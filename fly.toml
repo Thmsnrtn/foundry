@@ -1,0 +1,41 @@
+app = "foundry"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = 5
+
+[build]
+  builder = "heroku/buildpacks:20"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Scheduled jobs run on a separate process group
+# Configure via `fly machine run` or process groups
+# lifecycle_check: daily 6:00 UTC
+# competitive_scan: sunday 6:00 UTC
+# weekly_synthesis: friday 6:00 UTC
+# digest_generate: monday 7:00 AM per founder tz
+# behavioral_triggers: every 6 hours
+# metric_snapshot: daily midnight UTC
+# slot_enforcement: daily 9:00 UTC
+# cold_start_check: daily
+# scenario_accuracy: weekly after synthesis
