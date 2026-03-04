@@ -26,7 +26,7 @@ program
   .description('Run all database migrations')
   .action(async () => {
     console.log('Running migrations...');
-    const migrations = ['001_initial.sql', '002_wisdom_remediation.sql', '003_ux_intelligence.sql', '004_signal_wisdom.sql'];
+    const migrations = ['001_initial.sql', '002_wisdom_remediation.sql', '003_ux_intelligence.sql', '004_signal_wisdom.sql', '005_signal_history.sql'];
     for (const file of migrations) {
       console.log(`  Running ${file}...`);
       const filePath = resolve(__dirname, '../db/migrations', file);

@@ -12,6 +12,7 @@ import {
   getLifecycleState,
 } from '../db/client.js';
 import { callSonnet } from './ai/client.js';
+import { nanoid } from 'nanoid';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -124,6 +125,9 @@ export async function computeSignal(productId: string): Promise<SignalResult> {
     elevated,
     watch,
   });
+
+  // Record history snapshot (UPSERT: one per product per day)
+  void recordSignalSnapshot(productId, score, tier, riskState, stressors.length);
 
   return {
     score,
@@ -241,6 +245,54 @@ function buildFallbackProse(score: number, ctx: ProseContext): string {
   }
 
   return lines.join(' ');
+}
+
+// ─── History Recording ────────────────────────────────────────────────────────
+
+/**
+ * UPSERT one Signal snapshot per product per day.
+ * Called at end of computeSignal() — safe to call on every page load.
+ */
+async function recordSignalSnapshot(
+  productId: string,
+  score: number,
+  tier: SignalTier,
+  riskState: string,
+  stressorCount: number,
+): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO signal_history (id, product_id, score, tier, risk_state, stressor_count, snapshot_date)
+       VALUES (?, ?, ?, ?, ?, ?, date('now'))
+       ON CONFLICT(product_id, snapshot_date) DO UPDATE SET
+         score = excluded.score,
+         tier  = excluded.tier,
+         risk_state = excluded.risk_state,
+         stressor_count = excluded.stressor_count,
+         recorded_at = CURRENT_TIMESTAMP`,
+      [nanoid(), productId, score, tier, riskState, stressorCount],
+    );
+  } catch {
+    // Non-critical: don't let history recording break the Signal read
+  }
+}
+
+/**
+ * Fetch Signal history for a product, newest-first.
+ */
+export async function getSignalHistory(
+  productId: string,
+  days = 60,
+): Promise<Array<{ score: number; tier: string; risk_state: string; snapshot_date: string }>> {
+  const result = await query(
+    `SELECT score, tier, risk_state, snapshot_date
+     FROM signal_history
+     WHERE product_id = ?
+       AND snapshot_date >= date('now', ?)
+     ORDER BY snapshot_date ASC`,
+    [productId, `-${days} days`],
+  );
+  return result.rows as unknown as Array<{ score: number; tier: string; risk_state: string; snapshot_date: string }>;
 }
 
 // ─── Invalidate Cache ─────────────────────────────────────────────────────────

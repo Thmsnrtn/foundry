@@ -11,6 +11,7 @@ import { dashboardLayout } from '../../views/layout.js';
 import { settingsPage } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
+import { nanoid } from 'nanoid';
 
 export const settingsRoutes = new Hono<AuthEnv>();
 
@@ -18,8 +19,10 @@ settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings');
 
-  const products = await query('SELECT id, name, github_repo_url FROM products WHERE owner_id = ?', [founder.id]);
-  const productId = products.rows.length > 0 ? (products.rows[0] as Record<string, string>).id : null;
+  const products = await query('SELECT id, name, github_repo_url, share_token FROM products WHERE owner_id = ?', [founder.id]);
+  const firstProduct = products.rows.length > 0 ? (products.rows[0] as Record<string, string>) : null;
+  const productId = firstProduct?.id ?? null;
+  const shareToken = firstProduct?.share_token ?? null;
   const comps = productId
     ? await query('SELECT * FROM competitors WHERE product_id = ?', [productId])
     : { rows: [] };
@@ -30,6 +33,7 @@ settingsRoutes.get('/settings', async (c) => {
     [founder.id]
   );
   const wisdomOptIn = ((wisdomResult.rows[0] as Record<string, unknown>)?.wisdom_network_opted_in ?? 1) === 1;
+  const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
 
   const tierLabel = getTierBadge(founder.tier);
   const capabilities = getTierCapabilities(founder.tier);
@@ -76,8 +80,57 @@ settingsRoutes.get('/settings', async (c) => {
         </form>
       </div>
     </div>
+
+    ${productId ? html`
+    <div class="card">
+      <h3>Investor / Advisor Access</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        Generate a private link to share a live read-only view of your Signal score,
+        metrics, and recent decisions with investors or advisors. No login required.
+        Revoke it at any time by regenerating.
+      </p>
+      ${shareToken ? html`
+      <div style="margin-bottom:0.75rem;">
+        <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.35rem;">Your share link</div>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <input
+            type="text"
+            id="share-link-input"
+            value="${appUrl}/share/${shareToken}"
+            readonly
+            style="flex:1;font-size:0.82rem;font-family:monospace;cursor:pointer;"
+            onclick="this.select()"
+          />
+          <button
+            class="btn btn-secondary btn-sm"
+            onclick="navigator.clipboard.writeText(document.getElementById('share-link-input').value).then(()=>{this.textContent='Copied!';setTimeout(()=>{this.textContent='Copy'},1500)})"
+          >Copy</button>
+        </div>
+      </div>
+      <form method="POST" action="/settings/generate-share" style="display:inline;">
+        <button type="submit" class="btn btn-ghost btn-sm">Regenerate link</button>
+      </form>
+      ` : html`
+      <form method="POST" action="/settings/generate-share">
+        <button type="submit" class="btn btn-secondary btn-sm">Generate share link</button>
+      </form>`}
+    </div>` : ''}
   `;
   return c.html(dashboardLayout(ctx, content));
+});
+
+// ─── Share Token Generation ───────────────────────────────────────────────────
+
+settingsRoutes.post('/settings/generate-share', async (c) => {
+  const founder = c.get('founder');
+  const products = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
+  if (products.rows.length === 0) return c.redirect('/settings');
+
+  const productId = (products.rows[0] as Record<string, string>).id;
+  const token = nanoid(32);
+
+  await query('UPDATE products SET share_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
+  return c.redirect('/settings');
 });
 
 // ─── Wisdom Toggle ────────────────────────────────────────────────────────────

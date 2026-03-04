@@ -403,6 +403,29 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 
 .signal-stressors { width: 100%; margin-top: 1rem; }
 
+/* Signal sparkline under the number */
+.signal-sparkline-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  margin-top: 0.5rem;
+  opacity: 0.6;
+  transition: opacity var(--transition);
+}
+.signal-sparkline-wrap:hover { opacity: 1; }
+.signal-sparkline { display: block; }
+.signal-sparkline-label {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+/* Sparkline color inherits from parent signal tier */
+.signal-high .signal-sparkline-wrap { color: var(--signal-high); }
+.signal-mid  .signal-sparkline-wrap { color: var(--signal-mid); }
+.signal-low  .signal-sparkline-wrap { color: var(--signal-low); }
+
 /* ─── Query Bar ──────────────────────────────────────────────────────────────── */
 .query-bar    { width: 100%; max-width: 520px; margin-bottom: 1.5rem; }
 .query-form   { position: relative; }

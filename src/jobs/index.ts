@@ -567,6 +567,121 @@ export async function navBadgeRefresh(): Promise<void> {
   console.log('[JOB] nav_badge_refresh complete');
 }
 
+// ─── 20. Signal Alert Check — Every 2 hours ───────────────────────────────────
+
+import { computeSignal } from '../services/signal.js';
+import { createNotification } from '../services/ux/notifications.js';
+
+export async function signalAlertCheck(): Promise<void> {
+  console.log('[JOB] signal_alert_check starting');
+  const products = await getAllActiveProducts();
+
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      // Get yesterday's snapshot for comparison
+      const prev = await query(
+        `SELECT score, tier FROM signal_history
+         WHERE product_id = ? AND snapshot_date < date('now')
+         ORDER BY snapshot_date DESC LIMIT 1`,
+        [p.id],
+      );
+      if (prev.rows.length === 0) continue;
+
+      const prevRow = prev.rows[0] as Record<string, unknown>;
+      const prevScore = prevRow.score as number;
+      const prevTier = prevRow.tier as string;
+
+      // Compute current Signal (also records today's snapshot)
+      const signal = await computeSignal(p.id);
+      const drop = prevScore - signal.score;
+
+      // Alert conditions: significant drop OR tier degradation
+      const tierDowngrade =
+        (prevTier === 'high' && signal.tier !== 'high') ||
+        (prevTier === 'mid' && signal.tier === 'low');
+
+      if (drop >= 10 || tierDowngrade) {
+        // Avoid duplicate alerts: check if we've already notified today
+        const alreadyNotified = await query(
+          `SELECT id FROM notifications
+           WHERE product_id = ? AND type = 'signal_alert'
+             AND created_at >= datetime('now', 'start of day')`,
+          [p.id],
+        );
+        if (alreadyNotified.rows.length > 0) continue;
+
+        const title = tierDowngrade
+          ? `Signal dropped to ${signal.tier.toUpperCase()}`
+          : `Signal fell ${drop} points`;
+
+        const body = tierDowngrade
+          ? `${p.name} moved from ${prevTier} to ${signal.tier} tier (${prevScore} → ${signal.score}). Review stressors now.`
+          : `${p.name} Signal dropped from ${prevScore} to ${signal.score} in the last 24 hours.`;
+
+        await createNotification(p.owner_id, p.id, 'signal_alert', title, body, '/dashboard', 'View Signal');
+        console.log(`[JOB] signal_alert_check: alert created for ${p.name} — drop ${drop}pts, tier: ${prevTier} → ${signal.tier}`);
+      }
+    } catch (err) {
+      console.error(`[JOB] signal_alert_check error for ${p.id}:`, err);
+    }
+  }
+  console.log('[JOB] signal_alert_check complete');
+}
+
+// ─── 21. Decision Follow-up — Daily 10:00 UTC ─────────────────────────────────
+
+export async function decisionFollowUp(): Promise<void> {
+  console.log('[JOB] decision_follow_up starting');
+
+  const overdue = await query(
+    `SELECT d.id, d.what, d.product_id, d.chosen_option, p.owner_id, p.name as product_name
+     FROM decisions d
+     JOIN products p ON d.product_id = p.id
+     WHERE d.status = 'approved'
+       AND d.follow_up_at IS NOT NULL
+       AND d.follow_up_at <= datetime('now')
+       AND d.outcome IS NULL
+       AND d.outcome_measured_at IS NULL`,
+    [],
+  );
+
+  for (const row of overdue.rows) {
+    const d = row as Record<string, string>;
+    try {
+      // Check if notification already sent for this decision today
+      const alreadySent = await query(
+        `SELECT id FROM notifications
+         WHERE product_id = ? AND type = 'decision_followup'
+           AND body LIKE ? AND created_at >= datetime('now', '-1 day')`,
+        [d.product_id, `%${d.id}%`],
+      );
+      if (alreadySent.rows.length > 0) continue;
+
+      await createNotification(
+        d.owner_id,
+        d.product_id,
+        'decision_followup',
+        'How did that decision go?',
+        `Time to log the outcome of: "${d.what}" — decision ID: ${d.id}. You chose: ${d.chosen_option}. What actually happened?`,
+        `/decisions/${d.id}`,
+        'Log outcome',
+      );
+
+      // Push back follow_up_at by 7 days to prevent re-notifying immediately
+      await query(
+        `UPDATE decisions SET follow_up_at = datetime(follow_up_at, '+7 days') WHERE id = ?`,
+        [d.id],
+      );
+
+      console.log(`[JOB] decision_follow_up: notified for decision ${d.id} (${d.what})`);
+    } catch (err) {
+      console.error(`[JOB] decision_follow_up error for decision ${d.id}:`, err);
+    }
+  }
+  console.log('[JOB] decision_follow_up complete');
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -587,6 +702,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   founder_pattern_synthesis: { fn: founderPatternSynthesis, schedule: '0 7 * * 0', description: 'Synthesize founder judgment patterns (Sunday)' },
   dna_completion_nudge: { fn: dnaCompletionNudge,    schedule: '0 8 * * 3',      description: 'Nudge founders with incomplete DNA (Wednesday)' },
   remediation_outcome_check: { fn: remediationOutcomeCheck, schedule: '0 9 * * *', description: 'Check remediation PR outcomes (daily)' },
-  milestone_check:    { fn: milestoneCheck,    schedule: '0 8 * * *',   description: 'Check and award milestones for all products (daily)' },
-  nav_badge_refresh:  { fn: navBadgeRefresh,   schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
+  milestone_check:      { fn: milestoneCheck,      schedule: '0 8 * * *',   description: 'Check and award milestones for all products (daily)' },
+  nav_badge_refresh:    { fn: navBadgeRefresh,     schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
+  signal_alert_check:   { fn: signalAlertCheck,    schedule: '0 */2 * * *', description: 'Check for significant Signal drops and tier changes (every 2h)' },
+  decision_follow_up:   { fn: decisionFollowUp,    schedule: '0 10 * * *',  description: 'Notify founders to log decision outcomes (daily 10:00 UTC)' },
 };

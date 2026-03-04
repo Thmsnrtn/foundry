@@ -4,16 +4,34 @@
 // =============================================================================
 
 import { Hono } from 'hono';
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import { setCookie, getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
-import { computeSignal } from '../../services/signal.js';
+import { computeSignal, getSignalHistory } from '../../services/signal.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { stressorReport, milestoneToastScript, type StressorData } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 
 export const dashboardRoutes = new Hono<AuthEnv>();
+
+// ─── Sparkline ────────────────────────────────────────────────────────────────
+
+function sparklineSVG(history: Array<{ score: number }>, width = 120, height = 28) {
+  if (history.length < 2) return raw('');
+  const pts = history
+    .map((h, i) => {
+      const x = (i / (history.length - 1)) * width;
+      const y = 2 + ((100 - h.score) / 100) * (height - 4);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  return raw(
+    `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" class="signal-sparkline" aria-hidden="true">` +
+    `<polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>` +
+    `</svg>`,
+  );
+}
 
 // ─── Product Switcher ────────────────────────────────────────────────────────
 
@@ -55,9 +73,10 @@ dashboardRoutes.get('/dashboard', async (c) => {
   const ctx = await getLayoutContext(founder, 'dashboard', 'Dashboard', undefined, c);
   const productId = ctx.productId!;
 
-  const [signal, stressors] = await Promise.all([
+  const [signal, stressors, history] = await Promise.all([
     computeSignal(productId),
     getActiveStressors(productId),
+    getSignalHistory(productId, 60),
   ]);
 
   const stressorRows = stressors.rows as unknown as StressorData[];
@@ -72,6 +91,11 @@ dashboardRoutes.get('/dashboard', async (c) => {
       <div class="signal-display signal-${signal.tier}">
         <div class="signal-number">${signal.score}</div>
         <div class="signal-label">Signal</div>
+        ${history.length >= 2 ? html`
+        <div class="signal-sparkline-wrap">
+          ${sparklineSVG(history)}
+          <span class="signal-sparkline-label">${history.length}d trend</span>
+        </div>` : ''}
       </div>
 
       <div class="signal-prose" id="signal-prose">

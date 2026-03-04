@@ -35,6 +35,9 @@ import { settingsRoutes } from './routes/dashboard/settings.js';
 import { revenueRoutes } from './routes/dashboard/revenue.js';
 import { portfolioRoutes } from './routes/dashboard/portfolio.js';
 
+// Share routes (public, token-gated)
+import { shareRoutes } from './routes/share/index.js';
+
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
 import { apiMetricRoutes } from './routes/api/metrics.js';
@@ -106,6 +109,7 @@ app.route('/', landingRoutes);
 app.route('/', pricingRoutes);
 app.route('/', caseStudyRoutes);
 app.route('/', authRoutes);
+app.route('/', shareRoutes);
 
 // ─── Stripe Webhook (raw body, no auth) ──────────────────────────────────────
 

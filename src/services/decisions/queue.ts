@@ -47,7 +47,10 @@ export async function resolveDecision(
 ): Promise<void> {
   const now = new Date().toISOString();
   await query(
-    `UPDATE decisions SET status = 'approved', chosen_option = ?, decided_at = ?, decided_by = ? WHERE id = ? AND product_id = ?`,
+    `UPDATE decisions
+     SET status = 'approved', chosen_option = ?, decided_at = ?, decided_by = ?,
+         follow_up_at = datetime('now', '+30 days')
+     WHERE id = ? AND product_id = ?`,
     [chosenOption, now, decidedBy, decisionId, productId]
   );
 }
