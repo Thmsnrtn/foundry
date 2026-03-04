@@ -765,6 +765,80 @@ Return JSON only, no markdown:
   console.log('[JOB] daily_insight_generate complete');
 }
 
+// ─── 23. Weekly Plan Generate — Monday 8:00 UTC ───────────────────────────────
+
+function isoWeek(date: Date): string {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+export async function weeklyPlanGenerate(): Promise<void> {
+  console.log('[JOB] weekly_plan_generate starting');
+  const products = await getAllActiveProducts();
+  const week = isoWeek(new Date());
+
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const existing = await query('SELECT id FROM weekly_plans WHERE product_id = ? AND week_of = ?', [p.id, week]);
+      if (existing.rows.length > 0) continue;
+
+      const [signal, stressors, metrics, lifecycle, pendingResult] = await Promise.all([
+        computeSignal(p.id),
+        getActiveStressors(p.id),
+        getLatestMetrics(p.id),
+        query('SELECT current_prompt, risk_state FROM lifecycle_state WHERE product_id = ?', [p.id]),
+        query("SELECT COUNT(*) as c FROM decisions WHERE product_id = ? AND status = 'pending'", [p.id]),
+      ]);
+
+      const ls = (lifecycle.rows[0] ?? {}) as Record<string, string>;
+      const m = (metrics.rows[0] ?? {}) as Record<string, unknown>;
+      const stressorList = (stressors.rows as Array<Record<string, string>>)
+        .map((s) => `${s.title} (${s.severity})`).slice(0, 5).join('; ') || 'none';
+      const pendingCount = (pendingResult.rows[0] as Record<string, number>)?.c ?? 0;
+
+      const prompt = `Product: ${p.name}
+Signal score: ${signal.score} (${signal.tier} tier), risk state: ${signal.riskState}
+Stage: ${ls.current_prompt ?? 'unknown'}, pending decisions: ${pendingCount}
+Active stressors: ${stressorList}
+Signal components — stressors: −${signal.components.stressorPenalty}, MRR: −${signal.components.mrrPenalty}, backlog: −${signal.components.backlogPenalty}, lifecycle: +${signal.components.lifecycleBonus}
+Activation: ${m.activation_rate != null ? ((m.activation_rate as number)*100).toFixed(1)+'%' : 'unknown'}
+Churn: ${m.churn_rate != null ? ((m.churn_rate as number)*100).toFixed(1)+'%' : 'unknown'}
+
+Generate exactly 3 prioritized weekly actions that would raise Signal the most. Be specific and concrete.
+
+Return JSON only:
+{
+  "synthesis": "1-2 sentence framing of this week's priority",
+  "items": [
+    { "id": "1", "text": "Specific action", "category": "signal|decision|relationship|product", "impact": "high|medium|low" }
+  ]
+}`;
+
+      const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600);
+      const plan = parseJSONResponse<{ synthesis: string; items: Array<{ id: string; text: string; category: string; impact: string }> }>(raw.content);
+
+      if (plan?.items) {
+        const items = plan.items.map((item) => ({ ...item, done: false }));
+        await query(
+          `INSERT INTO weekly_plans (id, product_id, week_of, signal_at_generation, items_json, synthesis)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(product_id, week_of) DO NOTHING`,
+          [nanoid(), p.id, week, signal.score, JSON.stringify(items), plan.synthesis ?? null],
+        );
+        console.log(`[JOB] weekly_plan_generate: generated for ${p.name}`);
+      }
+    } catch (err) {
+      console.error(`[JOB] weekly_plan_generate error for ${p.id}:`, err);
+    }
+  }
+  console.log('[JOB] weekly_plan_generate complete');
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -789,5 +863,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   nav_badge_refresh:    { fn: navBadgeRefresh,     schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
   signal_alert_check:    { fn: signalAlertCheck,       schedule: '0 */2 * * *', description: 'Check for significant Signal drops and tier changes (every 2h)' },
   decision_follow_up:    { fn: decisionFollowUp,       schedule: '0 10 * * *',  description: 'Notify founders to log decision outcomes (daily 10:00 UTC)' },
-  daily_insight_generate:{ fn: dailyInsightGenerate,   schedule: '30 7 * * *',  description: 'Generate Daily One Thing for each product (daily 7:30 UTC)' },
+  daily_insight_generate: { fn: dailyInsightGenerate,  schedule: '30 7 * * *',  description: 'Generate Daily One Thing for each product (daily 7:30 UTC)' },
+  weekly_plan_generate:   { fn: weeklyPlanGenerate,    schedule: '0 8 * * 1',   description: 'Generate Weekly Operating Plan for each product (Monday 8:00 UTC)' },
 };

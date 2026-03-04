@@ -19,10 +19,11 @@ settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings');
 
-  const products = await query('SELECT id, name, github_repo_url, share_token FROM products WHERE owner_id = ?', [founder.id]);
+  const products = await query('SELECT id, name, github_repo_url, share_token, ingest_token FROM products WHERE owner_id = ?', [founder.id]);
   const firstProduct = products.rows.length > 0 ? (products.rows[0] as Record<string, string>) : null;
   const productId = firstProduct?.id ?? null;
   const shareToken = firstProduct?.share_token ?? null;
+  const ingestToken = firstProduct?.ingest_token ?? null;
   const comps = productId
     ? await query('SELECT * FROM competitors WHERE product_id = ?', [productId])
     : { rows: [] };
@@ -115,6 +116,55 @@ settingsRoutes.get('/settings', async (c) => {
         <button type="submit" class="btn btn-secondary btn-sm">Generate share link</button>
       </form>`}
     </div>` : ''}
+
+    ${productId ? html`
+    <div class="card">
+      <h3>Metric Ingest</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        A secret URL your tools can POST to — Stripe webhooks, Zapier, cron jobs, or your own pipeline.
+        Foundry maps the fields to your metrics and recomputes Signal automatically.
+        No login required; the URL is the secret.
+      </p>
+      ${ingestToken ? html`
+      <div style="margin-bottom:0.75rem;">
+        <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.35rem;">Ingest endpoint</div>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <input
+            type="text"
+            id="ingest-url-input"
+            value="${appUrl}/ingest/${ingestToken}"
+            readonly
+            style="flex:1;font-size:0.78rem;font-family:monospace;cursor:pointer;"
+            onclick="this.select()"
+          />
+          <button
+            class="btn btn-secondary btn-sm"
+            onclick="navigator.clipboard.writeText(document.getElementById('ingest-url-input').value).then(()=>{this.textContent='Copied!';setTimeout(()=>{this.textContent='Copy'},1500)})"
+          >Copy</button>
+        </div>
+      </div>
+      <details style="margin-bottom:0.75rem;">
+        <summary style="font-size:0.82rem;color:var(--text-dim);cursor:pointer;">Example payload</summary>
+        <pre class="ingest-example">{
+  "new_mrr": 4500,
+  "churned_mrr": 200,
+  "activation_rate": 0.34,
+  "day_30_retention": 0.68,
+  "churn_rate": 0.02,
+  "nps_score": 42,
+  "active_users": 87,
+  "signups_7d": 23
+}</pre>
+        <p style="font-size:0.78rem;color:var(--text-dim);margin:0.35rem 0 0;">MRR values in dollars. Rates as decimals (0.34 = 34%).</p>
+      </details>
+      <form method="POST" action="/settings/generate-ingest" style="display:inline;">
+        <button type="submit" class="btn btn-ghost btn-sm">Regenerate token</button>
+      </form>
+      ` : html`
+      <form method="POST" action="/settings/generate-ingest">
+        <button type="submit" class="btn btn-secondary btn-sm">Generate ingest URL</button>
+      </form>`}
+    </div>` : ''}
   `;
   return c.html(dashboardLayout(ctx, content));
 });
@@ -130,6 +180,20 @@ settingsRoutes.post('/settings/generate-share', async (c) => {
   const token = nanoid(32);
 
   await query('UPDATE products SET share_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
+  return c.redirect('/settings');
+});
+
+// ─── Ingest Token Generation ──────────────────────────────────────────────────
+
+settingsRoutes.post('/settings/generate-ingest', async (c) => {
+  const founder = c.get('founder');
+  const products = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
+  if (products.rows.length === 0) return c.redirect('/settings');
+
+  const productId = (products.rows[0] as Record<string, string>).id;
+  const token = nanoid(32);
+
+  await query('UPDATE products SET ingest_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
   return c.redirect('/settings');
 });
 

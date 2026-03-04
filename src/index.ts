@@ -38,6 +38,15 @@ import { portfolioRoutes } from './routes/dashboard/portfolio.js';
 // Share routes (public, token-gated)
 import { shareRoutes } from './routes/share/index.js';
 
+// Metric Ingest (public, token-gated)
+import { ingestRoutes } from './routes/ingest/index.js';
+
+// Signal Timeline
+import { timelineRoutes } from './routes/signal/timeline.js';
+
+// Weekly Operating Plan
+import { planRoutes } from './routes/dashboard/plan.js';
+
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
 import { apiMetricRoutes } from './routes/api/metrics.js';
@@ -110,6 +119,7 @@ app.route('/', pricingRoutes);
 app.route('/', caseStudyRoutes);
 app.route('/', authRoutes);
 app.route('/', shareRoutes);
+app.route('/', ingestRoutes);
 
 // ─── Stripe Webhook (raw body, no auth) ──────────────────────────────────────
 
@@ -151,6 +161,9 @@ app.use('/beta/*', authMiddleware);
 app.use('/koldly/*', authMiddleware);
 app.use('/settings', authMiddleware);
 app.use('/settings/*', authMiddleware);
+app.use('/plan', authMiddleware);
+app.use('/plan/*', authMiddleware);
+app.use('/signal/*', authMiddleware);
 app.use('/switch-product', authMiddleware);
 app.use('/portfolio', authMiddleware);
 app.use('/api/*', authMiddleware);
@@ -171,6 +184,8 @@ app.route('/', koldlyRoutes);
 app.route('/', settingsRoutes);
 app.route('/', revenueRoutes);
 app.route('/', portfolioRoutes);
+app.route('/', planRoutes);
+app.route('/', timelineRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);

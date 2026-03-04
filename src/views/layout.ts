@@ -3,7 +3,7 @@
 // Server-rendered pages using Hono's html tagged template literal.
 // =============================================================================
 
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { NextAction, AppNotification, MilestoneEvent, NavBadges } from '../types/index.js';
 
@@ -97,6 +97,8 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
     ${content}
   </main>
 
+  ${!chamberMode && showNav && productId ? mobilBottomNav(activeNav, navBadges?.decisions_count ?? 0) : ''}
+
   <script>
     // Register service worker
     if ('serviceWorker' in navigator) {
@@ -186,12 +188,14 @@ function groupedSidebar(
   const b = badges ?? { decisions_count: 0, has_overdue_audit: false, unread_signals: false, unseen_milestones: false, open_prs_count: 0, dna_completion: 0 };
 
   const operateItems: NavItem[] = [
-    { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
+    { key: 'dashboard', label: 'Signal', href: '/dashboard' },
+    { key: 'plan', label: 'Weekly Plan', href: '/plan' },
     { key: 'lifecycle', label: 'Lifecycle', href: `/products/${productId}/lifecycle` },
   ];
 
   const intelItems: NavItem[] = [
     { key: 'decisions', label: 'Decisions', href: '/decisions', badge: b.decisions_count > 0 ? String(b.decisions_count) : undefined, badgeType: 'count' },
+    { key: 'timeline', label: 'Signal Timeline', href: '/signal/timeline' },
     { key: 'digest', label: 'Digest', href: '/digest' },
   ];
 
@@ -242,6 +246,30 @@ function groupedSidebar(
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
       <li><a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a></li>
     </ul>
+  </nav>`;
+}
+
+// ─── Mobile Bottom Navigation ──────────────────────────────────────────────────
+
+function mobilBottomNav(active: string, decisionsCount: number): HtmlContent {
+  const tab = (key: string, href: string, label: string, icon: string, badge?: number) => html`
+  <a href="${href}" class="mbn-tab ${active === key ? 'mbn-active' : ''}" aria-label="${label}">
+    ${raw(icon)}
+    <span class="mbn-label">${label}</span>
+    ${badge && badge > 0 ? html`<span class="mbn-badge">${badge}</span>` : ''}
+  </a>`;
+
+  const signalIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="2.5"/><path d="M5.5 14.5a6.5 6.5 0 0 1 0-9M14.5 5.5a6.5 6.5 0 0 1 0 9"/><path d="M3 17a9.5 9.5 0 0 1 0-14M17 3a9.5 9.5 0 0 1 0 14" stroke-dasharray="2 2"/></svg>`;
+  const decisionsIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 10l2 2 4-4"/></svg>`;
+  const planIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 7h10M5 10h6M5 13h8"/></svg>`;
+  const moreIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="5" cy="10" r="1.2" fill="currentColor"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/><circle cx="15" cy="10" r="1.2" fill="currentColor"/></svg>`;
+
+  return html`
+  <nav class="mobile-bottom-nav" role="navigation" aria-label="Main navigation">
+    ${tab('dashboard', '/dashboard', 'Signal', signalIcon)}
+    ${tab('decisions', '/decisions', 'Decisions', decisionsIcon, decisionsCount)}
+    ${tab('plan', '/plan', 'Plan', planIcon)}
+    ${tab('settings', '/settings', 'More', moreIcon)}
   </nav>`;
 }
 
