@@ -1,20 +1,17 @@
 // =============================================================================
 // FOUNDRY — Operator Dashboard (home screen)
+// The Signal: one number, three sentences, one query bar.
 // =============================================================================
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { setCookie, getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { getProductsByOwner, getProductByOwner, getActiveStressors, getLatestMetrics, getPendingDecisions, getLifecycleState } from '../../db/client.js';
-import { getMRRDecomposition, computeHealthRatio } from '../../services/intelligence/revenue.js';
-import { getLatestCohortSummary } from '../../services/intelligence/cohort.js';
+import { getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
+import { computeSignal } from '../../services/signal.js';
 import { dashboardLayout } from '../../views/layout.js';
-import { riskStateBadge, stressorReport, mrrDecomposition, metricsGrid, lifecycleProgress, dashboardSummaryCard, pageHintBanner, tourOverlay, milestoneToastScript, type StressorData } from '../../views/components.js';
+import { stressorReport, milestoneToastScript, type StressorData } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
-import { getPageHints } from '../../services/ux/hints.js';
-import { TOUR_STEPS, buildTourStepData, fillTemplate } from '../../services/ux/tour.js';
-import type { RiskStateValue } from '../../types/index.js';
 
 export const dashboardRoutes = new Hono<AuthEnv>();
 
@@ -25,7 +22,6 @@ dashboardRoutes.post('/switch-product', async (c) => {
   const body = await c.req.parseBody() as Record<string, string>;
   const productId = body.product_id;
 
-  // Verify this product belongs to the founder
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.redirect('/dashboard');
 
@@ -33,10 +29,9 @@ dashboardRoutes.post('/switch-product', async (c) => {
     path: '/',
     httpOnly: true,
     sameSite: 'Lax',
-    maxAge: 60 * 60 * 24 * 365, // 1 year
+    maxAge: 60 * 60 * 24 * 365,
   });
 
-  // Redirect back to the referring page, or dashboard
   const referer = c.req.header('Referer');
   return c.redirect(referer ?? '/dashboard');
 });
@@ -51,84 +46,134 @@ dashboardRoutes.get('/dashboard', async (c) => {
     return c.redirect('/onboarding');
   }
 
+  // If founder has multiple products and no active selection: show portfolio
+  const cookieProductId = getCookie(c, 'foundry_product');
+  if (products.rows.length > 1 && !cookieProductId) {
+    return c.redirect('/portfolio');
+  }
+
   const ctx = await getLayoutContext(founder, 'dashboard', 'Dashboard', undefined, c);
   const productId = ctx.productId!;
 
-  const [stressors, metrics, decisions] = await Promise.all([
+  const [signal, stressors] = await Promise.all([
+    computeSignal(productId),
     getActiveStressors(productId),
-    getLatestMetrics(productId),
-    getPendingDecisions(productId),
   ]);
-  const mrr = await getMRRDecomposition(productId);
-  const mrrHealth = mrr ? computeHealthRatio(mrr) : { value: 0, indicator: 'green' as const };
-  const cohort = await getLatestCohortSummary(productId);
 
-  const lsResult = await getLifecycleState(productId);
-  const ls = lsResult.rows[0] as Record<string, unknown> | undefined;
-  const riskState = (ls?.risk_state as RiskStateValue) ?? 'green';
-  const riskReason = (ls?.risk_state_reason as string) ?? 'No risk signals detected.';
-  const riskChangedAt = (ls?.risk_state_changed_at as string) ?? null;
-  const currentPrompt = (ls?.current_prompt as string) ?? 'prompt_1';
-  const metricsRow = (metrics.rows[0] as Record<string, unknown>) ?? {};
+  const stressorRows = stressors.rows as unknown as StressorData[];
+  const criticalCount = stressorRows.filter((s) => s.severity === 'critical').length;
 
-  const stressorRows = (stressors.rows as unknown as StressorData[]);
-
-  // UX Intelligence: page hints
-  const hints = await getPageHints('dashboard', founder, productId, {
-    metrics_count: metrics.rows.length,
-    stressor_count: stressorRows.length,
-    risk_state: riskState,
-    first_red: false,
-  });
-
-  // Tour: detect ?tour=1 and active tour state
-  const showTour = c.req.query('tour') === '1' && ctx.ux.tourState && !ctx.ux.tourState.completed_at && !ctx.ux.tourState.skipped_at;
-  const tourStep = showTour ? TOUR_STEPS.find((s) => s.step === ctx.ux.tourState!.current_step) ?? null : null;
+  // Pending decisions count from ctx nav badges
+  const pendingDecisions = ctx.ux.navBadges.decisions_count;
 
   const content = html`
-    ${pageHintBanner(hints)}
-    ${riskStateBadge(riskState, riskReason, riskChangedAt)}
+    <div class="signal-home" data-product-id="${productId}">
 
-    <div class="dashboard-grid">
-      ${dashboardSummaryCard('Pending Decisions', decisions.rows.length, '/decisions')}
-      ${dashboardSummaryCard('Active Stressors', stressorRows.length, '#stressors')}
-      ${dashboardSummaryCard('Current Prompt', currentPrompt.replace('prompt_', 'P'), '/products/' + productId + '/lifecycle')}
-      ${dashboardSummaryCard('MRR Health', mrrHealth.value.toFixed(2), '/products/' + productId + '/cohorts')}
+      <div class="signal-display signal-${signal.tier}">
+        <div class="signal-number">${signal.score}</div>
+        <div class="signal-label">Signal</div>
+      </div>
+
+      <div class="signal-prose" id="signal-prose">
+        ${signal.prose}
+      </div>
+
+      <div class="query-bar">
+        <form class="query-form" id="query-form" onsubmit="handleQuery(event)">
+          <input
+            type="text"
+            class="query-input"
+            id="query-input"
+            placeholder="Ask anything about your business…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </form>
+        <div class="query-response" id="query-response"></div>
+      </div>
+
+      ${pendingDecisions > 0 || criticalCount > 0 ? html`
+      <div class="signal-actions">
+        ${pendingDecisions > 0 ? html`
+        <a href="/decisions" class="signal-action">
+          <span class="signal-action-number">${pendingDecisions}</span>
+          <span class="signal-action-label">${pendingDecisions === 1 ? 'decision' : 'decisions'} waiting</span>
+        </a>` : ''}
+        ${criticalCount > 0 ? html`
+        <a href="#stressors" class="signal-action signal-action-urgent">
+          <span class="signal-action-number">${criticalCount}</span>
+          <span class="signal-action-label">critical ${criticalCount === 1 ? 'stressor' : 'stressors'}</span>
+        </a>` : ''}
+      </div>` : ''}
+
+      ${stressorRows.length > 0 ? html`
+      <div class="signal-stressors" id="stressors">
+        ${stressorReport(stressorRows)}
+      </div>` : ''}
+
     </div>
 
-    <div class="card">
-      <h3>Lifecycle</h3>
-      ${lifecycleProgress(currentPrompt)}
-    </div>
-
-    <div id="stressors">
-      ${stressorReport(stressorRows)}
-    </div>
-
-    ${mrr ? mrrDecomposition(mrr, mrrHealth.indicator) : ''}
-
-    ${metricsGrid(metricsRow)}
-
-    ${tourStep ? tourOverlay(
-      tourStep,
-      buildTourStepData(tourStep, { composite: metricsRow.composite ?? null }, {
-        blocking_count: 0,
-        remediation_enabled: false,
-        remediation_queued: 0,
-        risk_state: riskState,
-        pending_decisions: decisions.rows.length,
-      }),
-      TOUR_STEPS.length,
-      founder.id,
-      fillTemplate(tourStep.body_template, buildTourStepData(tourStep, { composite: metricsRow.composite ?? null }, {
-        blocking_count: 0,
-        remediation_enabled: false,
-        remediation_queued: 0,
-        risk_state: riskState,
-        pending_decisions: decisions.rows.length,
-      })),
-    ) : ''}
     ${milestoneToastScript(ctx.ux.unseenMilestones)}
+
+    <script>
+    (function() {
+      const productId = document.querySelector('[data-product-id]').dataset.productId;
+      const responseEl = document.getElementById('query-response');
+      const proseEl = document.getElementById('signal-prose');
+      let originalProse = null;
+
+      window.handleQuery = async function(e) {
+        e.preventDefault();
+        const input = document.getElementById('query-input');
+        const question = input.value.trim();
+        if (!question) return;
+
+        if (!originalProse) originalProse = proseEl.innerHTML;
+
+        responseEl.className = 'query-response loading';
+        responseEl.textContent = 'Thinking';
+
+        try {
+          const res = await fetch('/api/ask', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ question, product_id: productId }),
+          });
+
+          if (!res.ok) throw new Error('Request failed');
+          const data = await res.json();
+
+          let html = '<p>' + data.answer + '</p>';
+          if (data.data_points && data.data_points.length > 0) {
+            html += '<div class="query-data-points">';
+            data.data_points.forEach(function(dp) {
+              html += '<span class="query-data-point">' + dp.label + ': ' + dp.value + '</span>';
+            });
+            html += '</div>';
+          }
+          html += '<button class="query-reset" onclick="resetQuery()">← Back to Signal</button>';
+
+          responseEl.innerHTML = html;
+          responseEl.className = 'query-response visible';
+          input.value = '';
+
+        } catch (err) {
+          responseEl.className = 'query-response visible';
+          responseEl.textContent = 'Something went wrong. Try again.';
+        }
+      };
+
+      window.resetQuery = function() {
+        responseEl.className = 'query-response';
+        responseEl.innerHTML = '';
+        if (originalProse) {
+          proseEl.innerHTML = originalProse;
+          originalProse = null;
+        }
+      };
+    })();
+    </script>
   `;
 
   return c.html(dashboardLayout(ctx, content));

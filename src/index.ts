@@ -33,12 +33,14 @@ import { journeyRoutes } from './routes/dashboard/journey.js';
 import { koldlyRoutes } from './routes/dashboard/koldly.js';
 import { settingsRoutes } from './routes/dashboard/settings.js';
 import { revenueRoutes } from './routes/dashboard/revenue.js';
+import { portfolioRoutes } from './routes/dashboard/portfolio.js';
 
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
 import { apiMetricRoutes } from './routes/api/metrics.js';
 import { apiAuditLogRoutes } from './routes/api/audit-log.js';
 import { apiUXRoutes } from './routes/api/ux.js';
+import { apiAskRoutes } from './routes/api/ask.js';
 
 // Internal routes (ecosystem key required, except /health)
 import { healthRoutes } from './routes/internal/health.js';
@@ -76,11 +78,26 @@ app.get('/static/:file', (c) => {
     const filePath = resolve(__dirname, 'public', fileName);
     const content = readFileSync(filePath, 'utf-8');
     const ext = fileName.split('.').pop();
-    const mimeTypes: Record<string, string> = { css: 'text/css', js: 'application/javascript', svg: 'image/svg+xml' };
+    const mimeTypes: Record<string, string> = { css: 'text/css', js: 'application/javascript', svg: 'image/svg+xml', json: 'application/json', png: 'image/png' };
     return c.body(content, 200, { 'Content-Type': mimeTypes[ext ?? ''] ?? 'text/plain', 'Cache-Control': 'public, max-age=3600' });
   } catch {
     return c.notFound();
   }
+});
+
+// PWA: manifest and service worker must be served from root scope
+app.get('/manifest.json', (c) => {
+  try {
+    const content = readFileSync(resolve(__dirname, 'public', 'manifest.json'), 'utf-8');
+    return c.body(content, 200, { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' });
+  } catch { return c.notFound(); }
+});
+
+app.get('/sw.js', (c) => {
+  try {
+    const content = readFileSync(resolve(__dirname, 'public', 'sw.js'), 'utf-8');
+    return c.body(content, 200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache' });
+  } catch { return c.notFound(); }
 });
 
 // ─── Public Routes ───────────────────────────────────────────────────────────
@@ -124,11 +141,14 @@ app.use('/dashboard/*', authMiddleware);
 app.use('/onboarding/*', authMiddleware);
 app.use('/products/*', authMiddleware);
 app.use('/decisions/*', authMiddleware);
+app.use('/api/decisions/*', authMiddleware);
 app.use('/digest/*', authMiddleware);
 app.use('/beta/*', authMiddleware);
 app.use('/koldly/*', authMiddleware);
+app.use('/settings', authMiddleware);
 app.use('/settings/*', authMiddleware);
 app.use('/switch-product', authMiddleware);
+app.use('/portfolio', authMiddleware);
 app.use('/api/*', authMiddleware);
 
 // Dashboard routes
@@ -146,12 +166,14 @@ app.route('/', journeyRoutes);
 app.route('/', koldlyRoutes);
 app.route('/', settingsRoutes);
 app.route('/', revenueRoutes);
+app.route('/', portfolioRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);
 app.route('/', apiMetricRoutes);
 app.route('/', apiAuditLogRoutes);
 app.route('/', apiUXRoutes);
+app.route('/', apiAskRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 

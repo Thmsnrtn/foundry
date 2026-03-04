@@ -16,6 +16,8 @@ export interface LayoutOptions {
   productName?: string | null;
   productId?: string | null;
   showNav?: boolean;
+  /** When true: no sidebar, focused full-screen mode for Decision Chamber */
+  chamberMode?: boolean;
   activeNav?: string;
   riskState?: 'green' | 'yellow' | 'red' | null;
   riskReason?: string | null;
@@ -38,6 +40,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
     productName = null,
     productId = null,
     showNav = false,
+    chamberMode = false,
     activeNav = '',
     riskState = null,
     riskReason = null,
@@ -53,39 +56,53 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   } = opts;
 
   const sidebarRiskClass = riskState === 'red' ? 'sidebar-risk-red' : riskState === 'yellow' ? 'sidebar-risk-yellow' : '';
+  const bodyClass = chamberMode ? 'chamber-mode' : showNav ? 'has-sidebar' : '';
 
   return html`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0a0a12" />
   <title>${title} — Foundry</title>
   <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="manifest" href="/manifest.json" />
 </head>
-<body class="${showNav ? 'has-sidebar' : ''}">
+<body class="${bodyClass}">
   <header class="site-header">
     <div class="header-left">
       <a href="${founderName ? '/dashboard' : '/'}" class="logo">Foundry</a>
-      ${allProducts.length > 1 ? productSwitcher(allProducts, productId, productName) : productName ? html`<span class="breadcrumb">/ ${productName}</span>` : ''}
+      ${chamberMode
+        ? (productName ? html`<span class="breadcrumb">/ ${productName}</span>` : '')
+        : allProducts.length > 1
+          ? productSwitcher(allProducts, productId, productName)
+          : productName ? html`<span class="breadcrumb">/ ${productName}</span>` : ''}
     </div>
     <div class="header-right">
-      ${riskState ? riskBadgeSmall(riskState, riskReason) : ''}
-      ${founderName ? notificationBell(unreadNotifications, unreadNotificationCount) : ''}
+      ${!chamberMode && riskState ? riskBadgeSmall(riskState, riskReason) : ''}
+      ${!chamberMode && founderName ? notificationBell(unreadNotifications, unreadNotificationCount) : ''}
       ${founderName
         ? html`<span class="user-name">${founderName}</span>
-               <a href="/settings" class="header-link">Settings</a>`
+               ${!chamberMode ? html`<a href="/settings" class="header-link">Settings</a>` : ''}`
         : html`<a href="/auth/login" class="header-link">Log in</a>
                <a href="/auth/signup" class="btn btn-primary btn-sm">Get Started</a>`}
     </div>
   </header>
 
-  ${showNav && nextAction ? nextActionBanner(nextAction) : ''}
+  ${!chamberMode && showNav && nextAction ? nextActionBanner(nextAction) : ''}
 
-  ${showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, dnaCompletionPct, openPRCount) : ''}
+  ${!chamberMode && showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, dnaCompletionPct, openPRCount) : ''}
 
-  <main class="${showNav ? 'main-with-sidebar' : 'main-full'}">
+  <main class="${showNav && !chamberMode ? 'main-with-sidebar' : 'main-full'}">
     ${content}
   </main>
+
+  <script>
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(function() {});
+    }
+  </script>
 </body>
 </html>`;
 }
@@ -264,4 +281,14 @@ export function dashboardLayout(
   content: HtmlContent
 ): HtmlContent {
   return layout({ ...opts, showNav: true }, content);
+}
+
+/**
+ * Chamber layout: no sidebar, focused mode for Decision detail.
+ */
+export function chamberLayout(
+  opts: Omit<LayoutOptions, 'showNav' | 'chamberMode'>,
+  content: HtmlContent
+): HtmlContent {
+  return layout({ ...opts, showNav: false, chamberMode: true }, content);
 }

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc && tsc-alias",
+    "build": "tsc && tsc-alias && cp -r src/public dist/public",
     "start": "node dist/index.js",
     "cli": "tsx src/cli/index.ts",
     "migrate": "tsx src/cli/index.ts db:migrate",
@@ -27,7 +27,7 @@
     "zod": "^3.22.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^20.19.35",
     "tsc-alias": "^1.8.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
