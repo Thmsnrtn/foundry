@@ -5,9 +5,8 @@
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
-import { setCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { getProductsByOwner, getProductByOwner } from '../../db/client.js';
+import { getProductsByOwner } from '../../db/client.js';
 import { computeSignal } from '../../services/signal.js';
 import { layout } from '../../views/layout.js';
 
@@ -44,14 +43,8 @@ portfolioRoutes.get('/portfolio', async (c) => {
       ${sorted.map(({ product, signal }) => html`
       <form method="POST" action="/switch-product" style="display:contents;">
         <input type="hidden" name="product_id" value="${product.id as string}" />
-        <button
-          type="submit"
-          class="portfolio-card tier-${signal.tier}"
-          style="all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;text-align:center;gap:0.35rem;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;transition:all 150ms ease;text-decoration:none;width:100%;"
-          onmouseover="this.style.borderColor='rgba(255,255,255,0.15)';this.style.transform='translateY(-2px)'"
-          onmouseout="this.style.borderColor='rgba(255,255,255,0.07)';this.style.transform='translateY(0)'"
-        >
-          <div class="portfolio-signal-number" style="color:${signalColor(signal.tier)}">${signal.score}</div>
+        <button type="submit" class="portfolio-card tier-${signal.tier}">
+          <div class="portfolio-signal-number">${signal.score}</div>
           <div class="portfolio-product-name">${product.name as string}</div>
           <div class="portfolio-product-status">${signal.prose.split('.')[0]}.</div>
         </button>
@@ -68,9 +61,3 @@ portfolioRoutes.get('/portfolio', async (c) => {
     content
   ));
 });
-
-function signalColor(tier: 'high' | 'mid' | 'low'): string {
-  if (tier === 'high') return 'var(--signal-high)';
-  if (tier === 'mid')  return 'var(--signal-mid)';
-  return 'var(--signal-low)';
-}

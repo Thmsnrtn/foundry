@@ -816,10 +816,17 @@ body.chamber-mode .main-full { max-width: 700px; padding: 2.5rem 2rem 4rem; }
 }
 
 .portfolio-card {
+  /* Button reset */
+  appearance: none;
+  font: inherit;
+  color: inherit;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.5rem;
+  width: 100%;
+  cursor: pointer;
+  /* Layout */
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -6,7 +6,6 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
 import {
-  query,
   getProductByOwner,
   getActiveStressors,
   getLatestMetrics,
