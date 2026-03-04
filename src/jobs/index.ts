@@ -682,6 +682,89 @@ export async function decisionFollowUp(): Promise<void> {
   console.log('[JOB] decision_follow_up complete');
 }
 
+// ─── 22. Daily Insight Generate — Daily 7:30 UTC ──────────────────────────────
+
+import { getPreviousSignalScore } from '../services/signal.js';
+
+export async function dailyInsightGenerate(): Promise<void> {
+  console.log('[JOB] daily_insight_generate starting');
+  const products = await getAllActiveProducts();
+
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      // Skip if today's insight already exists
+      const existing = await query(
+        `SELECT id FROM daily_insights WHERE product_id = ? AND insight_date = date('now')`,
+        [p.id],
+      );
+      if (existing.rows.length > 0) continue;
+
+      // Gather context
+      const [metrics, stressors, lifecycle, previousScore, pendingResult] = await Promise.all([
+        getLatestMetrics(p.id),
+        getActiveStressors(p.id),
+        query('SELECT current_prompt, risk_state FROM lifecycle_state WHERE product_id = ?', [p.id]),
+        getPreviousSignalScore(p.id),
+        query("SELECT COUNT(*) as c FROM decisions WHERE product_id = ? AND status = 'pending'", [p.id]),
+      ]);
+
+      const m = (metrics.rows[0] ?? {}) as Record<string, unknown>;
+      const ls = (lifecycle.rows[0] ?? {}) as Record<string, string>;
+      const stressorList = (stressors.rows as Array<Record<string, string>>)
+        .map((s) => `${s.title} (${s.severity})`).join('; ') || 'none';
+      const pendingCount = (pendingResult.rows[0] as Record<string, number>)?.c ?? 0;
+      const promptLabels: Record<string, string> = {
+        prompt_1: 'Ideation', prompt_2: 'Foundation', prompt_2_5: 'Transition',
+        prompt_3: 'Pre-launch', prompt_4: 'Launch', prompt_5: 'Early traction',
+        prompt_6: 'Growth', prompt_7: 'Scale', prompt_8: 'Maturity', prompt_9: 'Exit',
+      };
+      const stageLabel = promptLabels[ls.current_prompt ?? 'prompt_1'] ?? 'Unknown';
+      const mrrHealthStr = m.mrr_health_ratio != null
+        ? `MRR health ratio: ${(m.mrr_health_ratio as number).toFixed(2)}`
+        : 'MRR: insufficient data';
+
+      const prompt = `You are Foundry, an intelligence layer for early-stage founders.
+Generate today's "Daily One Thing" — the single most important insight for this business today.
+
+Product: ${p.name}
+Stage: ${stageLabel}
+Risk state: ${ls.risk_state ?? 'green'}
+Signal score: ${previousScore !== null ? `${previousScore} (yesterday's last reading)` : 'first day'}
+Active stressors: ${stressorList}
+Pending decisions: ${pendingCount}
+${mrrHealthStr}
+Activation rate: ${m.activation_rate != null ? ((m.activation_rate as number) * 100).toFixed(1) + '%' : 'unknown'}
+30-day retention: ${m.day_30_retention != null ? ((m.day_30_retention as number) * 100).toFixed(1) + '%' : 'unknown'}
+Churn rate: ${m.churn_rate != null ? ((m.churn_rate as number) * 100).toFixed(1) + '%' : 'unknown'}
+
+Return JSON only, no markdown:
+{
+  "headline": "One sentence, ≤120 chars, specific and concrete — the most important thing to know today",
+  "context": "2–3 sentences elaborating on why this matters and what's driving it",
+  "action": "The one concrete thing to do today, ≤80 chars, or null if none"
+}`;
+
+      const raw = await callOpus('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400);
+      const insight = parseJSONResponse<{ headline: string; context: string; action: string | null }>(raw.content);
+
+      if (insight?.headline) {
+        const { nanoid: nid } = await import('nanoid');
+        await query(
+          `INSERT INTO daily_insights (id, product_id, headline, context, action, insight_date)
+           VALUES (?, ?, ?, ?, ?, date('now'))
+           ON CONFLICT(product_id, insight_date) DO NOTHING`,
+          [nid(), p.id, insight.headline, insight.context, insight.action ?? null],
+        );
+        console.log(`[JOB] daily_insight_generate: generated for ${p.name} — "${insight.headline}"`);
+      }
+    } catch (err) {
+      console.error(`[JOB] daily_insight_generate error for ${p.id}:`, err);
+    }
+  }
+  console.log('[JOB] daily_insight_generate complete');
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -704,6 +787,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   remediation_outcome_check: { fn: remediationOutcomeCheck, schedule: '0 9 * * *', description: 'Check remediation PR outcomes (daily)' },
   milestone_check:      { fn: milestoneCheck,      schedule: '0 8 * * *',   description: 'Check and award milestones for all products (daily)' },
   nav_badge_refresh:    { fn: navBadgeRefresh,     schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
-  signal_alert_check:   { fn: signalAlertCheck,    schedule: '0 */2 * * *', description: 'Check for significant Signal drops and tier changes (every 2h)' },
-  decision_follow_up:   { fn: decisionFollowUp,    schedule: '0 10 * * *',  description: 'Notify founders to log decision outcomes (daily 10:00 UTC)' },
+  signal_alert_check:    { fn: signalAlertCheck,       schedule: '0 */2 * * *', description: 'Check for significant Signal drops and tier changes (every 2h)' },
+  decision_follow_up:    { fn: decisionFollowUp,       schedule: '0 10 * * *',  description: 'Notify founders to log decision outcomes (daily 10:00 UTC)' },
+  daily_insight_generate:{ fn: dailyInsightGenerate,   schedule: '30 7 * * *',  description: 'Generate Daily One Thing for each product (daily 7:30 UTC)' },
 };

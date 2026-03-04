@@ -58,12 +58,13 @@ export async function resolveDecision(
 export async function recordOutcome(
   decisionId: string,
   productId: string,
-  outcome: string
+  outcome: string,
+  valence?: number | null,
 ): Promise<void> {
   const now = new Date().toISOString();
   await query(
-    `UPDATE decisions SET outcome = ?, outcome_measured_at = ? WHERE id = ? AND product_id = ?`,
-    [outcome, now, decisionId, productId]
+    `UPDATE decisions SET outcome = ?, outcome_measured_at = ?, outcome_valence = ? WHERE id = ? AND product_id = ?`,
+    [outcome, now, valence ?? null, decisionId, productId]
   );
 }
 

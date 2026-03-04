@@ -8,9 +8,10 @@ import { html, raw } from 'hono/html';
 import { setCookie, getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
-import { computeSignal, getSignalHistory } from '../../services/signal.js';
+import { computeSignal, getSignalHistory, getDailyInsight, getPreviousSignalScore } from '../../services/signal.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { stressorReport, milestoneToastScript, type StressorData } from '../../views/components.js';
+import type { SignalComponents } from '../../services/signal.js';
 import { getLayoutContext } from './_shared.js';
 
 export const dashboardRoutes = new Hono<AuthEnv>();
@@ -31,6 +32,69 @@ function sparklineSVG(history: Array<{ score: number }>, width = 120, height = 2
     `<polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>` +
     `</svg>`,
   );
+}
+
+// ─── Signal Anatomy Dialog ────────────────────────────────────────────────────
+
+function signalAnatomyDialog(score: number, components: SignalComponents, riskState: string) {
+  const { stressorPenalty, mrrPenalty, backlogPenalty, lifecycleBonus } = components;
+  const preCeiling = 85 - stressorPenalty - mrrPenalty - backlogPenalty + lifecycleBonus;
+  const ceilingMap: Record<string, string> = {
+    green: 'No cap',
+    yellow: 'Capped at 72',
+    red: 'Capped at 40',
+  };
+  const ceilingLabel = ceilingMap[riskState] ?? 'No cap';
+
+  // Bar widths as % of max possible penalty for each component
+  const stressorBarW = Math.round((stressorPenalty / 40) * 100);
+  const mrrBarW = Math.round((mrrPenalty / 25) * 100);
+  const backlogBarW = Math.round((backlogPenalty / 15) * 100);
+  const bonusBarW = Math.round((lifecycleBonus / 10) * 100);
+
+  const hint =
+    stressorPenalty >= 20 ? 'Resolve active stressors for the biggest Signal improvement.' :
+    mrrPenalty >= 15 ? 'Improve your MRR health ratio — reduce churn or grow new MRR.' :
+    backlogPenalty >= 9 ? 'Clear the decision backlog — overdue decisions cost up to 15 points.' :
+    riskState !== 'green' ? 'Exit the current risk state to lift the score ceiling.' :
+    'Your Signal is well-balanced. Focus on lifecycle progression.';
+
+  const row = (name: string, val: string, barW: number, type: 'neg' | 'pos' | 'zero' | 'sub' | 'total' | 'base') => {
+    const cls = type === 'neg' ? 'anatomy-negative' : type === 'pos' ? 'anatomy-positive' :
+                type === 'zero' ? 'anatomy-zero' : type === 'sub' ? 'anatomy-sub' :
+                type === 'total' ? 'anatomy-total' : 'anatomy-base';
+    return html`<div class="anatomy-row ${cls}">
+      <span class="anatomy-name">${name}</span>
+      ${barW > 0 ? html`<div class="anatomy-bar-track"><div class="anatomy-bar" style="width:${barW}%"></div></div>` : html`<span class="anatomy-spacer"></span>`}
+      <span class="anatomy-value">${raw(val)}</span>
+    </div>`;
+  };
+
+  return html`
+  <dialog id="anatomy-dialog" class="anatomy-dialog">
+    <button class="anatomy-close" onclick="document.getElementById('anatomy-dialog').close()" aria-label="Close">&#x2715;</button>
+    <div class="anatomy-title">Signal Anatomy</div>
+    <div class="anatomy-subtitle">How your ${score} is built</div>
+
+    <div class="anatomy-table">
+      ${row('Base score', '85', 0, 'base')}
+      ${stressorPenalty > 0 ? row('Active stressors', `−${stressorPenalty}`, stressorBarW, 'neg') : row('Active stressors', '−0', 0, 'zero')}
+      ${mrrPenalty > 0 ? row('MRR health', `−${mrrPenalty}`, mrrBarW, 'neg') : row('MRR health', '−0', 0, 'zero')}
+      ${backlogPenalty > 0 ? row('Decision backlog', `−${backlogPenalty}`, backlogBarW, 'neg') : row('Decision backlog', '−0', 0, 'zero')}
+      ${lifecycleBonus > 0 ? row('Lifecycle progress', `+${lifecycleBonus}`, bonusBarW, 'pos') : row('Lifecycle progress', '+0', 0, 'zero')}
+      <div class="anatomy-divider"></div>
+      ${row('Before ceiling', String(preCeiling), 0, 'sub')}
+      ${row('Risk ceiling', ceilingLabel, 0, 'sub')}
+      <div class="anatomy-divider"></div>
+      ${row('Signal', String(score), 0, 'total')}
+    </div>
+
+    <div class="anatomy-hint">${hint}</div>
+
+    <form method="dialog" style="text-align:center;margin-top:1rem;">
+      <button class="btn btn-ghost btn-sm">Close</button>
+    </form>
+  </dialog>`;
 }
 
 // ─── Product Switcher ────────────────────────────────────────────────────────
@@ -73,24 +137,37 @@ dashboardRoutes.get('/dashboard', async (c) => {
   const ctx = await getLayoutContext(founder, 'dashboard', 'Dashboard', undefined, c);
   const productId = ctx.productId!;
 
-  const [signal, stressors, history] = await Promise.all([
+  const [signal, stressors, history, dailyInsight, previousScore] = await Promise.all([
     computeSignal(productId),
     getActiveStressors(productId),
     getSignalHistory(productId, 60),
+    getDailyInsight(productId),
+    getPreviousSignalScore(productId),
   ]);
 
   const stressorRows = stressors.rows as unknown as StressorData[];
   const criticalCount = stressorRows.filter((s) => s.severity === 'critical').length;
-
-  // Pending decisions count from ctx nav badges
   const pendingDecisions = ctx.ux.navBadges.decisions_count;
+
+  // Delta vs. yesterday
+  const delta = previousScore !== null ? signal.score - previousScore : null;
+  const deltaStr = delta === null ? '' : delta > 0 ? `+${delta}` : delta < 0 ? String(delta) : '±0';
+  const deltaCls = delta === null || delta === 0 ? '' : delta > 0 ? 'signal-delta-up' : 'signal-delta-down';
 
   const content = html`
     <div class="signal-home" data-product-id="${productId}">
 
       <div class="signal-display signal-${signal.tier}">
-        <div class="signal-number">${signal.score}</div>
-        <div class="signal-label">Signal</div>
+        <button
+          class="signal-number"
+          onclick="document.getElementById('anatomy-dialog').showModal()"
+          title="Tap to see score breakdown"
+          aria-haspopup="dialog"
+        >${signal.score}</button>
+        <div class="signal-label-row">
+          <span class="signal-label">Signal</span>
+          ${delta !== null ? raw(`<span class="signal-delta ${deltaCls}">${deltaStr}</span>`) : ''}
+        </div>
         ${history.length >= 2 ? html`
         <div class="signal-sparkline-wrap">
           ${sparklineSVG(history)}
@@ -101,6 +178,18 @@ dashboardRoutes.get('/dashboard', async (c) => {
       <div class="signal-prose" id="signal-prose">
         ${signal.prose}
       </div>
+
+      ${dailyInsight ? html`
+      <details class="daily-insight">
+        <summary class="daily-insight-summary">
+          <span class="daily-insight-eyebrow">Today's focus</span>
+          <span class="daily-insight-headline">${dailyInsight.headline}</span>
+        </summary>
+        <div class="daily-insight-body">
+          <p>${dailyInsight.context}</p>
+          ${dailyInsight.action ? html`<div class="daily-insight-action">${dailyInsight.action}</div>` : ''}
+        </div>
+      </details>` : ''}
 
       <div class="query-bar">
         <form class="query-form" id="query-form" onsubmit="handleQuery(event)">
@@ -136,6 +225,8 @@ dashboardRoutes.get('/dashboard', async (c) => {
       </div>` : ''}
 
     </div>
+
+    ${signalAnatomyDialog(signal.score, signal.components, signal.riskState)}
 
     ${milestoneToastScript(ctx.ux.unseenMilestones)}
 

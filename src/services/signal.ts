@@ -127,7 +127,9 @@ export async function computeSignal(productId: string): Promise<SignalResult> {
   });
 
   // Record history snapshot (UPSERT: one per product per day)
-  void recordSignalSnapshot(productId, score, tier, riskState, stressors.length);
+  void recordSignalSnapshot(productId, score, tier, riskState, stressors.length, {
+    riskStatePenalty, stressorPenalty, mrrPenalty, backlogPenalty, lifecycleBonus,
+  });
 
   return {
     score,
@@ -259,18 +261,20 @@ async function recordSignalSnapshot(
   tier: SignalTier,
   riskState: string,
   stressorCount: number,
+  components: SignalComponents,
 ): Promise<void> {
   try {
     await query(
-      `INSERT INTO signal_history (id, product_id, score, tier, risk_state, stressor_count, snapshot_date)
-       VALUES (?, ?, ?, ?, ?, ?, date('now'))
+      `INSERT INTO signal_history (id, product_id, score, tier, risk_state, stressor_count, snapshot_date, components_json)
+       VALUES (?, ?, ?, ?, ?, ?, date('now'), ?)
        ON CONFLICT(product_id, snapshot_date) DO UPDATE SET
          score = excluded.score,
          tier  = excluded.tier,
          risk_state = excluded.risk_state,
          stressor_count = excluded.stressor_count,
+         components_json = excluded.components_json,
          recorded_at = CURRENT_TIMESTAMP`,
-      [nanoid(), productId, score, tier, riskState, stressorCount],
+      [nanoid(), productId, score, tier, riskState, stressorCount, JSON.stringify(components)],
     );
   } catch {
     // Non-critical: don't let history recording break the Signal read
@@ -293,6 +297,35 @@ export async function getSignalHistory(
     [productId, `-${days} days`],
   );
   return result.rows as unknown as Array<{ score: number; tier: string; risk_state: string; snapshot_date: string }>;
+}
+
+/**
+ * Get yesterday's Signal score for delta computation.
+ */
+export async function getPreviousSignalScore(productId: string): Promise<number | null> {
+  const result = await query(
+    `SELECT score FROM signal_history
+     WHERE product_id = ? AND snapshot_date < date('now')
+     ORDER BY snapshot_date DESC LIMIT 1`,
+    [productId],
+  );
+  if (result.rows.length === 0) return null;
+  return (result.rows[0] as Record<string, number>).score;
+}
+
+/**
+ * Get today's daily insight for a product, if it exists.
+ */
+export async function getDailyInsight(
+  productId: string,
+): Promise<{ headline: string; context: string; action: string | null } | null> {
+  const result = await query(
+    `SELECT headline, context, action FROM daily_insights
+     WHERE product_id = ? AND insight_date = date('now')`,
+    [productId],
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0] as unknown as { headline: string; context: string; action: string | null };
 }
 
 // ─── Invalidate Cache ─────────────────────────────────────────────────────────

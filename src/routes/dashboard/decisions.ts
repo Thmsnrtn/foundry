@@ -32,7 +32,10 @@ decisionRoutes.get('/decisions', async (c) => {
   const decisions = await getDecisionQueue(productId, riskState);
 
   const content = html`
-    <h1>Decisions</h1>
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.25rem;">
+      <h1 style="margin:0;">Decisions</h1>
+      <a href="/decisions/analytics" class="btn btn-ghost btn-sm">Decision Intelligence →</a>
+    </div>
     ${decisionList(decisions as unknown as DecisionData[])}
   `;
   return c.html(dashboardLayout(ctx, content));
@@ -154,7 +157,26 @@ decisionRoutes.get('/decisions/:id', async (c) => {
     <div class="card" style="margin-top:2rem;">
       <div class="chamber-section-label">Resolved</div>
       <p style="margin:0.35rem 0 0;">Chosen: <strong>${decision.chosen_option ?? '—'}</strong></p>
-      ${decision.outcome ? html`<p style="margin:0.35rem 0 0;color:var(--text-muted);">Outcome: ${decision.outcome}</p>` : ''}
+      ${decision.outcome ? html`
+        <p style="margin:0.35rem 0 0;color:var(--text-muted);">Outcome: ${decision.outcome}</p>
+        ${(decision as unknown as Record<string, unknown>).outcome_valence != null ? html`
+        <p style="margin:0.25rem 0 0;font-size:0.82rem;">
+          Result: <strong>${(decision as unknown as Record<string, unknown>).outcome_valence === 1 ? '✓ Worked' : (decision as unknown as Record<string, unknown>).outcome_valence === -1 ? '✗ Didn\'t work' : '◎ Mixed'}</strong>
+        </p>` : ''}
+      ` : html`
+        <div class="outcome-log-form" style="margin-top:1rem;" id="outcome-log">
+          <div class="chamber-section-label" style="margin-bottom:0.6rem;">Log outcome</div>
+          <textarea id="outcome-text" class="outcome-textarea" placeholder="What happened? Be specific — this feeds your Decision Intelligence." rows="3"></textarea>
+          <div class="outcome-valence-row">
+            <span class="outcome-valence-label">How did it go?</span>
+            <label class="valence-option"><input type="radio" name="valence" value="1" /> Worked</label>
+            <label class="valence-option"><input type="radio" name="valence" value="0" /> Mixed</label>
+            <label class="valence-option"><input type="radio" name="valence" value="-1" /> Didn't work</label>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="logOutcome()" style="margin-top:0.75rem;">Save outcome</button>
+          <div id="outcome-result" style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted);"></div>
+        </div>
+      `}
     </div>`}
 
     <script>
@@ -184,6 +206,30 @@ decisionRoutes.get('/decisions/:id', async (c) => {
         } catch {
           btn.disabled = false;
           btn.textContent = 'Get clarity';
+        }
+      };
+
+      window.logOutcome = async function() {
+        const outcome = document.getElementById('outcome-text').value.trim();
+        const valenceEl = document.querySelector('input[name="valence"]:checked');
+        const resultEl = document.getElementById('outcome-result');
+        if (!outcome) { resultEl.textContent = 'Write what happened first.'; return; }
+        try {
+          const res = await fetch('/decisions/' + decisionId + '/outcome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              outcome,
+              valence: valenceEl ? parseInt(valenceEl.value, 10) : null,
+            }),
+          });
+          if (!res.ok) throw new Error();
+          resultEl.textContent = 'Saved. This feeds your Decision Intelligence.';
+          document.getElementById('outcome-log').style.opacity = '0.5';
+          setTimeout(function() { window.location.reload(); }, 1500);
+        } catch {
+          resultEl.textContent = 'Something went wrong.';
         }
       };
 
@@ -315,7 +361,7 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
 decisionRoutes.post('/decisions/:id/outcome', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
-  const body = await c.req.json() as { outcome: string };
+  const body = await c.req.json() as { outcome: string; valence?: number };
   const result = await query(
     `SELECT d.product_id FROM decisions d
      JOIN products p ON d.product_id = p.id
@@ -324,7 +370,8 @@ decisionRoutes.post('/decisions/:id/outcome', async (c) => {
   );
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const productId = (result.rows[0] as Record<string, string>).product_id;
-  await recordOutcome(decisionId, productId, body.outcome);
+  const valence = body.valence != null ? Number(body.valence) : null;
+  await recordOutcome(decisionId, productId, body.outcome, valence);
   return c.json({ status: 'recorded' });
 });
 
@@ -365,4 +412,177 @@ Give them 2-3 sentences of direct clarity on their specific uncertainty. Address
   } catch {
     return c.json({ clarity: 'Unable to generate clarity right now. Trust what you know.' });
   }
+});
+
+// ─── Decision Intelligence (Analytics) ───────────────────────────────────────
+
+import { callOpus, parseJSONResponse } from '../../services/ai/client.js';
+
+decisionRoutes.get('/decisions/analytics', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'decisions', 'Decision Intelligence', undefined, c);
+  if (!ctx.productId) return c.redirect('/decisions');
+
+  const productId = ctx.productId;
+
+  const [totalsResult, categoryResult, speedResult] = await Promise.all([
+    query(
+      `SELECT
+         COUNT(*) as total,
+         COUNT(CASE WHEN status = 'approved' THEN 1 END) as resolved,
+         COUNT(CASE WHEN outcome_valence IS NOT NULL THEN 1 END) as with_outcomes,
+         COUNT(CASE WHEN outcome_valence = 1 THEN 1 END) as favorable,
+         COUNT(CASE WHEN outcome_valence = -1 THEN 1 END) as unfavorable
+       FROM decisions WHERE product_id = ?`,
+      [productId],
+    ),
+    query(
+      `SELECT
+         category,
+         COUNT(*) as total,
+         COUNT(CASE WHEN status = 'approved' THEN 1 END) as resolved,
+         COUNT(CASE WHEN outcome_valence IS NOT NULL THEN 1 END) as with_outcomes,
+         COUNT(CASE WHEN outcome_valence = 1 THEN 1 END) as favorable,
+         COUNT(CASE WHEN outcome_valence = -1 THEN 1 END) as unfavorable,
+         ROUND(AVG(CASE WHEN decided_at IS NOT NULL THEN julianday(decided_at) - julianday(created_at) END), 1) as avg_days
+       FROM decisions
+       WHERE product_id = ? AND category NOT IN ('informational')
+       GROUP BY category ORDER BY total DESC`,
+      [productId],
+    ),
+    query(
+      `SELECT
+         CASE
+           WHEN julianday(decided_at) - julianday(created_at) < 3 THEN 'fast'
+           WHEN julianday(decided_at) - julianday(created_at) <= 7 THEN 'medium'
+           ELSE 'slow'
+         END as bucket,
+         COUNT(*) as total,
+         COUNT(CASE WHEN outcome_valence = 1 THEN 1 END) as favorable,
+         COUNT(CASE WHEN outcome_valence IS NOT NULL THEN 1 END) as with_outcomes,
+         ROUND(AVG(julianday(decided_at) - julianday(created_at)), 1) as avg_days
+       FROM decisions
+       WHERE product_id = ? AND status = 'approved' AND decided_at IS NOT NULL
+       GROUP BY bucket`,
+      [productId],
+    ),
+  ]);
+
+  const totals = (totalsResult.rows[0] ?? {}) as Record<string, number>;
+  const categories = categoryResult.rows as Array<Record<string, unknown>>;
+  const speedRows = speedResult.rows as Array<Record<string, unknown>>;
+
+  // Merge speed buckets into a fixed order
+  const speedBuckets = ['fast', 'medium', 'slow'].map((b) => {
+    const found = speedRows.find((r) => r.bucket === b);
+    return found ?? { bucket: b, total: 0, favorable: 0, with_outcomes: 0, avg_days: null };
+  }) as Array<Record<string, unknown>>;
+
+  // AI synthesis only if there's enough outcome data
+  let synthesis: string | null = null;
+  if (totals.with_outcomes >= 3) {
+    const catSummary = categories
+      .filter((c) => (c.with_outcomes as number) > 0)
+      .map((c) => `${c.category}: ${c.favorable}/${c.with_outcomes} favorable, avg ${c.avg_days ?? '?'}d to decide`)
+      .join('\n');
+    const speedSummary = speedBuckets
+      .filter((b) => (b.with_outcomes as number) > 0)
+      .map((b) => `${b.bucket} (<${b.bucket === 'fast' ? '3' : b.bucket === 'medium' ? '7' : '7+'}d): ${b.favorable}/${b.with_outcomes} favorable`)
+      .join('\n');
+
+    try {
+      const raw = await callOpus(
+        'You are Foundry. Given decision history data, synthesize the founder\'s pattern in 2-3 direct sentences. No markdown. No hedging. Address them as "You".',
+        `Categories:\n${catSummary}\n\nSpeed vs quality:\n${speedSummary}\n\nReturn JSON only: { "synthesis": "2-3 sentence pattern insight" }`,
+        350,
+      );
+      const parsed = parseJSONResponse<{ synthesis: string }>(raw.content);
+      synthesis = parsed?.synthesis ?? null;
+    } catch { /* non-critical */ }
+  }
+
+  // Render helpers
+  const pct = (favorable: number, total: number) =>
+    total > 0 ? Math.round((favorable / total) * 100) : null;
+
+  const barRow = (label: string, favorable: number, total: number, extra = '') => {
+    const p = pct(favorable, total);
+    const barW = p ?? 0;
+    return html`
+    <div class="analytics-row">
+      <div class="analytics-row-label">${label}</div>
+      <div class="analytics-row-bar">
+        <div class="analytics-bar-fill" style="width:${barW}%"></div>
+      </div>
+      <div class="analytics-row-stat">
+        ${p !== null ? html`<span class="analytics-pct">${p}%</span> <span class="analytics-sub">(${favorable}/${total})</span>` : html`<span class="analytics-sub">no outcomes yet</span>`}
+        ${extra ? html`<span class="analytics-extra"> · ${extra}</span>` : ''}
+      </div>
+    </div>`;
+  };
+
+  const categoryLabels: Record<string, string> = {
+    urgent: 'Urgent', strategic: 'Strategic', product: 'Product', marketing: 'Marketing',
+  };
+
+  const content = html`
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.5rem;">
+      <h1 style="margin:0;">Decision Intelligence</h1>
+      <a href="/decisions" class="btn btn-ghost btn-sm">← All decisions</a>
+    </div>
+
+    <div class="analytics-totals">
+      <div class="analytics-total-item">
+        <div class="analytics-total-value">${totals.total ?? 0}</div>
+        <div class="analytics-total-label">Total decisions</div>
+      </div>
+      <div class="analytics-total-item">
+        <div class="analytics-total-value">${totals.resolved ?? 0}</div>
+        <div class="analytics-total-label">Resolved</div>
+      </div>
+      <div class="analytics-total-item">
+        <div class="analytics-total-value">${totals.with_outcomes ?? 0}</div>
+        <div class="analytics-total-label">Outcomes logged</div>
+      </div>
+      <div class="analytics-total-item">
+        <div class="analytics-total-value">${totals.with_outcomes > 0 ? `${pct(totals.favorable, totals.with_outcomes)}%` : '—'}</div>
+        <div class="analytics-total-label">Favorable rate</div>
+      </div>
+    </div>
+
+    ${categories.length > 0 ? html`
+    <div class="card analytics-section">
+      <div class="analytics-section-label">Outcome quality by category</div>
+      ${categories.map((cat) => barRow(
+        categoryLabels[cat.category as string] ?? (cat.category as string),
+        cat.favorable as number,
+        cat.with_outcomes as number,
+        cat.avg_days ? `avg ${cat.avg_days}d to decide` : '',
+      ))}
+    </div>` : ''}
+
+    <div class="card analytics-section">
+      <div class="analytics-section-label">Decision speed vs. quality</div>
+      ${barRow('Fast  (<3 days)', speedBuckets[0].favorable as number, speedBuckets[0].with_outcomes as number,
+        (speedBuckets[0].total as number) > 0 ? `${speedBuckets[0].total} decisions` : '')}
+      ${barRow('Medium (3–7 days)', speedBuckets[1].favorable as number, speedBuckets[1].with_outcomes as number,
+        (speedBuckets[1].total as number) > 0 ? `${speedBuckets[1].total} decisions` : '')}
+      ${barRow('Slow  (>7 days)', speedBuckets[2].favorable as number, speedBuckets[2].with_outcomes as number,
+        (speedBuckets[2].total as number) > 0 ? `${speedBuckets[2].total} decisions` : '')}
+    </div>
+
+    ${synthesis ? html`
+    <div class="card analytics-synthesis">
+      <div class="analytics-section-label">Your pattern</div>
+      <p class="analytics-synthesis-text">${synthesis}</p>
+    </div>` : totals.with_outcomes < 3 ? html`
+    <div class="card" style="text-align:center;padding:2rem;">
+      <div style="font-size:0.87rem;color:var(--text-dim);">
+        Log outcomes on ${3 - (totals.with_outcomes ?? 0)} more decision${3 - (totals.with_outcomes ?? 0) === 1 ? '' : 's'} to unlock your decision pattern.
+      </div>
+      <a href="/decisions" class="btn btn-ghost btn-sm" style="margin-top:0.75rem;">Go to decisions</a>
+    </div>` : ''}
+  `;
+
+  return c.html(dashboardLayout(ctx, content));
 });
