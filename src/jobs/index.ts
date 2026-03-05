@@ -839,6 +839,108 @@ Return JSON only:
   console.log('[JOB] weekly_plan_generate complete');
 }
 
+// ─── New Job: Integration Sync ────────────────────────────────────────────────
+
+export async function integrationSync(): Promise<void> {
+  const { syncAllIntegrations } = await import('../services/integrations/sync.js');
+  await syncAllIntegrations();
+}
+
+// ─── New Job: Morning Briefings ───────────────────────────────────────────────
+
+export async function morningBriefings(): Promise<void> {
+  console.log('[JOB] morning_briefings starting');
+  const products = await getAllActiveProducts();
+
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const founderResult = await query('SELECT name FROM founders WHERE id = ?', [p.owner_id]);
+      const founderName = (founderResult.rows[0] as Record<string, string> | undefined)?.name ?? null;
+      const { generateMorningBriefing } = await import('../services/voice/briefing.js');
+      await generateMorningBriefing(p.id, p.owner_id, founderName);
+    } catch (err) {
+      console.error(`[JOB] morning_briefings error for ${p.id}:`, err);
+    }
+  }
+  console.log('[JOB] morning_briefings complete');
+}
+
+// ─── New Job: Alignment Scores ────────────────────────────────────────────────
+
+export async function alignmentScores(): Promise<void> {
+  console.log('[JOB] alignment_scores starting');
+  const products = await getAllActiveProducts();
+  const { computeAlignmentScore } = await import('../services/team/members.js');
+
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      await computeAlignmentScore(p.id);
+    } catch (err) {
+      console.error(`[JOB] alignment_scores error for ${p.id}:`, err);
+    }
+  }
+  console.log('[JOB] alignment_scores complete');
+}
+
+// ─── New Job: Network Contribution ────────────────────────────────────────────
+
+export async function networkContribution(): Promise<void> {
+  console.log('[JOB] network_contribution starting');
+  const products = await getAllActiveProducts();
+  const { contributeToNetwork } = await import('../services/network/benchmarks.js');
+
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const lsResult = await query('SELECT current_prompt FROM lifecycle_state WHERE product_id = ?', [p.id]);
+      const lifecycleStage = (lsResult.rows[0] as Record<string, string> | undefined)?.current_prompt ?? 'prompt_1';
+      await contributeToNetwork(p.id, p.market_category ?? null, lifecycleStage);
+    } catch (err) {
+      console.error(`[JOB] network_contribution error for ${p.id}:`, err);
+    }
+  }
+  console.log('[JOB] network_contribution complete');
+}
+
+// ─── New Job: Prediction Accuracy ─────────────────────────────────────────────
+
+export async function predictionAccuracyJob(): Promise<void> {
+  console.log('[JOB] prediction_accuracy starting');
+  // Find decisions with outcomes recorded in the last 7 days that haven't been scored
+  const decisions = await query(
+    `SELECT d.id, d.product_id, d.chosen_option, d.outcome, d.outcome_valence
+     FROM decisions d
+     WHERE d.outcome IS NOT NULL AND d.outcome_valence IS NOT NULL
+       AND d.decided_at > date('now', '-90 days')
+       AND NOT EXISTS (
+         SELECT 1 FROM prediction_accuracy pa WHERE pa.decision_id = d.id
+       )
+     LIMIT 50`,
+    [],
+  );
+
+  const { recordPredictionAccuracy } = await import('../services/temporal/replay.js');
+
+  for (const row of decisions.rows) {
+    const d = row as Record<string, unknown>;
+    const direction = d.outcome_valence === 1 ? 'positive' : d.outcome_valence === -1 ? 'negative' : 'neutral';
+    try {
+      await recordPredictionAccuracy(
+        d.product_id as string,
+        d.id as string,
+        direction as 'positive' | 'neutral' | 'negative',
+        null,
+        null,
+      );
+    } catch (err) {
+      console.error(`[JOB] prediction_accuracy error for decision ${d.id}:`, err);
+    }
+  }
+  console.log(`[JOB] prediction_accuracy: scored ${decisions.rows.length} decisions`);
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -865,4 +967,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   decision_follow_up:    { fn: decisionFollowUp,       schedule: '0 10 * * *',  description: 'Notify founders to log decision outcomes (daily 10:00 UTC)' },
   daily_insight_generate: { fn: dailyInsightGenerate,  schedule: '30 7 * * *',  description: 'Generate Daily One Thing for each product (daily 7:30 UTC)' },
   weekly_plan_generate:   { fn: weeklyPlanGenerate,    schedule: '0 8 * * 1',   description: 'Generate Weekly Operating Plan for each product (Monday 8:00 UTC)' },
+  integration_sync:       { fn: integrationSync,       schedule: '0 */1 * * *', description: 'Sync all active external integrations (every hour)' },
+  morning_briefings:      { fn: morningBriefings,      schedule: '30 6 * * *',  description: 'Pre-generate morning voice briefings (daily 6:30 UTC)' },
+  alignment_scores:       { fn: alignmentScores,       schedule: '0 8 * * 1',   description: 'Compute co-founder alignment scores (Monday)' },
+  network_contribution:   { fn: networkContribution,   schedule: '0 3 * * 0',   description: 'Contribute anonymized metrics to Intelligence Network (Sunday)' },
+  prediction_accuracy:    { fn: predictionAccuracyJob, schedule: '0 11 * * *',  description: 'Compute prediction accuracy for recent decision outcomes (daily)' },
 };

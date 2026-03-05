@@ -47,12 +47,19 @@ import { timelineRoutes } from './routes/signal/timeline.js';
 // Weekly Operating Plan
 import { planRoutes } from './routes/dashboard/plan.js';
 
+// New routes: Integrations, Team, Investors, Playbooks
+import { integrationsRoutes } from './routes/dashboard/integrations.js';
+import { teamRoutes } from './routes/dashboard/team.js';
+import { investorRoutes } from './routes/dashboard/investors.js';
+import { playbookRoutes } from './routes/dashboard/playbooks.js';
+
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
 import { apiMetricRoutes } from './routes/api/metrics.js';
 import { apiAuditLogRoutes } from './routes/api/audit-log.js';
 import { apiUXRoutes } from './routes/api/ux.js';
 import { apiAskRoutes } from './routes/api/ask.js';
+import { mobileRoutes } from './routes/api/mobile.js';
 
 // Internal routes (ecosystem key required, except /health)
 import { healthRoutes } from './routes/internal/health.js';
@@ -166,6 +173,14 @@ app.use('/plan/*', authMiddleware);
 app.use('/signal/*', authMiddleware);
 app.use('/switch-product', authMiddleware);
 app.use('/portfolio', authMiddleware);
+app.use('/integrations', authMiddleware);
+app.use('/integrations/*', authMiddleware);
+app.use('/team', authMiddleware);
+app.use('/team/*', authMiddleware);
+app.use('/investors', authMiddleware);
+app.use('/investors/*', authMiddleware);
+app.use('/playbooks', authMiddleware);
+app.use('/playbooks/*', authMiddleware);
 app.use('/api/*', authMiddleware);
 
 // Dashboard routes
@@ -186,6 +201,10 @@ app.route('/', revenueRoutes);
 app.route('/', portfolioRoutes);
 app.route('/', planRoutes);
 app.route('/', timelineRoutes);
+app.route('/', integrationsRoutes);
+app.route('/', teamRoutes);
+app.route('/', investorRoutes);
+app.route('/', playbookRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);
@@ -193,6 +212,7 @@ app.route('/', apiMetricRoutes);
 app.route('/', apiAuditLogRoutes);
 app.route('/', apiUXRoutes);
 app.route('/', apiAskRoutes);
+app.route('/', mobileRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 

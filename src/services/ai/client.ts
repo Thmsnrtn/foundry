@@ -85,6 +85,43 @@ export async function callSonnet(
 }
 
 /**
+ * Multi-turn Claude call with a full message history array.
+ * Used by the conversational layer to maintain context across turns.
+ */
+export async function callClaudeMultiTurn(
+  systemPrompt: string,
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  maxTokens: number = 1024,
+  useOpus: boolean = false,
+): Promise<AIResponse> {
+  const client = getClient();
+  const model = useOpus ? MODELS.OPUS : MODELS.SONNET;
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    temperature: 0.3,
+    system: systemPrompt,
+    messages,
+  });
+
+  const textContent = response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n');
+
+  return {
+    content: textContent,
+    model,
+    usage: {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    },
+    stop_reason: response.stop_reason,
+  };
+}
+
+/**
  * Parse a JSON response from Claude, handling markdown code fences.
  */
 export function parseJSONResponse<T>(content: string): T {

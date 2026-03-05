@@ -968,6 +968,437 @@ export interface DimensionHint {
   hint_text: string;
 }
 
+// ─── Integrations ────────────────────────────────────────────────────────────
+
+export type IntegrationType =
+  | 'stripe' | 'posthog' | 'intercom' | 'linear'
+  | 'slack' | 'mixpanel' | 'amplitude' | 'app_store_connect' | 'github_app';
+
+export type IntegrationStatus = 'pending' | 'active' | 'error' | 'paused' | 'revoked';
+
+export interface Integration {
+  id: string;
+  product_id: string;
+  type: IntegrationType;
+  status: IntegrationStatus;
+  credentials_json: Record<string, string> | null;
+  config_json: Record<string, unknown> | null;
+  last_synced_at: string | null;
+  last_error: string | null;
+  sync_cursor: string | null;
+  records_synced_total: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationSyncLog {
+  id: string;
+  integration_id: string;
+  product_id: string;
+  started_at: string;
+  completed_at: string | null;
+  status: 'running' | 'success' | 'partial' | 'failed' | null;
+  records_processed: number;
+  metrics_updated: string[] | null;
+  error_message: string | null;
+}
+
+// ─── Conversations ────────────────────────────────────────────────────────────
+
+export type ConversationIntent = 'explain' | 'compare' | 'scenario' | 'action' | 'search' | 'general';
+
+export interface ConversationThread {
+  id: string;
+  product_id: string;
+  founder_id: string;
+  title: string | null;
+  intent: ConversationIntent | null;
+  context_snapshot: ConversationContextSnapshot | null;
+  message_count: number;
+  last_message_at: string | null;
+  pinned: boolean;
+  archived: boolean;
+  created_at: string;
+}
+
+export interface ConversationContextSnapshot {
+  signal: number;
+  riskState: RiskStateValue;
+  stressorCount: number;
+  pendingDecisions: number;
+  currentPrompt: string;
+  mrr_health_ratio: number | null;
+}
+
+export interface ConversationMessage {
+  id: string;
+  thread_id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  data_points: Array<{ label: string; value: string }> | null;
+  actions_taken: Array<{ type: string; description: string; entity_id?: string; entity_type?: string }> | null;
+  intent: ConversationIntent | null;
+  model_used: string | null;
+  tokens_used: number | null;
+  created_at: string;
+}
+
+export interface SavedInsight {
+  id: string;
+  product_id: string;
+  founder_id: string;
+  message_id: string | null;
+  title: string;
+  content: string;
+  tags: string[] | null;
+  created_at: string;
+}
+
+// ─── Team / Co-Founder Mode ────────────────────────────────────────────────────
+
+export type TeamMemberRole = 'co_founder' | 'advisor' | 'investor_observer';
+
+export interface TeamMember {
+  id: string;
+  product_id: string;
+  founder_id: string;
+  role: TeamMemberRole;
+  can_view_decisions: boolean;
+  can_vote_decisions: boolean;
+  can_view_financials: boolean;
+  can_view_audit: boolean;
+  can_trigger_actions: boolean;
+  status: 'active' | 'inactive' | 'removed';
+  invited_by: string | null;
+  joined_at: string;
+}
+
+export interface TeamInvitation {
+  id: string;
+  product_id: string;
+  invited_by: string;
+  email: string;
+  role: TeamMemberRole;
+  token: string;
+  message: string | null;
+  accepted_at: string | null;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface DecisionVote {
+  id: string;
+  decision_id: string;
+  product_id: string;
+  founder_id: string;
+  vote: 'approve' | 'reject' | 'abstain' | 'needs_more_info' | null;
+  preferred_option: string | null;
+  rationale: string | null;
+  concerns: string[] | null;
+  voted_at: string;
+}
+
+export interface AlignmentSnapshot {
+  id: string;
+  product_id: string;
+  snapshot_date: string;
+  alignment_score: number;
+  signal_consensus: boolean | null;
+  divergence_areas: string[] | null;
+  risk_state_consensus: boolean | null;
+  priority_consensus: boolean | null;
+  notes: string | null;
+  created_at: string;
+}
+
+// ─── Investor Layer ───────────────────────────────────────────────────────────
+
+export type InvestorRelationship = 'lead_investor' | 'angel' | 'advisor' | 'board_member' | 'observer';
+
+export interface Investor {
+  id: string;
+  product_id: string;
+  name: string;
+  email: string | null;
+  firm: string | null;
+  relationship: InvestorRelationship | null;
+  access_token: string;
+  access_expires_at: string | null;
+  can_comment: boolean;
+  notify_on_milestones: boolean;
+  notify_on_risk_state_change: boolean;
+  last_viewed_at: string | null;
+  added_at: string;
+  status: 'active' | 'paused' | 'revoked';
+}
+
+export interface InvestorAnnotation {
+  id: string;
+  decision_id: string;
+  product_id: string;
+  investor_id: string;
+  content: string;
+  annotation_type: 'concern' | 'endorsement' | 'question' | 'context' | 'precedent' | null;
+  is_private: boolean;
+  created_at: string;
+}
+
+export type BoardPacketStatus = 'draft' | 'finalized' | 'shared';
+
+export interface BoardPacket {
+  id: string;
+  product_id: string;
+  quarter: string;
+  period_start: string;
+  period_end: string;
+  executive_summary: string | null;
+  signal_narrative: string | null;
+  key_decisions_made: Decision[] | null;
+  milestones_crossed: FoundingStoryArtifact[] | null;
+  stressors_resolved: Stressor[] | null;
+  stressors_active: Stressor[] | null;
+  mrr_narrative: string | null;
+  cohort_narrative: string | null;
+  competitive_narrative: string | null;
+  next_quarter_focus: string | null;
+  signal_start: number | null;
+  signal_end: number | null;
+  signal_delta: number | null;
+  generated_at: string | null;
+  finalized_at: string | null;
+  shared_with: string[] | null;
+  status: BoardPacketStatus;
+}
+
+export type FundingVerdict = 'raise_ready' | 'almost_ready' | 'not_ready';
+
+export interface FundingReadiness {
+  id: string;
+  product_id: string;
+  score: number;
+  mrr_trajectory_score: number | null;
+  churn_score: number | null;
+  activation_score: number | null;
+  technical_debt_score: number | null;
+  decision_track_record_score: number | null;
+  team_completeness_score: number | null;
+  market_clarity_score: number | null;
+  verdict: FundingVerdict | null;
+  key_gaps: string[] | null;
+  narrative: string | null;
+  created_at: string;
+}
+
+export interface DealRoom {
+  id: string;
+  product_id: string;
+  created_by: string;
+  title: string;
+  description: string | null;
+  access_token: string;
+  decision_ids: string[] | null;
+  expires_at: string | null;
+  view_count: number;
+  last_viewed_at: string | null;
+  created_at: string;
+}
+
+// ─── Playbooks ────────────────────────────────────────────────────────────────
+
+export type PlaybookType =
+  | 'operating_principles'
+  | 'onboarding_kit'
+  | 'pricing_framework'
+  | 'churn_response'
+  | 'activation_playbook'
+  | 'fundraising_narrative'
+  | 'competitive_response'
+  | 'recovery_protocol';
+
+export interface Playbook {
+  id: string;
+  product_id: string;
+  type: PlaybookType;
+  title: string;
+  version: number;
+  executive_summary: string | null;
+  core_principles: string | null;
+  playbook_body: string | null;
+  anti_patterns: string | null;
+  evidence: PlaybookEvidence[] | null;
+  source_decisions: number;
+  source_patterns: number;
+  source_failures: number;
+  dna_sections_used: string[] | null;
+  is_current: boolean;
+  generated_at: string;
+  last_updated_at: string;
+  notion_page_id: string | null;
+  linear_doc_id: string | null;
+  exported_at: string | null;
+}
+
+export interface PlaybookEvidence {
+  description: string;
+  decision_id?: string;
+  stressor_id?: string;
+  date: string;
+}
+
+// ─── Temporal Intelligence ────────────────────────────────────────────────────
+
+export type TemporalEventType =
+  | 'stressor_created' | 'stressor_resolved'
+  | 'decision_made' | 'decision_outcome'
+  | 'risk_state_change' | 'lifecycle_gate'
+  | 'audit_completed' | 'remediation_merged'
+  | 'signal_spike' | 'signal_drop'
+  | 'milestone' | 'integration_connected'
+  | 'cohort_anomaly' | 'competitive_signal';
+
+export interface TemporalEvent {
+  id: string;
+  product_id: string;
+  event_date: string;
+  event_type: TemporalEventType;
+  title: string;
+  description: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  signal_at_event: number | null;
+  signal_delta: number | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface PredictionAccuracy {
+  id: string;
+  product_id: string;
+  scenario_model_id: string | null;
+  decision_id: string;
+  option_chosen: string;
+  predicted_mrr_delta_pct: number | null;
+  predicted_outcome_direction: OutcomeDirection | null;
+  predicted_timeframe_days: number | null;
+  actual_mrr_delta_pct: number | null;
+  actual_outcome_direction: OutcomeDirection | null;
+  actual_timeframe_days: number | null;
+  direction_correct: boolean | null;
+  magnitude_accuracy: number | null;
+  timeframe_accuracy: number | null;
+  composite_accuracy: number | null;
+  measured_at: string | null;
+  created_at: string;
+}
+
+// ─── Voice Interface ──────────────────────────────────────────────────────────
+
+export interface VoiceSession {
+  id: string;
+  product_id: string;
+  founder_id: string;
+  session_date: string;
+  briefing_text: string | null;
+  briefing_headline: string | null;
+  signal_at_briefing: number | null;
+  risk_state_at_briefing: RiskStateValue | null;
+  transcript: string | null;
+  structured_updates: VoiceUpdate[] | null;
+  decisions_created: string[] | null;
+  stressors_updated: string[] | null;
+  metrics_updated: Record<string, number> | null;
+  duration_seconds: number | null;
+  model_used: string | null;
+  created_at: string;
+}
+
+export interface VoiceUpdate {
+  type: 'metric' | 'stressor' | 'decision' | 'note';
+  data: Record<string, unknown>;
+}
+
+// ─── Push Notifications ────────────────────────────────────────────────────────
+
+export type PushPlatform = 'web' | 'ios' | 'android';
+
+export interface PushSubscription {
+  id: string;
+  founder_id: string;
+  endpoint: string | null;
+  p256dh: string | null;
+  auth: string | null;
+  apns_device_token: string | null;
+  apns_bundle_id: string | null;
+  platform: PushPlatform | null;
+  user_agent: string | null;
+  notify_risk_state_change: boolean;
+  notify_critical_stressor: boolean;
+  notify_decision_deadline: boolean;
+  notify_daily_briefing: boolean;
+  notify_milestone: boolean;
+  notify_integration_error: boolean;
+  notify_weekly_digest: boolean;
+  last_delivered_at: string | null;
+  failure_count: number;
+  active: boolean;
+  created_at: string;
+}
+
+export interface SlackIntegration {
+  id: string;
+  founder_id: string;
+  workspace_name: string | null;
+  team_id: string | null;
+  channel_id: string | null;
+  channel_name: string | null;
+  bot_token: string | null;
+  notify_risk_state_change: boolean;
+  notify_critical_stressor: boolean;
+  notify_decision_deadline: boolean;
+  notify_weekly_digest: boolean;
+  notify_milestone: boolean;
+  active: boolean;
+  created_at: string;
+}
+
+export interface OutboundWebhook {
+  id: string;
+  product_id: string;
+  url: string;
+  secret: string | null;
+  events: string[];
+  active: boolean;
+  failure_count: number;
+  last_delivered_at: string | null;
+  last_error: string | null;
+  created_at: string;
+}
+
+// ─── Network / Benchmarks ─────────────────────────────────────────────────────
+
+export interface NetworkBenchmark {
+  metric: string;
+  market_category: string;
+  lifecycle_stage: string;
+  mrr_bracket: string;                  // e.g. "0-5k", "5k-25k", "25k-100k"
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  sample_count: number;
+  last_updated: string;
+}
+
+export interface BenchmarkComparison {
+  metric: string;
+  your_value: number;
+  percentile: number;                   // 0-100
+  p25: number | null;
+  p50: number | null;
+  p75: number | null;
+  label: string;                        // "above median", "below p25", etc.
+  sample_count: number;
+}
+
 // ─── Hono Context Extensions ─────────────────────────────────────────────────
 
 export interface AuthContext {
