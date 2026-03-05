@@ -34,6 +34,21 @@ authRoutes.post('/auth/webhook', async (c) => {
 
   const payload = await c.req.json() as { type: string; data: Record<string, unknown> };
 
+  if (payload.type === 'user.deleted') {
+    const userId = payload.data.id as string;
+    const founderResult = await query('SELECT id FROM founders WHERE clerk_user_id = ?', [userId]);
+    if (founderResult.rows.length > 0) {
+      const founderId = (founderResult.rows[0] as Record<string, string>).id;
+      // Delete products (and all cascaded child rows) then the founder
+      const productsResult = await query('SELECT id FROM products WHERE owner_id = ?', [founderId]);
+      for (const row of productsResult.rows) {
+        const productId = (row as Record<string, string>).id;
+        await query('DELETE FROM products WHERE id = ?', [productId]);
+      }
+      await query('DELETE FROM founders WHERE id = ?', [founderId]);
+    }
+  }
+
   if (payload.type === 'user.created') {
     const userId = payload.data.id as string;
     const email = (payload.data.email_addresses as Array<{ email_address: string }>)?.[0]?.email_address ?? '';

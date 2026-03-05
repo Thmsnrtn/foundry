@@ -14,6 +14,7 @@ import { getTourState } from '../../services/ux/tour.js';
 import { canAccess as canAccessFn } from '../../middleware/tier-gate.js';
 import { getCookie } from 'hono/cookie';
 import type { Context } from 'hono';
+import type { AuthEnv } from '../../middleware/auth.js';
 
 export interface UXContext {
   nextAction: NextAction | null;
@@ -160,4 +161,17 @@ export async function getLayoutContext(
     allProducts,
     ux,
   };
+}
+
+/**
+ * Wraps getLayoutContext for routes that need ctx.product (e.g. investor routes).
+ * Reads the founder from the Hono context automatically.
+ */
+export async function buildSharedContext(
+  c: Context<AuthEnv>,
+): Promise<LayoutContext & { product: { id: string; name: string } | null }> {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'investors', 'Investors', undefined, c);
+  const product = ctx.productId ? { id: ctx.productId, name: ctx.productName ?? '' } : null;
+  return { ...ctx, product };
 }

@@ -23,7 +23,7 @@ mobileRoutes.get('/api/dashboard', async (c) => {
 
   // Verify access
   const productResult = await query(
-    `SELECT id, name, market_category, lifecycle_stage
+    `SELECT id, name, market_category
      FROM products WHERE id = ? AND owner_id = ?`,
     [productId, founder.id],
   );
@@ -40,23 +40,23 @@ mobileRoutes.get('/api/dashboard', async (c) => {
       [productId],
     ),
     query(
-      `SELECT id, what, category, gate, status, created_at, deadline, decided_at, chosen_option, outcome, options_json, rationale
+      `SELECT id, what, category, gate, status, created_at, deadline, decided_at, chosen_option, outcome, options
        FROM decisions WHERE product_id = ? AND decided_at IS NULL
        ORDER BY CASE category WHEN 'urgent' THEN 0 WHEN 'strategic' THEN 1 ELSE 2 END
        LIMIT 10`,
       [productId],
     ),
     query(
-      `SELECT total_mrr, new_mrr, churned_mrr, expansion_mrr, contraction_mrr, health_ratio
-       FROM mrr_snapshots WHERE product_id = ?
+      `SELECT new_mrr_cents, churned_mrr_cents, expansion_mrr_cents, contraction_mrr_cents, mrr_health_ratio
+       FROM metric_snapshots WHERE product_id = ?
        ORDER BY snapshot_date DESC LIMIT 1`,
       [productId],
     ),
   ]);
 
   type StressorRow = { id: string; stressor_name: string; signal: string; severity: string; neutralizing_action: string; status: string };
-  type DecisionRow = { id: string; what: string; category: string; gate: number; status: string; created_at: string; deadline: string | null; decided_at: string | null; chosen_option: string | null; outcome: string | null; options_json: string | null; rationale: string | null };
-  type MrrRow = { total_mrr: number; new_mrr: number; churned_mrr: number; expansion_mrr: number; contraction_mrr: number; health_ratio: number | null };
+  type DecisionRow = { id: string; what: string; category: string; gate: number; status: string; created_at: string; deadline: string | null; decided_at: string | null; chosen_option: string | null; outcome: string | null; options: string | null };
+  type MrrRow = { new_mrr_cents: number; churned_mrr_cents: number; expansion_mrr_cents: number; contraction_mrr_cents: number; mrr_health_ratio: number | null };
 
   const stressors = (stressorData.rows as unknown as StressorRow[]).map((s) => ({
     id: s.id,
@@ -79,16 +79,16 @@ mobileRoutes.get('/api/dashboard', async (c) => {
     decided_at: d.decided_at,
     chosen_option: d.chosen_option,
     outcome: d.outcome,
-    options: d.options_json ? JSON.parse(d.options_json) as string[] : null,
-    rationale: d.rationale,
+    options: d.options ? JSON.parse(d.options) as string[] : null,
   }));
 
   const mrrRow = mrrData.rows.length > 0 ? (mrrData.rows[0] as unknown as MrrRow) : null;
   const mrr = mrrRow ? {
-    total: mrrRow.total_mrr,
-    new: mrrRow.new_mrr,
-    churned: mrrRow.churned_mrr,
-    health_ratio: mrrRow.health_ratio,
+    new: Math.round(mrrRow.new_mrr_cents / 100),
+    churned: Math.round(mrrRow.churned_mrr_cents / 100),
+    expansion: Math.round(mrrRow.expansion_mrr_cents / 100),
+    contraction: Math.round(mrrRow.contraction_mrr_cents / 100),
+    health_ratio: mrrRow.mrr_health_ratio,
   } : null;
 
   return c.json({
@@ -120,7 +120,7 @@ mobileRoutes.get('/api/decisions', async (c) => {
 
   const result = await query(
     `SELECT id, what, category, gate, status, created_at, deadline,
-            decided_at, chosen_option, outcome, options_json, rationale
+            decided_at, chosen_option, outcome, options
      FROM decisions WHERE product_id = ?
      ORDER BY CASE WHEN decided_at IS NULL THEN 0 ELSE 1 END,
               CASE category WHEN 'urgent' THEN 0 WHEN 'strategic' THEN 1 ELSE 2 END,
@@ -129,7 +129,7 @@ mobileRoutes.get('/api/decisions', async (c) => {
     [productId],
   );
 
-  type Row = { id: string; what: string; category: string; gate: number; status: string; created_at: string; deadline: string | null; decided_at: string | null; chosen_option: string | null; outcome: string | null; options_json: string | null; rationale: string | null };
+  type Row = { id: string; what: string; category: string; gate: number; status: string; created_at: string; deadline: string | null; decided_at: string | null; chosen_option: string | null; outcome: string | null; options: string | null };
 
   const decisions = (result.rows as unknown as Row[]).map((d) => ({
     id: d.id,
@@ -143,8 +143,7 @@ mobileRoutes.get('/api/decisions', async (c) => {
     decided_at: d.decided_at,
     chosen_option: d.chosen_option,
     outcome: d.outcome,
-    options: d.options_json ? JSON.parse(d.options_json) as string[] : null,
-    rationale: d.rationale,
+    options: d.options ? JSON.parse(d.options) as string[] : null,
   }));
 
   return c.json({ decisions });
@@ -154,7 +153,7 @@ mobileRoutes.get('/api/decisions', async (c) => {
 
 mobileRoutes.post('/api/decisions', async (c) => {
   const founder = c.get('founder');
-  const body = await c.req.json<{ product_id: string; what: string; category?: string; gate?: number }>();
+  const body = await c.req.json<{ product_id: string; what: string; why_now?: string; category?: string; gate?: number }>();
   if (!body.product_id || !body.what) return c.json({ error: 'product_id and what required' }, 400);
 
   const productCheck = await query(
@@ -166,11 +165,12 @@ mobileRoutes.post('/api/decisions', async (c) => {
   const id = nanoid();
   const category = body.category ?? 'strategic';
   const gate = body.gate ?? 2;
+  const whyNow = body.why_now ?? '';
 
   await query(
-    `INSERT INTO decisions (id, product_id, founder_id, what, category, gate, status)
+    `INSERT INTO decisions (id, product_id, what, why_now, category, gate, status)
      VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-    [id, body.product_id, founder.id, body.what, category, gate],
+    [id, body.product_id, body.what, whyNow, category, gate],
   );
 
   return c.json({
@@ -186,7 +186,6 @@ mobileRoutes.post('/api/decisions', async (c) => {
     chosen_option: null,
     outcome: null,
     options: null,
-    rationale: null,
   }, 201);
 });
 
@@ -206,42 +205,32 @@ mobileRoutes.get('/api/voice/briefing', async (c) => {
   try {
     const session = await generateMorningBriefing(productId, founder.id, founder.name ?? null);
 
-    // Build key metrics from latest snapshots
-    const [mrrResult, metricsResult] = await Promise.all([
-      query(
-        `SELECT total_mrr, health_ratio FROM mrr_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1`,
-        [productId],
-      ),
-      query(
-        `SELECT DISTINCT field_name, value FROM metric_snapshots WHERE product_id = ?
-         AND field_name IN ('activation_rate','churn_rate','nps_score','day_30_retention')
-         ORDER BY snapshot_date DESC LIMIT 8`,
-        [productId],
-      ),
-    ]);
+    // Build key metrics from latest snapshot
+    const metricsResult = await query(
+      `SELECT new_mrr_cents, mrr_health_ratio, activation_rate, churn_rate, nps_score, day_30_retention
+       FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1`,
+      [productId],
+    );
 
-    type MrrRow = { total_mrr: number; health_ratio: number | null };
-    type MetricRow = { field_name: string; value: number };
+    type MetricSnapshotRow = {
+      new_mrr_cents: number | null;
+      mrr_health_ratio: number | null;
+      activation_rate: number | null;
+      churn_rate: number | null;
+      nps_score: number | null;
+      day_30_retention: number | null;
+    };
 
-    const mrrRow = mrrResult.rows[0] as unknown as MrrRow | undefined;
-    const metrics = metricsResult.rows as unknown as MetricRow[];
+    const snap = metricsResult.rows[0] as unknown as MetricSnapshotRow | undefined;
 
     const keyMetrics: Array<{ label: string; value: string }> = [];
-    if (mrrRow) {
-      keyMetrics.push({ label: 'MRR', value: `$${Math.round(mrrRow.total_mrr).toLocaleString()}` });
-      if (mrrRow.health_ratio !== null) {
-        keyMetrics.push({ label: 'Health Ratio', value: mrrRow.health_ratio.toFixed(2) });
-      }
-    }
-    const seenFields = new Set<string>();
-    for (const m of metrics) {
-      if (seenFields.has(m.field_name)) continue;
-      seenFields.add(m.field_name);
-      const label = m.field_name.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
-      const value = m.field_name.includes('rate') || m.field_name.includes('retention')
-        ? `${(m.value * 100).toFixed(1)}%`
-        : m.value.toFixed(0);
-      keyMetrics.push({ label, value });
+    if (snap) {
+      if (snap.new_mrr_cents != null) keyMetrics.push({ label: 'New MRR', value: `$${Math.round(snap.new_mrr_cents / 100).toLocaleString()}` });
+      if (snap.mrr_health_ratio != null) keyMetrics.push({ label: 'MRR Health', value: snap.mrr_health_ratio.toFixed(2) });
+      if (snap.activation_rate != null) keyMetrics.push({ label: 'Activation Rate', value: `${(snap.activation_rate * 100).toFixed(1)}%` });
+      if (snap.churn_rate != null) keyMetrics.push({ label: 'Churn Rate', value: `${(snap.churn_rate * 100).toFixed(1)}%` });
+      if (snap.nps_score != null) keyMetrics.push({ label: 'NPS', value: snap.nps_score.toFixed(0) });
+      if (snap.day_30_retention != null) keyMetrics.push({ label: 'Day 30 Retention', value: `${(snap.day_30_retention * 100).toFixed(1)}%` });
     }
 
     const actionMatch = session.briefing_text.match(/([A-Z][^.!?]*(?:today|now|this week)[^.!?]*[.!?])/i);
@@ -312,14 +301,12 @@ mobileRoutes.post('/api/push/register', async (c) => {
   // Upsert push subscription
   await query(
     `INSERT INTO push_subscriptions
-     (id, founder_id, product_id, platform, apns_device_token, apns_bundle_id, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, 1)
-     ON CONFLICT(founder_id, apns_device_token) DO UPDATE SET
+     (id, founder_id, platform, apns_device_token, apns_bundle_id, active)
+     VALUES (?, ?, ?, ?, ?, 1)
+     ON CONFLICT(founder_id, apns_device_token) WHERE apns_device_token IS NOT NULL DO UPDATE SET
        apns_bundle_id = excluded.apns_bundle_id,
-       product_id = COALESCE(excluded.product_id, product_id),
-       is_active = 1,
-       last_active_at = CURRENT_TIMESTAMP`,
-    [nanoid(), founder.id, productId, body.platform ?? 'ios', body.apns_device_token, body.apns_bundle_id ?? null],
+       active = 1`,
+    [nanoid(), founder.id, body.platform ?? 'ios', body.apns_device_token, body.apns_bundle_id ?? null],
   );
 
   return c.json({ ok: true });

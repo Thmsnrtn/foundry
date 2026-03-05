@@ -12,6 +12,7 @@ import { settingsPage } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
 import { nanoid } from 'nanoid';
+import { randomBytes } from 'crypto';
 
 export const settingsRoutes = new Hono<AuthEnv>();
 
@@ -224,7 +225,7 @@ settingsRoutes.post('/settings/generate-share', async (c) => {
   if (products.rows.length === 0) return c.redirect('/settings');
 
   const productId = (products.rows[0] as Record<string, string>).id;
-  const token = nanoid(32);
+  const token = randomBytes(24).toString('hex');
 
   await query('UPDATE products SET share_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
   return c.redirect('/settings');
@@ -238,7 +239,7 @@ settingsRoutes.post('/settings/generate-ingest', async (c) => {
   if (products.rows.length === 0) return c.redirect('/settings');
 
   const productId = (products.rows[0] as Record<string, string>).id;
-  const token = nanoid(32);
+  const token = randomBytes(24).toString('hex');
 
   await query('UPDATE products SET ingest_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
   return c.redirect('/settings');

@@ -123,9 +123,9 @@ timelineRoutes.get('/signal/timeline', async (c) => {
       [productId],
     ),
     query(
-      `SELECT title, severity, created_at, resolved_at FROM stressors
+      `SELECT stressor_name, severity, identified_at, resolved_at FROM stressor_history
        WHERE product_id = ?
-       ORDER BY created_at ASC`,
+       ORDER BY identified_at ASC`,
       [productId],
     ),
     query(
@@ -158,9 +158,9 @@ timelineRoutes.get('/signal/timeline', async (c) => {
       color: '#6c63ff',
     })),
     ...(stressorsResult.rows as Array<Record<string, string>>).map((s) => ({
-      date: s.created_at.slice(0, 10),
+      date: s.identified_at.slice(0, 10),
       type: 'stressor_add' as const,
-      label: `⚠ ${s.title}`,
+      label: `⚠ ${s.stressor_name}`,
       color: s.severity === 'critical' ? '#ff6b6b' : '#ffb347',
     })),
     ...(stressorsResult.rows as Array<Record<string, string>>)
@@ -168,7 +168,7 @@ timelineRoutes.get('/signal/timeline', async (c) => {
       .map((s) => ({
         date: s.resolved_at.slice(0, 10),
         type: 'stressor_resolve' as const,
-        label: `✓ Resolved: ${s.title}`,
+        label: `✓ Resolved: ${s.stressor_name}`,
         color: '#4ecca3',
       })),
     ...(milestonesResult.rows as Array<Record<string, string>>).map((m) => ({
