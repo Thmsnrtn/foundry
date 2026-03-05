@@ -50,7 +50,21 @@ settingsRoutes.get('/settings', async (c) => {
       <h3>Subscription</h3>
       <p><strong>Current Plan:</strong> <span class="tier-badge">${tierLabel}</span></p>
       <p style="font-size:0.87rem;color:var(--text-muted);">You have access to ${capabilities.length} features.</p>
-      ${founder.tier !== 'investor_ready' ? html`<a href="/pricing" class="btn btn-primary btn-sm" style="margin-top:0.5rem;">Upgrade Plan</a>` : ''}
+      ${!founder.tier ? html`
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+          <a href="/checkout?tier=solo" class="btn btn-secondary btn-sm">Solo — $79/mo</a>
+          <a href="/checkout?tier=growth" class="btn btn-primary btn-sm">Growth — $199/mo</a>
+          <a href="/checkout?tier=investor_ready" class="btn btn-secondary btn-sm">Investor-Ready — $399/mo</a>
+        </div>` : ''}
+      ${founder.tier === 'solo' ? html`
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+          <a href="/checkout?tier=growth" class="btn btn-primary btn-sm">Upgrade to Growth — $199/mo</a>
+          <a href="/checkout?tier=investor_ready" class="btn btn-secondary btn-sm">Investor-Ready — $399/mo</a>
+        </div>` : ''}
+      ${founder.tier === 'growth' ? html`
+        <div style="margin-top:0.75rem;">
+          <a href="/checkout?tier=investor_ready" class="btn btn-primary btn-sm">Upgrade to Investor-Ready — $399/mo</a>
+        </div>` : ''}
     </div>
 
     <div class="card">
@@ -167,6 +181,39 @@ settingsRoutes.get('/settings', async (c) => {
     </div>` : ''}
   `;
   return c.html(dashboardLayout(ctx, content));
+});
+
+// ─── Stripe Checkout ─────────────────────────────────────────────────────────
+
+settingsRoutes.get('/checkout', async (c) => {
+  const founder = c.get('founder');
+  const tier = c.req.query('tier') as 'solo' | 'growth' | 'investor_ready' | undefined;
+
+  if (!tier || !['solo', 'growth', 'investor_ready'].includes(tier)) {
+    return c.redirect('/pricing');
+  }
+
+  // Ensure founder has a Stripe customer record
+  let customerId = founder.stripe_customer_id;
+  if (!customerId) {
+    const { createCustomer } = await import('../../services/billing/stripe.js');
+    customerId = await createCustomer(founder.email, founder.name ?? null);
+    await query('UPDATE founders SET stripe_customer_id = ? WHERE id = ?', [customerId, founder.id]);
+  }
+
+  const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+  try {
+    const checkoutUrl = await createCheckoutSession(
+      customerId,
+      tier,
+      `${appUrl}/dashboard?subscribed=1`,
+      `${appUrl}/pricing`,
+    );
+    return c.redirect(checkoutUrl);
+  } catch (err) {
+    console.error('[CHECKOUT] Stripe session creation failed:', err);
+    return c.redirect('/pricing?error=checkout_failed');
+  }
 });
 
 // ─── Share Token Generation ───────────────────────────────────────────────────

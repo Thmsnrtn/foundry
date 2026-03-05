@@ -5,7 +5,6 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { query } from '../../db/client.js';
-import { getFoundingCohortSlotCount } from '../../services/billing/stripe.js';
 import { publicLayout } from '../../views/layout.js';
 
 export const landingRoutes = new Hono();

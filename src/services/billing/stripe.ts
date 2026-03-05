@@ -78,6 +78,8 @@ export async function handleWebhook(payload: string, signature: string): Promise
       const tier = getTierFromPrice(priceId ?? '');
       if (tier) {
         await query('UPDATE founders SET tier = ? WHERE stripe_customer_id = ?', [tier, sub.customer]);
+      } else {
+        console.warn(`[STRIPE WEBHOOK] Unrecognised price ID: ${priceId} (customer: ${sub.customer}). Check STRIPE_*_PRICE_ID env vars.`);
       }
       break;
     }
@@ -90,12 +92,15 @@ export async function handleWebhook(payload: string, signature: string): Promise
 }
 
 function getPriceId(tier: string): string {
+  let priceId: string | undefined;
   switch (tier) {
-    case 'solo': return process.env.STRIPE_SOLO_PRICE_ID ?? '';
-    case 'growth': return process.env.STRIPE_GROWTH_PRICE_ID ?? '';
-    case 'investor_ready': return process.env.STRIPE_INVESTOR_READY_PRICE_ID ?? '';
+    case 'solo': priceId = process.env.STRIPE_SOLO_PRICE_ID; break;
+    case 'growth': priceId = process.env.STRIPE_GROWTH_PRICE_ID; break;
+    case 'investor_ready': priceId = process.env.STRIPE_INVESTOR_READY_PRICE_ID; break;
     default: throw new Error(`Unknown tier: ${tier}`);
   }
+  if (!priceId) throw new Error(`STRIPE_${tier.toUpperCase()}_PRICE_ID is not set`);
+  return priceId;
 }
 
 function getTierFromPrice(priceId: string): string | null {

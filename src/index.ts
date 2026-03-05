@@ -71,6 +71,32 @@ import { handleWebhook } from './services/billing/stripe.js';
 // Scheduled jobs
 import { JOB_REGISTRY } from './jobs/index.js';
 
+// Database migrations
+import { runMigrations } from './db/migrate.js';
+
+// ─── Startup Validation ───────────────────────────────────────────────────────
+
+const REQUIRED_ENV_VARS = [
+  'TURSO_DATABASE_URL',
+  'CLERK_SECRET_KEY',
+  'CLERK_PUBLISHABLE_KEY',
+  'STRIPE_SECRET_KEY',
+  'STRIPE_WEBHOOK_SECRET',
+  'STRIPE_SOLO_PRICE_ID',
+  'STRIPE_GROWTH_PRICE_ID',
+  'STRIPE_INVESTOR_READY_PRICE_ID',
+  'ANTHROPIC_API_KEY',
+];
+
+const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+if (missing.length > 0) {
+  console.warn(`[STARTUP] Missing env vars: ${missing.join(', ')}`);
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[STARTUP] Required env vars missing in production — exiting.');
+    process.exit(1);
+  }
+}
+
 // ─── App Setup ───────────────────────────────────────────────────────────────
 
 const app = new Hono();
@@ -173,6 +199,7 @@ app.use('/plan/*', authMiddleware);
 app.use('/signal/*', authMiddleware);
 app.use('/switch-product', authMiddleware);
 app.use('/portfolio', authMiddleware);
+app.use('/checkout', authMiddleware);
 app.use('/integrations', authMiddleware);
 app.use('/integrations/*', authMiddleware);
 app.use('/team', authMiddleware);
@@ -260,20 +287,26 @@ console.log(`
 ╚══════════════════════════════════════════════════╝
 `);
 
-// Start cron jobs in production
-if (process.env.NODE_ENV === 'production') {
-  startScheduler();
-}
-
 // ─── Serve ───────────────────────────────────────────────────────────────────
 
 import { serve } from '@hono/node-server';
 
-serve({
-  fetch: app.fetch,
-  port,
-}, (info) => {
-  console.log(`Listening on http://localhost:${info.port}`);
-});
+// Run migrations then start server
+runMigrations()
+  .then(() => {
+    if (process.env.NODE_ENV === 'production') {
+      startScheduler();
+    }
+    serve({
+      fetch: app.fetch,
+      port,
+    }, (info) => {
+      console.log(`Listening on http://localhost:${info.port}`);
+    });
+  })
+  .catch((err) => {
+    console.error('[STARTUP] Migration failed — cannot start:', err);
+    process.exit(1);
+  });
 
 export default app;
