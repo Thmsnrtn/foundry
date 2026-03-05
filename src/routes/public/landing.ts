@@ -53,47 +53,59 @@ landingRoutes.get('/', (c) => {
 });
 
 pricingRoutes.get('/pricing', async (c) => {
-  const slots = await getFoundingCohortSlotCount();
-  const remaining = Math.max(0, 30 - slots);
   return c.html(publicLayout('Pricing', html`
     <h1 style="text-align:center;margin-top:2rem;">Pricing</h1>
-    <p style="text-align:center;color:#6b7280;margin-bottom:2rem;">One platform. Three tiers. No feature gates.</p>
+    <p style="text-align:center;color:#6b7280;margin-bottom:2rem;">Autonomous business intelligence for SaaS founders.</p>
     <div class="pricing-grid">
-      <div class="pricing-card featured">
-        <div class="pricing-tier">Founding Cohort</div>
-        <div class="pricing-price">$99<span>/month</span></div>
-        <ul class="pricing-features">
-          <li>Full methodology and dashboard access</li>
-          <li>Rate locked permanently for lifetime</li>
-          <li>Case study participation required</li>
-          <li>Direct founder access during beta</li>
-          <li>Early access to new features</li>
-        </ul>
-        <div class="slot-count">${remaining} of 30 slots remaining</div>
-        <a href="/auth/signup" class="btn btn-primary" style="width:100%;margin-top:1rem;">Claim Your Slot</a>
-      </div>
       <div class="pricing-card">
-        <div class="pricing-tier">Growth</div>
-        <div class="pricing-price">$199<span>/month</span></div>
+        <div class="pricing-tier">Solo</div>
+        <div class="pricing-price">$79<span>/month</span></div>
+        <p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem;">For solo founders getting started.</p>
         <ul class="pricing-features">
-          <li>Full methodology and dashboard access</li>
-          <li>Standard support</li>
-          <li>Single product management</li>
+          <li>Signal score + risk state monitoring</li>
+          <li>AI Ask — conversational business advisor</li>
+          <li>Decision queue with gate system</li>
+          <li>Weekly digest + lifecycle tracking</li>
+          <li>iOS app, widgets, and Watch complication</li>
+          <li>Morning voice briefings</li>
+          <li>1 product</li>
         </ul>
         <a href="/auth/signup" class="btn btn-secondary" style="width:100%;margin-top:1rem;">Get Started</a>
       </div>
-      <div class="pricing-card">
-        <div class="pricing-tier">Scale</div>
-        <div class="pricing-price">$399<span>/month</span></div>
+      <div class="pricing-card featured">
+        <div class="pricing-tier">Growth</div>
+        <div class="pricing-price">$199<span>/month</span></div>
+        <p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem;">For teams scaling with data and co-founders.</p>
         <ul class="pricing-features">
-          <li>Multi-product management</li>
-          <li>Priority support</li>
-          <li>Early access to new features</li>
+          <li>Everything in Solo</li>
+          <li>Live integrations — Stripe, PostHog, Intercom, Linear</li>
+          <li>Co-founder mode — alignment scores, decision voting</li>
+          <li>Intelligence Network — anonymized peer benchmarks</li>
+          <li>Wisdom Layer — product DNA accumulation</li>
+          <li>Remediation Engine — automated GitHub PRs</li>
+          <li>Up to 3 team members</li>
+        </ul>
+        <a href="/auth/signup" class="btn btn-primary" style="width:100%;margin-top:1rem;">Get Started</a>
+      </div>
+      <div class="pricing-card">
+        <div class="pricing-tier">Investor-Ready</div>
+        <div class="pricing-price">$399<span>/month</span></div>
+        <p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem;">For founders approaching or managing investors.</p>
+        <ul class="pricing-features">
+          <li>Everything in Growth</li>
+          <li>Board packets — AI-drafted quarterly narratives</li>
+          <li>Funding readiness score across 7 dimensions</li>
+          <li>Secure investor deal rooms with live Signal share</li>
+          <li>Playbook crystallization — 8 operating playbook types</li>
+          <li>Temporal Intelligence — Signal replay + prediction accuracy</li>
+          <li>Cohort analysis + competitive intelligence</li>
+          <li>Founding Story Engine with timestamped case studies</li>
+          <li>Unlimited team members + multi-product (up to 5)</li>
         </ul>
         <a href="/auth/signup" class="btn btn-secondary" style="width:100%;margin-top:1rem;">Get Started</a>
       </div>
     </div>
-    <div class="page-footer">All tiers include every intelligence layer. No feature gates.</div>
+    <div class="page-footer">All plans include the iOS native app. Cancel anytime.</div>
   `));
 });
 

@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS founders (
   email TEXT UNIQUE NOT NULL,
   name TEXT,
   stripe_customer_id TEXT,
-  tier TEXT CHECK(tier IN ('founding_cohort', 'growth', 'scale')),
+  tier TEXT CHECK(tier IN ('solo', 'growth', 'investor_ready')),
   cohort_id TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   preferences TEXT -- JSON: digest time, notification channels

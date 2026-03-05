@@ -9,7 +9,7 @@ export type Gate = 0 | 1 | 2 | 3 | 4;
 
 export type RiskStateValue = 'green' | 'yellow' | 'red';
 
-export type SubscriptionTier = 'founding_cohort' | 'growth' | 'scale';
+export type SubscriptionTier = 'solo' | 'growth' | 'investor_ready';
 
 export type DecisionCategory = 'urgent' | 'strategic' | 'product' | 'marketing' | 'informational';
 

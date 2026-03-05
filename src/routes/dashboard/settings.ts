@@ -50,7 +50,7 @@ settingsRoutes.get('/settings', async (c) => {
       <h3>Subscription</h3>
       <p><strong>Current Plan:</strong> <span class="tier-badge">${tierLabel}</span></p>
       <p style="font-size:0.87rem;color:var(--text-muted);">You have access to ${capabilities.length} features.</p>
-      ${founder.tier !== 'scale' && founder.tier !== 'founding_cohort' ? html`<a href="/settings" class="btn btn-primary btn-sm" style="margin-top:0.5rem;">Upgrade to Scale</a>` : ''}
+      ${founder.tier !== 'investor_ready' ? html`<a href="/pricing" class="btn btn-primary btn-sm" style="margin-top:0.5rem;">Upgrade Plan</a>` : ''}
     </div>
 
     <div class="card">

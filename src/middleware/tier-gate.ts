@@ -1,6 +1,6 @@
 // =============================================================================
 // FOUNDRY — Feature Gating by Tier
-// Growth → core loop. Scale → intelligence layer. Founding Cohort → everything.
+// Solo ($79) → core loop. Growth ($199) → integrations + team. Investor-Ready ($399) → full platform.
 // Gates are previews, not walls.
 // =============================================================================
 
@@ -11,33 +11,41 @@ import type { Founder, SubscriptionTier, FeatureGateConfig } from '../types/inde
 import type { AuthEnv } from './auth.js';
 
 export const FEATURE_GATES: Record<string, FeatureGateConfig> = {
-  // Available to all tiers
-  audit:     { requiredTier: ['founding_cohort', 'growth', 'scale'], name: 'Audit Engine', description: '10-dimension codebase audit', upgradeMessage: '' },
-  dashboard: { requiredTier: ['founding_cohort', 'growth', 'scale'], name: 'Dashboard', description: 'Core intelligence dashboard', upgradeMessage: '' },
-  decisions: { requiredTier: ['founding_cohort', 'growth', 'scale'], name: 'Decision Queue', description: 'Structured decision management', upgradeMessage: '' },
-  lifecycle: { requiredTier: ['founding_cohort', 'growth', 'scale'], name: 'Lifecycle Tracking', description: 'Prompt-by-prompt progress', upgradeMessage: '' },
-  digest:    { requiredTier: ['founding_cohort', 'growth', 'scale'], name: 'Weekly Digest', description: 'Email intelligence digest', upgradeMessage: '' },
+  // Available to all tiers (Solo, Growth, Investor-Ready)
+  audit:     { requiredTier: ['solo', 'growth', 'investor_ready'], name: 'Audit Engine', description: '10-dimension codebase audit', upgradeMessage: '' },
+  dashboard: { requiredTier: ['solo', 'growth', 'investor_ready'], name: 'Dashboard', description: 'Core intelligence dashboard', upgradeMessage: '' },
+  decisions: { requiredTier: ['solo', 'growth', 'investor_ready'], name: 'Decision Queue', description: 'Structured decision management', upgradeMessage: '' },
+  lifecycle: { requiredTier: ['solo', 'growth', 'investor_ready'], name: 'Lifecycle Tracking', description: 'Prompt-by-prompt progress', upgradeMessage: '' },
+  digest:    { requiredTier: ['solo', 'growth', 'investor_ready'], name: 'Weekly Digest', description: 'Email intelligence digest', upgradeMessage: '' },
 
-  // Scale and above
-  wisdom:        { requiredTier: ['founding_cohort', 'scale'], name: 'Wisdom Layer', description: 'Product DNA and judgment pattern accumulation', upgradeMessage: 'The Wisdom Layer learns how you make decisions and calibrates every audit and automated fix to your specific product and ICP. Available on Scale.' },
-  remediation:   { requiredTier: ['founding_cohort', 'scale'], name: 'Remediation Engine', description: 'Automated fix generation and GitHub PR creation', upgradeMessage: 'The Remediation Engine generates targeted code fixes for blocking issues and opens GitHub PRs automatically. Available on Scale.' },
-  competitive:   { requiredTier: ['founding_cohort', 'scale'], name: 'Competitive Intelligence', description: 'Weekly competitor monitoring', upgradeMessage: 'Competitive Intelligence runs weekly scans of your competitors and surfaces pricing changes, feature launches, and positioning shifts. Available on Scale.' },
-  cohorts:       { requiredTier: ['founding_cohort', 'scale'], name: 'Cohort Analysis', description: 'Retention by acquisition period and channel', upgradeMessage: 'Cohort Analysis tracks retention across acquisition cohorts and channels, identifying which users actually stick and why. Available on Scale.' },
-  story:         { requiredTier: ['founding_cohort', 'scale'], name: 'Founding Story Engine', description: 'Timestamped publishable case studies', upgradeMessage: 'The Founding Story Engine generates publishable case studies with cryptographic timestamps. Available on Scale.' },
-  multi_product: { requiredTier: ['founding_cohort', 'scale'], name: 'Multi-Product', description: 'Govern more than one product', upgradeMessage: 'Scale allows up to 5 products with cross-portfolio intelligence. Available on Scale.' },
+  // Growth and above ($199+)
+  integrations:  { requiredTier: ['growth', 'investor_ready'], name: 'Live Integrations', description: 'Stripe, PostHog, Intercom, Linear data sync', upgradeMessage: 'Live Integrations pull real-time metrics from Stripe, PostHog, Intercom, and Linear directly into your Signal score. Available on Growth.' },
+  team_mode:     { requiredTier: ['growth', 'investor_ready'], name: 'Team Mode', description: 'Co-founder alignment scores and decision voting', upgradeMessage: 'Team Mode enables co-founder alignment tracking, decision voting, and shared operating context. Available on Growth.' },
+  benchmarks:    { requiredTier: ['growth', 'investor_ready'], name: 'Intelligence Network', description: 'Anonymized benchmarks across the founder network', upgradeMessage: 'The Intelligence Network shows how your key metrics compare to anonymized peers in the same market and stage. Available on Growth.' },
+  wisdom:        { requiredTier: ['growth', 'investor_ready'], name: 'Wisdom Layer', description: 'Product DNA and judgment pattern accumulation', upgradeMessage: 'The Wisdom Layer learns how you make decisions and calibrates every recommendation to your specific product and ICP. Available on Growth.' },
+  remediation:   { requiredTier: ['growth', 'investor_ready'], name: 'Remediation Engine', description: 'Automated fix generation and GitHub PR creation', upgradeMessage: 'The Remediation Engine generates targeted code fixes for blocking issues and opens GitHub PRs automatically. Available on Growth.' },
+
+  // Investor-Ready only ($399)
+  investor_layer: { requiredTier: ['investor_ready'], name: 'Investor Layer', description: 'Board packets, funding readiness score, deal rooms', upgradeMessage: 'The Investor Layer generates AI-drafted board packets, computes your funding readiness across 7 dimensions, and creates secure deal rooms for investor sharing. Available on Investor-Ready.' },
+  playbooks:      { requiredTier: ['investor_ready'], name: 'Playbook Crystallization', description: 'Auto-generate operating playbooks from your patterns', upgradeMessage: 'Playbook Crystallization distills your decision history into reusable operating playbooks — onboarding kits, pricing frameworks, churn responses, and more. Available on Investor-Ready.' },
+  temporal:       { requiredTier: ['investor_ready'], name: 'Temporal Intelligence', description: 'Signal replay and prediction accuracy tracking', upgradeMessage: 'Temporal Intelligence lets you replay your Signal history day-by-day and measures how accurate your scenario predictions were. Available on Investor-Ready.' },
+  competitive:    { requiredTier: ['investor_ready'], name: 'Competitive Intelligence', description: 'Weekly competitor monitoring', upgradeMessage: 'Competitive Intelligence runs weekly scans of your competitors and surfaces pricing changes, feature launches, and positioning shifts. Available on Investor-Ready.' },
+  cohorts:        { requiredTier: ['investor_ready'], name: 'Cohort Analysis', description: 'Retention by acquisition period and channel', upgradeMessage: 'Cohort Analysis tracks retention across acquisition cohorts and channels, identifying which users actually stick and why. Available on Investor-Ready.' },
+  story:          { requiredTier: ['investor_ready'], name: 'Founding Story Engine', description: 'Timestamped publishable case studies', upgradeMessage: 'The Founding Story Engine generates publishable case studies with cryptographic timestamps. Available on Investor-Ready.' },
+  multi_product:  { requiredTier: ['investor_ready'], name: 'Multi-Product', description: 'Govern more than one product', upgradeMessage: 'Investor-Ready allows unlimited products with cross-portfolio intelligence. Available on Investor-Ready.' },
 };
 
 /**
  * Check if a founder can access a feature based on their tier.
  * Null tier (free/no subscription) blocks everything except public routes.
- * Founding Cohort always passes.
+ * Investor-Ready has full access to all features.
  */
 export function canAccess(founder: Founder, featureKey: string): boolean {
   const gate = FEATURE_GATES[featureKey];
   if (!gate) return true; // Unknown feature — allow
 
-  // Founding Cohort always has full access during beta
-  if (founder.tier === 'founding_cohort') return true;
+  // Investor-Ready always has full access
+  if (founder.tier === 'investor_ready') return true;
 
   if (!founder.tier) return false; // No tier — no access to gated features
 
@@ -126,7 +134,7 @@ function gatePageHtml(feature: FeatureGateConfig, founder: Founder): string {
 
       ${feature.upgradeMessage ? `<div class="gate-upgrade-message">${feature.upgradeMessage}</div>` : ''}
 
-      <a href="${checkoutUrl}" class="btn btn-primary" style="font-size:1rem;padding:0.75rem 2rem;">Upgrade to Scale</a>
+      <a href="${checkoutUrl}" class="btn btn-primary" style="font-size:1rem;padding:0.75rem 2rem;">Upgrade Plan</a>
       <div style="margin-top:1rem;">
         <a href="/dashboard" style="font-size:0.87rem;color:#6b7280;">← Back to Dashboard</a>
       </div>
@@ -141,9 +149,9 @@ function gatePageHtml(feature: FeatureGateConfig, founder: Founder): string {
  */
 export function getTierBadge(tier: string | null): string {
   switch (tier) {
-    case 'founding_cohort': return 'Founding Cohort';
+    case 'solo': return 'Solo';
     case 'growth': return 'Growth';
-    case 'scale': return 'Scale';
+    case 'investor_ready': return 'Investor-Ready';
     default: return 'Free Trial';
   }
 }
@@ -154,7 +162,7 @@ export function getTierBadge(tier: string | null): string {
 export function getTierCapabilities(tier: string | null): string[] {
   return Object.entries(FEATURE_GATES)
     .filter(([_, gate]) => {
-      if (tier === 'founding_cohort') return true;
+      if (tier === 'investor_ready') return true;
       if (!tier) return false;
       return gate.requiredTier.includes(tier as SubscriptionTier);
     })
