@@ -1409,3 +1409,30 @@ export interface ProductContext extends AuthContext {
   product: Product;
   lifecycleState: LifecycleState;
 }
+
+// ─── SCP Re-exports ───────────────────────────────────────────────────────────
+// Core SCP types are in src/services/scp/types.ts.
+// Re-export commonly used ones here for convenience.
+
+export type {
+  CompanyLifecycleState,
+  SCPStatus,
+  AgentName,
+  AgentAuthorityLevel,
+  AgentInstance,
+  AgentAction,
+  AgentDecision,
+  EvolutionCandidate,
+  AgentSessionOutput,
+  AgentRunContext,
+  AgentAnalysisResult,
+  EvolutionVersion,
+  GoldenSuiteEntry,
+  AgentBriefingContribution,
+  FinancialSummary,
+  SCPBriefing,
+  SCPConstitution,
+  EvolutionPolicy,
+  SCPInstanceStatus,
+  ProvisionResult,
+} from '../services/scp/types.js';

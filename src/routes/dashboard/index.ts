@@ -13,6 +13,7 @@ import { dashboardLayout } from '../../views/layout.js';
 import { stressorReport, milestoneToastScript, type StressorData } from '../../views/components.js';
 import type { SignalComponents } from '../../services/signal.js';
 import { getLayoutContext } from './_shared.js';
+import type { SCPBriefing } from '../../services/scp/types.js';
 
 export const dashboardRoutes = new Hono<AuthEnv>();
 
@@ -137,12 +138,20 @@ dashboardRoutes.get('/dashboard', async (c) => {
   const ctx = await getLayoutContext(founder, 'dashboard', 'Dashboard', undefined, c);
   const productId = ctx.productId!;
 
-  const [signal, stressors, history, dailyInsight, previousScore] = await Promise.all([
+  const [signal, stressors, history, dailyInsight, previousScore, latestBriefing] = await Promise.all([
     computeSignal(productId),
     getActiveStressors(productId),
     getSignalHistory(productId, 60),
     getDailyInsight(productId),
     getPreviousSignalScore(productId),
+    (async (): Promise<SCPBriefing | null> => {
+      try {
+        const { getLatestBriefing } = await import('../../services/scp/briefing.js');
+        return await getLatestBriefing(productId);
+      } catch {
+        return null;
+      }
+    })(),
   ]);
 
   const stressorRows = stressors.rows as unknown as StressorData[];
@@ -190,6 +199,20 @@ dashboardRoutes.get('/dashboard', async (c) => {
           ${dailyInsight.action ? html`<div class="daily-insight-action">${dailyInsight.action}</div>` : ''}
         </div>
       </details>` : ''}
+
+      ${latestBriefing ? html`
+      <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--accent);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+          <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);">CEO BRIEFING · ${latestBriefing.briefing_date}</div>
+          <a href="/agents" style="font-size:0.75rem;color:var(--text-dim);">Agent Roster →</a>
+        </div>
+        <p style="margin:0 0 0.75rem;line-height:1.5;color:var(--text-primary);">${latestBriefing.headline}</p>
+        ${latestBriefing.pending_decisions.length > 0 ? html`
+        <div style="font-size:0.8rem;color:var(--warning);">
+          ${latestBriefing.pending_decisions.length} decision${latestBriefing.pending_decisions.length > 1 ? 's' : ''} waiting for approval
+          <a href="/agents" style="color:var(--accent);margin-left:0.5rem;">Review →</a>
+        </div>` : ''}
+      </div>` : ''}
 
       <div class="query-bar">
         <form class="query-form" id="query-form" onsubmit="handleQuery(event)">

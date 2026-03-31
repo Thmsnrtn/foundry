@@ -941,6 +941,67 @@ export async function predictionAccuracyJob(): Promise<void> {
   console.log(`[JOB] prediction_accuracy: scored ${decisions.rows.length} decisions`);
 }
 
+// ─── SCP Jobs ─────────────────────────────────────────────────────────────────
+
+/** Run all due agents for all active SCP companies — the core heartbeat. */
+export async function scpAgentRunner(): Promise<void> {
+  console.log('[JOB] scp_agent_runner starting');
+  try {
+    const { runDueAgentsForAllProducts } = await import('../services/scp/scheduler.js');
+    await runDueAgentsForAllProducts();
+  } catch (err) {
+    console.error('[JOB] scp_agent_runner error:', err);
+  }
+  console.log('[JOB] scp_agent_runner complete');
+}
+
+/** Generate CEO briefings for all active SCP companies. */
+export async function scpDailyBriefing(): Promise<void> {
+  console.log('[JOB] scp_daily_briefing starting');
+  try {
+    const { generateBriefingsForAllProducts } = await import('../services/scp/scheduler.js');
+    await generateBriefingsForAllProducts();
+  } catch (err) {
+    console.error('[JOB] scp_daily_briefing error:', err);
+  }
+  console.log('[JOB] scp_daily_briefing complete');
+}
+
+/** Run evolution synthesis for all active agents across all companies. */
+export async function scpEvolutionCycle(): Promise<void> {
+  console.log('[JOB] scp_evolution_cycle starting');
+  try {
+    const { runEvolutionForAllProducts } = await import('../services/scp/scheduler.js');
+    await runEvolutionForAllProducts();
+  } catch (err) {
+    console.error('[JOB] scp_evolution_cycle error:', err);
+  }
+  console.log('[JOB] scp_evolution_cycle complete');
+}
+
+/** Update company lifecycle states (setup → learning → operating → ...). */
+export async function scpLifecycleTransition(): Promise<void> {
+  console.log('[JOB] scp_lifecycle_transition starting');
+  try {
+    const { SCPInstance } = await import('../services/scp/instance.js');
+    const products = await getAllActiveProducts();
+    for (const row of products.rows) {
+      const p = row as Record<string, string>;
+      if (p.scp_status === 'active') {
+        try {
+          const instance = new SCPInstance(p.id);
+          await instance.updateLifecycleState();
+        } catch (err) {
+          console.error(`[JOB] scp_lifecycle_transition error for ${p.id}:`, err);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[JOB] scp_lifecycle_transition error:', err);
+  }
+  console.log('[JOB] scp_lifecycle_transition complete');
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -972,4 +1033,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   alignment_scores:       { fn: alignmentScores,       schedule: '0 8 * * 1',   description: 'Compute co-founder alignment scores (Monday)' },
   network_contribution:   { fn: networkContribution,   schedule: '0 3 * * 0',   description: 'Contribute anonymized metrics to Intelligence Network (Sunday)' },
   prediction_accuracy:    { fn: predictionAccuracyJob, schedule: '0 11 * * *',  description: 'Compute prediction accuracy for recent decision outcomes (daily)' },
+  // ─── SCP Jobs ─────────────────────────────────────────────────────────────
+  scp_agent_runner:        { fn: scpAgentRunner,        schedule: '0 * * * *',    description: 'Run due agents for all active SCP companies (every hour)' },
+  scp_daily_briefing:      { fn: scpDailyBriefing,      schedule: '30 5 * * *',   description: 'Generate CEO briefings for all SCP companies (daily 5:30 UTC)' },
+  scp_evolution_cycle:     { fn: scpEvolutionCycle,     schedule: '0 4 * * *',    description: 'Run evolution synthesis for all SCP agents (daily 4:00 UTC)' },
+  scp_lifecycle_transition:{ fn: scpLifecycleTransition,schedule: '0 6 * * *',    description: 'Evaluate company lifecycle state transitions (daily 6:00 UTC)' },
 };

@@ -53,6 +53,9 @@ import { teamRoutes } from './routes/dashboard/team.js';
 import { investorRoutes } from './routes/dashboard/investors.js';
 import { playbookRoutes } from './routes/dashboard/playbooks.js';
 
+// SCP: Agent Roster routes
+import { agentRoutes } from './routes/dashboard/agents.js';
+
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
 import { apiMetricRoutes } from './routes/api/metrics.js';
@@ -208,6 +211,8 @@ app.use('/investors', authMiddleware);
 app.use('/investors/*', authMiddleware);
 app.use('/playbooks', authMiddleware);
 app.use('/playbooks/*', authMiddleware);
+app.use('/agents', authMiddleware);
+app.use('/agents/*', authMiddleware);
 app.use('/api/*', authMiddleware);
 
 // Dashboard routes
@@ -232,6 +237,7 @@ app.route('/', integrationsRoutes);
 app.route('/', teamRoutes);
 app.route('/', investorRoutes);
 app.route('/', playbookRoutes);
+app.route('/', agentRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);
@@ -281,7 +287,7 @@ const port = parseInt(process.env.PORT ?? '8080', 10);
 
 console.log(`
 ╔══════════════════════════════════════════════════╗
-║  FOUNDRY — Autonomous Business Intelligence      ║
+║  FOUNDRY — Sovereign Company Platform            ║
 ║  Port: ${String(port).padEnd(42)}║
 ║  Environment: ${(process.env.NODE_ENV ?? 'development').padEnd(35)}║
 ╚══════════════════════════════════════════════════╝
@@ -293,7 +299,24 @@ import { serve } from '@hono/node-server';
 
 // Run migrations then start server
 runMigrations()
-  .then(() => {
+  .then(async () => {
+    // Provision SCP instances for any existing products that don't have one yet
+    try {
+      const { ensureProvisioned } = await import('./services/scp/provisioner.js');
+      const { getAllActiveProducts } = await import('./db/client.js');
+      const products = await getAllActiveProducts();
+      for (const row of products.rows) {
+        const p = row as Record<string, string>;
+        await ensureProvisioned(p.id, p.owner_id).catch((err) => {
+          console.warn(`[STARTUP] SCP provision skipped for ${p.id}:`, err);
+        });
+      }
+      console.log(`[STARTUP] SCP: provisioned for ${products.rows.length} product(s)`);
+    } catch (err) {
+      // Non-fatal: SCP provisioning failure should not block server startup
+      console.warn('[STARTUP] SCP provisioning error (non-fatal):', err);
+    }
+
     if (process.env.NODE_ENV === 'production') {
       startScheduler();
     }
