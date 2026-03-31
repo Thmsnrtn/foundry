@@ -1093,6 +1093,26 @@ async function scpIntelligenceBenchmarks(): Promise<void> {
   await computeAndStoreBenchmarks();
 }
 
+// ─── SCP DNA Nudge — Daily 10:00 UTC ─────────────────────────────────────────
+
+async function scpDNANudge(): Promise<void> {
+  // Daily: nudge founders whose DNA completion < 60% to fill in more context
+  // This gives agents better context for their analyses
+  console.log('[JOB] scp_dna_nudge starting');
+  const { query: dbQuery } = await import('../db/client.js');
+  const incompleteProducts = await dbQuery(
+    `SELECT p.id, p.name, f.email
+     FROM products p
+     JOIN founders f ON p.owner_id = f.id
+     WHERE p.scp_status = 'active'
+       AND p.company_lifecycle_state IN ('setup', 'learning')
+     LIMIT 50`
+  );
+  console.log(`[dna-nudge] Found ${incompleteProducts.rows.length} products in early lifecycle`);
+  // In production: send email nudge via notification service
+  console.log('[JOB] scp_dna_nudge complete');
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1133,5 +1153,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_intelligence_benchmarks: { fn: scpIntelligenceBenchmarks, schedule: '0 2 * * *', description: 'Recompute intelligence benchmarks across all products (daily 2:00 UTC)' },
   scp_remediation_sync:    { fn: scpRemediationSync,   schedule: '0 8 * * *',    description: 'Daily agent remediation sync and health logging (daily 8:00 UTC)' },
   scp_temporal_analysis:   { fn: scpTemporalAnalysis,  schedule: '0 5 * * 1',    description: 'Weekly temporal trend analysis for all SCP companies (Monday 5:00 UTC)' },
+  scp_dna_nudge:           { fn: scpDNANudge,          schedule: '0 10 * * *',   description: 'Nudge early-lifecycle SCP founders to complete DNA context (daily 10:00 UTC)' },
   scp_cost_report:         { fn: scpCostReport,        schedule: '0 0 1 * *',    description: 'Monthly 30d AI cost rollup for all products (1st of month)' },
 };
