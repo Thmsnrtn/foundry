@@ -61,6 +61,12 @@ import { agentEvolveRoutes } from './routes/dashboard/agents-evolve.js';
 import { agentConstitutionRoutes } from './routes/dashboard/agents-constitution.js';
 import { agentRemediationRoutes } from './routes/dashboard/agents-remediations.js';
 import { agentTemporalRoutes } from './routes/dashboard/agents-temporal.js';
+// SCP v2/v3: New capability layers
+import { agentIntegrationRoutes } from './routes/dashboard/agents-integrations.js';
+import { agentCustomerRoutes } from './routes/dashboard/agents-customers.js';
+import { agentMessageRoutes } from './routes/dashboard/agents-messages.js';
+import { agentStrategyRoutes } from './routes/dashboard/agents-strategy.js';
+import { agentExperimentRoutes } from './routes/dashboard/agents-experiments.js';
 
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
@@ -219,6 +225,7 @@ app.use('/playbooks', authMiddleware);
 app.use('/playbooks/*', authMiddleware);
 app.use('/agents', authMiddleware);
 app.use('/agents/*', authMiddleware);
+app.use('/products/*/agents/*', authMiddleware);
 app.use('/api/*', authMiddleware);
 
 // Dashboard routes
@@ -250,6 +257,12 @@ app.route('/', agentEvolveRoutes);
 app.route('/', agentConstitutionRoutes);
 app.route('/', agentRemediationRoutes);
 app.route('/', agentTemporalRoutes);
+// SCP v2/v3: New capability layers
+app.route('/', agentIntegrationRoutes);
+app.route('/', agentCustomerRoutes);
+app.route('/', agentMessageRoutes);
+app.route('/', agentStrategyRoutes);
+app.route('/', agentExperimentRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);

@@ -1113,6 +1113,65 @@ async function scpDNANudge(): Promise<void> {
   console.log('[JOB] scp_dna_nudge complete');
 }
 
+// ─── SCP v3: Lifecycle Rules — Every 4h ──────────────────────────────────────
+
+async function scpLifecycleRules(): Promise<void> {
+  console.log('[JOB] scp_lifecycle_rules starting');
+  const { query: dbQuery } = await import('../db/client.js');
+  const products = await dbQuery(
+    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+  );
+  const { evaluateLifecycleRules } = await import('../services/customer/lifecycle.js');
+  let totalTriggered = 0;
+  for (const row of products.rows) {
+    const { rules_triggered } = await evaluateLifecycleRules((row as Record<string, unknown>).id as string);
+    totalTriggered += rules_triggered;
+  }
+  console.log(`[scp_lifecycle_rules] ${totalTriggered} rules triggered across ${products.rows.length} products`);
+}
+
+// ─── SCP v3: AI P&L Update — Daily 1:00 UTC ──────────────────────────────────
+
+async function scpPLUpdate(): Promise<void> {
+  console.log('[JOB] scp_pl_update starting');
+  const { query: dbQuery } = await import('../db/client.js');
+  const products = await dbQuery(
+    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+  );
+  const { getAICompanyPL } = await import('../services/financial/economics.js');
+  for (const row of products.rows) {
+    const productId = (row as Record<string, unknown>).id as string;
+    const pl = await getAICompanyPL(productId, 30);
+    // Update products table with latest AI cost trailing 30d
+    await dbQuery(
+      `UPDATE products SET ai_cost_trailing_30d_usd=?, attributed_revenue_trailing_30d_usd=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+      [pl.costs.total_usd, pl.revenue.total_usd, productId]
+    );
+  }
+  console.log(`[scp_pl_update] Updated P&L for ${products.rows.length} products`);
+}
+
+// ─── SCP v3: Monthly Strategy Synthesis — 1st of month ───────────────────────
+
+async function scpStrategySynthesis(): Promise<void> {
+  console.log('[JOB] scp_strategy_synthesis starting');
+  const { query: dbQuery } = await import('../db/client.js');
+  const products = await dbQuery(
+    `SELECT id FROM products WHERE scp_status = 'active' AND company_lifecycle_state NOT IN ('setup') LIMIT 50`
+  );
+  const { generateStrategicSynthesis } = await import('../services/strategy/synthesis.js');
+  let generated = 0;
+  for (const row of products.rows) {
+    try {
+      await generateStrategicSynthesis((row as Record<string, unknown>).id as string);
+      generated++;
+    } catch (err) {
+      console.error(`[scp_strategy_synthesis] Failed for ${(row as Record<string, unknown>).id}:`, err);
+    }
+  }
+  console.log(`[scp_strategy_synthesis] Generated ${generated} syntheses`);
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1155,4 +1214,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_temporal_analysis:   { fn: scpTemporalAnalysis,  schedule: '0 5 * * 1',    description: 'Weekly temporal trend analysis for all SCP companies (Monday 5:00 UTC)' },
   scp_dna_nudge:           { fn: scpDNANudge,          schedule: '0 10 * * *',   description: 'Nudge early-lifecycle SCP founders to complete DNA context (daily 10:00 UTC)' },
   scp_cost_report:         { fn: scpCostReport,        schedule: '0 0 1 * *',    description: 'Monthly 30d AI cost rollup for all products (1st of month)' },
+  // SCP v3: New capability layer jobs
+  scp_lifecycle_rules:     { fn: scpLifecycleRules,    schedule: '0 */4 * * *',  description: 'Evaluate customer lifecycle rules for all SCP products (every 4h)' },
+  scp_pl_update:           { fn: scpPLUpdate,          schedule: '0 1 * * *',    description: 'Update AI Company P&L attribution for all products (daily 1:00 UTC)' },
+  scp_strategy_synthesis:  { fn: scpStrategySynthesis, schedule: '0 6 1 * *',    description: 'Generate monthly strategic synthesis for all products (1st of month)' },
 };

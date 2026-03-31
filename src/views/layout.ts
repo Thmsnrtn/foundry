@@ -232,6 +232,12 @@ function groupedSidebar(
     { key: 'agents-remediations', label: 'Remediations', href: '/agents/remediations' },
     { key: 'agents-temporal', label: 'Temporal', href: '/agents/temporal', locked: !check('board_packet') },
     { key: 'agents-constitution', label: 'Constitution', href: '/agents/constitution' },
+    // SCP v3: New capability layers
+    { key: 'agents-integrations', label: 'Integrations', href: '/agents/integrations' },
+    { key: 'agents-customers', label: 'Customers', href: '/agents/customers' },
+    { key: 'agents-messages', label: 'Agent Comms', href: '/agents/messages' },
+    { key: 'agents-experiments', label: 'Experiments', href: '/agents/experiments', locked: !check('wisdom') },
+    { key: 'agents-strategy', label: 'Strategy', href: '/agents/strategy', locked: !check('board_packet') },
   ];
 
   return html`

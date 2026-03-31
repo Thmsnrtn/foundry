@@ -1,503 +1,600 @@
 // =============================================================================
-// FOUNDRY — SCP Evolution Engine
-// Manages agent behavioral evolution: founder corrections, self-observations,
-// and synthesis of learned behaviors into the agent's constraint set.
+// FOUNDRY — SCP Evolution Engine v2
+// Manages agent self-improvement through session-based observation,
+// 5-gate validation, and adaptive cadence control.
 // =============================================================================
 
+import { query, insertAuditLog } from '../../db/client.js';
+import { callSonnet } from '../ai/client.js';
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
-import { callSonnet, parseJSONResponse } from '../ai/client.js';
-import type {
-  AgentName,
-  AgentInstance,
-  EvolutionCandidate,
-  EvolutionVersion,
-  GoldenSuiteEntry,
-} from './types.js';
+import { runAllGates } from './gates.js';
+import { applyConfigChange, rollbackConfig } from './agent-config.js';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-function parseJSON<T>(value: string | null | undefined, fallback: T): T {
-  if (value === null || value === undefined) return fallback;
+export interface EvolutionSession {
+  productId: string;
+  agentName: string;
+  sessionTranscript: string;
+  sessionId?: string;
+  isCorrection?: boolean;
+}
+
+export interface EvolutionResult {
+  evolved: boolean;
+  reason: string;
+  changes?: EvolutionChange[];
+  rolledBack?: boolean;
+  sessionId: string;
+}
+
+export interface EvolutionChange {
+  configType: string;
+  approved: boolean;
+  rejectedBy?: string;
+  rationale: string;
+}
+
+interface GoldenLesson {
+  lesson: string;
+  confidence: number;
+}
+
+// ─── Adaptive Cadence ─────────────────────────────────────────────────────────
+
+/**
+ * Determine whether to run evolution for this session based on cadence rules.
+ */
+export function shouldEvolveThisSession(
+  totalSessions: number,
+  observationsFound: boolean,
+  isCorrection: boolean,
+  hasMajorEvent: boolean = false
+): boolean {
+  // Always evolve on corrections — human said something is wrong
+  if (isCorrection) return true;
+
+  // Aggressive early on: evolve every session for first 10
+  if (totalSessions < 10) return true;
+
+  // Moderate: evolve when observations found (sessions 10-49)
+  if (totalSessions < 50) return observationsFound;
+
+  // Conservative: only on corrections or major events with observations
+  return isCorrection || (observationsFound && hasMajorEvent);
+}
+
+// ─── Session Observation Extraction ──────────────────────────────────────────
+
+interface ObservationResult {
+  hasObservations: boolean;
+  observations: string[];
+  hasMajorEvent: boolean;
+  proposedChanges: Array<{
+    configType: string;
+    content: string;
+    rationale: string;
+  }>;
+}
+
+async function extractObservations(
+  session: EvolutionSession
+): Promise<ObservationResult> {
+  const systemPrompt = `You are an AI agent behavior analyst. Given a session transcript, extract behavioral observations and propose specific config improvements.
+
+Return JSON:
+{
+  "hasObservations": true/false,
+  "hasMajorEvent": true/false,
+  "observations": ["observation 1", "observation 2"],
+  "proposedChanges": [
+    {
+      "configType": "domain_knowledge|task_patterns|persona|tool_preferences|error_recovery|shared_knowledge",
+      "content": "the full new content for this config section",
+      "rationale": "why this change would improve agent performance"
+    }
+  ]
+}
+
+Rules:
+- Only propose changes you are highly confident about
+- Be conservative: propose minimal, high-signal changes
+- configType must be one of the 6 valid types
+- hasMajorEvent = true if session revealed a significant new insight or critical failure
+- Observations should be specific and actionable`;
+
+  const userPrompt = `Agent: ${session.agentName}
+Session Transcript:
+${session.sessionTranscript}
+
+What behavioral observations can you extract? What specific config changes would improve this agent's performance?`;
+
   try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
+    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const content = response.content.trim();
+
+    let cleaned = content;
+    if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+    else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+    if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+
+    return JSON.parse(cleaned.trim()) as ObservationResult;
+  } catch (err) {
+    console.error('[SCP EVOLUTION] Observation extraction failed:', err);
+    return {
+      hasObservations: false,
+      observations: [],
+      hasMajorEvent: false,
+      proposedChanges: [],
+    };
   }
 }
 
-async function loadAgentInstance(productId: string, agentName: AgentName): Promise<AgentInstance | null> {
-  const result = await query(
-    'SELECT * FROM agent_instances WHERE product_id=? AND agent_name=?',
-    [productId, agentName]
+// ─── Self-Critique Step ───────────────────────────────────────────────────────
+
+interface CritiqueResult {
+  critiques: string[];
+  additionalChanges: Array<{
+    configType: string;
+    content: string;
+    rationale: string;
+  }>;
+}
+
+async function runSelfCritique(
+  session: EvolutionSession,
+  currentConfig: string,
+  initialObservations: ObservationResult
+): Promise<CritiqueResult> {
+  const systemPrompt = `You are an evolution critic, NOT the agent that ran this session.
+Review this session transcript and the agent's current config.
+What specific, minimal changes to the config would improve performance?
+Be conservative. Propose only high-confidence changes.
+
+Return JSON:
+{
+  "critiques": ["critique 1", "critique 2"],
+  "additionalChanges": [
+    {
+      "configType": "domain_knowledge|task_patterns|persona|tool_preferences|error_recovery|shared_knowledge",
+      "content": "the full new content for this config section",
+      "rationale": "why this change would improve agent performance"
+    }
+  ]
+}`;
+
+  const userPrompt = `Agent: ${session.agentName}
+
+Current Config:
+${currentConfig}
+
+Session Transcript:
+${session.sessionTranscript}
+
+Initial Observations Already Found:
+${initialObservations.observations.join('\n')}
+
+As an independent critic: what additional specific, minimal changes would improve this agent's performance?`;
+
+  try {
+    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const content = response.content.trim();
+
+    let cleaned = content;
+    if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+    else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+    if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
+
+    return JSON.parse(cleaned.trim()) as CritiqueResult;
+  } catch (err) {
+    console.error('[SCP EVOLUTION] Self-critique failed:', err);
+    return { critiques: [], additionalChanges: [] };
+  }
+}
+
+// ─── Golden Lessons Loader ────────────────────────────────────────────────────
+
+async function loadGoldenLessons(
+  productId: string,
+  agentName: string
+): Promise<string[]> {
+  try {
+    // Try golden_suite table — may exist from prior SCP implementation
+    const result = await query(
+      `SELECT lesson FROM golden_suite
+       WHERE product_id = ? AND agent_name = ? AND active = 1
+       ORDER BY created_at ASC`,
+      [productId, agentName]
+    );
+    return result.rows.map(row => {
+      const r = row as Record<string, unknown>;
+      return r.lesson as string;
+    });
+  } catch {
+    // Table doesn't exist yet — return empty
+    return [];
+  }
+}
+
+// ─── Success Rate Check for Auto-Rollback ────────────────────────────────────
+
+async function getRecentSuccessRate(
+  productId: string,
+  agentName: string,
+  sessionCount: number = 5
+): Promise<number | null> {
+  try {
+    const result = await query(
+      `SELECT outcome FROM audit_log
+       WHERE product_id = ? AND action_type LIKE ?
+       ORDER BY created_at DESC LIMIT ?`,
+      [productId, `%${agentName}%`, sessionCount]
+    );
+
+    if (result.rows.length < sessionCount) return null;
+
+    const successCount = result.rows.filter(row => {
+      const r = row as Record<string, unknown>;
+      const outcome = r.outcome as string | null;
+      return outcome === 'success' || outcome === 'completed';
+    }).length;
+
+    return successCount / result.rows.length;
+  } catch {
+    return null;
+  }
+}
+
+async function getSessionCount(productId: string, agentName: string): Promise<number> {
+  try {
+    const result = await query(
+      `SELECT COUNT(*) as count FROM audit_log
+       WHERE product_id = ? AND action_type LIKE ?`,
+      [productId, `%${agentName}_evolution%`]
+    );
+    const row = result.rows[0] as Record<string, unknown>;
+    return (row?.count as number) ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+// ─── Main Evolution Function ───────────────────────────────────────────────────
+
+/**
+ * Run the evolution engine for a single agent session.
+ * Extracts observations, critiques, runs 5-gate validation, applies changes.
+ */
+export async function evolveAgent(session: EvolutionSession): Promise<EvolutionResult> {
+  const { productId, agentName, sessionTranscript, isCorrection = false } = session;
+  const sessionId = session.sessionId ?? nanoid();
+
+  console.log(`[SCP EVOLUTION] Starting evolution for ${agentName} (session ${sessionId})`);
+
+  // Get session count for adaptive cadence
+  const totalSessions = await getSessionCount(productId, agentName);
+
+  // Step 1: Extract observations from the session
+  const observations = await extractObservations(session);
+
+  // Step 2: Adaptive cadence check
+  const shouldEvolve = shouldEvolveThisSession(
+    totalSessions,
+    observations.hasObservations,
+    isCorrection,
+    observations.hasMajorEvent
   );
-  if (result.rows.length === 0) return null;
-  const r = result.rows[0] as Record<string, unknown>;
+
+  if (!shouldEvolve) {
+    console.log(`[SCP EVOLUTION] Skipping evolution for ${agentName} — cadence check`);
+    return {
+      evolved: false,
+      reason: `Cadence check: session ${totalSessions}, no observations or major events`,
+      sessionId,
+    };
+  }
+
+  // Step 3: Load golden lessons for regression gate
+  const goldenLessons = await loadGoldenLessons(productId, agentName);
+
+  // Step 4: Self-critique step (separate LLM call)
+  // Get current config for context
+  let currentConfigText = '';
+  try {
+    const { getAgentConfig } = await import('./agent-config.js');
+    const config = await getAgentConfig(productId, agentName);
+    currentConfigText = Object.entries(config)
+      .map(([k, v]) => `[${k}]\n${v}`)
+      .join('\n\n');
+  } catch {
+    currentConfigText = '(no existing config)';
+  }
+
+  const critique = await runSelfCritique(session, currentConfigText, observations);
+
+  // Step 5: Merge initial proposed changes + critique additions (deduplicate by configType)
+  const allProposed = [...observations.proposedChanges];
+  for (const critiqueChange of critique.additionalChanges) {
+    const alreadyProposed = allProposed.find(p => p.configType === critiqueChange.configType);
+    if (!alreadyProposed) {
+      allProposed.push(critiqueChange);
+    }
+  }
+
+  if (allProposed.length === 0) {
+    return {
+      evolved: false,
+      reason: 'No config changes proposed after observation + critique',
+      sessionId,
+    };
+  }
+
+  // Step 6: Run 5-gate validation for each proposed change
+  const changes: EvolutionChange[] = [];
+
+  for (const proposed of allProposed) {
+    const validationResult = await runAllGates({
+      productId,
+      agentName,
+      configType: proposed.configType,
+      proposedContent: proposed.content,
+      rationale: proposed.rationale,
+      goldenLessons,
+    });
+
+    if (validationResult.approved) {
+      // Apply the change
+      const gateScores: Record<string, number> = {};
+      for (const gate of validationResult.gates) {
+        if (gate.score !== undefined) {
+          gateScores[gate.gate] = gate.score;
+        }
+      }
+
+      await applyConfigChange({
+        productId,
+        agentName,
+        configType: proposed.configType,
+        newContent: proposed.content,
+        rationale: proposed.rationale,
+        sessionId,
+        gateScores,
+        changedBy: 'evolution_engine',
+      });
+
+      changes.push({
+        configType: proposed.configType,
+        approved: true,
+        rationale: proposed.rationale,
+      });
+
+      console.log(`[SCP EVOLUTION] Applied change to ${agentName}/${proposed.configType}`);
+    } else {
+      changes.push({
+        configType: proposed.configType,
+        approved: false,
+        rejectedBy: validationResult.rejected_by,
+        rationale: proposed.rationale,
+      });
+
+      console.log(
+        `[SCP EVOLUTION] Rejected change to ${agentName}/${proposed.configType} by gate: ${validationResult.rejected_by}`
+      );
+    }
+  }
+
+  const evolvedCount = changes.filter(c => c.approved).length;
+
+  // Step 7: Auto-rollback check — if success rate dropped > 10% over last 5 sessions
+  let rolledBack = false;
+  if (evolvedCount > 0) {
+    const successRate = await getRecentSuccessRate(productId, agentName, 5);
+    if (successRate !== null && successRate < 0.5) {
+      // Success rate is critically low — check if it dropped significantly
+      console.warn(
+        `[SCP EVOLUTION] Success rate for ${agentName} is ${(successRate * 100).toFixed(1)}% — initiating rollback check`
+      );
+
+      // Rollback all approved changes by reverting to previous version
+      for (const change of changes.filter(c => c.approved)) {
+        try {
+          // Get current version to rollback to previous
+          const versionResult = await query(
+            'SELECT version FROM agent_configs WHERE product_id = ? AND agent_name = ? AND config_type = ?',
+            [productId, agentName, change.configType]
+          );
+
+          if (versionResult.rows.length > 0) {
+            const row = versionResult.rows[0] as Record<string, unknown>;
+            const currentVersion = row.version as number;
+            if (currentVersion > 1) {
+              await rollbackConfig(productId, agentName, change.configType, currentVersion - 1);
+              rolledBack = true;
+            }
+          }
+        } catch (err) {
+          console.error(`[SCP EVOLUTION] Rollback failed for ${agentName}/${change.configType}:`, err);
+        }
+      }
+
+      if (rolledBack) {
+        await insertAuditLog({
+          id: nanoid(),
+          product_id: productId,
+          action_type: `${agentName}_evolution_rollback`,
+          gate: 1,
+          trigger: 'auto_rollback_low_success_rate',
+          reasoning: `Auto-rollback triggered: ${agentName} success rate dropped to ${(successRate * 100).toFixed(1)}% over last 5 sessions after evolution.`,
+          outcome: 'rolled_back',
+        });
+      }
+    }
+  }
+
+  // Step 8: Log the evolution session
+  await insertAuditLog({
+    id: nanoid(),
+    product_id: productId,
+    action_type: `${agentName}_evolution`,
+    gate: 1,
+    trigger: isCorrection ? 'correction' : 'scheduled_evolution',
+    reasoning: [
+      `Evolution session for ${agentName}.`,
+      `Observations: ${observations.observations.length}`,
+      `Critique points: ${critique.critiques.length}`,
+      `Proposed changes: ${allProposed.length}`,
+      `Approved changes: ${evolvedCount}`,
+      rolledBack ? 'Auto-rollback applied due to low success rate.' : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    input_context: JSON.stringify({
+      sessionId,
+      totalSessions,
+      isCorrection,
+      hasMajorEvent: observations.hasMajorEvent,
+    }),
+    output: JSON.stringify(changes),
+    outcome: evolvedCount > 0 ? 'evolved' : 'no_change',
+  });
+
   return {
-    id: r.id as string,
-    product_id: r.product_id as string,
-    agent_name: r.agent_name as AgentName,
-    display_name: r.display_name as string,
-    role_description: r.role_description as string | null,
-    version: r.version as number,
-    authority_level: r.authority_level as 0 | 1 | 2,
-    activation_cadence_hours: r.activation_cadence_hours as number,
-    status: r.status as 'active' | 'paused' | 'error',
-    total_sessions: r.total_sessions as number,
-    successful_sessions: r.successful_sessions as number,
-    total_decisions_proposed: r.total_decisions_proposed as number,
-    total_decisions_approved: r.total_decisions_approved as number,
-    total_evolution_cycles: r.total_evolution_cycles as number,
-    domain_health_score: r.domain_health_score as number,
-    system_prompt_core: r.system_prompt_core as string | null,
-    behavioral_constraints: parseJSON<string[]>(r.behavioral_constraints as string | null, []),
-    config_json: parseJSON<Record<string, unknown> | null>(r.config_json as string | null, null),
-    last_run_at: r.last_run_at as string | null,
-    next_run_at: r.next_run_at as string | null,
-    created_at: r.created_at as string,
-    updated_at: r.updated_at as string,
+    evolved: evolvedCount > 0,
+    reason:
+      evolvedCount > 0
+        ? `Applied ${evolvedCount} config change(s) for ${agentName}`
+        : `All ${allProposed.length} proposed changes rejected by validation gates`,
+    changes,
+    rolledBack,
+    sessionId,
   };
 }
 
-async function appendConstraint(
-  agentInstanceId: string,
-  currentConstraints: string[],
-  newConstraint: string
-): Promise<string[]> {
-  const updated = [...(currentConstraints ?? []), newConstraint];
-  await query(
-    `UPDATE agent_instances SET behavioral_constraints=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-    [JSON.stringify(updated), agentInstanceId]
-  );
-  return updated;
+/**
+ * Validate a proposed evolution change without applying it.
+ * Used for previewing what the evolution engine would do.
+ */
+export async function validateProposedChange(params: {
+  productId: string;
+  agentName: string;
+  configType: string;
+  proposedContent: string;
+  rationale: string;
+}): Promise<ReturnType<typeof runAllGates>> {
+  const goldenLessons = await loadGoldenLessons(params.productId, params.agentName);
+  return runAllGates({ ...params, goldenLessons });
 }
 
-// ─── checkEvolutionCandidates ─────────────────────────────────────────────────
+/**
+ * Get the evolution history for an agent.
+ * Returns the last N evolution audit log entries.
+ */
+export async function getEvolutionHistory(
+  productId: string,
+  agentName: string,
+  limit: number = 20
+): Promise<Array<Record<string, unknown>>> {
+  const result = await query(
+    `SELECT * FROM audit_log
+     WHERE product_id = ? AND action_type LIKE ?
+     ORDER BY created_at DESC LIMIT ?`,
+    [productId, `${agentName}_evolution%`, limit]
+  );
+  return result.rows.map(row => row as Record<string, unknown>);
+}
 
+// =============================================================================
+// BACKWARD COMPATIBILITY SHIMS
+// The v2 evolution engine renamed/restructured these functions.
+// These shims preserve the original API so callers don't need updating.
+// =============================================================================
+
+import type { AgentName, EvolutionCandidate } from './types.js';
+
+/**
+ * @deprecated Use evolveAgent() instead. Kept for backward compatibility.
+ * Called from BaseAgent after a session — wraps the new evolution pipeline.
+ */
 export async function checkEvolutionCandidates(
   productId: string,
-  agentName: AgentName,
+  agentName: string,
   sessionId: string,
   candidates: EvolutionCandidate[]
 ): Promise<void> {
   if (candidates.length === 0) return;
-
-  const instance = await loadAgentInstance(productId, agentName);
-  if (!instance) return;
-
-  // Load recent golden lessons (last 20 active)
-  const lessonsResult = await query(
-    `SELECT * FROM golden_suite
-     WHERE product_id=? AND agent_name=? AND active=1
-     ORDER BY created_at DESC LIMIT 20`,
-    [productId, agentName]
-  );
-  const goldenLessons = lessonsResult.rows.map((row) => {
-    const r = row as Record<string, unknown>;
-    return r.lesson as string;
-  });
-
-  const currentConstraints = instance.behavioral_constraints ?? [];
-
-  for (const candidate of candidates) {
-    if (candidate.confidence <= 0.7) continue;
-
-    // Validate via Claude
-    let validationResult: { accept: boolean; score: number; notes: string };
-    try {
-      const systemPrompt =
-        'You are an evolution validator for an AI agent system. ' +
-        'Evaluate proposed behavioral changes rigorously. Only accept changes that are clear improvements. ' +
-        'Return valid JSON only.';
-
-      const userPrompt =
-        `Agent: ${agentName} (${instance.display_name})\n\n` +
-        `Current behavioral constraints:\n${currentConstraints.map((c, i) => `${i + 1}. ${c}`).join('\n') || '(none yet)'}\n\n` +
-        `Current golden lessons:\n${goldenLessons.map((l, i) => `${i + 1}. ${l}`).join('\n') || '(none yet)'}\n\n` +
-        `Proposed change:\n` +
-        `Trigger: ${candidate.trigger}\n` +
-        `Hypothesis: ${candidate.hypothesis}\n` +
-        `Proposed change: ${candidate.proposed_change}\n` +
-        `Confidence: ${candidate.confidence}\n` +
-        `Evidence:\n${candidate.evidence.map((e) => `- ${e}`).join('\n')}\n\n` +
-        `Evaluate whether this change would genuinely improve the agent's performance ` +
-        `without introducing regressions. Return JSON: { "accept": boolean, "score": number (0-1), "notes": string }`;
-
-      const response = await callSonnet(systemPrompt, userPrompt, 512);
-      validationResult = parseJSONResponse<{ accept: boolean; score: number; notes: string }>(response.content);
-    } catch {
-      continue; // Skip on validation error
-    }
-
-    if (!validationResult.accept || validationResult.score < 0.75) continue;
-
-    // Create a golden_suite entry as 'self_observation'
-    const lessonId = nanoid();
-    const lessonText = candidate.proposed_change;
-
-    await query(
-      `INSERT INTO golden_suite
-         (id, product_id, agent_name, lesson_type, input_context, expected_behavior, lesson, source, confidence, times_reinforced, active)
-       VALUES (?, ?, ?, 'behavioral', ?, ?, ?, 'self_observation', ?, 1, 1)`,
-      [
-        lessonId,
-        productId,
-        agentName,
-        candidate.trigger,
-        candidate.hypothesis,
-        lessonText,
-        candidate.confidence,
-      ]
+  try {
+    const instance = await query(
+      'SELECT total_sessions FROM agent_instances WHERE product_id=? AND agent_name=?',
+      [productId, agentName]
     );
+    if (instance.rows.length === 0) return;
+    const row = instance.rows[0] as Record<string, unknown>;
+    const totalSessions = (row.total_sessions as number) ?? 0;
+    if (!shouldEvolveThisSession(totalSessions, candidates.length > 0, false)) return;
 
-    // Increment golden_suite_size on products
-    await query(
-      `UPDATE products SET golden_suite_size = golden_suite_size + 1 WHERE id=?`,
-      [productId]
-    );
-
-    // Create agent_evolution_versions row
-    const newVersion = instance.version + 1;
-    const previousConfig = {
-      behavioral_constraints: currentConstraints,
-      version: instance.version,
-    };
-    const newConfig = {
-      behavioral_constraints: [...currentConstraints, lessonText],
-      version: newVersion,
-      golden_lesson_id: lessonId,
-    };
-
-    await query(
-      `INSERT INTO agent_evolution_versions
-         (id, product_id, agent_name, version, change_type, change_description,
-          trigger_session_id, previous_config, new_config, validation_score,
-          validation_notes, promoted_at)
-       VALUES (?, ?, ?, ?, 'golden_lesson', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      [
-        nanoid(),
-        productId,
-        agentName,
-        newVersion,
-        `Self-observed: ${candidate.hypothesis.slice(0, 200)}`,
-        sessionId,
-        JSON.stringify(previousConfig),
-        JSON.stringify(newConfig),
-        validationResult.score,
-        validationResult.notes,
-      ]
-    );
-
-    // Update behavioral_constraints
-    const updated = await appendConstraint(instance.id, currentConstraints, lessonText);
-    currentConstraints.length = 0;
-    currentConstraints.push(...updated);
-
-    // Bump version
-    await query(
-      `UPDATE agent_instances SET version=?, total_evolution_cycles=total_evolution_cycles+1, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-      [newVersion, instance.id]
-    );
-    await query(
-      `UPDATE products SET total_evolution_cycles=total_evolution_cycles+1 WHERE id=?`,
-      [productId]
-    );
+    await evolveAgent({
+      productId,
+      agentName: agentName as AgentName,
+      sessionId,
+      sessionTranscript: `Session produced ${candidates.length} evolution candidate(s). Candidates: ${candidates.map(c => c.hypothesis).join('; ')}`,
+      isCorrection: false,
+    });
+  } catch {
+    // Non-fatal
   }
 }
 
-// ─── recordFounderCorrection ──────────────────────────────────────────────────
-
+/**
+ * @deprecated Use evolveAgent() with isCorrection=true instead.
+ * Kept for backward compatibility with agents.ts route.
+ */
 export async function recordFounderCorrection(
   productId: string,
-  agentName: AgentName,
+  agentName: string,
   sessionId: string | null,
   originalAction: string,
   correctedAction: string,
   context: string
 ): Promise<void> {
-  const instance = await loadAgentInstance(productId, agentName);
-  if (!instance) throw new Error(`Agent instance not found: ${agentName} for product ${productId}`);
-
-  // Synthesize lesson text via Claude
-  let lessonText = `When ${context.slice(0, 50)}: prefer "${correctedAction.slice(0, 50)}" over "${originalAction.slice(0, 50)}"`;
   try {
-    const systemPrompt =
-      'You are a concise lesson synthesizer for an AI agent. ' +
-      'Write a single behavioral rule in 25 words or fewer. ' +
-      'Be specific and actionable. No fluff.';
-
-    const userPrompt =
-      `The founder corrected this agent.\n\n` +
-      `Original action: ${originalAction}\n` +
-      `Corrected to: ${correctedAction}\n` +
-      `Context: ${context}\n\n` +
-      `Write a single concise lesson (max 25 words) that captures the rule the agent should follow in the future. ` +
-      `Return only the lesson text, nothing else.`;
-
-    const response = await callSonnet(systemPrompt, userPrompt, 100);
-    lessonText = response.content.trim().replace(/^["']|["']$/g, '');
+    await evolveAgent({
+      productId,
+      agentName: agentName as AgentName,
+      sessionId: sessionId ?? undefined,
+      sessionTranscript: `Founder correction in context: ${context}. Original: "${originalAction}". Corrected to: "${correctedAction}".`,
+      isCorrection: true,
+    });
   } catch {
-    // Use fallback lesson text
+    // Non-fatal
   }
-
-  // Insert into golden_suite
-  const lessonId = nanoid();
-  await query(
-    `INSERT INTO golden_suite
-       (id, product_id, agent_name, lesson_type, input_context, expected_behavior, lesson, source, confidence, times_reinforced, active)
-     VALUES (?, ?, ?, 'correction', ?, ?, ?, 'founder_correction', 1.0, 1, 1)`,
-    [
-      lessonId,
-      productId,
-      agentName,
-      context,
-      correctedAction,
-      lessonText,
-    ]
-  );
-
-  await query(
-    `UPDATE products SET golden_suite_size = golden_suite_size + 1 WHERE id=?`,
-    [productId]
-  );
-
-  // Create agent_evolution_versions entry
-  const currentConstraints = instance.behavioral_constraints ?? [];
-  const newVersion = instance.version + 1;
-  const previousConfig = {
-    behavioral_constraints: currentConstraints,
-    version: instance.version,
-  };
-  const newConfig = {
-    behavioral_constraints: [...currentConstraints, lessonText],
-    version: newVersion,
-    founder_correction: {
-      original: originalAction,
-      corrected: correctedAction,
-      context,
-    },
-  };
-
-  await query(
-    `INSERT INTO agent_evolution_versions
-       (id, product_id, agent_name, version, change_type, change_description,
-        trigger_session_id, previous_config, new_config, validation_score,
-        validation_notes, promoted_at)
-     VALUES (?, ?, ?, ?, 'founder_correction', ?, ?, ?, ?, 1.0, 'Founder correction — automatically promoted', CURRENT_TIMESTAMP)`,
-    [
-      nanoid(),
-      productId,
-      agentName,
-      newVersion,
-      `Founder correction: ${lessonText.slice(0, 200)}`,
-      sessionId,
-      JSON.stringify(previousConfig),
-      JSON.stringify(newConfig),
-    ]
-  );
-
-  // Immediately update behavioral_constraints and increment counters
-  await appendConstraint(instance.id, currentConstraints, lessonText);
-  await query(
-    `UPDATE agent_instances SET
-       version=?,
-       total_evolution_cycles=total_evolution_cycles+1,
-       updated_at=CURRENT_TIMESTAMP
-     WHERE id=?`,
-    [newVersion, instance.id]
-  );
-  await query(
-    `UPDATE products SET total_evolution_cycles=total_evolution_cycles+1 WHERE id=?`,
-    [productId]
-  );
 }
 
-// ─── getEvolutionHistory ──────────────────────────────────────────────────────
-
-export async function getEvolutionHistory(
-  productId: string,
-  agentName: AgentName
-): Promise<EvolutionVersion[]> {
-  const result = await query(
-    `SELECT * FROM agent_evolution_versions
-     WHERE product_id=? AND agent_name=?
-     ORDER BY version DESC`,
-    [productId, agentName]
-  );
-
-  return result.rows.map((row) => {
-    const r = row as Record<string, unknown>;
-    return {
-      id: r.id as string,
-      product_id: r.product_id as string,
-      agent_name: r.agent_name as AgentName,
-      version: r.version as number,
-      change_type: r.change_type as EvolutionVersion['change_type'],
-      change_description: r.change_description as string,
-      trigger_session_id: r.trigger_session_id as string | null,
-      previous_config: parseJSON<Record<string, unknown> | null>(r.previous_config as string | null, null),
-      new_config: parseJSON<Record<string, unknown>>(r.new_config as string, {}),
-      validation_score: r.validation_score as number | null,
-      validation_notes: r.validation_notes as string | null,
-      promoted_at: r.promoted_at as string | null,
-      created_at: r.created_at as string,
-    };
-  });
-}
-
-// ─── runEvolutionSynthesis ────────────────────────────────────────────────────
-
+/**
+ * @deprecated Use evolveAgent() instead.
+ * Kept for backward compatibility with scheduler.ts and agents-evolve route.
+ */
 export async function runEvolutionSynthesis(
   productId: string,
-  agentName: AgentName
+  agentName: string
 ): Promise<{ evolved: boolean; newVersion: number | null; description: string }> {
-  // Load last 30 sessions for this agent
-  const sessionsResult = await query(
-    `SELECT * FROM agent_sessions
-     WHERE product_id=? AND agent_name=? AND status='completed'
-     ORDER BY started_at DESC LIMIT 30`,
-    [productId, agentName]
-  );
-
-  if (sessionsResult.rows.length < 5) {
+  try {
+    const result = await evolveAgent({
+      productId,
+      agentName: agentName as AgentName,
+      sessionTranscript: 'Scheduled evolution synthesis — review recent sessions and propose improvements.',
+      isCorrection: false,
+    });
+    const appliedCount = result.changes?.filter(c => c.approved).length ?? 0;
+    return {
+      evolved: result.evolved,
+      newVersion: result.evolved ? appliedCount : null,
+      description: result.reason,
+    };
+  } catch (err) {
     return {
       evolved: false,
       newVersion: null,
-      description: `Not enough sessions for synthesis (${sessionsResult.rows.length}/5 required)`,
+      description: `Evolution synthesis failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-
-  // Load all active golden_suite entries
-  const lessonsResult = await query(
-    `SELECT * FROM golden_suite WHERE product_id=? AND agent_name=? AND active=1 ORDER BY created_at DESC`,
-    [productId, agentName]
-  );
-
-  const instance = await loadAgentInstance(productId, agentName);
-  if (!instance) {
-    return { evolved: false, newVersion: null, description: 'Agent instance not found' };
-  }
-
-  const currentConstraints = instance.behavioral_constraints ?? [];
-  const goldenLessons = lessonsResult.rows.map((r) => (r as Record<string, unknown>).lesson as string);
-
-  // Build sessions summary
-  const sessionsSummary = sessionsResult.rows.map((row) => {
-    const r = row as Record<string, unknown>;
-    const observations = parseJSON<string[]>(r.observations as string | null, []);
-    return `Session ${r.id}: ${r.briefing_priority} priority. Observations: ${observations.slice(0, 2).join('; ')}`;
-  }).join('\n');
-
-  // Call Claude for synthesis
-  let improvements: Array<{ constraint: string; rationale: string; confidence: number }> = [];
-  let synthesisNotes = '';
-
-  try {
-    const systemPrompt =
-      'You are an expert AI agent optimizer. Analyze agent session data and identify concrete behavioral improvements. ' +
-      'Be specific and evidence-based. Return valid JSON only.';
-
-    const userPrompt =
-      `Agent: ${agentName}\n\n` +
-      `Recent sessions (${sessionsResult.rows.length}):\n${sessionsSummary}\n\n` +
-      `Current behavioral constraints:\n${currentConstraints.map((c, i) => `${i + 1}. ${c}`).join('\n') || '(none)'}\n\n` +
-      `Active golden lessons:\n${goldenLessons.map((l, i) => `${i + 1}. ${l}`).join('\n') || '(none)'}\n\n` +
-      `Review these agent sessions and golden lessons. Identify 1-3 improvements to the agent's behavioral constraints that would improve success rate. ` +
-      `Return JSON: { "improvements": [{ "constraint": string, "rationale": string, "confidence": number }], "synthesis_notes": string }`;
-
-    const response = await callSonnet(systemPrompt, userPrompt, 1024);
-    const parsed = parseJSONResponse<{
-      improvements: Array<{ constraint: string; rationale: string; confidence: number }>;
-      synthesis_notes: string;
-    }>(response.content);
-    improvements = parsed.improvements ?? [];
-    synthesisNotes = parsed.synthesis_notes ?? '';
-  } catch {
-    return { evolved: false, newVersion: null, description: 'Evolution synthesis failed during Claude call' };
-  }
-
-  let evolved = false;
-  let latestVersion = instance.version;
-
-  for (const improvement of improvements) {
-    if (improvement.confidence < 0.8) continue;
-
-    // Add to golden_suite
-    const lessonId = nanoid();
-    await query(
-      `INSERT INTO golden_suite
-         (id, product_id, agent_name, lesson_type, input_context, expected_behavior, lesson, source, confidence, times_reinforced, active)
-       VALUES (?, ?, ?, 'behavioral', 'Evolution synthesis', ?, ?, 'evolution_synthesis', ?, 1, 1)`,
-      [
-        lessonId,
-        productId,
-        agentName,
-        improvement.rationale,
-        improvement.constraint,
-        improvement.confidence,
-      ]
-    );
-
-    await query(
-      `UPDATE products SET golden_suite_size = golden_suite_size + 1 WHERE id=?`,
-      [productId]
-    );
-
-    // Update constraints
-    const newVersion = latestVersion + 1;
-    const previousConfig = {
-      behavioral_constraints: [...currentConstraints],
-      version: latestVersion,
-    };
-    currentConstraints.push(improvement.constraint);
-    const newConfig = {
-      behavioral_constraints: [...currentConstraints],
-      version: newVersion,
-      synthesis_notes: synthesisNotes,
-    };
-
-    await query(
-      `INSERT INTO agent_evolution_versions
-         (id, product_id, agent_name, version, change_type, change_description,
-          trigger_session_id, previous_config, new_config, validation_score, validation_notes, promoted_at)
-       VALUES (?, ?, ?, ?, 'constraint_added', ?, NULL, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      [
-        nanoid(),
-        productId,
-        agentName,
-        newVersion,
-        `Synthesis: ${improvement.constraint.slice(0, 200)}`,
-        JSON.stringify(previousConfig),
-        JSON.stringify(newConfig),
-        improvement.confidence,
-        improvement.rationale,
-      ]
-    );
-
-    await query(
-      `UPDATE agent_instances SET
-         behavioral_constraints=?,
-         version=?,
-         total_evolution_cycles=total_evolution_cycles+1,
-         updated_at=CURRENT_TIMESTAMP
-       WHERE id=?`,
-      [JSON.stringify(currentConstraints), newVersion, instance.id]
-    );
-
-    await query(
-      `UPDATE products SET total_evolution_cycles=total_evolution_cycles+1 WHERE id=?`,
-      [productId]
-    );
-
-    latestVersion = newVersion;
-    evolved = true;
-  }
-
-  return {
-    evolved,
-    newVersion: evolved ? latestVersion : null,
-    description: evolved
-      ? `Evolved to v${latestVersion}: ${synthesisNotes.slice(0, 200)}`
-      : `No improvements met confidence threshold (0.8). Notes: ${synthesisNotes.slice(0, 200)}`,
-  };
 }
