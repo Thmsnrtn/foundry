@@ -9,6 +9,7 @@ import { BaseAgent } from './base.js';
 import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { createRemediation } from '../remediation.js';
 
 interface AtlasClaudeResponse {
   observations: string[];
@@ -190,6 +191,85 @@ Return JSON only (no markdown fences):
       }
     }
 
+    // ── 7b. Create remediations from high/critical findings ───────────────────
+    const actionsTaken: AgentAction[] = [];
+
+    for (const action of (parsed.actions_proposed ?? [])) {
+      if (action.urgency !== 'high') continue;
+
+      // Determine remediation type from title/description keywords
+      const titleLower = action.title.toLowerCase();
+      const descLower = action.description.toLowerCase();
+      let remediationType = 'code_quality';
+      if (titleLower.includes('security') || descLower.includes('security') ||
+          titleLower.includes('vuln') || descLower.includes('vuln') ||
+          titleLower.includes('cve') || descLower.includes('auth')) {
+        remediationType = 'security';
+      } else if (titleLower.includes('debt') || descLower.includes('tech debt') ||
+                 titleLower.includes('refactor') || descLower.includes('refactor')) {
+        remediationType = 'code_quality';
+      }
+
+      try {
+        const remId = await createRemediation({
+          productId,
+          agentName: 'atlas',
+          sessionId: context.agentInstance.id,
+          remediationType,
+          title: action.title,
+          description: action.description,
+          severity: 'high',
+          suggestedFix: action.expected_impact,
+        });
+
+        actionsTaken.push({
+          id: nanoid(),
+          type: 'create_remediation',
+          description: `Created high remediation: ${action.title}`,
+          authority_level: 0,
+          executed: true,
+          executed_at: new Date().toISOString(),
+          target: 'agent_remediations',
+          result: remId,
+        });
+      } catch {
+        // Remediation creation failure is non-fatal
+      }
+    }
+
+    // Also handle observations that mention critical issues
+    for (const obs of (parsed.observations ?? [])) {
+      const obsLower = obs.toLowerCase();
+      if (obsLower.includes('critical') && (
+        obsLower.includes('security') || obsLower.includes('vulnerab') || obsLower.includes('exploit')
+      )) {
+        try {
+          const remId = await createRemediation({
+            productId,
+            agentName: 'atlas',
+            sessionId: context.agentInstance.id,
+            remediationType: 'security',
+            title: obs.slice(0, 100),
+            description: obs,
+            severity: 'critical',
+          });
+
+          actionsTaken.push({
+            id: nanoid(),
+            type: 'create_remediation',
+            description: `Created critical security remediation: ${obs.slice(0, 80)}`,
+            authority_level: 0,
+            executed: true,
+            executed_at: new Date().toISOString(),
+            target: 'agent_remediations',
+            result: remId,
+          });
+        } catch {
+          // Non-fatal
+        }
+      }
+    }
+
     // ── 8. Record analysis complete action ────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
@@ -203,7 +283,7 @@ Return JSON only (no markdown fences):
 
     return {
       observations: parsed.observations ?? [],
-      actionsTaken: [analysisAction],
+      actionsTaken: [analysisAction, ...actionsTaken],
       pendingDecisions,
       briefingContribution: parsed.briefing_contribution ?? 'Atlas completed technical review.',
       briefingPriority: parsed.briefing_priority ?? 'normal',

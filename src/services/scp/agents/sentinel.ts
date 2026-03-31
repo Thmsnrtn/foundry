@@ -9,6 +9,7 @@ import { BaseAgent } from './base.js';
 import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { createRemediation } from '../remediation.js';
 
 interface SentinelClaudeResponse {
   observations: string[];
@@ -180,6 +181,51 @@ Return JSON only (no markdown fences):
       }
     }
 
+    // ── 7b. Create remediations from infra alerts ─────────────────────────────
+    const actionsTaken: AgentAction[] = [];
+
+    for (const alert of (parsed.alerts ?? [])) {
+      if (alert.severity !== 'critical' && alert.severity !== 'warning') continue;
+      if (!alert.action_required) continue;
+
+      // Map alert to remediation type
+      const titleLower = alert.title.toLowerCase();
+      const descLower = alert.description.toLowerCase();
+      let remediationType = 'infra';
+      if (titleLower.includes('performance') || descLower.includes('slow') ||
+          titleLower.includes('latency') || descLower.includes('latency') ||
+          titleLower.includes('response time') || descLower.includes('throughput')) {
+        remediationType = 'performance';
+      }
+
+      const severity = alert.severity === 'critical' ? 'critical' : 'high';
+
+      try {
+        const remId = await createRemediation({
+          productId,
+          agentName: 'sentinel',
+          sessionId: context.agentInstance.id,
+          remediationType,
+          title: alert.title,
+          description: alert.description,
+          severity,
+        });
+
+        actionsTaken.push({
+          id: nanoid(),
+          type: 'create_remediation',
+          description: `Created ${severity} ${remediationType} remediation: ${alert.title}`,
+          authority_level: 0,
+          executed: true,
+          executed_at: new Date().toISOString(),
+          target: 'agent_remediations',
+          result: remId,
+        });
+      } catch {
+        // Non-fatal
+      }
+    }
+
     // ── 8. Record analysis action ─────────────────────────────────────────────
     const criticalCount = (parsed.alerts ?? []).filter(a => a.severity === 'critical').length;
     const analysisAction: AgentAction = {
@@ -194,7 +240,7 @@ Return JSON only (no markdown fences):
 
     return {
       observations: parsed.observations ?? [],
-      actionsTaken: [analysisAction],
+      actionsTaken: [analysisAction, ...actionsTaken],
       pendingDecisions,
       briefingContribution: parsed.briefing_contribution ?? 'Sentinel completed infrastructure review.',
       briefingPriority: parsed.briefing_priority ?? 'normal',

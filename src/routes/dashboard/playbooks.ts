@@ -9,6 +9,7 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { buildSharedContext } from './_shared.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { generatePlaybook, getPlaybooks } from '../../services/playbook/generator.js';
+import { getRemediationSummary } from '../../services/scp/remediation.js';
 import type { PlaybookType } from '../../types/index.js';
 
 export const playbookRoutes = new Hono<AuthEnv>();
@@ -31,13 +32,27 @@ playbookRoutes.get('/playbooks', async (c) => {
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
 
-  const existing = await getPlaybooks(ctx.product.id);
+  const [existing, scpSummary] = await Promise.all([
+    getPlaybooks(ctx.product.id),
+    getRemediationSummary(ctx.product.id).catch(() => ({ open: 0, critical: 0, high: 0, by_agent: {} })),
+  ]);
   const existingByType = new Map(existing.map((p) => [p.type, p]));
+  const scpContributed = existing.length > 0;
+  const scpActive = Object.keys(scpSummary.by_agent).length > 0;
 
   const content = html`
     <div class="page-header">
-      <h1>Playbooks</h1>
-      <p class="page-subtitle">Operational intelligence crystallized from your decision history and founder wisdom.</p>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:1rem;">
+        <div>
+          <h1 style="margin:0 0 0.25rem;">Playbooks</h1>
+          <p class="page-subtitle" style="margin:0;">Operational intelligence crystallized from your decision history and founder wisdom.</p>
+        </div>
+        ${scpActive || scpContributed ? html`
+          <a href="/agents/remediations" style="display:inline-flex;align-items:center;gap:0.4rem;padding:6px 12px;background:rgba(124,106,247,0.12);border:1px solid rgba(124,106,247,0.3);border-radius:8px;text-decoration:none;font-size:12px;font-weight:600;color:#7c6af7;">
+            <span style="font-size:14px;">✦</span> Powered by SCP${scpSummary.open > 0 ? html` · ${scpSummary.open} active remediations` : ''}
+          </a>
+        ` : ''}
+      </div>
     </div>
 
     <div class="playbook-grid">

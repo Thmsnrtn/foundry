@@ -53,8 +53,14 @@ import { teamRoutes } from './routes/dashboard/team.js';
 import { investorRoutes } from './routes/dashboard/investors.js';
 import { playbookRoutes } from './routes/dashboard/playbooks.js';
 
-// SCP: Agent Roster routes
+// SCP: Agent Roster + all SCP sub-routes
 import { agentRoutes } from './routes/dashboard/agents.js';
+import { agentWisdomRoutes } from './routes/dashboard/agents-wisdom.js';
+import { agentBriefingRoutes } from './routes/dashboard/agents-briefings.js';
+import { agentEvolveRoutes } from './routes/dashboard/agents-evolve.js';
+import { agentConstitutionRoutes } from './routes/dashboard/agents-constitution.js';
+import { agentRemediationRoutes } from './routes/dashboard/agents-remediations.js';
+import { agentTemporalRoutes } from './routes/dashboard/agents-temporal.js';
 
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
@@ -238,6 +244,12 @@ app.route('/', teamRoutes);
 app.route('/', investorRoutes);
 app.route('/', playbookRoutes);
 app.route('/', agentRoutes);
+app.route('/', agentWisdomRoutes);
+app.route('/', agentBriefingRoutes);
+app.route('/', agentEvolveRoutes);
+app.route('/', agentConstitutionRoutes);
+app.route('/', agentRemediationRoutes);
+app.route('/', agentTemporalRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);

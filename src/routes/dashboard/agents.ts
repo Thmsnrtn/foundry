@@ -10,6 +10,8 @@ import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
 import { recordFounderCorrection } from '../../services/scp/evolution.js';
+import { recordDecisionOutcome } from '../../services/scp/wisdom.js';
+import { SCPInstance } from '../../services/scp/instance.js';
 import {
   ALL_AGENTS,
   AGENT_DISPLAY_NAMES,
@@ -542,6 +544,9 @@ agentRoutes.post('/decisions/:id/approve', async (c) => {
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Roster', undefined, c);
   if (!ctx.productId) return c.redirect('/agents');
 
+  const productId = ctx.productId;
+  const body = await c.req.parseBody() as Record<string, string>;
+
   // Log audit notification
   try {
     await query(
@@ -549,12 +554,60 @@ agentRoutes.post('/decisions/:id/approve', async (c) => {
        VALUES (lower(hex(randomblob(16))), ?, ?, 'scp_decision', 'Decision Approved', ?, CURRENT_TIMESTAMP)`,
       [
         founder.id,
-        ctx.productId,
+        productId,
         `SCP decision ${decisionId} was approved by founder.`,
       ]
     );
   } catch {
     // notifications table may not exist yet — non-fatal
+  }
+
+  // Look up the session and agent that contains this decision
+  try {
+    const sessionResult = await query(
+      `SELECT id, agent_name, pending_decisions FROM agent_sessions
+       WHERE product_id = ? AND pending_decisions LIKE ?
+       ORDER BY started_at DESC LIMIT 1`,
+      [productId, `%${decisionId}%`]
+    );
+
+    let resolvedAgentName: AgentName = 'oracle';
+    let sessionId: string | null = null;
+    let decisionTitle = `Decision ${decisionId}`;
+    let decisionDescription = '';
+
+    if (sessionResult.rows.length > 0) {
+      const session = sessionResult.rows[0] as Record<string, unknown>;
+      resolvedAgentName = (session.agent_name as AgentName) ?? 'oracle';
+      sessionId = session.id as string;
+
+      // Parse pending_decisions JSON to extract title/description
+      try {
+        const pendingRaw = session.pending_decisions as string | null;
+        if (pendingRaw) {
+          const decisions = JSON.parse(pendingRaw) as Array<Record<string, unknown>>;
+          const found = decisions.find((d) => d.id === decisionId);
+          if (found) {
+            decisionTitle = (found.title as string) ?? decisionTitle;
+            decisionDescription = (found.description as string) ?? '';
+          }
+        }
+      } catch {
+        // JSON parse failure — use defaults
+      }
+    }
+
+    await recordDecisionOutcome({
+      productId,
+      agentName: resolvedAgentName,
+      sessionId,
+      decisionTitle,
+      decisionDescription,
+      outcome: 'approved',
+      founderRationale: body.rationale ?? undefined,
+    });
+  } catch {
+    // Non-fatal — wisdom tracking should not block the approval flow
   }
 
   return c.redirect('/agents?decision_approved=1');
@@ -570,20 +623,125 @@ agentRoutes.post('/decisions/:id/deny', async (c) => {
   if (!ctx.productId) return c.redirect('/agents');
 
   const productId = ctx.productId;
+  const body = await c.req.parseBody() as Record<string, string>;
+  const founderRationale = body.rationale ?? undefined;
+
+  // Look up the session and agent that contains this decision
+  let resolvedAgentName: AgentName = 'oracle';
+  let sessionId: string | null = null;
+  let decisionTitle = `Decision ${decisionId}`;
+  let decisionDescription = '';
+
+  try {
+    const sessionResult = await query(
+      `SELECT id, agent_name, pending_decisions FROM agent_sessions
+       WHERE product_id = ? AND pending_decisions LIKE ?
+       ORDER BY started_at DESC LIMIT 1`,
+      [productId, `%${decisionId}%`]
+    );
+
+    if (sessionResult.rows.length > 0) {
+      const session = sessionResult.rows[0] as Record<string, unknown>;
+      resolvedAgentName = (session.agent_name as AgentName) ?? 'oracle';
+      sessionId = session.id as string;
+
+      // Parse pending_decisions JSON to extract title/description
+      try {
+        const pendingRaw = session.pending_decisions as string | null;
+        if (pendingRaw) {
+          const decisions = JSON.parse(pendingRaw) as Array<Record<string, unknown>>;
+          const found = decisions.find((d) => d.id === decisionId);
+          if (found) {
+            decisionTitle = (found.title as string) ?? decisionTitle;
+            decisionDescription = (found.description as string) ?? '';
+          }
+        }
+      } catch {
+        // JSON parse failure — use defaults
+      }
+    }
+  } catch {
+    // Session lookup failed — use fallback agent name
+  }
+
+  // Mark decision as denied in agent_sessions via SCPInstance
+  try {
+    const instance = new SCPInstance(productId);
+    await instance.denyDecision(decisionId, founderRationale ?? 'Denied by founder');
+  } catch {
+    // Non-fatal — decision may already be resolved or session not found
+  }
 
   // Record founder correction via evolution engine
   try {
     await recordFounderCorrection(
       productId,
-      'oracle' as AgentName, // default fallback — real agent name would come from the session lookup
-      null,
+      resolvedAgentName,
+      sessionId,
       `Decision ${decisionId} proposed`,
       'Denied by founder',
-      'Decision denied without modification',
+      founderRationale ?? 'Decision denied without modification',
     );
   } catch {
     // Non-fatal — evolution service may not be fully wired yet
   }
 
+  // Record denial in wisdom layer
+  try {
+    await recordDecisionOutcome({
+      productId,
+      agentName: resolvedAgentName,
+      sessionId,
+      decisionTitle,
+      decisionDescription,
+      outcome: 'denied',
+      founderRationale,
+    });
+  } catch {
+    // Non-fatal — wisdom tracking should not block the denial flow
+  }
+
   return c.redirect('/agents?decision_denied=1');
+});
+
+// ─── POST /agents/:name/pause — Pause Agent ───────────────────────────────────
+
+agentRoutes.post('/:name/pause', async (c) => {
+  const founder = c.get('founder');
+  const name = c.req.param('name');
+
+  if (!isValidAgentName(name)) return c.redirect('/agents');
+
+  const ctx = await getLayoutContext(founder, 'agents', 'Agent Roster', undefined, c);
+  if (!ctx.productId) return c.redirect('/agents');
+
+  try {
+    const instance = new SCPInstance(ctx.productId);
+    await instance.pauseAgent(name);
+  } catch {
+    // Non-fatal — redirect to agent page regardless
+  }
+
+  return c.redirect(`/agents/${name}`);
+});
+
+// ─── POST /agents/:name/resume — Resume Agent ────────────────────────────────
+
+agentRoutes.post('/:name/resume', async (c) => {
+  const founder = c.get('founder');
+  const name = c.req.param('name');
+
+  if (!isValidAgentName(name)) return c.redirect('/agents');
+
+  const ctx = await getLayoutContext(founder, 'agents', 'Agent Roster', undefined, c);
+  if (!ctx.productId) return c.redirect('/agents');
+
+  try {
+    const instance = new SCPInstance(ctx.productId);
+    await instance.resumeAgent(name);
+  } catch {
+    // Non-fatal — redirect to agent page regardless
+  }
+
+  return c.redirect(`/agents/${name}`);
 });

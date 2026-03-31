@@ -11,6 +11,86 @@ import { getMRRDecomposition } from '../intelligence/revenue.js';
 import { nanoid } from 'nanoid';
 import type { BoardPacket, BoardPacketStatus } from '../../types/index.js';
 
+// ─── SCP Board Section ────────────────────────────────────────────────────────
+
+export interface SCPBoardSection {
+  health_score: number;
+  lifecycle_state: string;
+  total_evolution_cycles: number;
+  golden_suite_size: number;
+  ai_cost_30d_usd: number;
+  attributed_revenue_30d_usd: number;
+  roi: number | null;
+  top_agents: Array<{ name: string; role: string; health: number; version: number }>;
+  latest_briefing_headline: string | null;
+}
+
+export async function getSCPBoardSection(productId: string): Promise<SCPBoardSection> {
+  // Query product SCP fields
+  const productResult = await query(
+    `SELECT health_score, company_lifecycle_state,
+            total_evolution_cycles, golden_suite_size,
+            ai_cost_trailing_30d_usd, attributed_revenue_trailing_30d_usd
+     FROM products WHERE id = ?`,
+    [productId]
+  );
+
+  const prod = (productResult.rows[0] ?? {}) as Record<string, unknown>;
+  const aiCost = (prod.ai_cost_trailing_30d_usd as number) ?? 0;
+  const attributedRevenue = (prod.attributed_revenue_trailing_30d_usd as number) ?? 0;
+  const roi = aiCost > 0 ? attributedRevenue / aiCost : null;
+
+  // Top 3 agents by domain_health_score
+  const agentsResult = await query(
+    `SELECT display_name, agent_name, domain_health_score, version
+     FROM agent_instances
+     WHERE product_id = ? AND status = 'active'
+     ORDER BY domain_health_score DESC LIMIT 3`,
+    [productId]
+  );
+
+  // Import agent roles
+  const { AGENT_ROLES } = await import('../scp/types.js');
+
+  const top_agents = agentsResult.rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    const agentName = r.agent_name as string;
+    return {
+      name: (r.display_name as string) ?? agentName,
+      role: AGENT_ROLES[agentName as keyof typeof AGENT_ROLES] ?? agentName,
+      health: Math.round((r.domain_health_score as number) ?? 0),
+      version: (r.version as number) ?? 1,
+    };
+  });
+
+  // Latest briefing headline
+  let latest_briefing_headline: string | null = null;
+  try {
+    const briefingResult = await query(
+      `SELECT headline FROM scp_briefings
+       WHERE product_id = ? ORDER BY briefing_date DESC LIMIT 1`,
+      [productId]
+    );
+    if (briefingResult.rows.length > 0) {
+      latest_briefing_headline = ((briefingResult.rows[0] as Record<string, unknown>).headline as string) ?? null;
+    }
+  } catch {
+    // scp_briefings may not have data yet
+  }
+
+  return {
+    health_score: Math.round((prod.health_score as number) ?? 0),
+    lifecycle_state: (prod.company_lifecycle_state as string) ?? 'setup',
+    total_evolution_cycles: (prod.total_evolution_cycles as number) ?? 0,
+    golden_suite_size: (prod.golden_suite_size as number) ?? 0,
+    ai_cost_30d_usd: aiCost,
+    attributed_revenue_30d_usd: attributedRevenue,
+    roi,
+    top_agents,
+    latest_briefing_headline,
+  };
+}
+
 // ─── Generate Board Packet ────────────────────────────────────────────────────
 
 /**
@@ -38,6 +118,7 @@ export async function generateBoardPacket(
     mrrResult,
     competitiveSignals,
     auditResult,
+    scpSection,
   ] = await Promise.all([
     getSignalHistory(productId, 90),
     query(
@@ -77,6 +158,7 @@ export async function generateBoardPacket(
        WHERE product_id = ? ORDER BY created_at DESC LIMIT 2`,
       [productId],
     ),
+    getSCPBoardSection(productId).catch(() => null),
   ]);
 
   // ── Compute Signal trajectory ─────────────────────────────────────────────
@@ -92,7 +174,7 @@ export async function generateBoardPacket(
 
   if (mrrResult) {
     contextParts.push(`MRR: $${Math.round(mrrResult.total_cents / 100).toLocaleString()} total`);
-    contextParts.push(`  New: $${Math.round(mrrResult.new_mrr_cents / 100).toLocaleString()} | Churned: $${Math.round(mrrResult.churned_mrr_cents / 100).toLocaleString()}`);
+    contextParts.push(`  New: $${Math.round(mrrResult.new_cents / 100).toLocaleString()} | Churned: $${Math.round(mrrResult.churned_cents / 100).toLocaleString()}`);
   }
 
   const resolvedDecs = resolvedDecisions.rows as Array<Record<string, unknown>>;
@@ -132,6 +214,26 @@ export async function generateBoardPacket(
     contextParts.push(`\nCompetitive signals: ${compRows.map((s) => `${s.competitor_name}: ${s.signal_summary}`).join('; ')}`);
   }
 
+  // SCP / AI Operations context
+  if (scpSection) {
+    contextParts.push(`\nAI Operations (SCP):`);
+    contextParts.push(`  Company Health Score: ${scpSection.health_score}/100`);
+    contextParts.push(`  Lifecycle State: ${scpSection.lifecycle_state}`);
+    contextParts.push(`  Total Agent Evolution Cycles: ${scpSection.total_evolution_cycles}`);
+    contextParts.push(`  Golden Suite Lessons: ${scpSection.golden_suite_size}`);
+    contextParts.push(`  AI Cost (30d): $${scpSection.ai_cost_30d_usd.toFixed(2)}`);
+    contextParts.push(`  Attributed Revenue (30d): $${scpSection.attributed_revenue_30d_usd.toFixed(2)}`);
+    if (scpSection.roi !== null) {
+      contextParts.push(`  AI ROI: ${scpSection.roi.toFixed(2)}x`);
+    }
+    if (scpSection.top_agents.length > 0) {
+      contextParts.push(`  Top Agents: ${scpSection.top_agents.map((a) => `${a.name} (${a.role}, health ${a.health}, v${a.version})`).join('; ')}`);
+    }
+    if (scpSection.latest_briefing_headline) {
+      contextParts.push(`  Latest CEO Briefing: "${scpSection.latest_briefing_headline}"`);
+    }
+  }
+
   const context = contextParts.join('\n');
 
   // ── Generate narrative sections ───────────────────────────────────────────
@@ -146,6 +248,7 @@ Each section should be 3-5 sentences. Professional but not corporate.`;
     cohortNarrative,
     competitiveNarrative,
     nextQuarterFocus,
+    aiOperationsNarrative,
   ] = await Promise.all([
     generateNarrativeSection(systemPrompt, context, 'executive_summary',
       'Write a 3-4 sentence executive summary of the quarter. Lead with the most important truth.'),
@@ -159,6 +262,10 @@ Each section should be 3-5 sentences. Professional but not corporate.`;
       'Write 2-3 sentences about the competitive landscape this quarter. Only include if there were notable signals.'),
     generateNarrativeSection(systemPrompt, context, 'next_quarter_focus',
       'Write 3 clear sentences about the top 2-3 priorities for the coming quarter based on current Signal and stressors.'),
+    scpSection
+      ? generateNarrativeSection(systemPrompt, context, 'ai_operations',
+          'Write 3-4 sentences about AI operations performance this quarter: agent health, ROI on AI investment, evolution cycles, and what it means for operational leverage going forward.')
+      : Promise.resolve(''),
   ]);
 
   // ── Persist ───────────────────────────────────────────────────────────────
@@ -206,10 +313,10 @@ Each section should be 3-5 sentences. Professional but not corporate.`;
     period_end: periodEnd,
     executive_summary: execSummary,
     signal_narrative: signalNarrative,
-    key_decisions_made: resolvedDecs.slice(0, 10) as any,
-    milestones_crossed: milestoneRows as any,
-    stressors_resolved: resolvedRows.slice(0, 5) as any,
-    stressors_active: activeRows as any,
+    key_decisions_made: resolvedDecs.slice(0, 10) as unknown as BoardPacket['key_decisions_made'],
+    milestones_crossed: milestoneRows as unknown as BoardPacket['milestones_crossed'],
+    stressors_resolved: resolvedRows.slice(0, 5) as unknown as BoardPacket['stressors_resolved'],
+    stressors_active: activeRows as unknown as BoardPacket['stressors_active'],
     mrr_narrative: mrrNarrative,
     cohort_narrative: cohortNarrative,
     competitive_narrative: competitiveNarrative,
@@ -221,7 +328,8 @@ Each section should be 3-5 sentences. Professional but not corporate.`;
     finalized_at: null,
     shared_with: null,
     status: 'draft' as BoardPacketStatus,
-  };
+    ai_operations: scpSection ? { ...scpSection, narrative: aiOperationsNarrative } : null,
+  } as BoardPacket & { ai_operations: (SCPBoardSection & { narrative: string }) | null };
 }
 
 // ─── Funding Readiness Score ──────────────────────────────────────────────────

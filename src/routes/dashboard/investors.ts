@@ -9,7 +9,7 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { buildSharedContext } from './_shared.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { query } from '../../db/client.js';
-import { generateBoardPacket, computeFundingReadiness } from '../../services/investor/board_packet.js';
+import { generateBoardPacket, computeFundingReadiness, getSCPBoardSection } from '../../services/investor/board_packet.js';
 import { nanoid } from 'nanoid';
 
 export const investorRoutes = new Hono<AuthEnv>();
@@ -187,6 +187,19 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
 
   const packet = result.rows[0] as Record<string, unknown>;
 
+  // Load SCP board section for this product
+  const scpSection = await getSCPBoardSection(ctx.product.id).catch(() => null);
+
+  // Lifecycle state color helper
+  const lifecycleColors: Record<string, string> = {
+    setup: '#94a3b8',
+    learning: '#38bdf8',
+    operating: '#4ecca3',
+    optimizing: '#ffb347',
+    scaling: '#6c63ff',
+  };
+  const lifecycleColor = scpSection ? (lifecycleColors[scpSection.lifecycle_state] ?? '#94a3b8') : '#94a3b8';
+
   const content = html`
     <div class="page-header">
       <a href="/investors" class="back-link">← Investor Relations</a>
@@ -237,6 +250,77 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
         </div>
       ` : ''}
     </div>
+
+    <!-- AI Operations Section -->
+    ${scpSection ? html`
+    <div class="packet-section" style="background:var(--bg-card,#1a1a2e);border:1px solid var(--border,#2a2a3e);border-radius:8px;padding:20px;margin-bottom:24px;">
+      <h2 style="margin:0 0 16px;font-size:16px;font-weight:600;color:var(--text-primary,#e2e8f0);display:flex;align-items:center;gap:8px;">
+        AI Operations Summary
+        <span style="font-size:12px;font-weight:400;color:var(--text-muted,#64748b);">Sovereign Company Protocol</span>
+      </h2>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
+        <!-- Health Score -->
+        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
+          <div style="font-size:2rem;font-weight:700;color:${scpSection.health_score >= 70 ? '#4ecca3' : scpSection.health_score >= 40 ? '#ffb347' : '#ff6b6b'};">${scpSection.health_score}</div>
+          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Company Health</div>
+        </div>
+        <!-- Lifecycle State -->
+        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
+          <div style="font-size:1rem;font-weight:700;">
+            <span style="background:${lifecycleColor}22;color:${lifecycleColor};border:1px solid ${lifecycleColor}44;border-radius:4px;padding:3px 8px;font-size:12px;">${scpSection.lifecycle_state}</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:6px;">AI Lifecycle</div>
+        </div>
+        <!-- AI ROI -->
+        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
+          ${scpSection.roi !== null ? html`
+            <div style="font-size:2rem;font-weight:700;color:${scpSection.roi >= 2 ? '#4ecca3' : scpSection.roi >= 1 ? '#ffb347' : '#ff6b6b'};">${scpSection.roi.toFixed(1)}x</div>
+          ` : html`
+            <div style="font-size:1.5rem;font-weight:700;color:var(--text-muted,#64748b);">—</div>
+          `}
+          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">AI ROI</div>
+        </div>
+        <!-- Evolution Cycles -->
+        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
+          <div style="font-size:2rem;font-weight:700;color:#6c63ff;">${scpSection.total_evolution_cycles}</div>
+          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Evolution Cycles</div>
+        </div>
+        <!-- AI Cost -->
+        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
+          <div style="font-size:1.3rem;font-weight:700;color:var(--text-primary,#e2e8f0);">$${scpSection.ai_cost_30d_usd.toFixed(2)}</div>
+          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">AI Cost (30d)</div>
+        </div>
+        <!-- Golden Suite -->
+        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
+          <div style="font-size:2rem;font-weight:700;color:#ffb347;">${scpSection.golden_suite_size}</div>
+          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Golden Lessons</div>
+        </div>
+      </div>
+
+      ${scpSection.latest_briefing_headline ? html`
+      <div style="background:var(--bg-page,#0d0d1a);border-left:3px solid #6366f1;border-radius:4px;padding:10px 14px;margin-bottom:12px;">
+        <div style="font-size:11px;color:var(--text-muted,#64748b);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.04em;">Latest CEO Briefing</div>
+        <p style="margin:0;font-size:13px;color:var(--text-secondary,#94a3b8);">${scpSection.latest_briefing_headline}</p>
+      </div>
+      ` : ''}
+
+      ${scpSection.top_agents.length > 0 ? html`
+      <div>
+        <div style="font-size:11px;color:var(--text-muted,#64748b);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Top Performing Agents</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${scpSection.top_agents.map((agent) => html`
+            <div style="background:var(--bg-page,#0d0d1a);border:1px solid var(--border,#2a2a3e);border-radius:6px;padding:8px 12px;min-width:120px;">
+              <div style="font-weight:600;font-size:13px;color:var(--text-primary,#e2e8f0);">${agent.name}</div>
+              <div style="font-size:11px;color:var(--text-muted,#64748b);">${agent.role} · v${agent.version}</div>
+              <div style="font-size:12px;color:${agent.health >= 70 ? '#4ecca3' : agent.health >= 40 ? '#ffb347' : '#ff6b6b'};margin-top:4px;">Health: ${agent.health}</div>
+            </div>
+          `)}
+        </div>
+      </div>
+      ` : ''}
+    </div>
+    ` : ''}
 
     <div class="packet-actions-bar">
       ${(packet.status as string) === 'draft' ? html`

@@ -223,6 +223,17 @@ function groupedSidebar(
     { key: 'beta', label: 'Beta', href: '/beta' },
   ];
 
+  // SCP Agents section — Sovereign Company Protocol
+  const agentsItems: NavItem[] = [
+    { key: 'agents', label: 'Agent Roster', href: '/agents' },
+    { key: 'agents-briefings', label: 'CEO Briefing', href: '/agents/briefings/latest' },
+    { key: 'agents-evolve', label: 'Evolution', href: '/agents/evolve' },
+    { key: 'agents-wisdom', label: 'Wisdom Layer', href: '/agents/wisdom', locked: !check('wisdom') },
+    { key: 'agents-remediations', label: 'Remediations', href: '/agents/remediations' },
+    { key: 'agents-temporal', label: 'Temporal', href: '/agents/temporal', locked: !check('board_packet') },
+    { key: 'agents-constitution', label: 'Constitution', href: '/agents/constitution' },
+  ];
+
   return html`
   <nav class="sidebar ${riskClass}">
     ${sectionHeader('OPERATE')}
@@ -230,6 +241,9 @@ function groupedSidebar(
 
     ${sectionHeader('INTELLIGENCE')}
     <ul class="sidebar-nav">${renderNavItems(intelItems, active)}</ul>
+
+    ${sectionHeader('AGENTS')}
+    <ul class="sidebar-nav">${renderNavItems(agentsItems, active)}</ul>
 
     ${sectionHeader('PRODUCT')}
     <ul class="sidebar-nav">${renderNavItems(productItems, active)}</ul>
@@ -261,6 +275,7 @@ function mobilBottomNav(active: string, decisionsCount: number): HtmlContent {
 
   const signalIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="2.5"/><path d="M5.5 14.5a6.5 6.5 0 0 1 0-9M14.5 5.5a6.5 6.5 0 0 1 0 9"/><path d="M3 17a9.5 9.5 0 0 1 0-14M17 3a9.5 9.5 0 0 1 0 14" stroke-dasharray="2 2"/></svg>`;
   const decisionsIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 10l2 2 4-4"/></svg>`;
+  const agentsIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="3"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="16" cy="5" r="1.5" fill="currentColor" stroke="none"/></svg>`;
   const planIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 7h10M5 10h6M5 13h8"/></svg>`;
   const moreIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="5" cy="10" r="1.2" fill="currentColor"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/><circle cx="15" cy="10" r="1.2" fill="currentColor"/></svg>`;
 
@@ -268,6 +283,7 @@ function mobilBottomNav(active: string, decisionsCount: number): HtmlContent {
   <nav class="mobile-bottom-nav" role="navigation" aria-label="Main navigation">
     ${tab('dashboard', '/dashboard', 'Signal', signalIcon)}
     ${tab('decisions', '/decisions', 'Decisions', decisionsIcon, decisionsCount)}
+    ${tab('agents', '/agents', 'Agents', agentsIcon)}
     ${tab('plan', '/plan', 'Plan', planIcon)}
     ${tab('settings', '/settings', 'More', moreIcon)}
   </nav>`;

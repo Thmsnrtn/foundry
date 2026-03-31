@@ -9,6 +9,7 @@ import { BaseAgent } from './base.js';
 import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { createRemediation } from '../remediation.js';
 
 interface CrucibleClaudeResponse {
   observations: string[];
@@ -203,6 +204,49 @@ Return JSON only (no markdown fences):
     // with the agent relying on the notify+override authority model.
     const pendingDecisions: AgentDecision[] = [];
 
+    // ── 7b. Create remediations from quality alerts ───────────────────────────
+    const actionsTaken: AgentAction[] = [];
+
+    for (const alert of (parsed.quality_alerts ?? [])) {
+      if (alert.severity !== 'high') continue;
+
+      // Map alert type to remediation type
+      let remediationType: string;
+      if (alert.type === 'coverage_gap' || alert.type === 'test_needed') {
+        remediationType = 'test_coverage';
+      } else if (alert.type === 'regression_risk') {
+        remediationType = 'performance';
+      } else {
+        remediationType = 'code_quality';
+      }
+
+      try {
+        const remId = await createRemediation({
+          productId,
+          agentName: 'crucible',
+          sessionId: context.agentInstance.id,
+          remediationType,
+          title: alert.description.slice(0, 120),
+          description: alert.description,
+          severity: 'high',
+          suggestedFix: alert.recommendation,
+        });
+
+        actionsTaken.push({
+          id: nanoid(),
+          type: 'create_remediation',
+          description: `Created high ${remediationType} remediation: ${alert.description.slice(0, 80)}`,
+          authority_level: 0,
+          executed: true,
+          executed_at: new Date().toISOString(),
+          target: 'agent_remediations',
+          result: remId,
+        });
+      } catch {
+        // Non-fatal
+      }
+    }
+
     // ── 8. Record analysis action ─────────────────────────────────────────────
     const highAlerts = (parsed.quality_alerts ?? []).filter(a => a.severity === 'high').length;
     const analysisAction: AgentAction = {
@@ -217,7 +261,7 @@ Return JSON only (no markdown fences):
 
     return {
       observations: parsed.observations ?? [],
-      actionsTaken: [analysisAction],
+      actionsTaken: [analysisAction, ...actionsTaken],
       pendingDecisions,
       briefingContribution: parsed.briefing_contribution ?? 'Crucible completed QA review.',
       briefingPriority: parsed.briefing_priority ?? 'normal',

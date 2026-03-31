@@ -1002,6 +1002,97 @@ export async function scpLifecycleTransition(): Promise<void> {
   console.log('[JOB] scp_lifecycle_transition complete');
 }
 
+// ─── SCP Remediation Sync — Daily 8:00 UTC ───────────────────────────────────
+
+export async function scpRemediationSync(): Promise<void> {
+  console.log('[SCP] Remediation sync starting');
+  try {
+    const { getRemediationSummary } = await import('../services/scp/remediation.js');
+    const products = await getAllActiveProducts();
+    for (const row of products.rows) {
+      const p = row as Record<string, string>;
+      try {
+        const summary = await getRemediationSummary(p.id);
+        if (summary.open > 0) {
+          console.log(`[SCP] ${p.name}: ${summary.open} open remediations (critical:${summary.critical}, high:${summary.high})`);
+        }
+      } catch {
+        // Non-fatal per product
+      }
+    }
+  } catch (err) {
+    console.error('[SCP] Remediation sync error:', err);
+  }
+  console.log('[SCP] Remediation sync complete');
+}
+
+// ─── SCP Temporal Analysis — Monday 5:00 UTC ─────────────────────────────────
+
+async function scpTemporalAnalysis(): Promise<void> {
+  // Weekly: analyze temporal trends for all active SCP products
+  const { query } = await import('../db/client.js');
+  const { getSignalTimeline, analyzeTemporalTrends } = await import('../services/scp/temporal.js');
+  const products = await query(`SELECT id FROM products WHERE scp_status = 'active'`);
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const timeline = await getSignalTimeline(p.id, 90);
+      if (timeline.length >= 7) {
+        await analyzeTemporalTrends(p.id, timeline);
+        console.log(`[temporal] Analyzed ${p.id}: ${timeline.length} data points`);
+      }
+    } catch (err) {
+      console.error(`[temporal] Failed for ${p.id}:`, err);
+    }
+  }
+}
+
+// ─── SCP Cost Report — 1st of Month ──────────────────────────────────────────
+
+async function scpCostReport(): Promise<void> {
+  // Monthly: update 30d trailing AI cost on all active products
+  const { query } = await import('../db/client.js');
+  const costData = await query(
+    `SELECT product_id, SUM(cost_usd) as total_cost
+     FROM agent_cost_log
+     WHERE logged_at >= datetime('now', '-30 days')
+     GROUP BY product_id`
+  );
+  for (const row of costData.rows) {
+    const r = row as Record<string, unknown>;
+    await query(
+      `UPDATE products SET ai_cost_trailing_30d_usd = ? WHERE id = ?`,
+      [r.total_cost as number ?? 0, r.product_id as string]
+    );
+  }
+  console.log(`[cost-report] Updated 30d costs for ${costData.rows.length} products`);
+}
+
+// ─── SCP Wisdom Synthesis — Sunday 3:00 UTC ───────────────────────────────────
+
+async function scpWisdomSynthesis(): Promise<void> {
+  // Weekly: synthesize wisdom patterns for all active SCP products
+  const { query } = await import('../db/client.js');
+  const { synthesizeWisdomPatterns } = await import('../services/scp/wisdom.js');
+  const products = await query(`SELECT id FROM products WHERE scp_status = 'active'`);
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      await synthesizeWisdomPatterns(p.id);
+    } catch (err) {
+      console.error(`[wisdom] synthesis failed for ${p.id}:`, err);
+    }
+  }
+}
+
+// ─── SCP Intelligence Benchmarks — Daily 2:00 UTC ────────────────────────────
+
+async function scpIntelligenceBenchmarks(): Promise<void> {
+  // Daily: recompute intelligence benchmarks across all products
+  const { computeAndStoreBenchmarks } = await import('../services/scp/network.js');
+  await computeAndStoreBenchmarks();
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1038,4 +1129,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_daily_briefing:      { fn: scpDailyBriefing,      schedule: '30 5 * * *',   description: 'Generate CEO briefings for all SCP companies (daily 5:30 UTC)' },
   scp_evolution_cycle:     { fn: scpEvolutionCycle,     schedule: '0 4 * * *',    description: 'Run evolution synthesis for all SCP agents (daily 4:00 UTC)' },
   scp_lifecycle_transition:{ fn: scpLifecycleTransition,schedule: '0 6 * * *',    description: 'Evaluate company lifecycle state transitions (daily 6:00 UTC)' },
+  scp_wisdom_synthesis:    { fn: scpWisdomSynthesis,    schedule: '0 3 * * 0',    description: 'Synthesize wisdom patterns for all active SCP products (Sunday 3:00 UTC)' },
+  scp_intelligence_benchmarks: { fn: scpIntelligenceBenchmarks, schedule: '0 2 * * *', description: 'Recompute intelligence benchmarks across all products (daily 2:00 UTC)' },
+  scp_remediation_sync:    { fn: scpRemediationSync,   schedule: '0 8 * * *',    description: 'Daily agent remediation sync and health logging (daily 8:00 UTC)' },
+  scp_temporal_analysis:   { fn: scpTemporalAnalysis,  schedule: '0 5 * * 1',    description: 'Weekly temporal trend analysis for all SCP companies (Monday 5:00 UTC)' },
+  scp_cost_report:         { fn: scpCostReport,        schedule: '0 0 1 * *',    description: 'Monthly 30d AI cost rollup for all products (1st of month)' },
 };

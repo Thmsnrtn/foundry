@@ -9,6 +9,7 @@ import { callOpus } from '../ai/client.js';
 import { buildWisdomContext, getProductDNA } from '../wisdom/dna.js';
 import { getRelevantPatterns } from '../wisdom/patterns.js';
 import { getRelevantFailures } from '../wisdom/failures.js';
+import { getPendingRemediations } from '../scp/remediation.js';
 import { nanoid } from 'nanoid';
 import type { Playbook, PlaybookType, PlaybookEvidence } from '../../types/index.js';
 
@@ -79,7 +80,7 @@ export async function generatePlaybook(
   const config = PLAYBOOK_CONFIGS[type];
 
   // ── Load all sources ───────────────────────────────────────────────────────
-  const [wisdom, dna, decisions, stressors, patterns, failures, product] = await Promise.all([
+  const [wisdom, dna, decisions, stressors, patterns, failures, product, agentRemediations, agentSessions, goldenLessons] = await Promise.all([
     buildWisdomContext(productId, config.sourceCategories[0]),
     getProductDNA(productId),
     query(
@@ -99,6 +100,27 @@ export async function generatePlaybook(
     getRelevantPatterns(productId, config.sourceCategories[0]).catch(() => []),
     getRelevantFailures(productId, config.sourceCategories[0]).catch(() => []),
     query('SELECT name, market_category FROM products WHERE id = ?', [productId]),
+    // SCP: active remediations give insight into current technical/quality state
+    getPendingRemediations(productId, { limit: 20 }).catch(() => []),
+    // SCP: recent agent sessions with health scores
+    query(
+      `SELECT ai.agent_name, ai.domain_health_score, ai.last_run_at
+       FROM agent_instances ai
+       WHERE ai.product_id = ?
+         AND ai.status = 'active'
+         AND ai.last_run_at IS NOT NULL
+       ORDER BY ai.last_run_at DESC`,
+      [productId],
+    ).catch(() => ({ rows: [] })),
+    // SCP: golden lessons relevant to this product
+    query(
+      `SELECT agent_name, lesson, lesson_type, confidence, times_reinforced
+       FROM golden_suite
+       WHERE product_id = ? AND active = 1
+       ORDER BY times_reinforced DESC, confidence DESC
+       LIMIT 15`,
+      [productId],
+    ).catch(() => ({ rows: [] })),
   ]);
 
   const productName = (product.rows[0] as Record<string, string>)?.name ?? 'this product';
@@ -150,6 +172,38 @@ export async function generatePlaybook(
     contextParts.push('WHAT HAS FAILED:');
     for (const f of failures) {
       contextParts.push(`- tried: ${f.what_was_tried} | outcome: ${f.outcome}`);
+    }
+    contextParts.push('');
+  }
+
+  // ── SCP Agent Intelligence ─────────────────────────────────────────────────
+  const agentRows = agentSessions.rows as Array<Record<string, unknown>>;
+  if (agentRows.length > 0) {
+    contextParts.push('SCP AGENT HEALTH SCORES (current):');
+    for (const a of agentRows) {
+      const score = Number(a.domain_health_score) || 0;
+      contextParts.push(`- ${a.agent_name as string}: ${score}/100`);
+    }
+    contextParts.push('');
+  }
+
+  const remItems = agentRemediations;
+  if (remItems.length > 0) {
+    contextParts.push('ACTIVE AGENT REMEDIATIONS (open issues found by AI agents):');
+    for (const r of remItems.slice(0, 10)) {
+      contextParts.push(`- [${r.severity}/${r.remediation_type}] ${r.title} (found by ${r.agent_name})`);
+      if (r.suggested_fix) {
+        contextParts.push(`  → fix: ${r.suggested_fix}`);
+      }
+    }
+    contextParts.push('');
+  }
+
+  const lessonRows = goldenLessons.rows as Array<Record<string, unknown>>;
+  if (lessonRows.length > 0) {
+    contextParts.push('GOLDEN SUITE LESSONS (company-specific AI learned behaviors):');
+    for (const l of lessonRows) {
+      contextParts.push(`- [${l.agent_name as string}] ${l.lesson as string}`);
     }
     contextParts.push('');
   }
