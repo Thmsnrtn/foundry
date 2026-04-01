@@ -1201,6 +1201,158 @@ async function scpIntegrationFabricSync(): Promise<void> {
   console.log(`[scp_integration_fabric_sync] PostHog: ${posthogSynced} events, GitHub: ${githubSynced} events`);
 }
 
+// ─── SCP v4: Extended Integrations Sync — Every 2h ───────────────────────────
+
+async function scpExtendedIntegrationsSync(): Promise<void> {
+  console.log('[JOB] scp_extended_integrations_sync starting');
+  const { query: dbQuery } = await import('../db/client.js');
+  const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+
+  let total = 0;
+  for (const row of products.rows) {
+    const productId = (row as Record<string, unknown>).id as string;
+    try {
+      const [
+        { syncSentryEvents },
+        { syncLinearEvents },
+        { syncIntercomEvents },
+        { syncSlackEvents },
+      ] = await Promise.all([
+        import('../services/integration/sentry.js').catch(() => ({ syncSentryEvents: async () => ({ synced: 0 }) })),
+        import('../services/integration/linear.js').catch(() => ({ syncLinearEvents: async () => ({ synced: 0 }) })),
+        import('../services/integration/intercom.js').catch(() => ({ syncIntercomEvents: async () => ({ synced: 0 }) })),
+        import('../services/integration/slack.js').catch(() => ({ syncSlackEvents: async () => ({ synced: 0 }) })),
+      ]);
+      const results = await Promise.allSettled([
+        syncSentryEvents(productId),
+        syncLinearEvents(productId),
+        syncIntercomEvents(productId),
+        syncSlackEvents(productId),
+      ]);
+      const synced = results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? (r.value.synced ?? 0) : 0), 0);
+      total += synced;
+    } catch { /* non-fatal per product */ }
+  }
+  console.log(`[scp_extended_integrations_sync] Synced ${total} events across ${products.rows.length} products`);
+}
+
+// ─── SCP v4: Benchmark Refresh — Sunday 3:00 UTC ────────────────────────────
+
+async function scpBenchmarkRefresh(): Promise<void> {
+  console.log('[JOB] scp_benchmark_refresh starting');
+  try {
+    const { refreshPercentiles, submitBenchmark } = await import('../services/benchmarking/pool.js');
+    const { query: dbQuery } = await import('../db/client.js');
+
+    // Submit this cycle's metrics as benchmark contributions
+    const products = await dbQuery(
+      `SELECT ms.*, ls.current_prompt, p.market_category
+       FROM metric_snapshots ms
+       JOIN products p ON ms.product_id = p.id
+       JOIN lifecycle_state ls ON ms.product_id = ls.product_id
+       WHERE ms.snapshot_date = date('now', '-1 day')
+         AND p.scp_status = 'active'
+       LIMIT 200`
+    );
+
+    const stageMap: Record<string, string> = {
+      prompt_1: 'pre_revenue', prompt_2: 'pre_revenue', prompt_2_5: 'pre_revenue',
+      prompt_3: 'early', prompt_4: 'early', prompt_5: 'early',
+      prompt_6: 'growth', prompt_7: 'growth', prompt_8: 'scale', prompt_9: 'scale',
+    };
+
+    for (const row of products.rows) {
+      const r = row as Record<string, unknown>;
+      const stage = stageMap[r.current_prompt as string] ?? 'early';
+      const contributions = [];
+      if (r.churn_rate != null) contributions.push({ metric_name: 'churn_rate', value: Number(r.churn_rate), company_stage: stage, industry: 'saas' });
+      if (r.activation_rate != null) contributions.push({ metric_name: 'activation_rate', value: Number(r.activation_rate), company_stage: stage, industry: 'saas' });
+      if (contributions.length > 0) {
+        await submitBenchmark(r.product_id as string, contributions).catch(() => {});
+      }
+    }
+
+    await refreshPercentiles();
+    console.log(`[scp_benchmark_refresh] Refreshed percentiles for ${products.rows.length} contributions`);
+  } catch (err) {
+    console.error('[scp_benchmark_refresh] Error:', err);
+  }
+}
+
+// ─── SCP v4: Decision Retrospectives — Monday 9:00 UTC ───────────────────────
+
+async function scpDecisionRetrospectives(): Promise<void> {
+  console.log('[JOB] scp_decision_retrospectives starting');
+  try {
+    const { getDecisionsDueForRetrospective } = await import('../services/scp/decision-log.js');
+    const { query: dbQuery } = await import('../db/client.js');
+
+    const products = await dbQuery(`SELECT id, owner_id, name FROM products WHERE scp_status = 'active' LIMIT 100`);
+    let notified = 0;
+
+    for (const row of products.rows) {
+      const p = row as Record<string, unknown>;
+      const due = await getDecisionsDueForRetrospective(p.id as string);
+      if (due.length === 0) continue;
+
+      const { createNotification } = await import('../services/ux/notifications.js');
+      await createNotification(
+        p.owner_id as string,
+        p.id as string,
+        'decision_retrospective',
+        `${due.length} decision${due.length > 1 ? 's' : ''} ready for retrospective`,
+        `Review outcomes for: ${due.slice(0, 2).map(d => `"${d.decision_title}"`).join(', ')}${due.length > 2 ? ` +${due.length - 2} more` : ''}. Rate how each decision played out to improve future judgment.`,
+        '/agents/decisions',
+        'Review decisions'
+      );
+      notified++;
+    }
+    console.log(`[scp_decision_retrospectives] Notified ${notified} products`);
+  } catch (err) {
+    console.error('[scp_decision_retrospectives] Error:', err);
+  }
+}
+
+// ─── SCP v4: Wellbeing Focus Cleanup — Daily midnight ────────────────────────
+
+async function scpWellbeingFocusCleanup(): Promise<void> {
+  console.log('[JOB] scp_wellbeing_focus_cleanup starting');
+  try {
+    const { query: dbQuery } = await import('../db/client.js');
+    // Clear expired focus areas
+    await dbQuery(
+      `UPDATE founder_focus_settings SET focus_area=NULL, focus_ends_at=NULL WHERE focus_ends_at IS NOT NULL AND focus_ends_at <= datetime('now')`
+    );
+    // Clear expired vacation modes
+    await dbQuery(
+      `UPDATE founder_focus_settings SET vacation_mode_until=NULL WHERE vacation_mode_until IS NOT NULL AND vacation_mode_until <= datetime('now')`
+    );
+    // Clear expired decision snoozes
+    await dbQuery(
+      `DELETE FROM decision_snooze_log WHERE snoozed_until <= datetime('now')`
+    );
+    console.log('[scp_wellbeing_focus_cleanup] Cleaned up expired focus and snooze records');
+  } catch (err) {
+    console.error('[scp_wellbeing_focus_cleanup] Error:', err);
+  }
+}
+
+// ─── SCP v4: Webhook Delivery Cleanup — Sunday 4:00 UTC ─────────────────────
+
+async function scpWebhookDeliveryCleanup(): Promise<void> {
+  console.log('[JOB] scp_webhook_delivery_cleanup starting');
+  try {
+    const { query: dbQuery } = await import('../db/client.js');
+    // Keep last 30 days of delivery records, delete older ones
+    const result = await dbQuery(
+      `DELETE FROM webhook_deliveries WHERE created_at < datetime('now', '-30 days')`
+    );
+    console.log(`[scp_webhook_delivery_cleanup] Cleaned up old webhook delivery records`);
+  } catch (err) {
+    console.error('[scp_webhook_delivery_cleanup] Error:', err);
+  }
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1248,4 +1400,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_pl_update:           { fn: scpPLUpdate,          schedule: '0 1 * * *',    description: 'Update AI Company P&L attribution for all products (daily 1:00 UTC)' },
   scp_strategy_synthesis:  { fn: scpStrategySynthesis, schedule: '0 6 1 * *',    description: 'Generate monthly strategic synthesis for all products (1st of month)' },
   scp_integration_fabric_sync: { fn: scpIntegrationFabricSync, schedule: '0 * * * *', description: 'Sync PostHog and GitHub into integration fabric (every hour)' },
+  scp_extended_integrations_sync: { fn: scpExtendedIntegrationsSync, schedule: '0 */2 * * *', description: 'Sync Sentry, Linear, Intercom, Slack integrations (every 2h)' },
+  scp_benchmark_refresh: { fn: scpBenchmarkRefresh, schedule: '0 3 * * 0', description: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
+  scp_decision_retrospectives: { fn: scpDecisionRetrospectives, schedule: '0 9 * * 1', description: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
+  scp_wellbeing_focus_cleanup: { fn: scpWellbeingFocusCleanup, schedule: '0 0 * * *', description: 'Clear expired focus areas and vacation modes (daily midnight)' },
+  scp_webhook_delivery_cleanup: { fn: scpWebhookDeliveryCleanup, schedule: '0 4 * * 0', description: 'Clean up old webhook delivery records (Sunday 4:00 UTC)' },
 };

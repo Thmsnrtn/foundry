@@ -182,7 +182,7 @@ integrationsRoutes.get('/integrations', async (c) => {
     </div>
   `;
 
-  return c.html(dashboardLayout(ctx, String(content), 'Integrations'));
+  return c.html(dashboardLayout(ctx, content));
 });
 
 // ─── GET /integrations/:type/connect ─────────────────────────────────────────
@@ -227,7 +227,7 @@ integrationsRoutes.get('/integrations/:type/connect', async (c) => {
     `}
   `;
 
-  return c.html(dashboardLayout(ctx, String(content), `Connect ${meta.name}`));
+  return c.html(dashboardLayout(ctx, content));
 });
 
 // ─── POST /integrations/:type/connect ────────────────────────────────────────

@@ -149,7 +149,7 @@ investorRoutes.get('/investors', async (c) => {
     </div>
   `;
 
-  return c.html(dashboardLayout(ctx, String(content), 'Investors'));
+  return c.html(dashboardLayout(ctx, content));
 });
 
 // ─── POST /investors/generate-packet ─────────────────────────────────────────
@@ -339,7 +339,7 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
     </div>
   `;
 
-  return c.html(dashboardLayout(ctx, String(content), `Board Packet ${quarter}`));
+  return c.html(dashboardLayout(ctx, content));
 });
 
 // ─── POST /investors/compute-readiness ───────────────────────────────────────

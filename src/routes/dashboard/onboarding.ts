@@ -10,6 +10,7 @@ import { listRepos } from '../../services/audit/github.js';
 import { runAudit } from '../../services/audit/engine.js';
 import { captureArtifact } from '../../services/story/engine.js';
 import { dashboardLayout } from '../../views/layout.js';
+import { html } from 'hono/html';
 import { onboardingWizard } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
@@ -87,7 +88,7 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
         ? 'You have reached the 5-product limit.'
         : 'Your current plan supports 1 product. Upgrade to add more.';
     const ctx = await getLayoutContext(founder, '', 'Product Limit Reached');
-    return c.html(dashboardLayout(ctx, `
+    return c.html(dashboardLayout(ctx, html`
       <div class="card" style="max-width:480px;margin:3rem auto;text-align:center;">
         <h2>Product limit reached</h2>
         <p style="color:var(--text-muted);margin:0.75rem 0 1.5rem;">${upgradeHint}</p>

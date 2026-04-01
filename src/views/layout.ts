@@ -238,6 +238,11 @@ function groupedSidebar(
     { key: 'agents-messages', label: 'Agent Comms', href: '/agents/messages' },
     { key: 'agents-experiments', label: 'Experiments', href: '/agents/experiments', locked: !check('wisdom') },
     { key: 'agents-strategy', label: 'Strategy', href: '/agents/strategy', locked: !check('board_packet') },
+    // SCP v4: Intelligence & governance
+    { key: 'agents-inbox', label: 'Inbox', href: '/agents/inbox' },
+    { key: 'agents-wiki', label: 'Wiki', href: '/agents/wiki' },
+    { key: 'agents-okr', label: 'OKRs', href: '/agents/okr', locked: !check('wisdom') },
+    { key: 'agents-decisions', label: 'Decision Log', href: '/agents/decisions', locked: !check('board_packet') },
   ];
 
   return html`
@@ -262,6 +267,12 @@ function groupedSidebar(
 
     ${sectionHeader('PUBLISH')}
     <ul class="sidebar-nav">${renderNavItems(publishItems, active)}</ul>
+
+    ${sectionHeader('BENCHMARKS')}
+    <ul class="sidebar-nav">${renderNavItems([
+      { key: 'benchmarks', label: 'Industry Benchmarks', href: '/benchmarks' },
+      { key: 'audit-log', label: 'Audit Log', href: '/audit-log', locked: !check('board_packet') },
+    ], active)}</ul>
 
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
       <li><a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a></li>

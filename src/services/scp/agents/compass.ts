@@ -1,12 +1,17 @@
 // =============================================================================
-// FOUNDRY — Compass Agent (PM)
-// Domain: Product roadmap, feature prioritization, lifecycle management
+// FOUNDRY — Compass Agent (CEO)
+// Domain: Strategic direction, company health, big-picture decisions
 // Cadence: 48 hours
+// v2: Emits hypotheses for strategic bets, agentMessages (directives), outboundActions
+//     for board-level proposals
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
+} from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 
@@ -17,6 +22,20 @@ interface CompassClaudeResponse {
     description: string;
     priority: 'high' | 'medium' | 'low';
   }>;
+  strategic_hypotheses: Array<{
+    title: string;
+    description: string;
+    hypothesis: string;
+    success_metric: string;
+    success_threshold: number;
+    test_duration_days: number;
+  }>;
+  agent_directives: Array<{
+    to_agent: string;
+    directive: string;
+    priority: 'high' | 'normal';
+  }>;
+  company_health_score: number;
   domain_health_score: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
@@ -24,7 +43,7 @@ interface CompassClaudeResponse {
 
 export class CompassAgent extends BaseAgent {
   getName(): AgentName { return 'compass'; }
-  getRole(): string { return 'Product Manager'; }
+  getRole(): string { return 'CEO'; }
   getActivationCadenceHours(): number { return 48; }
 
   protected async analyzeAndAct(
@@ -58,7 +77,19 @@ export class CompassAgent extends BaseAgent {
       [productId]
     );
 
-    // ── 4. Handle no-data case ────────────────────────────────────────────────
+    // ── 4. Query active company OKRs ──────────────────────────────────────────
+    const okrResult = await db(
+      `SELECT objective, status FROM company_okrs WHERE product_id=? AND status='active' LIMIT 5`,
+      [productId]
+    );
+
+    // ── 5. Query recent strategic decisions log ───────────────────────────────
+    const decisionsLogResult = await db(
+      `SELECT title, decision_made, outcome_rating FROM strategic_decisions_log WHERE product_id=? ORDER BY created_at DESC LIMIT 3`,
+      [productId]
+    );
+
+    // ── 6. Handle no-data case ────────────────────────────────────────────────
     if (lifecycleResult.rows.length === 0) {
       const action: AgentAction = {
         id: nanoid(),
@@ -82,12 +113,11 @@ export class CompassAgent extends BaseAgent {
       };
     }
 
-    // ── 5. Build prompt data ──────────────────────────────────────────────────
+    // ── 7. Build prompt data ──────────────────────────────────────────────────
     const lifecycle = lifecycleResult.rows[0] as Record<string, unknown>;
     const currentPrompt = (lifecycle.current_prompt as string) ?? 'unknown';
     const riskState = (lifecycle.risk_state as string) ?? 'unknown';
 
-    // Determine prompt number from current_prompt string (e.g., "prompt_3" => 3)
     const promptMatch = currentPrompt.match(/(\d+(?:\.\d+)?)/);
     const promptN = promptMatch ? promptMatch[1] : '?';
 
@@ -106,7 +136,6 @@ export class CompassAgent extends BaseAgent {
       ? artifactRows.map(a => `[${a.phase as string}] ${a.title as string}`).join(', ')
       : 'No recent milestones recorded';
 
-    // Collect prompt statuses for context
     const promptStatuses: string[] = [];
     for (let i = 1; i <= 9; i++) {
       const key = `prompt_${i}_status`;
@@ -116,16 +145,28 @@ export class CompassAgent extends BaseAgent {
       }
     }
 
-    // ── 6. Call Claude Sonnet ─────────────────────────────────────────────────
+    const okrRows = okrResult.rows as Record<string, unknown>[];
+    const okrSummary = okrRows.length > 0
+      ? okrRows.map(o => `${o.objective as string} [${o.status as string}]`).join('; ')
+      : 'No active OKRs';
+
+    const decisionLogRows = decisionsLogResult.rows as Record<string, unknown>[];
+    const decisionLogSummary = decisionLogRows.length > 0
+      ? decisionLogRows.map(d => `"${d.title as string}" — decided: ${d.decision_made as string}, outcome: ${d.outcome_rating as string ?? 'TBD'}`).join('; ')
+      : 'No recent strategic decisions';
+
+    // ── 8. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
       context,
-      `You are Compass, the Product Manager agent for ${companyName}. You track product lifecycle progress, identify roadmap blockers, and keep the product moving forward.`
+      `You are Compass, the CEO strategic agent for ${companyName}. You assess company-wide health, set strategic direction, and coordinate other agents. Think big-picture: OKRs, strategic bets, board-level decisions, and cross-functional priorities.`
     );
 
     const userPrompt = `Lifecycle state: ${currentPrompt} (prompt ${promptN}/9). Risk state: ${riskState}.
 Prompt progress: ${promptStatuses.length > 0 ? promptStatuses.join(', ') : 'all prompts at initial state'}.
 Pending decisions: ${decisionCount}${decisionCount > 0 ? ` (oldest: ${oldestDecisionAgeDays} days)` : ''}.
 Recent milestones: ${milestoneList}.
+Active OKRs: ${okrSummary}.
+Recent strategic decisions: ${decisionLogSummary}.
 
 Return JSON only (no markdown fences):
 {
@@ -137,12 +178,30 @@ Return JSON only (no markdown fences):
       "priority": "high" | "medium" | "low"
     }
   ],
+  "strategic_hypotheses": [
+    {
+      "title": "string",
+      "description": "string",
+      "hypothesis": "string",
+      "success_metric": "string",
+      "success_threshold": number,
+      "test_duration_days": number
+    }
+  ],
+  "agent_directives": [
+    {
+      "to_agent": "string (agent name, e.g. 'beacon', 'forge', 'harbor')",
+      "directive": "string (what Compass needs that agent to focus on)",
+      "priority": "high" | "normal"
+    }
+  ],
+  "company_health_score": number (0-100),
   "domain_health_score": number (0-100),
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 3000);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 
@@ -163,7 +222,7 @@ Return JSON only (no markdown fences):
       };
     }
 
-    // ── 7. Build decisions for high-priority recommendations ──────────────────
+    // ── 9. Build decisions for high-priority recommendations ──────────────────
     const pendingDecisions: AgentDecision[] = [];
 
     for (const rec of (parsed.recommendations ?? [])) {
@@ -173,7 +232,7 @@ Return JSON only (no markdown fences):
           agent_name: this.getName(),
           title: rec.title,
           description: rec.description,
-          rationale: `Compass (PM) identified: ${rec.description}`,
+          rationale: `Compass (CEO) identified: ${rec.description}`,
           expected_impact: 'Unblocks product lifecycle progression and reduces roadmap risk.',
           action_type: 'roadmap_action',
           action_data: { raw_action: rec },
@@ -184,11 +243,49 @@ Return JSON only (no markdown fences):
       }
     }
 
-    // ── 8. Record analysis action ─────────────────────────────────────────────
+    // ── 10. Build outbound actions for board-level strategic proposals ─────────
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const rec of (parsed.recommendations ?? [])) {
+      if (rec.priority === 'high') {
+        outboundActions.push({
+          action_type: 'strategic_proposal',
+          description: rec.description,
+          parameters: {
+            title: rec.title,
+            priority: rec.priority,
+          },
+          authority_level: 2, // Board-level: requires human approval
+        });
+      }
+    }
+
+    // ── 11. Build agent messages from directives ──────────────────────────────
+    const agentMessages: AgentMessageSignal[] = [];
+    for (const directive of (parsed.agent_directives ?? [])) {
+      agentMessages.push({
+        to_agent: directive.to_agent,
+        message_type: 'request',
+        priority: directive.priority === 'high' ? 'high' : 'normal',
+        subject: `Strategic directive from Compass`,
+        body: directive.directive,
+      });
+    }
+
+    // ── 12. Build hypotheses from strategic_hypotheses ────────────────────────
+    const hypotheses: HypothesisSignal[] = (parsed.strategic_hypotheses ?? []).map(h => ({
+      title: h.title,
+      description: h.description,
+      hypothesis: h.hypothesis,
+      success_metric: h.success_metric,
+      success_threshold: h.success_threshold,
+      test_duration_days: h.test_duration_days,
+    }));
+
+    // ── 13. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed product lifecycle analysis: ${currentPrompt}, ${decisionCount} pending decisions`,
+      description: `Completed strategic analysis: ${currentPrompt}, ${decisionCount} pending decisions, health=${parsed.company_health_score ?? 50}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -199,12 +296,15 @@ Return JSON only (no markdown fences):
       observations: parsed.observations ?? [],
       actionsTaken: [analysisAction],
       pendingDecisions,
-      briefingContribution: parsed.briefing_contribution ?? 'Compass completed product lifecycle review.',
+      briefingContribution: parsed.briefing_contribution ?? 'Compass completed strategic review.',
       briefingPriority: parsed.briefing_priority ?? 'normal',
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      domainHealthScore: parsed.company_health_score ?? parsed.domain_health_score ?? 50,
+      outboundActions,
+      agentMessages,
+      hypotheses,
     };
   }
 }

@@ -2,22 +2,41 @@
 // FOUNDRY — Atlas Agent (CTO)
 // Domain: Code quality, architecture, technical debt, security
 // Cadence: 24 hours
+// v2: Emits outboundActions for immediate proposals, agentMessages to Crucible/Sentinel,
+//     hypotheses for technical experiments
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
+} from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
-import { createRemediation } from '../remediation.js';
 
 interface AtlasClaudeResponse {
   observations: string[];
-  actions_proposed: Array<{
+  technical_health_assessment: {
+    code_quality_score: number;
+    security_risk_level: 'low' | 'medium' | 'high' | 'critical';
+    debt_trend: 'improving' | 'stable' | 'worsening';
+    key_risks: string[];
+  };
+  architecture_proposals: Array<{
     title: string;
     description: string;
-    expected_impact: string;
-    urgency: 'high' | 'medium' | 'low';
+    priority: 'immediate' | 'this_sprint' | 'this_quarter';
+    estimated_effort: string;
+    authority_level: 0 | 1 | 2;
+  }>;
+  technical_hypotheses: Array<{
+    title: string;
+    description: string;
+    hypothesis: string;
+    success_metric: string;
+    success_threshold: number;
+    test_duration_days: number;
   }>;
   domain_health_score: number;
   briefing_contribution: string;
@@ -35,21 +54,17 @@ export class AtlasAgent extends BaseAgent {
   ): Promise<AgentAnalysisResult> {
     const { productId, companyName } = context;
 
-    // ── 1. Query latest audit_scores ──────────────────────────────────────────
-    const auditResult = await db(
-      `SELECT * FROM audit_scores WHERE product_id = ? ORDER BY created_at DESC LIMIT 1`,
+    // ── 1. Query metric_snapshots for incident proxy ───────────────────────────
+    const metricsResult = await db(
+      `SELECT support_volume_7d, snapshot_date
+       FROM metric_snapshots
+       WHERE product_id = ?
+       ORDER BY snapshot_date DESC
+       LIMIT 1`,
       [productId]
     );
 
-    // ── 2. Query open remediation PRs ─────────────────────────────────────────
-    const prResult = await db(
-      `SELECT id, blocking_issue_summary, blocking_issue_dimension, status, created_at
-       FROM remediation_prs WHERE product_id = ? AND status = 'pr_open'
-       ORDER BY created_at DESC`,
-      [productId]
-    );
-
-    // ── 3. Query tech/security/debt stressors ─────────────────────────────────
+    // ── 2. Query technical stressors ─────────────────────────────────────────
     const stressorResult = await db(
       `SELECT stressor_name, signal, severity, identified_at
        FROM stressor_history
@@ -59,24 +74,52 @@ export class AtlasAgent extends BaseAgent {
            LOWER(stressor_name) LIKE '%tech%'
            OR LOWER(stressor_name) LIKE '%security%'
            OR LOWER(stressor_name) LIKE '%debt%'
+           OR LOWER(stressor_name) LIKE '%architecture%'
+           OR LOWER(stressor_name) LIKE '%code%'
          )
        ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'elevated' THEN 2 ELSE 3 END`,
       [productId]
     );
 
-    // ── 4. Handle no-data case ────────────────────────────────────────────────
-    if (auditResult.rows.length === 0 && prResult.rows.length === 0 && stressorResult.rows.length === 0) {
+    // ── 3. Query recent Atlas sessions for trend ──────────────────────────────
+    const sessionResult = await db(
+      `SELECT domain_health_score, completed_at
+       FROM agent_sessions
+       WHERE product_id = ? AND agent_name = 'atlas'
+       ORDER BY completed_at DESC
+       LIMIT 3`,
+      [productId]
+    );
+
+    // ── 4. Query recent Crucible findings ─────────────────────────────────────
+    const crucibleResult = await db(
+      `SELECT briefing_contribution, completed_at
+       FROM agent_sessions
+       WHERE product_id = ? AND agent_name = 'crucible'
+         AND completed_at > datetime('now', '-24 hours')
+       ORDER BY completed_at DESC
+       LIMIT 1`,
+      [productId]
+    );
+
+    // ── 5. Handle no-data case ────────────────────────────────────────────────
+    const githubEvents = (context.integrationEvents ?? []).filter(e => e.source === 'github');
+    if (
+      metricsResult.rows.length === 0 &&
+      stressorResult.rows.length === 0 &&
+      githubEvents.length === 0
+    ) {
       const action: AgentAction = {
         id: nanoid(),
         type: 'analysis_complete',
-        description: 'No audit or technical data found — calibrating',
+        description: 'No technical data found — calibrating',
         authority_level: 0,
         executed: true,
         executed_at: new Date().toISOString(),
-        result: 'Awaiting first audit run',
+        result: 'Awaiting technical data',
       };
       return {
-        observations: ['No technical audit data available yet — Atlas will assess on next cycle after audit data accumulates.'],
+        observations: ['No technical data available yet — Atlas will assess code quality and architecture as data accumulates.'],
         actionsTaken: [action],
         pendingDecisions: [],
         briefingContribution: 'Atlas is calibrating — no significant activity to report.',
@@ -88,60 +131,71 @@ export class AtlasAgent extends BaseAgent {
       };
     }
 
-    // ── 5. Build prompt data ──────────────────────────────────────────────────
-    const audit = auditResult.rows.length > 0
-      ? (auditResult.rows[0] as Record<string, unknown>)
+    // ── 6. Build prompt data ──────────────────────────────────────────────────
+    const metricsRow = metricsResult.rows.length > 0
+      ? (metricsResult.rows[0] as Record<string, unknown>)
       : null;
-
-    const composite = audit ? Number(audit.composite) || 0 : 0;
-    const d1 = audit ? Number(audit.d1_score) || 0 : 0;
-    const d2 = audit ? Number(audit.d2_score) || 0 : 0;
-    const d3 = audit ? Number(audit.d3_score) || 0 : 0;
-    const d4 = audit ? Number(audit.d4_score) || 0 : 0;
-    const d5 = audit ? Number(audit.d5_score) || 0 : 0;
-    const d6 = audit ? Number(audit.d6_score) || 0 : 0;
-    const d7 = audit ? Number(audit.d7_score) || 0 : 0;
-    const d8 = audit ? Number(audit.d8_score) || 0 : 0;
-    const d9 = audit ? Number(audit.d9_score) || 0 : 0;
-    const d10 = audit ? Number(audit.d10_score) || 0 : 0;
-
-    const prCount = prResult.rows.length;
-    const prRows = prResult.rows as Record<string, unknown>[];
+    const supportVolume = metricsRow ? Number(metricsRow.support_volume_7d) || 0 : 0;
 
     const stressorRows = stressorResult.rows as Record<string, unknown>[];
     const stressorList = stressorRows.length > 0
       ? stressorRows.map(s => `${s.stressor_name as string} [${s.severity as string}]: ${s.signal as string}`).join('; ')
       : 'None active';
 
-    let blockingIssues: unknown[] = [];
-    if (audit?.blocking_issues) {
-      try {
-        blockingIssues = JSON.parse(audit.blocking_issues as string) as unknown[];
-      } catch { /* ignore */ }
-    }
+    const sessionRows = sessionResult.rows as Record<string, unknown>[];
+    const healthTrend = sessionRows.length > 0
+      ? sessionRows.map(r => `${r.completed_at as string}: score=${r.domain_health_score as number}`).join(' → ')
+      : 'No previous sessions';
 
-    // ── 6. Call Claude Sonnet ─────────────────────────────────────────────────
+    const crucibleRow = crucibleResult.rows.length > 0
+      ? (crucibleResult.rows[0] as Record<string, unknown>)
+      : null;
+    const crucibleFindings = crucibleRow
+      ? `Crucible (QA) recent findings: ${crucibleRow.briefing_contribution as string}`
+      : 'No recent Crucible findings';
+
+    const githubContext = githubEvents.length > 0
+      ? `GitHub activity: ${githubEvents.map(e => `[${e.event_type}] ${e.summary}`).join(' | ')}`
+      : 'No GitHub integration events';
+
+    // ── 7. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
       context,
-      `You are Atlas, the CTO agent for ${companyName}. Your job is to assess code quality, architecture health, and technical risk. Be precise and technical.`
+      `You are Atlas, the CTO agent for ${companyName}. You assess code quality, architecture health, and technical risk. Be precise and technical. Prioritize security and architectural integrity.`
     );
 
-    const userPrompt = `Current state:
-Audit composite score: ${composite}/100.
-Dimension scores: [d1=${d1} Functional Completeness, d2=${d2} Experience Coherence, d3=${d3} Trust Density, d4=${d4} Value Legibility, d5=${d5} Operational Readiness, d6=${d6} Commercial Integrity, d7=${d7} Self-Sufficiency, d8=${d8} Competitive Defensibility, d9=${d9} Launch Readiness, d10=${d10} Stranger Test].
-Open remediation PRs: ${prCount}.${prCount > 0 ? ` PRs: ${prRows.map(p => `${p.blocking_issue_dimension as string}: ${p.blocking_issue_summary as string}`).join('; ')}` : ''}
-Blocking issues: ${blockingIssues.length}.
-Active tech stressors: ${stressorList}.
+    const userPrompt = `Support volume (7d, incident proxy): ${supportVolume}.
+Active technical stressors: ${stressorList}.
+Historical domain health trend: ${healthTrend}.
+${crucibleFindings}.
+${githubContext}.
 
 Return JSON only (no markdown fences):
 {
   "observations": ["string", ...],
-  "actions_proposed": [
+  "technical_health_assessment": {
+    "code_quality_score": number (0-100),
+    "security_risk_level": "low" | "medium" | "high" | "critical",
+    "debt_trend": "improving" | "stable" | "worsening",
+    "key_risks": ["string", ...]
+  },
+  "architecture_proposals": [
     {
       "title": "string",
       "description": "string",
-      "expected_impact": "string",
-      "urgency": "high" | "medium" | "low"
+      "priority": "immediate" | "this_sprint" | "this_quarter",
+      "estimated_effort": "string",
+      "authority_level": 0 | 1 | 2
+    }
+  ],
+  "technical_hypotheses": [
+    {
+      "title": "string",
+      "description": "string",
+      "hypothesis": "string",
+      "success_metric": "string",
+      "success_threshold": number,
+      "test_duration_days": number
     }
   ],
   "domain_health_score": number (0-100),
@@ -149,9 +203,9 @@ Return JSON only (no markdown fences):
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 3000);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
-    const costUsd = tokensUsed * 0.000003; // Approximate Sonnet pricing
+    const costUsd = tokensUsed * 0.000003;
 
     let parsed: AtlasClaudeResponse;
     try {
@@ -170,111 +224,84 @@ Return JSON only (no markdown fences):
       };
     }
 
-    // ── 7. Build decisions for high-urgency actions ───────────────────────────
+    // ── 8. Build decisions for immediate proposals ─────────────────────────────
     const pendingDecisions: AgentDecision[] = [];
-
-    for (const action of (parsed.actions_proposed ?? [])) {
-      if (action.urgency === 'high') {
-        const decision: AgentDecision = {
+    for (const proposal of (parsed.architecture_proposals ?? [])) {
+      if (proposal.priority === 'immediate' && proposal.authority_level === 2) {
+        pendingDecisions.push({
           id: nanoid(),
           agent_name: this.getName(),
-          title: action.title,
-          description: action.description,
-          rationale: `Atlas (CTO) identified: ${action.description}`,
-          expected_impact: action.expected_impact,
-          action_type: 'technical_remediation',
-          action_data: { raw_action: action },
+          title: proposal.title,
+          description: proposal.description,
+          rationale: `Atlas (CTO) identified immediate architectural concern: ${proposal.description}`,
+          expected_impact: `Effort: ${proposal.estimated_effort}`,
+          action_type: 'architecture_proposal',
+          action_data: { raw_proposal: proposal },
           expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
           created_at: new Date().toISOString(),
-        };
-        pendingDecisions.push(decision);
-      }
-    }
-
-    // ── 7b. Create remediations from high/critical findings ───────────────────
-    const actionsTaken: AgentAction[] = [];
-
-    for (const action of (parsed.actions_proposed ?? [])) {
-      if (action.urgency !== 'high') continue;
-
-      // Determine remediation type from title/description keywords
-      const titleLower = action.title.toLowerCase();
-      const descLower = action.description.toLowerCase();
-      let remediationType = 'code_quality';
-      if (titleLower.includes('security') || descLower.includes('security') ||
-          titleLower.includes('vuln') || descLower.includes('vuln') ||
-          titleLower.includes('cve') || descLower.includes('auth')) {
-        remediationType = 'security';
-      } else if (titleLower.includes('debt') || descLower.includes('tech debt') ||
-                 titleLower.includes('refactor') || descLower.includes('refactor')) {
-        remediationType = 'code_quality';
-      }
-
-      try {
-        const remId = await createRemediation({
-          productId,
-          agentName: 'atlas',
-          sessionId: context.agentInstance.id,
-          remediationType,
-          title: action.title,
-          description: action.description,
-          severity: 'high',
-          suggestedFix: action.expected_impact,
         });
+      }
+    }
 
-        actionsTaken.push({
-          id: nanoid(),
-          type: 'create_remediation',
-          description: `Created high remediation: ${action.title}`,
-          authority_level: 0,
-          executed: true,
-          executed_at: new Date().toISOString(),
-          target: 'agent_remediations',
-          result: remId,
+    // ── 9. Build outbound actions for immediate, low-authority proposals ───────
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const proposal of (parsed.architecture_proposals ?? [])) {
+      if (proposal.priority === 'immediate' && proposal.authority_level <= 1) {
+        outboundActions.push({
+          action_type: 'architecture_proposal',
+          description: proposal.description,
+          parameters: {
+            title: proposal.title,
+            estimated_effort: proposal.estimated_effort,
+            priority: proposal.priority,
+          },
+          authority_level: proposal.authority_level,
         });
-      } catch {
-        // Remediation creation failure is non-fatal
       }
     }
 
-    // Also handle observations that mention critical issues
-    for (const obs of (parsed.observations ?? [])) {
-      const obsLower = obs.toLowerCase();
-      if (obsLower.includes('critical') && (
-        obsLower.includes('security') || obsLower.includes('vulnerab') || obsLower.includes('exploit')
-      )) {
-        try {
-          const remId = await createRemediation({
-            productId,
-            agentName: 'atlas',
-            sessionId: context.agentInstance.id,
-            remediationType: 'security',
-            title: obs.slice(0, 100),
-            description: obs,
-            severity: 'critical',
-          });
+    // ── 10. Build agent messages ──────────────────────────────────────────────
+    const agentMessages: AgentMessageSignal[] = [];
+    const assessment = parsed.technical_health_assessment;
 
-          actionsTaken.push({
-            id: nanoid(),
-            type: 'create_remediation',
-            description: `Created critical security remediation: ${obs.slice(0, 80)}`,
-            authority_level: 0,
-            executed: true,
-            executed_at: new Date().toISOString(),
-            target: 'agent_remediations',
-            result: remId,
-          });
-        } catch {
-          // Non-fatal
-        }
-      }
+    if (assessment && (assessment.security_risk_level === 'high' || assessment.security_risk_level === 'critical')) {
+      agentMessages.push({
+        to_agent: 'crucible',
+        message_type: 'alert',
+        priority: assessment.security_risk_level === 'critical' ? 'critical' : 'high',
+        subject: `Security risk level: ${assessment.security_risk_level} — QA coverage needed`,
+        body: `Atlas detected ${assessment.security_risk_level} security risk. Key risks: ${(assessment.key_risks ?? []).join('; ')}. Crucible should verify test coverage for affected areas.`,
+      });
     }
 
-    // ── 8. Record analysis complete action ────────────────────────────────────
+    const deploymentEvents = githubEvents.filter(e =>
+      e.event_type === 'deployment_status' || e.event_type === 'deploy'
+    );
+    if (deploymentEvents.length > 0) {
+      agentMessages.push({
+        to_agent: 'sentinel',
+        message_type: 'update',
+        priority: 'normal',
+        subject: 'GitHub deployment activity detected',
+        body: `Atlas observed deployment events: ${deploymentEvents.map(e => e.summary).join(' | ')}. Sentinel should verify infrastructure stability post-deploy.`,
+      });
+    }
+
+    // ── 11. Build hypotheses ──────────────────────────────────────────────────
+    const hypotheses: HypothesisSignal[] = (parsed.technical_hypotheses ?? []).map(h => ({
+      title: h.title,
+      description: h.description,
+      hypothesis: h.hypothesis,
+      success_metric: h.success_metric,
+      success_threshold: h.success_threshold,
+      test_duration_days: h.test_duration_days,
+    }));
+
+    // ── 12. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed technical analysis: composite score ${composite}/100, ${prCount} open PRs, ${stressorRows.length} active stressors`,
+      description: `Completed technical analysis: quality=${assessment?.code_quality_score ?? 0}/100, security=${assessment?.security_risk_level ?? 'unknown'}, ${stressorRows.length} stressors`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -283,7 +310,7 @@ Return JSON only (no markdown fences):
 
     return {
       observations: parsed.observations ?? [],
-      actionsTaken: [analysisAction, ...actionsTaken],
+      actionsTaken: [analysisAction],
       pendingDecisions,
       briefingContribution: parsed.briefing_contribution ?? 'Atlas completed technical review.',
       briefingPriority: parsed.briefing_priority ?? 'normal',
@@ -291,6 +318,9 @@ Return JSON only (no markdown fences):
       tokensUsed,
       costUsd,
       domainHealthScore: parsed.domain_health_score ?? 50,
+      outboundActions,
+      agentMessages,
+      hypotheses,
     };
   }
 }

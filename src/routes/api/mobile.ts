@@ -233,7 +233,7 @@ mobileRoutes.get('/api/voice/briefing', async (c) => {
       if (snap.day_30_retention != null) keyMetrics.push({ label: 'Day 30 Retention', value: `${(snap.day_30_retention * 100).toFixed(1)}%` });
     }
 
-    const actionMatch = session.briefing_text.match(/([A-Z][^.!?]*(?:today|now|this week)[^.!?]*[.!?])/i);
+    const actionMatch = session.briefing_text?.match(/([A-Z][^.!?]*(?:today|now|this week)[^.!?]*[.!?])/i);
 
     return c.json({
       id: session.id,

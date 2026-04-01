@@ -1,12 +1,17 @@
 // =============================================================================
-// FOUNDRY — Scribe Agent (Content Director)
-// Domain: Blog posts, documentation, case studies, SEO content
+// FOUNDRY — Scribe Agent (Chief of Staff / Knowledge Management)
+// Domain: Docs, meeting notes, playbooks, institutional memory
 // Cadence: 168 hours (weekly)
+// v2: Emits outboundActions for auto-write docs, agentMessages to harbor/atlas
+//     for knowledge gaps, queries agent_wiki_entries table
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal,
+} from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 
@@ -18,13 +23,29 @@ interface ScribeClaudeResponse {
     hook: string;
     key_points: string[];
   }>;
+  knowledge_gaps: Array<{
+    topic: string;
+    priority: 'high' | 'medium' | 'low';
+    recommended_action: string;
+  }>;
+  document_proposals: Array<{
+    type: 'playbook' | 'runbook' | 'faq' | 'decision_record';
+    title: string;
+    outline: string;
+    authority_level: 0 | 1 | 2;
+  }>;
+  wiki_contributions: Array<{
+    title: string;
+    content: string;
+    tags: string[];
+  }>;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
 
 export class ScribeAgent extends BaseAgent {
   getName(): AgentName { return 'scribe'; }
-  getRole(): string { return 'Content Director'; }
+  getRole(): string { return 'Chief of Staff'; }
   getActivationCadenceHours(): number { return 168; }
 
   protected async analyzeAndAct(
@@ -61,7 +82,13 @@ export class ScribeAgent extends BaseAgent {
       [productId]
     );
 
-    // ── 4. Handle no-data case ────────────────────────────────────────────────
+    // ── 4. Query recent wiki entries ──────────────────────────────────────────
+    const wikiResult = await db(
+      `SELECT title, category FROM agent_wiki_entries WHERE product_id=? ORDER BY created_at DESC LIMIT 5`,
+      [productId]
+    );
+
+    // ── 5. Handle no-data case ────────────────────────────────────────────────
     if (artifactsResult.rows.length === 0 && testimonialsResult.rows.length === 0 && dnaResult.rows.length === 0) {
       const action: AgentAction = {
         id: nanoid(),
@@ -84,7 +111,7 @@ export class ScribeAgent extends BaseAgent {
       };
     }
 
-    // ── 5. Build prompt data ──────────────────────────────────────────────────
+    // ── 6. Build prompt data ──────────────────────────────────────────────────
     const artifactRows = artifactsResult.rows as Record<string, unknown>[];
     const artifactCount = artifactRows.length;
     const artifactSummary = artifactRows.length > 0
@@ -107,10 +134,15 @@ export class ScribeAgent extends BaseAgent {
     const voicePrinciples = dna ? ((dna.voice_principles as string) ?? 'Not defined') : 'Not defined';
     const icp = dna ? ((dna.icp_description as string) ?? 'Not defined') : 'Not defined';
 
-    // ── 6. Call Claude Sonnet ─────────────────────────────────────────────────
+    const wikiRows = wikiResult.rows as Record<string, unknown>[];
+    const wikiSummary = wikiRows.length > 0
+      ? wikiRows.map(w => `"${w.title as string}" [${w.category as string ?? 'general'}]`).join(', ')
+      : 'No wiki entries yet';
+
+    // ── 7. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
       context,
-      `You are Scribe, the Content Director for ${companyName}. You identify content opportunities and draft briefs for approval. Your content must be grounded in genuine customer insight and the company's unique market position.`
+      `You are Scribe, the Chief of Staff and Knowledge Management agent for ${companyName}. You identify content opportunities, surface knowledge gaps, propose documentation, and maintain institutional memory. Your content must be grounded in genuine customer insight and the company's unique market position.`
     );
 
     const userPrompt = `Published artifacts: ${artifactCount}. Available testimonials: ${testimonialCount}.
@@ -120,8 +152,9 @@ ICP: ${icp}.
 Voice principles: ${voicePrinciples}.
 Testimonial samples: ${testimonialSamples}.
 Published artifact summary: ${artifactSummary}.
+Recent wiki entries: ${wikiSummary}.
 
-Generate 2-4 high-value content briefs that will drive ICP acquisition and credibility.
+Generate 2-4 high-value content briefs and identify knowledge gaps and documentation needs.
 Return JSON only (no markdown fences):
 {
   "observations": ["string", ...],
@@ -133,11 +166,33 @@ Return JSON only (no markdown fences):
       "key_points": ["string", ...]
     }
   ],
+  "knowledge_gaps": [
+    {
+      "topic": "string",
+      "priority": "high" | "medium" | "low",
+      "recommended_action": "string"
+    }
+  ],
+  "document_proposals": [
+    {
+      "type": "playbook" | "runbook" | "faq" | "decision_record",
+      "title": "string",
+      "outline": "string",
+      "authority_level": 0 | 1 | 2
+    }
+  ],
+  "wiki_contributions": [
+    {
+      "title": "string",
+      "content": "string",
+      "tags": ["string", ...]
+    }
+  ],
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 3000);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 
@@ -157,7 +212,7 @@ Return JSON only (no markdown fences):
       };
     }
 
-    // ── 7. Build decisions for each content brief (authority_level=1) ─────────
+    // ── 8. Build decisions for each content brief (authority_level=1) ─────────
     const pendingDecisions: AgentDecision[] = [];
     for (const brief of (parsed.content_briefs ?? [])) {
       const decision: AgentDecision = {
@@ -165,7 +220,7 @@ Return JSON only (no markdown fences):
         agent_name: this.getName(),
         title: `Content Brief: ${brief.title}`,
         description: `${brief.type.toUpperCase()}: ${brief.hook}. Key points: ${brief.key_points.join('; ')}`,
-        rationale: `Scribe (Content Director) identified a content opportunity: ${brief.hook}`,
+        rationale: `Scribe (Chief of Staff) identified a content opportunity: ${brief.hook}`,
         expected_impact: 'Drives ICP acquisition through organic search and thought leadership.',
         action_type: `content_${brief.type}`,
         action_data: { raw_action: brief },
@@ -175,11 +230,60 @@ Return JSON only (no markdown fences):
       pendingDecisions.push(decision);
     }
 
-    // ── 8. Record analysis action ─────────────────────────────────────────────
+    // ── 9. Build outbound actions from document_proposals (authority_level <= 1) ─
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const proposal of (parsed.document_proposals ?? [])) {
+      if (proposal.authority_level <= 1) {
+        outboundActions.push({
+          action_type: `write_${proposal.type}`,
+          description: `Auto-write ${proposal.type}: ${proposal.title}`,
+          parameters: {
+            doc_type: proposal.type,
+            title: proposal.title,
+            outline: proposal.outline,
+          },
+          authority_level: proposal.authority_level,
+        });
+      }
+    }
+
+    // ── 10. Build agent messages for high-priority knowledge gaps ─────────────
+    const agentMessages: AgentMessageSignal[] = [];
+    const highPriorityGaps = (parsed.knowledge_gaps ?? []).filter(g => g.priority === 'high');
+
+    for (const gap of highPriorityGaps) {
+      const topicLower = gap.topic.toLowerCase();
+      // Customer-facing docs gaps → Harbor; technical/code docs gaps → Atlas
+      if (
+        topicLower.includes('customer') ||
+        topicLower.includes('onboarding') ||
+        topicLower.includes('support') ||
+        topicLower.includes('faq') ||
+        topicLower.includes('user')
+      ) {
+        agentMessages.push({
+          to_agent: 'harbor',
+          message_type: 'insight',
+          priority: 'high',
+          subject: `Knowledge gap: customer-facing docs missing — ${gap.topic}`,
+          body: `Scribe identified a high-priority customer-facing documentation gap: "${gap.topic}". Recommended action: ${gap.recommended_action}. Harbor should factor this into CS workflows.`,
+        });
+      } else {
+        agentMessages.push({
+          to_agent: 'atlas',
+          message_type: 'insight',
+          priority: 'high',
+          subject: `Knowledge gap: technical docs missing — ${gap.topic}`,
+          body: `Scribe identified a high-priority technical documentation gap: "${gap.topic}". Recommended action: ${gap.recommended_action}. Atlas should flag this in architecture reviews.`,
+        });
+      }
+    }
+
+    // ── 11. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed content analysis: ${artifactCount} published artifacts, ${testimonialCount} testimonials, ${pendingDecisions.length} briefs generated`,
+      description: `Completed knowledge analysis: ${artifactCount} published artifacts, ${testimonialCount} testimonials, ${pendingDecisions.length} briefs, ${highPriorityGaps.length} high-priority gaps`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -190,11 +294,13 @@ Return JSON only (no markdown fences):
       observations: parsed.observations ?? [],
       actionsTaken: [analysisAction],
       pendingDecisions,
-      briefingContribution: parsed.briefing_contribution ?? 'Scribe completed weekly content review.',
+      briefingContribution: parsed.briefing_contribution ?? 'Scribe completed weekly knowledge review.',
       briefingPriority: parsed.briefing_priority ?? 'normal',
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
+      outboundActions,
+      agentMessages,
     };
   }
 }

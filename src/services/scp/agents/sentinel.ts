@@ -2,22 +2,41 @@
 // FOUNDRY — Sentinel Agent (DevOps)
 // Domain: Infrastructure monitoring, deployment health, uptime
 // Cadence: 6 hours
+// v2: Emits outboundActions for urgent ops items, agentMessages to Atlas/broadcast,
+//     hypotheses for deployment experiments
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
+} from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
-import { createRemediation } from '../remediation.js';
 
 interface SentinelClaudeResponse {
   observations: string[];
-  alerts: Array<{
-    severity: 'critical' | 'warning' | 'info';
+  infrastructure_health: {
+    deployment_status: 'healthy' | 'degraded' | 'failed' | 'unknown';
+    last_deployment_hours_ago: number | null;
+    open_incidents: number;
+    risk_level: 'green' | 'yellow' | 'red';
+  };
+  operations_actions: Array<{
+    type: 'deploy_block' | 'scale_recommendation' | 'alert_rule' | 'incident_response';
     title: string;
     description: string;
-    action_required: boolean;
+    authority_level: 0 | 1 | 2;
+    urgency: 'immediate' | 'planned';
+  }>;
+  deployment_hypotheses: Array<{
+    title: string;
+    description: string;
+    hypothesis: string;
+    success_metric: string;
+    success_threshold: number;
+    test_duration_days: number;
   }>;
   domain_health_score: number;
   briefing_contribution: string;
@@ -35,16 +54,7 @@ export class SentinelAgent extends BaseAgent {
   ): Promise<AgentAnalysisResult> {
     const { productId, companyName } = context;
 
-    // ── 1. Query open/generating infra-related PRs ────────────────────────────
-    const prResult = await db(
-      `SELECT id, blocking_issue_summary, blocking_issue_dimension, status, created_at
-       FROM remediation_prs
-       WHERE product_id = ? AND status IN ('pr_open', 'generating')
-       ORDER BY created_at DESC`,
-      [productId]
-    );
-
-    // ── 2. Query infrastructure stressors ─────────────────────────────────────
+    // ── 1. Query infrastructure stressors ─────────────────────────────────────
     const stressorResult = await db(
       `SELECT stressor_name, signal, severity, identified_at
        FROM stressor_history
@@ -62,18 +72,24 @@ export class SentinelAgent extends BaseAgent {
       [productId]
     );
 
-    // ── 3. Query audit_scores for d5 (Operational Readiness) and d7 (Self-Sufficiency) ──
-    const auditResult = await db(
-      `SELECT d5_score, d7_score, created_at
-       FROM audit_scores
+    // ── 2. Query support_volume as incident proxy ─────────────────────────────
+    const metricsResult = await db(
+      `SELECT support_volume_7d, snapshot_date
+       FROM metric_snapshots
        WHERE product_id = ?
-       ORDER BY created_at DESC
+       ORDER BY snapshot_date DESC
        LIMIT 1`,
       [productId]
     );
 
+    // ── 3. Filter integration events for GitHub deployment/PR activity ─────────
+    const githubEvents = (context.integrationEvents ?? []).filter(
+      e => e.source === 'github' &&
+        (e.event_type === 'deployment_status' || e.event_type === 'pr_activity' || e.event_type === 'deploy')
+    );
+
     // ── 4. Handle no-data case ────────────────────────────────────────────────
-    if (prResult.rows.length === 0 && stressorResult.rows.length === 0 && auditResult.rows.length === 0) {
+    if (stressorResult.rows.length === 0 && metricsResult.rows.length === 0 && githubEvents.length === 0) {
       const action: AgentAction = {
         id: nanoid(),
         type: 'analysis_complete',
@@ -97,22 +113,19 @@ export class SentinelAgent extends BaseAgent {
     }
 
     // ── 5. Build prompt data ──────────────────────────────────────────────────
-    const audit = auditResult.rows.length > 0
-      ? (auditResult.rows[0] as Record<string, unknown>)
-      : null;
-    const d5 = audit ? Number(audit.d5_score) || 0 : 0;
-    const d7 = audit ? Number(audit.d7_score) || 0 : 0;
-
-    const prRows = prResult.rows as Record<string, unknown>[];
-    const prCount = prRows.length;
-    const prSummary = prRows.length > 0
-      ? prRows.map(p => `[${p.status as string}] ${p.blocking_issue_dimension as string}: ${p.blocking_issue_summary as string}`).join('; ')
-      : 'No open PRs';
-
     const stressorRows = stressorResult.rows as Record<string, unknown>[];
     const stressorList = stressorRows.length > 0
       ? stressorRows.map(s => `${s.stressor_name as string} [${s.severity as string}]: ${s.signal as string}`).join('; ')
       : 'None active';
+
+    const metricsRow = metricsResult.rows.length > 0
+      ? (metricsResult.rows[0] as Record<string, unknown>)
+      : null;
+    const supportVolume = metricsRow ? Number(metricsRow.support_volume_7d) || 0 : 0;
+
+    const githubContext = githubEvents.length > 0
+      ? `GitHub deployment/PR events: ${githubEvents.map(e => `[${e.event_type}] ${e.summary}`).join(' | ')}`
+      : 'No recent GitHub deployment events';
 
     // ── 6. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
@@ -120,19 +133,36 @@ export class SentinelAgent extends BaseAgent {
       `You are Sentinel, the DevOps agent for ${companyName}. You monitor infrastructure health and prevent operational failures. Prioritize reliability and uptime. Escalate critical issues immediately.`
     );
 
-    const userPrompt = `Operational Readiness score: ${d5}/10. Self-Sufficiency: ${d7}/10.
-Open infra PRs: ${prCount}.${prCount > 0 ? ` Details: ${prSummary}` : ''}
-Infrastructure stressors: ${stressorList}.
+    const userPrompt = `Infrastructure stressors: ${stressorList}.
+Support volume (7d, incident proxy): ${supportVolume}.
+${githubContext}.
 
-Return JSON only (no markdown fences):
+Assess infrastructure and deployment health. Return JSON only (no markdown fences):
 {
   "observations": ["string", ...],
-  "alerts": [
+  "infrastructure_health": {
+    "deployment_status": "healthy" | "degraded" | "failed" | "unknown",
+    "last_deployment_hours_ago": number | null,
+    "open_incidents": number,
+    "risk_level": "green" | "yellow" | "red"
+  },
+  "operations_actions": [
     {
-      "severity": "critical" | "warning" | "info",
+      "type": "deploy_block" | "scale_recommendation" | "alert_rule" | "incident_response",
       "title": "string",
       "description": "string",
-      "action_required": boolean
+      "authority_level": 0 | 1 | 2,
+      "urgency": "immediate" | "planned"
+    }
+  ],
+  "deployment_hypotheses": [
+    {
+      "title": "string",
+      "description": "string",
+      "hypothesis": "string",
+      "success_metric": "string",
+      "success_threshold": number,
+      "test_duration_days": number
     }
   ],
   "domain_health_score": number (0-100),
@@ -140,7 +170,7 @@ Return JSON only (no markdown fences):
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 1024);
+    const response = await callSonnet(systemPrompt, userPrompt, 2500);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 
@@ -161,77 +191,76 @@ Return JSON only (no markdown fences):
       };
     }
 
-    // ── 7. Build decisions for critical alerts ────────────────────────────────
+    // ── 7. Build decisions for failed/red situations ───────────────────────────
     const pendingDecisions: AgentDecision[] = [];
-    for (const alert of (parsed.alerts ?? [])) {
-      if (alert.severity === 'critical' && alert.action_required) {
-        const decision: AgentDecision = {
-          id: nanoid(),
-          agent_name: this.getName(),
-          title: `CRITICAL: ${alert.title}`,
-          description: alert.description,
-          rationale: `Sentinel (DevOps) detected critical infrastructure issue: ${alert.description}`,
-          expected_impact: 'Resolving this issue prevents downtime and protects revenue.',
-          action_type: 'infra_critical',
-          action_data: { raw_action: alert },
-          expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
-          created_at: new Date().toISOString(),
-        };
-        pendingDecisions.push(decision);
+    const infra = parsed.infrastructure_health;
+
+    if (infra && (infra.deployment_status === 'failed' || infra.risk_level === 'red')) {
+      pendingDecisions.push({
+        id: nanoid(),
+        agent_name: this.getName(),
+        title: `CRITICAL: Infrastructure ${infra.deployment_status === 'failed' ? 'deployment failure' : 'red risk level'}`,
+        description: `Deployment status: ${infra.deployment_status}, risk: ${infra.risk_level}, open incidents: ${infra.open_incidents}`,
+        rationale: `Sentinel (DevOps) detected critical infrastructure condition requiring immediate attention.`,
+        expected_impact: 'Resolving this prevents downtime and protects revenue.',
+        action_type: 'infra_critical',
+        action_data: { infrastructure_health: infra },
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    // ── 8. Build outbound actions for immediate operations items ──────────────
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const action of (parsed.operations_actions ?? [])) {
+      if (action.urgency === 'immediate' && action.authority_level <= 1) {
+        outboundActions.push({
+          action_type: action.type,
+          description: action.description,
+          parameters: { title: action.title, urgency: action.urgency },
+          authority_level: action.authority_level,
+        });
       }
     }
 
-    // ── 7b. Create remediations from infra alerts ─────────────────────────────
-    const actionsTaken: AgentAction[] = [];
+    // ── 9. Build agent messages ───────────────────────────────────────────────
+    const agentMessages: AgentMessageSignal[] = [];
 
-    for (const alert of (parsed.alerts ?? [])) {
-      if (alert.severity !== 'critical' && alert.severity !== 'warning') continue;
-      if (!alert.action_required) continue;
-
-      // Map alert to remediation type
-      const titleLower = alert.title.toLowerCase();
-      const descLower = alert.description.toLowerCase();
-      let remediationType = 'infra';
-      if (titleLower.includes('performance') || descLower.includes('slow') ||
-          titleLower.includes('latency') || descLower.includes('latency') ||
-          titleLower.includes('response time') || descLower.includes('throughput')) {
-        remediationType = 'performance';
-      }
-
-      const severity = alert.severity === 'critical' ? 'critical' : 'high';
-
-      try {
-        const remId = await createRemediation({
-          productId,
-          agentName: 'sentinel',
-          sessionId: context.agentInstance.id,
-          remediationType,
-          title: alert.title,
-          description: alert.description,
-          severity,
-        });
-
-        actionsTaken.push({
-          id: nanoid(),
-          type: 'create_remediation',
-          description: `Created ${severity} ${remediationType} remediation: ${alert.title}`,
-          authority_level: 0,
-          executed: true,
-          executed_at: new Date().toISOString(),
-          target: 'agent_remediations',
-          result: remId,
-        });
-      } catch {
-        // Non-fatal
-      }
+    if (infra && (infra.deployment_status === 'failed' || infra.risk_level === 'red')) {
+      agentMessages.push({
+        to_agent: 'atlas',
+        message_type: 'alert',
+        priority: infra.deployment_status === 'failed' ? 'critical' : 'high',
+        subject: `Infrastructure alert: deployment ${infra.deployment_status}, risk ${infra.risk_level}`,
+        body: `Sentinel detected infrastructure issues. Deployment status: ${infra.deployment_status}. Open incidents: ${infra.open_incidents}. Atlas should review recent code changes for root cause.`,
+      });
     }
 
-    // ── 8. Record analysis action ─────────────────────────────────────────────
-    const criticalCount = (parsed.alerts ?? []).filter(a => a.severity === 'critical').length;
+    if (infra && infra.open_incidents > 0) {
+      agentMessages.push({
+        to_agent: 'broadcast',
+        message_type: 'alert',
+        priority: infra.open_incidents > 2 ? 'critical' : 'high',
+        subject: `${infra.open_incidents} open incident(s) detected`,
+        body: `Sentinel reports ${infra.open_incidents} open incident(s). Deployment status: ${infra.deployment_status ?? 'unknown'}. Risk level: ${infra.risk_level ?? 'unknown'}. All agents should be aware of potential instability.`,
+      });
+    }
+
+    // ── 10. Build hypotheses ──────────────────────────────────────────────────
+    const hypotheses: HypothesisSignal[] = (parsed.deployment_hypotheses ?? []).map(h => ({
+      title: h.title,
+      description: h.description,
+      hypothesis: h.hypothesis,
+      success_metric: h.success_metric,
+      success_threshold: h.success_threshold,
+      test_duration_days: h.test_duration_days,
+    }));
+
+    // ── 11. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed infra analysis: d5=${d5}/10, d7=${d7}/10, ${prCount} open PRs, ${criticalCount} critical alerts`,
+      description: `Completed infra analysis: status=${infra?.deployment_status ?? 'unknown'}, risk=${infra?.risk_level ?? 'unknown'}, incidents=${infra?.open_incidents ?? 0}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -240,7 +269,7 @@ Return JSON only (no markdown fences):
 
     return {
       observations: parsed.observations ?? [],
-      actionsTaken: [analysisAction, ...actionsTaken],
+      actionsTaken: [analysisAction],
       pendingDecisions,
       briefingContribution: parsed.briefing_contribution ?? 'Sentinel completed infrastructure review.',
       briefingPriority: parsed.briefing_priority ?? 'normal',
@@ -248,6 +277,9 @@ Return JSON only (no markdown fences):
       tokensUsed,
       costUsd,
       domainHealthScore: parsed.domain_health_score ?? 50,
+      outboundActions,
+      agentMessages,
+      hypotheses,
     };
   }
 }

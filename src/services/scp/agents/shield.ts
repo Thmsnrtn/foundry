@@ -2,22 +2,43 @@
 // FOUNDRY — Shield Agent (Legal/Compliance)
 // Domain: Compliance monitoring, terms, privacy, risk flags
 // Cadence: 168 hours (weekly)
+// v2: Emits outboundActions for compliance actions, agentMessages to Ledger/broadcast,
+//     lifecycle-aware compliance assessment
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal,
+} from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 
 interface ShieldClaudeResponse {
   observations: string[];
-  risk_flags: Array<{
-    area: string;
-    severity: 'critical' | 'medium' | 'low';
+  compliance_status: {
+    overall_risk: 'low' | 'medium' | 'high' | 'critical';
+    active_risks: string[];
+    upcoming_deadlines: Array<{
+      requirement: string;
+      deadline_days: number;
+      severity: 'mandatory' | 'recommended';
+    }>;
+  };
+  compliance_actions: Array<{
+    type: 'policy_update' | 'legal_review' | 'compliance_filing' | 'risk_mitigation';
+    title: string;
     description: string;
-    recommendation: string;
+    authority_level: 0 | 1 | 2;
+    deadline_days: number | null;
   }>;
+  legal_content_updates: Array<{
+    document: 'terms_of_service' | 'privacy_policy' | 'cookie_policy' | 'dpa';
+    update_reason: string;
+    draft_summary: string;
+  }>;
+  domain_health_score: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -33,17 +54,34 @@ export class ShieldAgent extends BaseAgent {
   ): Promise<AgentAnalysisResult> {
     const { productId, companyName } = context;
 
-    // ── 1. Query audit_scores for d3 (Trust Density) and d6 (Commercial Integrity) ──
-    const auditResult = await db(
-      `SELECT d3_score, d6_score, findings, created_at
-       FROM audit_scores
+    // ── 1. Query products for company age and lifecycle state ─────────────────
+    const productResult = await db(
+      `SELECT created_at, lifecycle_state
+       FROM products
+       WHERE id = ?`,
+      [productId]
+    );
+
+    // ── 2. Query founders for company details ──────────────────────────────────
+    const founderResult = await db(
+      `SELECT full_name, email, company_name, company_url
+       FROM founders
        WHERE product_id = ?
-       ORDER BY created_at DESC
        LIMIT 1`,
       [productId]
     );
 
-    // ── 2. Query legal/compliance/privacy stressors ───────────────────────────
+    // ── 3. Query integrations for credential expiry ───────────────────────────
+    const integrationsResult = await db(
+      `SELECT source, last_synced_at,
+              datetime(last_synced_at, '+90 days') as estimated_expiry
+       FROM integrations
+       WHERE product_id = ?
+         AND status = 'active'`,
+      [productId]
+    );
+
+    // ── 4. Query legal/compliance stressors ───────────────────────────────────
     const stressorResult = await db(
       `SELECT stressor_name, signal, severity, identified_at, neutralizing_action
        FROM stressor_history
@@ -62,16 +100,8 @@ export class ShieldAgent extends BaseAgent {
       [productId]
     );
 
-    // ── 3. Query product_dna for business model context ───────────────────────
-    const dnaResult = await db(
-      `SELECT business_model, revenue_streams, icp_description
-       FROM product_dna
-       WHERE product_id = ?`,
-      [productId]
-    );
-
-    // ── 4. Handle no-data case ────────────────────────────────────────────────
-    if (auditResult.rows.length === 0 && stressorResult.rows.length === 0) {
+    // ── 5. Handle no-data case ────────────────────────────────────────────────
+    if (productResult.rows.length === 0 && stressorResult.rows.length === 0) {
       const action: AgentAction = {
         id: nanoid(),
         type: 'analysis_complete',
@@ -90,74 +120,112 @@ export class ShieldAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
+        domainHealthScore: 50,
       };
     }
 
-    // ── 5. Build prompt data ──────────────────────────────────────────────────
-    const audit = auditResult.rows.length > 0
-      ? (auditResult.rows[0] as Record<string, unknown>)
+    // ── 6. Build prompt data ──────────────────────────────────────────────────
+    const productRow = productResult.rows.length > 0
+      ? (productResult.rows[0] as Record<string, unknown>)
       : null;
-    const d3 = audit ? Number(audit.d3_score) || 0 : 0;
-    const d6 = audit ? Number(audit.d6_score) || 0 : 0;
+    const lifecycleState = productRow ? (productRow.lifecycle_state as string ?? 'learning') : 'learning';
+    const companyCreatedAt = productRow ? (productRow.created_at as string) : null;
+    const companyAgeDays = companyCreatedAt
+      ? Math.floor((Date.now() - new Date(companyCreatedAt).getTime()) / 86400000)
+      : null;
 
-    // Extract relevant compliance findings from audit findings JSON
-    let complianceFindings: string[] = [];
-    if (audit?.findings) {
-      try {
-        const findings = JSON.parse(audit.findings as string) as Array<Record<string, unknown>>;
-        complianceFindings = findings
-          .filter(f => {
-            const text = JSON.stringify(f).toLowerCase();
-            return text.includes('trust') || text.includes('privacy') || text.includes('terms') ||
-                   text.includes('compliance') || text.includes('commercial') || text.includes('legal');
-          })
-          .map(f => String(f.finding ?? f.description ?? f.title ?? JSON.stringify(f)).slice(0, 120));
-      } catch { /* ignore */ }
-    }
+    const founderRow = founderResult.rows.length > 0
+      ? (founderResult.rows[0] as Record<string, unknown>)
+      : null;
+    const founderContext = founderRow
+      ? `Founder: ${founderRow.full_name as string ?? 'Unknown'}. Company URL: ${founderRow.company_url as string ?? 'Not set'}.`
+      : 'No founder details available.';
+
+    const integrationRows = integrationsResult.rows as Record<string, unknown>[];
+    const expiringIntegrations = integrationRows.filter(r => {
+      const expiry = r.estimated_expiry as string;
+      if (!expiry) return false;
+      const daysUntilExpiry = Math.floor((new Date(expiry).getTime() - Date.now()) / 86400000);
+      return daysUntilExpiry < 30;
+    });
+    const integrationContext = expiringIntegrations.length > 0
+      ? `Credentials expiring soon: ${expiringIntegrations.map(r => `${r.source as string} (est. ${r.estimated_expiry as string})`).join(', ')}`
+      : `${integrationRows.length} active integrations, all credentials appear current`;
 
     const stressorRows = stressorResult.rows as Record<string, unknown>[];
     const stressorList = stressorRows.length > 0
       ? stressorRows.map(s =>
-          `${s.stressor_name as string} [${s.severity as string}]: ${s.signal as string} — action: ${s.neutralizing_action as string}`
+          `${s.stressor_name as string} [${s.severity as string}]: ${s.signal as string} — action: ${s.neutralizing_action as string ?? 'none specified'}`
         ).join('; ')
       : 'None active';
 
-    const dna = dnaResult.rows.length > 0
-      ? (dnaResult.rows[0] as Record<string, unknown>)
-      : null;
-    const businessModel = dna ? ((dna.business_model as string) ?? 'Not specified') : 'Not specified';
-    const revenueStreams = dna?.revenue_streams
-      ? (() => { try { return JSON.parse(dna.revenue_streams as string) as string[]; } catch { return []; } })().join(', ')
-      : 'Not specified';
+    // Lifecycle-aware compliance context
+    const lifecycleGuidance: Record<string, string> = {
+      setup: 'Early stage: ensure basic Terms of Service and Privacy Policy exist.',
+      learning: 'Early stage: ensure basic Terms of Service and Privacy Policy exist. Focus on data handling clarity.',
+      operating: 'Growth stage: GDPR compliance, cookie consent, and SOC2 planning are priorities.',
+      optimizing: 'Growth stage: GDPR/CCPA enforcement, DPA agreements, SOC2 Type II planning required.',
+      scaling: 'Scaling stage: full compliance program needed — SOC2, GDPR, CCPA, DPA, vendor reviews.',
+    };
+    const lifecycleHint = lifecycleGuidance[lifecycleState] ?? lifecycleGuidance.learning;
 
-    // ── 6. Call Claude Sonnet ─────────────────────────────────────────────────
+    // Include unread messages relevant to compliance
+    const unreadMessages = (context.unreadMessages ?? []);
+    const unreadContext = unreadMessages.length > 0
+      ? `Unread agent messages: ${unreadMessages.map(m => `[${m.from_agent}] ${m.subject}: ${m.body.slice(0, 100)}`).join(' | ')}`
+      : '';
+
+    // ── 7. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
       context,
-      `You are Shield, the Compliance agent for ${companyName}. You flag legal risks, ensure compliance, and protect the company from regulatory and reputational harm. Focus on actionable, specific recommendations.`
+      `You are Shield, the Compliance agent for ${companyName}. You monitor legal risks, ensure regulatory compliance, and protect the company from regulatory and reputational harm. Be specific and actionable.`
     );
 
-    const userPrompt = `Trust Density score: ${d3}/10. Commercial Integrity: ${d6}/10.
-Business model: ${businessModel}. Revenue streams: ${revenueStreams}.
+    const userPrompt = `Company: ${companyName}. Lifecycle state: ${lifecycleState}. ${companyAgeDays !== null ? `Company age: ${companyAgeDays} days.` : ''}
+${founderContext}
+${lifecycleHint}
 Active compliance stressors: ${stressorList}.
-${complianceFindings.length > 0 ? `Compliance-related audit findings: ${complianceFindings.join('; ')}` : ''}
+Integration credential status: ${integrationContext}.
+${unreadContext ? `\n${unreadContext}` : ''}
 
-Assess compliance posture for a SaaS company. Consider: data privacy, terms of service, GDPR/CCPA, security disclosures, commercial agreements, billing practices.
+Assess compliance posture. Consider: data privacy (GDPR/CCPA), terms of service adequacy, security disclosures, billing practices, and upcoming requirements based on lifecycle stage.
+
 Return JSON only (no markdown fences):
 {
   "observations": ["string", ...],
-  "risk_flags": [
+  "compliance_status": {
+    "overall_risk": "low" | "medium" | "high" | "critical",
+    "active_risks": ["string", ...],
+    "upcoming_deadlines": [
+      {
+        "requirement": "string",
+        "deadline_days": number (days from now),
+        "severity": "mandatory" | "recommended"
+      }
+    ]
+  },
+  "compliance_actions": [
     {
-      "area": "string",
-      "severity": "critical" | "medium" | "low",
+      "type": "policy_update" | "legal_review" | "compliance_filing" | "risk_mitigation",
+      "title": "string",
       "description": "string",
-      "recommendation": "string"
+      "authority_level": 0 | 1 | 2,
+      "deadline_days": number | null
     }
   ],
+  "legal_content_updates": [
+    {
+      "document": "terms_of_service" | "privacy_policy" | "cookie_policy" | "dpa",
+      "update_reason": "string",
+      "draft_summary": "string"
+    }
+  ],
+  "domain_health_score": number (0-100),
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 1024);
+    const response = await callSonnet(systemPrompt, userPrompt, 3000);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 
@@ -174,35 +242,82 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
+        domainHealthScore: 50,
       };
     }
 
-    // ── 7. Build decisions for critical risk flags (authority_level=2) ────────
+    // ── 8. Build pending decisions for authority_level=2 compliance actions ───
     const pendingDecisions: AgentDecision[] = [];
-    for (const flag of (parsed.risk_flags ?? [])) {
-      if (flag.severity === 'critical') {
-        const decision: AgentDecision = {
+    const status = parsed.compliance_status;
+
+    for (const action of (parsed.compliance_actions ?? [])) {
+      if (action.authority_level === 2) {
+        pendingDecisions.push({
           id: nanoid(),
           agent_name: this.getName(),
-          title: `COMPLIANCE RISK: ${flag.area}`,
-          description: flag.description,
-          rationale: `Shield (Compliance) identified critical risk in ${flag.area}: ${flag.description}`,
-          expected_impact: flag.recommendation,
-          action_type: 'compliance_remediation',
-          action_data: { raw_action: flag },
-          expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+          title: action.title,
+          description: action.description,
+          rationale: `Shield (Compliance) identified required action: ${action.description}`,
+          expected_impact: `Deadline: ${action.deadline_days !== null ? `${action.deadline_days} days` : 'ongoing'}`,
+          action_type: action.type,
+          action_data: { raw_action: action },
+          expires_at: action.deadline_days !== null
+            ? new Date(Date.now() + action.deadline_days * 86400 * 1000).toISOString()
+            : new Date(Date.now() + 14 * 86400 * 1000).toISOString(),
           created_at: new Date().toISOString(),
-        };
-        pendingDecisions.push(decision);
+        });
       }
     }
 
-    // ── 8. Record analysis action ─────────────────────────────────────────────
-    const criticalCount = (parsed.risk_flags ?? []).filter(f => f.severity === 'critical').length;
+    // ── 9. Build outbound actions (exclude policy_update; authority_level <= 2) ─
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const action of (parsed.compliance_actions ?? [])) {
+      if (action.type !== 'policy_update' && action.authority_level <= 2) {
+        outboundActions.push({
+          action_type: action.type,
+          description: action.description,
+          parameters: {
+            title: action.title,
+            deadline_days: action.deadline_days,
+          },
+          authority_level: action.authority_level,
+        });
+      }
+    }
+
+    // ── 10. Build agent messages ──────────────────────────────────────────────
+    const agentMessages: AgentMessageSignal[] = [];
+
+    // Broadcast critical when any deadline < 14 days
+    const urgentDeadlines = (status?.upcoming_deadlines ?? []).filter(d => d.deadline_days < 14);
+    if (urgentDeadlines.length > 0) {
+      agentMessages.push({
+        to_agent: 'broadcast',
+        message_type: 'alert',
+        priority: 'critical',
+        subject: `${urgentDeadlines.length} compliance deadline(s) within 14 days`,
+        body: `Shield flagged urgent compliance deadlines: ${urgentDeadlines.map(d => `${d.requirement} (${d.deadline_days} days, ${d.severity})`).join('; ')}. Immediate founder attention required.`,
+      });
+    }
+
+    // Alert Ledger when overall_risk is high or critical
+    const overallRisk = status?.overall_risk;
+    if (overallRisk === 'high' || overallRisk === 'critical') {
+      agentMessages.push({
+        to_agent: 'ledger',
+        message_type: 'alert',
+        priority: overallRisk === 'critical' ? 'critical' : 'high',
+        subject: `Compliance risk level: ${overallRisk} — potential financial exposure`,
+        body: `Shield assessed overall compliance risk as ${overallRisk}. Active risks: ${(status?.active_risks ?? []).join('; ')}. Ledger should evaluate financial impact and potential remediation costs.`,
+      });
+    }
+
+    // ── 11. Record analysis action ────────────────────────────────────────────
+    const criticalCount = (parsed.compliance_actions ?? []).filter(a => a.authority_level === 2).length;
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed compliance review: d3=${d3}/10, d6=${d6}/10, ${stressorRows.length} stressors, ${criticalCount} critical flags`,
+      description: `Completed compliance review: risk=${overallRisk ?? 'unknown'}, lifecycle=${lifecycleState}, ${stressorRows.length} stressors, ${criticalCount} critical actions`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -218,6 +333,9 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
+      domainHealthScore: parsed.domain_health_score ?? 50,
+      outboundActions,
+      agentMessages,
     };
   }
 }

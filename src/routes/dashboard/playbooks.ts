@@ -90,7 +90,7 @@ playbookRoutes.get('/playbooks', async (c) => {
     </div>
   `;
 
-  return c.html(dashboardLayout(ctx, String(content), 'Playbooks'));
+  return c.html(dashboardLayout(ctx, content));
 });
 
 // ─── GET /playbooks/:type ─────────────────────────────────────────────────────
@@ -168,7 +168,7 @@ playbookRoutes.get('/playbooks/:type', async (c) => {
     </div>
   `;
 
-  return c.html(dashboardLayout(ctx, String(content), playbook.title));
+  return c.html(dashboardLayout(ctx, content));
 });
 
 // ─── POST /playbooks/:type/generate ──────────────────────────────────────────

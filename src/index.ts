@@ -67,6 +67,15 @@ import { agentCustomerRoutes } from './routes/dashboard/agents-customers.js';
 import { agentMessageRoutes } from './routes/dashboard/agents-messages.js';
 import { agentStrategyRoutes } from './routes/dashboard/agents-strategy.js';
 import { agentExperimentRoutes } from './routes/dashboard/agents-experiments.js';
+// SCP v4: New dashboard pages
+import { agentsInbox } from './routes/dashboard/agents-inbox.js';
+import { agentsWiki } from './routes/dashboard/agents-wiki.js';
+import { agentsOkr } from './routes/dashboard/agents-okr.js';
+import { agentsDecisions } from './routes/dashboard/agents-decisions.js';
+import { benchmarks } from './routes/dashboard/benchmarks.js';
+import { auditLog } from './routes/dashboard/audit-log.js';
+// REST API v1 (API key auth)
+import { apiV1 } from './api/v1/index.js';
 
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
@@ -227,6 +236,10 @@ app.use('/agents', authMiddleware);
 app.use('/agents/*', authMiddleware);
 app.use('/products/*/agents/*', authMiddleware);
 app.use('/api/*', authMiddleware);
+app.use('/benchmarks', authMiddleware);
+app.use('/benchmarks/*', authMiddleware);
+app.use('/audit-log', authMiddleware);
+app.use('/audit-log/*', authMiddleware);
 
 // Dashboard routes
 app.route('/', dashboardRoutes);
@@ -263,6 +276,15 @@ app.route('/', agentCustomerRoutes);
 app.route('/', agentMessageRoutes);
 app.route('/', agentStrategyRoutes);
 app.route('/', agentExperimentRoutes);
+// SCP v4: New dashboard pages
+app.route('/agents/inbox', agentsInbox);
+app.route('/agents/wiki', agentsWiki);
+app.route('/agents/okr', agentsOkr);
+app.route('/agents/decisions', agentsDecisions);
+app.route('/benchmarks', benchmarks);
+app.route('/audit-log', auditLog);
+// REST API v1 (API key auth — no session needed)
+app.route('/api/v1', apiV1);
 
 // API routes
 app.route('/', apiProductRoutes);

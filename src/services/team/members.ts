@@ -162,7 +162,7 @@ export async function computeAlignmentScore(productId: string): Promise<Alignmen
     [productId],
   );
 
-  const votes = recentVotes.rows as Array<{ decision_id: string; vote: string; preferred_option: string | null; founder_id: string }>;
+  const votes = recentVotes.rows as unknown as Array<{ decision_id: string; vote: string; preferred_option: string | null; founder_id: string }>;
 
   // Group by decision
   const votesByDecision = new Map<string, typeof votes>();

@@ -131,7 +131,7 @@ teamRoutes.get('/team', async (c) => {
     ` : ''}
   `;
 
-  return c.html(dashboardLayout(ctx, String(content), 'Team'));
+  return c.html(dashboardLayout(ctx, content));
 });
 
 // ─── POST /team/invite ────────────────────────────────────────────────────────

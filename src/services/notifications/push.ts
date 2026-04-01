@@ -286,7 +286,8 @@ async function sendWebPush(
 
   // Use web-push library if available, otherwise skip
   try {
-    const webpush = await import('web-push').catch(() => null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const webpush = await import('web-push' as any).catch(() => null);
     if (!webpush) return;
 
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);

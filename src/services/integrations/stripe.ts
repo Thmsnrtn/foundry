@@ -92,7 +92,7 @@ export async function syncStripeMetrics(
   // Active subscriptions → new MRR
   for (const sub of activeSubs) {
     const mrr = getSubscriptionMonthlyCents(sub);
-    if (sub.billing_reason_new || isNewThisMonth(sub.created)) {
+    if (isNewThisMonth(sub.created)) {
       newMrrCents += mrr;
     }
   }
@@ -221,7 +221,7 @@ async function fetchAllStripePages<T>(
     const response = await fetch(fullUrl, { headers });
     if (!response.ok) break;
 
-    const data = await response.json() as { data: T[]; has_more: boolean; data: T[] };
+    const data = await response.json() as { data: T[]; has_more: boolean };
     results.push(...data.data);
 
     if (!data.has_more) break;

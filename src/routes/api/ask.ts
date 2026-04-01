@@ -213,7 +213,7 @@ apiAskRoutes.post('/api/threads/:id/messages', async (c) => {
      WHERE thread_id = ? ORDER BY created_at ASC LIMIT 10`,
     [threadId],
   );
-  const history = historyResult.rows as Array<{ role: 'user' | 'assistant'; content: string }>;
+  const history = historyResult.rows as unknown as Array<{ role: 'user' | 'assistant'; content: string }>;
 
   const [ctx, classified] = await Promise.all([
     buildConversationContext(thread.product_id as string, product.name as string, product.market_category as string | null),

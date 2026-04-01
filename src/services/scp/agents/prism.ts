@@ -1,12 +1,17 @@
 // =============================================================================
-// FOUNDRY — Prism Agent (UX Lead)
-// Domain: User experience, onboarding friction, activation patterns
+// FOUNDRY — Prism Agent (CFO)
+// Domain: Financial health, runway, unit economics
 // Cadence: 48 hours
+// v2: Emits hypotheses for pricing/cost experiments, outboundActions for critical budget
+//     alerts, agentMessages based on runway and burn rate signals
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
+} from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 
@@ -17,6 +22,26 @@ interface PrismClaudeResponse {
     impact: 'high' | 'medium' | 'low';
     suggestion: string;
   }>;
+  financial_hypotheses: Array<{
+    title: string;
+    description: string;
+    hypothesis: string;
+    success_metric: string;
+    success_threshold: number;
+    test_duration_days: number;
+  }>;
+  budget_alerts: Array<{
+    severity: 'warning' | 'critical';
+    category: string;
+    message: string;
+  }>;
+  revenue_attribution: Array<{
+    channel: string;
+    mrr_contribution_pct: number;
+    cac_estimate: number;
+  }>;
+  runway_months: number;
+  burn_rate_trend: 'improving' | 'stable' | 'rising';
   domain_health_score: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
@@ -24,7 +49,7 @@ interface PrismClaudeResponse {
 
 export class PrismAgent extends BaseAgent {
   getName(): AgentName { return 'prism'; }
-  getRole(): string { return 'UX Lead'; }
+  getRole(): string { return 'CFO'; }
   getActivationCadenceHours(): number { return 48; }
 
   protected async analyzeAndAct(
@@ -68,14 +93,14 @@ export class PrismAgent extends BaseAgent {
       const action: AgentAction = {
         id: nanoid(),
         type: 'analysis_complete',
-        description: 'No UX or metric data found — calibrating',
+        description: 'No financial or UX data found — calibrating',
         authority_level: 0,
         executed: true,
         executed_at: new Date().toISOString(),
-        result: 'Awaiting user data',
+        result: 'Awaiting financial data',
       };
       return {
-        observations: ['No UX data available yet — Prism will analyze activation and experience metrics as data accumulates.'],
+        observations: ['No financial data available yet — Prism will analyze unit economics and runway as data accumulates.'],
         actionsTaken: [action],
         pendingDecisions: [],
         briefingContribution: 'Prism is calibrating — no significant activity to report.',
@@ -105,7 +130,6 @@ export class PrismAgent extends BaseAgent {
     for (const row of betaRows) {
       if (row.positioning_feedback) feedbackThemes.push(String(row.positioning_feedback).slice(0, 120));
       if (row.activation_outcome) {
-        // activation_outcome may be JSON; extract a summary
         let outcome = String(row.activation_outcome);
         try {
           const parsed = JSON.parse(outcome) as Record<string, unknown>;
@@ -121,7 +145,7 @@ export class PrismAgent extends BaseAgent {
     // ── 6. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
       context,
-      `You are Prism, the UX Lead agent for ${companyName}. You identify user experience friction, onboarding gaps, and activation failures. Focus on specific, actionable UX improvements.`
+      `You are Prism, the CFO agent for ${companyName}. You assess financial health, runway, unit economics, burn rate, and revenue attribution. Identify pricing and cost optimization opportunities. Flag budget risks proactively.`
     );
 
     const userPrompt = `Activation rate: ${activationRate.toFixed(1)}%. Day-30 retention: ${day30Retention.toFixed(1)}%.
@@ -138,12 +162,38 @@ Return JSON only (no markdown fences):
       "suggestion": "string"
     }
   ],
+  "financial_hypotheses": [
+    {
+      "title": "string",
+      "description": "string",
+      "hypothesis": "string",
+      "success_metric": "string",
+      "success_threshold": number,
+      "test_duration_days": number
+    }
+  ],
+  "budget_alerts": [
+    {
+      "severity": "warning" | "critical",
+      "category": "string",
+      "message": "string"
+    }
+  ],
+  "revenue_attribution": [
+    {
+      "channel": "string",
+      "mrr_contribution_pct": number,
+      "cac_estimate": number
+    }
+  ],
+  "runway_months": number,
+  "burn_rate_trend": "improving" | "stable" | "rising",
   "domain_health_score": number (0-100),
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 3000);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 
@@ -173,7 +223,7 @@ Return JSON only (no markdown fences):
           agent_name: this.getName(),
           title: `UX Fix: ${issue.area}`,
           description: issue.suggestion,
-          rationale: `Prism (UX Lead) identified high-impact friction in ${issue.area}: ${issue.suggestion}`,
+          rationale: `Prism (CFO) identified high-impact friction in ${issue.area}: ${issue.suggestion}`,
           expected_impact: 'Expected to improve activation rate and reduce onboarding drop-off.',
           action_type: 'ux_improvement',
           action_data: { raw_action: issue },
@@ -184,11 +234,70 @@ Return JSON only (no markdown fences):
       }
     }
 
-    // ── 8. Record analysis action ─────────────────────────────────────────────
+    // ── 8. Build outbound actions for critical budget alerts ──────────────────
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const alert of (parsed.budget_alerts ?? [])) {
+      if (alert.severity === 'critical') {
+        outboundActions.push({
+          action_type: 'budget_alert',
+          description: `CRITICAL budget alert [${alert.category}]: ${alert.message}`,
+          parameters: {
+            severity: alert.severity,
+            category: alert.category,
+            message: alert.message,
+          },
+          authority_level: 1,
+        });
+      }
+    }
+
+    // ── 9. Build agent messages based on runway and burn rate ─────────────────
+    const agentMessages: AgentMessageSignal[] = [];
+    const runwayMonths = parsed.runway_months ?? 12;
+    const burnTrend = parsed.burn_rate_trend ?? 'stable';
+
+    if (runwayMonths < 6) {
+      agentMessages.push({
+        to_agent: 'beacon',
+        message_type: 'alert',
+        priority: runwayMonths < 3 ? 'critical' : 'high',
+        subject: `Runway critical: ${runwayMonths.toFixed(1)} months — accelerate acquisition`,
+        body: `Prism reports runway of ${runwayMonths.toFixed(1)} months. Beacon must prioritize high-conversion acquisition channels to extend runway. Review CAC efficiency immediately.`,
+      });
+      agentMessages.push({
+        to_agent: 'forge',
+        message_type: 'alert',
+        priority: runwayMonths < 3 ? 'critical' : 'high',
+        subject: `Runway critical: ${runwayMonths.toFixed(1)} months — expand revenue`,
+        body: `Prism reports runway of ${runwayMonths.toFixed(1)} months. Forge must identify expansion revenue and conversion improvements to reduce burn runway pressure.`,
+      });
+    }
+
+    if (burnTrend === 'rising') {
+      agentMessages.push({
+        to_agent: 'compass',
+        message_type: 'insight',
+        priority: 'high',
+        subject: 'Burn rate rising — strategic priority adjustment needed',
+        body: `Prism detected rising burn rate trend. This should inform strategic priorities — consider pausing lower-ROI initiatives and focusing investment on direct revenue drivers.`,
+      });
+    }
+
+    // ── 10. Build hypotheses from financial_hypotheses ────────────────────────
+    const hypotheses: HypothesisSignal[] = (parsed.financial_hypotheses ?? []).map(h => ({
+      title: h.title,
+      description: h.description,
+      hypothesis: h.hypothesis,
+      success_metric: h.success_metric,
+      success_threshold: h.success_threshold,
+      test_duration_days: h.test_duration_days,
+    }));
+
+    // ── 11. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed UX analysis: activation ${activationRate.toFixed(1)}%, retention ${day30Retention.toFixed(1)}%, ${betaRows.length} beta records`,
+      description: `Completed financial analysis: activation ${activationRate.toFixed(1)}%, retention ${day30Retention.toFixed(1)}%, ${betaRows.length} beta records, runway=${runwayMonths}mo`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -199,12 +308,15 @@ Return JSON only (no markdown fences):
       observations: parsed.observations ?? [],
       actionsTaken: [analysisAction],
       pendingDecisions,
-      briefingContribution: parsed.briefing_contribution ?? 'Prism completed UX review.',
+      briefingContribution: parsed.briefing_contribution ?? 'Prism completed financial review.',
       briefingPriority: parsed.briefing_priority ?? 'normal',
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
       domainHealthScore: parsed.domain_health_score ?? 50,
+      outboundActions,
+      agentMessages,
+      hypotheses,
     };
   }
 }

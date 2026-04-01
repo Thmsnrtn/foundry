@@ -134,10 +134,10 @@ export async function buildConversationContext(
 
     mrr: mrrResult ? {
       total: Math.round(mrrResult.total_cents / 100),
-      new: Math.round(mrrResult.new_mrr_cents / 100),
-      churned: Math.round(mrrResult.churned_mrr_cents / 100),
-      expansion: Math.round(mrrResult.expansion_mrr_cents / 100),
-      contraction: Math.round(mrrResult.contraction_mrr_cents / 100),
+      new: Math.round(mrrResult.new_cents / 100),
+      churned: Math.round(mrrResult.churned_cents / 100),
+      expansion: Math.round(mrrResult.expansion_cents / 100),
+      contraction: Math.round(mrrResult.contraction_cents / 100),
     } : null,
 
     metrics: {
