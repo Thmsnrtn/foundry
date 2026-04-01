@@ -220,6 +220,27 @@ export interface AgentRunContext {
   goldenLessons: GoldenSuiteEntry[];
   constitution: SCPConstitution | null;
   runDate: string;                     // YYYY-MM-DD
+  // v2 enrichment — loaded by BaseAgent before calling analyzeAndAct
+  agentConfig?: Record<string, string>;        // ConfigType -> content
+  integrationEvents?: IntegrationEventSummary[]; // relevant events since last run
+  unreadMessages?: IncomingAgentMessage[];     // unread messages for this agent
+}
+
+/** Slim summary of an integration event injected into agent context. */
+export interface IntegrationEventSummary {
+  source: string;       // e.g. 'stripe', 'posthog', 'github'
+  event_type: string;
+  summary: string;      // ≤200 chars human-readable summary
+  created_at: string;
+}
+
+/** Slim view of an inter-agent message injected into agent context. */
+export interface IncomingAgentMessage {
+  from_agent: string;
+  priority: string;
+  subject: string;
+  body: string;
+  sent_at: string;
 }
 
 /** Result from an agent's domain-specific analysis (internal to BaseAgent). */
@@ -233,6 +254,56 @@ export interface AgentAnalysisResult {
   tokensUsed: number;
   costUsd?: number;                    // Optional: if provided, used directly; otherwise computed from tokensUsed
   domainHealthScore?: number;          // 0-100; if provided, updates agent_instances.domain_health_score
+  // v2/v3 signal fields — optional; BaseAgent processes these after analyzeAndAct returns
+  customerSignals?: CustomerSignal[];  // Upserted into customer_intelligence
+  outboundActions?: OutboundActionSignal[]; // Queued in outbound_actions
+  agentMessages?: AgentMessageSignal[]; // Sent via agent_messages bus
+  hypotheses?: HypothesisSignal[];     // Proposed into hypotheses table
+}
+
+// ─── v2/v3 Signal Types ───────────────────────────────────────────────────────
+
+/** A customer signal emitted by an agent (e.g. Harbor identifying at-risk users). */
+export interface CustomerSignal {
+  external_id: string;          // Stripe customer ID, email, or any stable identifier
+  name?: string;
+  email?: string;
+  mrr_cents?: number;
+  plan?: string;
+  health_login_score?: number;  // 0-100
+  health_feature_score?: number;
+  health_sentiment_score?: number;
+  health_billing_score?: number;
+  stage?: string;               // 'new' | 'active' | 'at_risk' | 'churned' | 'reactivated'
+  note?: string;                // Agent-authored note stored in agent_notes JSON
+}
+
+/** An outbound action an agent wants to propose or execute. */
+export interface OutboundActionSignal {
+  action_type: string;          // e.g. 'send_email', 'create_pr', 'update_pricing'
+  description: string;
+  parameters: Record<string, unknown>;
+  authority_level: 0 | 1 | 2;
+  estimated_value_usd?: number;
+}
+
+/** A message an agent wants to send to another agent. */
+export interface AgentMessageSignal {
+  to_agent: string;             // agent name or 'broadcast'
+  message_type: 'alert' | 'insight' | 'request' | 'update';
+  priority: 'critical' | 'high' | 'normal' | 'low';
+  subject: string;
+  body: string;
+}
+
+/** A hypothesis an agent wants to propose for the experiments engine. */
+export interface HypothesisSignal {
+  title: string;
+  description: string;
+  hypothesis: string;
+  success_metric: string;
+  success_threshold: number;    // e.g. 0.15 = 15% improvement
+  test_duration_days: number;
 }
 
 // ─── Evolution ────────────────────────────────────────────────────────────────

@@ -1172,6 +1172,35 @@ async function scpStrategySynthesis(): Promise<void> {
   console.log(`[scp_strategy_synthesis] Generated ${generated} syntheses`);
 }
 
+// ─── SCP v3: Integration Fabric Sync — Every Hour ────────────────────────────
+
+async function scpIntegrationFabricSync(): Promise<void> {
+  console.log('[JOB] scp_integration_fabric_sync starting');
+  const { query: dbQuery } = await import('../db/client.js');
+  const products = await dbQuery(
+    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+  );
+  const { syncPostHogEvents } = await import('../services/integration/posthog.js');
+  const { syncGitHubEvents } = await import('../services/integration/github.js');
+
+  let posthogSynced = 0;
+  let githubSynced = 0;
+
+  for (const row of products.rows) {
+    const productId = (row as Record<string, unknown>).id as string;
+    try {
+      const ph = await syncPostHogEvents(productId);
+      posthogSynced += ph.synced;
+    } catch { /* non-fatal per product */ }
+    try {
+      const gh = await syncGitHubEvents(productId);
+      githubSynced += gh.synced;
+    } catch { /* non-fatal per product */ }
+  }
+
+  console.log(`[scp_integration_fabric_sync] PostHog: ${posthogSynced} events, GitHub: ${githubSynced} events`);
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1218,4 +1247,5 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_lifecycle_rules:     { fn: scpLifecycleRules,    schedule: '0 */4 * * *',  description: 'Evaluate customer lifecycle rules for all SCP products (every 4h)' },
   scp_pl_update:           { fn: scpPLUpdate,          schedule: '0 1 * * *',    description: 'Update AI Company P&L attribution for all products (daily 1:00 UTC)' },
   scp_strategy_synthesis:  { fn: scpStrategySynthesis, schedule: '0 6 1 * *',    description: 'Generate monthly strategic synthesis for all products (1st of month)' },
+  scp_integration_fabric_sync: { fn: scpIntegrationFabricSync, schedule: '0 * * * *', description: 'Sync PostHog and GitHub into integration fabric (every hour)' },
 };

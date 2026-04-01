@@ -2,22 +2,43 @@
 // FOUNDRY — Beacon Agent (CMO)
 // Domain: Marketing, acquisition, brand, positioning experiments
 // Cadence: 24 hours
+// v2: Emits outboundActions for marketing campaigns, hypotheses for
+//     acquisition experiments, agentMessages to harbor on ICP quality
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
+} from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 
 interface BeaconClaudeResponse {
   observations: string[];
   marketing_actions: Array<{
-    type: 'content' | 'positioning' | 'channel' | 'experiment';
+    type: 'content' | 'positioning' | 'channel' | 'experiment' | 'campaign';
     title: string;
     description: string;
     estimated_impact: string;
+    authority_level: 0 | 1 | 2;
+    action_type?: string;
+    estimated_cac_usd?: number;
   }>;
+  acquisition_hypotheses: Array<{
+    title: string;
+    description: string;
+    hypothesis: string;
+    success_metric: string;
+    success_threshold: number;
+    test_duration_days: number;
+  }>;
+  icp_fit_assessment: {
+    quality: 'strong' | 'moderate' | 'weak';
+    signal: string;
+    recommended_adjustment?: string;
+  };
   domain_health_score: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
@@ -36,11 +57,11 @@ export class BeaconAgent extends BaseAgent {
 
     // ── 1. Query latest metric_snapshots ──────────────────────────────────────
     const metricsResult = await db(
-      `SELECT signups_7d, active_users, snapshot_date
+      `SELECT signups_7d, active_users, activation_rate, snapshot_date
        FROM metric_snapshots
        WHERE product_id = ?
        ORDER BY snapshot_date DESC
-       LIMIT 1`,
+       LIMIT 3`,
       [productId]
     );
 
@@ -72,7 +93,21 @@ export class BeaconAgent extends BaseAgent {
       [productId]
     );
 
-    // ── 5. Handle no-data case ────────────────────────────────────────────────
+    // ── 5. Query cohort acquisition channel performance ───────────────────────
+    const cohortChannelResult = await db(
+      `SELECT acquisition_channel,
+              COUNT(*) as cohort_count,
+              SUM(founder_count) as total_users,
+              AVG(CAST(activated_count AS REAL) / NULLIF(founder_count, 0)) as avg_activation
+       FROM cohorts
+       WHERE product_id = ?
+       GROUP BY acquisition_channel
+       ORDER BY avg_activation DESC
+       LIMIT 8`,
+      [productId]
+    );
+
+    // ── 6. Handle no-data case ────────────────────────────────────────────────
     if (metricsResult.rows.length === 0 && dnaResult.rows.length === 0) {
       const action: AgentAction = {
         id: nanoid(),
@@ -96,12 +131,17 @@ export class BeaconAgent extends BaseAgent {
       };
     }
 
-    // ── 6. Build prompt data ──────────────────────────────────────────────────
-    const metrics = metricsResult.rows.length > 0
-      ? (metricsResult.rows[0] as Record<string, unknown>)
-      : null;
-    const signups = metrics ? Number(metrics.signups_7d) || 0 : 0;
-    const activeUsers = metrics ? Number(metrics.active_users) || 0 : 0;
+    // ── 7. Build prompt data ──────────────────────────────────────────────────
+    const metricRows = metricsResult.rows as Record<string, unknown>[];
+    const latest = metricRows[0] ?? {};
+    const signups = Number(latest.signups_7d) || 0;
+    const activeUsers = Number(latest.active_users) || 0;
+    const activationRate = (Number(latest.activation_rate) || 0) * 100;
+
+    // Signup trend
+    const signupTrend = metricRows.length > 1
+      ? metricRows.map(r => `${r.snapshot_date as string}: ${Number(r.signups_7d) || 0} signups`).join(' | ')
+      : `${signups} signups (7d)`;
 
     const dna = dnaResult.rows.length > 0
       ? (dnaResult.rows[0] as Record<string, unknown>)
@@ -117,44 +157,77 @@ export class BeaconAgent extends BaseAgent {
       : 'No competitors tracked yet';
 
     const signalRows = signalsResult.rows as Record<string, unknown>[];
-    const signalCount = signalRows.length;
     const recentSignals = signalRows.length > 0
       ? signalRows.slice(0, 3).map(s =>
           `${s.competitor_name as string}: ${s.signal_type as string} — ${s.signal_summary as string}`
         ).join(' | ')
       : '';
 
-    // ── 7. Call Claude Sonnet ─────────────────────────────────────────────────
+    const channelRows = cohortChannelResult.rows as Record<string, unknown>[];
+    const channelPerf = channelRows.length > 0
+      ? channelRows.map(r =>
+          `${r.acquisition_channel as string}: ${r.total_users as number} users, ${((Number(r.avg_activation) || 0) * 100).toFixed(1)}% activation`
+        ).join(' | ')
+      : 'No channel data';
+
+    // Analytics events (PostHog shows funnel behavior)
+    const analyticsEvents = (context.integrationEvents ?? []).filter(
+      e => e.source === 'posthog' || e.source === 'plausible'
+    );
+    const analyticsContext = analyticsEvents.length > 0
+      ? `Behavioral signals: ${analyticsEvents.map(e => e.summary).join(' | ')}`
+      : '';
+
+    // ── 8. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
       context,
-      `You are Beacon, the CMO agent for ${companyName}. You drive acquisition, refine positioning, and experiment with marketing channels. Prioritize high-signal, low-cost experiments over large campaigns.`
+      `You are Beacon, the CMO agent for ${companyName}. You drive acquisition, refine positioning, and experiment with marketing channels. Prioritize high-signal, low-cost experiments over large campaigns. Always tie recommendations to ICP quality and activation data.`
     );
 
-    const userPrompt = `New signups (7d): ${signups}. Active users: ${activeUsers}.
+    const userPrompt = `Signup trend: ${signupTrend}. Active users: ${activeUsers}. Activation rate: ${activationRate.toFixed(1)}%.
+Channel performance: ${channelPerf}.
 ICP: ${icp}.
 Positioning: ${positioning}.
 What we are not: ${whatWeAreNot || 'Not specified'}.
 Voice principles: ${voicePrinciples || 'Not specified'}.
 Key competitors: ${competitorNames}.
-Unreviewed competitive signals: ${signalCount}.${recentSignals ? ` Latest: ${recentSignals}` : ''}
+Unreviewed competitive signals (${signalRows.length}): ${recentSignals || 'none'}.${analyticsContext ? `\n${analyticsContext}` : ''}
 
 Return JSON only (no markdown fences):
 {
   "observations": ["string", ...],
   "marketing_actions": [
     {
-      "type": "content" | "positioning" | "channel" | "experiment",
+      "type": "content" | "positioning" | "channel" | "experiment" | "campaign",
       "title": "string",
       "description": "string",
-      "estimated_impact": "string"
+      "estimated_impact": "string",
+      "authority_level": 0 | 1 | 2,
+      "action_type": "string (e.g. publish_blog_post, launch_ad_campaign, update_positioning)",
+      "estimated_cac_usd": number (optional, for paid channels)
     }
   ],
+  "acquisition_hypotheses": [
+    {
+      "title": "string",
+      "description": "string",
+      "hypothesis": "string",
+      "success_metric": "string (e.g. signup_rate, activation_rate, cac)",
+      "success_threshold": number (e.g. 0.20 = 20% improvement),
+      "test_duration_days": number
+    }
+  ],
+  "icp_fit_assessment": {
+    "quality": "strong" | "moderate" | "weak",
+    "signal": "string (what data supports this assessment)",
+    "recommended_adjustment": "string (optional, if quality is weak or moderate)"
+  },
   "domain_health_score": number (0-100),
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 3000);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 
@@ -175,31 +248,80 @@ Return JSON only (no markdown fences):
       };
     }
 
-    // ── 8. Build decisions for experiments ───────────────────────────────────
+    // ── 9. Build decisions for experiments ───────────────────────────────────
     const pendingDecisions: AgentDecision[] = [];
     for (const action of (parsed.marketing_actions ?? [])) {
-      if (action.type === 'experiment') {
-        const decision: AgentDecision = {
+      if (action.type === 'experiment' || (action.authority_level ?? 2) >= 2) {
+        pendingDecisions.push({
           id: nanoid(),
           agent_name: this.getName(),
           title: action.title,
           description: action.description,
-          rationale: `Beacon (CMO) proposed marketing experiment: ${action.description}`,
+          rationale: `Beacon proposed ${action.type}: ${action.description}`,
           expected_impact: action.estimated_impact,
-          action_type: 'marketing_experiment',
+          action_type: `marketing_${action.type}`,
           action_data: { raw_action: action },
           expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
           created_at: new Date().toISOString(),
-        };
-        pendingDecisions.push(decision);
+        });
       }
     }
 
-    // ── 9. Record analysis action ─────────────────────────────────────────────
+    // ── 10. Outbound actions for low-authority marketing tasks ────────────────
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const action of (parsed.marketing_actions ?? [])) {
+      if (action.type === 'content' && (action.authority_level ?? 1) <= 1) {
+        outboundActions.push({
+          action_type: action.action_type ?? 'publish_content',
+          description: action.description,
+          parameters: { title: action.title, type: action.type, estimated_impact: action.estimated_impact },
+          authority_level: (action.authority_level ?? 1) as 0 | 1 | 2,
+        });
+      }
+    }
+
+    // ── 11. Acquisition experiment hypotheses ─────────────────────────────────
+    const hypotheses: HypothesisSignal[] = (parsed.acquisition_hypotheses ?? []).map(h => ({
+      title: h.title,
+      description: h.description,
+      hypothesis: h.hypothesis,
+      success_metric: h.success_metric,
+      success_threshold: h.success_threshold,
+      test_duration_days: h.test_duration_days,
+    }));
+
+    // ── 12. Inter-agent messages ──────────────────────────────────────────────
+    const agentMessages: AgentMessageSignal[] = [];
+
+    // Notify Harbor if ICP fit is weak (acquisition quality affecting activation)
+    const icpFit = parsed.icp_fit_assessment;
+    if (icpFit && icpFit.quality !== 'strong') {
+      agentMessages.push({
+        to_agent: 'harbor',
+        message_type: 'insight',
+        priority: icpFit.quality === 'weak' ? 'high' : 'normal',
+        subject: `ICP fit assessment: ${icpFit.quality} — activation may be impacted`,
+        body: `Beacon assessed ICP fit as ${icpFit.quality}. Signal: ${icpFit.signal}. ${icpFit.recommended_adjustment ? `Recommended: ${icpFit.recommended_adjustment}` : ''} This may explain retention patterns Harbor is observing.`,
+      });
+    }
+
+    // Notify Forge of strong acquisition channels (expansion opportunity)
+    const topChannel = channelRows[0];
+    if (topChannel && (Number(topChannel.avg_activation) || 0) > 0.5) {
+      agentMessages.push({
+        to_agent: 'forge',
+        message_type: 'insight',
+        priority: 'normal',
+        subject: `High-activation channel identified: ${topChannel.acquisition_channel as string} (${((Number(topChannel.avg_activation) || 0) * 100).toFixed(0)}% activation)`,
+        body: `Channel '${topChannel.acquisition_channel as string}' drives the highest activation rate (${((Number(topChannel.avg_activation) || 0) * 100).toFixed(0)}%). This segment may have higher LTV — Forge should evaluate expansion pricing for this cohort.`,
+      });
+    }
+
+    // ── 13. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed marketing analysis: ${signups} signups (7d), ${signalCount} unreviewed signals`,
+      description: `Completed marketing analysis: ${signups} signups (7d), ${signalRows.length} unreviewed signals, ${hypotheses.length} experiments proposed, ICP fit: ${icpFit?.quality ?? 'unknown'}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -216,6 +338,9 @@ Return JSON only (no markdown fences):
       tokensUsed,
       costUsd,
       domainHealthScore: parsed.domain_health_score ?? 50,
+      outboundActions,
+      agentMessages,
+      hypotheses,
     };
   }
 }

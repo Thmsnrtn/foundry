@@ -3,11 +3,16 @@
 // Domain: Data analysis, stressor identification, metric interpretation, trends
 // Cadence: 24 hours
 // Uses Opus (not Sonnet) — the analytical core of the SCP
+// v2: Emits hypotheses for data-driven experiments, broadcasts analytical
+//     intelligence to the agent network
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentAction,
+  AgentMessageSignal, HypothesisSignal,
+} from '../types.js';
 import { callOpus, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 
@@ -18,11 +23,26 @@ interface OracleClaudeResponse {
     severity: 'critical' | 'elevated' | 'watch';
     signal: string;
     neutralizing_action: string;
+    agent_to_notify: string; // which agent should act on this
   }>;
   metric_insights: Array<{
     metric: string;
     trend: 'improving' | 'declining' | 'stable';
     insight: string;
+  }>;
+  analytical_hypotheses: Array<{
+    title: string;
+    description: string;
+    hypothesis: string;
+    success_metric: string;
+    success_threshold: number;
+    test_duration_days: number;
+  }>;
+  agent_intel: Array<{
+    to_agent: string;
+    subject: string;
+    insight: string;
+    priority: 'critical' | 'high' | 'normal' | 'low';
   }>;
   domain_health_score: number;
   briefing_contribution: string;
@@ -82,7 +102,17 @@ export class OracleAgent extends BaseAgent {
       [productId]
     );
 
-    // ── 5. Handle no-data case ────────────────────────────────────────────────
+    // ── 5. Query running experiments for context ──────────────────────────────
+    const experimentsResult = await db(
+      `SELECT title, hypothesis, success_metric, status, started_at
+       FROM experiments
+       WHERE product_id = ? AND status IN ('running', 'completed')
+       ORDER BY started_at DESC
+       LIMIT 5`,
+      [productId]
+    );
+
+    // ── 6. Handle no-data case ────────────────────────────────────────────────
     if (metricsResult.rows.length === 0 && stressorResult.rows.length === 0 && signalHistoryResult.rows.length === 0) {
       const action: AgentAction = {
         id: nanoid(),
@@ -106,10 +136,9 @@ export class OracleAgent extends BaseAgent {
       };
     }
 
-    // ── 6. Build prompt data ──────────────────────────────────────────────────
+    // ── 7. Build prompt data ──────────────────────────────────────────────────
     const metricRows = metricsResult.rows as Record<string, unknown>[];
 
-    // Build metric series (newest to oldest)
     const metricSeries = metricRows.map(row => {
       const date = row.snapshot_date as string;
       const signups = Number(row.signups_7d) || 0;
@@ -123,7 +152,6 @@ export class OracleAgent extends BaseAgent {
       return `${date}: signups=${signups} active=${active} newMRR=$${newMrr.toFixed(2)} activation=${activation}% ret30d=${retention}% churn=${churn}% nps=${nps} healthRatio=${healthRatio.toFixed(2)}`;
     }).join('\n');
 
-    // Build signal series
     const signalRows = signalHistoryResult.rows as Record<string, unknown>[];
     const signalSeries = signalRows.length > 0
       ? signalRows.map(s =>
@@ -131,7 +159,6 @@ export class OracleAgent extends BaseAgent {
         ).join(' | ')
       : 'No signal history in last 14 days';
 
-    // Active stressors
     const stressorRows = stressorResult.rows as Record<string, unknown>[];
     const stressorList = stressorRows.length > 0
       ? stressorRows.map(s =>
@@ -139,19 +166,30 @@ export class OracleAgent extends BaseAgent {
         ).join('; ')
       : 'None active';
 
-    // Competitive signals
     const compSignalRows = competitiveSignalsResult.rows as Record<string, unknown>[];
-    const compSignalCount = compSignalRows.length;
     const compSignalSummary = compSignalRows.length > 0
       ? compSignalRows.map(s =>
           `${s.competitor_name as string} [${s.signal_type as string}/${s.significance as string}]: ${s.signal_summary as string}`
         ).join('; ')
       : 'None';
 
-    // ── 7. Call Claude Opus (analytical core) ─────────────────────────────────
+    const experimentRows = experimentsResult.rows as Record<string, unknown>[];
+    const experimentContext = experimentRows.length > 0
+      ? `Running experiments: ${experimentRows.map(e => `${e.title as string} (${e.status as string})`).join(', ')}`
+      : 'No active experiments';
+
+    // PostHog/Plausible integration events add behavioral analytics context
+    const analyticsEvents = (context.integrationEvents ?? []).filter(
+      e => e.source === 'posthog' || e.source === 'plausible'
+    );
+    const analyticsContext = analyticsEvents.length > 0
+      ? `Analytics events: ${analyticsEvents.map(e => e.summary).join(' | ')}`
+      : '';
+
+    // ── 8. Call Claude Opus (analytical core) ─────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
       context,
-      `You are Oracle, the Analytics Lead for ${companyName}. You identify patterns in data, surface stressors, and provide strategic intelligence. Be analytical and precise. Cite specific numbers when drawing conclusions. Identify non-obvious correlations and leading indicators.`
+      `You are Oracle, the Analytics Lead for ${companyName}. You identify patterns in data, surface stressors, and provide strategic intelligence to the entire agent network. Be analytical and precise. Cite specific numbers. Identify non-obvious correlations and leading indicators. Route your insights to the right agents.`
     );
 
     const userPrompt = `Signal trend (14d): ${signalSeries}.
@@ -160,9 +198,11 @@ Metric snapshot trend (${metricRows.length} periods, newest first):
 ${metricSeries || 'No metric data'}
 
 Active stressors (${stressorRows.length}): ${stressorList}.
-Unreviewed competitive signals (${compSignalCount}): ${compSignalSummary}.
+Unreviewed competitive signals (${compSignalRows.length}): ${compSignalSummary}.
+${experimentContext}.${analyticsContext ? `\n${analyticsContext}` : ''}
 
-Analyze comprehensively. Identify trends, patterns, and leading indicators. Flag emerging risks before they become stressors.
+Analyze comprehensively. Identify trends, patterns, and leading indicators. Flag emerging risks. Route intelligence to relevant agents. Propose data-driven experiments.
+
 Return JSON only (no markdown fences):
 {
   "observations": ["string", ...],
@@ -171,7 +211,8 @@ Return JSON only (no markdown fences):
       "name": "string",
       "severity": "critical" | "elevated" | "watch",
       "signal": "string",
-      "neutralizing_action": "string"
+      "neutralizing_action": "string",
+      "agent_to_notify": "string (agent name: harbor, forge, beacon, atlas, etc.)"
     }
   ],
   "metric_insights": [
@@ -181,6 +222,24 @@ Return JSON only (no markdown fences):
       "insight": "string"
     }
   ],
+  "analytical_hypotheses": [
+    {
+      "title": "string",
+      "description": "string",
+      "hypothesis": "string",
+      "success_metric": "string",
+      "success_threshold": number,
+      "test_duration_days": number
+    }
+  ],
+  "agent_intel": [
+    {
+      "to_agent": "string (agent name or 'broadcast')",
+      "subject": "string",
+      "insight": "string (2-3 sentences of actionable intelligence)",
+      "priority": "critical" | "high" | "normal" | "low"
+    }
+  ],
   "domain_health_score": number (0-100),
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
@@ -188,7 +247,6 @@ Return JSON only (no markdown fences):
 
     const response = await callOpus(systemPrompt, userPrompt, 4096);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
-    // Opus pricing is ~3x Sonnet
     const costUsd = (response.usage.input_tokens ?? 0) * 0.000015 + (response.usage.output_tokens ?? 0) * 0.000075;
 
     let parsed: OracleClaudeResponse;
@@ -208,16 +266,52 @@ Return JSON only (no markdown fences):
       };
     }
 
-    // ── 8. Oracle is fully autonomous (authority level 0) — no decisions ──────
-    // It surfaces intelligence for other agents and the briefing.
-    // Log emerging stressors as evolution candidates if high confidence
+    // ── 9. Build analytical hypotheses ────────────────────────────────────────
+    const hypotheses: HypothesisSignal[] = (parsed.analytical_hypotheses ?? []).map(h => ({
+      title: h.title,
+      description: h.description,
+      hypothesis: h.hypothesis,
+      success_metric: h.success_metric,
+      success_threshold: h.success_threshold,
+      test_duration_days: h.test_duration_days,
+    }));
+
+    // ── 10. Build agent messages from stressor routing + intel ────────────────
+    const agentMessages: AgentMessageSignal[] = [];
+
+    // Route stressor alerts to specific agents
+    for (const risk of (parsed.stressor_risks ?? [])) {
+      if (risk.severity === 'critical' || risk.severity === 'elevated') {
+        const targetAgent = risk.agent_to_notify || 'broadcast';
+        agentMessages.push({
+          to_agent: targetAgent,
+          message_type: 'alert',
+          priority: risk.severity === 'critical' ? 'critical' : 'high',
+          subject: `[Oracle] Stressor detected: ${risk.name}`,
+          body: `Signal: ${risk.signal}\nRecommended action: ${risk.neutralizing_action}`,
+        });
+      }
+    }
+
+    // Add analytical intel messages
+    for (const intel of (parsed.agent_intel ?? [])) {
+      agentMessages.push({
+        to_agent: intel.to_agent,
+        message_type: 'insight',
+        priority: intel.priority,
+        subject: `[Oracle] ${intel.subject}`,
+        body: intel.insight,
+      });
+    }
+
+    // ── 11. Evolution candidates from critical stressors ──────────────────────
     const stressorCritical = (parsed.stressor_risks ?? []).filter(r => r.severity === 'critical');
 
-    // ── 9. Record analysis action ─────────────────────────────────────────────
+    // ── 12. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed analytics: ${metricRows.length} metric periods, ${stressorRows.length} active stressors, ${compSignalCount} competitive signals`,
+      description: `Completed analytics: ${metricRows.length} metric periods, ${stressorRows.length} active stressors, ${compSignalRows.length} competitive signals, ${hypotheses.length} hypotheses proposed`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -240,6 +334,8 @@ Return JSON only (no markdown fences):
       tokensUsed,
       costUsd,
       domainHealthScore: parsed.domain_health_score ?? 50,
+      hypotheses,
+      agentMessages,
     };
   }
 }

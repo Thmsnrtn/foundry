@@ -1,7 +1,8 @@
 // =============================================================================
-// FOUNDRY — SCP BaseAgent
+// FOUNDRY — SCP BaseAgent v2
 // Abstract base class for all 12 Sovereign Company Protocol agents.
-// Each agent extends this and implements analyzeAndAct().
+// v2 additions: typed config injection, integration event context, inter-agent
+// messages, cost P&L logging, and structured v2/v3 signal processing.
 // =============================================================================
 
 import { nanoid } from 'nanoid';
@@ -14,6 +15,8 @@ import type {
   AgentSessionOutput,
   GoldenSuiteEntry,
   SCPConstitution,
+  IntegrationEventSummary,
+  IncomingAgentMessage,
 } from '../types.js';
 
 export abstract class BaseAgent {
@@ -99,7 +102,19 @@ export abstract class BaseAgent {
       // Constitution load failure is non-fatal
     }
 
-    // 7. Build AgentRunContext
+    // 7. Load typed agent config (v2)
+    const agentConfig = await this._loadAgentConfig(productId, agentName);
+
+    // 8. Load relevant integration events (v2) — events since last run
+    const integrationEvents = await this._loadIntegrationEvents(productId, agentName, agentInstance.last_run_at);
+
+    // 9. Load unread inter-agent messages (v2)
+    const unreadMessages = await this._loadUnreadMessages(productId, agentName);
+
+    // 10. Check for pending initiatives (v2)
+    await this._processInitiatives(productId, agentName, sessionId);
+
+    // 11. Build AgentRunContext
     const runDate = new Date().toISOString().slice(0, 10);
     const context: AgentRunContext = {
       productId,
@@ -108,9 +123,12 @@ export abstract class BaseAgent {
       goldenLessons,
       constitution,
       runDate,
+      agentConfig,
+      integrationEvents,
+      unreadMessages,
     };
 
-    // 8. Call analyzeAndAct — catch errors, mark session failed if throws
+    // 12. Call analyzeAndAct — catch errors, mark session failed if throws
     let result: AgentAnalysisResult;
     try {
       result = await this.analyzeAndAct(context, query);
@@ -142,7 +160,7 @@ export abstract class BaseAgent {
       };
     }
 
-    // 9. On success: update session row
+    // 13. On success: update session row
     await query(
       `UPDATE agent_sessions SET
          status='completed',
@@ -164,12 +182,12 @@ export abstract class BaseAgent {
         result.briefingPriority,
         JSON.stringify(result.evolutionCandidates),
         result.tokensUsed,
-        0, // cost_usd computed below
+        0, // cost_usd back-filled below
         sessionId,
       ]
     );
 
-    // 10. Update agent_instances row
+    // 14. Update agent_instances row
     const nowIso = new Date().toISOString();
     const nextRunIso = new Date(Date.now() + this.getActivationCadenceHours() * 3600 * 1000).toISOString();
     const healthScoreUpdate = result.domainHealthScore !== undefined
@@ -192,11 +210,9 @@ export abstract class BaseAgent {
       [nowIso, nextRunIso, ...healthScoreParams, agentInstance.id]
     );
 
-    // 11. Log cost to agent_cost_log
-    // Use reported cost if provided; otherwise estimate from tokensUsed (Sonnet output token pricing)
+    // 15. Log cost — both to legacy agent_cost_log and new P&L cost_events (v2)
     const costUsd = result.costUsd !== undefined ? result.costUsd : result.tokensUsed * 0.000015;
     if (costUsd > 0 || result.tokensUsed > 0) {
-      // Also back-fill cost on session row
       await query(
         `UPDATE agent_sessions SET cost_usd=? WHERE id=?`,
         [costUsd, sessionId]
@@ -206,17 +222,126 @@ export abstract class BaseAgent {
          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         [nanoid(), productId, agentName, sessionId, result.tokensUsed, costUsd, 'agent_session']
       );
+      // Fire-and-forget: also log to AI Company P&L cost_events
+      import('../../financial/economics.js').then(({ logCost }) => {
+        logCost({
+          productId,
+          agentName,
+          costType: 'llm_tokens',
+          amountUsd: costUsd,
+          sessionId,
+          details: { tokens: result.tokensUsed, session: sessionId },
+        }).catch(() => {});
+      }).catch(() => {});
     }
 
-    // 12. Trigger evolution check if there are candidates (fire-and-forget)
+    // 16. Process v2/v3 signal fields (all fire-and-forget, non-fatal)
+
+    // Customer signals → customer_intelligence
+    if (result.customerSignals && result.customerSignals.length > 0) {
+      const signals = result.customerSignals;
+      import('../../customer/intelligence.js').then(({ upsertCustomer, addAgentNote, updateHealthScore }) => {
+        for (const sig of signals) {
+          const { note, external_id, name, email, mrr_cents, plan,
+                  health_login_score, health_feature_score,
+                  health_sentiment_score, health_billing_score, stage } = sig;
+          upsertCustomer(productId, {
+            external_customer_id: external_id,
+            account_name: name,
+            email,
+            plan,
+            mrr_cents,
+          }).then(async (customer) => {
+            // Update health sub-scores if provided
+            if (health_login_score !== undefined || health_feature_score !== undefined ||
+                health_sentiment_score !== undefined || health_billing_score !== undefined) {
+              await updateHealthScore(customer.id, {
+                login_frequency_score: health_login_score,
+                feature_depth_score: health_feature_score,
+                support_sentiment_score: health_sentiment_score,
+                billing_health_score: health_billing_score,
+              }).catch(() => {});
+            }
+            if (note) {
+              await addAgentNote(customer.id, agentName, note).catch(() => {});
+            }
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    // Agent messages → agent_messages bus
+    if (result.agentMessages && result.agentMessages.length > 0) {
+      const messages = result.agentMessages;
+      // Map 'update' type (not in enum) → 'report'
+      const validTypes = new Set(['insight', 'request', 'alert', 'handoff', 'question', 'report']);
+      import('../messages.js').then(({ sendMessage }) => {
+        for (const msg of messages) {
+          const msgType = validTypes.has(msg.message_type) ? msg.message_type : 'report';
+          sendMessage({
+            productId,
+            fromAgent: agentName,
+            toAgent: msg.to_agent,
+            type: msgType as 'insight' | 'request' | 'alert' | 'handoff' | 'question' | 'report',
+            priority: msg.priority as 'low' | 'medium' | 'high' | 'critical',
+            subject: msg.subject,
+            body: msg.body,
+            context: { sessionId },
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    // Outbound actions → outbound_actions queue
+    if (result.outboundActions && result.outboundActions.length > 0) {
+      const actions = result.outboundActions;
+      import('../../outbound/executor.js').then(({ proposeAction }) => {
+        for (const action of actions) {
+          proposeAction({
+            productId,
+            agentName,
+            integrationName: agentName, // agent as the integration source
+            actionType: action.action_type,
+            authorityLevel: action.authority_level,
+            parameters: action.parameters,
+            rationale: action.description,
+            previewText: action.description.slice(0, 200),
+            confidence: 0.8,
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    // Hypotheses → experiments engine
+    if (result.hypotheses && result.hypotheses.length > 0) {
+      const hypotheses = result.hypotheses;
+      import('../experiments.js').then(({ proposeHypothesis }) => {
+        for (const hyp of hypotheses) {
+          // Build the statement from title + hypothesis
+          const statement = `[${hyp.title}] ${hyp.hypothesis} — Success metric: ${hyp.success_metric} (target: ${(hyp.success_threshold * 100).toFixed(0)}% improvement)`;
+          proposeHypothesis(productId, {
+            proposedBy: agentName,
+            statement,
+            predictedEffectSize: hyp.success_threshold,
+            estimatedDurationDays: hyp.test_duration_days,
+            riskAssessment: `Proposed by ${agentName} — requires human validation before running.`,
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    // Mark integration events as processed
+    if (integrationEvents && integrationEvents.length > 0) {
+      this._markEventsProcessed(productId, agentName).catch(() => {});
+    }
+
+    // 17. Trigger evolution check if there are candidates (fire-and-forget)
     if (result.evolutionCandidates.length > 0) {
       import('../evolution.js').then(({ checkEvolutionCandidates }) => {
         checkEvolutionCandidates(productId, agentName, sessionId, result.evolutionCandidates).catch(() => {
           // Evolution failure is non-fatal
         });
-      }).catch(() => {
-        // Import failure is non-fatal
-      });
+      }).catch(() => {});
     }
 
     const durationMs = Date.now() - startTime;
@@ -290,7 +415,6 @@ export abstract class BaseAgent {
       ]
     );
 
-    // Keep products.golden_suite_size updated
     await query(
       `UPDATE products SET golden_suite_size = golden_suite_size + 1 WHERE id=?`,
       [productId]
@@ -310,7 +434,6 @@ export abstract class BaseAgent {
       return this._rowToAgentInstance(existing.rows[0] as Record<string, unknown>);
     }
 
-    // Create it fresh
     const id = nanoid();
     const cadence = this.getActivationCadenceHours();
     const nextRunAt = new Date(Date.now() + cadence * 3600 * 1000).toISOString();
@@ -326,7 +449,7 @@ export abstract class BaseAgent {
         id,
         productId,
         agentName,
-        agentName.charAt(0).toUpperCase() + agentName.slice(1), // display_name
+        agentName.charAt(0).toUpperCase() + agentName.slice(1),
         this._defaultAuthorityLevel(),
         cadence,
         nextRunAt,
@@ -345,6 +468,20 @@ export abstract class BaseAgent {
   protected buildSystemPrompt(context: AgentRunContext, domainSystemPrompt: string): string {
     const parts: string[] = [domainSystemPrompt];
 
+    // Inject typed config sections (v2) — persona and domain_knowledge enrich the prompt
+    if (context.agentConfig) {
+      const { persona, domain_knowledge, task_patterns } = context.agentConfig;
+      if (persona && !domainSystemPrompt.includes(persona.slice(0, 50))) {
+        parts.push(`AGENT PERSONA:\n${persona}`);
+      }
+      if (domain_knowledge) {
+        parts.push(`DOMAIN EXPERTISE:\n${domain_knowledge}`);
+      }
+      if (task_patterns) {
+        parts.push(`TASK PATTERNS:\n${task_patterns}`);
+      }
+    }
+
     const formattedLessons = this.formatGoldenLessons(context.goldenLessons);
     if (formattedLessons) {
       parts.push(formattedLessons);
@@ -358,6 +495,22 @@ export abstract class BaseAgent {
       );
     }
 
+    // Inject integration events (v2)
+    if (context.integrationEvents && context.integrationEvents.length > 0) {
+      const eventLines = context.integrationEvents.slice(0, 15).map(e =>
+        `[${e.source}/${e.event_type}] ${e.summary}`
+      ).join('\n');
+      parts.push(`INTEGRATION SIGNALS (${context.integrationEvents.length} since last run):\n${eventLines}`);
+    }
+
+    // Inject unread agent messages (v2)
+    if (context.unreadMessages && context.unreadMessages.length > 0) {
+      const msgLines = context.unreadMessages.map(m =>
+        `[${m.from_agent} · ${m.priority}] ${m.subject}: ${m.body.slice(0, 300)}`
+      ).join('\n');
+      parts.push(`MESSAGES FROM AGENT NETWORK:\n${msgLines}`);
+    }
+
     parts.push(`Today's date: ${context.runDate}`);
 
     return parts.join('\n\n');
@@ -367,6 +520,118 @@ export abstract class BaseAgent {
     if (!lessons || lessons.length === 0) return '';
     const lines = lessons.map((l, i) => `${i + 1}. ${l.lesson}`);
     return 'GOLDEN LESSONS (learned behaviors for this company):\n' + lines.join('\n');
+  }
+
+  // ─── v2 Context loaders ───────────────────────────────────────────────────
+
+  private async _loadAgentConfig(productId: string, agentName: string): Promise<Record<string, string>> {
+    try {
+      const { getAgentConfig } = await import('../agent-config.js');
+      return await getAgentConfig(productId, agentName);
+    } catch {
+      return {};
+    }
+  }
+
+  private async _loadIntegrationEvents(
+    productId: string,
+    agentName: string,
+    _lastRunAt: string | null
+  ): Promise<IntegrationEventSummary[]> {
+    try {
+      const { getUnprocessedEvents } = await import('../../integration/fabric.js');
+      const events = await getUnprocessedEvents(productId, agentName, 20);
+      return events.slice(0, 20).map(e => ({
+        source: e.integration_name,
+        event_type: e.event_type,
+        summary: this._summariseEvent(e.event_type, e.data),
+        created_at: e.created_at,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  private _summariseEvent(eventType: string, data: Record<string, unknown>): string {
+    // Produce a compact ≤200-char summary for the agent prompt
+    const parts: string[] = [eventType];
+    for (const key of ['customer_id', 'customer_email', 'amount', 'plan', 'event', 'actor']) {
+      if (data[key] !== undefined) parts.push(`${key}=${String(data[key]).slice(0, 40)}`);
+    }
+    return parts.join(' | ').slice(0, 200);
+  }
+
+  private async _loadUnreadMessages(productId: string, agentName: string): Promise<IncomingAgentMessage[]> {
+    try {
+      const { getUnreadMessages } = await import('../messages.js');
+      const messages = await getUnreadMessages(productId, agentName);
+      return messages.slice(0, 10).map(m => ({
+        from_agent: m.from_agent,
+        priority: m.priority,
+        subject: m.subject,
+        body: m.body,
+        sent_at: m.created_at,
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  private async _markEventsProcessed(productId: string, agentName: string): Promise<void> {
+    try {
+      const { markEventsProcessed } = await import('../../integration/fabric.js');
+      // Fetch the IDs that were just loaded and mark them
+      const { getUnprocessedEvents } = await import('../../integration/fabric.js');
+      const events = await getUnprocessedEvents(productId, agentName);
+      if (events.length > 0) {
+        await markEventsProcessed(events.map(e => e.id), agentName);
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  private async _processInitiatives(productId: string, agentName: string, sessionId: string): Promise<void> {
+    // Check for pending self-initiated actions from the initiative queue
+    try {
+      const result = await query(
+        `SELECT id, action_type, action_description, parameters_json
+         FROM agent_initiative_queue
+         WHERE product_id=? AND agent_name=? AND status='pending'
+         ORDER BY priority DESC, created_at ASC
+         LIMIT 3`,
+        [productId, agentName]
+      );
+      if (result.rows.length === 0) return;
+
+      for (const row of result.rows as Record<string, unknown>[]) {
+        // Mark as in_progress
+        await query(
+          `UPDATE agent_initiative_queue SET status='in_progress', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+          [row.id as string]
+        );
+        // Route into outbound executor for human approval
+        const { proposeAction } = await import('../../outbound/executor.js');
+        const actionDesc = row.action_description as string;
+        await proposeAction({
+          productId,
+          agentName,
+          integrationName: agentName,
+          actionType: row.action_type as string,
+          rationale: actionDesc,
+          previewText: actionDesc.slice(0, 200),
+          parameters: this._parseJSON<Record<string, unknown>>(row.parameters_json as string | null, {}),
+          authorityLevel: 2, // All initiative queue items require approval
+        }).catch(() => {});
+        // Mark as proposed
+        await query(
+          `UPDATE agent_initiative_queue SET status='proposed', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+          [row.id as string]
+        );
+      }
+    } catch {
+      // Non-fatal
+    }
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────
@@ -431,7 +696,6 @@ export abstract class BaseAgent {
   }
 
   private _defaultAuthorityLevel(): number {
-    // Import DEFAULT_AUTHORITY_LEVELS is circular at runtime; use a map literal here.
     const levels: Record<string, number> = {
       atlas: 2, compass: 2, prism: 2, beacon: 2, scribe: 1,
       forge: 2, harbor: 1, sentinel: 1, ledger: 1, shield: 2,

@@ -2,11 +2,16 @@
 // FOUNDRY — Forge Agent (Revenue Lead)
 // Domain: Revenue optimization, pricing, conversion, expansion
 // Cadence: 24 hours
+// v2: Emits outboundActions for expansion, agentMessages to harbor/ledger,
+//     revenue attribution signals
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { BaseAgent } from './base.js';
-import type { AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction } from '../types.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
+} from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 
@@ -17,6 +22,23 @@ interface ForgeClaudeResponse {
     title: string;
     description: string;
     estimated_impact_usd: number;
+    authority_level: 0 | 1 | 2;
+    action_type?: string; // for outbound executor routing
+  }>;
+  expansion_opportunities: Array<{
+    segment: string;
+    opportunity: string;
+    estimated_arr_usd: number;
+    next_step: string;
+    confidence: number; // 0-1
+  }>;
+  pricing_hypotheses: Array<{
+    title: string;
+    description: string;
+    hypothesis: string;
+    success_metric: string;
+    success_threshold: number;
+    test_duration_days: number;
   }>;
   domain_health_score: number;
   briefing_contribution: string;
@@ -59,7 +81,17 @@ export class ForgeAgent extends BaseAgent {
       [productId]
     );
 
-    // ── 4. Handle no-data case ────────────────────────────────────────────────
+    // ── 4. Query high-value customers from intelligence table ─────────────────
+    const highValueResult = await db(
+      `SELECT external_id, name, email, mrr_cents, stage, health_score
+       FROM customer_intelligence
+       WHERE product_id = ? AND mrr_cents > 0
+       ORDER BY mrr_cents DESC
+       LIMIT 10`,
+      [productId]
+    );
+
+    // ── 5. Handle no-data case ────────────────────────────────────────────────
     if (metricsResult.rows.length === 0) {
       const action: AgentAction = {
         id: nanoid(),
@@ -83,10 +115,9 @@ export class ForgeAgent extends BaseAgent {
       };
     }
 
-    // ── 5. Build prompt data ──────────────────────────────────────────────────
+    // ── 6. Build prompt data ──────────────────────────────────────────────────
     const metricRows = metricsResult.rows as Record<string, unknown>[];
 
-    // Build MRR trend string from newest to oldest
     const mrrTrend = metricRows.map(row => {
       const date = row.snapshot_date as string;
       const newMrr = (Number(row.new_mrr_cents) || 0) / 100;
@@ -96,7 +127,6 @@ export class ForgeAgent extends BaseAgent {
       return `${date}: new=$${newMrr.toFixed(2)} churned=$${churned.toFixed(2)} expansion=$${expansion.toFixed(2)} health_ratio=${healthRatio.toFixed(2)}`;
     }).join(' | ');
 
-    // Most recent snapshot
     const latest = metricRows[0];
     const latestNewMrr = (Number(latest.new_mrr_cents) || 0) / 100;
     const latestChurned = (Number(latest.churned_mrr_cents) || 0) / 100;
@@ -113,17 +143,31 @@ export class ForgeAgent extends BaseAgent {
       ? ((founderResult.rows[0] as Record<string, unknown>).tier as string) ?? 'solo'
       : 'solo';
 
-    // ── 6. Call Claude Sonnet ─────────────────────────────────────────────────
+    const highValueRows = highValueResult.rows as Record<string, unknown>[];
+    const highValueSummary = highValueRows.length > 0
+      ? highValueRows.map(r =>
+          `${r.name as string ?? r.external_id as string}: $${((Number(r.mrr_cents) || 0) / 100).toFixed(0)}/mo stage=${r.stage} health=${r.health_score}`
+        ).join(', ')
+      : 'None tracked';
+
+    // Stripe integration events for real-time revenue signals
+    const stripeEvents = (context.integrationEvents ?? []).filter(e => e.source === 'stripe');
+    const stripeContext = stripeEvents.length > 0
+      ? `Recent Stripe events: ${stripeEvents.map(e => e.summary).join(' | ')}`
+      : '';
+
+    // ── 7. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
       context,
-      `You are Forge, the Revenue Lead for ${companyName}. You optimize pricing, conversion, and expansion revenue. Never recommend actions that could damage customer trust for short-term revenue gains.`
+      `You are Forge, the Revenue Lead for ${companyName}. You optimize pricing, conversion, and expansion revenue. Never recommend actions that could damage customer trust for short-term revenue gains. Identify specific expansion opportunities with named customer segments.`
     );
 
     const userPrompt = `MRR trend (last ${metricRows.length} snapshots, newest first): ${mrrTrend}.
-Health ratio (churned/new): ${healthRatio.toFixed(2)} (>1.0 means churn exceeds new MRR — critical).
-New MRR (latest week): $${latestNewMrr.toFixed(2)}. Churned: $${latestChurned.toFixed(2)}. Expansion: $${latestExpansion.toFixed(2)}.
+Health ratio (churned/new): ${healthRatio.toFixed(2)} (>1.0 = churn exceeds new MRR — critical).
+New MRR (latest): $${latestNewMrr.toFixed(2)}. Churned: $${latestChurned.toFixed(2)}. Expansion: $${latestExpansion.toFixed(2)}.
 Lifecycle: ${currentPrompt} | Risk state: ${riskState}.
 Founder tier: ${founderTier}.
+High-value customers (${highValueRows.length}): ${highValueSummary}.${stripeContext ? `\n${stripeContext}` : ''}
 
 Return JSON only (no markdown fences):
 {
@@ -133,7 +177,28 @@ Return JSON only (no markdown fences):
       "type": "pricing" | "conversion" | "expansion" | "retention",
       "title": "string",
       "description": "string",
-      "estimated_impact_usd": number
+      "estimated_impact_usd": number,
+      "authority_level": 0 | 1 | 2,
+      "action_type": "string (e.g. send_expansion_email, update_pricing_page)"
+    }
+  ],
+  "expansion_opportunities": [
+    {
+      "segment": "string",
+      "opportunity": "string",
+      "estimated_arr_usd": number,
+      "next_step": "string",
+      "confidence": number (0-1)
+    }
+  ],
+  "pricing_hypotheses": [
+    {
+      "title": "string",
+      "description": "string",
+      "hypothesis": "string",
+      "success_metric": "string (e.g. conversion_rate, expansion_mrr)",
+      "success_threshold": number (e.g. 0.15 = 15% improvement),
+      "test_duration_days": number
     }
   ],
   "domain_health_score": number (0-100),
@@ -141,7 +206,7 @@ Return JSON only (no markdown fences):
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 3000);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 
@@ -162,49 +227,95 @@ Return JSON only (no markdown fences):
       };
     }
 
-    // ── 7. Build decisions ────────────────────────────────────────────────────
-    // Pricing/expansion → authority_level=2; conversion → authority_level=1
+    // ── 8. Build decisions ────────────────────────────────────────────────────
     const pendingDecisions: AgentDecision[] = [];
     for (const action of (parsed.revenue_actions ?? [])) {
       if (action.type === 'pricing' || action.type === 'expansion') {
-        const decision: AgentDecision = {
+        pendingDecisions.push({
           id: nanoid(),
           agent_name: this.getName(),
           title: action.title,
           description: action.description,
-          rationale: `Forge (Revenue Lead) identified ${action.type} opportunity: ${action.description}`,
+          rationale: `Forge identified ${action.type} opportunity: ${action.description}`,
           expected_impact: `Estimated revenue impact: $${(action.estimated_impact_usd ?? 0).toFixed(2)}`,
           estimated_impact_usd: action.estimated_impact_usd,
           action_type: `revenue_${action.type}`,
           action_data: { raw_action: action },
           expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
           created_at: new Date().toISOString(),
-        };
-        pendingDecisions.push(decision);
+        });
       } else if (action.type === 'conversion') {
-        // Conversion actions also added as decisions for visibility
-        const decision: AgentDecision = {
+        pendingDecisions.push({
           id: nanoid(),
           agent_name: this.getName(),
           title: action.title,
           description: action.description,
-          rationale: `Forge (Revenue Lead) identified conversion opportunity: ${action.description}`,
+          rationale: `Forge identified conversion opportunity: ${action.description}`,
           expected_impact: `Estimated revenue impact: $${(action.estimated_impact_usd ?? 0).toFixed(2)}`,
           estimated_impact_usd: action.estimated_impact_usd,
           action_type: 'revenue_conversion',
           action_data: { raw_action: action },
           expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
           created_at: new Date().toISOString(),
-        };
-        pendingDecisions.push(decision);
+        });
       }
     }
 
-    // ── 8. Record analysis action ─────────────────────────────────────────────
+    // ── 9. Build outbound actions for high-confidence expansion ───────────────
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const opp of (parsed.expansion_opportunities ?? [])) {
+      if (opp.confidence >= 0.75) {
+        outboundActions.push({
+          action_type: 'revenue_expansion_outreach',
+          description: `Expansion opportunity: ${opp.segment} — ${opp.opportunity} (est. $${opp.estimated_arr_usd.toFixed(0)}/yr)`,
+          parameters: {
+            segment: opp.segment,
+            opportunity: opp.opportunity,
+            estimated_arr_usd: opp.estimated_arr_usd,
+            next_step: opp.next_step,
+          },
+          authority_level: 2, // Revenue outreach requires CEO approval
+          estimated_value_usd: opp.estimated_arr_usd / 12,
+        });
+      }
+    }
+
+    // ── 10. Pricing experiment hypotheses ─────────────────────────────────────
+    const hypotheses: HypothesisSignal[] = (parsed.pricing_hypotheses ?? []).map(h => ({
+      title: h.title,
+      description: h.description,
+      hypothesis: h.hypothesis,
+      success_metric: h.success_metric,
+      success_threshold: h.success_threshold,
+      test_duration_days: h.test_duration_days,
+    }));
+
+    // ── 11. Inter-agent messages ──────────────────────────────────────────────
+    const agentMessages: AgentMessageSignal[] = [];
+    if (healthRatio > 1.2) {
+      agentMessages.push({
+        to_agent: 'harbor',
+        message_type: 'alert',
+        priority: 'critical',
+        subject: `Revenue health ratio critical: ${healthRatio.toFixed(2)} — churn exceeds new MRR`,
+        body: `MRR health ratio is ${healthRatio.toFixed(2)} — churned MRR ($${latestChurned.toFixed(0)}) exceeds new MRR ($${latestNewMrr.toFixed(0)}). Urgent retention focus needed. Forge is proposing ${pendingDecisions.length} revenue actions.`,
+      });
+    }
+    if (latestExpansion > latestNewMrr * 0.5) {
+      agentMessages.push({
+        to_agent: 'oracle',
+        message_type: 'insight',
+        priority: 'normal',
+        subject: 'Expansion revenue exceeding 50% of new MRR — strong product-market fit signal',
+        body: `Expansion MRR ($${latestExpansion.toFixed(0)}) is ${((latestExpansion / (latestNewMrr || 1)) * 100).toFixed(0)}% of new MRR. This is a strong retention and expansion signal worth tracking as a strategic metric.`,
+      });
+    }
+
+    // ── 12. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed revenue analysis: $${latestNewMrr.toFixed(2)} new MRR, $${latestChurned.toFixed(2)} churned, health ratio ${healthRatio.toFixed(2)}`,
+      description: `Completed revenue analysis: $${latestNewMrr.toFixed(2)} new MRR, $${latestChurned.toFixed(2)} churned, ${(parsed.expansion_opportunities ?? []).length} expansion opps`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -221,6 +332,9 @@ Return JSON only (no markdown fences):
       tokensUsed,
       costUsd,
       domainHealthScore: parsed.domain_health_score ?? 50,
+      outboundActions,
+      agentMessages,
+      hypotheses,
     };
   }
 }
