@@ -17,6 +17,7 @@ import {
 import {
   assessFundraisingReadiness,
   getLatestReadinessScore,
+  type FundraisingReadiness,
 } from '../../services/scp/investor/fundraising-readiness.js';
 import {
   generateInvestorUpdate,
@@ -79,7 +80,7 @@ function trendIcon(trend: 'up' | 'down' | 'flat'): string {
 
 // ─── GET /board — Investor Hub ─────────────────────────────────────────────────
 
-boardPacket.get('/board', async (c) => {
+boardPacket.get('/', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'investors', 'Investor Hub', undefined, c);
 
@@ -230,9 +231,9 @@ boardPacket.get('/board', async (c) => {
   return c.html(dashboardLayout(ctx, content));
 });
 
-// ─── POST /board/readiness/assess ─────────────────────────────────────────────
+// ─── POST /board/readiness — generate readiness assessment, redirect to detail ─
 
-boardPacket.post('/board/readiness/assess', async (c) => {
+boardPacket.post('/readiness', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'investors', 'Investor Hub', undefined, c);
 
@@ -241,7 +242,30 @@ boardPacket.post('/board/readiness/assess', async (c) => {
   const body = await c.req.parseBody();
   const round = (body['round'] as string) ?? 'seed';
   const validRounds = ['pre_seed', 'seed', 'series_a', 'series_b'] as const;
-  type RoundType = typeof validRounds[number];
+  type RoundType = (typeof validRounds)[number];
+  const targetRound: RoundType = validRounds.includes(round as RoundType) ? (round as RoundType) : 'seed';
+
+  try {
+    await assessFundraisingReadiness(ctx.productId, targetRound);
+  } catch {
+    // Non-fatal
+  }
+
+  return c.redirect(`/board/readiness/${targetRound}`);
+});
+
+// ─── POST /board/readiness/assess — alias kept for backward compat ─────────────
+
+boardPacket.post('/readiness/assess', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'investors', 'Investor Hub', undefined, c);
+
+  if (!ctx.productId) return c.redirect('/board');
+
+  const body = await c.req.parseBody();
+  const round = (body['round'] as string) ?? 'seed';
+  const validRounds = ['pre_seed', 'seed', 'series_a', 'series_b'] as const;
+  type RoundType = (typeof validRounds)[number];
   const targetRound: RoundType = validRounds.includes(round as RoundType) ? (round as RoundType) : 'seed';
 
   try {
@@ -253,9 +277,87 @@ boardPacket.post('/board/readiness/assess', async (c) => {
   return c.redirect('/board');
 });
 
+// ─── GET /board/readiness/:round — readiness detail page ──────────────────────
+
+boardPacket.get('/readiness/:round', async (c) => {
+  const founder = c.get('founder');
+  const roundParam = c.req.param('round') as FundraisingReadiness['target_round'];
+  const ctx = await getLayoutContext(founder, 'investors', `Readiness — ${roundParam}`, undefined, c);
+
+  if (!ctx.productId) return c.redirect('/board');
+
+  const readiness = await getLatestReadinessScore(ctx.productId, roundParam).catch(() => null);
+
+  if (!readiness) return c.redirect('/board');
+
+  const content = html`
+    <div style="margin-bottom:1.5rem;">
+      <a href="/board" style="font-size:0.85rem;color:var(--text-dim);text-decoration:none;">← Investor Hub</a>
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:0.75rem;">
+      <div>
+        <h1 style="margin:0 0 0.25rem;">Fundraising Readiness</h1>
+        <div style="font-size:0.8rem;color:var(--text-muted);">${roundParam.replace(/_/g, ' ')} · ${readiness.ready_to_raise ? 'Ready to raise' : `~${readiness.estimated_weeks_to_ready ?? '?'} weeks away`}</div>
+      </div>
+      <form method="POST" action="/board/readiness">
+        <input type="hidden" name="round" value="${roundParam}" />
+        <button type="submit" class="btn btn-ghost" style="font-size:0.78rem;">Re-assess</button>
+      </form>
+    </div>
+
+    <!-- Overall score -->
+    <div class="card" style="padding:1.5rem;margin-bottom:1.25rem;text-align:center;">
+      <div style="font-size:3.5rem;font-weight:800;color:${readiness.overall_score >= 7 ? '#4ecca3' : readiness.overall_score >= 5 ? '#ffb347' : '#ff6b6b'};">${readiness.overall_score.toFixed(1)}</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.35rem;">Overall Score / 10</div>
+      ${readiness.ready_to_raise
+        ? html`<div style="margin-top:0.75rem;background:rgba(78,204,163,0.1);border:1px solid rgba(78,204,163,0.25);border-radius:6px;padding:6px 14px;display:inline-block;font-weight:700;color:#4ecca3;font-size:0.85rem;">Ready to Raise</div>`
+        : readiness.estimated_weeks_to_ready
+          ? html`<div style="margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted);">Est. ${readiness.estimated_weeks_to_ready} weeks to reach 7.0</div>`
+          : ''}
+    </div>
+
+    <!-- Dimension scores -->
+    <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.875rem;">Dimension Scores</div>
+      <div style="display:flex;flex-direction:column;gap:0.6rem;">
+        ${Object.entries(readiness.scores).map(([key, val]) => html`
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.2rem;">
+              <span style="font-size:0.8rem;color:var(--text-dim);">${dimensionLabel(key)}</span>
+            </div>
+            ${scoreBar(val as number)}
+          </div>
+        `)}
+      </div>
+    </div>
+
+    <!-- Gaps -->
+    ${readiness.gaps.length > 0 ? html`
+      <div class="card" style="padding:1.25rem;margin-bottom:1.25rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.875rem;">Gaps to Close</div>
+        <div style="display:flex;flex-direction:column;gap:0.6rem;">
+          ${readiness.gaps.map((gap) => html`
+            <div style="padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:6px;border-left:2px solid ${gap.urgency === 'high' ? '#ff6b6b' : gap.urgency === 'medium' ? '#ffb347' : 'rgba(255,255,255,0.15)'};">
+              <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem;">
+                <span style="font-size:0.82rem;font-weight:600;color:var(--text-primary);">${dimensionLabel(gap.dimension)}</span>
+                ${urgencyBadge(gap.urgency)}
+              </div>
+              <div style="font-size:0.78rem;color:var(--text-dim);margin-bottom:0.2rem;">${gap.gap}</div>
+              <div style="font-size:0.78rem;color:var(--accent);">${gap.recommendation}</div>
+            </div>
+          `)}
+        </div>
+      </div>
+    ` : html`<div class="card" style="padding:1.25rem;text-align:center;color:#4ecca3;font-size:0.85rem;">No critical gaps — strong across all dimensions.</div>`}
+  `;
+
+  return c.html(dashboardLayout(ctx, content));
+});
+
 // ─── POST /board/packet/generate ──────────────────────────────────────────────
 
-boardPacket.post('/board/packet/generate', async (c) => {
+boardPacket.post('/packet/generate', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'investors', 'Investor Hub', undefined, c);
 
@@ -268,7 +370,7 @@ boardPacket.post('/board/packet/generate', async (c) => {
 
 // ─── GET /board/packet/:id ─────────────────────────────────────────────────────
 
-boardPacket.get('/board/packet/:id', async (c) => {
+boardPacket.get('/packet/:id', async (c) => {
   const founder = c.get('founder');
   const id = c.req.param('id');
   const ctx = await getLayoutContext(founder, 'investors', 'Board Packet', undefined, c);
@@ -380,7 +482,7 @@ boardPacket.get('/board/packet/:id', async (c) => {
 
 // ─── POST /board/packet/:id/reviewed ──────────────────────────────────────────
 
-boardPacket.post('/board/packet/:id/reviewed', async (c) => {
+boardPacket.post('/packet/:id/reviewed', async (c) => {
   const id = c.req.param('id');
   try {
     await markPacketReviewed(id);
@@ -392,7 +494,7 @@ boardPacket.post('/board/packet/:id/reviewed', async (c) => {
 
 // ─── POST /board/update/generate ──────────────────────────────────────────────
 
-boardPacket.post('/board/update/generate', async (c) => {
+boardPacket.post('/update/generate', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'investors', 'Investor Hub', undefined, c);
 
@@ -405,7 +507,7 @@ boardPacket.post('/board/update/generate', async (c) => {
 
 // ─── GET /board/update/:id ─────────────────────────────────────────────────────
 
-boardPacket.get('/board/update/:id', async (c) => {
+boardPacket.get('/update/:id', async (c) => {
   const founder = c.get('founder');
   const id = c.req.param('id');
   const ctx = await getLayoutContext(founder, 'investors', 'Investor Update', undefined, c);
@@ -448,7 +550,7 @@ boardPacket.get('/board/update/:id', async (c) => {
 
 // ─── POST /board/update/:id/sent ──────────────────────────────────────────────
 
-boardPacket.post('/board/update/:id/sent', async (c) => {
+boardPacket.post('/update/:id/sent', async (c) => {
   const id = c.req.param('id');
   try {
     await markUpdateSent(id);
