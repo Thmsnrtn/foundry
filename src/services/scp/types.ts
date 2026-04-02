@@ -224,6 +224,8 @@ export interface AgentRunContext {
   agentConfig?: Record<string, string>;        // ConfigType -> content
   integrationEvents?: IntegrationEventSummary[]; // relevant events since last run
   unreadMessages?: IncomingAgentMessage[];     // unread messages for this agent
+  // v3 coordination — what other agents found today (injected into system prompt)
+  scratchpadContext?: string;
 }
 
 /** Slim summary of an integration event injected into agent context. */

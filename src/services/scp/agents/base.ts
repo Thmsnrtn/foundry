@@ -116,6 +116,11 @@ export abstract class BaseAgent {
 
     // 11. Build AgentRunContext
     const runDate = new Date().toISOString().slice(0, 10);
+
+    // Load what other agents found today (fire-and-forget on failure)
+    const { getScratchpadContext } = await import('../coordination/scratchpad.js');
+    const scratchpadContext = await getScratchpadContext(productId).catch(() => '');
+
     const context: AgentRunContext = {
       productId,
       companyName,
@@ -126,6 +131,7 @@ export abstract class BaseAgent {
       agentConfig,
       integrationEvents,
       unreadMessages,
+      scratchpadContext: scratchpadContext || undefined,
     };
 
     // 12. Call analyzeAndAct — catch errors, mark session failed if throws
@@ -158,6 +164,16 @@ export abstract class BaseAgent {
         tokensUsed: 0,
         costUsd: 0,
       };
+    }
+
+    // Write key finding to scratchpad for other agents (fire-and-forget)
+    if (result.briefingContribution) {
+      import('../coordination/scratchpad.js').then(({ writeAgentFinding }) => {
+        writeAgentFinding(productId, agentName, {
+          position: result.briefingContribution,
+          confidence: result.domainHealthScore !== undefined ? result.domainHealthScore / 100 : 0.5,
+        }).catch(() => {});
+      }).catch(() => {});
     }
 
     // 13. On success: update session row
@@ -518,6 +534,11 @@ export abstract class BaseAgent {
         `[${m.from_agent} · ${m.priority}] ${m.subject}: ${m.body.slice(0, 300)}`
       ).join('\n');
       parts.push(`MESSAGES FROM AGENT NETWORK:\n${msgLines}`);
+    }
+
+    // Inject scratchpad context — what other agents found today
+    if (context.scratchpadContext) {
+      parts.push(context.scratchpadContext);
     }
 
     parts.push(`Today's date: ${context.runDate}`);
