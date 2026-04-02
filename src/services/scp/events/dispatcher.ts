@@ -118,8 +118,8 @@ export async function processSignalEvent(eventId: string): Promise<void> {
   // with this signal when it runs. We insert once for the run context.
   let syntheticEventId: string | null = null;
   try {
-    const { insertEvent } = await import('../../integration/fabric.js');
-    syntheticEventId = await insertEvent(productId, {
+    const { storeEvent } = await import('../../integration/fabric.js');
+    syntheticEventId = await storeEvent(productId, {
       integration_name: source,
       event_type: eventType,
       actor_type: 'system',
