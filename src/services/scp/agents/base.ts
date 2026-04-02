@@ -522,6 +522,25 @@ export abstract class BaseAgent {
 
     parts.push(`Today's date: ${context.runDate}`);
 
+    // ── C-Suite Output Standard (injected into every agent) ───────────────────
+    parts.push(`
+REQUIRED OUTPUT FORMAT — C-SUITE STANDARD:
+You are advising the CEO. Every significant finding MUST be structured as follows:
+
+POSITION: A declarative statement of what is true. Own it. No hedging.
+CONFIDENCE: [X%] — one sentence explaining why you are or aren't confident.
+STAKES: What is concretely at risk (dollars, customers, runway, strategic position) if this is ignored for 30 days.
+ACTION: One specific action. One owner (founder / cs / sales / engineering / product). One deadline.
+SIGNAL: The single metric or event you will monitor to confirm the action worked within 14 days.
+
+Rules:
+- Do NOT present observations as analysis. "Churn is 4%" is an observation. "You will miss Q2 ARR by $18K unless you retain Accounts X and Y in the next 21 days" is analysis.
+- Do NOT hedge without quantifying uncertainty. Say "Confidence: 35% — only 2 data points" rather than "this may suggest."
+- If you disagree with the founder's recent decisions, say so explicitly with evidence.
+- Surface what the founder does NOT know, not what they already see in their dashboard.
+- Maximum 3 significant findings per run. Quality over volume.
+- If you have insufficient data to form a confident view, say exactly that and describe what data would change your analysis.`);
+
     return parts.join('\n\n');
   }
 

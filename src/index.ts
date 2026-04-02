@@ -70,7 +70,6 @@ import { agentStrategyRoutes } from './routes/dashboard/agents-strategy.js';
 import { agentExperimentRoutes } from './routes/dashboard/agents-experiments.js';
 // SCP v4: New dashboard pages
 import { agentsInbox } from './routes/dashboard/agents-inbox.js';
-import { agentsWiki } from './routes/dashboard/agents-wiki.js';
 import { agentsOkr } from './routes/dashboard/agents-okr.js';
 import { agentsDecisions } from './routes/dashboard/agents-decisions.js';
 import { benchmarks } from './routes/dashboard/benchmarks.js';
@@ -322,7 +321,7 @@ app.route('/', agentStrategyRoutes);
 app.route('/', agentExperimentRoutes);
 // SCP v4: New dashboard pages
 app.route('/agents/inbox', agentsInbox);
-app.route('/agents/wiki', agentsWiki);
+// wiki removed — replaced by company memory graph (/memory)
 app.route('/agents/okr', agentsOkr);
 app.route('/agents/decisions', agentsDecisions);
 app.route('/benchmarks', benchmarks);

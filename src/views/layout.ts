@@ -67,6 +67,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <title>${title} — Foundry</title>
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="manifest" href="/manifest.json" />
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js" defer></script>
 </head>
 <body class="${bodyClass}">
   <header class="site-header">
@@ -94,11 +95,67 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   ${!chamberMode && showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, dnaCompletionPct, openPRCount) : ''}
 
   <main class="${showNav && !chamberMode ? 'main-with-sidebar' : 'main-full'}">
+    ${showNav && !chamberMode ? html`<div id="one-thing-banner"
+      hx-get="/api/priority/one-thing"
+      hx-trigger="load"
+      hx-swap="innerHTML"
+      style="min-height:0"></div>` : ''}
     ${content}
   </main>
 
   ${!chamberMode && showNav && productId ? mobilBottomNav(activeNav, navBadges?.decisions_count ?? 0) : ''}
 
+  <!-- Command Palette -->
+  <div id="cmd-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;backdrop-filter:blur(4px)" onclick="closeCmdPalette()"></div>
+  <div id="cmd-palette" style="display:none;position:fixed;top:15vh;left:50%;transform:translateX(-50%);width:min(640px,90vw);background:#1e293b;border:1px solid rgba(255,255,255,0.12);border-radius:12px;z-index:9999;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
+    <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.08)">
+      <input id="cmd-input" type="text" placeholder="Go anywhere... (type a page or action)"
+        style="width:100%;background:transparent;border:none;outline:none;color:#f1f5f9;font-size:16px;font-family:inherit"
+        oninput="filterCmdPalette(this.value)" onkeydown="handleCmdKey(event)" autocomplete="off" />
+    </div>
+    <div id="cmd-results" style="max-height:400px;overflow-y:auto;padding:8px 0"></div>
+    <div style="padding:8px 16px;border-top:1px solid rgba(255,255,255,0.08);display:flex;gap:16px;font-size:11px;color:#64748b">
+      <span>&#x2191;&#x2193; navigate</span><span>&#x21b5; go</span><span>esc close</span>
+    </div>
+  </div>
+  <script>
+    const CMD_ROUTES=[
+      {label:'Signal Dashboard',href:'/dashboard',section:'Navigate'},
+      {label:'CEO Briefing',href:'/agents/briefings/latest',section:'Navigate'},
+      {label:'Decisions',href:'/decisions',section:'Navigate'},
+      {label:'Action Queue',href:'/agents/actions',section:'Navigate'},
+      {label:'Agent Debate',href:'/agents/debate',section:'Agents'},
+      {label:'Agent Accuracy',href:'/agents/accuracy',section:'Agents'},
+      {label:'Agent Transparency',href:'/agents/transparency',section:'Agents'},
+      {label:'Agent Intelligence',href:'/agents/intelligence',section:'Agents'},
+      {label:'Agent Roster',href:'/agents',section:'Agents'},
+      {label:'Scenario Planner',href:'/scenarios',section:'Forecasting'},
+      {label:'Investor Board',href:'/board',section:'Forecasting'},
+      {label:'Exit Intelligence',href:'/exit',section:'Forecasting'},
+      {label:'Weekly Brief',href:'/brief',section:'Forecasting'},
+      {label:'Multi-Modal Signals',href:'/signals/multimodal',section:'Signals'},
+      {label:'Network Intelligence',href:'/network',section:'Signals'},
+      {label:'Company Memory',href:'/memory',section:'Signals'},
+      {label:'Standing Orders',href:'/playbooks/execution',section:'Autonomy'},
+      {label:'Ambient Layer',href:'/ambient',section:'Autonomy'},
+      {label:'ROI Dashboard',href:'/roi',section:'Autonomy'},
+      {label:'Benchmarks',href:'/benchmarks',section:'System'},
+      {label:'Privacy & Data',href:'/privacy',section:'System'},
+      {label:'Settings',href:'/settings',section:'System'},
+      {label:'Audit Log',href:'/audit-log',section:'System'},
+      {label:'Playbooks',href:'/playbooks',section:'System'},
+      {label:'Revenue',href:'/products/current/revenue',section:'Product'},
+      {label:'Competitive Intel',href:'/products/current/competitive',section:'Product'},
+      {label:'Product DNA',href:'/products/current/dna',section:'Product'},
+    ];
+    let cmdIdx=0;
+    function openCmdPalette(){document.getElementById('cmd-overlay').style.display='block';var p=document.getElementById('cmd-palette');p.style.display='block';document.getElementById('cmd-input').focus();renderCmdResults(CMD_ROUTES);}
+    function closeCmdPalette(){document.getElementById('cmd-overlay').style.display='none';document.getElementById('cmd-palette').style.display='none';document.getElementById('cmd-input').value='';cmdIdx=0;}
+    function filterCmdPalette(q){var r=q?CMD_ROUTES.filter(function(x){return x.label.toLowerCase().includes(q.toLowerCase())||x.section.toLowerCase().includes(q.toLowerCase());}):CMD_ROUTES;cmdIdx=0;renderCmdResults(r);}
+    function renderCmdResults(routes){var el=document.getElementById('cmd-results');if(!routes.length){el.innerHTML='<div style="padding:16px 20px;color:#64748b;font-size:14px">No results</div>';return;}var html='',sec='';routes.slice(0,12).forEach(function(r,i){if(r.section!==sec){sec=r.section;html+='<div style="padding:4px 16px 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+sec+'</div>';}html+='<div class="cmd-item'+(i===cmdIdx?' cmd-selected':'')+'" data-href="'+r.href+'" onclick="location.href=\''+r.href+'\'" style="padding:8px 16px;cursor:pointer;font-size:14px;color:'+(i===cmdIdx?'#f1f5f9':'#cbd5e1')+';background:'+(i===cmdIdx?'rgba(255,255,255,0.07)':'transparent')+';transition:background 0.1s">'+r.label+'</div>';});el.innerHTML=html;}
+    function handleCmdKey(e){var items=document.querySelectorAll('.cmd-item');if(e.key==='ArrowDown'){e.preventDefault();cmdIdx=Math.min(cmdIdx+1,items.length-1);}else if(e.key==='ArrowUp'){e.preventDefault();cmdIdx=Math.max(cmdIdx-1,0);}else if(e.key==='Enter'){if(items[cmdIdx])location.href=items[cmdIdx].dataset.href;closeCmdPalette();return;}else if(e.key==='Escape'){closeCmdPalette();return;}items.forEach(function(el,i){el.style.background=i===cmdIdx?'rgba(255,255,255,0.07)':'transparent';el.style.color=i===cmdIdx?'#f1f5f9':'#cbd5e1';});}
+    document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openCmdPalette();}});
+  </script>
   <script>
     // Register service worker
     if ('serviceWorker' in navigator) {
@@ -184,124 +241,74 @@ function groupedSidebar(
   dnaCompletionPct: number,
   openPRCount: number,
 ): HtmlContent {
-  const check = canAccess ?? (() => true);
   const b = badges ?? { decisions_count: 0, has_overdue_audit: false, unread_signals: false, unseen_milestones: false, open_prs_count: 0, dna_completion: 0 };
 
-  const operateItems: NavItem[] = [
+  // Primary items — larger visual weight, no section header
+  const primaryItems: NavItem[] = [
     { key: 'dashboard', label: 'Signal', href: '/dashboard' },
-    { key: 'plan', label: 'Weekly Plan', href: '/plan' },
-    { key: 'lifecycle', label: 'Lifecycle', href: `/products/${productId}/lifecycle` },
+    { key: 'agents-briefings', label: 'Briefing', href: '/agents/briefings/latest', badge: 'NEW', badgeType: 'dot' },
+    { key: 'decisions', label: 'Decide', href: '/decisions', badge: b.decisions_count > 0 ? String(b.decisions_count) : undefined, badgeType: 'count' },
+    { key: 'agents-actions', label: 'Actions', href: '/agents/actions' },
   ];
 
-  const intelItems: NavItem[] = [
-    { key: 'decisions', label: 'Decisions', href: '/decisions', badge: b.decisions_count > 0 ? String(b.decisions_count) : undefined, badgeType: 'count' },
-    { key: 'timeline', label: 'Signal Timeline', href: '/signal/timeline' },
-    { key: 'digest', label: 'Digest', href: '/digest' },
-  ];
-
-  const productItems: NavItem[] = [
-    { key: 'audit', label: 'Audit', href: `/products/${productId}/audit`, badge: b.has_overdue_audit ? '●' : undefined, badgeType: 'dot' },
-    { key: 'revenue', label: 'Revenue', href: `/products/${productId}/revenue` },
-    { key: 'cohorts', label: 'Cohorts', href: `/products/${productId}/cohorts`, locked: !check('cohorts'), badgeType: 'lock' },
-    { key: 'competitive', label: 'Competitive', href: `/products/${productId}/competitive`, locked: !check('competitive'), badge: b.unread_signals ? '●' : undefined, badgeType: b.unread_signals ? 'dot' : 'lock' },
-  ];
-
-  const wisdomLocked = !check('wisdom');
-  const wisdomItems: NavItem[] = [
-    { key: 'dna', label: 'Product DNA', href: `/products/${productId}/dna`, badge: dnaCompletionPct < 60 ? `${dnaCompletionPct}%` : undefined, badgeType: 'pct', locked: wisdomLocked },
-    { key: 'failures', label: 'Failure Log', href: `/products/${productId}/failures`, locked: wisdomLocked },
-    { key: 'patterns', label: 'Patterns', href: `/products/${productId}/patterns`, locked: wisdomLocked },
-  ];
-
-  const fixLocked = !check('remediation');
-  const fixItems: NavItem[] = [
-    { key: 'remediation', label: 'Remediation', href: `/products/${productId}/remediation`, badge: openPRCount > 0 ? String(openPRCount) : undefined, badgeType: 'count', locked: fixLocked },
-  ];
-
-  const publishItems: NavItem[] = [
-    { key: 'journey', label: 'Journey', href: `/products/${productId}/journey`, badge: b.unseen_milestones ? '●' : undefined, badgeType: 'dot' },
-    { key: 'beta', label: 'Beta', href: '/beta' },
-  ];
-
-  // SCP Agents section — Sovereign Company Protocol
   const agentsItems: NavItem[] = [
-    { key: 'agents', label: 'Agent Roster', href: '/agents' },
-    { key: 'agents-briefings', label: 'CEO Briefing', href: '/agents/briefings/latest' },
-    { key: 'agents-evolve', label: 'Evolution', href: '/agents/evolve' },
-    { key: 'agents-wisdom', label: 'Wisdom Layer', href: '/agents/wisdom', locked: !check('wisdom') },
-    { key: 'agents-remediations', label: 'Remediations', href: '/agents/remediations' },
-    { key: 'agents-temporal', label: 'Temporal', href: '/agents/temporal', locked: !check('board_packet') },
-    { key: 'agents-constitution', label: 'Constitution', href: '/agents/constitution' },
-    // SCP v3: New capability layers
-    { key: 'agents-integrations', label: 'Integrations', href: '/agents/integrations' },
-    { key: 'agents-customers', label: 'Customers', href: '/agents/customers' },
-    { key: 'agents-messages', label: 'Agent Comms', href: '/agents/messages' },
-    { key: 'agents-experiments', label: 'Experiments', href: '/agents/experiments', locked: !check('wisdom') },
-    { key: 'agents-strategy', label: 'Strategy', href: '/agents/strategy', locked: !check('board_packet') },
-    // SCP v4: Intelligence & governance
-    { key: 'agents-inbox', label: 'Inbox', href: '/agents/inbox' },
-    { key: 'agents-wiki', label: 'Wiki', href: '/agents/wiki' },
-    { key: 'agents-okr', label: 'OKRs', href: '/agents/okr', locked: !check('wisdom') },
-    { key: 'agents-decisions', label: 'Decision Log', href: '/agents/decisions', locked: !check('board_packet') },
-    // SCP v5: Execution + accountability
-    { key: 'agents-actions', label: 'Action Queue', href: '/agents/actions' },
-    { key: 'agents-accuracy', label: 'Accuracy', href: '/agents/accuracy', locked: !check('wisdom') },
-    { key: 'agents-transparency', label: 'Transparency', href: '/agents/transparency', locked: !check('wisdom') },
-    // SCP v6: Debate + intelligence
-    { key: 'agents-debate', label: 'Debate', href: '/agents/debate', locked: !check('wisdom') },
-    { key: 'agents-intelligence', label: 'Intelligence', href: '/agents/intelligence', locked: !check('wisdom') },
+    { key: 'agents', label: 'Roster', href: '/agents' },
+    { key: 'agents-debate', label: 'Debate', href: '/agents/debate' },
+    { key: 'agents-accuracy', label: 'Accuracy', href: '/agents/accuracy' },
+    { key: 'agents-transparency', label: 'Transparency', href: '/agents/transparency' },
+    { key: 'agents-intelligence', label: 'Intelligence', href: '/agents/intelligence' },
+  ];
+
+  const forwardItems: NavItem[] = [
+    { key: 'scenarios', label: 'Scenarios', href: '/scenarios' },
+    { key: 'board', label: 'Investor Board', href: '/board' },
+    { key: 'exit', label: 'Exit', href: '/exit' },
+    { key: 'brief', label: 'Weekly Brief', href: '/brief' },
+  ];
+
+  const signalsItems: NavItem[] = [
+    { key: 'signals-multimodal', label: 'Multi-Modal', href: '/signals/multimodal' },
+    { key: 'network', label: 'Network', href: '/network' },
+    { key: 'memory', label: 'Memory', href: '/memory' },
+    { key: 'competitive', label: 'Competitive', href: `/products/${productId}/competitive` },
+  ];
+
+  const autonomyItems: NavItem[] = [
+    { key: 'playbooks-execution', label: 'Standing Orders', href: '/playbooks/execution' },
+    { key: 'ambient', label: 'Ambient', href: '/ambient' },
+    { key: 'roi', label: 'ROI', href: '/roi' },
+  ];
+
+  const systemItems: NavItem[] = [
+    { key: 'benchmarks', label: 'Benchmarks', href: '/benchmarks' },
+    { key: 'privacy', label: 'Privacy', href: '/privacy' },
   ];
 
   return html`
   <nav class="sidebar ${riskClass}">
-    ${sectionHeader('OPERATE')}
-    <ul class="sidebar-nav">${renderNavItems(operateItems, active)}</ul>
+    <button onclick="openCmdPalette()" style="display:flex;align-items:center;gap:6px;width:calc(100% - 24px);margin:10px 12px 14px;padding:7px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#94a3b8;font-size:13px;cursor:pointer;text-align:left;">
+      <span style="font-size:12px;opacity:0.7;">⌘K</span>
+      <span>Go anywhere</span>
+    </button>
 
-    ${sectionHeader('INTELLIGENCE')}
-    <ul class="sidebar-nav">${renderNavItems(intelItems, active)}</ul>
+    <ul class="sidebar-nav" style="margin-bottom:0.75rem;">${renderNavItems(primaryItems, active)}</ul>
 
-    ${sectionHeader('AGENTS')}
-    <ul class="sidebar-nav">${renderNavItems(agentsItems, active)}</ul>
+    <details open>
+      <summary style="list-style:none;cursor:pointer;">${sectionHeader('AGENTS')}</summary>
+      <ul class="sidebar-nav">${renderNavItems(agentsItems, active)}</ul>
+    </details>
 
-    ${sectionHeader('PRODUCT')}
-    <ul class="sidebar-nav">${renderNavItems(productItems, active)}</ul>
-
-    ${sectionHeader('WISDOM', wisdomLocked)}
-    <ul class="sidebar-nav">${renderNavItems(wisdomItems, active)}</ul>
-
-    ${sectionHeader('FIXES', fixLocked)}
-    <ul class="sidebar-nav">${renderNavItems(fixItems, active)}</ul>
-
-    ${sectionHeader('PUBLISH')}
-    <ul class="sidebar-nav">${renderNavItems(publishItems, active)}</ul>
-
-    ${sectionHeader('FORECASTING')}
-    <ul class="sidebar-nav">${renderNavItems([
-      { key: 'scenarios', label: 'Scenario Planner', href: '/scenarios', locked: !check('wisdom') },
-      { key: 'board', label: 'Investor Board', href: '/board', locked: !check('board_packet') },
-      { key: 'brief', label: 'Weekly Brief', href: '/brief' },
-      { key: 'exit', label: 'Exit Intelligence', href: '/exit', locked: !check('board_packet') },
-    ], active)}</ul>
+    ${sectionHeader('FORWARD')}
+    <ul class="sidebar-nav">${renderNavItems(forwardItems, active)}</ul>
 
     ${sectionHeader('SIGNALS')}
-    <ul class="sidebar-nav">${renderNavItems([
-      { key: 'signals-multimodal', label: 'Multi-Modal', href: '/signals/multimodal' },
-      { key: 'network', label: 'Network Intelligence', href: '/network' },
-      { key: 'memory', label: 'Company Memory', href: '/memory' },
-    ], active)}</ul>
+    <ul class="sidebar-nav">${renderNavItems(signalsItems, active)}</ul>
 
-    ${sectionHeader('AMBIENT')}
-    <ul class="sidebar-nav">${renderNavItems([
-      { key: 'ambient', label: 'Ambient Layer', href: '/ambient' },
-      { key: 'playbooks-execution', label: 'Standing Orders', href: '/playbooks/execution' },
-    ], active)}</ul>
+    ${sectionHeader('AUTONOMY')}
+    <ul class="sidebar-nav">${renderNavItems(autonomyItems, active)}</ul>
 
-    ${sectionHeader('BENCHMARKS')}
-    <ul class="sidebar-nav">${renderNavItems([
-      { key: 'benchmarks', label: 'Industry Benchmarks', href: '/benchmarks' },
-      { key: 'audit-log', label: 'Audit Log', href: '/audit-log', locked: !check('board_packet') },
-      { key: 'privacy', label: 'Privacy & Data', href: '/privacy' },
-    ], active)}</ul>
+    ${sectionHeader('SYSTEM')}
+    <ul class="sidebar-nav">${renderNavItems(systemItems, active)}</ul>
 
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
       <li><a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a></li>
