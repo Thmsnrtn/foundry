@@ -1,0 +1,450 @@
+// =============================================================================
+// FOUNDRY — M&A Readiness Assessment
+// Algorithmic scoring across 5 dimensions. No AI for scores — just rules.
+// =============================================================================
+
+import { nanoid } from 'nanoid';
+import { query } from '../../../db/client.js';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface MAReadinessScore {
+  id: string;
+  overall_score: number; // 0-10
+  revenue_quality_score: number;
+  ip_clarity_score: number;
+  team_retention_score: number;
+  integration_complexity_score: number;
+  customer_concentration_score: number;
+  ready_to_be_acquired: boolean;
+  key_gaps: string[];
+  target_acquirer_profile: string;
+  estimated_multiple_range: string;
+  assessed_at: string;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function clamp(val: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, val));
+}
+
+function parseJSONSafe<T>(value: string | null | undefined, fallback: T): T {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+// ─── Dimension Scorers ────────────────────────────────────────────────────────
+
+function scoreRevenueQuality(
+  nrr: number | null,
+  churnRate: number | null,
+  mrrGrowthHistory: number[],
+): number {
+  let points = 0;
+
+  // NRR: Net Revenue Retention
+  if (nrr !== null) {
+    if (nrr >= 110) points += 4;
+    else if (nrr >= 100) points += 3;
+    else if (nrr >= 90) points += 1;
+  } else {
+    points += 2; // neutral if unknown
+  }
+
+  // Churn
+  if (churnRate !== null) {
+    if (churnRate <= 2) points += 3;
+    else if (churnRate <= 3) points += 2;
+    else if (churnRate <= 5) points += 1;
+  } else {
+    points += 1;
+  }
+
+  // MRR growth consistency: at least 3 data points with positive growth
+  if (mrrGrowthHistory.length >= 3) {
+    const positiveMonths = mrrGrowthHistory.filter((g) => g > 0).length;
+    const consistency = positiveMonths / mrrGrowthHistory.length;
+    if (consistency >= 0.8) points += 3;
+    else if (consistency >= 0.6) points += 2;
+    else if (consistency >= 0.4) points += 1;
+  } else {
+    points += 1;
+  }
+
+  // Max raw = 10
+  return clamp((points / 10) * 10, 0, 10);
+}
+
+function scoreIPClarity(companyAgeDays: number): number {
+  // No way to auto-detect IP issues — use company age as proxy
+  // Older companies are more likely to have cleaned up IP
+  if (companyAgeDays >= 730) return 9.0; // 2+ years
+  if (companyAgeDays >= 365) return 8.0; // 1-2 years
+  if (companyAgeDays >= 180) return 7.0; // 6-12 months
+  return 6.0; // Early stage — IP likely not formalized
+}
+
+function scoreTeamRetention(
+  teamSize: number,
+  companyAgeDays: number,
+  hasFounderVesting: boolean,
+): number {
+  let points = 0;
+
+  // Larger teams = better distributed key-person risk
+  if (teamSize >= 10) points += 3;
+  else if (teamSize >= 5) points += 2;
+  else if (teamSize >= 3) points += 1;
+
+  // Company age as vesting proxy (founders approaching cliff = higher risk)
+  if (companyAgeDays >= 365) points += 3; // past typical 1-year cliff
+  else if (companyAgeDays >= 180) points += 2;
+  else points += 1;
+
+  // Vesting structure present
+  if (hasFounderVesting) points += 2;
+  else points += 1;
+
+  // Baseline: 2 for being in business
+  points += 2;
+
+  // Max raw = 10
+  return clamp((points / 10) * 10, 0, 10);
+}
+
+function scoreIntegrationComplexity(integrationCount: number): number {
+  // More integrations = more API-first = easier to integrate in M&A
+  // Paradox: too many integrations can add complexity too — cap at 8
+  if (integrationCount >= 10) return 8.0;
+  if (integrationCount >= 5) return 7.0;
+  if (integrationCount >= 2) return 6.0;
+  if (integrationCount >= 1) return 5.0;
+  return 4.0; // No integrations — uncertain acquirability
+}
+
+function scoreCustomerConcentration(
+  topCustomerMrrPct: number | null,
+  customerCount: number,
+): number {
+  // Good: no single customer > 20% of MRR
+  if (customerCount === 0) return 5.0; // no data
+
+  if (topCustomerMrrPct === null) {
+    // Estimate from customer count — many customers = lower concentration risk
+    if (customerCount >= 50) return 8.0;
+    if (customerCount >= 20) return 7.0;
+    if (customerCount >= 10) return 6.0;
+    return 5.0;
+  }
+
+  if (topCustomerMrrPct <= 10) return 9.0;
+  if (topCustomerMrrPct <= 20) return 7.0;
+  if (topCustomerMrrPct <= 30) return 5.0;
+  if (topCustomerMrrPct <= 50) return 3.0;
+  return 1.0; // Single customer risk
+}
+
+// ─── Gap Identification ───────────────────────────────────────────────────────
+
+function identifyGaps(scores: {
+  revenue_quality: number;
+  ip_clarity: number;
+  team_retention: number;
+  integration_complexity: number;
+  customer_concentration: number;
+}): string[] {
+  const gaps: string[] = [];
+
+  if (scores.revenue_quality < 7) {
+    gaps.push('Revenue quality needs improvement — target NRR > 110% and churn < 2% to attract premium acquirers');
+  }
+  if (scores.ip_clarity < 7) {
+    gaps.push('IP clarity is low — ensure all code, patents, and trademarks are properly assigned to the company');
+  }
+  if (scores.team_retention < 7) {
+    gaps.push('Team retention risk is elevated — ensure founders and key hires have proper vesting schedules');
+  }
+  if (scores.integration_complexity < 7) {
+    gaps.push('Limited integration ecosystem — building an API-first product and key integrations increases strategic value');
+  }
+  if (scores.customer_concentration < 7) {
+    gaps.push('Customer concentration risk — reduce dependency on top customers, target no single customer > 20% of MRR');
+  }
+
+  return gaps;
+}
+
+// ─── Acquirer Profile & Multiple Range ───────────────────────────────────────
+
+function deriveAcquirerProfile(
+  overall: number,
+  revenueQuality: number,
+  integrationScore: number,
+  mrr: number,
+): string {
+  if (mrr >= 100000 && revenueQuality >= 7) {
+    return 'Strategic acquirer (growth-stage tech company seeking recurring revenue and customer base)';
+  }
+  if (integrationScore >= 7) {
+    return 'Platform company looking to expand ecosystem and reduce integration build cost';
+  }
+  if (overall >= 7) {
+    return 'Vertical SaaS acquirer or PE-backed roll-up seeking proven product in your category';
+  }
+  return 'Acqui-hire or early-stage strategic buyer focused on technology and team';
+}
+
+function deriveMultipleRange(
+  overall: number,
+  revenueQuality: number,
+  mrr: number,
+): string {
+  const arr = mrr * 12;
+
+  if (arr < 100000) {
+    return '1-3x ARR (pre-scale, primarily acqui-hire value)';
+  }
+
+  if (overall >= 8 && revenueQuality >= 8) {
+    if (arr >= 1000000) return '8-15x ARR (premium: strong metrics, scale)';
+    return '6-10x ARR (strong metrics, approaching scale)';
+  }
+  if (overall >= 7) {
+    return '4-7x ARR (good profile, some gaps remain)';
+  }
+  if (overall >= 5) {
+    return '2-5x ARR (below-average readiness, gaps suppress multiple)';
+  }
+  return '1-3x ARR (significant gaps — multiple is heavily discounted)';
+}
+
+// ─── assessMAReadiness ────────────────────────────────────────────────────────
+
+export async function assessMAReadiness(productId: string): Promise<MAReadinessScore> {
+  // ── 1. Load latest metrics snapshot ──
+  let metricsRow: Record<string, unknown> = {};
+  try {
+    const res = await query(
+      'SELECT * FROM metric_snapshots WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 1',
+      [productId]
+    );
+    if (res.rows.length > 0) metricsRow = res.rows[0] as Record<string, unknown>;
+  } catch { /* ok */ }
+
+  const mrr = metricsRow.mrr_cents != null ? (metricsRow.mrr_cents as number) / 100 : 0;
+  const churnRate = metricsRow.churn_rate as number | null;
+  const customerCount = (metricsRow.customer_count as number) ?? 0;
+
+  // ── 2. Load historical MRR growth for consistency check ──
+  const mrrGrowthHistory: number[] = [];
+  try {
+    const res = await query(
+      `SELECT mrr_growth_pct FROM metric_snapshots
+       WHERE product_id=? AND mrr_growth_pct IS NOT NULL
+       ORDER BY snapshot_date DESC LIMIT 6`,
+      [productId]
+    );
+    for (const row of res.rows) {
+      mrrGrowthHistory.push((row as Record<string, unknown>).mrr_growth_pct as number);
+    }
+  } catch { /* ok */ }
+
+  // ── 3. Compute NRR proxy (use stored nrr if available, else derive) ──
+  let nrr: number | null = null;
+  try {
+    const res = await query(
+      `SELECT nrr FROM metric_snapshots
+       WHERE product_id=? AND nrr IS NOT NULL
+       ORDER BY snapshot_date DESC LIMIT 1`,
+      [productId]
+    );
+    if (res.rows.length > 0) {
+      nrr = (res.rows[0] as Record<string, unknown>).nrr as number;
+    }
+  } catch { /* ok */ }
+
+  // ── 4. Company age (from products table) ──
+  let companyAgeDays = 180; // default
+  try {
+    const res = await query(
+      'SELECT created_at FROM products WHERE id=?',
+      [productId]
+    );
+    if (res.rows.length > 0) {
+      const createdAt = (res.rows[0] as Record<string, unknown>).created_at as string;
+      const ageMs = Date.now() - new Date(createdAt).getTime();
+      companyAgeDays = Math.floor(ageMs / (1000 * 60 * 60 * 24));
+    }
+  } catch { /* ok */ }
+
+  // ── 5. Team size ──
+  let teamSize = 1;
+  let hasFounderVesting = false;
+  try {
+    const res = await query(
+      `SELECT COUNT(*) as cnt FROM team_members WHERE product_id=? AND status='active'`,
+      [productId]
+    );
+    teamSize = Math.max(1, ((res.rows[0] as Record<string, unknown>)?.cnt as number) ?? 1);
+    // Check for vesting info
+    const vestingRes = await query(
+      `SELECT COUNT(*) as cnt FROM team_members WHERE product_id=? AND vesting_schedule IS NOT NULL`,
+      [productId]
+    );
+    hasFounderVesting = ((vestingRes.rows[0] as Record<string, unknown>)?.cnt as number) > 0;
+  } catch { /* ok */ }
+
+  // ── 6. Integration count ──
+  let integrationCount = 0;
+  try {
+    const res = await query(
+      `SELECT COUNT(*) as cnt FROM integrations WHERE product_id=? AND status='active'`,
+      [productId]
+    );
+    integrationCount = ((res.rows[0] as Record<string, unknown>)?.cnt as number) ?? 0;
+  } catch { /* ok */ }
+
+  // ── 7. Customer concentration (top customer MRR % if available) ──
+  // We don't have per-customer MRR in our schema — estimate from count
+  const topCustomerMrrPct: number | null = null;
+
+  // ── 8. Score each dimension ──
+  const revenue_quality_score = parseFloat(
+    scoreRevenueQuality(nrr, churnRate, mrrGrowthHistory).toFixed(1)
+  );
+  const ip_clarity_score = parseFloat(
+    scoreIPClarity(companyAgeDays).toFixed(1)
+  );
+  const team_retention_score = parseFloat(
+    scoreTeamRetention(teamSize, companyAgeDays, hasFounderVesting).toFixed(1)
+  );
+  const integration_complexity_score = parseFloat(
+    scoreIntegrationComplexity(integrationCount).toFixed(1)
+  );
+  const customer_concentration_score = parseFloat(
+    scoreCustomerConcentration(topCustomerMrrPct, customerCount).toFixed(1)
+  );
+
+  // Weighted average (revenue quality and customer concentration weighted higher)
+  const overall_score = parseFloat((
+    (revenue_quality_score * 0.25) +
+    (ip_clarity_score * 0.15) +
+    (team_retention_score * 0.20) +
+    (integration_complexity_score * 0.15) +
+    (customer_concentration_score * 0.25)
+  ).toFixed(1));
+
+  const ready_to_be_acquired = overall_score >= 7.0;
+
+  const key_gaps = identifyGaps({
+    revenue_quality: revenue_quality_score,
+    ip_clarity: ip_clarity_score,
+    team_retention: team_retention_score,
+    integration_complexity: integration_complexity_score,
+    customer_concentration: customer_concentration_score,
+  });
+
+  const target_acquirer_profile = deriveAcquirerProfile(
+    overall_score,
+    revenue_quality_score,
+    integration_complexity_score,
+    mrr,
+  );
+
+  const estimated_multiple_range = deriveMultipleRange(
+    overall_score,
+    revenue_quality_score,
+    mrr,
+  );
+
+  const id = nanoid();
+  const assessed_at = new Date().toISOString();
+
+  await query(
+    `INSERT INTO ma_readiness_scores
+       (id, product_id, assessed_at, overall_score,
+        revenue_quality_score, ip_clarity_score, team_retention_score,
+        integration_complexity_score, customer_concentration_score,
+        ready_to_be_acquired, key_gaps_json, target_acquirer_profile, estimated_multiple_range)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      productId,
+      assessed_at,
+      overall_score,
+      revenue_quality_score,
+      ip_clarity_score,
+      team_retention_score,
+      integration_complexity_score,
+      customer_concentration_score,
+      ready_to_be_acquired ? 1 : 0,
+      JSON.stringify(key_gaps),
+      target_acquirer_profile,
+      estimated_multiple_range,
+    ]
+  );
+
+  return {
+    id,
+    overall_score,
+    revenue_quality_score,
+    ip_clarity_score,
+    team_retention_score,
+    integration_complexity_score,
+    customer_concentration_score,
+    ready_to_be_acquired,
+    key_gaps,
+    target_acquirer_profile,
+    estimated_multiple_range,
+    assessed_at,
+  };
+}
+
+// ─── getLatestMAScore ─────────────────────────────────────────────────────────
+
+export async function getLatestMAScore(productId: string): Promise<MAReadinessScore | null> {
+  const res = await query(
+    `SELECT * FROM ma_readiness_scores
+     WHERE product_id=?
+     ORDER BY assessed_at DESC LIMIT 1`,
+    [productId]
+  );
+  if (res.rows.length === 0) return null;
+  return rowToScore(res.rows[0] as Record<string, unknown>);
+}
+
+// ─── listMAScores ─────────────────────────────────────────────────────────────
+
+export async function listMAScores(productId: string): Promise<MAReadinessScore[]> {
+  const res = await query(
+    `SELECT * FROM ma_readiness_scores
+     WHERE product_id=?
+     ORDER BY assessed_at DESC LIMIT 20`,
+    [productId]
+  );
+  return res.rows.map((r) => rowToScore(r as Record<string, unknown>));
+}
+
+// ─── Row mapper ───────────────────────────────────────────────────────────────
+
+function rowToScore(row: Record<string, unknown>): MAReadinessScore {
+  return {
+    id: row.id as string,
+    overall_score: row.overall_score as number,
+    revenue_quality_score: row.revenue_quality_score as number,
+    ip_clarity_score: row.ip_clarity_score as number,
+    team_retention_score: row.team_retention_score as number,
+    integration_complexity_score: row.integration_complexity_score as number,
+    customer_concentration_score: row.customer_concentration_score as number,
+    ready_to_be_acquired: (row.ready_to_be_acquired as number) === 1,
+    key_gaps: parseJSONSafe<string[]>(row.key_gaps_json as string, []),
+    target_acquirer_profile: (row.target_acquirer_profile as string) ?? '',
+    estimated_multiple_range: (row.estimated_multiple_range as string) ?? '',
+    assessed_at: row.assessed_at as string,
+  };
+}
