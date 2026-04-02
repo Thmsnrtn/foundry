@@ -243,6 +243,10 @@ function groupedSidebar(
     { key: 'agents-wiki', label: 'Wiki', href: '/agents/wiki' },
     { key: 'agents-okr', label: 'OKRs', href: '/agents/okr', locked: !check('wisdom') },
     { key: 'agents-decisions', label: 'Decision Log', href: '/agents/decisions', locked: !check('board_packet') },
+    // SCP v5: Execution + accountability
+    { key: 'agents-actions', label: 'Action Queue', href: '/agents/actions' },
+    { key: 'agents-accuracy', label: 'Accuracy', href: '/agents/accuracy', locked: !check('wisdom') },
+    { key: 'agents-transparency', label: 'Transparency', href: '/agents/transparency', locked: !check('wisdom') },
   ];
 
   return html`
@@ -268,10 +272,18 @@ function groupedSidebar(
     ${sectionHeader('PUBLISH')}
     <ul class="sidebar-nav">${renderNavItems(publishItems, active)}</ul>
 
+    ${sectionHeader('FORECASTING')}
+    <ul class="sidebar-nav">${renderNavItems([
+      { key: 'scenarios', label: 'Scenario Planner', href: '/scenarios', locked: !check('wisdom') },
+      { key: 'board', label: 'Investor Board', href: '/board', locked: !check('board_packet') },
+      { key: 'brief', label: 'Weekly Brief', href: '/brief' },
+    ], active)}</ul>
+
     ${sectionHeader('BENCHMARKS')}
     <ul class="sidebar-nav">${renderNavItems([
       { key: 'benchmarks', label: 'Industry Benchmarks', href: '/benchmarks' },
       { key: 'audit-log', label: 'Audit Log', href: '/audit-log', locked: !check('board_packet') },
+      { key: 'privacy', label: 'Privacy & Data', href: '/privacy' },
     ], active)}</ul>
 
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">

@@ -21,6 +21,7 @@ import { authRoutes } from './routes/auth/clerk.js';
 // Dashboard routes (auth required)
 import { dashboardRoutes } from './routes/dashboard/index.js';
 import { onboardingRoutes } from './routes/dashboard/onboarding.js';
+import { onboardingChat } from './routes/dashboard/onboarding-chat.js';
 import { productRoutes } from './routes/dashboard/products.js';
 import { auditRoutes } from './routes/dashboard/audit.js';
 import { decisionRoutes } from './routes/dashboard/decisions.js';
@@ -74,6 +75,14 @@ import { agentsOkr } from './routes/dashboard/agents-okr.js';
 import { agentsDecisions } from './routes/dashboard/agents-decisions.js';
 import { benchmarks } from './routes/dashboard/benchmarks.js';
 import { auditLog } from './routes/dashboard/audit-log.js';
+// SCP v5: Gap-closing — execution, forecasting, investor layer, accuracy, privacy
+import { agentsActions } from './routes/dashboard/agents-actions.js';
+import { agentsAccuracy } from './routes/dashboard/agents-accuracy.js';
+import { agentsTransparency } from './routes/dashboard/agents-transparency.js';
+import { scenarios } from './routes/dashboard/scenarios.js';
+import { privacySettings } from './routes/dashboard/privacy.js';
+import { boardPacket } from './routes/dashboard/board-packet.js';
+import { weeklyBrief } from './routes/dashboard/weekly-brief.js';
 // REST API v1 (API key auth)
 import { apiV1 } from './api/v1/index.js';
 
@@ -210,6 +219,8 @@ app.route('/', ecosystemRoutes);
 // Apply auth middleware to all dashboard and API routes
 app.use('/dashboard/*', authMiddleware);
 app.use('/onboarding/*', authMiddleware);
+app.use('/setup', authMiddleware);
+app.use('/setup/*', authMiddleware);
 app.use('/products/*', authMiddleware);
 app.use('/decisions/*', authMiddleware);
 app.use('/api/decisions/*', authMiddleware);
@@ -240,10 +251,21 @@ app.use('/benchmarks', authMiddleware);
 app.use('/benchmarks/*', authMiddleware);
 app.use('/audit-log', authMiddleware);
 app.use('/audit-log/*', authMiddleware);
+app.use('/scenarios', authMiddleware);
+app.use('/scenarios/*', authMiddleware);
+app.use('/board', authMiddleware);
+app.use('/board/*', authMiddleware);
+app.use('/brief', authMiddleware);
+app.use('/brief/*', authMiddleware);
+app.use('/privacy', authMiddleware);
+app.use('/privacy/*', authMiddleware);
+app.use('/setup', authMiddleware);
+app.use('/setup/*', authMiddleware);
 
 // Dashboard routes
 app.route('/', dashboardRoutes);
 app.route('/', onboardingRoutes);
+app.route('/', onboardingChat);
 app.route('/', productRoutes);
 app.route('/', auditRoutes);
 app.route('/', decisionRoutes);
@@ -283,6 +305,14 @@ app.route('/agents/okr', agentsOkr);
 app.route('/agents/decisions', agentsDecisions);
 app.route('/benchmarks', benchmarks);
 app.route('/audit-log', auditLog);
+// SCP v5: Gap-closing features
+app.route('/agents/actions', agentsActions);
+app.route('/agents/accuracy', agentsAccuracy);
+app.route('/agents/transparency', agentsTransparency);
+app.route('/scenarios', scenarios);
+app.route('/privacy', privacySettings);
+app.route('/board', boardPacket);
+app.route('/brief', weeklyBrief);
 // REST API v1 (API key auth — no session needed)
 app.route('/api/v1', apiV1);
 

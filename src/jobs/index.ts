@@ -1353,6 +1353,74 @@ async function scpWebhookDeliveryCleanup(): Promise<void> {
   }
 }
 
+// ─── SCP v5: Prediction Accuracy Check — Daily 6:00 UTC ──────────────────────
+
+async function scpPredictionAccuracyCheck(): Promise<void> {
+  console.log('[JOB] scp_prediction_accuracy starting');
+  try {
+    const { measurePendingPredictions } = await import('../services/scp/accuracy/tracker.js');
+    const { query: dbQuery } = await import('../db/client.js');
+    const products = await dbQuery(`SELECT id FROM products WHERE scp_status='active' LIMIT 100`);
+    let totalMeasured = 0;
+    for (const row of products.rows) {
+      const productId = (row as Record<string, unknown>).id as string;
+      try {
+        const result = await measurePendingPredictions(productId);
+        totalMeasured += result.measured;
+      } catch { /* non-fatal per product */ }
+    }
+    console.log(`[scp_prediction_accuracy] Measured ${totalMeasured} predictions`);
+  } catch (err) {
+    console.error('[scp_prediction_accuracy] Error:', err);
+  }
+}
+
+// ─── SCP v5: Compressed Brief — Monday 7:00 UTC ───────────────────────────────
+
+async function scpCompressedBrief(): Promise<void> {
+  console.log('[JOB] scp_compressed_brief starting');
+  try {
+    const { generateCompressedWeeklyBrief } = await import('../services/scp/briefing/compressed.js');
+    const { query: dbQuery } = await import('../db/client.js');
+    const products = await dbQuery(`SELECT id FROM products WHERE scp_status='active' LIMIT 100`);
+    let generated = 0;
+    for (const row of products.rows) {
+      const productId = (row as Record<string, unknown>).id as string;
+      try {
+        await generateCompressedWeeklyBrief(productId);
+        generated++;
+      } catch { /* non-fatal per product */ }
+    }
+    console.log(`[scp_compressed_brief] Generated ${generated} compressed briefs`);
+  } catch (err) {
+    console.error('[scp_compressed_brief] Error:', err);
+  }
+}
+
+// ─── SCP v5: Scenario Refresh — Monday 5:00 UTC ───────────────────────────────
+
+async function scpScenarioRefresh(): Promise<void> {
+  console.log('[JOB] scp_scenario_refresh starting');
+  try {
+    const { generateScenariosForProduct } = await import('../services/scp/forecasting/runway.js');
+    const { query: dbQuery } = await import('../db/client.js');
+    const products = await dbQuery(
+      `SELECT id FROM products WHERE scp_status='active' LIMIT 100`
+    );
+    let generated = 0;
+    for (const row of products.rows) {
+      const productId = (row as Record<string, unknown>).id as string;
+      try {
+        await generateScenariosForProduct(productId);
+        generated++;
+      } catch { /* non-fatal per product */ }
+    }
+    console.log(`[scp_scenario_refresh] Generated scenarios for ${generated} products`);
+  } catch (err) {
+    console.error('[scp_scenario_refresh] Error:', err);
+  }
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1401,6 +1469,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_strategy_synthesis:  { fn: scpStrategySynthesis, schedule: '0 6 1 * *',    description: 'Generate monthly strategic synthesis for all products (1st of month)' },
   scp_integration_fabric_sync: { fn: scpIntegrationFabricSync, schedule: '0 * * * *', description: 'Sync PostHog and GitHub into integration fabric (every hour)' },
   scp_extended_integrations_sync: { fn: scpExtendedIntegrationsSync, schedule: '0 */2 * * *', description: 'Sync Sentry, Linear, Intercom, Slack integrations (every 2h)' },
+  scp_prediction_accuracy: { fn: scpPredictionAccuracyCheck, schedule: '0 6 * * *', description: 'Measure pending agent predictions against actual outcomes (daily 6:00 UTC)' },
+  scp_compressed_brief: { fn: scpCompressedBrief, schedule: '0 7 * * 1', description: 'Generate compressed weekly brief for all SCP products (Monday 7:00 UTC)' },
+  scp_scenario_refresh: { fn: scpScenarioRefresh, schedule: '0 5 * * 1', description: 'Refresh Monte Carlo runway scenarios for all SCP products (Monday 5:00 UTC)' },
   scp_benchmark_refresh: { fn: scpBenchmarkRefresh, schedule: '0 3 * * 0', description: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
   scp_decision_retrospectives: { fn: scpDecisionRetrospectives, schedule: '0 9 * * 1', description: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
   scp_wellbeing_focus_cleanup: { fn: scpWellbeingFocusCleanup, schedule: '0 0 * * *', description: 'Clear expired focus areas and vacation modes (daily midnight)' },

@@ -127,6 +127,8 @@ export async function generateBriefingsForAllProducts(): Promise<void> {
     try {
       await generateDailyBriefing(productId);
       generated++;
+      // Fire-and-forget: send briefing to Slack if connected
+      _sendBriefingToSlack(productId).catch(() => {});
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[scheduler] generateBriefing failed for ${productId}: ${msg}`);
@@ -134,4 +136,44 @@ export async function generateBriefingsForAllProducts(): Promise<void> {
   }
 
   console.log(`[scheduler] generateBriefingsForAllProducts complete. Generated: ${generated}/${result.rows.length}`);
+}
+
+// ─── Internal: Slack Briefing Delivery ────────────────────────────────────────
+
+async function _sendBriefingToSlack(productId: string): Promise<void> {
+  try {
+    const { sendAgentBriefing, isSlackConnected } = await import('../integration/slack.js');
+    const connected = await isSlackConnected(productId);
+    if (!connected) return;
+
+    // Load today's briefing
+    const { query: dbQuery } = await import('../../db/client.js');
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await dbQuery(
+      `SELECT * FROM briefings WHERE product_id=? AND DATE(generated_at)=? ORDER BY generated_at DESC LIMIT 1`,
+      [productId, today]
+    );
+    if (result.rows.length === 0) return;
+
+    const row = result.rows[0] as Record<string, unknown>;
+    const headline = (row.headline as string) ?? 'Daily briefing ready';
+    const healthScore = Number(row.overall_health_score ?? 70);
+
+    // Extract top 3 insights from agent contributions
+    let keyPoints: string[] = [];
+    try {
+      const contribs = JSON.parse(row.agent_contributions as string || '[]') as Array<Record<string, unknown>>;
+      keyPoints = contribs
+        .sort((a, b) => (b.priority_score as number ?? 0) - (a.priority_score as number ?? 0))
+        .slice(0, 3)
+        .map(c => (c.contribution as string ?? '').slice(0, 120));
+    } catch { /* non-fatal */ }
+
+    await sendAgentBriefing(productId, {
+      date: today,
+      health_score: healthScore,
+      headline,
+      key_points: keyPoints.length > 0 ? keyPoints : ['Briefing generated — view in Foundry for details'],
+    });
+  } catch { /* non-fatal */ }
 }

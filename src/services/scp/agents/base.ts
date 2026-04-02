@@ -335,6 +335,15 @@ export abstract class BaseAgent {
       this._markEventsProcessed(productId, agentName).catch(() => {});
     }
 
+    // Auto-extract predictions from agent output (v4 accuracy tracking)
+    import('../accuracy/calibrator.js').then(({ extractPredictionsFromAnalysis }) => {
+      extractPredictionsFromAnalysis(productId, agentName, sessionId, {
+        customerSignals: result.customerSignals,
+        outboundActions: result.outboundActions,
+        hypotheses: result.hypotheses,
+      }).catch(() => {});
+    }).catch(() => {});
+
     // 17. Trigger evolution check if there are candidates (fire-and-forget)
     if (result.evolutionCandidates.length > 0) {
       import('../evolution.js').then(({ checkEvolutionCandidates }) => {
