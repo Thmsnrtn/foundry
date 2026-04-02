@@ -93,6 +93,11 @@ import { networkIntelligence } from './routes/dashboard/network-intelligence.js'
 import { exitRoutes } from './routes/dashboard/exit.js';
 import { transcriptWebhooks } from './routes/api/webhooks/transcripts.js';
 import { voiceReplyWebhook } from './routes/api/webhooks/voice-reply.js';
+// SCP v7: ROI dashboard, founder intelligence, integration health, priority API
+import { roiDashboard } from './routes/dashboard/roi.js';
+import { founderIntelligence } from './routes/dashboard/founder-intelligence.js';
+import { integrationHealth } from './routes/dashboard/integration-health.js';
+import { priorityApi } from './routes/api/priority.js';
 // REST API v1 (API key auth)
 import { apiV1 } from './api/v1/index.js';
 
@@ -271,6 +276,13 @@ app.use('/privacy', authMiddleware);
 app.use('/privacy/*', authMiddleware);
 app.use('/setup', authMiddleware);
 app.use('/setup/*', authMiddleware);
+// SCP v7 auth
+app.use('/roi', authMiddleware);
+app.use('/roi/*', authMiddleware);
+app.use('/founder', authMiddleware);
+app.use('/founder/*', authMiddleware);
+app.use('/integrations/health', authMiddleware);
+app.use('/integrations/health/*', authMiddleware);
 // SCP v6 auth
 app.use('/memory', authMiddleware);
 app.use('/memory/*', authMiddleware);
@@ -345,6 +357,11 @@ app.route('/network', networkIntelligence);
 app.route('/exit', exitRoutes);
 app.route('/', transcriptWebhooks);
 app.route('/', voiceReplyWebhook);
+// SCP v7: ROI, founder intelligence, integration health, priority API (HTMX)
+app.route('/roi', roiDashboard);
+app.route('/founder', founderIntelligence);
+app.route('/integrations/health', integrationHealth);
+app.route('/', priorityApi);
 // REST API v1 (API key auth — no session needed)
 app.route('/api/v1', apiV1);
 

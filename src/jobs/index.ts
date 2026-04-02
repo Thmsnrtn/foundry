@@ -1506,6 +1506,100 @@ async function scpExecutionPlaybookEval(): Promise<void> {
   }
 }
 
+// ─── SCP v7: Signal Event Processing — Hourly ────────────────────────────────
+
+async function scpSignalEvents(): Promise<void> {
+  console.log('[JOB] scp_signal_events starting');
+  try {
+    const { query: dbQuery } = await import('../db/client.js');
+    const { processPendingSignalEvents } = await import('../services/scp/events/dispatcher.js');
+    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    let total = 0;
+    for (const row of products.rows) {
+      const productId = (row as Record<string, unknown>).id as string;
+      try {
+        const processed = await processPendingSignalEvents(productId);
+        total += processed;
+      } catch { /* non-fatal per product */ }
+    }
+    console.log(`[scp_signal_events] Processed ${total} signal events`);
+  } catch (err) {
+    console.error('[scp_signal_events] Error:', err);
+  }
+}
+
+// ─── SCP v7: Monthly ROI Computation — 1st of month 8:00 UTC ─────────────────
+
+async function scpROIMonthly(): Promise<void> {
+  console.log('[JOB] scp_roi_monthly starting');
+  try {
+    const { query: dbQuery } = await import('../db/client.js');
+    const { computeMonthlyROI } = await import('../services/scp/roi/calculator.js');
+    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    let computed = 0;
+    for (const row of products.rows) {
+      const productId = (row as Record<string, unknown>).id as string;
+      try {
+        await computeMonthlyROI(productId);
+        computed++;
+      } catch { /* non-fatal per product */ }
+    }
+    console.log(`[scp_roi_monthly] Computed ROI for ${computed} products`);
+  } catch (err) {
+    console.error('[scp_roi_monthly] Error:', err);
+  }
+}
+
+// ─── SCP v7: Founder State Assessment — Daily 7:00 UTC ───────────────────────
+
+async function scpFounderStateAssessment(): Promise<void> {
+  console.log('[JOB] scp_founder_state starting');
+  try {
+    const { query: dbQuery } = await import('../db/client.js');
+    const { detectBehavioralSignals, assessFounderState } = await import('../services/scp/founder/decision-quality.js');
+    const founders = await dbQuery(
+      `SELECT DISTINCT f.id FROM founders f
+       JOIN products p ON p.owner_id = f.id
+       WHERE p.scp_status = 'active'
+       LIMIT 100`
+    );
+    let assessed = 0;
+    for (const row of founders.rows) {
+      const founderId = (row as Record<string, unknown>).id as string;
+      try {
+        await detectBehavioralSignals(founderId);
+        await assessFounderState(founderId);
+        assessed++;
+      } catch { /* non-fatal per founder */ }
+    }
+    console.log(`[scp_founder_state] Assessed ${assessed} founders`);
+  } catch (err) {
+    console.error('[scp_founder_state] Error:', err);
+  }
+}
+
+// ─── SCP v7: Priority Queue Rebuild — Every 30 minutes ───────────────────────
+
+async function scpPriorityRebuild(): Promise<void> {
+  console.log('[JOB] scp_priority_rebuild starting');
+  try {
+    const { query: dbQuery } = await import('../db/client.js');
+    const { rebuildPriorityQueue } = await import('../services/scp/priority/ranker.js');
+    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    let total = 0;
+    for (const row of products.rows) {
+      const productId = (row as Record<string, unknown>).id as string;
+      try {
+        const inserted = await rebuildPriorityQueue(productId);
+        total += inserted;
+      } catch { /* non-fatal per product */ }
+    }
+    console.log(`[scp_priority_rebuild] Rebuilt ${total} priority actions`);
+  } catch (err) {
+    console.error('[scp_priority_rebuild] Error:', err);
+  }
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1565,4 +1659,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_decision_retrospectives: { fn: scpDecisionRetrospectives, schedule: '0 9 * * 1', description: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
   scp_wellbeing_focus_cleanup: { fn: scpWellbeingFocusCleanup, schedule: '0 0 * * *', description: 'Clear expired focus areas and vacation modes (daily midnight)' },
   scp_webhook_delivery_cleanup: { fn: scpWebhookDeliveryCleanup, schedule: '0 4 * * 0', description: 'Clean up old webhook delivery records (Sunday 4:00 UTC)' },
+  // SCP v7: Event bus, ROI, founder intelligence, priority queue
+  scp_signal_events:       { fn: scpSignalEvents,           schedule: '0 * * * *',   description: 'Process pending signal events and dispatch to target agents (hourly)' },
+  scp_roi_monthly:         { fn: scpROIMonthly,             schedule: '0 8 1 * *',   description: 'Compute monthly ROI summaries for all active products (1st of month 8:00 UTC)' },
+  scp_founder_state:       { fn: scpFounderStateAssessment, schedule: '0 7 * * *',   description: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)' },
+  scp_priority_rebuild:    { fn: scpPriorityRebuild,        schedule: '*/30 * * * *', description: 'Rebuild priority action queue for One Thing banner (every 30 min)' },
 };
