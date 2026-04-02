@@ -1421,6 +1421,91 @@ async function scpScenarioRefresh(): Promise<void> {
   }
 }
 
+// ─── SCP v6: Debate, Failure Pattern Scan, Prompt Evolution ──────────────────
+
+async function scpDebateRun(): Promise<void> {
+  console.log('[JOB] scp_debate_run starting');
+  try {
+    const { query } = await import('../db/client.js');
+    const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
+    const today = new Date().toISOString().slice(0, 10);
+    let ran = 0;
+    for (const row of rows.rows) {
+      const productId = String((row as Record<string, unknown>)['product_id']);
+      try {
+        const { runDebateForProduct } = await import('../services/scp/debate/orchestrator.js');
+        await runDebateForProduct(productId, today);
+        ran++;
+      } catch { /* non-fatal per product */ }
+    }
+    console.log(`[scp_debate_run] Ran debate for ${ran} products`);
+  } catch (err) {
+    console.error('[scp_debate_run] Error:', err);
+  }
+}
+
+async function scpFailurePatternScan(): Promise<void> {
+  console.log('[JOB] scp_failure_pattern_scan starting');
+  try {
+    const { query } = await import('../db/client.js');
+    const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
+    let scanned = 0;
+    for (const row of rows.rows) {
+      const productId = String((row as Record<string, unknown>)['product_id']);
+      try {
+        const { seedDefaultPatterns, scanForFailurePatterns } = await import('../services/network/failure-library.js');
+        await seedDefaultPatterns();
+        await scanForFailurePatterns(productId);
+        scanned++;
+      } catch { /* non-fatal */ }
+    }
+    console.log(`[scp_failure_pattern_scan] Scanned ${scanned} products`);
+  } catch (err) {
+    console.error('[scp_failure_pattern_scan] Error:', err);
+  }
+}
+
+async function scpPromptEvolution(): Promise<void> {
+  console.log('[JOB] scp_prompt_evolution starting');
+  try {
+    const { query } = await import('../db/client.js');
+    const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
+    let evolved = 0;
+    for (const row of rows.rows) {
+      const productId = String((row as Record<string, unknown>)['product_id']);
+      try {
+        const { generatePromptMutations, recordMutationOutcome } = await import('../services/scp/accuracy/prompt-evolver.js');
+        await recordMutationOutcome(productId, '');  // update outcome stats for active mutations
+        await generatePromptMutations(productId);
+        evolved++;
+      } catch { /* non-fatal */ }
+    }
+    console.log(`[scp_prompt_evolution] Processed ${evolved} products`);
+  } catch (err) {
+    console.error('[scp_prompt_evolution] Error:', err);
+  }
+}
+
+async function scpExecutionPlaybookEval(): Promise<void> {
+  console.log('[JOB] scp_playbook_eval starting');
+  try {
+    const { query } = await import('../db/client.js');
+    const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
+    let triggered = 0;
+    for (const row of rows.rows) {
+      const productId = String((row as Record<string, unknown>)['product_id']);
+      try {
+        const { evaluatePlaybooksForProduct } = await import('../services/scp/playbooks/execution-engine.js');
+        const result = await evaluatePlaybooksForProduct(productId);
+        triggered += result.triggered;
+      } catch { /* non-fatal */ }
+    }
+    console.log(`[scp_playbook_eval] Triggered ${triggered} playbook actions`);
+  } catch (err) {
+    console.error('[scp_playbook_eval] Error:', err);
+  }
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1472,6 +1557,10 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_prediction_accuracy: { fn: scpPredictionAccuracyCheck, schedule: '0 6 * * *', description: 'Measure pending agent predictions against actual outcomes (daily 6:00 UTC)' },
   scp_compressed_brief: { fn: scpCompressedBrief, schedule: '0 7 * * 1', description: 'Generate compressed weekly brief for all SCP products (Monday 7:00 UTC)' },
   scp_scenario_refresh: { fn: scpScenarioRefresh, schedule: '0 5 * * 1', description: 'Refresh Monte Carlo runway scenarios for all SCP products (Monday 5:00 UTC)' },
+  scp_debate_run: { fn: scpDebateRun, schedule: '0 8 * * *', description: 'Run challenger/synthesizer debate pass after daily agent runs (daily 8:00 UTC)' },
+  scp_failure_pattern_scan: { fn: scpFailurePatternScan, schedule: '0 9 * * *', description: 'Scan all products for failure pattern matches (daily 9:00 UTC)' },
+  scp_prompt_evolution: { fn: scpPromptEvolution, schedule: '0 4 * * 0', description: 'Generate prompt mutation suggestions for underperforming agents (Sunday 4:00 UTC)' },
+  scp_playbook_eval: { fn: scpExecutionPlaybookEval, schedule: '0 * * * *', description: 'Evaluate execution playbook conditions for all active products (hourly)' },
   scp_benchmark_refresh: { fn: scpBenchmarkRefresh, schedule: '0 3 * * 0', description: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
   scp_decision_retrospectives: { fn: scpDecisionRetrospectives, schedule: '0 9 * * 1', description: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
   scp_wellbeing_focus_cleanup: { fn: scpWellbeingFocusCleanup, schedule: '0 0 * * *', description: 'Clear expired focus areas and vacation modes (daily midnight)' },

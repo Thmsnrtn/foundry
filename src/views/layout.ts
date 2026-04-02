@@ -247,6 +247,9 @@ function groupedSidebar(
     { key: 'agents-actions', label: 'Action Queue', href: '/agents/actions' },
     { key: 'agents-accuracy', label: 'Accuracy', href: '/agents/accuracy', locked: !check('wisdom') },
     { key: 'agents-transparency', label: 'Transparency', href: '/agents/transparency', locked: !check('wisdom') },
+    // SCP v6: Debate + intelligence
+    { key: 'agents-debate', label: 'Debate', href: '/agents/debate', locked: !check('wisdom') },
+    { key: 'agents-intelligence', label: 'Intelligence', href: '/agents/intelligence', locked: !check('wisdom') },
   ];
 
   return html`
@@ -277,6 +280,20 @@ function groupedSidebar(
       { key: 'scenarios', label: 'Scenario Planner', href: '/scenarios', locked: !check('wisdom') },
       { key: 'board', label: 'Investor Board', href: '/board', locked: !check('board_packet') },
       { key: 'brief', label: 'Weekly Brief', href: '/brief' },
+      { key: 'exit', label: 'Exit Intelligence', href: '/exit', locked: !check('board_packet') },
+    ], active)}</ul>
+
+    ${sectionHeader('SIGNALS')}
+    <ul class="sidebar-nav">${renderNavItems([
+      { key: 'signals-multimodal', label: 'Multi-Modal', href: '/signals/multimodal' },
+      { key: 'network', label: 'Network Intelligence', href: '/network' },
+      { key: 'memory', label: 'Company Memory', href: '/memory' },
+    ], active)}</ul>
+
+    ${sectionHeader('AMBIENT')}
+    <ul class="sidebar-nav">${renderNavItems([
+      { key: 'ambient', label: 'Ambient Layer', href: '/ambient' },
+      { key: 'playbooks-execution', label: 'Standing Orders', href: '/playbooks/execution' },
     ], active)}</ul>
 
     ${sectionHeader('BENCHMARKS')}

@@ -83,6 +83,17 @@ import { scenarios } from './routes/dashboard/scenarios.js';
 import { privacySettings } from './routes/dashboard/privacy.js';
 import { boardPacket } from './routes/dashboard/board-packet.js';
 import { weeklyBrief } from './routes/dashboard/weekly-brief.js';
+// SCP v6: Full evolved platform
+import { agentsDebate } from './routes/dashboard/agents-debate.js';
+import { executionPlaybooks } from './routes/dashboard/execution-playbooks.js';
+import { memoryGraph } from './routes/dashboard/memory.js';
+import { agentIntelligence } from './routes/dashboard/agent-intelligence.js';
+import { multimodalSignals } from './routes/dashboard/signals-multimodal.js';
+import { ambientRoutes } from './routes/dashboard/ambient.js';
+import { networkIntelligence } from './routes/dashboard/network-intelligence.js';
+import { exitRoutes } from './routes/dashboard/exit.js';
+import { transcriptWebhooks } from './routes/api/webhooks/transcripts.js';
+import { voiceReplyWebhook } from './routes/api/webhooks/voice-reply.js';
 // REST API v1 (API key auth)
 import { apiV1 } from './api/v1/index.js';
 
@@ -261,6 +272,17 @@ app.use('/privacy', authMiddleware);
 app.use('/privacy/*', authMiddleware);
 app.use('/setup', authMiddleware);
 app.use('/setup/*', authMiddleware);
+// SCP v6 auth
+app.use('/memory', authMiddleware);
+app.use('/memory/*', authMiddleware);
+app.use('/signals/multimodal', authMiddleware);
+app.use('/signals/multimodal/*', authMiddleware);
+app.use('/ambient', authMiddleware);
+app.use('/ambient/*', authMiddleware);
+app.use('/network', authMiddleware);
+app.use('/network/*', authMiddleware);
+app.use('/exit', authMiddleware);
+app.use('/exit/*', authMiddleware);
 
 // Dashboard routes
 app.route('/', dashboardRoutes);
@@ -313,6 +335,17 @@ app.route('/scenarios', scenarios);
 app.route('/privacy', privacySettings);
 app.route('/board', boardPacket);
 app.route('/brief', weeklyBrief);
+// SCP v6: Full evolved platform
+app.route('/agents/debate', agentsDebate);
+app.route('/agents/intelligence', agentIntelligence);
+app.route('/playbooks/execution', executionPlaybooks);
+app.route('/memory', memoryGraph);
+app.route('/signals/multimodal', multimodalSignals);
+app.route('/ambient', ambientRoutes);
+app.route('/network', networkIntelligence);
+app.route('/exit', exitRoutes);
+app.route('/', transcriptWebhooks);
+app.route('/', voiceReplyWebhook);
 // REST API v1 (API key auth — no session needed)
 app.route('/api/v1', apiV1);
 
