@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
-import { createCheckoutSession } from '../../services/billing/stripe.js';
+import { createCheckoutSession, cancelSubscription } from '../../services/billing/stripe.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { settingsPage } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
@@ -283,4 +283,58 @@ settingsRoutes.get('/settings/usage', async (c) => {
     usage: usageByProduct,
     total_cost_cents: usageByProduct.reduce((sum, p) => sum + p.cost_cents, 0),
   });
+});
+
+// ─── Cancel Subscription ────────────────────────────────────────────────────
+
+settingsRoutes.post('/settings/cancel-subscription', async (c) => {
+  const founder = c.get('founder');
+
+  if (!founder.stripe_customer_id) {
+    return respondWithRedirectOrJson(c, '/settings?error=no_subscription', { error: 'No active subscription' }, 400);
+  }
+
+  // Find active subscription from Stripe
+  try {
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? '', { apiVersion: '2023-10-16' });
+    const subscriptions = await stripe.subscriptions.list({
+      customer: founder.stripe_customer_id,
+      status: 'active',
+      limit: 1,
+    });
+
+    if (subscriptions.data.length === 0) {
+      return respondWithRedirectOrJson(c, '/settings?error=no_active_subscription', { error: 'No active subscription found' }, 400);
+    }
+
+    // Cancel at end of billing period (not immediately)
+    await stripe.subscriptions.update(subscriptions.data[0].id, {
+      cancel_at_period_end: true,
+    });
+
+    log.info('Subscription cancelled at period end', { founderId: founder.id, subscriptionId: subscriptions.data[0].id });
+
+    return respondWithRedirectOrJson(c, '/settings?cancelled=1', {
+      status: 'cancelled',
+      message: 'Your subscription will end at the end of the current billing period. You retain access until then.',
+    });
+  } catch (err) {
+    log.error('Subscription cancellation failed', err, { founderId: founder.id });
+    return respondWithRedirectOrJson(c, '/settings?error=cancel_failed', { error: 'Cancellation failed. Please try again or contact support.' }, 500);
+  }
+});
+
+// ─── Cancel Deletion Request ────────────────────────────────────────────────
+
+settingsRoutes.post('/settings/cancel-deletion', async (c) => {
+  const founder = c.get('founder');
+
+  const result = await query(
+    "UPDATE deletion_requests SET status = 'cancelled' WHERE founder_id = ? AND status IN ('pending', 'confirmed')",
+    [founder.id]
+  );
+
+  log.info('Deletion request cancelled', { founderId: founder.id });
+  return respondWithRedirectOrJson(c, '/settings?deletion_cancelled=1', { status: 'cancelled' });
 });

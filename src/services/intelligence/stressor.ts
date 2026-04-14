@@ -112,6 +112,54 @@ export async function identifyStressors(inputs: StressorInputs): Promise<Stresso
     }
   }
 
+  // 5. Raw churn rate stressor (catches high churn even without cohort data)
+  if (inputs.currentMetrics?.churn_rate != null) {
+    const churnRate = inputs.currentMetrics.churn_rate as number;
+    if (churnRate >= 0.15) {
+      items.push({
+        name: 'Monthly churn rate critical',
+        signal: `Churn rate at ${(churnRate * 100).toFixed(1)}% — unsustainable for growth`,
+        timeframe_days: 30,
+        neutralizing_action: 'Conduct exit interviews with recent churns. Identify top 3 churn reasons.',
+        severity: churnRate >= 0.20 ? 'critical' : 'elevated',
+        competitive_correlation: null,
+      });
+    } else if (churnRate >= 0.08) {
+      items.push({
+        name: 'Churn rate elevated',
+        signal: `Churn rate at ${(churnRate * 100).toFixed(1)}% — monitor closely`,
+        timeframe_days: 60,
+        neutralizing_action: 'Review onboarding completion rates and feature adoption.',
+        severity: 'watch',
+        competitive_correlation: null,
+      });
+    }
+  }
+
+  // 6. Raw retention stressor (works without cohort data)
+  if (inputs.currentMetrics?.day_30_retention != null) {
+    const retention = inputs.currentMetrics.day_30_retention as number;
+    if (retention < 0.30) {
+      items.push({
+        name: 'Day-30 retention critically low',
+        signal: `Only ${(retention * 100).toFixed(0)}% of users return by day 30`,
+        timeframe_days: 30,
+        neutralizing_action: 'Identify activation gaps. Users who complete [key action] retain 2x better.',
+        severity: 'critical',
+        competitive_correlation: null,
+      });
+    } else if (retention < 0.50) {
+      items.push({
+        name: 'Day-30 retention below average',
+        signal: `${(retention * 100).toFixed(0)}% day-30 retention — below SaaS average of ~50%`,
+        timeframe_days: 60,
+        neutralizing_action: 'Map the retention curve. Focus on day 1-7 activation improvements.',
+        severity: 'elevated',
+        competitive_correlation: null,
+      });
+    }
+  }
+
   // Enrich with failure context
   for (const item of items) {
     const category = mapStressorToFailureCategory(item.name);

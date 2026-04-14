@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { listRepos } from '../../services/audit/github.js';
@@ -48,7 +49,7 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, '', 'Select Repository', undefined, c);
   const code = c.req.query('code');
-  if (!code) return c.json({ error: 'Missing code' }, 400);
+  if (!code) return c.redirect('/onboarding?error=github_denied');
 
   const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
@@ -60,7 +61,7 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
     }),
   });
   const tokenData = await tokenResponse.json() as { access_token?: string; error?: string };
-  if (!tokenData.access_token) return c.json({ error: 'GitHub auth failed' }, 400);
+  if (!tokenData.access_token) return c.redirect('/onboarding?error=github_auth_failed');
 
   const repos = await listRepos(tokenData.access_token);
 
@@ -113,6 +114,63 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   );
 
   return c.redirect(`/onboarding/audit?product_id=${productId}`);
+});
+
+// Skip GitHub — create product without repo
+onboardingRoutes.get('/onboarding/skip-github', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, '', 'Name Your Product', undefined, c);
+  const content = html`
+  <div class="onboarding-steps">
+    <div class="step-card">
+      <h2><span class="step-number">1</span> Name Your Product</h2>
+      <p>You can connect a GitHub repo later. For now, let's set up Foundry for revenue intelligence and decision management.</p>
+      <form method="POST" action="/onboarding/create-manual">
+        <div class="form-group">
+          <label for="product_name">Product Name</label>
+          <input type="text" name="product_name" id="product_name" placeholder="My SaaS Product" required minlength="1" maxlength="100" />
+        </div>
+        <div class="form-group">
+          <label for="market_category">Market Category (optional)</label>
+          <select name="market_category" id="market_category">
+            <option value="">Select...</option>
+            <option value="developer_tools">Developer Tools</option>
+            <option value="marketing">Marketing</option>
+            <option value="sales">Sales</option>
+            <option value="productivity">Productivity</option>
+            <option value="analytics">Analytics</option>
+            <option value="fintech">Fintech</option>
+            <option value="healthcare">Healthcare</option>
+            <option value="education">Education</option>
+            <option value="ecommerce">E-commerce</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Create Product</button>
+      </form>
+    </div>
+  </div>`;
+  return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
+});
+
+onboardingRoutes.post('/onboarding/create-manual', async (c) => {
+  const founder = c.get('founder');
+  const body = await parseBody(c);
+  const productName = (body.product_name as string ?? '').trim();
+  if (!productName) return c.redirect('/onboarding/skip-github?error=name_required');
+
+  const productId = nanoid();
+  await query(
+    `INSERT INTO products (id, name, owner_id, market_category) VALUES (?, ?, ?, ?)`,
+    [productId, productName, founder.id, (body.market_category as string) || null]
+  );
+  await query(
+    `INSERT INTO lifecycle_state (product_id, current_prompt, risk_state) VALUES (?, 'prompt_4', 'green')`,
+    [productId]
+  );
+
+  // Skip to prompt_4 (Intelligence Activation) since no audit is possible
+  return c.redirect('/dashboard');
 });
 
 // Step 4: Identify competitors

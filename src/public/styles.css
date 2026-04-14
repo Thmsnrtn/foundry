@@ -480,7 +480,7 @@ p { margin-bottom: 0.5rem; }
   .composite-score { font-size: 2.25rem; }
 
   .tour-card { width: calc(100vw - 32px); bottom: 16px; left: 16px; transform: none; }
-  .notif-dropdown { width: calc(100vw - 32px); right: -60px; }
+  .notif-dropdown { width: calc(100vw - 32px); right: 0; left: auto; max-width: 320px; }
   .milestone-toast { right: 12px; left: 12px; max-width: none; }
 
   .btn { padding: 0.6rem 1rem; min-height: 44px; }

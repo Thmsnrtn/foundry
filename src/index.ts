@@ -22,6 +22,7 @@ import { csrfProtection } from './middleware/csrf.js';
 
 // Public routes (no auth)
 import { landingRoutes, pricingRoutes, caseStudyRoutes } from './routes/public/landing.js';
+import { legalRoutes } from './routes/public/legal.js';
 
 // Auth routes
 import { authRoutes } from './routes/auth/clerk.js';
@@ -133,6 +134,7 @@ app.route('/', landingRoutes);
 app.route('/', pricingRoutes);
 app.route('/', caseStudyRoutes);
 app.route('/', authRoutes);
+app.route('/', legalRoutes);
 
 // ─── Stripe Webhook (raw body, no auth) ──────────────────────────────────────
 

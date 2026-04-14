@@ -131,7 +131,7 @@ landingRoutes.get('/', (c) => {
       <a href="/auth/signup" class="btn btn-primary" style="font-size:1rem;padding:0.75rem 2rem;">Start Free Audit</a>
     </div>
 
-    <div class="page-footer">Foundry — Autonomous Business Intelligence for SaaS Founders</div>
+    <div class="page-footer">Foundry — Autonomous Business Intelligence for SaaS Founders<br/><a href="/privacy" style="color:var(--color-text-faint);">Privacy</a> · <a href="/terms" style="color:var(--color-text-faint);">Terms</a></div>
   `));
 });
 

@@ -705,6 +705,10 @@ function onboardingGitHub(githubUrl: string): HtmlContent {
     <h2><span class="step-number">1</span> Connect GitHub</h2>
     <p>Foundry reads your codebase to run a ten-dimension product audit. We need read-only access to your repository.</p>
     <a href="${githubUrl}" class="btn btn-primary" style="margin-top:1rem;">Connect GitHub →</a>
+    <div style="margin-top:1.5rem;padding-top:1rem;border-top:1px solid var(--color-border-subtle);">
+      <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:0.5rem;">No GitHub repo? You can still use Foundry for revenue intelligence, decision management, and competitive monitoring.</p>
+      <a href="/onboarding/skip-github" class="btn btn-secondary btn-sm">Skip GitHub — Set Up Manually</a>
+    </div>
   </div>`;
 }
 

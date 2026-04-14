@@ -192,3 +192,103 @@ v1Routes.get('/v1/products/:id/health', async (c) => {
   const score = await calculateHealthScore(productId);
   return c.json({ health: score });
 });
+
+// Trigger audit via API
+v1Routes.post('/v1/products/:id/audit/run', async (c) => {
+  const founder = c.get('founder');
+  const productId = c.req.param('id');
+  const check = await getProductByOwner(productId, founder.id);
+  if (check.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  const product = check.rows[0] as Record<string, unknown>;
+  if (!product.github_repo_owner || !product.github_repo_name || !product.github_access_token) {
+    return c.json({ error: 'GitHub repository not connected. Audit requires a connected repo.' }, 400);
+  }
+
+  // Import audit engine dynamically to avoid circular deps
+  const { runAudit } = await import('../../services/audit/engine.js');
+  const priorAudit = await getLatestAudit(productId);
+  const runType = priorAudit.rows.length > 0 ? 'post_remediation' as const : 'initial' as const;
+
+  const audit = await runAudit({
+    id: product.id as string, name: product.name as string, owner_id: product.owner_id as string,
+    github_repo_url: product.github_repo_url as string | null,
+    github_repo_owner: product.github_repo_owner as string | null,
+    github_repo_name: product.github_repo_name as string | null,
+    github_access_token: product.github_access_token as string | null,
+    stack_description: null, market_category: null,
+    created_at: product.created_at as string, updated_at: product.updated_at as string,
+    status: 'active',
+  }, runType);
+
+  return c.json({ audit_id: audit.id, composite: audit.composite, verdict: audit.verdict, status: 'completed' }, 201);
+});
+
+// Create decision via API
+v1Routes.post('/v1/products/:id/decisions', async (c) => {
+  const founder = c.get('founder');
+  const productId = c.req.param('id');
+  const check = await getProductByOwner(productId, founder.id);
+  if (check.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  const body = validate(reportMetricsSchema, await c.req.json()); // reuse for now; TODO: decision schema
+  // Actually, let's validate with a proper schema
+  const { z } = await import('zod');
+  const schema = z.object({
+    category: z.enum(['urgent', 'strategic', 'product', 'marketing', 'informational']),
+    what: z.string().min(1).max(500),
+    why_now: z.string().min(1).max(2000),
+    options: z.array(z.object({ label: z.string(), description: z.string().optional(), trade_offs: z.string().optional() })).min(2).max(6).optional(),
+    deadline: z.string().optional(),
+  });
+  const decision = schema.parse(await c.req.json());
+
+  const decisionId = nanoid();
+  await query(
+    `INSERT INTO decisions (id, product_id, category, gate, what, why_now, options, deadline, status)
+     VALUES (?, ?, ?, 3, ?, ?, ?, ?, 'pending')`,
+    [decisionId, productId, decision.category, decision.what, decision.why_now,
+     decision.options ? JSON.stringify(decision.options) : null, decision.deadline ?? null]
+  );
+  return c.json({ decision_id: decisionId, status: 'created' }, 201);
+});
+
+// Resolve decision via API
+v1Routes.post('/v1/decisions/:id/resolve', async (c) => {
+  const founder = c.get('founder');
+  const decisionId = c.req.param('id');
+
+  const result = await query(
+    `SELECT d.product_id, d.gate FROM decisions d JOIN products p ON d.product_id = p.id WHERE d.id = ? AND p.owner_id = ?`,
+    [decisionId, founder.id]
+  );
+  if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  const { resolveDecision } = await import('../../services/decisions/queue.js');
+  const body = validate(reportMetricsSchema, {}); // placeholder
+  // Actually parse properly:
+  const raw = await c.req.json() as { chosen_option: string; resolution_reasoning?: string };
+  if (!raw.chosen_option) return c.json({ error: 'chosen_option is required' }, 400);
+
+  const row = result.rows[0] as Record<string, unknown>;
+  await resolveDecision(decisionId, row.product_id as string, raw.chosen_option, 'api');
+
+  if (raw.resolution_reasoning) {
+    await query('UPDATE decisions SET resolution_reasoning = ? WHERE id = ?', [raw.resolution_reasoning, decisionId]);
+  }
+  return c.json({ status: 'resolved' });
+});
+
+// Get digest data as JSON
+v1Routes.get('/v1/products/:id/digest', async (c) => {
+  const founder = c.get('founder');
+  const productId = c.req.param('id');
+  const check = await getProductByOwner(productId, founder.id);
+  if (check.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  const { generateDigest } = await import('../../services/digest/generator.js');
+  const ls = await query('SELECT risk_state FROM lifecycle_state WHERE product_id = ?', [productId]);
+  const riskState = ((ls.rows[0] as Record<string, string>)?.risk_state ?? 'green') as 'green' | 'yellow' | 'red';
+  const digest = await generateDigest(productId, riskState, 'weekly');
+  return c.json({ digest });
+});
