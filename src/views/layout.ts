@@ -180,6 +180,7 @@ function groupedSidebar(
   const intelItems: NavItem[] = [
     { key: 'ask', label: 'Ask Foundry', href: '/dashboard/ask' },
     { key: 'decisions', label: 'Decisions', href: '/decisions', badge: b.decisions_count > 0 ? String(b.decisions_count) : undefined, badgeType: 'count' },
+    { key: 'insights', label: 'Insights', href: `/products/${productId}/insights` },
     { key: 'digest', label: 'Digest', href: '/digest' },
   ];
 

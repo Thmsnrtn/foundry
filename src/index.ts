@@ -44,6 +44,9 @@ import { revenueRoutes } from './routes/dashboard/revenue.js';
 import { apiDocsRoutes } from './routes/dashboard/api-docs.js';
 import { feedPageRoutes } from './routes/dashboard/feed.js';
 import { askPageRoutes } from './routes/dashboard/ask.js';
+import { integrationRoutes } from './routes/dashboard/integrations.js';
+import { portfolioRoutes } from './routes/dashboard/portfolio.js';
+import { insightRoutes } from './routes/dashboard/insights.js';
 
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
@@ -60,6 +63,8 @@ import { ecosystemRoutes } from './routes/internal/ecosystem.js';
 
 // Public API v1 (API key auth)
 import { v1Routes, apiKeyRoutes } from './routes/v1/index.js';
+import { sseRoutes } from './routes/api/events.js';
+import { widgetRoutes } from './routes/api/widget.js';
 
 // Stripe webhook (raw body needed)
 import { handleWebhook } from './services/billing/stripe.js';
@@ -152,8 +157,9 @@ app.post('/webhooks/stripe', async (c) => {
 
 // ─── Internal Routes ─────────────────────────────────────────────────────────
 
-// Health check is public
+// Health check and public widget routes (no auth)
 app.route('/', healthRoutes);
+app.route('/', widgetRoutes);
 
 // All other internal routes require ecosystem service key
 app.use('/internal/*', async (c, next) => {
@@ -203,6 +209,9 @@ app.route('/', revenueRoutes);
 app.route('/', apiDocsRoutes);
 app.route('/', feedPageRoutes);
 app.route('/', askPageRoutes);
+app.route('/', integrationRoutes);
+app.route('/', portfolioRoutes);
+app.route('/', insightRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);
@@ -212,6 +221,7 @@ app.route('/', apiUXRoutes);
 app.route('/', searchRoutes);
 app.route('/', feedRoutes);
 app.route('/', askRoutes);
+app.route('/', sseRoutes);
 
 // API key management (session auth)
 app.route('/', apiKeyRoutes);

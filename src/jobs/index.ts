@@ -23,6 +23,8 @@ import { getPlaintextToken } from '../lib/crypto.js';
 import { withJobLock } from '../lib/job-lock.js';
 import { processDataExports, processAccountDeletions } from './gdpr.js';
 import { evaluateOnboardingSequence } from '../lib/onboarding-emails.js';
+import { syncStripeRevenue } from '../services/integrations/stripe-sync.js';
+import { generateProactiveInsights } from '../services/intelligence/predictions.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
 import { callOpus, parseJSONResponse } from '../services/ai/client.js';
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
@@ -572,6 +574,50 @@ export async function navBadgeRefresh(): Promise<void> {
   console.log('[JOB] nav_badge_refresh complete');
 }
 
+// ─── 20. Stripe Revenue Sync — Daily midnight UTC ────────────────────────────
+export async function stripeRevenueSync(): Promise<void> {
+  console.log('[JOB] stripe_revenue_sync starting');
+  const founders = await query(
+    "SELECT DISTINCT f.id FROM founders f JOIN integrations i ON f.id = i.founder_id WHERE i.provider = 'stripe' AND i.active = 1", []
+  );
+  for (const row of founders.rows) {
+    const f = row as Record<string, string>;
+    try {
+      await syncStripeRevenue(f.id);
+    } catch (err) {
+      console.error(`[JOB] stripe_revenue_sync error for founder ${f.id}:`, err);
+    }
+  }
+  console.log('[JOB] stripe_revenue_sync complete');
+}
+
+// ─── 21. Proactive Insights — Daily 8:00 UTC ─────────────────────────────────
+export async function proactiveInsightsJob(): Promise<void> {
+  console.log('[JOB] proactive_insights starting');
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const insights = await generateProactiveInsights(p.id);
+      // Store insights as notifications
+      for (const insight of insights) {
+        await query(
+          `INSERT INTO notifications (id, founder_id, product_id, type, title, body, action_url, created_at)
+           VALUES (?, ?, ?, 'insight', ?, ?, ?, ?)
+           ON CONFLICT DO NOTHING`,
+          [insight.id, p.owner_id, p.id, insight.title, insight.body, insight.action?.url ?? null, insight.generated_at]
+        );
+      }
+      if (insights.length > 0) {
+        console.log(`[JOB] proactive_insights: ${p.name} — ${insights.length} insights`);
+      }
+    } catch (err) {
+      console.error(`[JOB] proactive_insights error for ${p.id}:`, err);
+    }
+  }
+  console.log('[JOB] proactive_insights complete');
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 /** Wrap a job function with distributed locking for multi-instance safety. */
@@ -601,4 +647,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   nav_badge_refresh:  { fn: locked('nav_badge_refresh', navBadgeRefresh),   schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
   data_export:        { fn: locked('data_export', processDataExports),     schedule: '*/15 * * * *', description: 'Process pending data export requests (every 15m)' },
   account_deletion:   { fn: locked('account_deletion', processAccountDeletions), schedule: '0 3 * * *', description: 'Process confirmed account deletions (daily 3AM)' },
+  stripe_revenue_sync: { fn: locked('stripe_revenue_sync', stripeRevenueSync), schedule: '0 1 * * *', description: 'Sync revenue from connected Stripe accounts (daily 1AM)' },
+  proactive_insights:  { fn: locked('proactive_insights', proactiveInsightsJob), schedule: '0 8 * * *', description: 'Generate proactive insights from metric trends (daily 8AM)' },
 };
