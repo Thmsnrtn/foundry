@@ -22,6 +22,7 @@ import { isPRMerged, isPROpen } from '../services/audit/github.js';
 import { getPlaintextToken } from '../lib/crypto.js';
 import { withJobLock } from '../lib/job-lock.js';
 import { processDataExports, processAccountDeletions } from './gdpr.js';
+import { evaluateOnboardingSequence } from '../lib/onboarding-emails.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
 import { callOpus, parseJSONResponse } from '../services/ai/client.js';
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
@@ -169,6 +170,7 @@ export async function digestGenerate(): Promise<void> {
 export async function behavioralTriggers(): Promise<void> {
   console.log('[JOB] behavioral_triggers starting');
   await evaluateTriggers();
+  await evaluateOnboardingSequence();
   console.log('[JOB] behavioral_triggers complete');
 }
 
@@ -417,7 +419,7 @@ export async function dnaCompletionNudge(): Promise<void> {
     try {
       // Max 1 nudge per week: check audit_log
       const recent = await query(
-        `SELECT id FROM audit_log WHERE product_id = ? AND action = 'dna_completion_nudge' AND created_at > datetime('now', '-7 days')`,
+        `SELECT id FROM audit_log WHERE product_id = ? AND action_type = 'dna_completion_nudge' AND created_at > datetime('now', '-7 days')`,
         [p.id]
       );
       if (recent.rows.length > 0) continue;
@@ -435,7 +437,7 @@ export async function dnaCompletionNudge(): Promise<void> {
       );
 
       await query(
-        `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'dna_completion_nudge', ?, ?)`,
+        `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'dna_completion_nudge', 0, 'dna_nudge_job', ?, ?)`,
         [nanoid(), p.id, JSON.stringify({ completion_pct: completionPct }), new Date().toISOString()]
       );
       console.log(`[JOB] dna_completion_nudge: nudged ${p.name} (${completionPct}%)`);
@@ -500,7 +502,7 @@ export async function remediationOutcomeCheck(): Promise<void> {
       const daysSinceCreation = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
       if (daysSinceCreation >= 14) {
         await query(
-          `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'remediation_pr_stale', ?, ?)`,
+          `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'remediation_pr_stale', 1, 'remediation_check', ?, ?)`,
           [nanoid(), pr.product_id, JSON.stringify({ pr_id: pr.id, pr_number: prNumber, days_open: daysSinceCreation }), new Date().toISOString()]
         );
       }

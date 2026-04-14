@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { apiKeyAuth, createApiKey, listApiKeys, revokeApiKey, type ApiKeyEnv } from '../../middleware/api-key.js';
+import { calculateHealthScore } from '../../services/intelligence/health-score.js';
 import { apiRateLimit } from '../../middleware/rate-limit.js';
 import { query, getProductByOwner, getProductsByOwner, getLatestAudit, getLatestMetrics, getActiveStressors, getPendingDecisions, getAuditLog } from '../../db/client.js';
 import { getMRRDecomposition, computeHealthRatio } from '../../services/intelligence/revenue.js';
@@ -180,4 +181,14 @@ v1Routes.get('/v1/products/:id/audit-log', async (c) => {
     [productId], [productId], pagination,
   );
   return c.json(result);
+});
+
+// Health Score
+v1Routes.get('/v1/products/:id/health', async (c) => {
+  const founder = c.get('founder');
+  const productId = c.req.param('id');
+  const check = await getProductByOwner(productId, founder.id);
+  if (check.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  const score = await calculateHealthScore(productId);
+  return c.json({ health: score });
 });

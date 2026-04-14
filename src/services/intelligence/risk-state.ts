@@ -106,6 +106,16 @@ export async function transitionRiskState(
     input_context: JSON.stringify({ triggering_signals: triggeringSignals }),
     risk_state_at_action: fromState,
   });
+
+  // Dispatch webhook for risk state change
+  const ownerResult = await query('SELECT owner_id FROM products WHERE id = ?', [productId]);
+  const ownerId = (ownerResult.rows[0] as Record<string, string>)?.owner_id;
+  if (ownerId) {
+    const { dispatchWebhook } = await import('../../lib/webhooks.js');
+    dispatchWebhook(ownerId, 'risk_state.changed', {
+      product_id: productId, from_state: fromState, to_state: toState, reason, triggering_signals: triggeringSignals,
+    }).catch(() => {});
+  }
 }
 
 /**

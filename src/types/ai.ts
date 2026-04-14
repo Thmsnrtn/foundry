@@ -12,6 +12,10 @@ export interface AICallConfig {
   temperature?: number;
   systemPrompt: string;
   userPrompt: string;
+  /** Product ID for usage tracking. If provided, token costs are logged. */
+  productId?: string;
+  /** Call type label for usage tracking (e.g., 'audit_scoring', 'digest_narrative'). */
+  callType?: string;
 }
 
 export interface AIResponse {

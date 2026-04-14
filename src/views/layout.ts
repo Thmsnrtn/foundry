@@ -173,10 +173,12 @@ function groupedSidebar(
 
   const operateItems: NavItem[] = [
     { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
+    { key: 'feed', label: 'Activity', href: '/dashboard/feed' },
     { key: 'lifecycle', label: 'Lifecycle', href: `/products/${productId}/lifecycle` },
   ];
 
   const intelItems: NavItem[] = [
+    { key: 'ask', label: 'Ask Foundry', href: '/dashboard/ask' },
     { key: 'decisions', label: 'Decisions', href: '/decisions', badge: b.decisions_count > 0 ? String(b.decisions_count) : undefined, badgeType: 'count' },
     { key: 'digest', label: 'Digest', href: '/digest' },
   ];

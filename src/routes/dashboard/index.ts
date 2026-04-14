@@ -10,6 +10,7 @@ import { getProductsByOwner, getProductByOwner, getActiveStressors, getLatestMet
 import { query } from '../../db/client.js';
 import { getMRRDecomposition, computeHealthRatio } from '../../services/intelligence/revenue.js';
 import { getLatestCohortSummary } from '../../services/intelligence/cohort.js';
+import { calculateHealthScore } from '../../services/intelligence/health-score.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { riskStateBadge, stressorReport, mrrDecomposition, metricsGrid, lifecycleProgress, dashboardSummaryCard, pageHintBanner, tourOverlay, milestoneToastScript, type StressorData } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
@@ -100,6 +101,9 @@ dashboardRoutes.get('/dashboard', async (c) => {
   const showTour = c.req.query('tour') === '1' && ctx.ux.tourState && !ctx.ux.tourState.completed_at && !ctx.ux.tourState.skipped_at;
   const tourStep = showTour ? TOUR_STEPS.find((s) => s.step === ctx.ux.tourState!.current_step) ?? null : null;
 
+  // Health Score
+  const healthScore = await calculateHealthScore(productId);
+
   // Setup checklist for new users
   const setupSteps = [
     { done: !!audit, label: 'Run first audit', url: `/products/${productId}/audit`, action: 'Run Audit' },
@@ -132,29 +136,46 @@ dashboardRoutes.get('/dashboard', async (c) => {
     </div>
     ` : ''}
 
-    ${composite !== null ? html`
     <div class="card" style="margin-bottom:1rem;">
-      <div style="display:flex;align-items:center;gap:1.5rem;">
-        <div style="text-align:center;">
-          <div style="font-size:2.5rem;font-weight:800;color:${composite >= 7 ? '#059669' : composite >= 5 ? '#d97706' : '#dc2626'};">${composite.toFixed(1)}</div>
-          <div style="font-size:0.75rem;color:#6b7280;text-transform:uppercase;">Composite</div>
+      <div style="display:flex;align-items:center;gap:2rem;flex-wrap:wrap;">
+        <div style="text-align:center;min-width:100px;">
+          <svg width="100" height="100" viewBox="0 0 100 100" style="transform:rotate(-90deg);">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-border)" stroke-width="6"/>
+            <circle cx="50" cy="50" r="42" fill="none"
+              stroke="${healthScore.grade === 'A' ? 'var(--color-success)' : healthScore.grade === 'B' ? 'var(--color-primary)' : healthScore.grade === 'C' ? 'var(--color-warning)' : 'var(--color-danger)'}"
+              stroke-width="6" stroke-linecap="round"
+              stroke-dasharray="${2 * Math.PI * 42}"
+              stroke-dashoffset="${2 * Math.PI * 42 * (1 - healthScore.score / 100)}"
+              class="health-ring"/>
+          </svg>
+          <div style="position:relative;top:-66px;font-size:1.8rem;font-weight:800;letter-spacing:-1px;" class="score-animated">${healthScore.score}</div>
+          <div style="position:relative;top:-62px;font-size:0.7rem;color:var(--color-text-muted);text-transform:uppercase;letter-spacing:1px;">Grade ${healthScore.grade}</div>
         </div>
-        <div style="flex:1;">
-          <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.25rem;">
-            <span class="verdict-badge ${verdict === 'READY' ? 'verdict-ready' : verdict === 'READY_WITH_CONDITIONS' ? 'verdict-conditions' : 'verdict-not-ready'}">${verdict?.replace(/_/g, ' ') ?? 'Pending'}</span>
+        <div style="flex:1;min-width:200px;">
+          <h3 style="margin-bottom:0.25rem;">${healthScore.headline}</h3>
+          <p style="font-size:0.87rem;color:var(--color-text-secondary);margin-bottom:0.75rem;">${healthScore.summary}</p>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;font-size:0.75rem;">
+            <div style="text-align:center;">
+              <div style="font-weight:700;font-size:0.9rem;">${healthScore.components.audit.score}</div>
+              <div style="color:var(--color-text-muted);">Audit</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-weight:700;font-size:0.9rem;">${healthScore.components.revenue.score}</div>
+              <div style="color:var(--color-text-muted);">Revenue</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-weight:700;font-size:0.9rem;">${healthScore.components.risk.score}</div>
+              <div style="color:var(--color-text-muted);">Risk</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-weight:700;font-size:0.9rem;">${healthScore.components.engagement.score}</div>
+              <div style="color:var(--color-text-muted);">Engage</div>
+            </div>
           </div>
-          <p style="font-size:0.87rem;color:#4b5563;margin:0;">
-            ${composite >= 7
-              ? 'Your product meets launch readiness standards across all dimensions.'
-              : composite >= 5
-                ? 'Nearly there. Fix blocking issues to reach launch readiness.'
-                : 'Significant gaps found. Focus on the blocking issues in your audit.'}
-          </p>
         </div>
-        <a href="/products/${productId}/audit" class="btn btn-secondary btn-sm">View Full Audit</a>
+        ${composite !== null ? html`<a href="/products/${productId}/audit" class="btn btn-secondary btn-sm">View Audit</a>` : ''}
       </div>
     </div>
-    ` : ''}
 
     ${riskStateBadge(riskState, riskReason, riskChangedAt)}
 

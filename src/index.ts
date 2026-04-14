@@ -42,6 +42,8 @@ import { koldlyRoutes } from './routes/dashboard/koldly.js';
 import { settingsRoutes } from './routes/dashboard/settings.js';
 import { revenueRoutes } from './routes/dashboard/revenue.js';
 import { apiDocsRoutes } from './routes/dashboard/api-docs.js';
+import { feedPageRoutes } from './routes/dashboard/feed.js';
+import { askPageRoutes } from './routes/dashboard/ask.js';
 
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
@@ -199,6 +201,8 @@ app.route('/', koldlyRoutes);
 app.route('/', settingsRoutes);
 app.route('/', revenueRoutes);
 app.route('/', apiDocsRoutes);
+app.route('/', feedPageRoutes);
+app.route('/', askPageRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);

@@ -115,7 +115,7 @@ export async function runAudit(
 
       // Log classification to audit_log
       await query(
-        `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'remediation_classified', ?, ?)`,
+        `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'remediation_classified', 1, 'audit_engine', ?, ?)`,
         [nanoid(), product.id, JSON.stringify({ issue_id: issue.id, classification: classification.classification }), new Date().toISOString()]
       );
 
@@ -125,7 +125,7 @@ export async function runAudit(
         const relevantFiles = new Map<string, string>();
         generateFix(product.id, product.owner_id, auditId, blockingIssue, relevantFiles, wisdomContext).then(async (remId) => {
           await query(
-            `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'remediation_fix_queued', ?, ?)`,
+            `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'remediation_fix_queued', 1, 'audit_engine', ?, ?)`,
             [nanoid(), product.id, JSON.stringify({ issue_id: issue.id, remediation_pr_id: remId }), new Date().toISOString()]
           );
         }).catch((err) => {
