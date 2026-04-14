@@ -692,7 +692,7 @@ export function onboardingWizard(
       </div>`)}
     </div>
     ${step === 'connect_github' ? onboardingGitHub(data.github_oauth_url as string) : ''}
-    ${step === 'select_repo' ? onboardingRepoSelect(data.repos as Array<Record<string, unknown>>, data._token as string) : ''}
+    ${step === 'select_repo' ? onboardingRepoSelect(data.repos as Array<Record<string, unknown>>) : ''}
     ${step === 'identify_competitors' ? onboardingCompetitors(data.product_id as string) : ''}
     ${step === 'running_audit' ? onboardingRunAudit(data.product_id as string) : ''}
     ${step === 'complete' ? onboardingComplete(data.audit as Record<string, unknown>) : ''}
@@ -708,7 +708,7 @@ function onboardingGitHub(githubUrl: string): HtmlContent {
   </div>`;
 }
 
-function onboardingRepoSelect(repos: Array<Record<string, unknown>>, token: string): HtmlContent {
+function onboardingRepoSelect(repos: Array<Record<string, unknown>>): HtmlContent {
   return html`
   <div class="step-card">
     <h2><span class="step-number">2</span> Select Repository</h2>
@@ -717,7 +717,6 @@ function onboardingRepoSelect(repos: Array<Record<string, unknown>>, token: stri
     <form method="POST" action="/onboarding/select-repo" style="display:inline;">
       <input type="hidden" name="repo_owner" value="${r.owner}" />
       <input type="hidden" name="repo_name" value="${r.name}" />
-      <input type="hidden" name="access_token" value="${token}" />
       <button type="submit" class="btn btn-secondary" style="margin:0.25rem;">${r.full_name ?? r.name}</button>
     </form>`)}
   </div>`;

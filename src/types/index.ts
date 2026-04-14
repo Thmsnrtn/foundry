@@ -970,6 +970,11 @@ export interface DimensionHint {
 
 // ─── Hono Context Extensions ─────────────────────────────────────────────────
 
+/** Base variables available on all routes (set by global middleware). */
+export interface AppVariables {
+  requestId: string;
+}
+
 export interface AuthContext {
   founder: Founder;
 }

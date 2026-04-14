@@ -48,11 +48,35 @@ export async function sendDigestEmail(to: string, productName: string, digest: D
       ${digest.cohort_snapshot ? `<h3>Latest Cohort</h3><p>${digest.cohort_snapshot.period} (${digest.cohort_snapshot.channel}): Day 14 retention ${digest.cohort_snapshot.retention_day_14.toFixed(1)}%</p>` : ''}
     </div>`;
 
-  await resend.emails.send({ from, to, subject, html });
+  const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+  const footer = `
+    <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center;">
+      <p>You're receiving this because you have a Foundry account.</p>
+      <p><a href="${appUrl}/settings" style="color:#6b7280;">Manage preferences</a> · <a href="${appUrl}/settings" style="color:#6b7280;">Unsubscribe</a></p>
+      <p>Foundry — Autonomous Business Intelligence</p>
+    </div>`;
+
+  const fullHtml = html + footer;
+
+  try {
+    await resend.emails.send({ from, to, subject, html: fullHtml });
+  } catch (err) {
+    console.error(`[email] Failed to send digest to ${to}:`, err instanceof Error ? err.message : err);
+    throw err; // Re-throw so caller can handle retry
+  }
 }
 
 export async function sendTriggerEmail(to: string, subject: string, body: string): Promise<void> {
   const resend = getResend();
   const from = process.env.RESEND_FROM_ADDRESS ?? 'foundry@example.com';
-  await resend.emails.send({ from, to, subject, html: `<div style="font-family: system-ui, sans-serif;">${body}</div>` });
+  const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+  const footer = `<div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:11px;color:#9ca3af;text-align:center;">
+    <a href="${appUrl}/settings" style="color:#6b7280;">Manage preferences</a> · <a href="${appUrl}/settings" style="color:#6b7280;">Unsubscribe</a>
+  </div>`;
+  try {
+    await resend.emails.send({ from, to, subject, html: `<div style="font-family: system-ui, sans-serif;">${body}${footer}</div>` });
+  } catch (err) {
+    console.error(`[email] Failed to send trigger email to ${to}:`, err instanceof Error ? err.message : err);
+    throw err;
+  }
 }

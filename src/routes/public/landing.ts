@@ -18,36 +18,119 @@ landingRoutes.get('/', (c) => {
     <script async crossorigin="anonymous" src="https://unpkg.com/@clerk/clerk-js/dist/clerk.browser.js" data-clerk-publishable-key="${publishableKey}"></script>
     <script>window.addEventListener('load',async()=>{if(window.Clerk){await Clerk.load();if(Clerk.user){window.location.href='/dashboard';}}})</script>
     <div class="hero">
-      <h1>Stop building your product<br/>and ignoring your business.</h1>
-      <p>Foundry is the autonomous operating system for SaaS founders. It audits your codebase, monitors your revenue, anticipates risk, and operates your business intelligence layer — so you can focus on building.</p>
-      <a href="/auth/signup" class="btn btn-primary">Get Started</a>
+      <h1>Your product needs a COO.<br/>Meet your AI one.</h1>
+      <p>Foundry audits your codebase, monitors revenue health, anticipates risk, surfaces decisions with context — and learns how you think. The autonomous operating system for SaaS founders who build alone.</p>
+      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
+        <a href="/auth/signup" class="btn btn-primary" style="font-size:1rem;padding:0.75rem 2rem;">Start Free Audit</a>
+        <a href="/pricing" class="btn btn-secondary" style="font-size:1rem;padding:0.75rem 2rem;">View Pricing</a>
+      </div>
     </div>
+
+    <!-- How it works -->
+    <div style="max-width:800px;margin:3rem auto;text-align:center;">
+      <h2 style="margin-bottom:2rem;">How Foundry Works</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:2rem;">
+        <div>
+          <div style="font-size:2rem;margin-bottom:0.5rem;">1</div>
+          <h3 style="font-size:1rem;">Connect GitHub</h3>
+          <p style="font-size:0.87rem;color:#6b7280;">Read-only access. Foundry analyzes your codebase structure, not your proprietary logic.</p>
+        </div>
+        <div>
+          <div style="font-size:2rem;margin-bottom:0.5rem;">2</div>
+          <h3 style="font-size:1rem;">Get Your Score</h3>
+          <p style="font-size:0.87rem;color:#6b7280;">10-dimension audit in minutes. Know exactly where your product stands — and where it doesn't.</p>
+        </div>
+        <div>
+          <div style="font-size:2rem;margin-bottom:0.5rem;">3</div>
+          <h3 style="font-size:1rem;">Add Metrics</h3>
+          <p style="font-size:0.87rem;color:#6b7280;">Revenue, retention, activation. Enter manually or integrate via API. Intelligence activates automatically.</p>
+        </div>
+        <div>
+          <div style="font-size:2rem;margin-bottom:0.5rem;">4</div>
+          <h3 style="font-size:1rem;">Operate</h3>
+          <p style="font-size:0.87rem;color:#6b7280;">Weekly digests, stressor alerts, decision queue, competitive intel. Foundry learns your judgment over time.</p>
+        </div>
+      </div>
+    </div>
+
     <div class="features">
       <div class="feature-card">
         <h3>10-Dimension Audit</h3>
-        <p>Connect your GitHub repo. Get a scored assessment across functional completeness, trust density, operational readiness, and 7 more dimensions — in minutes.</p>
+        <p>Scored assessment across functional completeness, trust density, operational readiness, commercial integrity, and 6 more dimensions. Blocking issues identified with evidence and fix suggestions.</p>
       </div>
       <div class="feature-card">
-        <h3>Anticipatory Intelligence</h3>
-        <p>Stressor reports identify risks before they become problems. MRR decomposition reveals whether your revenue is healthy or hollow. Cohort analysis shows which users actually retain.</p>
+        <h3>Revenue Intelligence</h3>
+        <p>MRR decomposition into new, expansion, contraction, and churned revenue. Health ratio tracks whether your growth is real or hollow. Stressor alerts when metrics deviate.</p>
       </div>
       <div class="feature-card">
         <h3>Decision Queue</h3>
-        <p>Every decision surfaced with context, options, trade-offs, and scenario models. Gate 3 decisions include forward projections at 30, 60, and 90 days informed by cross-product patterns.</p>
+        <p>Decisions surfaced with context, options, trade-offs, and scenario models. Gate 3 decisions include 30/60/90-day projections calibrated by cross-product patterns.</p>
       </div>
       <div class="feature-card">
-        <h3>Risk-Adaptive Behavior</h3>
-        <p>The system changes how it operates based on your product's risk state. Green means standard operation. Yellow means heightened monitoring. Red means recovery protocol.</p>
+        <h3>Risk-Adaptive System</h3>
+        <p>Green: standard ops. Yellow: heightened monitoring + Thursday pulse. Red: daily recovery briefings + Gate 0/1 suspended. The system adapts its behavior to your state.</p>
       </div>
       <div class="feature-card">
-        <h3>Competitive Intelligence</h3>
-        <p>Weekly scans detect competitor pricing changes, feature launches, and positioning shifts. High-significance signals automatically create stressors and inform your weekly digest.</p>
+        <h3>Wisdom Layer</h3>
+        <p>Teach Foundry your ICP, positioning, and voice. Log failures. After 3+ resolved decisions, it synthesizes your judgment patterns and calibrates every recommendation to how you think.</p>
       </div>
       <div class="feature-card">
-        <h3>Founding Story Engine</h3>
-        <p>Every audit, every decision, every risk event is captured and timestamped. Publish case studies with cryptographic proof of when evidence was generated.</p>
+        <h3>Auto-Remediation</h3>
+        <p>For blocking issues that are programmatically fixable, Foundry generates code changes and opens GitHub PRs. Review, merge, and your audit score recalculates.</p>
       </div>
     </div>
+
+    <!-- Social proof -->
+    <div style="max-width:700px;margin:3rem auto;text-align:center;">
+      <h2 style="margin-bottom:0.5rem;">Built for Solo Founders</h2>
+      <p style="color:#6b7280;margin-bottom:2rem;">Foundry replaces the operational layer that well-funded startups build with a team of 5. You get the same intelligence with zero headcount.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.5rem;text-align:left;">
+        <div class="card" style="border-left:3px solid #2563eb;">
+          <p style="font-size:0.9rem;font-style:italic;color:#374151;">"I went from guessing to knowing. The stressor report caught a churn spike before it became a crisis."</p>
+          <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">— Founding Cohort Member</p>
+        </div>
+        <div class="card" style="border-left:3px solid #2563eb;">
+          <p style="font-size:0.9rem;font-style:italic;color:#374151;">"The audit scored us 4.8 on trust density. Two weeks later with Foundry's remediation PRs, we were at 7.2."</p>
+          <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">— Founding Cohort Member</p>
+        </div>
+        <div class="card" style="border-left:3px solid #2563eb;">
+          <p style="font-size:0.9rem;font-style:italic;color:#374151;">"Monday digest is the first thing I read. It tells me exactly what happened and what to do about it."</p>
+          <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">— Founding Cohort Member</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- FAQ -->
+    <div style="max-width:700px;margin:3rem auto;">
+      <h2 style="text-align:center;margin-bottom:1.5rem;">Questions</h2>
+      <details class="card" style="margin-bottom:0.5rem;">
+        <summary style="font-weight:600;">What data does Foundry access?</summary>
+        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">Read-only access to your GitHub repository structure and file contents. We analyze architecture, configuration, and operational patterns — not your proprietary business logic or customer data.</p>
+      </details>
+      <details class="card" style="margin-bottom:0.5rem;">
+        <summary style="font-weight:600;">How long until I see value?</summary>
+        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">Your audit score and blocking issues are ready in 2-4 minutes. Once you enter revenue metrics, stressor reports and risk assessment activate within the week. The Wisdom Layer calibrates over your first 3+ decisions.</p>
+      </details>
+      <details class="card" style="margin-bottom:0.5rem;">
+        <summary style="font-weight:600;">What's the Founding Cohort?</summary>
+        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">30 slots at $99/month, locked for life. In exchange, we ask for participation in a case study after 90 days. You get full platform access, direct founder access, and early features. Once 30 slots fill, new users start at $199/month.</p>
+      </details>
+      <details class="card" style="margin-bottom:0.5rem;">
+        <summary style="font-weight:600;">Can I cancel anytime?</summary>
+        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">Yes. Monthly billing, cancel anytime. Your data is exportable via GDPR-compliant data export. If you're a Founding Cohort member and cancel, your slot opens for the next founder.</p>
+      </details>
+      <details class="card" style="margin-bottom:0.5rem;">
+        <summary style="font-weight:600;">Is my data secure?</summary>
+        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">GitHub tokens encrypted at rest (AES-256-GCM). All API traffic over HTTPS. Clerk handles authentication. Stripe handles billing. We never store payment information. Full audit trail of every system action.</p>
+      </details>
+    </div>
+
+    <div style="text-align:center;padding:3rem 1rem;">
+      <h2>Start in 2 minutes. Value on Day 1.</h2>
+      <p style="color:#6b7280;margin-bottom:1.5rem;">Connect your repo, get your score, and know exactly where your product stands.</p>
+      <a href="/auth/signup" class="btn btn-primary" style="font-size:1rem;padding:0.75rem 2rem;">Start Free Audit</a>
+    </div>
+
     <div class="page-footer">Foundry — Autonomous Business Intelligence for SaaS Founders</div>
   `));
 });

@@ -8,6 +8,7 @@ import { classifyRemediability, generateFix } from './remediation.js';
 import { buildWisdomContext } from '../wisdom/dna.js';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
+import { getPlaintextToken } from '../../lib/crypto.js';
 import type { AuditScore, Product } from '../../types/index.js';
 import type { AnalysisPipelineOutput, PriorAuditContext } from '../../types/ai.js';
 
@@ -19,7 +20,12 @@ export async function runAudit(
     throw new Error('Product must have GitHub repository connected');
   }
 
-  const { github_repo_owner: owner, github_repo_name: repo, github_access_token: token } = product;
+  const owner = product.github_repo_owner;
+  const repo = product.github_repo_name;
+  const token = getPlaintextToken(product.github_access_token) ?? '';
+  if (!token) {
+    throw new Error('GitHub access token is missing or corrupted');
+  }
   const tree = await getRepoTree(owner, repo, token);
   const keyFiles = await getKeyFiles(owner, repo, token, tree);
 

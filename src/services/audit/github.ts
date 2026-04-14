@@ -40,13 +40,27 @@ async function githubFetch(
   retries: number = 3
 ): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000); // 30s timeout per request
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      if (attempt === retries) throw err;
+      await sleep(Math.pow(2, attempt) * 1000);
+      continue;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (response.status === 403) {
       const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');

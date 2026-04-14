@@ -63,8 +63,10 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body class="${showNav ? 'has-sidebar' : ''}">
-  <header class="site-header">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <header class="site-header" role="banner">
     <div class="header-left">
+      ${showNav ? html`<button class="sidebar-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open');document.querySelector('.sidebar-overlay').classList.toggle('visible')" aria-label="Toggle navigation" aria-expanded="false">☰</button>` : ''}
       <a href="${founderName ? '/dashboard' : '/'}" class="logo">Foundry</a>
       ${allProducts.length > 1 ? productSwitcher(allProducts, productId, productName) : productName ? html`<span class="breadcrumb">/ ${productName}</span>` : ''}
     </div>
@@ -81,9 +83,10 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
 
   ${showNav && nextAction ? nextActionBanner(nextAction) : ''}
 
+  ${showNav && productId ? html`<div class="sidebar-overlay" onclick="document.querySelector('.sidebar').classList.remove('open');this.classList.remove('visible')"></div>` : ''}
   ${showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, dnaCompletionPct, openPRCount) : ''}
 
-  <main class="${showNav ? 'main-with-sidebar' : 'main-full'}">
+  <main id="main-content" class="${showNav ? 'main-with-sidebar' : 'main-full'}" role="main">
     ${content}
   </main>
 </body>
@@ -203,7 +206,7 @@ function groupedSidebar(
   ];
 
   return html`
-  <nav class="sidebar ${riskClass}">
+  <nav class="sidebar ${riskClass}" role="navigation" aria-label="Main navigation">
     ${sectionHeader('OPERATE')}
     <ul class="sidebar-nav">${renderNavItems(operateItems, active)}</ul>
 

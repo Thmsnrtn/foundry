@@ -3,14 +3,22 @@
 // Hono HTTP server with all routes, middleware, and cron scheduler.
 // =============================================================================
 
+// Validate environment variables before anything else
+import { validateEnv, env } from './lib/env.js';
+validateEnv();
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
 import { CronJob } from 'cron';
+import { log } from './lib/logger.js';
+import type { AppVariables } from './types/index.js';
 
 // Middleware
 import { authMiddleware } from './middleware/auth.js';
 import { internalMiddleware } from './middleware/internal.js';
+import { requestIdMiddleware, securityHeaders } from './middleware/security.js';
+import { apiRateLimit, authRateLimit, webhookRateLimit } from './middleware/rate-limit.js';
+import { csrfProtection } from './middleware/csrf.js';
 
 // Public routes (no auth)
 import { landingRoutes, pricingRoutes, caseStudyRoutes } from './routes/public/landing.js';
@@ -33,16 +41,21 @@ import { journeyRoutes } from './routes/dashboard/journey.js';
 import { koldlyRoutes } from './routes/dashboard/koldly.js';
 import { settingsRoutes } from './routes/dashboard/settings.js';
 import { revenueRoutes } from './routes/dashboard/revenue.js';
+import { apiDocsRoutes } from './routes/dashboard/api-docs.js';
 
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
 import { apiMetricRoutes } from './routes/api/metrics.js';
 import { apiAuditLogRoutes } from './routes/api/audit-log.js';
 import { apiUXRoutes } from './routes/api/ux.js';
+import { searchRoutes } from './routes/api/search.js';
 
 // Internal routes (ecosystem key required, except /health)
 import { healthRoutes } from './routes/internal/health.js';
 import { ecosystemRoutes } from './routes/internal/ecosystem.js';
+
+// Public API v1 (API key auth)
+import { v1Routes, apiKeyRoutes } from './routes/v1/index.js';
 
 // Stripe webhook (raw body needed)
 import { handleWebhook } from './services/billing/stripe.js';
@@ -52,13 +65,29 @@ import { JOB_REGISTRY } from './jobs/index.js';
 
 // ─── App Setup ───────────────────────────────────────────────────────────────
 
-const app = new Hono();
+const app = new Hono<{ Variables: AppVariables }>();
 
-// Global middleware
-app.use('*', logger());
+// Global middleware — order matters
+app.use('*', requestIdMiddleware);
+app.use('*', securityHeaders);
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  await next();
+  const duration = Date.now() - start;
+  const status = c.res.status;
+  const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
+  log[level](`${c.req.method} ${c.req.path} ${status}`, {
+    requestId: c.get('requestId'),
+    method: c.req.method,
+    path: c.req.path,
+    statusCode: status,
+    durationMs: duration,
+  });
+});
 app.use('*', cors({
-  origin: process.env.APP_URL ?? 'http://localhost:8080',
+  origin: env().APP_URL,
   credentials: true,
+  maxAge: 86400,
 }));
 
 // ─── Static Files ─────────────────────────────────────────────────────────────
@@ -83,6 +112,12 @@ app.get('/static/:file', (c) => {
   }
 });
 
+// ─── Rate Limiting ──────────────────────────────────────────────────────────
+
+app.use('/auth/*', authRateLimit);
+app.use('/webhooks/*', webhookRateLimit);
+app.use('/api/*', apiRateLimit);
+
 // ─── Public Routes ───────────────────────────────────────────────────────────
 
 app.route('/', landingRoutes);
@@ -99,8 +134,14 @@ app.post('/webhooks/stripe', async (c) => {
   try {
     await handleWebhook(body, signature);
     return c.json({ received: true });
-  } catch (err) {
-    console.error('Stripe webhook error:', err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    // Distinguish signature verification failure from processing errors
+    if (message.includes('signature') || message.includes('No signatures found')) {
+      log.warn('Stripe webhook signature verification failed', { error: message });
+      return c.json({ error: 'Invalid signature' }, 401);
+    }
+    log.error('Stripe webhook processing error', err, { path: '/webhooks/stripe' });
     return c.json({ error: 'Webhook processing failed' }, 400);
   }
 });
@@ -131,6 +172,15 @@ app.use('/settings/*', authMiddleware);
 app.use('/switch-product', authMiddleware);
 app.use('/api/*', authMiddleware);
 
+// CSRF protection on all dashboard form submissions
+app.use('/dashboard/*', csrfProtection);
+app.use('/onboarding/*', csrfProtection);
+app.use('/products/*', csrfProtection);
+app.use('/decisions/*', csrfProtection);
+app.use('/beta/*', csrfProtection);
+app.use('/settings/*', csrfProtection);
+app.use('/switch-product', csrfProtection);
+
 // Dashboard routes
 app.route('/', dashboardRoutes);
 app.route('/', onboardingRoutes);
@@ -146,61 +196,103 @@ app.route('/', journeyRoutes);
 app.route('/', koldlyRoutes);
 app.route('/', settingsRoutes);
 app.route('/', revenueRoutes);
+app.route('/', apiDocsRoutes);
 
 // API routes
 app.route('/', apiProductRoutes);
 app.route('/', apiMetricRoutes);
 app.route('/', apiAuditLogRoutes);
 app.route('/', apiUXRoutes);
+app.route('/', searchRoutes);
+
+// API key management (session auth)
+app.route('/', apiKeyRoutes);
+
+// Public API v1 (API key auth — self-contained, no session needed)
+app.route('/', v1Routes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
 app.notFound((c) => {
+  const accept = c.req.header('Accept') ?? '';
+  if (accept.includes('text/html')) {
+    return c.html(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not Found — Foundry</title><link rel="stylesheet" href="/static/styles.css"></head><body>
+      <header class="site-header"><div class="header-left"><a href="/" class="logo">Foundry</a></div></header>
+      <main class="main-full" style="text-align:center;padding-top:4rem;">
+        <h1 style="font-size:4rem;font-weight:800;color:#e5e7eb;">404</h1>
+        <h2>Page not found</h2>
+        <p style="color:#6b7280;margin-bottom:2rem;">The page you're looking for doesn't exist or has been moved.</p>
+        <a href="/dashboard" class="btn btn-primary">Go to Dashboard</a>
+      </main></body></html>`, 404);
+  }
   return c.json({ error: 'Not found' }, 404);
 });
 
 // ─── Error Handler ───────────────────────────────────────────────────────────
 
 app.onError((err, c) => {
-  console.error('Unhandled error:', err);
-  return c.json({ error: 'Internal server error' }, 500);
+  const requestId = c.get('requestId') as string | undefined;
+  const status = (err as any).status ?? 500;
+
+  // Validation errors get 400 with details
+  if (status === 400 && (err as any).issues) {
+    return c.json({
+      error: 'Validation failed',
+      details: (err as any).issues,
+      requestId,
+    }, 400);
+  }
+
+  log.error('Unhandled error', err, {
+    requestId,
+    path: c.req.path,
+    method: c.req.method,
+  });
+
+  return c.json({
+    error: status >= 500 ? 'Internal server error' : err.message,
+    requestId,
+  }, status);
 });
 
 // ─── Cron Scheduler ──────────────────────────────────────────────────────────
 
+const cronJobs: CronJob[] = [];
+
 function startScheduler(): void {
-  console.log('Starting job scheduler...');
+  log.info('Starting job scheduler...');
   for (const [name, job] of Object.entries(JOB_REGISTRY)) {
     try {
-      new CronJob(job.schedule, async () => {
-        console.log(`[CRON] Running: ${name}`);
+      const cronJob = new CronJob(job.schedule, async () => {
+        const start = Date.now();
+        log.info(`[CRON] Running: ${name}`);
         try {
           await job.fn();
+          log.info(`[CRON] Completed: ${name}`, { durationMs: Date.now() - start });
         } catch (err) {
-          console.error(`[CRON] Error in ${name}:`, err);
+          log.error(`[CRON] Error in ${name}`, err, { durationMs: Date.now() - start });
         }
       }, null, true, 'UTC');
-      console.log(`  ✓ ${name} — ${job.schedule}`);
+      cronJobs.push(cronJob);
+      log.info(`  Scheduled: ${name} — ${job.schedule}`);
     } catch (err) {
-      console.error(`  ✗ ${name} — failed to schedule:`, err);
+      log.error(`  Failed to schedule: ${name}`, err);
     }
   }
 }
 
 // ─── Server Start ────────────────────────────────────────────────────────────
 
-const port = parseInt(process.env.PORT ?? '8080', 10);
+const port = parseInt(env().PORT, 10);
 
-console.log(`
-╔══════════════════════════════════════════════════╗
-║  FOUNDRY — Autonomous Business Intelligence      ║
-║  Port: ${String(port).padEnd(42)}║
-║  Environment: ${(process.env.NODE_ENV ?? 'development').padEnd(35)}║
-╚══════════════════════════════════════════════════╝
-`);
+log.info('FOUNDRY — Autonomous Business Intelligence', {
+  port,
+  environment: env().NODE_ENV,
+  version: '0.1.0',
+});
 
 // Start cron jobs in production
-if (process.env.NODE_ENV === 'production') {
+if (env().NODE_ENV === 'production') {
   startScheduler();
 }
 
@@ -208,11 +300,37 @@ if (process.env.NODE_ENV === 'production') {
 
 import { serve } from '@hono/node-server';
 
-serve({
+const server = serve({
   fetch: app.fetch,
   port,
 }, (info) => {
-  console.log(`Listening on http://localhost:${info.port}`);
+  log.info(`Listening on http://localhost:${info.port}`);
 });
+
+// ─── Graceful Shutdown ──────────────────────────────────────────────────────
+
+function gracefulShutdown(signal: string): void {
+  log.info(`Received ${signal}, shutting down gracefully...`);
+
+  // Stop accepting new connections
+  server.close(() => {
+    log.info('HTTP server closed');
+  });
+
+  // Stop all cron jobs
+  for (const job of cronJobs) {
+    job.stop();
+  }
+  log.info(`Stopped ${cronJobs.length} cron jobs`);
+
+  // Give in-flight requests time to complete
+  setTimeout(() => {
+    log.warn('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10_000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner, getLatestMetrics, getActiveStressors } from '../../db/client.js';
 import { nanoid } from 'nanoid';
+import { reportMetricsSchema, validate } from '../../lib/validation.js';
 
 export const apiMetricRoutes = new Hono<AuthEnv>();
 
@@ -20,10 +21,10 @@ apiMetricRoutes.post('/api/products/:id/metrics', async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const body = await c.req.json() as Record<string, unknown>;
+  const body = validate(reportMetricsSchema, await c.req.json());
   const today = new Date().toISOString().split('T')[0];
-  const newMrr = (body.new_mrr_cents as number) ?? 0;
-  const churned = (body.churned_mrr_cents as number) ?? 0;
+  const newMrr = body.new_mrr_cents ?? 0;
+  const churned = body.churned_mrr_cents ?? 0;
   const healthRatio = newMrr > 0 ? churned / newMrr : null;
 
   await query(

@@ -121,8 +121,10 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
 
     c.set('founder', founder);
 
-    // Update last_seen_at (fire-and-forget)
-    query('UPDATE founders SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [founder.id]).catch(() => {});
+    // Update last_seen_at (fire-and-forget, but log failures)
+    query('UPDATE founders SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [founder.id]).catch((err) => {
+      console.warn('[auth] Failed to update last_seen_at:', err?.message);
+    });
 
     await next();
   } catch {

@@ -19,6 +19,9 @@ import { generatePatternFromOutcome } from '../services/decisions/patterns.js';
 import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
 import { getProductDNA } from '../services/wisdom/dna.js';
 import { isPRMerged, isPROpen } from '../services/audit/github.js';
+import { getPlaintextToken } from '../lib/crypto.js';
+import { withJobLock } from '../lib/job-lock.js';
+import { processDataExports, processAccountDeletions } from './gdpr.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
 import { callOpus, parseJSONResponse } from '../services/ai/client.js';
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
@@ -458,7 +461,7 @@ export async function remediationOutcomeCheck(): Promise<void> {
     try {
       const owner = pr.github_repo_owner as string;
       const repo = pr.github_repo_name as string;
-      const token = pr.github_access_token as string;
+      const token = getPlaintextToken(pr.github_access_token as string);
       const prNumber = pr.github_pr_number as number;
 
       if (!owner || !repo || !token || !prNumber) continue;
@@ -569,24 +572,31 @@ export async function navBadgeRefresh(): Promise<void> {
 
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
+/** Wrap a job function with distributed locking for multi-instance safety. */
+function locked(name: string, fn: () => Promise<void>): () => Promise<void> {
+  return () => withJobLock(name, fn).then(() => {});
+}
+
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
-  lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
-  competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
-  weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
-  digest_generate:      { fn: digestGenerate,       schedule: '0 7 * * 1',       description: 'Generate and send weekly digests (Monday)' },
-  behavioral_triggers:  { fn: behavioralTriggers,   schedule: '0 */6 * * *',     description: 'Evaluate behavioral trigger emails (every 6h)' },
-  metric_snapshot:      { fn: metricSnapshot,       schedule: '0 0 * * *',       description: 'Ensure daily metric snapshots exist' },
-  slot_enforcement:     { fn: slotEnforcement,      schedule: '0 9 * * *',       description: 'Enforce founding cohort activation window' },
-  cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },
-  scenario_accuracy:    { fn: scenarioAccuracy,     schedule: '0 8 * * 5',       description: 'Evaluate scenario prediction accuracy (Friday)' },
-  yellow_pulse:         { fn: yellowPulse,          schedule: '0 7 * * 4',       description: 'Thursday pulse digest for Yellow products' },
-  red_daily:            { fn: redDaily,             schedule: '0 7 * * *',       description: 'Daily briefing for Red products' },
-  stressor_cleanup:     { fn: stressorCleanup,      schedule: '0 4 * * *',       description: 'Auto-escalate expired stressors' },
-  pattern_aggregation:  { fn: patternAggregation,   schedule: '0 9 * * 0',       description: 'Aggregate decision pattern stats (Sunday)' },
-  story_capture:        { fn: storyCapture,         schedule: '0 23 * * *',      description: 'Capture milestone events as story artifacts' },
-  founder_pattern_synthesis: { fn: founderPatternSynthesis, schedule: '0 7 * * 0', description: 'Synthesize founder judgment patterns (Sunday)' },
-  dna_completion_nudge: { fn: dnaCompletionNudge,    schedule: '0 8 * * 3',      description: 'Nudge founders with incomplete DNA (Wednesday)' },
-  remediation_outcome_check: { fn: remediationOutcomeCheck, schedule: '0 9 * * *', description: 'Check remediation PR outcomes (daily)' },
-  milestone_check:    { fn: milestoneCheck,    schedule: '0 8 * * *',   description: 'Check and award milestones for all products (daily)' },
-  nav_badge_refresh:  { fn: navBadgeRefresh,   schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
+  lifecycle_check:      { fn: locked('lifecycle_check', lifecycleCheck),      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
+  competitive_scan:     { fn: locked('competitive_scan', competitiveScan),     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
+  weekly_synthesis:     { fn: locked('weekly_synthesis', weeklySynthesis),      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
+  digest_generate:      { fn: locked('digest_generate', digestGenerate),       schedule: '0 7 * * 1',       description: 'Generate and send weekly digests (Monday)' },
+  behavioral_triggers:  { fn: locked('behavioral_triggers', behavioralTriggers),   schedule: '0 */6 * * *',     description: 'Evaluate behavioral trigger emails (every 6h)' },
+  metric_snapshot:      { fn: locked('metric_snapshot', metricSnapshot),       schedule: '0 0 * * *',       description: 'Ensure daily metric snapshots exist' },
+  slot_enforcement:     { fn: locked('slot_enforcement', slotEnforcement),      schedule: '0 9 * * *',       description: 'Enforce founding cohort activation window' },
+  cold_start_check:     { fn: locked('cold_start_check', coldStartCheck),       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },
+  scenario_accuracy:    { fn: locked('scenario_accuracy', scenarioAccuracy),     schedule: '0 8 * * 5',       description: 'Evaluate scenario prediction accuracy (Friday)' },
+  yellow_pulse:         { fn: locked('yellow_pulse', yellowPulse),          schedule: '0 7 * * 4',       description: 'Thursday pulse digest for Yellow products' },
+  red_daily:            { fn: locked('red_daily', redDaily),             schedule: '0 7 * * *',       description: 'Daily briefing for Red products' },
+  stressor_cleanup:     { fn: locked('stressor_cleanup', stressorCleanup),      schedule: '0 4 * * *',       description: 'Auto-escalate expired stressors' },
+  pattern_aggregation:  { fn: locked('pattern_aggregation', patternAggregation),   schedule: '0 9 * * 0',       description: 'Aggregate decision pattern stats (Sunday)' },
+  story_capture:        { fn: locked('story_capture', storyCapture),         schedule: '0 23 * * *',      description: 'Capture milestone events as story artifacts' },
+  founder_pattern_synthesis: { fn: locked('founder_pattern_synthesis', founderPatternSynthesis), schedule: '0 7 * * 0', description: 'Synthesize founder judgment patterns (Sunday)' },
+  dna_completion_nudge: { fn: locked('dna_completion_nudge', dnaCompletionNudge),    schedule: '0 8 * * 3',      description: 'Nudge founders with incomplete DNA (Wednesday)' },
+  remediation_outcome_check: { fn: locked('remediation_outcome_check', remediationOutcomeCheck), schedule: '0 9 * * *', description: 'Check remediation PR outcomes (daily)' },
+  milestone_check:    { fn: locked('milestone_check', milestoneCheck),    schedule: '0 8 * * *',   description: 'Check and award milestones for all products (daily)' },
+  nav_badge_refresh:  { fn: locked('nav_badge_refresh', navBadgeRefresh),   schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
+  data_export:        { fn: locked('data_export', processDataExports),     schedule: '*/15 * * * *', description: 'Process pending data export requests (every 15m)' },
+  account_deletion:   { fn: locked('account_deletion', processAccountDeletions), schedule: '0 3 * * *', description: 'Process confirmed account deletions (daily 3AM)' },
 };
