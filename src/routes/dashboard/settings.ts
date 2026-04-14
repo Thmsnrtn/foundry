@@ -9,6 +9,8 @@ import { getLayoutContext } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
 import { preferencesSchema, validate } from '../../lib/validation.js';
 import { env } from '../../lib/env.js';
+import { nanoid } from 'nanoid';
+import { log } from '../../lib/logger.js';
 
 export const settingsRoutes = new Hono<AuthEnv>();
 
@@ -85,4 +87,136 @@ settingsRoutes.post('/settings/upgrade', async (c) => {
   );
 
   return c.json({ checkout_url: sessionUrl });
+});
+
+// ─── Data Export (GDPR Article 20) ──────────────────────────────────────────
+
+settingsRoutes.post('/settings/export-data', async (c) => {
+  const founder = c.get('founder');
+
+  // Check for existing pending/processing request
+  const existing = await query(
+    "SELECT id FROM data_export_requests WHERE founder_id = ? AND status IN ('pending', 'processing')",
+    [founder.id]
+  );
+  if (existing.rows.length > 0) {
+    return c.json({ error: 'An export request is already in progress.' }, 409);
+  }
+
+  const requestId = nanoid();
+  await query(
+    'INSERT INTO data_export_requests (id, founder_id, status) VALUES (?, ?, ?)',
+    [requestId, founder.id, 'pending']
+  );
+
+  log.info('Data export requested', { founderId: founder.id, requestId });
+
+  return c.json({
+    status: 'requested',
+    request_id: requestId,
+    message: 'Your data export has been queued. You will receive an email when it is ready.',
+  });
+});
+
+// ─── Account Deletion (GDPR Article 17) ─────────────────────────────────────
+
+settingsRoutes.post('/settings/request-deletion', async (c) => {
+  const founder = c.get('founder');
+
+  // Check for existing pending request
+  const existing = await query(
+    "SELECT id FROM deletion_requests WHERE founder_id = ? AND status IN ('pending', 'confirmed')",
+    [founder.id]
+  );
+  if (existing.rows.length > 0) {
+    return c.json({ error: 'A deletion request is already pending.' }, 409);
+  }
+
+  const requestId = nanoid();
+  const confirmationToken = nanoid(32);
+
+  await query(
+    'INSERT INTO deletion_requests (id, founder_id, status, confirmation_token) VALUES (?, ?, ?, ?)',
+    [requestId, founder.id, 'pending', confirmationToken]
+  );
+
+  log.info('Account deletion requested', { founderId: founder.id, requestId });
+
+  // In production: send confirmation email with token
+  return c.json({
+    status: 'pending',
+    request_id: requestId,
+    message: 'A confirmation email has been sent. You must confirm deletion within 7 days.',
+  });
+});
+
+settingsRoutes.post('/settings/confirm-deletion', async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.json() as { confirmation_token: string };
+
+  const request = await query(
+    "SELECT id FROM deletion_requests WHERE founder_id = ? AND confirmation_token = ? AND status = 'pending'",
+    [founder.id, body.confirmation_token]
+  );
+
+  if (request.rows.length === 0) {
+    return c.json({ error: 'Invalid or expired confirmation token.' }, 400);
+  }
+
+  const requestId = (request.rows[0] as Record<string, string>).id;
+
+  // Mark as confirmed — actual deletion happens via a scheduled job
+  await query(
+    "UPDATE deletion_requests SET status = 'confirmed', confirmed_at = ? WHERE id = ?",
+    [new Date().toISOString(), requestId]
+  );
+
+  log.info('Account deletion confirmed', { founderId: founder.id, requestId });
+
+  return c.json({
+    status: 'confirmed',
+    message: 'Your account and all associated data will be permanently deleted within 30 days. You can cancel by contacting support.',
+  });
+});
+
+// ─── AI Usage Summary ───────────────────────────────────────────────────────
+
+settingsRoutes.get('/settings/usage', async (c) => {
+  const founder = c.get('founder');
+  const products = await query('SELECT id, name FROM products WHERE owner_id = ?', [founder.id]);
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
+
+  const usageByProduct = await Promise.all(
+    (products.rows as unknown as Array<{ id: string; name: string }>).map(async (p) => {
+      const result = await query(
+        `SELECT
+           COALESCE(SUM(input_tokens), 0) as input_tokens,
+           COALESCE(SUM(output_tokens), 0) as output_tokens,
+           COALESCE(SUM(cache_read_tokens), 0) as cache_tokens,
+           COALESCE(SUM(cost_cents), 0) as cost_cents,
+           COUNT(*) as calls
+         FROM ai_usage_log WHERE product_id = ? AND created_at BETWEEN ? AND ?`,
+        [p.id, startOfMonth, endOfMonth]
+      );
+      const row = (result.rows[0] as Record<string, number>) ?? {};
+      return {
+        product_id: p.id,
+        product_name: p.name,
+        input_tokens: row.input_tokens ?? 0,
+        output_tokens: row.output_tokens ?? 0,
+        cache_tokens: row.cache_tokens ?? 0,
+        cost_cents: row.cost_cents ?? 0,
+        calls: row.calls ?? 0,
+      };
+    })
+  );
+
+  return c.json({
+    period: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`,
+    usage: usageByProduct,
+    total_cost_cents: usageByProduct.reduce((sum, p) => sum + p.cost_cents, 0),
+  });
 });

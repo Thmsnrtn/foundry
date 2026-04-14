@@ -201,6 +201,17 @@ app.route('/', apiUXRoutes);
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
 app.notFound((c) => {
+  const accept = c.req.header('Accept') ?? '';
+  if (accept.includes('text/html')) {
+    return c.html(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not Found — Foundry</title><link rel="stylesheet" href="/static/styles.css"></head><body>
+      <header class="site-header"><div class="header-left"><a href="/" class="logo">Foundry</a></div></header>
+      <main class="main-full" style="text-align:center;padding-top:4rem;">
+        <h1 style="font-size:4rem;font-weight:800;color:#e5e7eb;">404</h1>
+        <h2>Page not found</h2>
+        <p style="color:#6b7280;margin-bottom:2rem;">The page you're looking for doesn't exist or has been moved.</p>
+        <a href="/dashboard" class="btn btn-primary">Go to Dashboard</a>
+      </main></body></html>`, 404);
+  }
   return c.json({ error: 'Not found' }, 404);
 });
 

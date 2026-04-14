@@ -6,6 +6,70 @@ import { dashboardLayout } from '../../views/layout.js';
 import { lifecycleProgress, lifecycleConditions } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 
+/** Human-readable descriptions and actions for each lifecycle prompt. */
+const PROMPT_DESCRIPTIONS: Record<string, { name: string; description: string; what: string; nextAction: string }> = {
+  prompt_1: {
+    name: 'Initial Audit',
+    description: 'Foundry analyzes your codebase across 10 dimensions to establish a baseline.',
+    what: 'Run your first audit and review the results. Fix blocking issues before proceeding.',
+    nextAction: 'Run an audit from the Audit page.',
+  },
+  prompt_2: {
+    name: 'Hypothesis Formation',
+    description: 'Based on your audit results, Foundry forms hypotheses about your product\'s market fit.',
+    what: 'Review and validate the hypotheses Foundry generates. Confirm or reject each one.',
+    nextAction: 'Check the Decisions queue for hypothesis validation tasks.',
+  },
+  prompt_2_5: {
+    name: 'Remediation',
+    description: 'Auto-fix blocking issues from your audit. PRs are opened against your repo.',
+    what: 'Review and merge the remediation PRs Foundry creates.',
+    nextAction: 'Check the Remediation page for open PRs.',
+  },
+  prompt_3: {
+    name: 'Beta Infrastructure',
+    description: 'Set up feedback loops with early users. Capture interviews, quotes, and activation data.',
+    what: 'Record beta participant interviews and track activation outcomes.',
+    nextAction: 'Visit the Beta page to log participant feedback.',
+  },
+  prompt_4: {
+    name: 'Intelligence Activation',
+    description: 'Stressor reports, competitive monitoring, and risk state assessment come online.',
+    what: 'Start reporting metrics (MRR, retention, NPS) so intelligence can calibrate.',
+    nextAction: 'Report metrics via the Revenue page or API.',
+  },
+  prompt_5: {
+    name: 'Decision Engine',
+    description: 'Foundry begins surfacing decisions with context, options, and scenario models.',
+    what: 'Review and resolve decisions as they appear. Each resolution trains the pattern engine.',
+    nextAction: 'Check the Decisions queue regularly.',
+  },
+  prompt_6: {
+    name: 'Competitive Intelligence',
+    description: 'Weekly competitive scans detect pricing changes, feature launches, and positioning shifts.',
+    what: 'Review competitive signals and factor them into your strategy.',
+    nextAction: 'Visit the Competitive page for the latest signals.',
+  },
+  prompt_7: {
+    name: 'Cohort Analysis',
+    description: 'Retention curves and cohort comparisons reveal which acquisition channels retain best.',
+    what: 'Monitor cohort health and compare against historical averages.',
+    nextAction: 'Visit the Cohorts page.',
+  },
+  prompt_8: {
+    name: 'Scenario Modeling',
+    description: 'Gate 3 decisions include forward projections at 30, 60, and 90 days.',
+    what: 'Review scenario models before making high-impact decisions.',
+    nextAction: 'Scenarios appear automatically on Gate 3+ decisions.',
+  },
+  prompt_9: {
+    name: 'Full Autonomy',
+    description: 'Foundry has exited cold start. Pattern library is calibrated. Maximum autonomous operation.',
+    what: 'Continue operating. Foundry handles Gate 0-2 actions autonomously.',
+    nextAction: 'Review the weekly digest and respond to Gate 3+ decisions.',
+  },
+};
+
 export const lifecycleRoutes = new Hono<AuthEnv>();
 
 lifecycleRoutes.get('/products/:id/lifecycle', async (c) => {
@@ -19,17 +83,56 @@ lifecycleRoutes.get('/products/:id/lifecycle', async (c) => {
   const conditionsResult = await getLifecycleConditions(productId);
   const ls = state.rows[0] as Record<string, unknown> | undefined;
   const currentPrompt = (ls?.current_prompt as string) ?? 'prompt_1';
+  const riskState = (ls?.risk_state as string) ?? 'green';
+
+  const promptInfo = PROMPT_DESCRIPTIONS[currentPrompt] ?? PROMPT_DESCRIPTIONS.prompt_1;
+  const promptNumber = parseInt(currentPrompt.replace('prompt_', '').replace('.', '_'), 10) || 1;
 
   const content = html`
     <h1>Lifecycle</h1>
+
     <div class="card">
       <h3>Current Position</h3>
       ${lifecycleProgress(currentPrompt)}
-      <p style="margin-top:0.75rem;">
-        <strong>Current Prompt:</strong> ${currentPrompt}
-        ${ls?.risk_state ? html` · <strong>Risk State:</strong> ${ls.risk_state}` : ''}
-      </p>
     </div>
+
+    <div class="card" style="border-left:3px solid #2563eb;">
+      <div style="display:flex;justify-content:space-between;align-items:start;">
+        <div>
+          <h3 style="margin-bottom:0.25rem;">Phase ${promptNumber}: ${promptInfo.name}</h3>
+          <p style="color:#4b5563;margin-bottom:0.75rem;">${promptInfo.description}</p>
+        </div>
+        <span class="risk-badge risk-${riskState}">${riskState.toUpperCase()}</span>
+      </div>
+      <div style="background:#f8fafc;border-radius:6px;padding:1rem;margin-bottom:0.75rem;">
+        <strong style="font-size:0.87rem;">What you should be doing:</strong>
+        <p style="color:#374151;margin:0.25rem 0 0;">${promptInfo.what}</p>
+      </div>
+      <p style="font-size:0.87rem;"><strong>Next action:</strong> ${promptInfo.nextAction}</p>
+    </div>
+
+    <div class="card">
+      <h3>All Phases</h3>
+      <div style="display:flex;flex-direction:column;gap:0.5rem;">
+        ${Object.entries(PROMPT_DESCRIPTIONS).map(([key, info]) => {
+          const num = parseInt(key.replace('prompt_', '').replace('.', '_'), 10) || 0;
+          const isCurrent = key === currentPrompt;
+          const isPast = num < promptNumber;
+          const statusIcon = isPast ? '✓' : isCurrent ? '→' : '○';
+          const statusColor = isPast ? '#059669' : isCurrent ? '#2563eb' : '#9ca3af';
+          return html`
+            <div style="display:flex;align-items:start;gap:0.75rem;padding:0.5rem 0;${isPast ? 'opacity:0.6;' : ''}">
+              <span style="color:${statusColor};font-weight:700;font-size:1.1rem;min-width:20px;text-align:center;">${statusIcon}</span>
+              <div>
+                <strong style="font-size:0.87rem;${isCurrent ? 'color:#2563eb;' : ''}">${info.name}</strong>
+                <p style="font-size:0.8rem;color:#6b7280;margin:0;">${info.description}</p>
+              </div>
+            </div>
+          `;
+        })}
+      </div>
+    </div>
+
     ${lifecycleConditions(conditionsResult.rows as Array<Record<string, unknown>>)}
   `;
 

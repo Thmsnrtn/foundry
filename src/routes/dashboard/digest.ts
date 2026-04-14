@@ -48,6 +48,19 @@ async function assembleDigestData(productId: string) {
     [productId]
   );
 
+  // Format competitive signals for display
+  const compSignals = (compResult.rows as unknown as Array<Record<string, string>>).map((s) => ({
+    competitor: s.competitor_name,
+    type: s.signal_type,
+    summary: s.signal_summary,
+    significance: s.significance,
+    detected_at: s.detected_at,
+  }));
+
+  // Calculate data age
+  const metricsDate = metricsRow?.snapshot_date as string | undefined;
+  const dataAgeDays = metricsDate ? Math.floor((Date.now() - new Date(metricsDate).getTime()) / 86400000) : null;
+
   return {
     risk_state: {
       state: riskState,
@@ -55,11 +68,12 @@ async function assembleDigestData(productId: string) {
       changed_at: (ls?.risk_state_changed_at as string) ?? null,
     },
     stressors,
-    competitive_context: compResult.rows,
+    competitive_signals: compSignals,
     mrr: mrr ?? { new_cents: 0, expansion_cents: 0, contraction_cents: 0, churned_cents: 0, total_cents: 0, health_ratio: null },
     mrr_health: mrrHealth,
     metrics: metricsRow ?? null,
     cohort_snapshot: cohort,
+    data_age_days: dataAgeDays,
     generated_at: new Date().toISOString(),
   };
 }

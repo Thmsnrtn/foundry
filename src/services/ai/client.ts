@@ -27,16 +27,26 @@ function getClient(): Anthropic {
 }
 
 /**
- * Make a Claude API call with the given configuration.
+ * Make a Claude API call with prompt caching for system prompts.
+ * System prompts are marked as cacheable to reduce costs on repeated calls.
  */
 export async function callClaude(config: AICallConfig): Promise<AIResponse> {
   const client = getClient();
+
+  // Use prompt caching: mark the system prompt as cacheable.
+  // Anthropic caches the system prompt across calls with the same content,
+  // reducing input token costs by ~90% on cache hits.
+  const systemContent: Anthropic.Messages.TextBlockParam[] = [{
+    type: 'text',
+    text: config.systemPrompt,
+    cache_control: { type: 'ephemeral' },
+  } as any];
 
   const response = await client.messages.create({
     model: config.model,
     max_tokens: config.maxTokens,
     temperature: config.temperature ?? 0.3,
-    system: config.systemPrompt,
+    system: systemContent as any,
     messages: [{ role: 'user', content: config.userPrompt }],
   });
 
@@ -45,12 +55,19 @@ export async function callClaude(config: AICallConfig): Promise<AIResponse> {
     .map((block) => block.text)
     .join('\n');
 
+  // Track cache performance
+  const usage = response.usage as unknown as Record<string, number>;
+  const cacheHit = usage.cache_read_input_tokens ?? 0;
+  const cacheCreation = usage.cache_creation_input_tokens ?? 0;
+
   return {
     content: textContent,
     model: config.model,
     usage: {
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,
+      cache_read_input_tokens: cacheHit,
+      cache_creation_input_tokens: cacheCreation,
     },
     stop_reason: response.stop_reason,
   };

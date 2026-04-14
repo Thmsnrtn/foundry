@@ -40,6 +40,7 @@ program
       '002_wisdom_remediation.sql',
       '003_ux_intelligence.sql',
       '004_migration_tracking.sql',
+      '005_usage_tracking.sql',
     ];
 
     for (const file of migrations) {

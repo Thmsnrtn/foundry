@@ -93,7 +93,7 @@ dashboardRoutes.get('/dashboard', async (c) => {
       ${dashboardSummaryCard('Pending Decisions', decisions.rows.length, '/decisions')}
       ${dashboardSummaryCard('Active Stressors', stressorRows.length, '#stressors')}
       ${dashboardSummaryCard('Current Prompt', currentPrompt.replace('prompt_', 'P'), '/products/' + productId + '/lifecycle')}
-      ${dashboardSummaryCard('MRR Health', mrrHealth.value.toFixed(2), '/products/' + productId + '/cohorts')}
+      ${dashboardSummaryCard('MRR Health', mrr && mrrHealth.value > 0 ? mrrHealth.value.toFixed(2) : '—', '/products/' + productId + '/revenue')}
     </div>
 
     <div class="card">
