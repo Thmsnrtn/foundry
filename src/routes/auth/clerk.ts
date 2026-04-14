@@ -32,7 +32,48 @@ authRoutes.post('/auth/webhook', async (c) => {
   const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
   if (!webhookSecret) return c.json({ error: 'Webhook not configured' }, 500);
 
-  const payload = await c.req.json() as { type: string; data: Record<string, unknown> };
+  // Verify webhook signature (Clerk uses Svix)
+  const svixId = c.req.header('svix-id');
+  const svixTimestamp = c.req.header('svix-timestamp');
+  const svixSignature = c.req.header('svix-signature');
+
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    return c.json({ error: 'Missing signature headers' }, 401);
+  }
+
+  // Verify timestamp is within tolerance (5 minutes)
+  const timestampSeconds = parseInt(svixTimestamp, 10);
+  const now = Math.floor(Date.now() / 1000);
+  if (isNaN(timestampSeconds) || Math.abs(now - timestampSeconds) > 300) {
+    return c.json({ error: 'Invalid timestamp' }, 401);
+  }
+
+  // Verify HMAC signature
+  const rawBody = await c.req.text();
+  const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`;
+
+  // Clerk webhook secrets are base64 encoded with "whsec_" prefix
+  const secretBytes = Uint8Array.from(atob(webhookSecret.replace('whsec_', '')), (ch) => ch.charCodeAt(0));
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    secretBytes,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signatureBytes = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(signedContent));
+  const expectedSignature = btoa(String.fromCharCode(...new Uint8Array(signatureBytes)));
+
+  // svix-signature may contain multiple signatures separated by spaces, each prefixed with "v1,"
+  const signatures = svixSignature.split(' ').map((s) => s.replace('v1,', ''));
+  const isValid = signatures.some((sig) => sig === expectedSignature);
+
+  if (!isValid) {
+    return c.json({ error: 'Invalid signature' }, 401);
+  }
+
+  const payload = JSON.parse(rawBody) as { type: string; data: Record<string, unknown> };
 
   if (payload.type === 'user.created') {
     const userId = payload.data.id as string;

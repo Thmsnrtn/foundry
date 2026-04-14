@@ -7,6 +7,8 @@ import { dashboardLayout } from '../../views/layout.js';
 import { decisionList, decisionDetail, type DecisionData } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
+import { resolveDecisionSchema, recordOutcomeSchema, validate } from '../../lib/validation.js';
+import { log } from '../../lib/logger.js';
 import type { RiskStateValue } from '../../types/index.js';
 
 export const decisionRoutes = new Hono<AuthEnv>();
@@ -51,7 +53,7 @@ decisionRoutes.get('/decisions/:id', async (c) => {
 decisionRoutes.post('/decisions/:id/resolve', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
-  const body = await c.req.json() as { chosen_option: string; resolution_reasoning?: string };
+  const body = validate(resolveDecisionSchema, await c.req.json());
   const result = await query(
     `SELECT d.product_id, d.gate FROM decisions d JOIN products p ON d.product_id = p.id WHERE d.id = ? AND p.owner_id = ?`,
     [decisionId, founder.id]
@@ -69,7 +71,9 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
   await resolveDecision(decisionId, productId, body.chosen_option, 'founder');
 
   // UX Intelligence: check milestones after resolve
-  checkAndAwardMilestones(productId, founder.id).catch(() => {});
+  checkAndAwardMilestones(productId, founder.id).catch((err) => {
+    log.error('Failed to check milestones after decision resolve', err, { productId, founderId: founder.id });
+  });
 
   // Store resolution reasoning and wisdom context flag
   if (body.resolution_reasoning) {
@@ -85,7 +89,7 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
 decisionRoutes.post('/decisions/:id/outcome', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
-  const body = await c.req.json() as { outcome: string };
+  const body = validate(recordOutcomeSchema, await c.req.json());
   const result = await query(
     `SELECT d.product_id FROM decisions d JOIN products p ON d.product_id = p.id WHERE d.id = ? AND p.owner_id = ?`,
     [decisionId, founder.id]

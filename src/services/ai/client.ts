@@ -17,7 +17,11 @@ function getClient(): Anthropic {
   if (!_client) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required');
-    _client = new Anthropic({ apiKey });
+    _client = new Anthropic({
+      apiKey,
+      timeout: 120_000, // 2 minute timeout for AI calls
+      maxRetries: 2,
+    });
   }
   return _client;
 }

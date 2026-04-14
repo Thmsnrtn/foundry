@@ -16,6 +16,7 @@ import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import { startTour } from '../../services/ux/tour.js';
 import { generateDimensionHints } from '../../services/ux/hints.js';
 import { nanoid } from 'nanoid';
+import { selectRepoSchema, validate } from '../../lib/validation.js';
 
 export const onboardingRoutes = new Hono<AuthEnv>();
 
@@ -66,7 +67,8 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
 // Step 3: Select repository
 onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const founder = c.get('founder');
-  const body = await parseBody(c) as { repo_owner: string; repo_name: string; access_token: string; market_category?: string };
+  const rawBody = await parseBody(c);
+  const body = validate(selectRepoSchema, rawBody);
 
   const productId = nanoid();
   const repoUrl = `https://github.com/${body.repo_owner}/${body.repo_name}`;
@@ -157,7 +159,9 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   // UX Intelligence: award milestones, start tour, generate dimension hints (fire-and-forget)
   await checkAndAwardMilestones(body.product_id, founder.id);
   await startTour(founder.id, body.product_id);
-  generateDimensionHints(auditScore.id, body.product_id).catch(() => {});
+  generateDimensionHints(auditScore.id, body.product_id).catch((err) => {
+    console.error('[onboarding] Failed to generate dimension hints:', err?.message, { auditId: auditScore.id, productId: body.product_id });
+  });
 
   return c.redirect('/dashboard?tour=1');
 });

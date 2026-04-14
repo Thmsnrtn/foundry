@@ -7,6 +7,7 @@ import { competitiveView } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { requireTier } from '../../middleware/tier-gate.js';
 import { nanoid } from 'nanoid';
+import { addCompetitorSchema, validate } from '../../lib/validation.js';
 
 export const competitiveRoutes = new Hono<AuthEnv>();
 
@@ -36,7 +37,7 @@ competitiveRoutes.post('/products/:id/competitors', async (c) => {
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-  const body = await c.req.json() as { name: string; website?: string; positioning?: string };
+  const body = validate(addCompetitorSchema, await c.req.json());
   await query('INSERT INTO competitors (id, product_id, name, website, positioning) VALUES (?, ?, ?, ?, ?)',
     [nanoid(), productId, body.name, body.website ?? null, body.positioning ?? null]);
   return c.json({ status: 'added' });

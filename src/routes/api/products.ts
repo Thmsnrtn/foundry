@@ -7,5 +7,11 @@ export const apiProductRoutes = new Hono<AuthEnv>();
 apiProductRoutes.get('/api/products', async (c) => {
   const founder = c.get('founder');
   const result = await getProductsByOwner(founder.id);
-  return c.json({ products: result.rows });
+  // Strip sensitive fields from API response
+  const safeProducts = result.rows.map((row) => {
+    const p = row as Record<string, unknown>;
+    const { github_access_token, ...safe } = p;
+    return safe;
+  });
+  return c.json({ products: safeProducts });
 });
