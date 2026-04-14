@@ -17,6 +17,8 @@ import { startTour } from '../../services/ux/tour.js';
 import { generateDimensionHints } from '../../services/ux/hints.js';
 import { nanoid } from 'nanoid';
 import { selectRepoSchema, validate } from '../../lib/validation.js';
+import { encryptToken, getPlaintextToken } from '../../lib/crypto.js';
+import { log } from '../../lib/logger.js';
 
 export const onboardingRoutes = new Hono<AuthEnv>();
 
@@ -60,7 +62,12 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
   if (!tokenData.access_token) return c.json({ error: 'GitHub auth failed' }, 400);
 
   const repos = await listRepos(tokenData.access_token);
-  const content = onboardingWizard('select_repo', { repos, _token: tokenData.access_token });
+
+  // Store token in encrypted HttpOnly cookie instead of passing to view template
+  const encryptedToken = encryptToken(tokenData.access_token);
+  c.header('Set-Cookie', `__gh_token=${encryptedToken}; Path=/onboarding; HttpOnly; SameSite=Strict; Max-Age=3600${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+
+  const content = onboardingWizard('select_repo', { repos });
   return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
 });
 
@@ -68,16 +75,35 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
 onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const founder = c.get('founder');
   const rawBody = await parseBody(c);
-  const body = validate(selectRepoSchema, rawBody);
+
+  // Retrieve token from encrypted cookie (not form body)
+  const cookie = c.req.header('Cookie') ?? '';
+  const tokenCookie = cookie.split(';').find((c) => c.trim().startsWith('__gh_token='));
+  const encryptedToken = tokenCookie?.split('=').slice(1).join('=')?.trim();
+  if (!encryptedToken) {
+    return c.json({ error: 'GitHub token expired. Please reconnect GitHub.' }, 400);
+  }
+  const accessToken = getPlaintextToken(encryptedToken);
+  if (!accessToken) {
+    return c.json({ error: 'Invalid GitHub token. Please reconnect GitHub.' }, 400);
+  }
+
+  const body = validate(selectRepoSchema, { ...rawBody, access_token: accessToken });
 
   const productId = nanoid();
   const repoUrl = `https://github.com/${body.repo_owner}/${body.repo_name}`;
 
+  // Encrypt the token before storing in database
+  const encryptedStorageToken = encryptToken(accessToken);
+
   await query(
     `INSERT INTO products (id, name, owner_id, github_repo_url, github_repo_owner, github_repo_name, github_access_token, market_category)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [productId, body.repo_name, founder.id, repoUrl, body.repo_owner, body.repo_name, body.access_token, body.market_category ?? null]
+    [productId, body.repo_name, founder.id, repoUrl, body.repo_owner, body.repo_name, encryptedStorageToken, body.market_category ?? null]
   );
+
+  // Clear the temporary token cookie
+  c.header('Set-Cookie', '__gh_token=; Path=/onboarding; HttpOnly; SameSite=Strict; Max-Age=0');
 
   // Initialize lifecycle state
   await query(

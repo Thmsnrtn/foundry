@@ -7,6 +7,8 @@ import { dashboardLayout } from '../../views/layout.js';
 import { settingsPage } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
+import { preferencesSchema, validate } from '../../lib/validation.js';
+import { env } from '../../lib/env.js';
 
 export const settingsRoutes = new Hono<AuthEnv>();
 
@@ -38,4 +40,49 @@ settingsRoutes.get('/settings', async (c) => {
     </div>
   `;
   return c.html(dashboardLayout(ctx, content));
+});
+
+// ─── Update Preferences ─────────────────────────────────────────────────────
+
+settingsRoutes.post('/settings/preferences', async (c) => {
+  const founder = c.get('founder');
+  const rawBody = await c.req.json();
+  const prefs = validate(preferencesSchema, rawBody);
+
+  // Merge with existing preferences
+  const existing = founder.preferences ?? {};
+  const merged = { ...existing, ...prefs };
+
+  await query(
+    'UPDATE founders SET preferences = ? WHERE id = ?',
+    [JSON.stringify(merged), founder.id]
+  );
+
+  return c.json({ status: 'saved', preferences: merged });
+});
+
+// ─── Create Checkout Session ────────────────────────────────────────────────
+
+settingsRoutes.post('/settings/upgrade', async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.json() as { tier: string };
+
+  const tier = body.tier as 'founding_cohort' | 'growth' | 'scale';
+  if (!['founding_cohort', 'growth', 'scale'].includes(tier)) {
+    return c.json({ error: 'Invalid tier' }, 400);
+  }
+
+  if (!founder.stripe_customer_id) {
+    return c.json({ error: 'No billing account. Please contact support.' }, 400);
+  }
+
+  const appUrl = env().APP_URL;
+  const sessionUrl = await createCheckoutSession(
+    founder.stripe_customer_id,
+    tier,
+    `${appUrl}/settings?upgraded=1`,
+    `${appUrl}/settings?cancelled=1`,
+  );
+
+  return c.json({ checkout_url: sessionUrl });
 });

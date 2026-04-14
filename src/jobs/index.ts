@@ -19,6 +19,7 @@ import { generatePatternFromOutcome } from '../services/decisions/patterns.js';
 import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
 import { getProductDNA } from '../services/wisdom/dna.js';
 import { isPRMerged, isPROpen } from '../services/audit/github.js';
+import { getPlaintextToken } from '../lib/crypto.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
 import { callOpus, parseJSONResponse } from '../services/ai/client.js';
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
@@ -458,7 +459,7 @@ export async function remediationOutcomeCheck(): Promise<void> {
     try {
       const owner = pr.github_repo_owner as string;
       const repo = pr.github_repo_name as string;
-      const token = pr.github_access_token as string;
+      const token = getPlaintextToken(pr.github_access_token as string);
       const prNumber = pr.github_pr_number as number;
 
       if (!owner || !repo || !token || !prNumber) continue;

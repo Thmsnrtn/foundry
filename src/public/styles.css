@@ -304,3 +304,118 @@ p { margin-bottom: 0.5rem; }
 .dim-hint-icon { font-size: 11px; color: #9ca3af; cursor: help; }
 .dim-hint-tooltip { display: none; position: absolute; left: 0; bottom: calc(100% + 6px); background: #1a1a2e; color: #e8eaf0; font-size: 11px; border-radius: 6px; padding: 8px 10px; width: 220px; line-height: 1.5; z-index: 50; }
 .dim-hint-wrapper:hover .dim-hint-tooltip { display: block; }
+
+/* =============================================================================
+   RESPONSIVE DESIGN — Mobile-First Overhaul
+   ============================================================================= */
+
+/* Hamburger toggle (hidden on desktop) */
+.sidebar-toggle { display: none; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #1a1a2e; padding: 4px 8px; }
+.sidebar-overlay { display: none; }
+
+/* ─── Tablet (≤1024px) ────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .main-with-sidebar { margin-left: 0; padding: 1rem; }
+  .sidebar { position: fixed; left: -260px; width: 260px; transition: left 0.25s ease; z-index: 300; top: 56px; }
+  .sidebar.open { left: 0; }
+  .sidebar-toggle { display: block; }
+  .sidebar-overlay { display: none; position: fixed; inset: 0; top: 56px; background: rgba(0,0,0,0.3); z-index: 299; }
+  .sidebar-overlay.visible { display: block; }
+
+  .dimension-row { grid-template-columns: 1fr 40px 1fr 40px; }
+  .comp-header, .comp-row { grid-template-columns: 1fr 50px 50px 50px; font-size: 0.8rem; }
+  .mrr-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ─── Mobile (≤640px) ─────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  html { font-size: 14px; }
+  .site-header { padding: 0 0.75rem; height: 48px; }
+  .header-right { gap: 0.5rem; }
+  .user-name { display: none; }
+
+  .main-full { padding: 1rem 0.75rem; }
+  .main-with-sidebar { padding: 0.75rem; }
+
+  .hero { padding: 2.5rem 1rem 2rem; }
+  .hero h1 { font-size: 1.8rem; }
+  .hero p { font-size: 1rem; }
+
+  .dashboard-grid { grid-template-columns: 1fr; gap: 0.75rem; }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .mrr-grid { grid-template-columns: repeat(2, 1fr); }
+
+  .features { grid-template-columns: 1fr; padding: 1rem 0.75rem; }
+  .pricing-grid { grid-template-columns: 1fr; padding: 0 0.75rem; }
+
+  .card { padding: 1rem; }
+  .step-card { padding: 1.25rem; }
+  .onboarding-steps { max-width: 100%; }
+
+  .dimension-row { grid-template-columns: 1fr 30px; gap: 0.35rem; }
+  .dim-weight, .dim-bar-track { display: none; }
+
+  .decision-meta { flex-wrap: wrap; }
+  .stressor-meta { flex-wrap: wrap; gap: 0.5rem; }
+
+  .audit-summary { flex-direction: column; gap: 0.75rem; }
+  .composite-score { font-size: 2.25rem; }
+
+  .tour-card { width: calc(100vw - 32px); bottom: 16px; left: 16px; transform: none; }
+  .notif-dropdown { width: calc(100vw - 32px); right: -60px; }
+  .milestone-toast { right: 12px; left: 12px; max-width: none; }
+
+  .btn { padding: 0.6rem 1rem; min-height: 44px; }
+  .btn-sm { min-height: 36px; }
+
+  /* Form elements touch-friendly sizing */
+  .form-group input, .form-group select, .form-group textarea {
+    padding: 0.65rem 0.75rem; font-size: 1rem; min-height: 44px;
+  }
+}
+
+/* =============================================================================
+   ACCESSIBILITY
+   ============================================================================= */
+
+/* Focus indicators — visible ring for keyboard navigation */
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
+summary:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Skip to main content link (hidden unless focused) */
+.skip-link {
+  position: absolute; top: -100px; left: 16px; z-index: 9999;
+  background: #2563eb; color: #fff; padding: 8px 16px; border-radius: 4px;
+  font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.skip-link:focus { top: 8px; }
+
+/* Color-blind-safe risk states: add text labels alongside colors */
+.risk-badge::before { font-weight: 800; margin-right: 4px; }
+.risk-green::before { content: "●"; }
+.risk-yellow::before { content: "▲"; }
+.risk-red::before { content: "■"; }
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* High contrast mode improvements */
+@media (prefers-contrast: high) {
+  .sidebar { background: #000; }
+  .sidebar-nav li a { color: #ddd; }
+  .sidebar-nav li a.active { background: #333; color: #fff; border-left-color: #4d90fe; }
+  .card { border-width: 2px; }
+  .risk-badge { border: 1px solid currentColor; }
+}
+
+/* Print styles */
+@media print {
+  .sidebar, .site-header, .next-action-banner, .tour-backdrop, .tour-card { display: none !important; }
+  .main-with-sidebar { margin-left: 0; }
+  body { background: #fff; }
+}

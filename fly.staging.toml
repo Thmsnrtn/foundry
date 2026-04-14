@@ -1,0 +1,31 @@
+# =============================================================================
+# FOUNDRY — Staging Environment (Fly.io)
+# Deploy: fly deploy --config fly.staging.toml --app foundry-staging
+# =============================================================================
+
+app = "foundry-staging"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = 5
+
+[build]
+
+[env]
+  NODE_ENV = "staging"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 100
+    soft_limit = 80
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

@@ -18,6 +18,7 @@ import { authMiddleware } from './middleware/auth.js';
 import { internalMiddleware } from './middleware/internal.js';
 import { requestIdMiddleware, securityHeaders } from './middleware/security.js';
 import { apiRateLimit, authRateLimit, webhookRateLimit } from './middleware/rate-limit.js';
+import { csrfProtection } from './middleware/csrf.js';
 
 // Public routes (no auth)
 import { landingRoutes, pricingRoutes, caseStudyRoutes } from './routes/public/landing.js';
@@ -165,6 +166,15 @@ app.use('/koldly/*', authMiddleware);
 app.use('/settings/*', authMiddleware);
 app.use('/switch-product', authMiddleware);
 app.use('/api/*', authMiddleware);
+
+// CSRF protection on all dashboard form submissions
+app.use('/dashboard/*', csrfProtection);
+app.use('/onboarding/*', csrfProtection);
+app.use('/products/*', csrfProtection);
+app.use('/decisions/*', csrfProtection);
+app.use('/beta/*', csrfProtection);
+app.use('/settings/*', csrfProtection);
+app.use('/switch-product', csrfProtection);
 
 // Dashboard routes
 app.route('/', dashboardRoutes);
