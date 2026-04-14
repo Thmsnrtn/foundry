@@ -19,7 +19,7 @@ export const betaRoutes = new Hono<AuthEnv>();
 
 betaRoutes.get('/beta', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'beta', 'Beta');
+  const ctx = await getLayoutContext(founder, 'beta', 'Beta', undefined, c);
   const products = await query('SELECT id FROM products WHERE owner_id = ?', [founder.id]);
   const productId = products.rows.length > 0 ? (products.rows[0] as Record<string, string>).id : null;
   const intakes = productId ? await getBetaIntakes(productId) : { rows: [] };

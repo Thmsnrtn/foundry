@@ -180,6 +180,7 @@ app.use('/beta/*', authMiddleware);
 app.use('/koldly/*', authMiddleware);
 app.use('/settings/*', authMiddleware);
 app.use('/switch-product', authMiddleware);
+app.use('/integrations/*', authMiddleware);
 app.use('/api/*', authMiddleware);
 
 // CSRF protection on all dashboard form submissions

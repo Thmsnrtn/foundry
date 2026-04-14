@@ -14,7 +14,7 @@ export const apiDocsRoutes = new Hono<AuthEnv>();
 
 apiDocsRoutes.get('/settings/api-docs', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'settings', 'API Documentation');
+  const ctx = await getLayoutContext(founder, 'settings', 'API Documentation', undefined, c);
   const keys = await listApiKeys(founder.id);
   const appUrl = process.env.APP_URL ?? 'https://foundry.dev';
 

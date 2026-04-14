@@ -24,7 +24,7 @@ insightRoutes.get('/products/:id/insights', async (c) => {
   if (prodResult.rows.length === 0) return c.redirect('/dashboard');
 
   const product = prodResult.rows[0] as Record<string, string>;
-  const ctx = await getLayoutContext(founder, 'insights', 'Insights', productId);
+  const ctx = await getLayoutContext(founder, 'insights', 'Insights', productId, c);
 
   const [forecast, churnRisk, benchmarks, insights] = await Promise.all([
     forecastRevenue(productId),

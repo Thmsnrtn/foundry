@@ -8,6 +8,7 @@ import { decisionList, decisionDetail, type DecisionData } from '../../views/com
 import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import { resolveDecisionSchema, recordOutcomeSchema, validate } from '../../lib/validation.js';
+import { parseRequestBody, respondWithRedirectOrJson } from '../../lib/request.js';
 import { log } from '../../lib/logger.js';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
@@ -55,7 +56,8 @@ decisionRoutes.get('/decisions/:id', async (c) => {
 decisionRoutes.post('/decisions/:id/resolve', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
-  const body = validate(resolveDecisionSchema, await c.req.json());
+  const rawBody = await parseRequestBody(c);
+  const body = validate(resolveDecisionSchema, rawBody);
   const result = await query(
     `SELECT d.product_id, d.gate FROM decisions d JOIN products p ON d.product_id = p.id WHERE d.id = ? AND p.owner_id = ?`,
     [decisionId, founder.id]
@@ -85,13 +87,14 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
     );
   }
 
-  return c.json({ status: 'resolved' });
+  return respondWithRedirectOrJson(c, `/decisions/${decisionId}`, { status: 'resolved' });
 });
 
 decisionRoutes.post('/decisions/:id/outcome', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
-  const body = validate(recordOutcomeSchema, await c.req.json());
+  const rawBody = await parseRequestBody(c);
+  const body = validate(recordOutcomeSchema, rawBody);
   const result = await query(
     `SELECT d.product_id FROM decisions d JOIN products p ON d.product_id = p.id WHERE d.id = ? AND p.owner_id = ?`,
     [decisionId, founder.id]
@@ -99,7 +102,7 @@ decisionRoutes.post('/decisions/:id/outcome', async (c) => {
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const productId = (result.rows[0] as Record<string, string>).product_id;
   await recordOutcome(decisionId, productId, body.outcome);
-  return c.json({ status: 'recorded' });
+  return respondWithRedirectOrJson(c, `/decisions/${decisionId}`, { status: 'recorded' });
 });
 
 // ─── Manual Decision Creation ───────────────────────────────────────────────

@@ -47,7 +47,7 @@ productRoutes.get('/products/:id/dna', requireTier('wisdom'), async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'dna', 'Product DNA', productId);
+  const ctx = await getLayoutContext(founder, 'dna', 'Product DNA', productId, c);
   const dna = await getProductDNA(productId);
   const completionPct = dna?.completion_pct ?? 0;
   const saved = c.req.query('saved') === '1';
@@ -86,7 +86,7 @@ productRoutes.get('/products/:id/failures', requireTier('wisdom'), async (c) => 
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'failures', 'Failure Log', productId);
+  const ctx = await getLayoutContext(founder, 'failures', 'Failure Log', productId, c);
   const failures = await getAllFailures(productId);
 
   const content = html`
@@ -123,7 +123,7 @@ productRoutes.get('/products/:id/patterns', requireTier('wisdom'), async (c) => 
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'patterns', 'Judgment Patterns', productId);
+  const ctx = await getLayoutContext(founder, 'patterns', 'Judgment Patterns', productId, c);
   const patternsResult = await query(
     'SELECT * FROM founder_judgment_patterns WHERE product_id = ? ORDER BY confidence DESC',
     [productId]
@@ -155,7 +155,7 @@ productRoutes.get('/products/:id/remediation', requireTier('remediation'), async
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'remediation', 'Remediation', productId);
+  const ctx = await getLayoutContext(founder, 'remediation', 'Remediation', productId, c);
   const stats = await getRemediationStats(productId);
   const prsResult = await query(
     'SELECT * FROM remediation_prs WHERE product_id = ? ORDER BY created_at DESC',

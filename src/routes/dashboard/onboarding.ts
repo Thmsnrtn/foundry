@@ -33,7 +33,7 @@ async function parseBody(c: { req: { header: (n: string) => string | undefined; 
 // Step 1: Show onboarding page
 onboardingRoutes.get('/onboarding', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, '', 'Get Started');
+  const ctx = await getLayoutContext(founder, '', 'Get Started', undefined, c);
   const ghClientId = process.env.GITHUB_CLIENT_ID ?? '';
   const appUrl = process.env.APP_URL ?? '';
   const redirectUri = `${appUrl}/onboarding/github/callback`;
@@ -46,7 +46,7 @@ onboardingRoutes.get('/onboarding', async (c) => {
 // Step 2: GitHub OAuth callback
 onboardingRoutes.get('/onboarding/github/callback', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, '', 'Select Repository');
+  const ctx = await getLayoutContext(founder, '', 'Select Repository', undefined, c);
   const code = c.req.query('code');
   if (!code) return c.json({ error: 'Missing code' }, 400);
 
@@ -82,11 +82,11 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const tokenCookie = cookie.split(';').find((c) => c.trim().startsWith('__gh_token='));
   const encryptedToken = tokenCookie?.split('=').slice(1).join('=')?.trim();
   if (!encryptedToken) {
-    return c.json({ error: 'GitHub token expired. Please reconnect GitHub.' }, 400);
+    return c.redirect('/onboarding?error=token_expired');
   }
   const accessToken = getPlaintextToken(encryptedToken);
   if (!accessToken) {
-    return c.json({ error: 'Invalid GitHub token. Please reconnect GitHub.' }, 400);
+    return c.redirect('/onboarding?error=token_invalid');
   }
 
   const body = validate(selectRepoSchema, { ...rawBody, access_token: accessToken });
@@ -150,7 +150,7 @@ onboardingRoutes.post('/onboarding/competitors', async (c) => {
 // Step 4b: Show audit step
 onboardingRoutes.get('/onboarding/audit', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, '', 'Run Audit');
+  const ctx = await getLayoutContext(founder, '', 'Run Audit', undefined, c);
   const productId = c.req.query('product_id') ?? '';
   const content = onboardingWizard('running_audit', { product_id: productId });
   return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));

@@ -8,6 +8,7 @@ import { settingsPage } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
 import { preferencesSchema, validate } from '../../lib/validation.js';
+import { parseRequestBody, respondWithRedirectOrJson } from '../../lib/request.js';
 import { env } from '../../lib/env.js';
 import { nanoid } from 'nanoid';
 import { log } from '../../lib/logger.js';
@@ -16,7 +17,7 @@ export const settingsRoutes = new Hono<AuthEnv>();
 
 settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'settings', 'Settings');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
 
   const products = await query('SELECT id, name, github_repo_url FROM products WHERE owner_id = ?', [founder.id]);
   const productId = products.rows.length > 0 ? (products.rows[0] as Record<string, string>).id : null;
@@ -27,18 +28,75 @@ settingsRoutes.get('/settings', async (c) => {
   const tierLabel = getTierBadge(founder.tier);
   const capabilities = getTierCapabilities(founder.tier);
 
+  const saved = c.req.query('saved') === '1';
+  const prefs = founder.preferences ?? {};
+
   const content = html`
     <h1>Settings</h1>
+    ${saved ? html`<div class="feedback-banner feedback-success"><span class="feedback-icon">&#10003;</span><span>Settings saved.</span></div>` : ''}
+
     ${settingsPage(
       { id: founder.id, email: founder.email, name: founder.name, tier: founder.tier },
       products.rows as Array<Record<string, unknown>>,
       comps.rows as Array<Record<string, unknown>>,
     )}
+
     <div class="card">
       <h3>Subscription</h3>
-      <p><strong>Current Plan:</strong> <span class="badge badge-watch">${tierLabel}</span></p>
-      <p style="font-size:0.87rem;color:#6b7280;">You have access to ${capabilities.length} features.</p>
-      ${founder.tier !== 'scale' && founder.tier !== 'founding_cohort' ? html`<a href="/settings" class="btn btn-primary btn-sm" style="margin-top:0.5rem;">Upgrade to Scale</a>` : ''}
+      <p><strong>Current Plan:</strong> <span class="status-badge status-blue">${tierLabel}</span></p>
+      <p style="font-size:var(--text-sm);color:var(--color-text-muted);">You have access to ${capabilities.length} features.</p>
+      ${founder.tier !== 'scale' && founder.tier !== 'founding_cohort' ? html`
+        <a href="/settings/integrations" class="btn btn-primary btn-sm" style="margin-top:0.5rem;">Upgrade Plan</a>` : ''}
+    </div>
+
+    <div class="card">
+      <h3>Preferences</h3>
+      <form method="POST" action="/settings/preferences">
+        <div class="form-group">
+          <label for="digest_time">Digest Delivery Time</label>
+          <input type="time" name="digest_time" id="digest_time" value="${prefs.digest_time ?? '09:00'}" />
+        </div>
+        <div class="form-group">
+          <label for="timezone">Timezone</label>
+          <select name="timezone" id="timezone">
+            ${['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Europe/Berlin', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'UTC'].map((tz) => html`
+              <option value="${tz}" ${prefs.timezone === tz ? 'selected' : ''}>${tz.replace(/_/g, ' ')}</option>
+            `)}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Notification Channels</label>
+          <div style="display:flex;gap:1rem;">
+            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:var(--text-sm);">
+              <input type="checkbox" name="notification_channels" value="email" ${(prefs.notification_channels ?? ['email']).includes('email') ? 'checked' : ''} /> Email
+            </label>
+            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:var(--text-sm);">
+              <input type="checkbox" name="notification_channels" value="dashboard" ${(prefs.notification_channels ?? []).includes('dashboard') ? 'checked' : ''} /> Dashboard
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-sm">Save Preferences</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Integrations &amp; API</h3>
+      <p style="font-size:var(--text-sm);color:var(--color-text-secondary);">Connect Stripe, manage API keys, and configure webhooks.</p>
+      <a href="/settings/integrations" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;">Manage Integrations</a>
+      <a href="/settings/api-docs" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;margin-left:0.5rem;">API Documentation</a>
+    </div>
+
+    <div class="card" style="border-top:2px solid var(--color-border);">
+      <h3>Data &amp; Privacy</h3>
+      <p style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-bottom:0.75rem;">Export your data or request account deletion.</p>
+      <div style="display:flex;gap:0.75rem;">
+        <form method="POST" action="/settings/export-data">
+          <button type="submit" class="btn btn-secondary btn-sm">Export My Data</button>
+        </form>
+        <form method="POST" action="/settings/request-deletion" onsubmit="return confirm('Are you sure you want to delete your account? This action requires email confirmation and takes 30 days to complete.')">
+          <button type="submit" class="btn btn-danger btn-sm">Delete Account</button>
+        </form>
+      </div>
     </div>
   `;
   return c.html(dashboardLayout(ctx, content));
@@ -48,7 +106,13 @@ settingsRoutes.get('/settings', async (c) => {
 
 settingsRoutes.post('/settings/preferences', async (c) => {
   const founder = c.get('founder');
-  const rawBody = await c.req.json();
+  const rawBody = await parseRequestBody(c);
+
+  // Handle notification_channels from form checkboxes
+  if (typeof rawBody.notification_channels === 'string') {
+    rawBody.notification_channels = [rawBody.notification_channels];
+  }
+
   const prefs = validate(preferencesSchema, rawBody);
 
   // Merge with existing preferences
@@ -60,7 +124,7 @@ settingsRoutes.post('/settings/preferences', async (c) => {
     [JSON.stringify(merged), founder.id]
   );
 
-  return c.json({ status: 'saved', preferences: merged });
+  return respondWithRedirectOrJson(c, '/settings?saved=1', { status: 'saved', preferences: merged });
 });
 
 // ─── Create Checkout Session ────────────────────────────────────────────────

@@ -29,6 +29,8 @@ export interface LayoutOptions {
   canAccess?: (featureKey: string) => boolean;
   dnaCompletionPct?: number;
   openPRCount?: number;
+  /** CSRF token for form submissions */
+  csrfToken?: string;
 }
 
 export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
@@ -54,6 +56,8 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
 
   const sidebarRiskClass = riskState === 'red' ? 'sidebar-risk-red' : riskState === 'yellow' ? 'sidebar-risk-yellow' : '';
 
+  const csrfToken = opts.csrfToken ?? '';
+
   return html`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -61,6 +65,20 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title} — Foundry</title>
   <link rel="stylesheet" href="/static/styles.css" />
+  ${csrfToken ? html`<script>
+    // Auto-inject CSRF tokens into all forms on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(form) {
+        if (!form.querySelector('input[name="_csrf"]')) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = '_csrf';
+          input.value = '${csrfToken}';
+          form.appendChild(input);
+        }
+      });
+    });
+  </script>` : ''}
 </head>
 <body class="${showNav ? 'has-sidebar' : ''}">
   <a href="#main-content" class="skip-link">Skip to main content</a>

@@ -24,7 +24,7 @@ export const integrationRoutes = new Hono<AuthEnv>();
 
 integrationRoutes.get('/settings/integrations', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'settings', 'Integrations');
+  const ctx = await getLayoutContext(founder, 'settings', 'Integrations', undefined, c);
   const products = await getProductsByOwner(founder.id);
   const productId = products.rows.length > 0 ? (products.rows[0] as Record<string, string>).id : null;
 

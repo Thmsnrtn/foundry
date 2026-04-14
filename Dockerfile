@@ -28,7 +28,8 @@ ENV NODE_ENV=production
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/src/db/migrations ./src/db/migrations
-COPY --from=builder /app/src/public ./src/public
+COPY --from=builder /app/src/db/migrations ./dist/db/migrations
+COPY --from=builder /app/src/public ./dist/public
 COPY package.json ./
 
 # Switch to non-root user

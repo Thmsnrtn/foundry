@@ -23,7 +23,7 @@ revenueRoutes.get('/products/:id/revenue', async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.redirect('/dashboard');
 
-  const ctx = await getLayoutContext(founder, 'revenue', 'Revenue', productId);
+  const ctx = await getLayoutContext(founder, 'revenue', 'Revenue', productId, c);
   const saved = c.req.query('saved') === '1';
 
   const [mrr, totalMrr, metrics] = await Promise.all([

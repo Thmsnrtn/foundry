@@ -78,7 +78,7 @@ lifecycleRoutes.get('/products/:id/lifecycle', async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'lifecycle', 'Lifecycle', productId);
+  const ctx = await getLayoutContext(founder, 'lifecycle', 'Lifecycle', productId, c);
   const state = await getLifecycleState(productId);
   const conditionsResult = await getLifecycleConditions(productId);
   const ls = state.rows[0] as Record<string, unknown> | undefined;

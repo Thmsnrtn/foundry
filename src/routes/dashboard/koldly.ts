@@ -20,7 +20,7 @@ export const koldlyRoutes = new Hono<AuthEnv>();
 
 koldlyRoutes.get('/koldly', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'koldly', 'Koldly Integration');
+  const ctx = await getLayoutContext(founder, 'koldly', 'Koldly Integration', undefined, c);
   const ecosystemKey = process.env.ECOSYSTEM_SERVICE_KEY ? 'Configured' : 'Not configured';
   const koldlyUrl = process.env.KOLDLY_INTERNAL_API_URL ?? 'Not configured';
 
