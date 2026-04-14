@@ -41,6 +41,7 @@ program
       '003_ux_intelligence.sql',
       '004_migration_tracking.sql',
       '005_usage_tracking.sql',
+      '006_api_keys_webhooks.sql',
     ];
 
     for (const file of migrations) {

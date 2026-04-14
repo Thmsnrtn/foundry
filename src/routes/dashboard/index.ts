@@ -36,9 +36,19 @@ dashboardRoutes.post('/switch-product', async (c) => {
     maxAge: 60 * 60 * 24 * 365, // 1 year
   });
 
-  // Redirect back to the referring page, or dashboard
+  // Redirect back to the referring page (same-origin only), or dashboard
   const referer = c.req.header('Referer');
-  return c.redirect(referer ?? '/dashboard');
+  let safePath = '/dashboard';
+  if (referer) {
+    try {
+      const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+      const refUrl = new URL(referer, appUrl);
+      if (refUrl.origin === new URL(appUrl).origin) {
+        safePath = refUrl.pathname + refUrl.search;
+      }
+    } catch { /* Invalid URL, use default */ }
+  }
+  return c.redirect(safePath);
 });
 
 // ─── Dashboard ───────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
+import { withCircuitBreaker } from '../../lib/circuit-breaker.js';
 
 let _client: Anthropic | null = null;
 
@@ -31,6 +32,7 @@ function getClient(): Anthropic {
  * System prompts are marked as cacheable to reduce costs on repeated calls.
  */
 export async function callClaude(config: AICallConfig): Promise<AIResponse> {
+  return withCircuitBreaker(async () => {
   const client = getClient();
 
   // Use prompt caching: mark the system prompt as cacheable.
@@ -71,6 +73,7 @@ export async function callClaude(config: AICallConfig): Promise<AIResponse> {
     },
     stop_reason: response.stop_reason,
   };
+  }, { name: `anthropic-${config.model}`, failureThreshold: 3, resetTimeoutMs: 120_000 });
 }
 
 /**

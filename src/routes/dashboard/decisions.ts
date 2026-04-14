@@ -9,6 +9,8 @@ import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import { resolveDecisionSchema, recordOutcomeSchema, validate } from '../../lib/validation.js';
 import { log } from '../../lib/logger.js';
+import { z } from 'zod';
+import { nanoid } from 'nanoid';
 import type { RiskStateValue } from '../../types/index.js';
 
 export const decisionRoutes = new Hono<AuthEnv>();
@@ -98,4 +100,41 @@ decisionRoutes.post('/decisions/:id/outcome', async (c) => {
   const productId = (result.rows[0] as Record<string, string>).product_id;
   await recordOutcome(decisionId, productId, body.outcome);
   return c.json({ status: 'recorded' });
+});
+
+// ─── Manual Decision Creation ───────────────────────────────────────────────
+
+const createDecisionSchema = z.object({
+  product_id: z.string().min(1),
+  category: z.enum(['urgent', 'strategic', 'product', 'marketing', 'informational']),
+  what: z.string().min(1).max(500),
+  why_now: z.string().min(1).max(2000),
+  options: z.array(z.object({
+    label: z.string().min(1).max(200),
+    description: z.string().max(1000).optional(),
+    trade_offs: z.string().max(1000).optional(),
+  })).min(2).max(6).optional(),
+  deadline: z.string().optional(),
+});
+
+decisionRoutes.post('/decisions/create', async (c) => {
+  const founder = c.get('founder');
+  const body = validate(createDecisionSchema, await c.req.json());
+
+  const prodCheck = await query('SELECT id FROM products WHERE id = ? AND owner_id = ?', [body.product_id, founder.id]);
+  if (prodCheck.rows.length === 0) return c.json({ error: 'Product not found' }, 404);
+
+  const decisionId = nanoid();
+  await query(
+    `INSERT INTO decisions (id, product_id, category, gate, what, why_now, options, deadline, status, decided_by)
+     VALUES (?, ?, ?, 3, ?, ?, ?, ?, 'pending', 'founder')`,
+    [
+      decisionId, body.product_id, body.category,
+      body.what, body.why_now,
+      body.options ? JSON.stringify(body.options) : null,
+      body.deadline ?? null,
+    ]
+  );
+
+  return c.json({ decision_id: decisionId, status: 'created' }, 201);
 });

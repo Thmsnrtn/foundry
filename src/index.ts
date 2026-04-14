@@ -47,10 +47,14 @@ import { apiProductRoutes } from './routes/api/products.js';
 import { apiMetricRoutes } from './routes/api/metrics.js';
 import { apiAuditLogRoutes } from './routes/api/audit-log.js';
 import { apiUXRoutes } from './routes/api/ux.js';
+import { searchRoutes } from './routes/api/search.js';
 
 // Internal routes (ecosystem key required, except /health)
 import { healthRoutes } from './routes/internal/health.js';
 import { ecosystemRoutes } from './routes/internal/ecosystem.js';
+
+// Public API v1 (API key auth)
+import { v1Routes, apiKeyRoutes } from './routes/v1/index.js';
 
 // Stripe webhook (raw body needed)
 import { handleWebhook } from './services/billing/stripe.js';
@@ -197,6 +201,13 @@ app.route('/', apiProductRoutes);
 app.route('/', apiMetricRoutes);
 app.route('/', apiAuditLogRoutes);
 app.route('/', apiUXRoutes);
+app.route('/', searchRoutes);
+
+// API key management (session auth)
+app.route('/', apiKeyRoutes);
+
+// Public API v1 (API key auth — self-contained, no session needed)
+app.route('/', v1Routes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
