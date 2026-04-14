@@ -49,6 +49,8 @@ import { apiMetricRoutes } from './routes/api/metrics.js';
 import { apiAuditLogRoutes } from './routes/api/audit-log.js';
 import { apiUXRoutes } from './routes/api/ux.js';
 import { searchRoutes } from './routes/api/search.js';
+import { feedRoutes } from './routes/api/feed.js';
+import { askRoutes } from './routes/api/ask.js';
 
 // Internal routes (ecosystem key required, except /health)
 import { healthRoutes } from './routes/internal/health.js';
@@ -204,6 +206,8 @@ app.route('/', apiMetricRoutes);
 app.route('/', apiAuditLogRoutes);
 app.route('/', apiUXRoutes);
 app.route('/', searchRoutes);
+app.route('/', feedRoutes);
+app.route('/', askRoutes);
 
 // API key management (session auth)
 app.route('/', apiKeyRoutes);
