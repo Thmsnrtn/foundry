@@ -65,18 +65,28 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title} — Foundry</title>
   <link rel="stylesheet" href="/static/styles.css" />
-  ${csrfToken ? html`<script>
-    // Auto-inject CSRF tokens into all forms on page load
-    document.addEventListener('DOMContentLoaded', function() {
+  ${csrfToken ? html`<meta name="csrf-token" content="${csrfToken}" />
+  <script>
+    // Auto-inject CSRF tokens into all forms (current and future)
+    function injectCsrf() {
+      var token = document.querySelector('meta[name="csrf-token"]');
+      if (!token) return;
+      var val = token.getAttribute('content');
       document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(form) {
         if (!form.querySelector('input[name="_csrf"]')) {
           var input = document.createElement('input');
           input.type = 'hidden';
           input.name = '_csrf';
-          input.value = '${csrfToken}';
+          input.value = val;
           form.appendChild(input);
         }
       });
+    }
+    document.addEventListener('DOMContentLoaded', injectCsrf);
+    // Re-inject on any DOM mutation (catches dynamically created forms)
+    if (typeof MutationObserver !== 'undefined') {
+      new MutationObserver(injectCsrf).observe(document.body || document.documentElement, { childList: true, subtree: true });
+    }
     });
   </script>` : ''}
 </head>

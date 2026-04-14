@@ -84,12 +84,20 @@ sseRoutes.get('/api/events', async (c) => {
     }, 10_000);
 
     // Cleanup on disconnect
+    let alive = true;
     stream.onAbort(() => {
+      alive = false;
       clearInterval(interval);
     });
 
-    // Keep the connection alive for up to 5 minutes
-    await new Promise((resolve) => setTimeout(resolve, 300_000));
+    // Keep the connection alive for up to 5 minutes, but exit immediately if aborted
+    const maxLifetime = 300_000;
+    const checkInterval = 5_000;
+    let elapsed = 0;
+    while (alive && elapsed < maxLifetime) {
+      await new Promise((resolve) => setTimeout(resolve, checkInterval));
+      elapsed += checkInterval;
+    }
     clearInterval(interval);
   });
 });

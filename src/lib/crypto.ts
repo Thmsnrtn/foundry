@@ -12,13 +12,26 @@ const TAG_LENGTH = 16;
 const SALT = 'foundry-token-encryption-v1'; // Static salt is fine; key derivation adds entropy
 
 let _derivedKey: Buffer | null = null;
+let _oldDerivedKey: Buffer | null = null;
 
 function getDerivedKey(): Buffer {
   if (_derivedKey) return _derivedKey;
   const secret = process.env.ENCRYPTION_KEY || process.env.CLERK_SECRET_KEY;
   if (!secret) throw new Error('ENCRYPTION_KEY or CLERK_SECRET_KEY required for token encryption');
   _derivedKey = scryptSync(secret, SALT, 32);
+
+  // Support key rotation: if OLD_ENCRYPTION_KEY is set, derive the old key for decryption fallback
+  const oldSecret = process.env.OLD_ENCRYPTION_KEY;
+  if (oldSecret) {
+    _oldDerivedKey = scryptSync(oldSecret, SALT, 32);
+  }
+
   return _derivedKey;
+}
+
+function getOldDerivedKey(): Buffer | null {
+  getDerivedKey(); // ensure both keys are initialized
+  return _oldDerivedKey;
 }
 
 /**
@@ -38,20 +51,33 @@ export function encryptToken(plaintext: string): string {
  * Returns null if decryption fails (corrupt or wrong key).
  */
 export function decryptToken(encrypted: string): string | null {
+  const parts = encrypted.split(':');
+  if (parts.length !== 3) return null;
+
+  const iv = Buffer.from(parts[0], 'base64');
+  const ciphertext = Buffer.from(parts[1], 'base64');
+  const tag = Buffer.from(parts[2], 'base64');
+
+  // Try current key first
   try {
-    const parts = encrypted.split(':');
-    if (parts.length !== 3) return null;
-
     const key = getDerivedKey();
-    const iv = Buffer.from(parts[0], 'base64');
-    const ciphertext = Buffer.from(parts[1], 'base64');
-    const tag = Buffer.from(parts[2], 'base64');
-
     const decipher = createDecipheriv(ALGORITHM, key, iv);
     decipher.setAuthTag(tag);
     const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
     return decrypted.toString('utf8');
   } catch {
+    // Current key failed — try old key for rotation support
+    const oldKey = getOldDerivedKey();
+    if (oldKey) {
+      try {
+        const decipher = createDecipheriv(ALGORITHM, oldKey, iv);
+        decipher.setAuthTag(tag);
+        const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+        return decrypted.toString('utf8');
+      } catch {
+        return null;
+      }
+    }
     return null;
   }
 }

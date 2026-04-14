@@ -85,21 +85,17 @@ export async function syncStripeRevenue(founderId: string): Promise<void> {
 
     // Fetch recent invoices (last 30 days)
     const thirtyDaysAgo = Math.floor((Date.now() - 30 * 86400000) / 1000);
-    const invoices = await stripe.invoices.list({
-      created: { gte: thirtyDaysAgo },
-      limit: 100,
-      status: 'paid',
-    });
 
-    // Fetch active subscriptions for MRR calculation
-    const subscriptions = await stripe.subscriptions.list({
-      status: 'active',
-      limit: 100,
-    });
+    // Auto-paginate to fetch ALL results (Stripe SDK handles pagination)
+    const allActiveSubscriptions: Stripe.Subscription[] = [];
+    for await (const sub of stripe.subscriptions.list({ status: 'active', limit: 100 })) {
+      allActiveSubscriptions.push(sub);
+      if (allActiveSubscriptions.length >= 500) break; // Safety cap
+    }
 
     // Calculate MRR from active subscriptions
     let currentMrr = 0;
-    for (const sub of subscriptions.data) {
+    for (const sub of allActiveSubscriptions) {
       for (const item of sub.items.data) {
         const amount = item.price?.unit_amount ?? 0;
         const interval = item.price?.recurring?.interval;
@@ -108,13 +104,14 @@ export async function syncStripeRevenue(founderId: string): Promise<void> {
       }
     }
 
-    // Fetch churned subscriptions (cancelled in last 30 days)
-    const cancelledSubs = await stripe.subscriptions.list({
-      status: 'canceled',
-      limit: 100,
-    });
+    // Fetch churned subscriptions (cancelled in last 30 days) with auto-pagination
+    const allCancelledSubs: Stripe.Subscription[] = [];
+    for await (const sub of stripe.subscriptions.list({ status: 'canceled', limit: 100 })) {
+      allCancelledSubs.push(sub);
+      if (allCancelledSubs.length >= 500) break;
+    }
     let churnedMrr = 0;
-    for (const sub of cancelledSubs.data) {
+    for (const sub of allCancelledSubs) {
       if (sub.canceled_at && sub.canceled_at >= thirtyDaysAgo) {
         for (const item of sub.items.data) {
           const amount = item.price?.unit_amount ?? 0;
@@ -125,16 +122,17 @@ export async function syncStripeRevenue(founderId: string): Promise<void> {
       }
     }
 
-    // Count new customers (created in last 7 days)
+    // Count new customers (created in last 7 days) with auto-pagination
     const sevenDaysAgo = Math.floor((Date.now() - 7 * 86400000) / 1000);
-    const newCustomers = await stripe.customers.list({
-      created: { gte: sevenDaysAgo },
-      limit: 100,
-    });
+    const newCustomersList: Stripe.Customer[] = [];
+    for await (const cust of stripe.customers.list({ created: { gte: sevenDaysAgo }, limit: 100 })) {
+      newCustomersList.push(cust);
+      if (newCustomersList.length >= 500) break;
+    }
 
     // Calculate new MRR (subscriptions created in last 30 days)
     let newMrr = 0;
-    for (const sub of subscriptions.data) {
+    for (const sub of allActiveSubscriptions) {
       if (sub.created >= thirtyDaysAgo) {
         for (const item of sub.items.data) {
           const amount = item.price?.unit_amount ?? 0;
@@ -158,7 +156,7 @@ export async function syncStripeRevenue(founderId: string): Promise<void> {
          signups_7d = excluded.signups_7d,
          active_users = excluded.active_users,
          mrr_health_ratio = excluded.mrr_health_ratio`,
-      [nanoid(), productId, today, newMrr, churnedMrr, newCustomers.data.length, subscriptions.data.length, healthRatio]
+      [nanoid(), productId, today, newMrr, churnedMrr, newCustomersList.length, allActiveSubscriptions.length, healthRatio]
     );
 
     // Dispatch webhook
@@ -166,7 +164,7 @@ export async function syncStripeRevenue(founderId: string): Promise<void> {
     const ownerId = (ownerResult.rows[0] as Record<string, string>)?.owner_id;
     if (ownerId) {
       dispatchWebhook(ownerId, 'metric.recorded', {
-        product_id: productId, source: 'stripe', new_mrr_cents: newMrr, churned_mrr_cents: churnedMrr, active_subscriptions: subscriptions.data.length,
+        product_id: productId, source: 'stripe', new_mrr_cents: newMrr, churned_mrr_cents: churnedMrr, active_subscriptions: allActiveSubscriptions.length,
       }).catch(() => {});
     }
 

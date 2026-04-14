@@ -13,18 +13,25 @@ const LOCK_TTL_MS = 15 * 60 * 1000; // 15 minutes max lock hold time
  * Attempt to acquire a lock for a job. Returns true if acquired.
  * Uses INSERT OR IGNORE + timestamp check for atomicity.
  */
+let _tableCreated = false;
+
+async function ensureLockTable(): Promise<void> {
+  if (_tableCreated) return;
+  await query(`CREATE TABLE IF NOT EXISTS job_locks (
+    job_name TEXT PRIMARY KEY,
+    locked_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    instance_id TEXT
+  )`, []);
+  _tableCreated = true;
+}
+
 export async function acquireJobLock(jobName: string): Promise<boolean> {
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.now() + LOCK_TTL_MS).toISOString();
 
   try {
-    // Ensure lock table exists
-    await query(`CREATE TABLE IF NOT EXISTS job_locks (
-      job_name TEXT PRIMARY KEY,
-      locked_at DATETIME NOT NULL,
-      expires_at DATETIME NOT NULL,
-      instance_id TEXT
-    )`, []);
+    await ensureLockTable();
 
     // Clean up expired locks
     await query('DELETE FROM job_locks WHERE expires_at < ?', [now]);
