@@ -19,6 +19,7 @@ import { nanoid } from 'nanoid';
 import { selectRepoSchema, validate } from '../../lib/validation.js';
 import { encryptToken, getPlaintextToken } from '../../lib/crypto.js';
 import { log } from '../../lib/logger.js';
+import { sendAuditResultsEmail } from '../../lib/onboarding-emails.js';
 
 export const onboardingRoutes = new Hono<AuthEnv>();
 
@@ -187,6 +188,19 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   await startTour(founder.id, body.product_id);
   generateDimensionHints(auditScore.id, body.product_id).catch((err) => {
     console.error('[onboarding] Failed to generate dimension hints:', err?.message, { auditId: auditScore.id, productId: body.product_id });
+  });
+
+  // Send audit results email (the founder's first real value email)
+  const blockingIssues = auditScore.blocking_issues ? (typeof auditScore.blocking_issues === 'string' ? JSON.parse(auditScore.blocking_issues) : auditScore.blocking_issues) : [];
+  sendAuditResultsEmail(
+    founder.email,
+    product.name as string,
+    auditScore.composite ?? 0,
+    auditScore.verdict ?? 'NOT_READY',
+    Array.isArray(blockingIssues) ? blockingIssues.length : 0,
+    body.product_id,
+  ).catch((err) => {
+    log.error('Failed to send audit results email', err, { productId: body.product_id });
   });
 
   return c.redirect('/dashboard?tour=1');
