@@ -201,6 +201,7 @@ function groupedSidebar(
 
   const operateItems: NavItem[] = [
     { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
+    { key: 'actions', label: 'Daily Actions', href: '/dashboard/actions' },
     { key: 'feed', label: 'Activity', href: '/dashboard/feed' },
     { key: 'lifecycle', label: 'Lifecycle', href: `/products/${productId}/lifecycle` },
   ];

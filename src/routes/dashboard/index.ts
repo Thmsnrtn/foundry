@@ -11,6 +11,7 @@ import { query } from '../../db/client.js';
 import { getMRRDecomposition, computeHealthRatio } from '../../services/intelligence/revenue.js';
 import { getLatestCohortSummary } from '../../services/intelligence/cohort.js';
 import { calculateHealthScore } from '../../services/intelligence/health-score.js';
+import { getRecentActions } from '../../services/autonomous/daily-actions.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { riskStateBadge, stressorReport, mrrDecomposition, metricsGrid, lifecycleProgress, dashboardSummaryCard, pageHintBanner, tourOverlay, milestoneToastScript, type StressorData } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
@@ -176,6 +177,23 @@ dashboardRoutes.get('/dashboard', async (c) => {
         ${composite !== null ? html`<a href="/products/${productId}/audit" class="btn btn-secondary btn-sm">View Audit</a>` : ''}
       </div>
     </div>
+
+    ${await (async () => {
+      const recentActions = await getRecentActions(productId, 1);
+      const todayAction = recentActions.length > 0 && recentActions[0].created_at.startsWith(new Date().toISOString().split('T')[0]) ? recentActions[0] : null;
+      if (!todayAction) return '';
+      return html`
+      <div class="card card-enter" style="border-left:3px solid ${todayAction.action_type === 'all_clear' ? 'var(--color-success)' : todayAction.requires_approval ? 'var(--color-warning)' : 'var(--color-primary)'}; margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <span style="font-size:var(--text-xs);color:var(--color-text-faint);text-transform:uppercase;letter-spacing:0.5px;">Today, Foundry</span>
+            <div style="font-weight:600;margin-top:0.15rem;">${todayAction.title}</div>
+            <div style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:0.25rem;">${todayAction.summary}</div>
+          </div>
+          <a href="/dashboard/actions" class="btn btn-secondary btn-sm" style="flex-shrink:0;">Details</a>
+        </div>
+      </div>`;
+    })()}
 
     ${riskStateBadge(riskState, riskReason, riskChangedAt)}
 

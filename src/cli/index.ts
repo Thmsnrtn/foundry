@@ -43,6 +43,7 @@ program
       '005_usage_tracking.sql',
       '006_api_keys_webhooks.sql',
       '007_schema_hardening.sql',
+      '008_daily_actions.sql',
     ];
 
     for (const file of migrations) {

@@ -25,6 +25,7 @@ import { processDataExports, processAccountDeletions } from './gdpr.js';
 import { evaluateOnboardingSequence } from '../lib/onboarding-emails.js';
 import { syncStripeRevenue } from '../services/integrations/stripe-sync.js';
 import { generateProactiveInsights } from '../services/intelligence/predictions.js';
+import { planDailyAction } from '../services/autonomous/daily-actions.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
 import { callOpus, parseJSONResponse } from '../services/ai/client.js';
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
@@ -618,6 +619,24 @@ export async function proactiveInsightsJob(): Promise<void> {
   console.log('[JOB] proactive_insights complete');
 }
 
+// ─── 22. Daily Action — Every day at 7:00 UTC ────────────────────────────────
+export async function dailyActionJob(): Promise<void> {
+  console.log('[JOB] daily_action starting');
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const action = await planDailyAction(p.id, p.owner_id);
+      if (action) {
+        console.log(`[JOB] daily_action: ${p.name} — ${action.action_type}: ${action.title}`);
+      }
+    } catch (err) {
+      console.error(`[JOB] daily_action error for ${p.id}:`, err);
+    }
+  }
+  console.log('[JOB] daily_action complete');
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 /** Wrap a job function with distributed locking for multi-instance safety. */
@@ -649,4 +668,5 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   account_deletion:   { fn: locked('account_deletion', processAccountDeletions), schedule: '0 3 * * *', description: 'Process confirmed account deletions (daily 3AM)' },
   stripe_revenue_sync: { fn: locked('stripe_revenue_sync', stripeRevenueSync), schedule: '0 1 * * *', description: 'Sync revenue from connected Stripe accounts (daily 1AM)' },
   proactive_insights:  { fn: locked('proactive_insights', proactiveInsightsJob), schedule: '0 8 * * *', description: 'Generate proactive insights from metric trends (daily 8AM)' },
+  daily_action:        { fn: locked('daily_action', dailyActionJob), schedule: '0 7 * * *', description: 'Plan and execute one autonomous action per product (daily 7AM)' },
 };
