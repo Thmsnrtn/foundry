@@ -155,17 +155,17 @@ export async function calculateTrustScore(productId: string, founderId: string):
 }
 
 // ─── Tier Action Limits ─────────────────────────────────────────────────────
-// Philosophy: zero-cost actions (nudges, metric checks, badge updates) are UNLIMITED
-// on all paid tiers. The limit is on AI-drafted content, which has real compute cost.
-// This means every paying customer sees Foundry working hard for them every day.
+// Philosophy: if an action is worth doing, DO IT. Don't cap value to create
+// artificial scarcity. The only real constraint is AI compute cost.
+// Zero-cost actions are truly unlimited on all paid tiers.
 
 export interface TierActionConfig {
-  /** Maximum actions per day (including zero-cost actions). Effectively unlimited on paid tiers. */
-  maxActionsPerDay: number;
-  /** Maximum AI-drafted actions per day (churn emails, competitive plans — these cost $0.03-0.15 each) */
+  /** Maximum zero-cost actions per day. 999 = effectively unlimited. */
+  maxZeroCostActionsPerDay: number;
+  /** Maximum AI-drafted actions per day (churn emails, competitive plans — $0.03-0.15 each) */
   aiDraftsPerDay: number;
-  /** Maximum AI calls per month for daily actions (total budget for AI-heavy work) */
-  aiCallsPerMonth: number;
+  /** Maximum heavy AI calls per month (case studies, investor reports — $0.50-1.00 each) */
+  heavyAiCallsPerMonth: number;
   /** Whether the daily action uses the Wisdom Layer for calibration */
   wisdomCalibration: boolean;
 }
@@ -173,20 +173,17 @@ export interface TierActionConfig {
 export function getTierActionConfig(tier: string | null): TierActionConfig {
   switch (tier) {
     case 'founding_cohort':
-      // $99/mo — full access, unlimited actions, generous AI budget
-      // Cost: ~$5-10/mo in AI compute per active user. Margin: 90%+
-      return { maxActionsPerDay: 20, aiDraftsPerDay: 5, aiCallsPerMonth: 300, wisdomCalibration: true };
+      // $99/mo — loss leader. Everything unlimited. Best case study generators.
+      return { maxZeroCostActionsPerDay: 999, aiDraftsPerDay: 10, heavyAiCallsPerMonth: 50, wisdomCalibration: true };
     case 'scale':
-      // $399/mo — unlimited actions, 3 AI drafts/day
-      // Cost: ~$8-15/mo in AI compute. Margin: 96%+
-      return { maxActionsPerDay: 20, aiDraftsPerDay: 3, aiCallsPerMonth: 200, wisdomCalibration: true };
+      // $399/mo — power users. Unlimited actions, generous AI budget.
+      return { maxZeroCostActionsPerDay: 999, aiDraftsPerDay: 7, heavyAiCallsPerMonth: 30, wisdomCalibration: true };
     case 'growth':
-      // $199/mo — unlimited zero-cost actions, 1 AI draft/day
-      // Cost: ~$2-4/mo in AI compute. Margin: 98%+
-      return { maxActionsPerDay: 15, aiDraftsPerDay: 1, aiCallsPerMonth: 60, wisdomCalibration: false };
+      // $199/mo — core product. Unlimited zero-cost, 3 AI drafts/day.
+      return { maxZeroCostActionsPerDay: 999, aiDraftsPerDay: 3, heavyAiCallsPerMonth: 5, wisdomCalibration: false };
     default:
-      // Free/trial — limited actions, no AI drafts
-      return { maxActionsPerDay: 3, aiDraftsPerDay: 0, aiCallsPerMonth: 0, wisdomCalibration: false };
+      // Free/trial — limited but enough to demonstrate value
+      return { maxZeroCostActionsPerDay: 5, aiDraftsPerDay: 0, heavyAiCallsPerMonth: 0, wisdomCalibration: false };
   }
 }
 
@@ -207,9 +204,9 @@ export async function getEffectiveActionLimit(productId: string, founderId: stri
     Promise.resolve(getTierActionConfig(tier)),
   ]);
 
-  // Actions per day: trust score determines autonomy WITHIN the tier ceiling
-  // But on paid tiers the ceiling is high enough that trust is the real limiter
-  const actionsPerDay = Math.min(trust.maxActionsPerDay, tierConfig.maxActionsPerDay);
+  // Zero-cost actions: effectively unlimited on paid tiers (999 cap is just safety)
+  // Trust score determines the gate level, not the action count
+  const actionsPerDay = tierConfig.maxZeroCostActionsPerDay;
 
   // AI drafts: tier determines the budget, trust determines if they auto-execute
   const aiDraftsPerDay = tierConfig.aiDraftsPerDay;

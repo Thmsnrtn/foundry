@@ -13,6 +13,7 @@ import { dispatchWebhook } from '../../lib/webhooks.js';
 import { log } from '../../lib/logger.js';
 import { nanoid } from 'nanoid';
 import { getEffectiveActionLimit } from './autonomy-engine.js';
+import { getAutopilotPreferences, applyFocusWeights } from './preferences.js';
 import type { RiskStateValue } from '../../types/index.js';
 
 // ─── Action Types ───────────────────────────────────────────────────────────
@@ -267,6 +268,11 @@ export async function planDailyAction(productId: string, founderId: string, tier
   }
 
   // Pick top N actions based on trust-derived limit
+  // Apply founder's focus preferences to reweight priorities
+  const prefs = await getAutopilotPreferences(productId);
+  applyFocusWeights(candidates, prefs.focus);
+
+  // Sort by reweighted priority and select top N
   candidates.sort((a, b) => b.priority - a.priority);
   const selected = candidates.slice(0, remainingSlots);
 
@@ -289,14 +295,23 @@ export async function planDailyAction(productId: string, founderId: string, tier
     // Determine effective gate based on trust and risk state
     let effectiveGate = candidate.action.gate;
 
-    // Auto-approve categories that have earned Gate 0 through repeated approval
-    if (limits.trustScore.autoApprovedCategories.includes(candidate.action.action_type)) {
+    // Founder explicit preference: always approve (override trust)
+    if (prefs.always_approve.includes(candidate.action.action_type)) {
+      effectiveGate = 2;
+      candidate.action.requires_approval = true;
+    }
+    // Founder explicit preference: always auto (override trust)
+    else if (prefs.always_auto.includes(candidate.action.action_type)) {
       effectiveGate = 0;
       candidate.action.requires_approval = false;
     }
-
+    // Auto-approve categories that have earned Gate 0 through repeated approval
+    else if (limits.trustScore.autoApprovedCategories.includes(candidate.action.action_type)) {
+      effectiveGate = 0;
+      candidate.action.requires_approval = false;
+    }
     // If trust level has a lower default gate than the action's gate, use it
-    if (limits.trustScore.defaultGate < effectiveGate && !candidate.action.requires_approval) {
+    else if (limits.trustScore.defaultGate < effectiveGate && !candidate.action.requires_approval) {
       effectiveGate = limits.trustScore.defaultGate;
     }
 

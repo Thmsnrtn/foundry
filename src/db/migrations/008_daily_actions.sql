@@ -22,3 +22,10 @@ CREATE TABLE IF NOT EXISTS daily_actions (
 CREATE INDEX IF NOT EXISTS idx_daily_actions_product ON daily_actions(product_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_daily_actions_founder ON daily_actions(founder_id);
 CREATE INDEX IF NOT EXISTS idx_daily_actions_status ON daily_actions(status);
+
+-- Autopilot configuration per product
+CREATE TABLE IF NOT EXISTS autopilot_config (
+  product_id TEXT PRIMARY KEY REFERENCES products(id),
+  preferences TEXT NOT NULL DEFAULT '{}',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

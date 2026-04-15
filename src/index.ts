@@ -47,6 +47,7 @@ import { feedPageRoutes } from './routes/dashboard/feed.js';
 import { actionRoutes } from './routes/dashboard/actions.js';
 import { askPageRoutes } from './routes/dashboard/ask.js';
 import { integrationRoutes } from './routes/dashboard/integrations.js';
+import { autopilotRoutes } from './routes/dashboard/autopilot.js';
 import { portfolioRoutes } from './routes/dashboard/portfolio.js';
 import { insightRoutes } from './routes/dashboard/insights.js';
 
@@ -215,6 +216,7 @@ app.route('/', feedPageRoutes);
 app.route('/', actionRoutes);
 app.route('/', askPageRoutes);
 app.route('/', integrationRoutes);
+app.route('/', autopilotRoutes);
 app.route('/', portfolioRoutes);
 app.route('/', insightRoutes);
 
