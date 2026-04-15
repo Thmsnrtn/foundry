@@ -70,6 +70,7 @@ import { ecosystemRoutes } from './routes/internal/ecosystem.js';
 import { v1Routes, apiKeyRoutes } from './routes/v1/index.js';
 import { sseRoutes } from './routes/api/events.js';
 import { widgetRoutes } from './routes/api/widget.js';
+import { mcpRoutes } from './routes/api/mcp.js';
 
 // Stripe webhook (raw body needed)
 import { handleWebhook } from './services/billing/stripe.js';
@@ -239,6 +240,9 @@ app.route('/', apiKeyRoutes);
 
 // Public API v1 (API key auth — self-contained, no session needed)
 app.route('/', v1Routes);
+
+// MCP endpoint (API key auth)
+app.route('/', mcpRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
