@@ -12,6 +12,7 @@ import { callSonnet } from '../ai/client.js';
 import { dispatchWebhook } from '../../lib/webhooks.js';
 import { log } from '../../lib/logger.js';
 import { nanoid } from 'nanoid';
+import { getEffectiveActionLimit } from './autonomy-engine.js';
 import type { RiskStateValue } from '../../types/index.js';
 
 // ─── Action Types ───────────────────────────────────────────────────────────
@@ -48,14 +49,19 @@ interface ActionCandidate {
  * Plan and execute today's daily action for a product.
  * Called once per day per product by the daily_action job.
  */
-export async function planDailyAction(productId: string, founderId: string): Promise<DailyAction | null> {
-  // Check if we already ran today
+export async function planDailyAction(productId: string, founderId: string, tier: string | null = null): Promise<DailyAction[]> {
+  // Get trust-based action limits
+  const limits = await getEffectiveActionLimit(productId, founderId, tier);
+
+  // Check how many actions we've already taken today
   const today = new Date().toISOString().split('T')[0];
   const existing = await query(
-    "SELECT id FROM daily_actions WHERE product_id = ? AND created_at >= ? LIMIT 1",
+    "SELECT COUNT(*) as count FROM daily_actions WHERE product_id = ? AND created_at >= ?",
     [productId, today]
   );
-  if (existing.rows.length > 0) return null; // Already ran today
+  const todayCount = (existing.rows[0] as Record<string, number>)?.count ?? 0;
+  const remainingSlots = limits.actionsPerDay - todayCount;
+  if (remainingSlots <= 0) return []; // Already at limit today
 
   // Gather context
   const [audit, metrics, stressors, decisions, lsResult, mrr, churnRisk, wisdom] = await Promise.all([
@@ -260,66 +266,97 @@ export async function planDailyAction(productId: string, founderId: string): Pro
     });
   }
 
-  // Pick the highest priority action
+  // Pick top N actions based on trust-derived limit
   candidates.sort((a, b) => b.priority - a.priority);
-  const winner = candidates[0];
+  const selected = candidates.slice(0, remainingSlots);
 
-  // In Red state, escalate Gate 0/1 to Gate 2 (except notifications)
-  let effectiveGate = winner.action.gate;
-  if (riskState === 'red' && effectiveGate < 2 && winner.action.action_type !== 'all_clear') {
-    effectiveGate = 2;
+  // If AI drafts not enabled by tier, strip draft_content from actions
+  if (!limits.aiDraftsEnabled) {
+    for (const c of selected) {
+      c.action.draft_content = null;
+    }
   }
 
-  // Store the action
-  const actionId = nanoid();
+  const results: DailyAction[] = [];
   const now = new Date().toISOString();
-  await query(
-    `INSERT INTO daily_actions (id, product_id, founder_id, action_type, gate, title, summary, detail, draft_content, requires_approval, action_url, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [actionId, productId, founderId, winner.action.action_type, effectiveGate,
-     winner.action.title, winner.action.summary, winner.action.detail,
-     winner.action.draft_content, winner.action.requires_approval ? 1 : 0,
-     winner.action.action_url, winner.action.requires_approval ? 'pending_approval' : 'completed', now]
-  );
 
-  // Create notification
-  await query(
-    `INSERT INTO notifications (id, founder_id, product_id, type, title, body, action_url, created_at)
-     VALUES (?, ?, ?, 'daily_action', ?, ?, ?, ?)`,
-    [nanoid(), founderId, productId, winner.action.title, winner.action.summary, winner.action.action_url, now]
-  );
+  for (const candidate of selected) {
+    // Determine effective gate based on trust and risk state
+    let effectiveGate = candidate.action.gate;
 
-  // Log to audit trail
-  await query(
-    `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at)
-     VALUES (?, ?, ?, ?, 'daily_action_engine', ?, ?)`,
-    [nanoid(), productId, `daily_action_${winner.action.action_type}`, effectiveGate, winner.action.summary, now]
-  );
+    // Auto-approve categories that have earned Gate 0 through repeated approval
+    if (limits.trustScore.autoApprovedCategories.includes(candidate.action.action_type)) {
+      effectiveGate = 0;
+      candidate.action.requires_approval = false;
+    }
 
-  // Dispatch webhook
-  dispatchWebhook(founderId, 'decision.created', {
-    type: 'daily_action',
-    action_type: winner.action.action_type,
-    title: winner.action.title,
-    summary: winner.action.summary,
-    requires_approval: winner.action.requires_approval,
-  }).catch(() => {});
+    // If trust level has a lower default gate than the action's gate, use it
+    if (limits.trustScore.defaultGate < effectiveGate && !candidate.action.requires_approval) {
+      effectiveGate = limits.trustScore.defaultGate;
+    }
 
-  const action: DailyAction = {
-    id: actionId,
-    ...winner.action,
-    gate: effectiveGate,
-    status: winner.action.requires_approval ? 'pending_approval' : 'completed',
-    created_at: now,
-  };
+    // In Red state, escalate Gate 0/1 to Gate 2 (safety override)
+    if (riskState === 'red' && effectiveGate < 2 && candidate.action.action_type !== 'all_clear') {
+      effectiveGate = 2;
+      candidate.action.requires_approval = true;
+    }
 
-  log.info('Daily action planned', {
-    productId, founderId, actionType: winner.action.action_type,
-    priority: winner.priority, gate: effectiveGate,
+    // Store the action
+    const actionId = nanoid();
+    await query(
+      `INSERT INTO daily_actions (id, product_id, founder_id, action_type, gate, title, summary, detail, draft_content, requires_approval, action_url, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [actionId, productId, founderId, candidate.action.action_type, effectiveGate,
+       candidate.action.title, candidate.action.summary, candidate.action.detail,
+       candidate.action.draft_content, candidate.action.requires_approval ? 1 : 0,
+       candidate.action.action_url, candidate.action.requires_approval ? 'pending_approval' : 'completed', now]
+    );
+
+    // Create notification
+    await query(
+      `INSERT INTO notifications (id, founder_id, product_id, type, title, body, action_url, created_at)
+       VALUES (?, ?, ?, 'daily_action', ?, ?, ?, ?)`,
+      [nanoid(), founderId, productId, candidate.action.title, candidate.action.summary, candidate.action.action_url, now]
+    );
+
+    // Log to audit trail
+    await query(
+      `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at)
+       VALUES (?, ?, ?, ?, 'daily_action_engine', ?, ?)`,
+      [nanoid(), productId, `daily_action_${candidate.action.action_type}`, effectiveGate, candidate.action.summary, now]
+    );
+
+    // Dispatch webhook
+    dispatchWebhook(founderId, 'decision.created', {
+      type: 'daily_action',
+      action_type: candidate.action.action_type,
+      title: candidate.action.title,
+      summary: candidate.action.summary,
+      requires_approval: candidate.action.requires_approval,
+    }).catch(() => {});
+
+    const action: DailyAction = {
+      id: actionId,
+      ...candidate.action,
+      gate: effectiveGate,
+      status: candidate.action.requires_approval ? 'pending_approval' : 'completed',
+      created_at: now,
+    };
+
+    results.push(action);
+  }
+
+  log.info('Daily actions planned', {
+    productId, founderId,
+    actionsPlanned: results.length,
+    trustLevel: limits.trustScore.level,
+    trustScore: limits.trustScore.score,
+    maxAllowed: limits.actionsPerDay,
     candidateCount: candidates.length,
+    upgradePrompt: limits.upgradePrompt,
   });
 
-  return action;
+  return results;
 }
 
 /**

@@ -622,13 +622,16 @@ export async function proactiveInsightsJob(): Promise<void> {
 // ─── 22. Daily Action — Every day at 7:00 UTC ────────────────────────────────
 export async function dailyActionJob(): Promise<void> {
   console.log('[JOB] daily_action starting');
-  const products = await getAllActiveProducts();
+  // Fetch products with their founder's tier
+  const products = await query(
+    `SELECT p.id, p.name, p.owner_id, f.tier FROM products p JOIN founders f ON p.owner_id = f.id WHERE p.status = 'active'`, []
+  );
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
-      const action = await planDailyAction(p.id, p.owner_id);
-      if (action) {
-        console.log(`[JOB] daily_action: ${p.name} — ${action.action_type}: ${action.title}`);
+      const actions = await planDailyAction(p.id, p.owner_id, p.tier ?? null);
+      if (actions.length > 0) {
+        console.log(`[JOB] daily_action: ${p.name} — ${actions.length} actions (${actions.map((a) => a.action_type).join(', ')})`);
       }
     } catch (err) {
       console.error(`[JOB] daily_action error for ${p.id}:`, err);
