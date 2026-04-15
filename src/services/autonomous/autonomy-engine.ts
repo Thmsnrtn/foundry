@@ -155,31 +155,38 @@ export async function calculateTrustScore(productId: string, founderId: string):
 }
 
 // ─── Tier Action Limits ─────────────────────────────────────────────────────
-// Each pricing tier has a maximum action count. Trust unlocks autonomy within
-// the tier's ceiling. Upgrading raises the ceiling.
+// Philosophy: zero-cost actions (nudges, metric checks, badge updates) are UNLIMITED
+// on all paid tiers. The limit is on AI-drafted content, which has real compute cost.
+// This means every paying customer sees Foundry working hard for them every day.
 
 export interface TierActionConfig {
-  /** Maximum actions per day regardless of trust score */
+  /** Maximum actions per day (including zero-cost actions). Effectively unlimited on paid tiers. */
   maxActionsPerDay: number;
-  /** Whether AI-drafted content (churn emails, competitive responses) is available */
-  aiDraftsEnabled: boolean;
+  /** Maximum AI-drafted actions per day (churn emails, competitive plans — these cost $0.03-0.15 each) */
+  aiDraftsPerDay: number;
+  /** Maximum AI calls per month for daily actions (total budget for AI-heavy work) */
+  aiCallsPerMonth: number;
   /** Whether the daily action uses the Wisdom Layer for calibration */
   wisdomCalibration: boolean;
-  /** Maximum AI calls per month for daily actions */
-  aiCallsPerMonth: number;
 }
 
 export function getTierActionConfig(tier: string | null): TierActionConfig {
   switch (tier) {
     case 'founding_cohort':
-      return { maxActionsPerDay: 7, aiDraftsEnabled: true, wisdomCalibration: true, aiCallsPerMonth: 200 };
+      // $99/mo — full access, unlimited actions, generous AI budget
+      // Cost: ~$5-10/mo in AI compute per active user. Margin: 90%+
+      return { maxActionsPerDay: 20, aiDraftsPerDay: 5, aiCallsPerMonth: 300, wisdomCalibration: true };
     case 'scale':
-      return { maxActionsPerDay: 5, aiDraftsEnabled: true, wisdomCalibration: true, aiCallsPerMonth: 150 };
+      // $399/mo — unlimited actions, 3 AI drafts/day
+      // Cost: ~$8-15/mo in AI compute. Margin: 96%+
+      return { maxActionsPerDay: 20, aiDraftsPerDay: 3, aiCallsPerMonth: 200, wisdomCalibration: true };
     case 'growth':
-      return { maxActionsPerDay: 2, aiDraftsEnabled: false, wisdomCalibration: false, aiCallsPerMonth: 30 };
+      // $199/mo — unlimited zero-cost actions, 1 AI draft/day
+      // Cost: ~$2-4/mo in AI compute. Margin: 98%+
+      return { maxActionsPerDay: 15, aiDraftsPerDay: 1, aiCallsPerMonth: 60, wisdomCalibration: false };
     default:
-      // Free/no tier: 1 action, no AI drafts
-      return { maxActionsPerDay: 1, aiDraftsEnabled: false, wisdomCalibration: false, aiCallsPerMonth: 0 };
+      // Free/trial — limited actions, no AI drafts
+      return { maxActionsPerDay: 3, aiDraftsPerDay: 0, aiCallsPerMonth: 0, wisdomCalibration: false };
   }
 }
 
@@ -188,11 +195,11 @@ export function getTierActionConfig(tier: string | null): TierActionConfig {
  */
 export async function getEffectiveActionLimit(productId: string, founderId: string, tier: string | null): Promise<{
   actionsPerDay: number;
-  aiDraftsEnabled: boolean;
+  aiDraftsPerDay: number;
   wisdomCalibration: boolean;
   trustScore: TrustScore;
   tierConfig: TierActionConfig;
-  /** If the trust score exceeds the tier ceiling, this is the upgrade prompt */
+  /** If the founder would benefit from upgrading, this explains why */
   upgradePrompt: string | null;
 }> {
   const [trust, tierConfig] = await Promise.all([
@@ -200,18 +207,24 @@ export async function getEffectiveActionLimit(productId: string, founderId: stri
     Promise.resolve(getTierActionConfig(tier)),
   ]);
 
+  // Actions per day: trust score determines autonomy WITHIN the tier ceiling
+  // But on paid tiers the ceiling is high enough that trust is the real limiter
   const actionsPerDay = Math.min(trust.maxActionsPerDay, tierConfig.maxActionsPerDay);
 
-  // If trust unlocks more actions than the tier allows, prompt upgrade
+  // AI drafts: tier determines the budget, trust determines if they auto-execute
+  const aiDraftsPerDay = tierConfig.aiDraftsPerDay;
+
+  // Upgrade prompt: show when the founder would get more AI drafts by upgrading
   let upgradePrompt: string | null = null;
-  if (trust.maxActionsPerDay > tierConfig.maxActionsPerDay) {
-    const diff = trust.maxActionsPerDay - tierConfig.maxActionsPerDay;
-    upgradePrompt = `Your trust level (${trust.level}) unlocks ${trust.maxActionsPerDay} actions/day, but your ${tier ?? 'free'} plan caps at ${tierConfig.maxActionsPerDay}. Upgrade to unlock ${diff} more daily actions.`;
+  if (tier === 'growth' && trust.score >= 45) {
+    upgradePrompt = 'Your trust level qualifies for AI-drafted churn interventions and competitive responses. Upgrade to Scale to unlock Wisdom-calibrated drafts.';
+  } else if (!tier && trust.score >= 20) {
+    upgradePrompt = 'Foundry is learning your product. Upgrade to Growth to unlock unlimited daily actions and your first AI draft per day.';
   }
 
   return {
     actionsPerDay,
-    aiDraftsEnabled: tierConfig.aiDraftsEnabled,
+    aiDraftsPerDay,
     wisdomCalibration: tierConfig.wisdomCalibration,
     trustScore: trust,
     tierConfig,

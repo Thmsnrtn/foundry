@@ -270,10 +270,15 @@ export async function planDailyAction(productId: string, founderId: string, tier
   candidates.sort((a, b) => b.priority - a.priority);
   const selected = candidates.slice(0, remainingSlots);
 
-  // If AI drafts not enabled by tier, strip draft_content from actions
-  if (!limits.aiDraftsEnabled) {
-    for (const c of selected) {
-      c.action.draft_content = null;
+  // Enforce AI draft budget: only the top N actions with drafts keep their drafts
+  let draftsRemaining = limits.aiDraftsPerDay;
+  for (const c of selected) {
+    if (c.action.draft_content !== null) {
+      if (draftsRemaining <= 0) {
+        c.action.draft_content = null; // Over budget — strip the draft, keep the action
+      } else {
+        draftsRemaining--;
+      }
     }
   }
 

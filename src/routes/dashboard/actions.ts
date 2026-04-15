@@ -43,7 +43,7 @@ actionRoutes.get('/dashboard/actions', async (c) => {
       <div class="card" style="text-align:center;padding:1rem;margin:0;">
         <div style="font-size:1.3rem;font-weight:800;">${limits.actionsPerDay}</div>
         <div style="font-size:var(--text-xs);color:var(--color-text-muted);">Actions/Day</div>
-        <div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:2px;">of ${limits.tierConfig.maxActionsPerDay} max</div>
+        <div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:2px;">${limits.aiDraftsPerDay} AI drafts</div>
       </div>
       <div class="card" style="text-align:center;padding:1rem;margin:0;">
         <div style="font-size:1.3rem;font-weight:800;">${value.actionsThisMonth}</div>
