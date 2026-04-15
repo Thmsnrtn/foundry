@@ -214,6 +214,7 @@ function groupedSidebar(
   ];
 
   const productItems: NavItem[] = [
+    { key: 'validate', label: 'Validate', href: `/products/${productId}/validate` },
     { key: 'audit', label: 'Audit', href: `/products/${productId}/audit`, badge: b.has_overdue_audit ? '●' : undefined, badgeType: 'dot' },
     { key: 'revenue', label: 'Revenue', href: `/products/${productId}/revenue` },
     { key: 'cohorts', label: 'Cohorts', href: `/products/${productId}/cohorts`, locked: !check('cohorts'), badgeType: 'lock' },

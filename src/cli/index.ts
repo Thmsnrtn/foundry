@@ -44,6 +44,7 @@ program
       '006_api_keys_webhooks.sql',
       '007_schema_hardening.sql',
       '008_daily_actions.sql',
+      '009_idea_validation.sql',
     ];
 
     for (const file of migrations) {
