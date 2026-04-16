@@ -47,7 +47,10 @@ export async function resolveDecision(
 ): Promise<void> {
   const now = new Date().toISOString();
   await query(
-    `UPDATE decisions SET status = 'approved', chosen_option = ?, decided_at = ?, decided_by = ? WHERE id = ? AND product_id = ?`,
+    `UPDATE decisions
+     SET status = 'approved', chosen_option = ?, decided_at = ?, decided_by = ?,
+         follow_up_at = datetime('now', '+30 days')
+     WHERE id = ? AND product_id = ?`,
     [chosenOption, now, decidedBy, decisionId, productId]
   );
 
@@ -65,12 +68,13 @@ export async function resolveDecision(
 export async function recordOutcome(
   decisionId: string,
   productId: string,
-  outcome: string
+  outcome: string,
+  valence?: number | null,
 ): Promise<void> {
   const now = new Date().toISOString();
   await query(
-    `UPDATE decisions SET outcome = ?, outcome_measured_at = ? WHERE id = ? AND product_id = ?`,
-    [outcome, now, decisionId, productId]
+    `UPDATE decisions SET outcome = ?, outcome_measured_at = ?, outcome_valence = ? WHERE id = ? AND product_id = ?`,
+    [outcome, now, valence ?? null, decisionId, productId]
   );
 }
 

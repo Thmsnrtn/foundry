@@ -11,7 +11,11 @@ import { query, batch } from './client.js';
 import { nanoid } from 'nanoid';
 
 export async function seedDatabase(): Promise<void> {
-  console.log('🌱 Seeding founding products...');
+  if (process.env.NODE_ENV === 'production') {
+    console.warn('[SEED] Refusing to seed in production. Skipping.');
+    return;
+  }
+  console.log('[SEED] Seeding founding products (development only)...');
 
   // ─── Create Founder (you, the builder) ──────────────────────────────────────
   const founderId = nanoid();
@@ -25,8 +29,8 @@ export async function seedDatabase(): Promise<void> {
       'dev_founder_001',
       'builder@foundry.dev',
       'Builder',
-      'founding_cohort',
-      'founding_cohort',
+      'investor_ready',
+      null,
       new Date('2026-01-01').toISOString(),
     ]
   );

@@ -1,232 +1,315 @@
 // =============================================================================
-// FOUNDRY — Integration Management Routes
-// Connect external services (Stripe, Slack, etc.) for automatic data flow.
+// FOUNDRY — Integrations Dashboard
+// Connect and manage external data sources: Stripe, PostHog, Intercom, Linear.
 // =============================================================================
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { query, getProductsByOwner } from '../../db/client.js';
+import { getProductByOwner, query } from '../../db/client.js';
+import { buildSharedContext } from './_shared.js';
 import { dashboardLayout } from '../../views/layout.js';
-import { getLayoutContext } from './_shared.js';
-import { getStripeConnectUrl, handleStripeOAuthCallback } from '../../services/integrations/stripe-sync.js';
-import { listApiKeys, createApiKey, revokeApiKey } from '../../middleware/api-key.js';
-import { listWebhooks, registerWebhook, deleteWebhook, type WebhookEvent } from '../../lib/webhooks.js';
-import { z } from 'zod';
-import { validate } from '../../lib/validation.js';
 import { nanoid } from 'nanoid';
-import { randomBytes } from 'crypto';
-import { log } from '../../lib/logger.js';
+import type { IntegrationType } from '../../types/index.js';
 
-export const integrationRoutes = new Hono<AuthEnv>();
+export const integrationsRoutes = new Hono<AuthEnv>();
 
-// ─── Integration Hub ────────────────────────────────────────────────────────
+const INTEGRATION_META: Record<IntegrationType, {
+  name: string;
+  description: string;
+  icon: string;
+  authMethod: 'api_key' | 'oauth' | 'webhook';
+  fields?: Array<{ key: string; label: string; placeholder: string; required: boolean }>;
+  color: string;
+}> = {
+  stripe: {
+    name: 'Stripe',
+    description: 'Sync MRR decomposition, churn events, and subscription changes in real time.',
+    icon: '💳',
+    authMethod: 'api_key',
+    fields: [
+      { key: 'access_token', label: 'Stripe Restricted Key', placeholder: 'rk_live_...', required: true },
+      { key: 'stripe_account_id', label: 'Connected Account ID (optional)', placeholder: 'acct_...', required: false },
+    ],
+    color: '#635BFF',
+  },
+  posthog: {
+    name: 'PostHog',
+    description: 'Pull activation rates, feature adoption, session depth, and day-30 retention.',
+    icon: '🦔',
+    authMethod: 'api_key',
+    fields: [
+      { key: 'api_key', label: 'Private Project API Key', placeholder: 'phx_...', required: true },
+      { key: 'project_id', label: 'Project ID', placeholder: '12345', required: true },
+      { key: 'activation_event', label: 'Activation Event Name', placeholder: 'user_activated', required: true },
+      { key: 'host', label: 'PostHog Host (optional)', placeholder: 'https://app.posthog.com', required: false },
+    ],
+    color: '#F54E00',
+  },
+  intercom: {
+    name: 'Intercom',
+    description: 'Track support volume, NPS from CSAT, and auto-detect support spikes as stressors.',
+    icon: '💬',
+    authMethod: 'api_key',
+    fields: [
+      { key: 'access_token', label: 'Access Token', placeholder: 'dG9rO...', required: true },
+    ],
+    color: '#1F8DED',
+  },
+  linear: {
+    name: 'Linear',
+    description: 'Track ship cadence as execution velocity. Push audit blocking issues as Linear issues.',
+    icon: '🔷',
+    authMethod: 'api_key',
+    fields: [
+      { key: 'api_key', label: 'Personal API Key', placeholder: 'lin_api_...', required: true },
+      { key: 'team_id', label: 'Team ID (optional)', placeholder: 'TEAM-...', required: false },
+    ],
+    color: '#5E6AD2',
+  },
+  slack: {
+    name: 'Slack',
+    description: 'Get risk state changes, critical stressors, and weekly digest in your Slack channel.',
+    icon: '💼',
+    authMethod: 'oauth',
+    color: '#4A154B',
+  },
+  mixpanel: {
+    name: 'Mixpanel',
+    description: 'Pull activation and retention metrics from Mixpanel event data.',
+    icon: '📊',
+    authMethod: 'api_key',
+    fields: [
+      { key: 'api_key', label: 'Service Account Username', placeholder: 'service-account-...', required: true },
+      { key: 'api_secret', label: 'Service Account Password', placeholder: '...', required: true },
+      { key: 'project_id', label: 'Project ID', placeholder: '1234567', required: true },
+    ],
+    color: '#7856FF',
+  },
+  amplitude: {
+    name: 'Amplitude',
+    description: 'Sync retention and engagement metrics from Amplitude.',
+    icon: '📈',
+    authMethod: 'api_key',
+    fields: [
+      { key: 'api_key', label: 'API Key', placeholder: '...', required: true },
+      { key: 'secret_key', label: 'Secret Key', placeholder: '...', required: true },
+    ],
+    color: '#1BAACC',
+  },
+  app_store_connect: {
+    name: 'App Store Connect',
+    description: 'Pull ratings, crash rates, and review sentiment for iOS/macOS apps.',
+    icon: '🍎',
+    authMethod: 'api_key',
+    fields: [
+      { key: 'issuer_id', label: 'Issuer ID', placeholder: '...', required: true },
+      { key: 'key_id', label: 'Key ID', placeholder: '...', required: true },
+      { key: 'private_key', label: 'Private Key (.p8)', placeholder: '-----BEGIN PRIVATE KEY-----...', required: true },
+    ],
+    color: '#000000',
+  },
+  github_app: {
+    name: 'GitHub (Enhanced)',
+    description: 'Upgrade to OAuth for richer commit analytics and ship cadence tracking.',
+    icon: '🐙',
+    authMethod: 'oauth',
+    color: '#24292F',
+  },
+};
 
-integrationRoutes.get('/settings/integrations', async (c) => {
+// ─── GET /integrations ────────────────────────────────────────────────────────
+
+integrationsRoutes.get('/integrations', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'settings', 'Integrations', undefined, c);
-  const products = await getProductsByOwner(founder.id);
-  const productId = products.rows.length > 0 ? (products.rows[0] as Record<string, string>).id : null;
+  const ctx = await buildSharedContext(c);
+  if (!ctx.product) return c.redirect('/products');
 
-  // Check existing integrations
-  const integrations = await query('SELECT provider, active, updated_at FROM integrations WHERE founder_id = ?', [founder.id]);
-  const connected = new Map((integrations.rows as Array<Record<string, unknown>>).map((r) => [r.provider as string, r]));
+  const existing = await query(
+    `SELECT type, status, last_synced_at, last_error FROM integrations WHERE product_id = ?`,
+    [ctx.product.id],
+  );
 
-  // API Keys
-  const apiKeys = await listApiKeys(founder.id);
-
-  // Webhooks
-  const webhooks = await listWebhooks(founder.id);
-
-  const stripeUrl = productId ? getStripeConnectUrl(founder.id, productId) : '';
+  const connectedTypes = new Map<string, { status: string; last_synced_at: string | null; last_error: string | null }>();
+  for (const row of existing.rows) {
+    const r = row as Record<string, string | null>;
+    connectedTypes.set(r.type as string, {
+      status: r.status as string,
+      last_synced_at: r.last_synced_at,
+      last_error: r.last_error,
+    });
+  }
 
   const content = html`
-    <h1>Integrations</h1>
-
-    <!-- Stripe -->
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:start;">
-        <div>
-          <h3>Stripe</h3>
-          <p style="font-size:var(--text-base);color:var(--color-text-secondary);">
-            Automatically sync MRR, churn, new customers, and subscription data. No manual entry needed.
-          </p>
-        </div>
-        ${connected.has('stripe')
-          ? html`<span class="status-badge status-green">Connected</span>`
-          : stripeUrl
-            ? html`<a href="${stripeUrl}" class="btn btn-primary btn-sm">Connect Stripe</a>`
-            : html`<span class="status-badge status-gray">Configure STRIPE_CONNECT_CLIENT_ID</span>`
-        }
-      </div>
-      ${connected.has('stripe') ? html`
-        <div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--color-border-subtle);font-size:var(--text-sm);color:var(--color-text-muted);">
-          Revenue data syncs daily at midnight UTC. Last sync: ${(connected.get('stripe') as Record<string, string>)?.updated_at ?? 'Never'}
-        </div>` : ''}
+    <div class="page-header">
+      <h1>Integrations</h1>
+      <p class="page-subtitle">Connect external data sources so Foundry can update Signal in real time.</p>
     </div>
 
-    <!-- API Keys -->
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <h3 style="margin:0;">API Keys</h3>
-        <form method="POST" action="/settings/integrations/api-keys" style="display:flex;gap:0.5rem;">
-          <input type="text" name="name" placeholder="Key name (e.g. CI Pipeline)" required style="padding:0.35rem 0.75rem;border:1px solid var(--color-border);border-radius:var(--radius-md);font-size:var(--text-sm);" />
-          <button type="submit" class="btn btn-secondary btn-sm">Create Key</button>
-        </form>
-      </div>
-      ${apiKeys.length === 0
-        ? html`<p style="color:var(--color-text-muted);font-size:var(--text-sm);">No API keys. Create one to integrate with the public REST API.</p>`
-        : html`<div style="font-size:var(--text-sm);">
-          ${apiKeys.map((k) => html`
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--color-border-subtle);">
-              <div>
-                <strong>${k.name}</strong>
-                <code style="margin-left:0.5rem;">${k.key_prefix}...</code>
-                <span style="color:var(--color-text-faint);margin-left:0.5rem;">Last used: ${k.last_used_at ?? 'Never'}</span>
+    <div class="integration-grid">
+      ${Object.entries(INTEGRATION_META).map(([type, meta]) => {
+        const connected = connectedTypes.get(type);
+        const isConnected = connected?.status === 'active';
+        const hasError = connected?.status === 'error';
+
+        return html`
+          <div class="integration-card ${isConnected ? 'connected' : ''} ${hasError ? 'error' : ''}">
+            <div class="integration-header">
+              <span class="integration-icon">${meta.icon}</span>
+              <div class="integration-title">
+                <h3>${meta.name}</h3>
+                ${isConnected ? html`<span class="badge badge-green">Connected</span>` :
+                  hasError ? html`<span class="badge badge-red">Error</span>` :
+                  html`<span class="badge badge-gray">Not connected</span>`}
               </div>
-              <form method="POST" action="/settings/integrations/api-keys/${k.id}/revoke" onsubmit="return confirm('Revoke this API key? This cannot be undone.')">
-                <button type="submit" class="btn btn-danger btn-sm">Revoke</button>
-              </form>
             </div>
-          `)}
-        </div>`}
-      <p style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:0.75rem;">
-        <a href="/settings/api-docs" style="color:var(--color-primary);">View API documentation</a> for endpoint reference and code examples.
-      </p>
-    </div>
-
-    <!-- Webhooks -->
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-        <h3 style="margin:0;">Webhooks</h3>
-      </div>
-      <p style="font-size:var(--text-sm);color:var(--color-text-secondary);margin-bottom:1rem;">
-        Receive real-time notifications when events occur. All deliveries are signed with HMAC-SHA256.
-      </p>
-
-      <form method="POST" action="/settings/integrations/webhooks" style="margin-bottom:1rem;padding:1rem;background:var(--color-bg);border-radius:var(--radius-md);">
-        <div class="form-group" style="margin-bottom:0.75rem;">
-          <label for="webhook_url">Endpoint URL</label>
-          <input type="url" name="url" id="webhook_url" placeholder="https://your-app.com/webhooks/foundry" required />
-        </div>
-        <div class="form-group" style="margin-bottom:0.75rem;">
-          <label>Events</label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.35rem;font-size:var(--text-sm);">
-            ${(['audit.completed', 'decision.created', 'decision.resolved', 'stressor.identified', 'stressor.resolved', 'risk_state.changed', 'metric.recorded', 'digest.generated', 'remediation.pr_opened', 'remediation.pr_merged'] as WebhookEvent[]).map((e) => html`
-              <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;">
-                <input type="checkbox" name="events" value="${e}" /> ${e}
-              </label>
-            `)}
+            <p class="integration-description">${meta.description}</p>
+            ${connected?.last_synced_at ? html`<p class="integration-sync-time">Last synced: ${new Date(connected.last_synced_at).toLocaleDateString()}</p>` : ''}
+            ${hasError && connected?.last_error ? html`<p class="integration-error">${connected.last_error}</p>` : ''}
+            <div class="integration-actions">
+              ${isConnected ? html`
+                <form method="POST" action="/integrations/${type}/disconnect">
+                  <button type="submit" class="btn btn-ghost btn-sm">Disconnect</button>
+                </form>
+                <a href="/integrations/${type}/sync" class="btn btn-outline btn-sm">Sync now</a>
+              ` : html`
+                <a href="/integrations/${type}/connect" class="btn btn-primary btn-sm">Connect</a>
+              `}
+            </div>
           </div>
-        </div>
-        <button type="submit" class="btn btn-primary btn-sm">Register Webhook</button>
-      </form>
-
-      ${webhooks.length > 0 ? html`
-        <div style="font-size:var(--text-sm);">
-          ${webhooks.map((w) => html`
-            <div style="display:flex;justify-content:space-between;align-items:start;padding:0.75rem 0;border-bottom:1px solid var(--color-border-subtle);">
-              <div>
-                <code style="font-size:var(--text-xs);">${w.url}</code>
-                <div style="margin-top:0.25rem;">
-                  ${w.events.map((e: string) => html`<span class="status-badge status-blue" style="margin-right:0.25rem;margin-bottom:0.25rem;">${e}</span>`)}
-                </div>
-                <div style="color:var(--color-text-faint);font-size:var(--text-xs);margin-top:0.25rem;">
-                  ${w.failure_count > 0 ? html`<span style="color:var(--color-danger);">${w.failure_count} failures</span> · ` : ''}
-                  Last delivery: ${w.last_delivery_at ?? 'Never'}
-                </div>
-              </div>
-              <form method="POST" action="/settings/integrations/webhooks/${w.id}/delete" onsubmit="return confirm('Delete this webhook?')">
-                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-              </form>
-            </div>
-          `)}
-        </div>` : ''}
+        `;
+      })}
     </div>
   `;
 
   return c.html(dashboardLayout(ctx, content));
 });
 
-// ─── Stripe OAuth Callback ──────────────────────────────────────────────────
+// ─── GET /integrations/:type/connect ─────────────────────────────────────────
 
-integrationRoutes.get('/integrations/stripe/callback', async (c) => {
-  const code = c.req.query('code');
-  const state = c.req.query('state');
-  if (!code || !state) return c.redirect('/settings/integrations?error=missing_params');
+integrationsRoutes.get('/integrations/:type/connect', async (c) => {
+  const founder = c.get('founder');
+  const type = c.req.param('type') as IntegrationType;
+  const meta = INTEGRATION_META[type];
+  if (!meta) return c.notFound();
+
+  const ctx = await buildSharedContext(c);
+  if (!ctx.product) return c.redirect('/products');
+
+  const content = html`
+    <div class="page-header">
+      <a href="/integrations" class="back-link">← Integrations</a>
+      <h1>Connect ${meta.name}</h1>
+      <p class="page-subtitle">${meta.description}</p>
+    </div>
+
+    ${meta.authMethod === 'api_key' ? html`
+      <form method="POST" action="/integrations/${type}/connect" class="form-card">
+        ${(meta.fields ?? []).map((field) => html`
+          <div class="form-group">
+            <label for="${field.key}">${field.label}${field.required ? '' : ' (optional)'}</label>
+            <input type="${field.key.includes('key') || field.key.includes('secret') || field.key.includes('token') ? 'password' : 'text'}"
+                   id="${field.key}" name="${field.key}"
+                   placeholder="${field.placeholder}"
+                   ${field.required ? 'required' : ''} />
+          </div>
+        `)}
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Connect ${meta.name}</button>
+          <a href="/integrations" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    ` : html`
+      <div class="oauth-connect">
+        <p>This integration uses OAuth. You'll be redirected to ${meta.name} to authorize access.</p>
+        <a href="/integrations/${type}/oauth-start" class="btn btn-primary">Continue to ${meta.name}</a>
+      </div>
+    `}
+  `;
+
+  return c.html(dashboardLayout(ctx, content));
+});
+
+// ─── POST /integrations/:type/connect ────────────────────────────────────────
+
+integrationsRoutes.post('/integrations/:type/connect', async (c) => {
+  const founder = c.get('founder');
+  const type = c.req.param('type') as IntegrationType;
+  const meta = INTEGRATION_META[type];
+  if (!meta) return c.notFound();
+
+  const ctx = await buildSharedContext(c);
+  if (!ctx.product) return c.redirect('/products');
+
+  const body = await c.req.parseBody() as Record<string, string>;
+
+  // Build credentials object from form fields
+  const credentials: Record<string, string> = {};
+  const config: Record<string, unknown> = {};
+
+  for (const field of (meta.fields ?? [])) {
+    if (body[field.key]) {
+      // Separate config fields from credential fields
+      if (['activation_event', 'active_user_event', 'team_id', 'host', 'account_id'].includes(field.key)) {
+        config[field.key] = body[field.key];
+      } else {
+        credentials[field.key] = body[field.key];
+      }
+    }
+  }
+
+  const existing = await query(
+    `SELECT id FROM integrations WHERE product_id = ? AND type = ?`,
+    [ctx.product.id, type],
+  );
+
+  if (existing.rows.length > 0) {
+    await query(
+      `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
+       last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE product_id = ? AND type = ?`,
+      [JSON.stringify(credentials), JSON.stringify(config), ctx.product.id, type],
+    );
+  } else {
+    await query(
+      `INSERT INTO integrations (id, product_id, type, status, credentials_json, config_json)
+       VALUES (?, ?, ?, 'active', ?, ?)`,
+      [nanoid(), ctx.product.id, type, JSON.stringify(credentials), JSON.stringify(config)],
+    );
+  }
+
+  return c.redirect('/integrations?connected=' + type);
+});
+
+// ─── POST /integrations/:type/disconnect ─────────────────────────────────────
+
+integrationsRoutes.post('/integrations/:type/disconnect', async (c) => {
+  const founder = c.get('founder');
+  const type = c.req.param('type');
+  const ctx = await buildSharedContext(c);
+  if (!ctx.product) return c.redirect('/products');
+
+  await query(
+    `UPDATE integrations SET status = 'revoked', credentials_json = NULL WHERE product_id = ? AND type = ?`,
+    [ctx.product.id, type],
+  );
+
+  return c.redirect('/integrations');
+});
+
+// ─── GET /integrations/:type/sync ─────────────────────────────────────────────
+
+integrationsRoutes.get('/integrations/:type/sync', async (c) => {
+  const founder = c.get('founder');
+  const type = c.req.param('type');
+  const ctx = await buildSharedContext(c);
+  if (!ctx.product) return c.redirect('/products');
 
   try {
-    const { productId } = await handleStripeOAuthCallback(code, state);
-    return c.redirect(`/settings/integrations?connected=stripe`);
+    const { syncProductIntegrations } = await import('../../services/integrations/sync.js');
+    await syncProductIntegrations(ctx.product.id);
   } catch (err) {
-    log.error('Stripe OAuth callback failed', err);
-    return c.redirect('/settings/integrations?error=stripe_failed');
+    console.error('[integrations] manual sync error:', err);
   }
-});
 
-// ─── API Key Management ─────────────────────────────────────────────────────
-
-integrationRoutes.post('/settings/integrations/api-keys', async (c) => {
-  const founder = c.get('founder');
-  const body = await c.req.parseBody() as Record<string, string>;
-  const name = (body.name ?? '').trim();
-  if (!name || name.length > 100) return c.redirect('/settings/integrations?error=invalid_name');
-
-  const existing = await listApiKeys(founder.id);
-  if (existing.length >= 5) return c.redirect('/settings/integrations?error=max_keys');
-
-  const result = await createApiKey(founder.id, name);
-
-  // Show the key once — redirect with flash
-  return c.html(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>API Key Created</title><link rel="stylesheet" href="/static/styles.css"></head><body>
-    <header class="site-header"><div class="header-left"><a href="/dashboard" class="logo">Foundry</a></div></header>
-    <main class="main-full" style="max-width:600px;">
-      <div class="card" style="border-left:3px solid var(--color-success);">
-        <h2>API Key Created</h2>
-        <p style="color:var(--color-text-secondary);">Copy this key now. It won't be shown again.</p>
-        <div style="background:var(--color-sidebar-bg);color:#e8eaf0;padding:1rem;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:var(--text-base);word-break:break-all;margin:1rem 0;">
-          ${result.key}
-        </div>
-        <p style="font-size:var(--text-sm);color:var(--color-text-muted);">Name: ${result.name}</p>
-        <a href="/settings/integrations" class="btn btn-primary" style="margin-top:1rem;">Done</a>
-      </div>
-    </main></body></html>`);
-});
-
-integrationRoutes.post('/settings/integrations/api-keys/:id/revoke', async (c) => {
-  const founder = c.get('founder');
-  const keyId = c.req.param('id');
-  await revokeApiKey(keyId, founder.id);
-  return c.redirect('/settings/integrations');
-});
-
-// ─── Webhook Management ─────────────────────────────────────────────────────
-
-const webhookSchema = z.object({
-  url: z.string().url(),
-  events: z.union([z.string(), z.array(z.string())]),
-});
-
-integrationRoutes.post('/settings/integrations/webhooks', async (c) => {
-  const founder = c.get('founder');
-  const raw = await c.req.parseBody() as Record<string, unknown>;
-
-  // Events can come as a single string or array from checkboxes
-  let events: string[] = [];
-  if (Array.isArray(raw.events)) events = raw.events as string[];
-  else if (typeof raw.events === 'string') events = [raw.events];
-
-  if (!raw.url || events.length === 0) return c.redirect('/settings/integrations?error=invalid_webhook');
-
-  const secret = randomBytes(32).toString('hex');
-  await registerWebhook(founder.id, raw.url as string, events as WebhookEvent[], secret);
-
-  return c.redirect('/settings/integrations?webhook_created=1');
-});
-
-integrationRoutes.post('/settings/integrations/webhooks/:id/delete', async (c) => {
-  const founder = c.get('founder');
-  const webhookId = c.req.param('id');
-  await deleteWebhook(webhookId, founder.id);
-  return c.redirect('/settings/integrations');
+  return c.redirect('/integrations?synced=' + type);
 });

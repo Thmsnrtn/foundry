@@ -1,0 +1,407 @@
+// =============================================================================
+// FOUNDRY — Crucible Agent (QA Director)
+// Domain: Quality assurance, bug tracking, test coverage
+// Cadence: 24 hours
+// v2: Emits hypotheses for testing experiments, outboundActions for quality
+//     improvements, agentMessages to atlas/sentinel on regression risks
+// =============================================================================
+
+import { nanoid } from 'nanoid';
+import { BaseAgent } from './base.js';
+import type {
+  AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
+  OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
+} from '../types.js';
+import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { query } from '../../../db/client.js';
+import { createRemediation } from '../remediation.js';
+
+interface CrucibleClaudeResponse {
+  observations: string[];
+  quality_alerts: Array<{
+    type: 'regression_risk' | 'coverage_gap' | 'test_needed';
+    severity: 'high' | 'medium' | 'low';
+    description: string;
+    recommendation: string;
+  }>;
+  quality_hypotheses: Array<{
+    title: string;
+    description: string;
+    hypothesis: string;
+    success_metric: string;
+    success_threshold: number;
+    test_duration_days: number;
+  }>;
+  regression_risks: Array<{
+    area: string;
+    risk_level: 'low' | 'medium' | 'high';
+    description: string;
+  }>;
+  quality_improvements: Array<{
+    type: 'test' | 'process' | 'tooling';
+    title: string;
+    description: string;
+    authority_level: 0 | 1 | 2;
+  }>;
+  domain_health_score: number;
+  briefing_contribution: string;
+  briefing_priority: 'high' | 'normal' | 'low';
+}
+
+export class CrucibleAgent extends BaseAgent {
+  getName(): AgentName { return 'crucible'; }
+  getRole(): string { return 'QA Director'; }
+  getActivationCadenceHours(): number { return 24; }
+
+  protected async analyzeAndAct(
+    context: AgentRunContext,
+    db: typeof query
+  ): Promise<AgentAnalysisResult> {
+    const { productId, companyName } = context;
+
+    // ── 1. Query audit_scores for d1, d5, d9 ─────────────────────────────────
+    const auditResult = await db(
+      `SELECT d1_score, d5_score, d9_score, findings, blocking_issues, created_at
+       FROM audit_scores
+       WHERE product_id = ?
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [productId]
+    );
+
+    // ── 2. Query remediation PRs — count and status breakdown ─────────────────
+    const prResult = await db(
+      `SELECT status, COUNT(*) as count
+       FROM remediation_prs
+       WHERE product_id = ?
+       GROUP BY status`,
+      [productId]
+    );
+
+    // ── 3. Query quality-related stressors ────────────────────────────────────
+    const stressorResult = await db(
+      `SELECT stressor_name, signal, severity, identified_at
+       FROM stressor_history
+       WHERE product_id = ?
+         AND status = 'active'
+         AND (
+           LOWER(stressor_name) LIKE '%bug%'
+           OR LOWER(stressor_name) LIKE '%crash%'
+           OR LOWER(stressor_name) LIKE '%error%'
+           OR LOWER(stressor_name) LIKE '%regression%'
+           OR LOWER(stressor_name) LIKE '%test%'
+           OR LOWER(stressor_name) LIKE '%quality%'
+           OR LOWER(stressor_name) LIKE '%broken%'
+         )
+       ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'elevated' THEN 2 ELSE 3 END`,
+      [productId]
+    );
+
+    // ── 4. Handle no-data case ────────────────────────────────────────────────
+    if (auditResult.rows.length === 0 && prResult.rows.length === 0) {
+      const action: AgentAction = {
+        id: nanoid(),
+        type: 'analysis_complete',
+        description: 'No quality data found — calibrating',
+        authority_level: 0,
+        executed: true,
+        executed_at: new Date().toISOString(),
+        result: 'Awaiting audit and PR data',
+      };
+      return {
+        observations: ['No quality audit data available yet — Crucible will track test coverage and regression risks as audit data accumulates.'],
+        actionsTaken: [action],
+        pendingDecisions: [],
+        briefingContribution: 'Crucible is calibrating — no significant activity to report.',
+        briefingPriority: 'low',
+        evolutionCandidates: [],
+        tokensUsed: 0,
+        costUsd: 0,
+        domainHealthScore: 50,
+      };
+    }
+
+    // ── 5. Build prompt data ──────────────────────────────────────────────────
+    const audit = auditResult.rows.length > 0
+      ? (auditResult.rows[0] as Record<string, unknown>)
+      : null;
+    const d1 = audit ? Number(audit.d1_score) || 0 : 0;
+    const d5 = audit ? Number(audit.d5_score) || 0 : 0;
+    const d9 = audit ? Number(audit.d9_score) || 0 : 0;
+
+    let blockingIssueCount = 0;
+    if (audit?.blocking_issues) {
+      try {
+        const issues = JSON.parse(audit.blocking_issues as string) as unknown[];
+        blockingIssueCount = issues.length;
+      } catch { /* ignore */ }
+    }
+
+    let qualityFindings: string[] = [];
+    if (audit?.findings) {
+      try {
+        const findings = JSON.parse(audit.findings as string) as Array<Record<string, unknown>>;
+        qualityFindings = findings
+          .filter(f => {
+            const text = JSON.stringify(f).toLowerCase();
+            return text.includes('test') || text.includes('bug') || text.includes('error') ||
+                   text.includes('function') || text.includes('coverage') || text.includes('regression');
+          })
+          .map(f => String(f.finding ?? f.description ?? f.title ?? '').slice(0, 120))
+          .filter(Boolean)
+          .slice(0, 5);
+      } catch { /* ignore */ }
+    }
+
+    const prRows = prResult.rows as Record<string, unknown>[];
+    const prStatusMap: Record<string, number> = {};
+    for (const row of prRows) {
+      prStatusMap[row.status as string] = Number(row.count) || 0;
+    }
+    const prBreakdown = Object.entries(prStatusMap)
+      .map(([status, count]) => `${status}:${count}`)
+      .join(', ') || 'No PRs';
+
+    const totalOpenPrs = (prStatusMap['pr_open'] ?? 0) + (prStatusMap['generating'] ?? 0);
+    const mergedPrs = prStatusMap['merged'] ?? 0;
+    const failedPrs = prStatusMap['failed'] ?? 0;
+
+    const stressorRows = stressorResult.rows as Record<string, unknown>[];
+    const stressorList = stressorRows.length > 0
+      ? stressorRows.map(s => `${s.stressor_name as string} [${s.severity as string}]: ${s.signal as string}`).join('; ')
+      : 'None active';
+
+    // ── 5b. Extract GitHub issue_summary events ───────────────────────────────
+    const githubIssueEvents = (context.integrationEvents ?? []).filter(
+      e => e.source === 'github' && e.event_type === 'issue_summary'
+    );
+    let githubBugCount = 0;
+    let githubIssueContext = '';
+    for (const event of githubIssueEvents) {
+      // Try to extract bug_count from summary text (e.g. "bug_count: 5" or "5 bugs")
+      const bugMatch = event.summary.match(/bug[_\s]?count[:\s]+(\d+)|(\d+)\s+bugs?/i);
+      if (bugMatch) {
+        githubBugCount += parseInt(bugMatch[1] ?? bugMatch[2] ?? '0', 10);
+      }
+      githubIssueContext += `${event.summary} `;
+    }
+
+    // ── 6. Call Claude Sonnet ─────────────────────────────────────────────────
+    const systemPrompt = this.buildSystemPrompt(
+      context,
+      `You are Crucible, the VP of Quality for ${companyName}. You translate test coverage and bug data into customer trust risk.
+
+Your core belief: quality is not a technical metric — it is a customer experience metric and a revenue risk metric. A bug that affects 3% of enterprise users on the core workflow is worth more attention than a bug that affects 40% of free users on an edge case.
+
+You prioritize by: revenue impact of affected users × frequency of affected workflow × severity of failure mode. You present your top risk as: "The payment flow has a known race condition that affects approximately 1-2% of checkout attempts. At current volume, this is causing approximately 8-12 failed purchases per week, which at average order value represents $2,400-$3,600 in monthly revenue impact. This has been open for 3 sprints."
+
+You are direct when test coverage is creating false confidence. When there are no tests on a critical path, you name the specific risk: "There are no integration tests on the Stripe webhook handler. A Stripe API change would silently break billing with no detection until customers report missing subscriptions."
+
+You push back when shipping velocity is being traded for quality in ways that will cost more later.`
+    );
+
+    const userPrompt = `Functional Completeness: ${d1}/10. Operational Readiness: ${d5}/10. Launch Readiness: ${d9}/10.
+Blocking issues in latest audit: ${blockingIssueCount}.
+${qualityFindings.length > 0 ? `Quality-related findings: ${qualityFindings.join('; ')}` : ''}
+Remediation PRs status: ${prBreakdown} (${totalOpenPrs} open, ${mergedPrs} merged, ${failedPrs} failed).
+Quality stressors: ${stressorList}.${githubBugCount > 0 ? `\nGitHub issue tracker: ${githubBugCount} bugs reported. ${githubIssueContext.trim()}` : ''}
+
+Return JSON only (no markdown fences):
+{
+  "observations": ["string", ...],
+  "quality_alerts": [
+    {
+      "type": "regression_risk" | "coverage_gap" | "test_needed",
+      "severity": "high" | "medium" | "low",
+      "description": "string",
+      "recommendation": "string"
+    }
+  ],
+  "quality_hypotheses": [
+    {
+      "title": "string",
+      "description": "string",
+      "hypothesis": "string",
+      "success_metric": "string",
+      "success_threshold": number,
+      "test_duration_days": number
+    }
+  ],
+  "regression_risks": [
+    {
+      "area": "string",
+      "risk_level": "low" | "medium" | "high",
+      "description": "string"
+    }
+  ],
+  "quality_improvements": [
+    {
+      "type": "test" | "process" | "tooling",
+      "title": "string",
+      "description": "string",
+      "authority_level": 0 | 1 | 2
+    }
+  ],
+  "domain_health_score": number (0-100),
+  "briefing_contribution": "string (2-3 sentences max)",
+  "briefing_priority": "high" | "normal" | "low"
+}`;
+
+    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
+    const costUsd = tokensUsed * 0.000003;
+
+    let parsed: CrucibleClaudeResponse;
+    try {
+      parsed = parseJSONResponse<CrucibleClaudeResponse>(response.content);
+    } catch {
+      return {
+        observations: ['Crucible encountered a parsing error — will retry next cycle.'],
+        actionsTaken: [],
+        pendingDecisions: [],
+        briefingContribution: 'Crucible experienced a temporary error during analysis.',
+        briefingPriority: 'low',
+        evolutionCandidates: [],
+        tokensUsed,
+        costUsd,
+        domainHealthScore: 50,
+      };
+    }
+
+    // ── 7. No explicit AgentDecisions for Crucible — it uses notify (level 1) ─
+    const pendingDecisions: AgentDecision[] = [];
+
+    // ── 7b. Create remediations from quality alerts ───────────────────────────
+    const actionsTaken: AgentAction[] = [];
+
+    for (const alert of (parsed.quality_alerts ?? [])) {
+      if (alert.severity !== 'high') continue;
+
+      let remediationType: string;
+      if (alert.type === 'coverage_gap' || alert.type === 'test_needed') {
+        remediationType = 'test_coverage';
+      } else if (alert.type === 'regression_risk') {
+        remediationType = 'performance';
+      } else {
+        remediationType = 'code_quality';
+      }
+
+      try {
+        const remId = await createRemediation({
+          productId,
+          agentName: 'crucible',
+          sessionId: context.agentInstance.id,
+          remediationType,
+          title: alert.description.slice(0, 120),
+          description: alert.description,
+          severity: 'high',
+          suggestedFix: alert.recommendation,
+        });
+
+        actionsTaken.push({
+          id: nanoid(),
+          type: 'create_remediation',
+          description: `Created high ${remediationType} remediation: ${alert.description.slice(0, 80)}`,
+          authority_level: 0,
+          executed: true,
+          executed_at: new Date().toISOString(),
+          target: 'agent_remediations',
+          result: remId,
+        });
+      } catch {
+        // Non-fatal
+      }
+    }
+
+    // ── 8. Build outbound actions from quality_improvements (authority_level <= 1) ─
+    const outboundActions: OutboundActionSignal[] = [];
+    for (const improvement of (parsed.quality_improvements ?? [])) {
+      if (improvement.authority_level <= 1) {
+        outboundActions.push({
+          action_type: `quality_improvement_${improvement.type}`,
+          description: improvement.description,
+          parameters: {
+            type: improvement.type,
+            title: improvement.title,
+          },
+          authority_level: improvement.authority_level,
+        });
+      }
+    }
+
+    // ── 9. Build agent messages for high regression risks and quality drops ────
+    const agentMessages: AgentMessageSignal[] = [];
+    const highRegressionRisks = (parsed.regression_risks ?? []).filter(r => r.risk_level === 'high');
+
+    if (highRegressionRisks.length > 0) {
+      const riskAreas = highRegressionRisks.map(r => r.area).join(', ');
+      const riskDetails = highRegressionRisks.map(r => `${r.area}: ${r.description}`).join('; ');
+
+      agentMessages.push({
+        to_agent: 'atlas',
+        message_type: 'alert',
+        priority: 'high',
+        subject: `High regression risk detected in ${highRegressionRisks.length} area(s): ${riskAreas}`,
+        body: `Crucible identified high regression risk areas: ${riskDetails}. Atlas should review architectural changes that may have introduced these risks.`,
+      });
+
+      agentMessages.push({
+        to_agent: 'sentinel',
+        message_type: 'alert',
+        priority: 'high',
+        subject: `High regression risk — infrastructure monitoring needed: ${riskAreas}`,
+        body: `Crucible flagged high regression risks in: ${riskAreas}. Sentinel should increase monitoring sensitivity for these areas to catch production failures early.`,
+      });
+    }
+
+    const qualityScore = parsed.domain_health_score ?? 50;
+    if (qualityScore < 60) {
+      agentMessages.push({
+        to_agent: 'compass',
+        message_type: 'insight',
+        priority: qualityScore < 40 ? 'high' : 'normal',
+        subject: `Quality score dropped to ${qualityScore}/100 — strategic attention needed`,
+        body: `Crucible reports quality score of ${qualityScore}/100. Key concerns: ${(parsed.quality_alerts ?? []).filter(a => a.severity === 'high').map(a => a.description).slice(0, 3).join('; ') || 'see full analysis'}. This may require reprioritizing engineering capacity toward quality.`,
+      });
+    }
+
+    // ── 10. Build hypotheses from quality_hypotheses ──────────────────────────
+    const hypotheses: HypothesisSignal[] = (parsed.quality_hypotheses ?? []).map(h => ({
+      title: h.title,
+      description: h.description,
+      hypothesis: h.hypothesis,
+      success_metric: h.success_metric,
+      success_threshold: h.success_threshold,
+      test_duration_days: h.test_duration_days,
+    }));
+
+    // ── 11. Record analysis action ────────────────────────────────────────────
+    const highAlerts = (parsed.quality_alerts ?? []).filter(a => a.severity === 'high').length;
+    const analysisAction: AgentAction = {
+      id: nanoid(),
+      type: 'analysis_complete',
+      description: `Completed QA analysis: d1=${d1}/10, d5=${d5}/10, d9=${d9}/10, ${totalOpenPrs} open PRs, ${highAlerts} high-severity quality alerts, ${highRegressionRisks.length} high regression risks`,
+      authority_level: 0,
+      executed: true,
+      executed_at: new Date().toISOString(),
+      result: 'Analysis stored in session',
+    };
+
+    return {
+      observations: parsed.observations ?? [],
+      actionsTaken: [analysisAction, ...actionsTaken],
+      pendingDecisions,
+      briefingContribution: parsed.briefing_contribution ?? 'Crucible completed QA review.',
+      briefingPriority: parsed.briefing_priority ?? 'normal',
+      evolutionCandidates: [],
+      tokensUsed,
+      costUsd,
+      domainHealthScore: parsed.domain_health_score ?? 50,
+      outboundActions,
+      agentMessages,
+      hypotheses,
+    };
+  }
+}
+
+export default CrucibleAgent;

@@ -1031,6 +1031,11 @@ const DNA_SECTIONS: DNASection[] = [
   { key: 'objection_response', label: 'Objection Response', value: null, placeholder: 'How you counter the primary objection.', type: 'textarea' },
   { key: 'market_insight', label: 'Market Insight', value: null, placeholder: 'A non-obvious belief about your market.', type: 'textarea' },
   { key: 'retention_hypothesis', label: 'Retention Hypothesis', value: null, placeholder: 'Why do users keep coming back?', type: 'textarea' },
+  // SCP Agent Context — improves all 12 agent analyses
+  { key: 'business_model', label: 'Business Model', value: null, placeholder: 'SaaS, marketplace, usage-based, freemium, etc.', type: 'text' },
+  { key: 'tech_stack', label: 'Tech Stack', value: null, placeholder: 'e.g. Next.js, Node, PostgreSQL, AWS — helps Atlas and Sentinel.', type: 'text' },
+  { key: 'team_context', label: 'Team Context', value: null, placeholder: 'Solo founder, 2-person team, 5 engineers, etc. — helps all agents calibrate recommendations.', type: 'text' },
+  { key: 'competitive_landscape', label: 'Competitive Landscape', value: null, placeholder: 'Key competitors and what differentiates you — helps Beacon and Shield.', type: 'textarea' },
 ];
 
 export function dnaEditor(

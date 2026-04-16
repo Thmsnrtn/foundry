@@ -3,26 +3,17 @@
 // Hono HTTP server with all routes, middleware, and cron scheduler.
 // =============================================================================
 
-// Validate environment variables before anything else
-import { validateEnv, env } from './lib/env.js';
-validateEnv();
-
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { logger } from 'hono/logger';
 import { CronJob } from 'cron';
-import { log } from './lib/logger.js';
-import type { AppVariables } from './types/index.js';
 
 // Middleware
 import { authMiddleware } from './middleware/auth.js';
 import { internalMiddleware } from './middleware/internal.js';
-import { requestIdMiddleware, securityHeaders } from './middleware/security.js';
-import { apiRateLimit, authRateLimit, webhookRateLimit } from './middleware/rate-limit.js';
-import { csrfProtection } from './middleware/csrf.js';
 
 // Public routes (no auth)
 import { landingRoutes, pricingRoutes, caseStudyRoutes } from './routes/public/landing.js';
-import { legalRoutes } from './routes/public/legal.js';
 
 // Auth routes
 import { authRoutes } from './routes/auth/clerk.js';
@@ -30,6 +21,7 @@ import { authRoutes } from './routes/auth/clerk.js';
 // Dashboard routes (auth required)
 import { dashboardRoutes } from './routes/dashboard/index.js';
 import { onboardingRoutes } from './routes/dashboard/onboarding.js';
+import { onboardingChat } from './routes/dashboard/onboarding-chat.js';
 import { productRoutes } from './routes/dashboard/products.js';
 import { auditRoutes } from './routes/dashboard/audit.js';
 import { decisionRoutes } from './routes/dashboard/decisions.js';
@@ -42,35 +34,84 @@ import { journeyRoutes } from './routes/dashboard/journey.js';
 import { koldlyRoutes } from './routes/dashboard/koldly.js';
 import { settingsRoutes } from './routes/dashboard/settings.js';
 import { revenueRoutes } from './routes/dashboard/revenue.js';
-import { apiDocsRoutes } from './routes/dashboard/api-docs.js';
-import { feedPageRoutes } from './routes/dashboard/feed.js';
-import { actionRoutes } from './routes/dashboard/actions.js';
-import { askPageRoutes } from './routes/dashboard/ask.js';
-import { integrationRoutes } from './routes/dashboard/integrations.js';
-import { autopilotRoutes } from './routes/dashboard/autopilot.js';
-import { ideaRoutes } from './routes/dashboard/validate.js';
-import { voiceRoutes } from './routes/dashboard/voice.js';
 import { portfolioRoutes } from './routes/dashboard/portfolio.js';
-import { insightRoutes } from './routes/dashboard/insights.js';
+
+// Share routes (public, token-gated)
+import { shareRoutes } from './routes/share/index.js';
+
+// Metric Ingest (public, token-gated)
+import { ingestRoutes } from './routes/ingest/index.js';
+
+// Signal Timeline
+import { timelineRoutes } from './routes/signal/timeline.js';
+
+// Weekly Operating Plan
+import { planRoutes } from './routes/dashboard/plan.js';
+
+// New routes: Integrations, Team, Investors, Playbooks
+import { integrationsRoutes } from './routes/dashboard/integrations.js';
+import { teamRoutes } from './routes/dashboard/team.js';
+import { investorRoutes } from './routes/dashboard/investors.js';
+import { playbookRoutes } from './routes/dashboard/playbooks.js';
+
+// SCP: Agent Roster + all SCP sub-routes
+import { agentRoutes } from './routes/dashboard/agents.js';
+import { agentWisdomRoutes } from './routes/dashboard/agents-wisdom.js';
+import { agentBriefingRoutes } from './routes/dashboard/agents-briefings.js';
+import { agentEvolveRoutes } from './routes/dashboard/agents-evolve.js';
+import { agentConstitutionRoutes } from './routes/dashboard/agents-constitution.js';
+import { agentRemediationRoutes } from './routes/dashboard/agents-remediations.js';
+import { agentTemporalRoutes } from './routes/dashboard/agents-temporal.js';
+// SCP v2/v3: New capability layers
+import { agentIntegrationRoutes } from './routes/dashboard/agents-integrations.js';
+import { agentCustomerRoutes } from './routes/dashboard/agents-customers.js';
+import { agentMessageRoutes } from './routes/dashboard/agents-messages.js';
+import { agentStrategyRoutes } from './routes/dashboard/agents-strategy.js';
+import { agentExperimentRoutes } from './routes/dashboard/agents-experiments.js';
+// SCP v4: New dashboard pages
+import { agentsInbox } from './routes/dashboard/agents-inbox.js';
+import { agentsOkr } from './routes/dashboard/agents-okr.js';
+import { agentsDecisions } from './routes/dashboard/agents-decisions.js';
+import { benchmarks } from './routes/dashboard/benchmarks.js';
+import { auditLog } from './routes/dashboard/audit-log.js';
+// SCP v5: Gap-closing — execution, forecasting, investor layer, accuracy, privacy
+import { agentsActions } from './routes/dashboard/agents-actions.js';
+import { agentsAccuracy } from './routes/dashboard/agents-accuracy.js';
+import { agentsTransparency } from './routes/dashboard/agents-transparency.js';
+import { scenarios } from './routes/dashboard/scenarios.js';
+import { privacySettings } from './routes/dashboard/privacy.js';
+import { boardPacket } from './routes/dashboard/board-packet.js';
+import { weeklyBrief } from './routes/dashboard/weekly-brief.js';
+// SCP v6: Full evolved platform
+import { agentsDebate } from './routes/dashboard/agents-debate.js';
+import { executionPlaybooks } from './routes/dashboard/execution-playbooks.js';
+import { memoryGraph } from './routes/dashboard/memory.js';
+import { agentIntelligence } from './routes/dashboard/agent-intelligence.js';
+import { multimodalSignals } from './routes/dashboard/signals-multimodal.js';
+import { ambientRoutes } from './routes/dashboard/ambient.js';
+import { networkIntelligence } from './routes/dashboard/network-intelligence.js';
+import { exitRoutes } from './routes/dashboard/exit.js';
+import { transcriptWebhooks } from './routes/api/webhooks/transcripts.js';
+import { voiceReplyWebhook } from './routes/api/webhooks/voice-reply.js';
+// SCP v7: ROI dashboard, founder intelligence, integration health, priority API
+import { roiDashboard } from './routes/dashboard/roi.js';
+import { founderIntelligence } from './routes/dashboard/founder-intelligence.js';
+import { integrationHealth } from './routes/dashboard/integration-health.js';
+import { priorityApi } from './routes/api/priority.js';
+// REST API v1 (API key auth)
+import { apiV1 } from './api/v1/index.js';
 
 // API routes (auth required)
 import { apiProductRoutes } from './routes/api/products.js';
 import { apiMetricRoutes } from './routes/api/metrics.js';
 import { apiAuditLogRoutes } from './routes/api/audit-log.js';
 import { apiUXRoutes } from './routes/api/ux.js';
-import { searchRoutes } from './routes/api/search.js';
-import { feedRoutes } from './routes/api/feed.js';
-import { askRoutes } from './routes/api/ask.js';
+import { apiAskRoutes } from './routes/api/ask.js';
+import { mobileRoutes } from './routes/api/mobile.js';
 
 // Internal routes (ecosystem key required, except /health)
 import { healthRoutes } from './routes/internal/health.js';
 import { ecosystemRoutes } from './routes/internal/ecosystem.js';
-
-// Public API v1 (API key auth)
-import { v1Routes, apiKeyRoutes } from './routes/v1/index.js';
-import { sseRoutes } from './routes/api/events.js';
-import { widgetRoutes } from './routes/api/widget.js';
-import { mcpRoutes } from './routes/api/mcp.js';
 
 // Stripe webhook (raw body needed)
 import { handleWebhook } from './services/billing/stripe.js';
@@ -78,31 +119,41 @@ import { handleWebhook } from './services/billing/stripe.js';
 // Scheduled jobs
 import { JOB_REGISTRY } from './jobs/index.js';
 
+// Database migrations
+import { runMigrations } from './db/migrate.js';
+
+// ─── Startup Validation ───────────────────────────────────────────────────────
+
+const REQUIRED_ENV_VARS = [
+  'TURSO_DATABASE_URL',
+  'CLERK_SECRET_KEY',
+  'CLERK_PUBLISHABLE_KEY',
+  'STRIPE_SECRET_KEY',
+  'STRIPE_WEBHOOK_SECRET',
+  'STRIPE_SOLO_PRICE_ID',
+  'STRIPE_GROWTH_PRICE_ID',
+  'STRIPE_INVESTOR_READY_PRICE_ID',
+  'ANTHROPIC_API_KEY',
+];
+
+const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
+if (missing.length > 0) {
+  console.warn(`[STARTUP] Missing env vars: ${missing.join(', ')}`);
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[STARTUP] Required env vars missing in production — exiting.');
+    process.exit(1);
+  }
+}
+
 // ─── App Setup ───────────────────────────────────────────────────────────────
 
-const app = new Hono<{ Variables: AppVariables }>();
+const app = new Hono();
 
-// Global middleware — order matters
-app.use('*', requestIdMiddleware);
-app.use('*', securityHeaders);
-app.use('*', async (c, next) => {
-  const start = Date.now();
-  await next();
-  const duration = Date.now() - start;
-  const status = c.res.status;
-  const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
-  log[level](`${c.req.method} ${c.req.path} ${status}`, {
-    requestId: c.get('requestId'),
-    method: c.req.method,
-    path: c.req.path,
-    statusCode: status,
-    durationMs: duration,
-  });
-});
+// Global middleware
+app.use('*', logger());
 app.use('*', cors({
-  origin: env().APP_URL,
+  origin: process.env.APP_URL ?? 'http://localhost:8080',
   credentials: true,
-  maxAge: 86400,
 }));
 
 // ─── Static Files ─────────────────────────────────────────────────────────────
@@ -120,18 +171,27 @@ app.get('/static/:file', (c) => {
     const filePath = resolve(__dirname, 'public', fileName);
     const content = readFileSync(filePath, 'utf-8');
     const ext = fileName.split('.').pop();
-    const mimeTypes: Record<string, string> = { css: 'text/css', js: 'application/javascript', svg: 'image/svg+xml' };
+    const mimeTypes: Record<string, string> = { css: 'text/css', js: 'application/javascript', svg: 'image/svg+xml', json: 'application/json', png: 'image/png' };
     return c.body(content, 200, { 'Content-Type': mimeTypes[ext ?? ''] ?? 'text/plain', 'Cache-Control': 'public, max-age=3600' });
   } catch {
     return c.notFound();
   }
 });
 
-// ─── Rate Limiting ──────────────────────────────────────────────────────────
+// PWA: manifest and service worker must be served from root scope
+app.get('/manifest.json', (c) => {
+  try {
+    const content = readFileSync(resolve(__dirname, 'public', 'manifest.json'), 'utf-8');
+    return c.body(content, 200, { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'public, max-age=3600' });
+  } catch { return c.notFound(); }
+});
 
-app.use('/auth/*', authRateLimit);
-app.use('/webhooks/*', webhookRateLimit);
-app.use('/api/*', apiRateLimit);
+app.get('/sw.js', (c) => {
+  try {
+    const content = readFileSync(resolve(__dirname, 'public', 'sw.js'), 'utf-8');
+    return c.body(content, 200, { 'Content-Type': 'application/javascript', 'Cache-Control': 'no-cache' });
+  } catch { return c.notFound(); }
+});
 
 // ─── Public Routes ───────────────────────────────────────────────────────────
 
@@ -139,7 +199,8 @@ app.route('/', landingRoutes);
 app.route('/', pricingRoutes);
 app.route('/', caseStudyRoutes);
 app.route('/', authRoutes);
-app.route('/', legalRoutes);
+app.route('/', shareRoutes);
+app.route('/', ingestRoutes);
 
 // ─── Stripe Webhook (raw body, no auth) ──────────────────────────────────────
 
@@ -150,23 +211,16 @@ app.post('/webhooks/stripe', async (c) => {
   try {
     await handleWebhook(body, signature);
     return c.json({ received: true });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    // Distinguish signature verification failure from processing errors
-    if (message.includes('signature') || message.includes('No signatures found')) {
-      log.warn('Stripe webhook signature verification failed', { error: message });
-      return c.json({ error: 'Invalid signature' }, 401);
-    }
-    log.error('Stripe webhook processing error', err, { path: '/webhooks/stripe' });
+  } catch (err) {
+    console.error('Stripe webhook error:', err);
     return c.json({ error: 'Webhook processing failed' }, 400);
   }
 });
 
 // ─── Internal Routes ─────────────────────────────────────────────────────────
 
-// Health check and public widget routes (no auth)
+// Health check is public
 app.route('/', healthRoutes);
-app.route('/', widgetRoutes);
 
 // All other internal routes require ecosystem service key
 app.use('/internal/*', async (c, next) => {
@@ -180,28 +234,71 @@ app.route('/', ecosystemRoutes);
 // Apply auth middleware to all dashboard and API routes
 app.use('/dashboard/*', authMiddleware);
 app.use('/onboarding/*', authMiddleware);
+app.use('/setup', authMiddleware);
+app.use('/setup/*', authMiddleware);
 app.use('/products/*', authMiddleware);
 app.use('/decisions/*', authMiddleware);
+app.use('/api/decisions/*', authMiddleware);
 app.use('/digest/*', authMiddleware);
 app.use('/beta/*', authMiddleware);
 app.use('/koldly/*', authMiddleware);
+app.use('/settings', authMiddleware);
 app.use('/settings/*', authMiddleware);
+app.use('/plan', authMiddleware);
+app.use('/plan/*', authMiddleware);
+app.use('/signal/*', authMiddleware);
 app.use('/switch-product', authMiddleware);
+app.use('/portfolio', authMiddleware);
+app.use('/checkout', authMiddleware);
+app.use('/integrations', authMiddleware);
 app.use('/integrations/*', authMiddleware);
+app.use('/team', authMiddleware);
+app.use('/team/*', authMiddleware);
+app.use('/investors', authMiddleware);
+app.use('/investors/*', authMiddleware);
+app.use('/playbooks', authMiddleware);
+app.use('/playbooks/*', authMiddleware);
+app.use('/agents', authMiddleware);
+app.use('/agents/*', authMiddleware);
+app.use('/products/*/agents/*', authMiddleware);
 app.use('/api/*', authMiddleware);
-
-// CSRF protection on all dashboard form submissions
-app.use('/dashboard/*', csrfProtection);
-app.use('/onboarding/*', csrfProtection);
-app.use('/products/*', csrfProtection);
-app.use('/decisions/*', csrfProtection);
-app.use('/beta/*', csrfProtection);
-app.use('/settings/*', csrfProtection);
-app.use('/switch-product', csrfProtection);
+app.use('/benchmarks', authMiddleware);
+app.use('/benchmarks/*', authMiddleware);
+app.use('/audit-log', authMiddleware);
+app.use('/audit-log/*', authMiddleware);
+app.use('/scenarios', authMiddleware);
+app.use('/scenarios/*', authMiddleware);
+app.use('/board', authMiddleware);
+app.use('/board/*', authMiddleware);
+app.use('/brief', authMiddleware);
+app.use('/brief/*', authMiddleware);
+app.use('/privacy', authMiddleware);
+app.use('/privacy/*', authMiddleware);
+app.use('/setup', authMiddleware);
+app.use('/setup/*', authMiddleware);
+// SCP v7 auth
+app.use('/roi', authMiddleware);
+app.use('/roi/*', authMiddleware);
+app.use('/founder', authMiddleware);
+app.use('/founder/*', authMiddleware);
+app.use('/integrations/health', authMiddleware);
+app.use('/integrations/health/*', authMiddleware);
+// SCP v6 auth
+app.use('/memory', authMiddleware);
+app.use('/memory/*', authMiddleware);
+app.use('/signals/multimodal', authMiddleware);
+app.use('/signals/multimodal/*', authMiddleware);
+app.use('/ambient', authMiddleware);
+app.use('/ambient/*', authMiddleware);
+app.use('/network', authMiddleware);
+app.use('/network/*', authMiddleware);
+app.use('/exit', authMiddleware);
+app.use('/exit/*', authMiddleware);
 
 // Dashboard routes
 app.route('/', dashboardRoutes);
 app.route('/', onboardingRoutes);
+app.route('/', onboardingChat);
 app.route('/', productRoutes);
 app.route('/', auditRoutes);
 app.route('/', decisionRoutes);
@@ -214,156 +311,151 @@ app.route('/', journeyRoutes);
 app.route('/', koldlyRoutes);
 app.route('/', settingsRoutes);
 app.route('/', revenueRoutes);
-app.route('/', apiDocsRoutes);
-app.route('/', feedPageRoutes);
-app.route('/', actionRoutes);
-app.route('/', askPageRoutes);
-app.route('/', integrationRoutes);
-app.route('/', autopilotRoutes);
-app.route('/', ideaRoutes);
-app.route('/', voiceRoutes);
 app.route('/', portfolioRoutes);
-app.route('/', insightRoutes);
+app.route('/', planRoutes);
+app.route('/', timelineRoutes);
+app.route('/', integrationsRoutes);
+app.route('/', teamRoutes);
+app.route('/', investorRoutes);
+app.route('/', playbookRoutes);
+app.route('/', agentRoutes);
+app.route('/', agentWisdomRoutes);
+app.route('/', agentBriefingRoutes);
+app.route('/', agentEvolveRoutes);
+app.route('/', agentConstitutionRoutes);
+app.route('/', agentRemediationRoutes);
+app.route('/', agentTemporalRoutes);
+// SCP v2/v3: New capability layers
+app.route('/', agentIntegrationRoutes);
+app.route('/', agentCustomerRoutes);
+app.route('/', agentMessageRoutes);
+app.route('/', agentStrategyRoutes);
+app.route('/', agentExperimentRoutes);
+// SCP v4: New dashboard pages
+app.route('/agents/inbox', agentsInbox);
+// wiki removed — replaced by company memory graph (/memory)
+app.route('/agents/okr', agentsOkr);
+app.route('/agents/decisions', agentsDecisions);
+app.route('/benchmarks', benchmarks);
+app.route('/audit-log', auditLog);
+// SCP v5: Gap-closing features
+app.route('/agents/actions', agentsActions);
+app.route('/agents/accuracy', agentsAccuracy);
+app.route('/agents/transparency', agentsTransparency);
+app.route('/scenarios', scenarios);
+app.route('/privacy', privacySettings);
+app.route('/board', boardPacket);
+app.route('/brief', weeklyBrief);
+// SCP v6: Full evolved platform
+app.route('/agents/debate', agentsDebate);
+app.route('/agents/intelligence', agentIntelligence);
+app.route('/playbooks/execution', executionPlaybooks);
+app.route('/memory', memoryGraph);
+app.route('/signals/multimodal', multimodalSignals);
+app.route('/ambient', ambientRoutes);
+app.route('/network', networkIntelligence);
+app.route('/exit', exitRoutes);
+app.route('/', transcriptWebhooks);
+app.route('/', voiceReplyWebhook);
+// SCP v7: ROI, founder intelligence, integration health, priority API (HTMX)
+app.route('/roi', roiDashboard);
+app.route('/founder', founderIntelligence);
+app.route('/integrations/health', integrationHealth);
+app.route('/', priorityApi);
+// REST API v1 (API key auth — no session needed)
+app.route('/api/v1', apiV1);
 
 // API routes
 app.route('/', apiProductRoutes);
 app.route('/', apiMetricRoutes);
 app.route('/', apiAuditLogRoutes);
 app.route('/', apiUXRoutes);
-app.route('/', searchRoutes);
-app.route('/', feedRoutes);
-app.route('/', askRoutes);
-app.route('/', sseRoutes);
-
-// API key management (session auth)
-app.route('/', apiKeyRoutes);
-
-// Public API v1 (API key auth — self-contained, no session needed)
-app.route('/', v1Routes);
-
-// MCP endpoint (API key auth)
-app.route('/', mcpRoutes);
+app.route('/', apiAskRoutes);
+app.route('/', mobileRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
 app.notFound((c) => {
-  const accept = c.req.header('Accept') ?? '';
-  if (accept.includes('text/html')) {
-    return c.html(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Not Found — Foundry</title><link rel="stylesheet" href="/static/styles.css"></head><body>
-      <header class="site-header"><div class="header-left"><a href="/" class="logo">Foundry</a></div></header>
-      <main class="main-full" style="text-align:center;padding-top:4rem;">
-        <h1 style="font-size:4rem;font-weight:800;color:#e5e7eb;">404</h1>
-        <h2>Page not found</h2>
-        <p style="color:#6b7280;margin-bottom:2rem;">The page you're looking for doesn't exist or has been moved.</p>
-        <a href="/dashboard" class="btn btn-primary">Go to Dashboard</a>
-      </main></body></html>`, 404);
-  }
   return c.json({ error: 'Not found' }, 404);
 });
 
 // ─── Error Handler ───────────────────────────────────────────────────────────
 
 app.onError((err, c) => {
-  const requestId = c.get('requestId') as string | undefined;
-  const status = (err as any).status ?? 500;
-
-  // Validation errors get 400 with details
-  if (status === 400 && (err as any).issues) {
-    return c.json({
-      error: 'Validation failed',
-      details: (err as any).issues,
-      requestId,
-    }, 400);
-  }
-
-  log.error('Unhandled error', err, {
-    requestId,
-    path: c.req.path,
-    method: c.req.method,
-  });
-
-  return c.json({
-    error: status >= 500 ? 'Internal server error' : err.message,
-    requestId,
-  }, status);
+  console.error('Unhandled error:', err);
+  return c.json({ error: 'Internal server error' }, 500);
 });
 
 // ─── Cron Scheduler ──────────────────────────────────────────────────────────
 
-const cronJobs: CronJob[] = [];
-
 function startScheduler(): void {
-  log.info('Starting job scheduler...');
+  console.log('Starting job scheduler...');
   for (const [name, job] of Object.entries(JOB_REGISTRY)) {
     try {
-      const cronJob = new CronJob(job.schedule, async () => {
-        const start = Date.now();
-        log.info(`[CRON] Running: ${name}`);
+      new CronJob(job.schedule, async () => {
+        console.log(`[CRON] Running: ${name}`);
         try {
           await job.fn();
-          log.info(`[CRON] Completed: ${name}`, { durationMs: Date.now() - start });
         } catch (err) {
-          log.error(`[CRON] Error in ${name}`, err, { durationMs: Date.now() - start });
+          console.error(`[CRON] Error in ${name}:`, err);
         }
       }, null, true, 'UTC');
-      cronJobs.push(cronJob);
-      log.info(`  Scheduled: ${name} — ${job.schedule}`);
+      console.log(`  ✓ ${name} — ${job.schedule}`);
     } catch (err) {
-      log.error(`  Failed to schedule: ${name}`, err);
+      console.error(`  ✗ ${name} — failed to schedule:`, err);
     }
   }
 }
 
 // ─── Server Start ────────────────────────────────────────────────────────────
 
-const port = parseInt(env().PORT, 10);
+const port = parseInt(process.env.PORT ?? '8080', 10);
 
-log.info('FOUNDRY — Autonomous Business Intelligence', {
-  port,
-  environment: env().NODE_ENV,
-  version: '0.1.0',
-});
-
-// Start cron jobs in production
-if (env().NODE_ENV === 'production') {
-  startScheduler();
-}
+console.log(`
+╔══════════════════════════════════════════════════╗
+║  FOUNDRY — Sovereign Company Platform            ║
+║  Port: ${String(port).padEnd(42)}║
+║  Environment: ${(process.env.NODE_ENV ?? 'development').padEnd(35)}║
+╚══════════════════════════════════════════════════╝
+`);
 
 // ─── Serve ───────────────────────────────────────────────────────────────────
 
 import { serve } from '@hono/node-server';
 
-const server = serve({
-  fetch: app.fetch,
-  port,
-}, (info) => {
-  log.info(`Listening on http://localhost:${info.port}`);
-});
+// Run migrations then start server
+runMigrations()
+  .then(async () => {
+    // Provision SCP instances for any existing products that don't have one yet
+    try {
+      const { ensureProvisioned } = await import('./services/scp/provisioner.js');
+      const { getAllActiveProducts } = await import('./db/client.js');
+      const products = await getAllActiveProducts();
+      for (const row of products.rows) {
+        const p = row as Record<string, string>;
+        await ensureProvisioned(p.id, p.owner_id).catch((err) => {
+          console.warn(`[STARTUP] SCP provision skipped for ${p.id}:`, err);
+        });
+      }
+      console.log(`[STARTUP] SCP: provisioned for ${products.rows.length} product(s)`);
+    } catch (err) {
+      // Non-fatal: SCP provisioning failure should not block server startup
+      console.warn('[STARTUP] SCP provisioning error (non-fatal):', err);
+    }
 
-// ─── Graceful Shutdown ──────────────────────────────────────────────────────
-
-function gracefulShutdown(signal: string): void {
-  log.info(`Received ${signal}, shutting down gracefully...`);
-
-  // Stop accepting new connections
-  server.close(() => {
-    log.info('HTTP server closed');
-  });
-
-  // Stop all cron jobs
-  for (const job of cronJobs) {
-    job.stop();
-  }
-  log.info(`Stopped ${cronJobs.length} cron jobs`);
-
-  // Give in-flight requests time to complete
-  setTimeout(() => {
-    log.warn('Forced shutdown after timeout');
+    if (process.env.NODE_ENV === 'production') {
+      startScheduler();
+    }
+    serve({
+      fetch: app.fetch,
+      port,
+    }, (info) => {
+      console.log(`Listening on http://localhost:${info.port}`);
+    });
+  })
+  .catch((err) => {
+    console.error('[STARTUP] Migration failed — cannot start:', err);
     process.exit(1);
-  }, 10_000);
-}
-
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+  });
 
 export default app;
