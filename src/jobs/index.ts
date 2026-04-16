@@ -1258,7 +1258,7 @@ async function scpBenchmarkRefresh(): Promise<void> {
     const stageMap: Record<string, string> = {
       prompt_1: 'pre_revenue', prompt_2: 'pre_revenue', prompt_2_5: 'pre_revenue',
       prompt_3: 'early', prompt_4: 'early', prompt_5: 'early',
-      prompt_6: 'growth', prompt_7: 'growth', prompt_8: 'scale', prompt_9: 'scale',
+      prompt_6: 'growth', prompt_7: 'growth', prompt_8: 'investor_ready', prompt_9: 'investor_ready',
     };
 
     for (const row of products.rows) {

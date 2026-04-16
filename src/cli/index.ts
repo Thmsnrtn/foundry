@@ -23,80 +23,14 @@ program.name('foundry').description('Foundry CLI').version('0.1.0');
 // ─── Database Migration ──────────────────────────────────────────────────────
 program
   .command('db:migrate')
-  .description('Run all database migrations (idempotent, tracks applied versions)')
+  .description('Run all database migrations (idempotent, auto-discovers all .sql files)')
   .action(async () => {
-    console.log('Running migrations...');
-
-    // Ensure migration tracking table exists
-    await query(`CREATE TABLE IF NOT EXISTS schema_migrations (
-      version TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      checksum TEXT
-    )`, []);
-
-    const migrations = [
-      '001_initial.sql',
-      '002_wisdom_remediation.sql',
-      '003_ux_intelligence.sql',
-      '004_migration_tracking.sql',
-      '005_usage_tracking.sql',
-      '006_api_keys_webhooks.sql',
-      '007_schema_hardening.sql',
-      '008_daily_actions.sql',
-      '009_idea_validation.sql',
-    ];
-
-    for (const file of migrations) {
-      const version = file.split('_')[0]; // e.g., "001"
-
-      // Check if already applied
-      const applied = await query('SELECT version FROM schema_migrations WHERE version = ?', [version]);
-      if (applied.rows.length > 0) {
-        console.log(`  ✓ ${file} (already applied)`);
-        continue;
-      }
-
-      console.log(`  → Running ${file}...`);
-      const filePath = resolve(__dirname, '../db/migrations', file);
-      const sql = readFileSync(filePath, 'utf-8');
-
-      // Compute simple checksum for tracking
-      const { createHash } = await import('node:crypto');
-      const checksum = createHash('sha256').update(sql).digest('hex').slice(0, 16);
-
-      // Split on statement-ending semicolons
-      const statements = sql
-        .split(/;\s*\n/)
-        .map(s => s.replace(/--[^\n]*/g, '').trim())
-        .filter(s => s.length > 0);
-
-      for (const stmt of statements) {
-        try {
-          await query(stmt, []);
-        } catch (e: any) {
-          // ALTER TABLE ADD COLUMN fails if column already exists — that's fine
-          if (stmt.toUpperCase().includes('ALTER TABLE') && e?.message?.includes('duplicate column')) {
-            continue;
-          }
-          // CREATE TABLE IF NOT EXISTS — also fine
-          if (stmt.toUpperCase().includes('IF NOT EXISTS') && e?.message?.includes('already exists')) {
-            continue;
-          }
-          throw e;
-        }
-      }
-
-      // Record migration
-      await query(
-        'INSERT INTO schema_migrations (version, name, checksum) VALUES (?, ?, ?)',
-        [version, file, checksum]
-      );
-      console.log(`  ✓ ${file} applied`);
-    }
-
+    const { runMigrations } = await import('../db/migrate.js');
+    await runMigrations();
     console.log('Migrations complete.');
   });
+
+// (migration logic is now in src/db/migrate.ts)
 
 // ─── Database Seed ───────────────────────────────────────────────────────────
 program

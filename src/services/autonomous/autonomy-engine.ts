@@ -172,10 +172,10 @@ export interface TierActionConfig {
 
 export function getTierActionConfig(tier: string | null): TierActionConfig {
   switch (tier) {
-    case 'founding_cohort':
-      // $99/mo — loss leader. Everything unlimited. Best case study generators.
+    case 'solo':
+      // $79/mo — loss leader. Everything unlimited. Best case study generators.
       return { maxZeroCostActionsPerDay: 999, aiDraftsPerDay: 10, heavyAiCallsPerMonth: 50, wisdomCalibration: true };
-    case 'scale':
+    case 'investor_ready':
       // $399/mo — power users. Unlimited actions, generous AI budget.
       return { maxZeroCostActionsPerDay: 999, aiDraftsPerDay: 7, heavyAiCallsPerMonth: 30, wisdomCalibration: true };
     case 'growth':

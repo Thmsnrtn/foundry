@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npm run typecheck && tsc && tsc-alias && mkdir -p dist/public && cp -r src/public/. dist/public/",
+    "build": "npm run typecheck && tsc && tsc-alias && mkdir -p dist/public && cp -r src/public/. dist/public/ && mkdir -p dist/db/migrations && cp -r src/db/migrations/. dist/db/migrations/",
     "start": "node dist/index.js",
     "cli": "tsx src/cli/index.ts",
     "migrate": "tsx src/cli/index.ts db:migrate",
