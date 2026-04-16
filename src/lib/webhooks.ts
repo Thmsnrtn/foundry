@@ -91,7 +91,7 @@ export async function dispatchWebhook(
     const events = JSON.parse((webhook.events as string) || '[]') as string[];
     if (!events.includes(event) && !events.includes('*')) continue;
 
-    // Fire and forget — delivery errors logged but don't block
+    // Fire and forget — delivery errors logged but don't block the caller
     deliverWebhook(
       webhook.id as string,
       webhook.url as string,

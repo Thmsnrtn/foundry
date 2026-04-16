@@ -4,12 +4,14 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { listRepos } from '../../services/audit/github.js';
 import { runAudit } from '../../services/audit/engine.js';
 import { captureArtifact } from '../../services/story/engine.js';
 import { dashboardLayout } from '../../views/layout.js';
+import { html } from 'hono/html';
 import { onboardingWizard } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
@@ -33,7 +35,7 @@ async function parseBody(c: { req: { header: (n: string) => string | undefined; 
 // Step 1: Show onboarding page
 onboardingRoutes.get('/onboarding', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, '', 'Get Started');
+  const ctx = await getLayoutContext(founder, '', 'Get Started', undefined, c);
   const ghClientId = process.env.GITHUB_CLIENT_ID ?? '';
   const appUrl = process.env.APP_URL ?? '';
   const redirectUri = `${appUrl}/onboarding/github/callback`;
@@ -46,9 +48,9 @@ onboardingRoutes.get('/onboarding', async (c) => {
 // Step 2: GitHub OAuth callback
 onboardingRoutes.get('/onboarding/github/callback', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, '', 'Select Repository');
+  const ctx = await getLayoutContext(founder, '', 'Select Repository', undefined, c);
   const code = c.req.query('code');
-  if (!code) return c.json({ error: 'Missing code' }, 400);
+  if (!code) return c.redirect('/onboarding?error=github_denied');
 
   const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
@@ -60,7 +62,7 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
     }),
   });
   const tokenData = await tokenResponse.json() as { access_token?: string; error?: string };
-  if (!tokenData.access_token) return c.json({ error: 'GitHub auth failed' }, 400);
+  if (!tokenData.access_token) return c.redirect('/onboarding?error=github_auth_failed');
 
   const repos = await listRepos(tokenData.access_token);
 
@@ -82,14 +84,43 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const tokenCookie = cookie.split(';').find((c) => c.trim().startsWith('__gh_token='));
   const encryptedToken = tokenCookie?.split('=').slice(1).join('=')?.trim();
   if (!encryptedToken) {
-    return c.json({ error: 'GitHub token expired. Please reconnect GitHub.' }, 400);
+    return c.redirect('/onboarding?error=token_expired');
   }
   const accessToken = getPlaintextToken(encryptedToken);
   if (!accessToken) {
-    return c.json({ error: 'Invalid GitHub token. Please reconnect GitHub.' }, 400);
+    return c.redirect('/onboarding?error=token_invalid');
   }
 
   const body = validate(selectRepoSchema, { ...rawBody, access_token: accessToken });
+
+  // Enforce per-tier product limits
+  const productLimits: Record<string, number> = {
+    solo: 1,
+    growth: 1,
+    investor_ready: 5,
+  };
+  const limit = founder.tier ? (productLimits[founder.tier] ?? 1) : 1;
+  const existing = await query(
+    "SELECT COUNT(*) as c FROM products WHERE owner_id = ? AND status != 'archived'",
+    [founder.id]
+  );
+  const count = ((existing.rows[0] as Record<string, number>)?.c ?? 0);
+  if (count >= limit) {
+    const upgradeHint = founder.tier === 'growth'
+      ? 'Upgrade to Investor-Ready for up to 5 products.'
+      : founder.tier === 'investor_ready'
+        ? 'You have reached the 5-product limit.'
+        : 'Your current plan supports 1 product. Upgrade to add more.';
+    const ctx = await getLayoutContext(founder, '', 'Product Limit Reached');
+    return c.html(dashboardLayout(ctx, html`
+      <div class="card" style="max-width:480px;margin:3rem auto;text-align:center;">
+        <h2>Product limit reached</h2>
+        <p style="color:var(--text-muted);margin:0.75rem 0 1.5rem;">${upgradeHint}</p>
+        <a href="/settings" class="btn btn-primary">View upgrade options</a>
+        <a href="/dashboard" class="btn btn-ghost" style="margin-left:0.5rem;">Back to dashboard</a>
+      </div>
+    `));
+  }
 
   const productId = nanoid();
   const repoUrl = `https://github.com/${body.repo_owner}/${body.repo_name}`;
@@ -113,6 +144,63 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   );
 
   return c.redirect(`/onboarding/audit?product_id=${productId}`);
+});
+
+// Skip GitHub — create product without repo
+onboardingRoutes.get('/onboarding/skip-github', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, '', 'Name Your Product', undefined, c);
+  const content = html`
+  <div class="onboarding-steps">
+    <div class="step-card">
+      <h2><span class="step-number">1</span> Name Your Product</h2>
+      <p>You can connect a GitHub repo later. For now, let's set up Foundry for revenue intelligence and decision management.</p>
+      <form method="POST" action="/onboarding/create-manual">
+        <div class="form-group">
+          <label for="product_name">Product Name</label>
+          <input type="text" name="product_name" id="product_name" placeholder="My SaaS Product" required minlength="1" maxlength="100" />
+        </div>
+        <div class="form-group">
+          <label for="market_category">Market Category (optional)</label>
+          <select name="market_category" id="market_category">
+            <option value="">Select...</option>
+            <option value="developer_tools">Developer Tools</option>
+            <option value="marketing">Marketing</option>
+            <option value="sales">Sales</option>
+            <option value="productivity">Productivity</option>
+            <option value="analytics">Analytics</option>
+            <option value="fintech">Fintech</option>
+            <option value="healthcare">Healthcare</option>
+            <option value="education">Education</option>
+            <option value="ecommerce">E-commerce</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Create Product</button>
+      </form>
+    </div>
+  </div>`;
+  return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
+});
+
+onboardingRoutes.post('/onboarding/create-manual', async (c) => {
+  const founder = c.get('founder');
+  const body = await parseBody(c);
+  const productName = (body.product_name as string ?? '').trim();
+  if (!productName) return c.redirect('/onboarding/skip-github?error=name_required');
+
+  const productId = nanoid();
+  await query(
+    `INSERT INTO products (id, name, owner_id, market_category) VALUES (?, ?, ?, ?)`,
+    [productId, productName, founder.id, (body.market_category as string) || null]
+  );
+  await query(
+    `INSERT INTO lifecycle_state (product_id, current_prompt, risk_state) VALUES (?, 'prompt_4', 'green')`,
+    [productId]
+  );
+
+  // Skip to prompt_4 (Intelligence Activation) since no audit is possible
+  return c.redirect('/dashboard');
 });
 
 // Step 4: Identify competitors
@@ -150,7 +238,7 @@ onboardingRoutes.post('/onboarding/competitors', async (c) => {
 // Step 4b: Show audit step
 onboardingRoutes.get('/onboarding/audit', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, '', 'Run Audit');
+  const ctx = await getLayoutContext(founder, '', 'Run Audit', undefined, c);
   const productId = c.req.query('product_id') ?? '';
   const content = onboardingWizard('running_audit', { product_id: productId });
   return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));

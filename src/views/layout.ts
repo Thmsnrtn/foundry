@@ -29,6 +29,8 @@ export interface LayoutOptions {
   canAccess?: (featureKey: string) => boolean;
   dnaCompletionPct?: number;
   openPRCount?: number;
+  /** CSRF token for form submissions */
+  csrfToken?: string;
 }
 
 export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
@@ -54,6 +56,8 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
 
   const sidebarRiskClass = riskState === 'red' ? 'sidebar-risk-red' : riskState === 'yellow' ? 'sidebar-risk-yellow' : '';
 
+  const csrfToken = opts.csrfToken ?? '';
+
   return html`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -61,6 +65,30 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${title} — Foundry</title>
   <link rel="stylesheet" href="/static/styles.css" />
+  ${csrfToken ? html`<meta name="csrf-token" content="${csrfToken}" />
+  <script>
+    // Auto-inject CSRF tokens into all forms (current and future)
+    function injectCsrf() {
+      var token = document.querySelector('meta[name="csrf-token"]');
+      if (!token) return;
+      var val = token.getAttribute('content');
+      document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(form) {
+        if (!form.querySelector('input[name="_csrf"]')) {
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = '_csrf';
+          input.value = val;
+          form.appendChild(input);
+        }
+      });
+    }
+    document.addEventListener('DOMContentLoaded', injectCsrf);
+    // Re-inject on any DOM mutation (catches dynamically created forms)
+    if (typeof MutationObserver !== 'undefined') {
+      new MutationObserver(injectCsrf).observe(document.body || document.documentElement, { childList: true, subtree: true });
+    }
+    });
+  </script>` : ''}
 </head>
 <body class="${showNav ? 'has-sidebar' : ''}">
   <a href="#main-content" class="skip-link">Skip to main content</a>
@@ -71,6 +99,12 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
       ${allProducts.length > 1 ? productSwitcher(allProducts, productId, productName) : productName ? html`<span class="breadcrumb">/ ${productName}</span>` : ''}
     </div>
     <div class="header-right">
+      ${showNav && founderName ? html`
+        <form action="/api/search" method="GET" style="display:flex;">
+          <input type="text" name="q" placeholder="Search decisions, audit log..." aria-label="Search"
+            style="padding:0.3rem 0.75rem;border:1px solid var(--color-border);border-radius:var(--radius-full);font-size:var(--text-sm);width:180px;background:var(--color-bg);color:var(--color-text);transition:width var(--transition-base);"
+            onfocus="this.style.width='260px'" onblur="this.style.width='180px'" />
+        </form>` : ''}
       ${riskState ? riskBadgeSmall(riskState, riskReason) : ''}
       ${founderName ? notificationBell(unreadNotifications, unreadNotificationCount) : ''}
       ${founderName
@@ -89,6 +123,37 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <main id="main-content" class="${showNav ? 'main-with-sidebar' : 'main-full'}" role="main">
     ${content}
   </main>
+  ${showNav ? html`<script>
+    // Keyboard shortcuts for power users
+    document.addEventListener('keydown', function(e) {
+      // Only trigger if not typing in an input
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      var routes = {
+        'g': '/dashboard',          // go home
+        'a': '/dashboard/actions',  // today's actions
+        'f': '/dashboard/ask',      // ask foundry
+        'd': '/decisions',          // decisions
+        'r': '/products/${productId}/revenue',  // revenue
+        'i': '/products/${productId}/insights', // insights
+        's': '/api/search?q=',      // search (focuses search bar)
+        '?': null,                  // show shortcuts help
+      };
+      if (e.key === 's') {
+        e.preventDefault();
+        var searchInput = document.querySelector('input[name="q"]');
+        if (searchInput) searchInput.focus();
+        return;
+      }
+      if (e.key === '?' || e.key === '/') {
+        e.preventDefault();
+        alert('Keyboard Shortcuts:\\n\\ng → Home\\na → Today\\'s Actions\\nf → Ask Foundry\\nd → Decisions\\nr → Revenue\\ni → Insights\\ns → Search\\n? → This help');
+        return;
+      }
+      var route = routes[e.key];
+      if (route) { e.preventDefault(); window.location.href = route; }
+    });
+  </script>` : ''}
 </body>
 </html>`;
 }
@@ -171,68 +236,82 @@ function groupedSidebar(
   const check = canAccess ?? (() => true);
   const b = badges ?? { decisions_count: 0, has_overdue_audit: false, unread_signals: false, unseen_milestones: false, open_prs_count: 0, dna_completion: 0 };
 
-  const operateItems: NavItem[] = [
-    { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
-    { key: 'lifecycle', label: 'Lifecycle', href: `/products/${productId}/lifecycle` },
+  // ─── Reorganized Navigation ─────────────────────────────────────────────
+  // Grouped by WHAT THE FOUNDER IS TRYING TO DO, not by system architecture.
+  // Progressive disclosure: sections appear based on lifecycle stage.
+
+  const homeItems: NavItem[] = [
+    { key: 'dashboard', label: 'Home', href: '/dashboard' },
+    { key: 'actions', label: 'Today', href: '/dashboard/actions' },
+    { key: 'feed', label: 'Activity', href: '/dashboard/feed' },
+    { key: 'ask', label: 'Ask Foundry', href: '/dashboard/ask' },
   ];
 
-  const intelItems: NavItem[] = [
-    { key: 'decisions', label: 'Decisions', href: '/decisions', badge: b.decisions_count > 0 ? String(b.decisions_count) : undefined, badgeType: 'count' },
-    { key: 'digest', label: 'Digest', href: '/digest' },
+  const buildItems: NavItem[] = [
+    { key: 'validate', label: 'Validate Idea', href: `/products/${productId}/validate` },
+    { key: 'audit', label: 'Code Audit', href: `/products/${productId}/audit`, badge: b.has_overdue_audit ? '●' : undefined, badgeType: 'dot' },
+    { key: 'remediation', label: 'Auto-Fix PRs', href: `/products/${productId}/remediation`, badge: openPRCount > 0 ? String(openPRCount) : undefined, badgeType: 'count', locked: !check('remediation') },
   ];
 
-  const productItems: NavItem[] = [
-    { key: 'audit', label: 'Audit', href: `/products/${productId}/audit`, badge: b.has_overdue_audit ? '●' : undefined, badgeType: 'dot' },
+  const growItems: NavItem[] = [
     { key: 'revenue', label: 'Revenue', href: `/products/${productId}/revenue` },
-    { key: 'cohorts', label: 'Cohorts', href: `/products/${productId}/cohorts`, locked: !check('cohorts'), badgeType: 'lock' },
+    { key: 'insights', label: 'Insights', href: `/products/${productId}/insights` },
+    { key: 'decisions', label: 'Decisions', href: '/decisions', badge: b.decisions_count > 0 ? String(b.decisions_count) : undefined, badgeType: 'count' },
     { key: 'competitive', label: 'Competitive', href: `/products/${productId}/competitive`, locked: !check('competitive'), badge: b.unread_signals ? '●' : undefined, badgeType: b.unread_signals ? 'dot' : 'lock' },
+    { key: 'cohorts', label: 'Cohorts', href: `/products/${productId}/cohorts`, locked: !check('cohorts'), badgeType: 'lock' },
   ];
 
   const wisdomLocked = !check('wisdom');
-  const wisdomItems: NavItem[] = [
+  const learnItems: NavItem[] = [
     { key: 'dna', label: 'Product DNA', href: `/products/${productId}/dna`, badge: dnaCompletionPct < 60 ? `${dnaCompletionPct}%` : undefined, badgeType: 'pct', locked: wisdomLocked },
-    { key: 'failures', label: 'Failure Log', href: `/products/${productId}/failures`, locked: wisdomLocked },
-    { key: 'patterns', label: 'Patterns', href: `/products/${productId}/patterns`, locked: wisdomLocked },
+    { key: 'failures', label: 'What Didn\'t Work', href: `/products/${productId}/failures`, locked: wisdomLocked },
+    { key: 'patterns', label: 'Your Patterns', href: `/products/${productId}/patterns`, locked: wisdomLocked },
   ];
 
-  const fixLocked = !check('remediation');
-  const fixItems: NavItem[] = [
-    { key: 'remediation', label: 'Remediation', href: `/products/${productId}/remediation`, badge: openPRCount > 0 ? String(openPRCount) : undefined, badgeType: 'count', locked: fixLocked },
-  ];
-
-  const publishItems: NavItem[] = [
-    { key: 'journey', label: 'Journey', href: `/products/${productId}/journey`, badge: b.unseen_milestones ? '●' : undefined, badgeType: 'dot' },
-    { key: 'beta', label: 'Beta', href: '/beta' },
+  const moreItems: NavItem[] = [
+    { key: 'digest', label: 'Weekly Digest', href: '/digest' },
+    { key: 'lifecycle', label: 'Progress', href: `/products/${productId}/lifecycle` },
+    { key: 'journey', label: 'Story & Case Studies', href: `/products/${productId}/journey`, badge: b.unseen_milestones ? '●' : undefined, badgeType: 'dot' },
+    { key: 'beta', label: 'Beta Feedback', href: '/beta' },
   ];
 
   return html`
   <nav class="sidebar ${riskClass}" role="navigation" aria-label="Main navigation">
-    ${sectionHeader('OPERATE')}
-    <ul class="sidebar-nav">${renderNavItems(operateItems, active)}</ul>
+    ${sectionHeader('HOME')}
+    <ul class="sidebar-nav">${renderNavItems(homeItems, active)}</ul>
 
-    ${sectionHeader('INTELLIGENCE')}
-    <ul class="sidebar-nav">${renderNavItems(intelItems, active)}</ul>
+    ${sectionHeader('BUILD')}
+    <ul class="sidebar-nav">${renderNavItems(buildItems, active)}</ul>
 
-    ${sectionHeader('PRODUCT')}
-    <ul class="sidebar-nav">${renderNavItems(productItems, active)}</ul>
+    ${sectionHeader('GROW')}
+    <ul class="sidebar-nav">${renderNavItems(growItems, active)}</ul>
 
-    ${sectionHeader('WISDOM', wisdomLocked)}
-    <ul class="sidebar-nav">${renderNavItems(wisdomItems, active)}</ul>
+    ${sectionHeader('TEACH FOUNDRY', wisdomLocked)}
+    <ul class="sidebar-nav">${renderNavItems(learnItems, active)}</ul>
 
-    ${sectionHeader('FIXES', fixLocked)}
-    <ul class="sidebar-nav">${renderNavItems(fixItems, active)}</ul>
-
-    ${sectionHeader('PUBLISH')}
-    <ul class="sidebar-nav">${renderNavItems(publishItems, active)}</ul>
+    ${sectionHeader('MORE')}
+    <ul class="sidebar-nav">${renderNavItems(moreItems, active)}</ul>
 
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
+      <li><a href="/settings/autopilot" class="${active === 'autopilot' ? 'active' : ''}" style="display:flex;align-items:center;">Autopilot</a></li>
+      <li><a href="/settings/voice" class="${active === 'voice' ? 'active' : ''}" style="display:flex;align-items:center;">Your Voice</a></li>
+      <li><a href="/settings/integrations" class="${active === 'integrations' ? 'active' : ''}" style="display:flex;align-items:center;">Integrations</a></li>
       <li><a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a></li>
     </ul>
   </nav>`;
 }
 
+const SECTION_HINTS: Record<string, string> = {
+  'HOME': 'Your command center',
+  'BUILD': 'Code quality & validation',
+  'GROW': 'Revenue, decisions & market',
+  'TEACH FOUNDRY': 'The more you teach, the smarter it gets',
+  'MORE': 'Digests, progress & publishing',
+};
+
 function sectionHeader(label: string, locked: boolean = false): HtmlContent {
-  return html`<div class="nav-section-header">${label}${locked ? html` <span class="nav-lock">🔒</span>` : ''}</div>`;
+  const hint = SECTION_HINTS[label];
+  return html`<div class="nav-section-header" ${hint ? `title="${hint}"` : ''}>${label}${locked ? html` <span class="nav-lock">🔒</span>` : ''}</div>`;
 }
 
 function renderNavItems(items: NavItem[], active: string): HtmlContent {

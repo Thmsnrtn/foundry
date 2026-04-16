@@ -17,7 +17,7 @@ competitiveRoutes.get('/products/:id/competitive', requireTier('competitive'), a
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'competitive', 'Competitive', productId);
+  const ctx = await getLayoutContext(founder, 'competitive', 'Competitive', productId, c);
   const competitors = await getCompetitors(productId);
   const signals = await getCompetitiveSignals(productId, 20);
 

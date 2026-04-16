@@ -1,6 +1,6 @@
 // =============================================================================
 // FOUNDRY — Stripe Billing Integration
-// Three tiers: Founding Cohort ($99), Growth ($199), Scale ($399)
+// Three tiers: Solo ($79), Growth ($199), Investor-Ready ($399)
 // =============================================================================
 
 import Stripe from 'stripe';
@@ -23,7 +23,7 @@ export async function createCustomer(email: string, name: string | null): Promis
   return customer.id;
 }
 
-export async function createSubscription(customerId: string, tier: 'founding_cohort' | 'growth' | 'scale'): Promise<string> {
+export async function createSubscription(customerId: string, tier: 'solo' | 'growth' | 'investor_ready'): Promise<string> {
   const stripe = getStripe();
   const priceId = getPriceId(tier);
   const subscription = await stripe.subscriptions.create({
@@ -35,7 +35,7 @@ export async function createSubscription(customerId: string, tier: 'founding_coh
   return subscription.id;
 }
 
-export async function createCheckoutSession(customerId: string, tier: 'founding_cohort' | 'growth' | 'scale', successUrl: string, cancelUrl: string): Promise<string> {
+export async function createCheckoutSession(customerId: string, tier: 'solo' | 'growth' | 'investor_ready', successUrl: string, cancelUrl: string): Promise<string> {
   const stripe = getStripe();
   const session = await stripe.checkout.sessions.create({
     customer: customerId,
@@ -57,8 +57,8 @@ export async function cancelSubscription(subscriptionId: string): Promise<void> 
   await stripe.subscriptions.cancel(subscriptionId);
 }
 
-export async function getFoundingCohortSlotCount(): Promise<number> {
-  const result = await query("SELECT COUNT(*) as c FROM founders WHERE tier = 'founding_cohort'", []);
+export async function getSoloSlotCount(): Promise<number> {
+  const result = await query("SELECT COUNT(*) as c FROM founders WHERE tier = 'solo'", []);
   return (result.rows[0] as Record<string, number>)?.c ?? 0;
 }
 
@@ -78,6 +78,8 @@ export async function handleWebhook(payload: string, signature: string): Promise
       const tier = getTierFromPrice(priceId ?? '');
       if (tier) {
         await query('UPDATE founders SET tier = ? WHERE stripe_customer_id = ?', [tier, sub.customer]);
+      } else {
+        console.warn(`[STRIPE WEBHOOK] Unrecognised price ID: ${priceId} (customer: ${sub.customer}). Check STRIPE_*_PRICE_ID env vars.`);
       }
       break;
     }
@@ -90,17 +92,20 @@ export async function handleWebhook(payload: string, signature: string): Promise
 }
 
 function getPriceId(tier: string): string {
+  let priceId: string | undefined;
   switch (tier) {
-    case 'founding_cohort': return process.env.STRIPE_FOUNDING_COHORT_PRICE_ID ?? '';
-    case 'growth': return process.env.STRIPE_GROWTH_PRICE_ID ?? '';
-    case 'scale': return process.env.STRIPE_SCALE_PRICE_ID ?? '';
+    case 'solo': priceId = process.env.STRIPE_SOLO_PRICE_ID; break;
+    case 'growth': priceId = process.env.STRIPE_GROWTH_PRICE_ID; break;
+    case 'investor_ready': priceId = process.env.STRIPE_INVESTOR_READY_PRICE_ID; break;
     default: throw new Error(`Unknown tier: ${tier}`);
   }
+  if (!priceId) throw new Error(`STRIPE_${tier.toUpperCase()}_PRICE_ID is not set`);
+  return priceId;
 }
 
 function getTierFromPrice(priceId: string): string | null {
-  if (priceId === process.env.STRIPE_FOUNDING_COHORT_PRICE_ID) return 'founding_cohort';
+  if (priceId === process.env.STRIPE_SOLO_PRICE_ID) return 'solo';
   if (priceId === process.env.STRIPE_GROWTH_PRICE_ID) return 'growth';
-  if (priceId === process.env.STRIPE_SCALE_PRICE_ID) return 'scale';
+  if (priceId === process.env.STRIPE_INVESTOR_READY_PRICE_ID) return 'investor_ready';
   return null;
 }

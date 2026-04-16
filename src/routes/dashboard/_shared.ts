@@ -14,6 +14,7 @@ import { getTourState } from '../../services/ux/tour.js';
 import { canAccess as canAccessFn } from '../../middleware/tier-gate.js';
 import { getCookie } from 'hono/cookie';
 import type { Context } from 'hono';
+import type { AuthEnv } from '../../middleware/auth.js';
 
 export interface UXContext {
   nextAction: NextAction | null;
@@ -31,6 +32,8 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
   dnaCompletionPct: number;
   wisdomLayerActive: boolean;
   openPRCount: number;
+  /** CSRF token for form auto-injection */
+  csrfToken: string;
   /** All products owned by this founder, for the switcher */
   allProducts: Array<{ id: string; name: string }>;
   /** UX intelligence layer context */
@@ -68,6 +71,9 @@ export async function getLayoutContext(
     canAccess: (featureKey: string) => canAccessFn(founder, featureKey),
   };
 
+  // Extract CSRF token from Hono context
+  const csrfToken = honoCtx ? ((honoCtx as any).get?.('csrfToken') as string ?? '') : '';
+
   if (products.rows.length === 0) {
     return {
       title,
@@ -77,6 +83,7 @@ export async function getLayoutContext(
       activeNav,
       riskState: null,
       riskReason: null,
+      csrfToken,
       founderId: founder.id,
       founder,
       dnaCompletionPct: 0,
@@ -152,6 +159,7 @@ export async function getLayoutContext(
     activeNav,
     riskState,
     riskReason,
+    csrfToken,
     founderId: founder.id,
     founder,
     dnaCompletionPct,
@@ -160,4 +168,17 @@ export async function getLayoutContext(
     allProducts,
     ux,
   };
+}
+
+/**
+ * Wraps getLayoutContext for routes that need ctx.product (e.g. investor routes).
+ * Reads the founder from the Hono context automatically.
+ */
+export async function buildSharedContext(
+  c: Context<AuthEnv>,
+): Promise<LayoutContext & { product: { id: string; name: string } | null }> {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'investors', 'Investors', undefined, c);
+  const product = ctx.productId ? { id: ctx.productId, name: ctx.productName ?? '' } : null;
+  return { ...ctx, product };
 }

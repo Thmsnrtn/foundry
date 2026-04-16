@@ -5,7 +5,6 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { query } from '../../db/client.js';
-import { getFoundingCohortSlotCount } from '../../services/billing/stripe.js';
 import { publicLayout } from '../../views/layout.js';
 
 export const landingRoutes = new Hono();
@@ -14,169 +13,197 @@ export const caseStudyRoutes = new Hono();
 
 landingRoutes.get('/', (c) => {
   const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
-  return c.html(publicLayout('Autonomous Business Intelligence', html`
+  return c.html(publicLayout('Give Your Product a Team', html`
     <script async crossorigin="anonymous" src="https://unpkg.com/@clerk/clerk-js/dist/clerk.browser.js" data-clerk-publishable-key="${publishableKey}"></script>
     <script>window.addEventListener('load',async()=>{if(window.Clerk){await Clerk.load();if(Clerk.user){window.location.href='/dashboard';}}})</script>
-    <div class="hero">
-      <h1>Your product needs a COO.<br/>Meet your AI one.</h1>
-      <p>Foundry audits your codebase, monitors revenue health, anticipates risk, surfaces decisions with context — and learns how you think. The autonomous operating system for SaaS founders who build alone.</p>
+
+    <div class="hero" style="text-align:center;padding:4rem 1rem 3rem;">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent);margin-bottom:1.25rem;">Sovereign Company Protocol</div>
+      <h1 style="font-size:clamp(2rem,5vw,3.25rem);line-height:1.15;margin:0 0 1.25rem;max-width:760px;margin-left:auto;margin-right:auto;">
+        Connect your product.<br/>Get a company.
+      </h1>
+      <p style="font-size:1.05rem;color:var(--text-dim);max-width:580px;margin:0 auto 2rem;line-height:1.6;">
+        Foundry gives your SaaS product a team of 12 specialized AI agents — Atlas the CTO,
+        Oracle the analyst, Harbor for customer success, Beacon the CMO, and 8 more.
+        They operate, learn, and grow your business while you sleep.
+      </p>
       <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
-        <a href="/auth/signup" class="btn btn-primary" style="font-size:1rem;padding:0.75rem 2rem;">Start Free Audit</a>
-        <a href="/pricing" class="btn btn-secondary" style="font-size:1rem;padding:0.75rem 2rem;">View Pricing</a>
+        <a href="/auth/signup" class="btn btn-primary" style="padding:0.75rem 2rem;font-size:1rem;">Give my product a team →</a>
+        <a href="/pricing" class="btn btn-ghost" style="padding:0.75rem 1.5rem;font-size:1rem;">See pricing</a>
       </div>
     </div>
 
-    <!-- How it works -->
-    <div style="max-width:800px;margin:3rem auto;text-align:center;">
-      <h2 style="margin-bottom:2rem;">How Foundry Works</h2>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:2rem;">
-        <div>
-          <div style="font-size:2rem;margin-bottom:0.5rem;">1</div>
-          <h3 style="font-size:1rem;">Connect GitHub</h3>
-          <p style="font-size:0.87rem;color:#6b7280;">Read-only access. Foundry analyzes your codebase structure, not your proprietary logic.</p>
-        </div>
-        <div>
-          <div style="font-size:2rem;margin-bottom:0.5rem;">2</div>
-          <h3 style="font-size:1rem;">Get Your Score</h3>
-          <p style="font-size:0.87rem;color:#6b7280;">10-dimension audit in minutes. Know exactly where your product stands — and where it doesn't.</p>
-        </div>
-        <div>
-          <div style="font-size:2rem;margin-bottom:0.5rem;">3</div>
-          <h3 style="font-size:1rem;">Add Metrics</h3>
-          <p style="font-size:0.87rem;color:#6b7280;">Revenue, retention, activation. Enter manually or integrate via API. Intelligence activates automatically.</p>
-        </div>
-        <div>
-          <div style="font-size:2rem;margin-bottom:0.5rem;">4</div>
-          <h3 style="font-size:1rem;">Operate</h3>
-          <p style="font-size:0.87rem;color:#6b7280;">Weekly digests, stressor alerts, decision queue, competitive intel. Foundry learns your judgment over time.</p>
+    <div style="max-width:900px;margin:0 auto;padding:0 1rem 3rem;">
+
+      <!-- The vision statement -->
+      <div class="card" style="text-align:center;padding:2.5rem;margin-bottom:2.5rem;border:1px solid rgba(108,99,255,0.2);">
+        <p style="font-size:1.05rem;line-height:1.7;color:var(--text-primary);margin:0;font-style:italic;">
+          "A founder opens Foundry, connects their product, and gets a company.
+          Not a dashboard. Not a chatbot. A company — with a team of specialized AI agents
+          that market, sell, support, analyze, and improve their product while they sleep."
+        </p>
+      </div>
+
+      <!-- The 12 agents -->
+      <div style="margin-bottom:2.5rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">Your AI Team</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:0.75rem;">
+          ${[
+            ['Atlas', 'CTO', 'Code quality · architecture · technical debt'],
+            ['Compass', 'Product', 'Roadmap · lifecycle · feature priority'],
+            ['Prism', 'UX Lead', 'Onboarding · friction · activation'],
+            ['Beacon', 'CMO', 'Marketing · acquisition · positioning'],
+            ['Scribe', 'Content', 'Blog posts · docs · case studies'],
+            ['Forge', 'Revenue', 'Pricing · conversion · expansion'],
+            ['Harbor', 'CS', 'Retention · health monitoring · outreach'],
+            ['Sentinel', 'DevOps', 'Infrastructure · uptime · deployments'],
+            ['Ledger', 'CFO', 'Revenue tracking · financial health · ROI'],
+            ['Shield', 'Compliance', 'Legal risk · privacy · terms'],
+            ['Oracle', 'Analytics', 'Data analysis · stressors · trends'],
+            ['Crucible', 'QA', 'Test coverage · quality gates · regressions'],
+          ].map(([name, role, domain]) => html`
+            <div class="card" style="padding:1rem;">
+              <div style="font-weight:700;color:var(--accent);font-size:0.95rem;">${name}</div>
+              <div style="font-size:0.72rem;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;">${role}</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);line-height:1.4;">${domain}</div>
+            </div>
+          `)}
         </div>
       </div>
+
+      <!-- How it works -->
+      <div style="margin-bottom:2.5rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">How It Works</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1rem;">
+          <div class="card" style="padding:1.25rem;">
+            <div style="font-size:1.5rem;margin-bottom:0.5rem;">1</div>
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Connect your product</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Link your GitHub repo, fill in your Company DNA — ICP, positioning, voice, market insight.</p>
+          </div>
+          <div class="card" style="padding:1.25rem;">
+            <div style="font-size:1.5rem;margin-bottom:0.5rem;">2</div>
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Agents activate</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">12 agents spin up. They start cautious, run on their cadences, and earn trust by being right.</p>
+          </div>
+          <div class="card" style="padding:1.25rem;">
+            <div style="font-size:1.5rem;margin-bottom:0.5rem;">3</div>
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Read your briefing</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Every morning, one briefing from your company. What they did. What needs your approval. What's working.</p>
+          </div>
+          <div class="card" style="padding:1.25rem;">
+            <div style="font-size:1.5rem;margin-bottom:0.5rem;">4</div>
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Agents evolve</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Every correction you make becomes a golden lesson. Every session makes the next one better. Trust compounds.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- The evolution engine highlight -->
+      <div class="card" style="padding:2rem;margin-bottom:2.5rem;border-left:3px solid var(--accent);">
+        <h3 style="margin:0 0 0.75rem;">Agents that learn</h3>
+        <p style="margin:0 0 0.75rem;color:var(--text-dim);line-height:1.6;font-size:0.9rem;">
+          Every time you correct an agent, that correction becomes a <strong style="color:var(--text-primary);">golden lesson</strong>
+          injected into every future session. Agents track their own version history. Day 1 agents operate at
+          maximum oversight. Agents that prove themselves earn autonomy.
+        </p>
+        <p style="margin:0;color:var(--text-dim);line-height:1.6;font-size:0.9rem;">
+          After 50 sessions with a 91% success rate, an agent transitions from Level 2 (approval required) to Level 0
+          (fully autonomous). <strong style="color:var(--text-primary);">You set the pace. They earn the trust.</strong>
+        </p>
+      </div>
+
+      <!-- Daily briefing example -->
+      <div style="margin-bottom:2.5rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">Your Daily CEO Briefing</div>
+        <div class="card" style="padding:1.75rem;font-family:monospace;font-size:0.82rem;line-height:1.7;color:var(--text-primary);">
+          <div style="color:var(--accent);font-weight:700;margin-bottom:0.5rem;">ACREOS · CEO BRIEFING · March 30, 2026</div>
+          <div style="color:var(--text-dim);margin-bottom:1rem;">Signal: 87/100 ↑+3 · Risk: GREEN · Health: 91/100</div>
+          <div style="margin-bottom:0.75rem;"><strong>Overnight:</strong></div>
+          <div style="color:var(--text-dim);margin-bottom:0.25rem;">→ Atlas: Closed a security gap in the auth flow automatically.</div>
+          <div style="color:var(--text-dim);margin-bottom:0.25rem;">→ Oracle: Churn improved 0.4% this week — retention emails working.</div>
+          <div style="color:#ffb347;margin-bottom:1rem;">→ Harbor: 3 trial users went silent after onboarding. Suspects step 3 friction.</div>
+          <div style="margin-bottom:0.75rem;"><strong>Decisions waiting (2):</strong></div>
+          <div style="color:var(--text-dim);margin-bottom:0.25rem;">  [1] Beacon: Publish case study from last 3 wins. Est. 2-4 leads. <span style="color:var(--accent);">[Approve]</span></div>
+          <div style="color:var(--text-dim);margin-bottom:1rem;">  [2] Harbor: Re-engagement campaign for 12 silent users. $240/mo impact. <span style="color:var(--accent);">[Approve]</span></div>
+          <div style="color:var(--text-dim);">MRR: $4,230 ↑$340 · AI Cost: $12.40 · ROI: 14.2x</div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div style="text-align:center;padding:2rem 0;">
+        <h2 style="margin:0 0 1rem;">Your product deserves a team.</h2>
+        <p style="color:var(--text-dim);margin:0 0 1.5rem;">Connect it to Foundry today.</p>
+        <a href="/auth/signup" class="btn btn-primary" style="padding:0.875rem 2.5rem;font-size:1.05rem;">Get Started Free</a>
+      </div>
+
     </div>
 
-    <div class="features">
-      <div class="feature-card">
-        <h3>10-Dimension Audit</h3>
-        <p>Scored assessment across functional completeness, trust density, operational readiness, commercial integrity, and 6 more dimensions. Blocking issues identified with evidence and fix suggestions.</p>
-      </div>
-      <div class="feature-card">
-        <h3>Revenue Intelligence</h3>
-        <p>MRR decomposition into new, expansion, contraction, and churned revenue. Health ratio tracks whether your growth is real or hollow. Stressor alerts when metrics deviate.</p>
-      </div>
-      <div class="feature-card">
-        <h3>Decision Queue</h3>
-        <p>Decisions surfaced with context, options, trade-offs, and scenario models. Gate 3 decisions include 30/60/90-day projections calibrated by cross-product patterns.</p>
-      </div>
-      <div class="feature-card">
-        <h3>Risk-Adaptive System</h3>
-        <p>Green: standard ops. Yellow: heightened monitoring + Thursday pulse. Red: daily recovery briefings + Gate 0/1 suspended. The system adapts its behavior to your state.</p>
-      </div>
-      <div class="feature-card">
-        <h3>Wisdom Layer</h3>
-        <p>Teach Foundry your ICP, positioning, and voice. Log failures. After 3+ resolved decisions, it synthesizes your judgment patterns and calibrates every recommendation to how you think.</p>
-      </div>
-      <div class="feature-card">
-        <h3>Auto-Remediation</h3>
-        <p>For blocking issues that are programmatically fixable, Foundry generates code changes and opens GitHub PRs. Review, merge, and your audit score recalculates.</p>
-      </div>
+    <div class="page-footer" style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:0.8rem;">
+      Foundry — Sovereign Company Platform for SaaS Founders
     </div>
-
-    <!-- Social proof -->
-    <div style="max-width:700px;margin:3rem auto;text-align:center;">
-      <h2 style="margin-bottom:0.5rem;">Built for Solo Founders</h2>
-      <p style="color:#6b7280;margin-bottom:2rem;">Foundry replaces the operational layer that well-funded startups build with a team of 5. You get the same intelligence with zero headcount.</p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.5rem;text-align:left;">
-        <div class="card" style="border-left:3px solid #2563eb;">
-          <p style="font-size:0.9rem;font-style:italic;color:#374151;">"I went from guessing to knowing. The stressor report caught a churn spike before it became a crisis."</p>
-          <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">— Founding Cohort Member</p>
-        </div>
-        <div class="card" style="border-left:3px solid #2563eb;">
-          <p style="font-size:0.9rem;font-style:italic;color:#374151;">"The audit scored us 4.8 on trust density. Two weeks later with Foundry's remediation PRs, we were at 7.2."</p>
-          <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">— Founding Cohort Member</p>
-        </div>
-        <div class="card" style="border-left:3px solid #2563eb;">
-          <p style="font-size:0.9rem;font-style:italic;color:#374151;">"Monday digest is the first thing I read. It tells me exactly what happened and what to do about it."</p>
-          <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">— Founding Cohort Member</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- FAQ -->
-    <div style="max-width:700px;margin:3rem auto;">
-      <h2 style="text-align:center;margin-bottom:1.5rem;">Questions</h2>
-      <details class="card" style="margin-bottom:0.5rem;">
-        <summary style="font-weight:600;">What data does Foundry access?</summary>
-        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">Read-only access to your GitHub repository structure and file contents. We analyze architecture, configuration, and operational patterns — not your proprietary business logic or customer data.</p>
-      </details>
-      <details class="card" style="margin-bottom:0.5rem;">
-        <summary style="font-weight:600;">How long until I see value?</summary>
-        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">Your audit score and blocking issues are ready in 2-4 minutes. Once you enter revenue metrics, stressor reports and risk assessment activate within the week. The Wisdom Layer calibrates over your first 3+ decisions.</p>
-      </details>
-      <details class="card" style="margin-bottom:0.5rem;">
-        <summary style="font-weight:600;">What's the Founding Cohort?</summary>
-        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">30 slots at $99/month, locked for life. In exchange, we ask for participation in a case study after 90 days. You get full platform access, direct founder access, and early features. Once 30 slots fill, new users start at $199/month.</p>
-      </details>
-      <details class="card" style="margin-bottom:0.5rem;">
-        <summary style="font-weight:600;">Can I cancel anytime?</summary>
-        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">Yes. Monthly billing, cancel anytime. Your data is exportable via GDPR-compliant data export. If you're a Founding Cohort member and cancel, your slot opens for the next founder.</p>
-      </details>
-      <details class="card" style="margin-bottom:0.5rem;">
-        <summary style="font-weight:600;">Is my data secure?</summary>
-        <p style="margin-top:0.5rem;font-size:0.9rem;color:#4b5563;">GitHub tokens encrypted at rest (AES-256-GCM). All API traffic over HTTPS. Clerk handles authentication. Stripe handles billing. We never store payment information. Full audit trail of every system action.</p>
-      </details>
-    </div>
-
-    <div style="text-align:center;padding:3rem 1rem;">
-      <h2>Start in 2 minutes. Value on Day 1.</h2>
-      <p style="color:#6b7280;margin-bottom:1.5rem;">Connect your repo, get your score, and know exactly where your product stands.</p>
-      <a href="/auth/signup" class="btn btn-primary" style="font-size:1rem;padding:0.75rem 2rem;">Start Free Audit</a>
-    </div>
-
-    <div class="page-footer">Foundry — Autonomous Business Intelligence for SaaS Founders</div>
   `));
 });
 
 pricingRoutes.get('/pricing', async (c) => {
-  const slots = await getFoundingCohortSlotCount();
-  const remaining = Math.max(0, 30 - slots);
-  return c.html(publicLayout('Pricing', html`
-    <h1 style="text-align:center;margin-top:2rem;">Pricing</h1>
-    <p style="text-align:center;color:#6b7280;margin-bottom:2rem;">One platform. Three tiers. No feature gates.</p>
-    <div class="pricing-grid">
-      <div class="pricing-card featured">
-        <div class="pricing-tier">Founding Cohort</div>
-        <div class="pricing-price">$99<span>/month</span></div>
-        <ul class="pricing-features">
-          <li>Full methodology and dashboard access</li>
-          <li>Rate locked permanently for lifetime</li>
-          <li>Case study participation required</li>
-          <li>Direct founder access during beta</li>
-          <li>Early access to new features</li>
-        </ul>
-        <div class="slot-count">${remaining} of 30 slots remaining</div>
-        <a href="/auth/signup" class="btn btn-primary" style="width:100%;margin-top:1rem;">Claim Your Slot</a>
+  return c.html(publicLayout('Pricing — Foundry', html`
+    <div style="max-width:960px;margin:0 auto;padding:2rem 1rem;">
+      <h1 style="text-align:center;margin-bottom:0.5rem;">Give your product a team.</h1>
+      <p style="text-align:center;color:var(--text-dim);margin-bottom:2.5rem;font-size:0.95rem;">All plans include 12 AI agents, CEO briefings, and the evolution engine.</p>
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <div class="pricing-tier">Solo</div>
+          <div class="pricing-price">$79<span>/month</span></div>
+          <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem;">One company. Full agent team. For solo founders.</p>
+          <ul class="pricing-features">
+            <li>1 company · 12 AI agents</li>
+            <li>Daily CEO briefing</li>
+            <li>Agent evolution — golden lessons, versioned configs</li>
+            <li>Signal score + risk state monitoring</li>
+            <li>AI Ask — conversational business advisor</li>
+            <li>Decision queue (Gate 0–4)</li>
+            <li>iOS app + voice briefings + Watch complication</li>
+          </ul>
+          <a href="/auth/signup" class="btn btn-secondary" style="width:100%;margin-top:1rem;text-align:center;">Get Started</a>
+        </div>
+        <div class="pricing-card featured">
+          <div class="pricing-tier">Growth</div>
+          <div class="pricing-price">$199<span>/month</span></div>
+          <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem;">Live integrations + Intelligence Network. For scaling teams.</p>
+          <ul class="pricing-features">
+            <li>Everything in Solo</li>
+            <li>Live integrations — Stripe, PostHog, Intercom, Linear</li>
+            <li>Agents use live integration data for richer analysis</li>
+            <li>Co-founder mode — alignment scores, decision voting</li>
+            <li>Intelligence Network — anonymized peer benchmarks</li>
+            <li>Wisdom Layer — DNA accumulation, failure log, patterns</li>
+            <li>Remediation Engine — automated GitHub PRs</li>
+            <li>Up to 3 team members</li>
+          </ul>
+          <a href="/auth/signup" class="btn btn-primary" style="width:100%;margin-top:1rem;text-align:center;">Get Started</a>
+        </div>
+        <div class="pricing-card">
+          <div class="pricing-tier">Investor-Ready</div>
+          <div class="pricing-price">$399<span>/month</span></div>
+          <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem;">Full platform + investor layer. For founders approaching investors.</p>
+          <ul class="pricing-features">
+            <li>Everything in Growth</li>
+            <li>Up to 5 companies (agent teams per company)</li>
+            <li>Board packets — AI-drafted quarterly narratives</li>
+            <li>Funding readiness score across 7 dimensions</li>
+            <li>Secure investor deal rooms with live Signal share</li>
+            <li>Playbook crystallization — 8 operating playbook types</li>
+            <li>Temporal Intelligence — Signal replay + prediction accuracy</li>
+            <li>Cohort analysis + competitive intelligence</li>
+            <li>Founding Story Engine with timestamped case studies</li>
+            <li>Unlimited team members</li>
+          </ul>
+          <a href="/auth/signup" class="btn btn-secondary" style="width:100%;margin-top:1rem;text-align:center;">Get Started</a>
+        </div>
       </div>
-      <div class="pricing-card">
-        <div class="pricing-tier">Growth</div>
-        <div class="pricing-price">$199<span>/month</span></div>
-        <ul class="pricing-features">
-          <li>Full methodology and dashboard access</li>
-          <li>Standard support</li>
-          <li>Single product management</li>
-        </ul>
-        <a href="/auth/signup" class="btn btn-secondary" style="width:100%;margin-top:1rem;">Get Started</a>
-      </div>
-      <div class="pricing-card">
-        <div class="pricing-tier">Scale</div>
-        <div class="pricing-price">$399<span>/month</span></div>
-        <ul class="pricing-features">
-          <li>Multi-product management</li>
-          <li>Priority support</li>
-          <li>Early access to new features</li>
-        </ul>
-        <a href="/auth/signup" class="btn btn-secondary" style="width:100%;margin-top:1rem;">Get Started</a>
+      <div style="text-align:center;margin-top:2rem;color:var(--text-muted);font-size:0.82rem;">
+        All plans include the iOS native app, agent evolution, and CEO briefings. Cancel anytime.
       </div>
     </div>
-    <div class="page-footer">All tiers include every intelligence layer. No feature gates.</div>
   `));
 });
 

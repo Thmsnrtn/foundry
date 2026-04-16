@@ -1,0 +1,204 @@
+// =============================================================================
+// FOUNDRY REST API v1 — Experiments
+// =============================================================================
+
+import { Hono } from 'hono';
+import { nanoid } from 'nanoid';
+import { query } from '../../db/client.js';
+import { requireScope } from '../middleware/auth.js';
+import type { ApiAuthEnv } from '../middleware/auth.js';
+
+export const experimentsApi = new Hono<ApiAuthEnv>();
+
+// GET / — list experiments
+experimentsApi.get('/', requireScope('agents:read'), async (c) => {
+  const productId = c.get('productId');
+  const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
+  const offset = Number(c.req.query('offset') ?? 0);
+
+  try {
+    const result = await query(
+      `SELECT id, title, hypothesis, status, success_metric, success_threshold,
+              current_results_json, started_at, concluded_at, created_at
+       FROM experiments
+       WHERE product_id = ?
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [productId, limit, offset]
+    );
+
+    const countResult = await query(
+      `SELECT COUNT(*) as total FROM experiments WHERE product_id = ?`,
+      [productId]
+    );
+    const total = (countResult.rows[0] as Record<string, unknown>)?.total as number ?? 0;
+
+    return c.json({ data: result.rows, meta: { total, limit, offset } });
+  } catch (err) {
+    return c.json({ error: 'Failed to fetch experiments' }, 500);
+  }
+});
+
+// GET /:experimentId — full experiment detail
+experimentsApi.get('/:experimentId', requireScope('agents:read'), async (c) => {
+  const productId = c.get('productId');
+  const experimentId = c.req.param('experimentId');
+
+  try {
+    const result = await query(
+      `SELECT * FROM experiments WHERE id = ? AND product_id = ?`,
+      [experimentId, productId]
+    );
+    if (result.rows.length === 0) {
+      return c.json({ error: 'Experiment not found' }, 404);
+    }
+
+    const exp = result.rows[0] as Record<string, unknown>;
+
+    // Fetch variants
+    const variantsResult = await query(
+      `SELECT id, name, description, traffic_pct, results_json, created_at
+       FROM experiment_variants
+       WHERE experiment_id = ?
+       ORDER BY created_at ASC`,
+      [experimentId]
+    );
+
+    return c.json({
+      data: {
+        ...exp,
+        variants: variantsResult.rows,
+      },
+    });
+  } catch (err) {
+    return c.json({ error: 'Failed to fetch experiment' }, 500);
+  }
+});
+
+// POST / — create new experiment
+experimentsApi.post('/', requireScope('agents:read'), async (c) => {
+  const productId = c.get('productId');
+  const userId = c.get('userId');
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const { title, hypothesis, success_metric, success_threshold, variants } = body;
+
+  if (!title || !hypothesis) {
+    return c.json({ error: 'title and hypothesis are required' }, 400);
+  }
+
+  try {
+    const id = nanoid();
+    await query(
+      `INSERT INTO experiments
+         (id, product_id, title, hypothesis, success_metric, success_threshold, status, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)`,
+      [id, productId, title, hypothesis, success_metric ?? null, success_threshold ?? null, userId]
+    );
+
+    // Insert variants if provided
+    if (Array.isArray(variants) && variants.length > 0) {
+      for (const variant of variants as Array<Record<string, unknown>>) {
+        await query(
+          `INSERT INTO experiment_variants (id, experiment_id, name, description, traffic_pct)
+           VALUES (?, ?, ?, ?, ?)`,
+          [nanoid(), id, variant.name ?? 'Variant', variant.description ?? null, variant.traffic_pct ?? null]
+        );
+      }
+    }
+
+    const result = await query(`SELECT * FROM experiments WHERE id = ?`, [id]);
+    return c.json({ data: result.rows[0] }, 201);
+  } catch (err) {
+    return c.json({ error: 'Failed to create experiment' }, 500);
+  }
+});
+
+// PUT /:experimentId/results — update current results
+experimentsApi.put('/:experimentId/results', requireScope('agents:read'), async (c) => {
+  const productId = c.get('productId');
+  const experimentId = c.req.param('experimentId');
+
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+
+  try {
+    const check = await query(
+      `SELECT id, status, success_threshold FROM experiments WHERE id = ? AND product_id = ?`,
+      [experimentId, productId]
+    );
+    if (check.rows.length === 0) {
+      return c.json({ error: 'Experiment not found' }, 404);
+    }
+
+    const exp = check.rows[0] as Record<string, unknown>;
+    const currentValue = body.current_value as number | undefined;
+    const threshold = exp.success_threshold as number | null;
+
+    // Recalculate status based on results
+    let newStatus = exp.status as string;
+    if (currentValue !== undefined && threshold !== null && newStatus !== 'concluded') {
+      newStatus = currentValue >= threshold ? 'winning' : 'running';
+    }
+
+    await query(
+      `UPDATE experiments
+       SET current_results_json = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND product_id = ?`,
+      [JSON.stringify(body), newStatus, experimentId, productId]
+    );
+
+    const result = await query(`SELECT * FROM experiments WHERE id = ?`, [experimentId]);
+    return c.json({ data: result.rows[0] });
+  } catch (err) {
+    return c.json({ error: 'Failed to update results' }, 500);
+  }
+});
+
+// POST /:experimentId/conclude — mark as concluded
+experimentsApi.post('/:experimentId/conclude', requireScope('agents:read'), async (c) => {
+  const productId = c.get('productId');
+  const experimentId = c.req.param('experimentId');
+
+  let body: Record<string, unknown> = {};
+  try {
+    body = await c.req.json().catch(() => ({}));
+  } catch {
+    // optional body
+  }
+
+  try {
+    const check = await query(
+      `SELECT id FROM experiments WHERE id = ? AND product_id = ?`,
+      [experimentId, productId]
+    );
+    if (check.rows.length === 0) {
+      return c.json({ error: 'Experiment not found' }, 404);
+    }
+
+    const { outcome, winning_variant_id } = body;
+
+    await query(
+      `UPDATE experiments
+       SET status = 'concluded', outcome = ?, winning_variant_id = ?,
+           concluded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND product_id = ?`,
+      [outcome ?? null, winning_variant_id ?? null, experimentId, productId]
+    );
+
+    const result = await query(`SELECT * FROM experiments WHERE id = ?`, [experimentId]);
+    return c.json({ data: result.rows[0] });
+  } catch (err) {
+    return c.json({ error: 'Failed to conclude experiment' }, 500);
+  }
+});

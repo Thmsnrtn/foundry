@@ -23,7 +23,7 @@ auditRoutes.get('/products/:id/audit', async (c) => {
 
   const product = prodResult.rows[0] as Record<string, unknown>;
   const hasGitHub = !!(product.github_repo_owner && product.github_repo_name && product.github_access_token);
-  const ctx = await getLayoutContext(founder, 'audit', 'Audit', productId);
+  const ctx = await getLayoutContext(founder, 'audit', 'Audit', productId, c);
 
   const current = await getLatestAudit(productId);
   if (current.rows.length === 0) {

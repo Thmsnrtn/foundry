@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "npm run typecheck && tsc && tsc-alias",
+    "build": "npm run typecheck && tsc && tsc-alias && mkdir -p dist/public && cp -r src/public/. dist/public/",
     "start": "node dist/index.js",
     "cli": "tsx src/cli/index.ts",
     "migrate": "tsx src/cli/index.ts db:migrate",
@@ -13,7 +13,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:ci": "vitest --run",
-    "check": "npm run typecheck && npm run test:ci"
+    "check": "npm run typecheck && npm run test:ci",
+    "mcp:context": "tsx src/mcp/cli.ts context",
+    "mcp:audit": "tsx src/mcp/cli.ts audit",
+    "mcp:issues": "tsx src/mcp/cli.ts issues",
+    "mcp:dna": "tsx src/mcp/cli.ts dna"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",

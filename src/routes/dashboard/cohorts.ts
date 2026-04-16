@@ -16,7 +16,7 @@ cohortRoutes.get('/products/:id/cohorts', requireTier('cohorts'), async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'cohorts', 'Cohorts', productId);
+  const ctx = await getLayoutContext(founder, 'cohorts', 'Cohorts', productId, c);
   const cohorts = await getCohorts(productId);
   const avg = await getHistoricalAverage(productId);
   const byChannel = await getCohortsByChannel(productId);

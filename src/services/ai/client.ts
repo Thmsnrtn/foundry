@@ -6,6 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
 import { withCircuitBreaker } from '../../lib/circuit-breaker.js';
+import { trackUsage } from '../../lib/usage-tracking.js';
 
 let _client: Anthropic | null = null;
 
@@ -62,7 +63,7 @@ export async function callClaude(config: AICallConfig): Promise<AIResponse> {
   const cacheHit = usage.cache_read_input_tokens ?? 0;
   const cacheCreation = usage.cache_creation_input_tokens ?? 0;
 
-  return {
+  const result: AIResponse = {
     content: textContent,
     model: config.model,
     usage: {
@@ -73,6 +74,13 @@ export async function callClaude(config: AICallConfig): Promise<AIResponse> {
     },
     stop_reason: response.stop_reason,
   };
+
+  // Track usage if productId provided
+  if (config.productId) {
+    trackUsage(config.productId, result, config.callType ?? 'unknown').catch(() => {});
+  }
+
+  return result;
   }, { name: `anthropic-${config.model}`, failureThreshold: 3, resetTimeoutMs: 120_000 });
 }
 
@@ -106,6 +114,43 @@ export async function callSonnet(
     systemPrompt,
     userPrompt,
   });
+}
+
+/**
+ * Multi-turn Claude call with a full message history array.
+ * Used by the conversational layer to maintain context across turns.
+ */
+export async function callClaudeMultiTurn(
+  systemPrompt: string,
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+  maxTokens: number = 1024,
+  useOpus: boolean = false,
+): Promise<AIResponse> {
+  const client = getClient();
+  const model = useOpus ? MODELS.OPUS : MODELS.SONNET;
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    temperature: 0.3,
+    system: systemPrompt,
+    messages,
+  });
+
+  const textContent = response.content
+    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n');
+
+  return {
+    content: textContent,
+    model,
+    usage: {
+      input_tokens: response.usage.input_tokens,
+      output_tokens: response.usage.output_tokens,
+    },
+    stop_reason: response.stop_reason,
+  };
 }
 
 /**
