@@ -11,7 +11,6 @@ import { listRepos } from '../../services/audit/github.js';
 import { runAudit } from '../../services/audit/engine.js';
 import { captureArtifact } from '../../services/story/engine.js';
 import { dashboardLayout } from '../../views/layout.js';
-import { html } from 'hono/html';
 import { onboardingWizard } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';

@@ -138,7 +138,7 @@ export async function getCohortPatterns(productId: string): Promise<Array<{
     [cohortKey, `${profile.business_model}_${profile.stage}%`],
   );
 
-  const patterns = result.rows as CohortPatternRow[];
+  const patterns = result.rows as unknown as CohortPatternRow[];
 
   return patterns.map((p) => {
     const exactMatch = p.cohort_key === cohortKey;
@@ -392,7 +392,7 @@ export async function seedDefaultCohortPatterns(): Promise<void> {
   if (count > 0) return;
 
   const now = new Date().toISOString();
-  const patterns: Array<[string, string, string, string, string, string, string, number, number]> = [
+  const patterns: Array<[string, string, string, string, string, string, string, number, number, string]> = [
     [
       'cp_b2b_seed_churn',
       'b2b_saas_seed',

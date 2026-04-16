@@ -1540,7 +1540,8 @@ async function scpROIMonthly(): Promise<void> {
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
-        await computeMonthlyROI(productId);
+        const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+        await computeMonthlyROI(productId, currentMonth);
         computed++;
       } catch { /* non-fatal per product */ }
     }

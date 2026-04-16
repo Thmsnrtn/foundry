@@ -492,7 +492,7 @@ export async function scanForFailurePatterns(productId: string): Promise<Pattern
     loadProductState(productId),
   ]);
 
-  const patterns = patternsResult.rows as FailurePatternRow[];
+  const patterns = patternsResult.rows as unknown as FailurePatternRow[];
   const matches: PatternMatch[] = [];
   const now = new Date().toISOString();
 
@@ -614,5 +614,5 @@ export async function resolvePattern(
 export async function getAllFailurePatterns(): Promise<FailurePatternRow[]> {
   await seedDefaultPatterns();
   const result = await query('SELECT * FROM failure_patterns ORDER BY severity DESC, pattern_name', []);
-  return result.rows as FailurePatternRow[];
+  return result.rows as unknown as FailurePatternRow[];
 }

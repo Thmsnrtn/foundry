@@ -141,11 +141,11 @@ Be specific, strategic, and grounded in the data provided. Avoid generic advice.
 Write in clear prose, 3-5 paragraphs. Focus on actionable insights.`;
 
   const productDescription = dna
-    ? `Product: ${dna.product_name ?? 'Unknown'}
-Problem it solves: ${dna.problem ?? 'Unknown'}
-Target customer: ${dna.target_customer ?? 'Unknown'}
-Key differentiator: ${dna.positioning ?? 'Unknown'}
-Current phase: ${dna.current_phase ?? 'Unknown'}`
+    ? `Product: ${(dna as any).product_name ?? dna.icp_description ?? 'Unknown'}
+Problem it solves: ${(dna as any).problem ?? dna.icp_pain ?? 'Unknown'}
+Target customer: ${(dna as any).target_customer ?? dna.icp_description ?? 'Unknown'}
+Key differentiator: ${(dna as any).positioning ?? dna.positioning_statement ?? 'Unknown'}
+Current phase: ${(dna as any).current_phase ?? 'Unknown'}`
     : 'Product DNA not available.';
 
   const maContext = maScore
