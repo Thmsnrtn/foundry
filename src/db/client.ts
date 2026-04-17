@@ -17,6 +17,12 @@ export function getDb(): Client {
       url,
       authToken: authToken || undefined,
     });
+
+    // Enable foreign key enforcement — without this, all REFERENCES clauses are decorative
+    _client.execute('PRAGMA foreign_keys = ON').catch(() => {
+      // Some Turso configurations may not support this; log but don't fail
+      console.warn('[DB] Could not enable foreign_keys PRAGMA');
+    });
   }
   return _client;
 }
