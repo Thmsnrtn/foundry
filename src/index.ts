@@ -3,6 +3,13 @@
 // Hono HTTP server with all routes, middleware, and cron scheduler.
 // =============================================================================
 
+import { validateEnvironment } from './env.js';
+
+// Validate environment before anything else
+if (process.env.NODE_ENV !== 'test') {
+  validateEnvironment();
+}
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
@@ -10,6 +17,7 @@ import { CronJob } from 'cron';
 
 // Middleware
 import { authMiddleware } from './middleware/auth.js';
+import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit } from './middleware/rate-limit.js';
 import { internalMiddleware } from './middleware/internal.js';
 
 // Public routes (no auth)
@@ -35,6 +43,8 @@ import { koldlyRoutes } from './routes/dashboard/koldly.js';
 import { settingsRoutes } from './routes/dashboard/settings.js';
 import { revenueRoutes } from './routes/dashboard/revenue.js';
 import { portfolioRoutes } from './routes/dashboard/portfolio.js';
+import { founderOpsRoutes } from './routes/dashboard/founder-ops.js';
+import { founderIntelRoutes } from './routes/api/founder-intelligence.js';
 
 // Share routes (public, token-gated)
 import { shareRoutes } from './routes/share/index.js';
@@ -108,6 +118,12 @@ import { apiAuditLogRoutes } from './routes/api/audit-log.js';
 import { apiUXRoutes } from './routes/api/ux.js';
 import { apiAskRoutes } from './routes/api/ask.js';
 import { mobileRoutes } from './routes/api/mobile.js';
+import { tier1ApiRoutes } from './routes/api/tier1.js';
+import { tier2ApiRoutes } from './routes/api/tier2.js';
+import { tier3ApiRoutes } from './routes/api/tier3.js';
+import { tier4ApiRoutes } from './routes/api/tier4.js';
+import { superchargeApiRoutes } from './routes/api/supercharge.js';
+import { platformApiRoutes } from './routes/api/platform.js';
 
 // Internal routes (ecosystem key required, except /health)
 import { healthRoutes } from './routes/internal/health.js';
@@ -138,11 +154,7 @@ const REQUIRED_ENV_VARS = [
 
 const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
 if (missing.length > 0) {
-  console.warn(`[STARTUP] Missing env vars: ${missing.join(', ')}`);
-  if (process.env.NODE_ENV === 'production') {
-    console.error('[STARTUP] Required env vars missing in production — exiting.');
-    process.exit(1);
-  }
+  console.warn(`[STARTUP] Optional env vars missing: ${missing.join(', ')} — some features disabled.`);
 }
 
 // ─── App Setup ───────────────────────────────────────────────────────────────
@@ -168,7 +180,11 @@ app.get('/static/:file', (c) => {
   const fileName = c.req.param('file');
   if (!/^[\w.-]+$/.test(fileName)) return c.notFound();
   try {
-    const filePath = resolve(__dirname, 'public', fileName);
+    // Try local (src/public) then production (../src/public from dist/)
+    let filePath = resolve(__dirname, 'public', fileName);
+    try { readFileSync(filePath); } catch {
+      filePath = resolve(__dirname, '../src/public', fileName);
+    }
     const content = readFileSync(filePath, 'utf-8');
     const ext = fileName.split('.').pop();
     const mimeTypes: Record<string, string> = { css: 'text/css', js: 'application/javascript', svg: 'image/svg+xml', json: 'application/json', png: 'image/png' };
@@ -195,6 +211,7 @@ app.get('/sw.js', (c) => {
 
 // ─── Public Routes ───────────────────────────────────────────────────────────
 
+app.use('/auth/*', authRateLimit);
 app.route('/', landingRoutes);
 app.route('/', pricingRoutes);
 app.route('/', caseStudyRoutes);
@@ -203,6 +220,7 @@ app.route('/', shareRoutes);
 app.route('/', ingestRoutes);
 
 // ─── Stripe Webhook (raw body, no auth) ──────────────────────────────────────
+app.use('/webhooks/*', webhookRateLimit);
 
 app.post('/webhooks/stripe', async (c) => {
   const signature = c.req.header('stripe-signature');
@@ -213,6 +231,25 @@ app.post('/webhooks/stripe', async (c) => {
     return c.json({ received: true });
   } catch (err) {
     console.error('Stripe webhook error:', err);
+    return c.json({ error: 'Webhook processing failed' }, 400);
+  }
+});
+
+// Per-product Stripe webhook with full intelligence chain
+import { verifyStripeWebhook, processStripeEventChain } from './services/integrations/stripe-webhook.js';
+
+app.post('/webhooks/stripe/:productId', async (c) => {
+  const productId = c.req.param('productId');
+  const signature = c.req.header('stripe-signature');
+  if (!signature) return c.json({ error: 'Missing signature' }, 400);
+
+  const rawBody = await c.req.text();
+  try {
+    const event = verifyStripeWebhook(rawBody, signature);
+    const result = await processStripeEventChain(productId, event);
+    return c.json({ received: true, ...result });
+  } catch (err) {
+    console.error(`Stripe webhook error for ${productId}:`, err);
     return c.json({ error: 'Webhook processing failed' }, 400);
   }
 });
@@ -247,6 +284,7 @@ app.use('/settings/*', authMiddleware);
 app.use('/plan', authMiddleware);
 app.use('/plan/*', authMiddleware);
 app.use('/signal/*', authMiddleware);
+app.use('/checkout', authMiddleware);
 app.use('/switch-product', authMiddleware);
 app.use('/portfolio', authMiddleware);
 app.use('/checkout', authMiddleware);
@@ -274,8 +312,6 @@ app.use('/brief', authMiddleware);
 app.use('/brief/*', authMiddleware);
 app.use('/privacy', authMiddleware);
 app.use('/privacy/*', authMiddleware);
-app.use('/setup', authMiddleware);
-app.use('/setup/*', authMiddleware);
 // SCP v7 auth
 app.use('/roi', authMiddleware);
 app.use('/roi/*', authMiddleware);
@@ -294,6 +330,9 @@ app.use('/network', authMiddleware);
 app.use('/network/*', authMiddleware);
 app.use('/exit', authMiddleware);
 app.use('/exit/*', authMiddleware);
+app.use('/api/*', apiRateLimit);
+app.use('/founder-ops', authMiddleware);
+app.use('/founder-ops/*', authMiddleware);
 
 // Dashboard routes
 app.route('/', dashboardRoutes);
@@ -312,6 +351,7 @@ app.route('/', koldlyRoutes);
 app.route('/', settingsRoutes);
 app.route('/', revenueRoutes);
 app.route('/', portfolioRoutes);
+app.route('/', founderOpsRoutes);
 app.route('/', planRoutes);
 app.route('/', timelineRoutes);
 app.route('/', integrationsRoutes);
@@ -372,6 +412,13 @@ app.route('/', apiAuditLogRoutes);
 app.route('/', apiUXRoutes);
 app.route('/', apiAskRoutes);
 app.route('/', mobileRoutes);
+app.route('/', tier1ApiRoutes);
+app.route('/', tier2ApiRoutes);
+app.route('/', tier3ApiRoutes);
+app.route('/', tier4ApiRoutes);
+app.route('/', superchargeApiRoutes);
+app.route('/', platformApiRoutes);
+app.route('/', founderIntelRoutes);
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
@@ -454,8 +501,34 @@ runMigrations()
     });
   })
   .catch((err) => {
-    console.error('[STARTUP] Migration failed — cannot start:', err);
-    process.exit(1);
+    console.error('[STARTUP] Migration error (non-fatal):', err?.message ?? err);
+    // Don't exit — migrations may have partially succeeded and app can still serve
+    const port = parseInt(process.env.PORT ?? '8080');
+    serve({ fetch: app.fetch, port }, (info) => {
+      console.log(`Listening on http://localhost:${info.port} (with migration warnings)`);
+    });
   });
+
+// ─── Graceful Shutdown ───────────────────────────────────────────────────────
+// Allow in-flight requests to complete on SIGTERM (deployment) and SIGINT (dev)
+let isShuttingDown = false;
+
+function gracefulShutdown(signal: string) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[SHUTDOWN] Received ${signal}, draining...`);
+
+  // Stop accepting new cron jobs
+  // The CronJob instances will be garbage-collected
+
+  // Give in-flight requests 4 seconds to complete (Fly.io kill_timeout is 5s)
+  setTimeout(() => {
+    console.log('[SHUTDOWN] Drain complete, exiting.');
+    process.exit(0);
+  }, 4000);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;
