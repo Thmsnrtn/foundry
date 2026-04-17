@@ -34,10 +34,74 @@ onboardingRoutes.get('/onboarding', async (c) => {
   const ghClientId = process.env.GITHUB_CLIENT_ID ?? '';
   const appUrl = process.env.APP_URL ?? '';
   const redirectUri = `${appUrl}/onboarding/github/callback`;
-  const githubUrl = `https://github.com/login/oauth/authorize?client_id=${ghClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo`;
+
+  // Generate CSRF state token for GitHub OAuth (SEC-02 fix)
+  const { randomBytes } = await import('node:crypto');
+  const oauthState = randomBytes(32).toString('hex');
+  // Store state in oauth_states table with 10-minute expiry
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  await query(
+    `INSERT INTO oauth_states (state, product_id, founder_id, integration_type, redirect_uri, expires_at)
+     VALUES (?, 'pending', ?, 'github', ?, ?)`,
+    [oauthState, founder.id, redirectUri, expiresAt]
+  );
+
+  const githubUrl = `https://github.com/login/oauth/authorize?client_id=${ghClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=repo&state=${oauthState}`;
 
   const content = onboardingWizard('connect_github', { github_oauth_url: githubUrl });
   return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
+});
+
+// Non-code path: URL-based onboarding
+onboardingRoutes.get('/onboarding/no-code', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, '', 'Add Your Product');
+  const { html } = await import('hono/html');
+  const content = html`
+  <div class="onboarding-steps">
+    <div class="step-card">
+      <h2>Add Your Product</h2>
+      <p>Tell us about your product and we'll run a web-based audit from its URL.</p>
+      <form method="POST" action="/onboarding/create-product">
+        <div class="form-group"><label for="name">Product Name</label><input type="text" id="name" name="name" required placeholder="e.g. LabFlow" /></div>
+        <div class="form-group"><label for="url">Product URL</label><input type="url" id="url" name="url" required placeholder="https://your-product.com" /></div>
+        <div class="form-group"><label for="build_platform">Built With</label>
+          <select id="build_platform" name="build_platform">
+            <option value="bubble">Bubble</option><option value="webflow">Webflow</option><option value="shopify">Shopify</option>
+            <option value="wordpress">WordPress</option><option value="retool">Retool</option><option value="agency_built">Agency Built</option>
+            <option value="other">Other</option>
+          </select></div>
+        <div class="form-group"><label for="sector_profile">Sector</label>
+          <select id="sector_profile" name="sector_profile">
+            <option value="b2b_saas">B2B SaaS</option><option value="consumer">Consumer</option><option value="marketplace">Marketplace</option>
+            <option value="healthcare">Healthcare</option><option value="education">Education</option><option value="government">Government</option>
+            <option value="developer_tools">Developer Tools</option><option value="fintech">Fintech</option>
+            <option value="climate_impact">Climate/Impact</option><option value="vertical_saas">Vertical SaaS</option>
+          </select></div>
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem;">Continue →</button>
+      </form>
+    </div>
+  </div>`;
+  return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
+});
+
+onboardingRoutes.post('/onboarding/create-product', async (c) => {
+  const founder = c.get('founder');
+  const body = await parseBody(c) as Record<string, string>;
+  const productId = nanoid();
+
+  await query(
+    `INSERT INTO products (id, name, owner_id, build_platform, sector_profile, status) VALUES (?, ?, ?, ?, ?, 'active')`,
+    [productId, body.name, founder.id, body.build_platform ?? 'other', body.sector_profile ?? 'b2b_saas']
+  );
+
+  if (body.url) {
+    await query(`INSERT INTO web_audit_results (id, product_id, owner_id, url) VALUES (?, ?, ?, ?)`,
+      [nanoid(), productId, founder.id, body.url]);
+  }
+
+  await query(`INSERT INTO lifecycle_state (product_id, current_prompt, risk_state) VALUES (?, 'prompt_1', 'green')`, [productId]);
+  return c.redirect(`/onboarding/competitors?product_id=${productId}`);
 });
 
 // Step 2: GitHub OAuth callback
@@ -45,7 +109,18 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, '', 'Select Repository');
   const code = c.req.query('code');
+  const state = c.req.query('state');
   if (!code) return c.json({ error: 'Missing code' }, 400);
+
+  // Validate OAuth state to prevent CSRF (SEC-02 fix)
+  if (!state) return c.json({ error: 'Missing state parameter' }, 400);
+  const stateResult = await query(
+    `SELECT * FROM oauth_states WHERE state = ? AND founder_id = ? AND integration_type = 'github' AND expires_at > datetime('now')`,
+    [state, founder.id]
+  );
+  if (stateResult.rows.length === 0) return c.json({ error: 'Invalid or expired OAuth state' }, 400);
+  // Clean up used state
+  await query('DELETE FROM oauth_states WHERE state = ?', [state]);
 
   const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
@@ -113,7 +188,20 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
     [productId]
   );
 
-  return c.redirect(`/onboarding/audit?product_id=${productId}`);
+  return c.redirect(`/onboarding/competitors?product_id=${productId}`);
+});
+
+// Step 3b: Show competitor identification form
+onboardingRoutes.get('/onboarding/competitors', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, '', 'Identify Competitors');
+  const productId = c.req.query('product_id') ?? '';
+
+  const prodCheck = await query('SELECT id FROM products WHERE id = ? AND owner_id = ?', [productId, founder.id]);
+  if (prodCheck.rows.length === 0) return c.redirect('/onboarding');
+
+  const content = onboardingWizard('identify_competitors', { product_id: productId });
+  return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
 });
 
 // Step 4: Identify competitors
@@ -176,6 +264,8 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
     market_category: product.market_category as string | null,
     created_at: product.created_at as string, updated_at: product.updated_at as string,
     status: product.status as 'active',
+    sector_profile: 'b2b_saas', growth_stage: 'pre_launch',
+    growth_stage_updated_at: null, growth_stage_overridden: false,
   }, 'initial');
 
   await captureArtifact({
