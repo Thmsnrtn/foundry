@@ -334,6 +334,29 @@ app.use('/api/*', apiRateLimit);
 app.use('/founder-ops', authMiddleware);
 app.use('/founder-ops/*', authMiddleware);
 
+// CSRF protection on all authenticated routes (SEC-03)
+import { csrfMiddleware } from './middleware/csrf.js';
+app.use('/dashboard/*', csrfMiddleware);
+app.use('/onboarding/*', csrfMiddleware);
+app.use('/settings', csrfMiddleware);
+app.use('/settings/*', csrfMiddleware);
+app.use('/products/*', csrfMiddleware);
+app.use('/decisions/*', csrfMiddleware);
+app.use('/switch-product', csrfMiddleware);
+app.use('/checkout', csrfMiddleware);
+app.use('/investors/*', csrfMiddleware);
+app.use('/team/*', csrfMiddleware);
+app.use('/privacy/*', csrfMiddleware);
+app.use('/agents/*', csrfMiddleware);
+app.use('/playbooks/*', csrfMiddleware);
+app.use('/scenarios/*', csrfMiddleware);
+app.use('/board/*', csrfMiddleware);
+app.use('/memory/*', csrfMiddleware);
+app.use('/ambient/*', csrfMiddleware);
+app.use('/network/*', csrfMiddleware);
+app.use('/exit/*', csrfMiddleware);
+app.use('/founder-ops/*', csrfMiddleware);
+
 // Dashboard routes
 app.route('/', dashboardRoutes);
 app.route('/', onboardingRoutes);
