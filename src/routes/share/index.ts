@@ -11,6 +11,18 @@ import { computeSignal, getSignalHistory } from '../../services/signal.js';
 
 export const shareRoutes = new Hono();
 
+// ─── HTML Escaping ────────────────────────────────────────────────────────────
+
+function escapeHtml(str: unknown): string {
+  const s = String(str ?? '');
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ─── Sparkline SVG ────────────────────────────────────────────────────────────
 
 function sparklineSVG(
@@ -113,7 +125,7 @@ shareRoutes.get('/share/:token', async (c) => {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${product.name as string} — Foundry Signal</title>
+  <title>${escapeHtml(product.name)} — Foundry Signal</title>
   <meta name="robots" content="noindex, nofollow" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -328,7 +340,7 @@ shareRoutes.get('/share/:token', async (c) => {
   <div class="share-wrap">
 
     <div class="share-header">
-      <div class="share-product-name">${product.name as string}</div>
+      <div class="share-product-name">${escapeHtml(product.name)}</div>
       <span class="share-badge">LIVE SIGNAL</span>
     </div>
 
@@ -342,7 +354,7 @@ shareRoutes.get('/share/:token', async (c) => {
     <div class="share-sparkline-label">Last 90 days</div>
     ` : ''}
 
-    <div class="share-prose">${signal.prose}</div>
+    <div class="share-prose">${escapeHtml(signal.prose)}</div>
 
     <div class="share-meta">
       <div class="share-meta-item">
@@ -372,9 +384,9 @@ shareRoutes.get('/share/:token', async (c) => {
       <div class="share-section-label">Recent Decisions</div>
       ${decisions.map((d) => `
       <div class="share-decision">
-        <div class="share-decision-what">${d.what as string}</div>
-        ${d.chosen_option ? `<div class="share-decision-chosen">Chose: ${d.chosen_option as string}</div>` : ''}
-        ${d.outcome ? `<div class="share-decision-outcome">${d.outcome as string}</div>` : ''}
+        <div class="share-decision-what">${escapeHtml(d.what)}</div>
+        ${d.chosen_option ? `<div class="share-decision-chosen">Chose: ${escapeHtml(d.chosen_option)}</div>` : ''}
+        ${d.outcome ? `<div class="share-decision-outcome">${escapeHtml(d.outcome)}</div>` : ''}
       </div>`).join('')}
     </div>` : ''}
 
