@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS integrations (
 
 CREATE INDEX IF NOT EXISTS idx_integrations_product ON integrations(product_id);
 CREATE INDEX IF NOT EXISTS idx_integrations_status ON integrations(product_id, status);
-CREATE INDEX IF NOT EXISTS idx_integrations_type_active ON integrations(type, status);
+-- Index on type column — skip if column doesn't exist (may have been created with 'provider' instead)
+-- CREATE INDEX IF NOT EXISTS idx_integrations_type_active ON integrations(type, status);
 
 -- One entry per sync run. Enables debugging and monitoring.
 CREATE TABLE IF NOT EXISTS integration_sync_log (

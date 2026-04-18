@@ -31,6 +31,7 @@ export interface LayoutOptions {
   canAccess?: (featureKey: string) => boolean;
   dnaCompletionPct?: number;
   openPRCount?: number;
+  founderEmail?: string | null;
 }
 
 export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
@@ -92,7 +93,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
 
   ${!chamberMode && showNav && nextAction ? nextActionBanner(nextAction) : ''}
 
-  ${!chamberMode && showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, dnaCompletionPct, openPRCount) : ''}
+  ${!chamberMode && showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, dnaCompletionPct, openPRCount, opts.founderEmail) : ''}
 
   <main class="${showNav && !chamberMode ? 'main-with-sidebar' : 'main-full'}">
     ${showNav && !chamberMode ? html`<div id="one-thing-banner"
@@ -240,6 +241,7 @@ function groupedSidebar(
   canAccess: ((key: string) => boolean) | null,
   dnaCompletionPct: number,
   openPRCount: number,
+  founderEmail?: string | null,
 ): HtmlContent {
   const b = badges ?? { decisions_count: 0, has_overdue_audit: false, unread_signals: false, unseen_milestones: false, open_prs_count: 0, dna_completion: 0 };
 
@@ -311,6 +313,7 @@ function groupedSidebar(
     <ul class="sidebar-nav">${renderNavItems(systemItems, active)}</ul>
 
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
+      ${founderEmail?.toLowerCase() === 'thmsnrtn@gmail.com' ? html`<li><a href="/founder-ops" class="${active === 'founder-ops' ? 'active' : ''}" style="color:#f59e0b;">Founder Ops</a></li>` : ''}
       <li><a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a></li>
     </ul>
   </nav>`;

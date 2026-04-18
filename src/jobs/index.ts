@@ -3,6 +3,7 @@
 // Each job is a standalone async function callable by cron or CLI.
 // =============================================================================
 
+import { logger } from '../services/logger.js';
 import { getAllActiveProducts, query, getActiveStressors, getLatestMetrics, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
 import { evaluateConditions } from '../services/lifecycle/monitor.js';
 import { runCompetitiveScan } from '../services/intelligence/competitive.js';
@@ -22,46 +23,57 @@ import { isPRMerged, isPROpen } from '../services/audit/github.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
 import { callOpus, parseJSONResponse } from '../services/ai/client.js';
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
+import { detectGrowthStage, updateGrowthStage } from '../services/lifecycle/stage-detection.js';
+import { refreshFounderHealthMetrics } from '../services/intelligence/founder-health.js';
+import { scanGeopoliticalRisks } from '../services/intelligence/global.js';
+import { scanRegulatoryChanges } from '../services/intelligence/regulatory.js';
+import { aggregateInsights } from '../services/wisdom/network.js';
+import { runAllDueSyncs } from '../services/integrations/framework.js';
+import { generatePredictions } from '../services/intelligence/predictive.js';
+import { generateDraftsForPendingDecisions } from '../services/decisions/actions.js';
+import { refreshAllCustomerHealth } from '../services/customers/intelligence.js';
+import { buildProductGraph, discoverCausalChains } from '../services/graph/engine.js';
+import { generatePortfolioSnapshot } from '../services/portfolio/manager.js';
 import { nanoid } from 'nanoid';
-import type { RiskStateValue, StressorSeverity, CompetitiveSignal } from '../types/index.js';
+import type { RiskStateValue, StressorSeverity, CompetitiveSignal, GrowthStage } from '../types/index.js';
 
 // ─── 1. Lifecycle Check — Daily 6:00 UTC ─────────────────────────────────────
 export async function lifecycleCheck(): Promise<void> {
-  console.log('[JOB] lifecycle_check starting');
+  logger.info('lifecycle_check starting', { jobName: 'lifecycle_check' });
   const products = await getAllActiveProducts();
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
       const activated = await evaluateConditions(p.id);
       if (activated.length > 0) {
-        console.log(`[JOB] lifecycle_check: ${p.name} activated: ${activated.join(', ')}`);
+        logger.info(`lifecycle_check: ${p.name} activated: ${activated.join(', ')}`, { jobName: 'lifecycle_check' });
       }
     } catch (err) {
-      console.error(`[JOB] lifecycle_check error for ${p.id}:`, err);
+      logger.error(`lifecycle_check error for ${p.id}:`, { jobName: 'lifecycle_check', error: String(err) });
     }
   }
-  console.log('[JOB] lifecycle_check complete');
+  logger.info('lifecycle_check complete', { jobName: 'lifecycle_check' });
 }
 
 // ─── 2. Competitive Scan — Sunday 6:00 UTC ───────────────────────────────────
 export async function competitiveScan(): Promise<void> {
-  console.log('[JOB] competitive_scan starting');
+  logger.info('competitive_scan starting', { jobName: 'competitive_scan' });
   const products = await getAllActiveProducts();
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
       const signals = await runCompetitiveScan(p.id);
-      console.log(`[JOB] competitive_scan: ${p.name} — ${signals.length} signals`);
+      logger.info(`competitive_scan: ${p.name} — ${signals.length} signals`, { jobName: 'competitive_scan' });
     } catch (err) {
-      console.error(`[JOB] competitive_scan error for ${p.id}:`, err);
+      logger.error(`competitive_scan error for ${p.id}:`, { jobName: 'competitive_scan', error: String(err) });
     }
   }
-  console.log('[JOB] competitive_scan complete');
+  logger.info('competitive_scan complete', { jobName: 'competitive_scan' });
 }
 
 // ─── 3. Weekly Synthesis — Friday 6:00 UTC ────────────────────────────────────
 export async function weeklySynthesis(): Promise<void> {
-  console.log('[JOB] weekly_synthesis starting');
+  logger.info('weekly_synthesis starting', { jobName: 'weekly_synthesis' });
   const products = await getAllActiveProducts();
 
   for (const row of products.rows) {
@@ -83,7 +95,12 @@ export async function weeklySynthesis(): Promise<void> {
       const compSignals = await query(
         `SELECT * FROM competitive_signals WHERE product_id = ? AND significance = 'high' AND detected_at > datetime('now', '-7 days')`, [p.id]);
 
-      // Run stressor identification
+      // Get product growth stage and lifestyle mode
+      const growthStage = (p.growth_stage as GrowthStage) ?? 'growth';
+      const founderResult = await query('SELECT lifestyle_mode FROM founders WHERE id = ?', [p.owner_id]);
+      const isLifestyle = ((founderResult.rows[0] as Record<string, number> | undefined)?.lifestyle_mode ?? 0) === 1;
+
+      // Run stressor identification with stage and lifestyle awareness
       const stressorInputs: StressorInputs = {
         productId: p.id,
         currentMetrics: latestMetrics.rows[0] as unknown as StressorInputs['currentMetrics'],
@@ -93,10 +110,12 @@ export async function weeklySynthesis(): Promise<void> {
         historicalAvgRetention: historicalAvg ? { day_14: historicalAvg.day_14, day_30: historicalAvg.day_30 } : null,
         highSignificanceSignals: compSignals.rows as unknown as CompetitiveSignal[],
         riskState,
+        growthStage,
+        lifestyleMode: isLifestyle,
       };
       const stressorReport = await identifyStressors(stressorInputs);
 
-      // Assess risk state
+      // Assess risk state with stage awareness
       const activeStressors = await getActiveStressors(p.id);
       const stressorList = (activeStressors.rows as unknown as Array<Record<string, unknown>>).map((s) => ({
         severity: s.severity as StressorSeverity, name: s.stressor_name as string,
@@ -109,6 +128,7 @@ export async function weeklySynthesis(): Promise<void> {
         mrrHealthRatio: mrr?.health_ratio ?? null,
         pendingGate3AgeDays: pendingGate3Age,
         currentState: riskState,
+        growthStage,
       });
 
       if (riskAssessment.transitionWarranted) {
@@ -126,17 +146,17 @@ export async function weeklySynthesis(): Promise<void> {
         }
       }
 
-      console.log(`[JOB] weekly_synthesis: ${p.name} — risk ${riskState}→${riskAssessment.recommendedState}, ${stressorReport.stressors.length} stressors`);
+      logger.info(`weekly_synthesis: ${p.name} — risk ${riskState}→${riskAssessment.recommendedState}, ${stressorReport.stressors.length} stressors`, { jobName: 'weekly_synthesis' });
     } catch (err) {
-      console.error(`[JOB] weekly_synthesis error for ${p.id}:`, err);
+      logger.error(`weekly_synthesis error for ${p.id}:`, { jobName: 'weekly_synthesis', error: String(err) });
     }
   }
-  console.log('[JOB] weekly_synthesis complete');
+  logger.info('weekly_synthesis complete', { jobName: 'weekly_synthesis' });
 }
 
 // ─── 4. Digest Generate — Monday 7:00 AM per founder timezone ─────────────────
 export async function digestGenerate(): Promise<void> {
-  console.log('[JOB] digest_generate starting');
+  logger.info('digest_generate starting', { jobName: 'digest_generate' });
   const founders = await query('SELECT * FROM founders WHERE tier IS NOT NULL', []);
 
   for (const fRow of founders.rows) {
@@ -156,22 +176,22 @@ export async function digestGenerate(): Promise<void> {
         await sendDigestEmail(f.email as string, p.name, digest);
       }
     } catch (err) {
-      console.error(`[JOB] digest_generate error for founder ${f.id}:`, err);
+      logger.error(`digest_generate error for founder ${f.id}:`, { jobName: 'digest_generate', error: String(err) });
     }
   }
-  console.log('[JOB] digest_generate complete');
+  logger.info('digest_generate complete', { jobName: 'digest_generate' });
 }
 
 // ─── 5. Behavioral Triggers — Every 6 hours ──────────────────────────────────
 export async function behavioralTriggers(): Promise<void> {
-  console.log('[JOB] behavioral_triggers starting');
+  logger.info('behavioral_triggers starting', { jobName: 'behavioral_triggers' });
   await evaluateTriggers();
-  console.log('[JOB] behavioral_triggers complete');
+  logger.info('behavioral_triggers complete', { jobName: 'behavioral_triggers' });
 }
 
 // ─── 6. Metric Snapshot — Daily midnight UTC ──────────────────────────────────
 export async function metricSnapshot(): Promise<void> {
-  console.log('[JOB] metric_snapshot starting');
+  logger.info('metric_snapshot starting', { jobName: 'metric_snapshot' });
   // This job is a no-op if metrics are pushed via API.
   // It serves as a fallback to ensure daily snapshots exist.
   const products = await getAllActiveProducts();
@@ -187,19 +207,19 @@ export async function metricSnapshot(): Promise<void> {
         [nanoid(), p.id, today]);
     }
   }
-  console.log('[JOB] metric_snapshot complete');
+  logger.info('metric_snapshot complete', { jobName: 'metric_snapshot' });
 }
 
 // ─── 7. Slot Enforcement — Daily 9:00 UTC ────────────────────────────────────
 export async function slotEnforcement(): Promise<void> {
-  console.log('[JOB] slot_enforcement starting');
+  logger.info('slot_enforcement starting', { jobName: 'slot_enforcement' });
   await enforceActivationWindow();
-  console.log('[JOB] slot_enforcement complete');
+  logger.info('slot_enforcement complete', { jobName: 'slot_enforcement' });
 }
 
 // ─── 8. Cold Start Check — Daily ──────────────────────────────────────────────
 export async function coldStartCheck(): Promise<void> {
-  console.log('[JOB] cold_start_check starting');
+  logger.info('cold_start_check starting', { jobName: 'cold_start_check' });
   const products = await getAllActiveProducts();
   for (const row of products.rows) {
     const p = row as Record<string, string>;
@@ -228,12 +248,12 @@ export async function coldStartCheck(): Promise<void> {
       });
     }
   }
-  console.log('[JOB] cold_start_check complete');
+  logger.info('cold_start_check complete', { jobName: 'cold_start_check' });
 }
 
 // ─── 9. Scenario Accuracy — Weekly after synthesis ────────────────────────────
 export async function scenarioAccuracy(): Promise<void> {
-  console.log('[JOB] scenario_accuracy starting');
+  logger.info('scenario_accuracy starting', { jobName: 'scenario_accuracy' });
   // Find decisions with outcomes that have scenario models but no accuracy score
   const decisions = await query(
     `SELECT d.*, sm.id as scenario_id, sm.best_case, sm.base_case, sm.stress_case
@@ -278,15 +298,15 @@ export async function scenarioAccuracy(): Promise<void> {
         scenarioAccuracyScore: accuracy.accuracy_score as number,
       });
     } catch (err) {
-      console.error(`[JOB] scenario_accuracy error for decision ${d.id}:`, err);
+      logger.error(`scenario_accuracy error for decision ${d.id}:`, { jobName: 'scenario_accuracy', error: String(err) });
     }
   }
-  console.log('[JOB] scenario_accuracy complete');
+  logger.info('scenario_accuracy complete', { jobName: 'scenario_accuracy' });
 }
 
 // ─── 10. Yellow Pulse — Thursday (for Yellow state products) ──────────────────
 export async function yellowPulse(): Promise<void> {
-  console.log('[JOB] yellow_pulse starting');
+  logger.info('yellow_pulse starting', { jobName: 'yellow_pulse' });
   const products = await query(
     `SELECT p.*, f.email FROM products p
      JOIN founders f ON p.owner_id = f.id
@@ -299,15 +319,15 @@ export async function yellowPulse(): Promise<void> {
       const digest = await generateDigest(p.id as string, 'yellow', 'yellow_pulse');
       await sendDigestEmail(p.email as string, p.name as string, digest);
     } catch (err) {
-      console.error(`[JOB] yellow_pulse error for ${p.id}:`, err);
+      logger.error(`yellow_pulse error for ${p.id}:`, { jobName: 'yellow_pulse', error: String(err) });
     }
   }
-  console.log('[JOB] yellow_pulse complete');
+  logger.info('yellow_pulse complete', { jobName: 'yellow_pulse' });
 }
 
 // ─── 11. Red Daily — Daily (for Red state products) ───────────────────────────
 export async function redDaily(): Promise<void> {
-  console.log('[JOB] red_daily starting');
+  logger.info('red_daily starting', { jobName: 'red_daily' });
   const products = await query(
     `SELECT p.*, f.email FROM products p
      JOIN founders f ON p.owner_id = f.id
@@ -320,35 +340,45 @@ export async function redDaily(): Promise<void> {
       const digest = await generateDigest(p.id as string, 'red', 'red_daily');
       await sendDigestEmail(p.email as string, p.name as string, digest);
     } catch (err) {
-      console.error(`[JOB] red_daily error for ${p.id}:`, err);
+      logger.error(`red_daily error for ${p.id}:`, { jobName: 'red_daily', error: String(err) });
     }
   }
-  console.log('[JOB] red_daily complete');
+  logger.info('red_daily complete', { jobName: 'red_daily' });
 }
 
 // ─── 12. Stressor Cleanup — Daily ────────────────────────────────────────────
 export async function stressorCleanup(): Promise<void> {
-  console.log('[JOB] stressor_cleanup starting');
+  logger.info('stressor_cleanup starting', { jobName: 'stressor_cleanup' });
   // Auto-resolve stressors that have exceeded their timeframe
   await query(
     `UPDATE stressor_history SET status = 'escalated', resolution_notes = 'Auto-escalated: exceeded timeframe'
      WHERE status = 'active' AND datetime(identified_at, '+' || timeframe_days || ' days') < datetime('now')`, []);
-  console.log('[JOB] stressor_cleanup complete');
+  logger.info('stressor_cleanup complete', { jobName: 'stressor_cleanup' });
 }
 
 // ─── 13. Pattern Aggregation — Weekly ─────────────────────────────────────────
 export async function patternAggregation(): Promise<void> {
-  console.log('[JOB] pattern_aggregation starting');
+  logger.info('pattern_aggregation starting', { jobName: 'pattern_aggregation' });
   // Log pattern stats for monitoring
   const total = await query('SELECT COUNT(*) as c FROM decision_patterns', []);
   const withOutcomes = await query('SELECT COUNT(*) as c FROM decision_patterns WHERE outcome_direction IS NOT NULL', []);
-  console.log(`[JOB] pattern_aggregation: ${(total.rows[0] as Record<string, number>)?.c ?? 0} total, ${(withOutcomes.rows[0] as Record<string, number>)?.c ?? 0} with outcomes`);
-  console.log('[JOB] pattern_aggregation complete');
+  logger.info(`pattern_aggregation: ${(total.rows[0] as Record<string, number>)?.c ?? 0} total, ${(withOutcomes.rows[0] as Record<string, number>)?.c ?? 0} with outcomes`, { jobName: 'pattern_aggregation' });
+
+  // Cross-product wisdom network aggregation
+  try {
+    const insightsGenerated = await aggregateInsights();
+    if (insightsGenerated > 0) {
+      logger.info(`pattern_aggregation: generated ${insightsGenerated} cross-product insights`, { jobName: 'pattern_aggregation' });
+    }
+  } catch (err) {
+    logger.error('JOB: pattern_aggregation: wisdom network aggregation failed:', { jobName: 'JOB', error: String(err) });
+  }
+  logger.info('pattern_aggregation complete', { jobName: 'pattern_aggregation' });
 }
 
 // ─── 14. Story Capture — Event-driven, but checked daily ─────────────────────
 export async function storyCapture(): Promise<void> {
-  console.log('[JOB] story_capture starting');
+  logger.info('story_capture starting', { jobName: 'story_capture' });
   const products = await getAllActiveProducts();
   for (const row of products.rows) {
     const p = row as Record<string, string>;
@@ -364,12 +394,12 @@ export async function storyCapture(): Promise<void> {
         [nanoid(), p.id, `Risk Transition: ${tr.reasoning}`, tr.reasoning as string]);
     }
   }
-  console.log('[JOB] story_capture complete');
+  logger.info('story_capture complete', { jobName: 'story_capture' });
 }
 
 // ─── 15. Founder Pattern Synthesis — Sunday 7:00 UTC ──────────────────────────
 export async function founderPatternSynthesis(): Promise<void> {
-  console.log('[JOB] founder_pattern_synthesis starting');
+  logger.info('founder_pattern_synthesis starting', { jobName: 'founder_pattern_synthesis' });
   const products = await getAllActiveProducts();
   for (const row of products.rows) {
     const p = row as Record<string, string>;
@@ -388,17 +418,17 @@ export async function founderPatternSynthesis(): Promise<void> {
       if (cnt < 3) continue;
 
       await synthesizeJudgmentPatterns(p.id, p.owner_id);
-      console.log(`[JOB] founder_pattern_synthesis: ${p.name} — patterns synthesized`);
+      logger.info(`founder_pattern_synthesis: ${p.name} — patterns synthesized`, { jobName: 'founder_pattern_synthesis' });
     } catch (err) {
-      console.error(`[JOB] founder_pattern_synthesis error for ${p.id}:`, err);
+      logger.error(`founder_pattern_synthesis error for ${p.id}:`, { jobName: 'founder_pattern_synthesis', error: String(err) });
     }
   }
-  console.log('[JOB] founder_pattern_synthesis complete');
+  logger.info('founder_pattern_synthesis complete', { jobName: 'founder_pattern_synthesis' });
 }
 
 // ─── 16. DNA Completion Nudge — Wednesday 8:00 UTC ────────────────────────────
 export async function dnaCompletionNudge(): Promise<void> {
-  console.log('[JOB] dna_completion_nudge starting');
+  logger.info('dna_completion_nudge starting', { jobName: 'dna_completion_nudge' });
   const products = await query(
     `SELECT p.id, p.name, p.owner_id, p.created_at, f.email
      FROM products p
@@ -435,17 +465,17 @@ export async function dnaCompletionNudge(): Promise<void> {
         `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'dna_completion_nudge', ?, ?)`,
         [nanoid(), p.id, JSON.stringify({ completion_pct: completionPct }), new Date().toISOString()]
       );
-      console.log(`[JOB] dna_completion_nudge: nudged ${p.name} (${completionPct}%)`);
+      logger.info(`dna_completion_nudge: nudged ${p.name} (${completionPct}%)`, { jobName: 'dna_completion_nudge' });
     } catch (err) {
-      console.error(`[JOB] dna_completion_nudge error for ${p.id}:`, err);
+      logger.error(`dna_completion_nudge error for ${p.id}:`, { jobName: 'dna_completion_nudge', error: String(err) });
     }
   }
-  console.log('[JOB] dna_completion_nudge complete');
+  logger.info('dna_completion_nudge complete', { jobName: 'dna_completion_nudge' });
 }
 
 // ─── 17. Remediation Outcome Check — Daily 9:00 UTC ───────────────────────────
 export async function remediationOutcomeCheck(): Promise<void> {
-  console.log('[JOB] remediation_outcome_check starting');
+  logger.info('remediation_outcome_check starting', { jobName: 'remediation_outcome_check' });
   const openPRs = await query(
     `SELECT rp.*, p.github_repo_owner, p.github_repo_name, p.github_access_token
      FROM remediation_prs rp
@@ -477,7 +507,7 @@ export async function remediationOutcomeCheck(): Promise<void> {
           pr.blocking_issue_dimension as string,
           pr.id as string
         );
-        console.log(`[JOB] remediation_outcome_check: PR #${prNumber} merged, re-audit triggered`);
+        logger.info(`remediation_outcome_check: PR #${prNumber} merged, re-audit triggered`, { jobName: 'remediation_outcome_check' });
         continue;
       }
 
@@ -488,7 +518,7 @@ export async function remediationOutcomeCheck(): Promise<void> {
           `UPDATE remediation_prs SET status = 'rejected', resolved_at = ?, rejection_reason = 'PR closed without merge' WHERE id = ?`,
           [new Date().toISOString(), pr.id]
         );
-        console.log(`[JOB] remediation_outcome_check: PR #${prNumber} rejected`);
+        logger.info(`remediation_outcome_check: PR #${prNumber} rejected`, { jobName: 'remediation_outcome_check' });
         continue;
       }
 
@@ -502,33 +532,33 @@ export async function remediationOutcomeCheck(): Promise<void> {
         );
       }
     } catch (err) {
-      console.error(`[JOB] remediation_outcome_check error for PR ${pr.id}:`, err);
+      logger.error(`remediation_outcome_check error for PR ${pr.id}:`, { jobName: 'remediation_outcome_check', error: String(err) });
     }
   }
-  console.log('[JOB] remediation_outcome_check complete');
+  logger.info('remediation_outcome_check complete', { jobName: 'remediation_outcome_check' });
 }
 
 // ─── 18. Milestone Check — Daily 8:00 UTC ─────────────────────────────────────
 export async function milestoneCheck(): Promise<void> {
-  console.log('[JOB] milestone_check starting');
+  logger.info('milestone_check starting', { jobName: 'milestone_check' });
   const products = await getAllActiveProducts();
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
       const awarded = await checkAndAwardMilestones(p.id, p.owner_id);
       if (awarded.length > 0) {
-        console.log(`[JOB] milestone_check: ${p.name} — ${awarded.length} new milestones`);
+        logger.info(`milestone_check: ${p.name} — ${awarded.length} new milestones`, { jobName: 'milestone_check' });
       }
     } catch (err) {
-      console.error(`[JOB] milestone_check error for ${p.id}:`, err);
+      logger.error(`milestone_check error for ${p.id}:`, { jobName: 'milestone_check', error: String(err) });
     }
   }
-  console.log('[JOB] milestone_check complete');
+  logger.info('milestone_check complete', { jobName: 'milestone_check' });
 }
 
 // ─── 19. Nav Badge Refresh — Every 6 hours ────────────────────────────────────
 export async function navBadgeRefresh(): Promise<void> {
-  console.log('[JOB] nav_badge_refresh starting');
+  logger.info('nav_badge_refresh starting', { jobName: 'nav_badge_refresh' });
   const products = await getAllActiveProducts();
   for (const row of products.rows) {
     const p = row as Record<string, string>;
@@ -561,10 +591,10 @@ export async function navBadgeRefresh(): Promise<void> {
         [pendingCount, auditAgeDays, unreadCount, openPRCount, unseenCount, dnaCompletion, p.id],
       );
     } catch (err) {
-      console.error(`[JOB] nav_badge_refresh error for ${p.id}:`, err);
+      logger.error(`nav_badge_refresh error for ${p.id}:`, { jobName: 'nav_badge_refresh', error: String(err) });
     }
   }
-  console.log('[JOB] nav_badge_refresh complete');
+  logger.info('nav_badge_refresh complete', { jobName: 'nav_badge_refresh' });
 }
 
 // ─── 20. Signal Alert Check — Every 2 hours ───────────────────────────────────
@@ -573,7 +603,7 @@ import { computeSignal } from '../services/signal.js';
 import { createNotification } from '../services/ux/notifications.js';
 
 export async function signalAlertCheck(): Promise<void> {
-  console.log('[JOB] signal_alert_check starting');
+  logger.info('signal_alert_check starting', { jobName: 'signal_alert_check' });
   const products = await getAllActiveProducts();
 
   for (const row of products.rows) {
@@ -620,19 +650,19 @@ export async function signalAlertCheck(): Promise<void> {
           : `${p.name} Signal dropped from ${prevScore} to ${signal.score} in the last 24 hours.`;
 
         await createNotification(p.owner_id, p.id, 'signal_alert', title, body, '/dashboard', 'View Signal');
-        console.log(`[JOB] signal_alert_check: alert created for ${p.name} — drop ${drop}pts, tier: ${prevTier} → ${signal.tier}`);
+        logger.info(`signal_alert_check: alert created for ${p.name} — drop ${drop}pts, tier: ${prevTier} → ${signal.tier}`, { jobName: 'signal_alert_check' });
       }
     } catch (err) {
-      console.error(`[JOB] signal_alert_check error for ${p.id}:`, err);
+      logger.error(`signal_alert_check error for ${p.id}:`, { jobName: 'signal_alert_check', error: String(err) });
     }
   }
-  console.log('[JOB] signal_alert_check complete');
+  logger.info('signal_alert_check complete', { jobName: 'signal_alert_check' });
 }
 
 // ─── 21. Decision Follow-up — Daily 10:00 UTC ─────────────────────────────────
 
 export async function decisionFollowUp(): Promise<void> {
-  console.log('[JOB] decision_follow_up starting');
+  logger.info('decision_follow_up starting', { jobName: 'decision_follow_up' });
 
   const overdue = await query(
     `SELECT d.id, d.what, d.product_id, d.chosen_option, p.owner_id, p.name as product_name
@@ -674,12 +704,12 @@ export async function decisionFollowUp(): Promise<void> {
         [d.id],
       );
 
-      console.log(`[JOB] decision_follow_up: notified for decision ${d.id} (${d.what})`);
+      logger.info(`decision_follow_up: notified for decision ${d.id} (${d.what})`, { jobName: 'decision_follow_up' });
     } catch (err) {
-      console.error(`[JOB] decision_follow_up error for decision ${d.id}:`, err);
+      logger.error(`decision_follow_up error for decision ${d.id}:`, { jobName: 'decision_follow_up', error: String(err) });
     }
   }
-  console.log('[JOB] decision_follow_up complete');
+  logger.info('decision_follow_up complete', { jobName: 'decision_follow_up' });
 }
 
 // ─── 22. Daily Insight Generate — Daily 7:30 UTC ──────────────────────────────
@@ -687,7 +717,7 @@ export async function decisionFollowUp(): Promise<void> {
 import { getPreviousSignalScore } from '../services/signal.js';
 
 export async function dailyInsightGenerate(): Promise<void> {
-  console.log('[JOB] daily_insight_generate starting');
+  logger.info('daily_insight_generate starting', { jobName: 'daily_insight_generate' });
   const products = await getAllActiveProducts();
 
   for (const row of products.rows) {
@@ -756,13 +786,13 @@ Return JSON only, no markdown:
            ON CONFLICT(product_id, insight_date) DO NOTHING`,
           [nid(), p.id, insight.headline, insight.context, insight.action ?? null],
         );
-        console.log(`[JOB] daily_insight_generate: generated for ${p.name} — "${insight.headline}"`);
+        logger.info(`daily_insight_generate: generated for ${p.name} — "${insight.headline}"`, { jobName: 'daily_insight_generate' });
       }
     } catch (err) {
-      console.error(`[JOB] daily_insight_generate error for ${p.id}:`, err);
+      logger.error(`daily_insight_generate error for ${p.id}:`, { jobName: 'daily_insight_generate', error: String(err) });
     }
   }
-  console.log('[JOB] daily_insight_generate complete');
+  logger.info('daily_insight_generate complete', { jobName: 'daily_insight_generate' });
 }
 
 // ─── 23. Weekly Plan Generate — Monday 8:00 UTC ───────────────────────────────
@@ -777,7 +807,7 @@ function isoWeek(date: Date): string {
 }
 
 export async function weeklyPlanGenerate(): Promise<void> {
-  console.log('[JOB] weekly_plan_generate starting');
+  logger.info('weekly_plan_generate starting', { jobName: 'weekly_plan_generate' });
   const products = await getAllActiveProducts();
   const week = isoWeek(new Date());
 
@@ -830,13 +860,13 @@ Return JSON only:
            ON CONFLICT(product_id, week_of) DO NOTHING`,
           [nanoid(), p.id, week, signal.score, JSON.stringify(items), plan.synthesis ?? null],
         );
-        console.log(`[JOB] weekly_plan_generate: generated for ${p.name}`);
+        logger.info(`weekly_plan_generate: generated for ${p.name}`, { jobName: 'weekly_plan_generate' });
       }
     } catch (err) {
-      console.error(`[JOB] weekly_plan_generate error for ${p.id}:`, err);
+      logger.error(`weekly_plan_generate error for ${p.id}:`, { jobName: 'weekly_plan_generate', error: String(err) });
     }
   }
-  console.log('[JOB] weekly_plan_generate complete');
+  logger.info('weekly_plan_generate complete', { jobName: 'weekly_plan_generate' });
 }
 
 // ─── New Job: Integration Sync ────────────────────────────────────────────────
@@ -849,7 +879,7 @@ export async function integrationSync(): Promise<void> {
 // ─── New Job: Morning Briefings ───────────────────────────────────────────────
 
 export async function morningBriefings(): Promise<void> {
-  console.log('[JOB] morning_briefings starting');
+  logger.info('morning_briefings starting', { jobName: 'morning_briefings' });
   const products = await getAllActiveProducts();
 
   for (const row of products.rows) {
@@ -860,16 +890,16 @@ export async function morningBriefings(): Promise<void> {
       const { generateMorningBriefing } = await import('../services/voice/briefing.js');
       await generateMorningBriefing(p.id, p.owner_id, founderName);
     } catch (err) {
-      console.error(`[JOB] morning_briefings error for ${p.id}:`, err);
+      logger.error(`morning_briefings error for ${p.id}:`, { jobName: 'morning_briefings', error: String(err) });
     }
   }
-  console.log('[JOB] morning_briefings complete');
+  logger.info('morning_briefings complete', { jobName: 'morning_briefings' });
 }
 
 // ─── New Job: Alignment Scores ────────────────────────────────────────────────
 
 export async function alignmentScores(): Promise<void> {
-  console.log('[JOB] alignment_scores starting');
+  logger.info('alignment_scores starting', { jobName: 'alignment_scores' });
   const products = await getAllActiveProducts();
   const { computeAlignmentScore } = await import('../services/team/members.js');
 
@@ -878,16 +908,16 @@ export async function alignmentScores(): Promise<void> {
     try {
       await computeAlignmentScore(p.id);
     } catch (err) {
-      console.error(`[JOB] alignment_scores error for ${p.id}:`, err);
+      logger.error(`alignment_scores error for ${p.id}:`, { jobName: 'alignment_scores', error: String(err) });
     }
   }
-  console.log('[JOB] alignment_scores complete');
+  logger.info('alignment_scores complete', { jobName: 'alignment_scores' });
 }
 
 // ─── New Job: Network Contribution ────────────────────────────────────────────
 
 export async function networkContribution(): Promise<void> {
-  console.log('[JOB] network_contribution starting');
+  logger.info('network_contribution starting', { jobName: 'network_contribution' });
   const products = await getAllActiveProducts();
   const { contributeToNetwork } = await import('../services/network/benchmarks.js');
 
@@ -898,16 +928,16 @@ export async function networkContribution(): Promise<void> {
       const lifecycleStage = (lsResult.rows[0] as Record<string, string> | undefined)?.current_prompt ?? 'prompt_1';
       await contributeToNetwork(p.id, p.market_category ?? null, lifecycleStage);
     } catch (err) {
-      console.error(`[JOB] network_contribution error for ${p.id}:`, err);
+      logger.error(`network_contribution error for ${p.id}:`, { jobName: 'network_contribution', error: String(err) });
     }
   }
-  console.log('[JOB] network_contribution complete');
+  logger.info('network_contribution complete', { jobName: 'network_contribution' });
 }
 
 // ─── New Job: Prediction Accuracy ─────────────────────────────────────────────
 
 export async function predictionAccuracyJob(): Promise<void> {
-  console.log('[JOB] prediction_accuracy starting');
+  logger.info('prediction_accuracy starting', { jobName: 'prediction_accuracy' });
   // Find decisions with outcomes recorded in the last 7 days that haven't been scored
   const decisions = await query(
     `SELECT d.id, d.product_id, d.chosen_option, d.outcome, d.outcome_valence
@@ -935,53 +965,53 @@ export async function predictionAccuracyJob(): Promise<void> {
         null,
       );
     } catch (err) {
-      console.error(`[JOB] prediction_accuracy error for decision ${d.id}:`, err);
+      logger.error(`prediction_accuracy error for decision ${d.id}:`, { jobName: 'prediction_accuracy', error: String(err) });
     }
   }
-  console.log(`[JOB] prediction_accuracy: scored ${decisions.rows.length} decisions`);
+  logger.info(`prediction_accuracy: scored ${decisions.rows.length} decisions`, { jobName: 'prediction_accuracy' });
 }
 
 // ─── SCP Jobs ─────────────────────────────────────────────────────────────────
 
 /** Run all due agents for all active SCP companies — the core heartbeat. */
 export async function scpAgentRunner(): Promise<void> {
-  console.log('[JOB] scp_agent_runner starting');
+  logger.info('scp_agent_runner starting', { jobName: 'scp_agent_runner' });
   try {
     const { runDueAgentsForAllProducts } = await import('../services/scp/scheduler.js');
     await runDueAgentsForAllProducts();
   } catch (err) {
-    console.error('[JOB] scp_agent_runner error:', err);
+    logger.error('JOB: scp_agent_runner error:', { jobName: 'JOB', error: String(err) });
   }
-  console.log('[JOB] scp_agent_runner complete');
+  logger.info('scp_agent_runner complete', { jobName: 'scp_agent_runner' });
 }
 
 /** Generate CEO briefings for all active SCP companies. */
 export async function scpDailyBriefing(): Promise<void> {
-  console.log('[JOB] scp_daily_briefing starting');
+  logger.info('scp_daily_briefing starting', { jobName: 'scp_daily_briefing' });
   try {
     const { generateBriefingsForAllProducts } = await import('../services/scp/scheduler.js');
     await generateBriefingsForAllProducts();
   } catch (err) {
-    console.error('[JOB] scp_daily_briefing error:', err);
+    logger.error('JOB: scp_daily_briefing error:', { jobName: 'JOB', error: String(err) });
   }
-  console.log('[JOB] scp_daily_briefing complete');
+  logger.info('scp_daily_briefing complete', { jobName: 'scp_daily_briefing' });
 }
 
 /** Run evolution synthesis for all active agents across all companies. */
 export async function scpEvolutionCycle(): Promise<void> {
-  console.log('[JOB] scp_evolution_cycle starting');
+  logger.info('scp_evolution_cycle starting', { jobName: 'scp_evolution_cycle' });
   try {
     const { runEvolutionForAllProducts } = await import('../services/scp/scheduler.js');
     await runEvolutionForAllProducts();
   } catch (err) {
-    console.error('[JOB] scp_evolution_cycle error:', err);
+    logger.error('JOB: scp_evolution_cycle error:', { jobName: 'JOB', error: String(err) });
   }
-  console.log('[JOB] scp_evolution_cycle complete');
+  logger.info('scp_evolution_cycle complete', { jobName: 'scp_evolution_cycle' });
 }
 
 /** Update company lifecycle states (setup → learning → operating → ...). */
 export async function scpLifecycleTransition(): Promise<void> {
-  console.log('[JOB] scp_lifecycle_transition starting');
+  logger.info('scp_lifecycle_transition starting', { jobName: 'scp_lifecycle_transition' });
   try {
     const { SCPInstance } = await import('../services/scp/instance.js');
     const products = await getAllActiveProducts();
@@ -992,20 +1022,20 @@ export async function scpLifecycleTransition(): Promise<void> {
           const instance = new SCPInstance(p.id);
           await instance.updateLifecycleState();
         } catch (err) {
-          console.error(`[JOB] scp_lifecycle_transition error for ${p.id}:`, err);
+          logger.error(`scp_lifecycle_transition error for ${p.id}:`, { jobName: 'scp_lifecycle_transition', error: String(err) });
         }
       }
     }
   } catch (err) {
-    console.error('[JOB] scp_lifecycle_transition error:', err);
+    logger.error('JOB: scp_lifecycle_transition error:', { jobName: 'JOB', error: String(err) });
   }
-  console.log('[JOB] scp_lifecycle_transition complete');
+  logger.info('scp_lifecycle_transition complete', { jobName: 'scp_lifecycle_transition' });
 }
 
 // ─── SCP Remediation Sync — Daily 8:00 UTC ───────────────────────────────────
 
 export async function scpRemediationSync(): Promise<void> {
-  console.log('[SCP] Remediation sync starting');
+  logger.info('scp_remediation_sync starting', { jobName: 'scp_remediation_sync' });
   try {
     const { getRemediationSummary } = await import('../services/scp/remediation.js');
     const products = await getAllActiveProducts();
@@ -1014,16 +1044,16 @@ export async function scpRemediationSync(): Promise<void> {
       try {
         const summary = await getRemediationSummary(p.id);
         if (summary.open > 0) {
-          console.log(`[SCP] ${p.name}: ${summary.open} open remediations (critical:${summary.critical}, high:${summary.high})`);
+          logger.info(`scp_remediation_sync: ${p.name}: ${summary.open} open remediations (critical:${summary.critical}, high:${summary.high})`, { jobName: 'scp_remediation_sync' });
         }
       } catch {
         // Non-fatal per product
       }
     }
   } catch (err) {
-    console.error('[SCP] Remediation sync error:', err);
+    logger.error('scp_remediation_sync: Remediation sync error:', { jobName: 'scp_remediation_sync', error: String(err) });
   }
-  console.log('[SCP] Remediation sync complete');
+  logger.info('scp_remediation_sync complete', { jobName: 'scp_remediation_sync' });
 }
 
 // ─── SCP Temporal Analysis — Monday 5:00 UTC ─────────────────────────────────
@@ -1039,10 +1069,10 @@ async function scpTemporalAnalysis(): Promise<void> {
       const timeline = await getSignalTimeline(p.id, 90);
       if (timeline.length >= 7) {
         await analyzeTemporalTrends(p.id, timeline);
-        console.log(`[temporal] Analyzed ${p.id}: ${timeline.length} data points`);
+        logger.info(`temporal: Analyzed ${p.id}: ${timeline.length} data points`, { jobName: 'temporal' });
       }
     } catch (err) {
-      console.error(`[temporal] Failed for ${p.id}:`, err);
+      logger.error(`temporal: Failed for ${p.id}:`, { jobName: 'temporal', error: String(err) });
     }
   }
 }
@@ -1065,7 +1095,7 @@ async function scpCostReport(): Promise<void> {
       [r.total_cost as number ?? 0, r.product_id as string]
     );
   }
-  console.log(`[cost-report] Updated 30d costs for ${costData.rows.length} products`);
+  logger.info(`cost_report: Updated 30d costs for ${costData.rows.length} products`, { jobName: 'cost_report' });
 }
 
 // ─── SCP Wisdom Synthesis — Sunday 3:00 UTC ───────────────────────────────────
@@ -1080,7 +1110,7 @@ async function scpWisdomSynthesis(): Promise<void> {
     try {
       await synthesizeWisdomPatterns(p.id);
     } catch (err) {
-      console.error(`[wisdom] synthesis failed for ${p.id}:`, err);
+      logger.error(`wisdom: synthesis failed for ${p.id}:`, { jobName: 'wisdom', error: String(err) });
     }
   }
 }
@@ -1098,7 +1128,7 @@ async function scpIntelligenceBenchmarks(): Promise<void> {
 async function scpDNANudge(): Promise<void> {
   // Daily: nudge founders whose DNA completion < 60% to fill in more context
   // This gives agents better context for their analyses
-  console.log('[JOB] scp_dna_nudge starting');
+  logger.info('scp_dna_nudge starting', { jobName: 'scp_dna_nudge' });
   const { query: dbQuery } = await import('../db/client.js');
   const incompleteProducts = await dbQuery(
     `SELECT p.id, p.name, f.email
@@ -1108,15 +1138,15 @@ async function scpDNANudge(): Promise<void> {
        AND p.company_lifecycle_state IN ('setup', 'learning')
      LIMIT 50`
   );
-  console.log(`[dna-nudge] Found ${incompleteProducts.rows.length} products in early lifecycle`);
+  logger.info(`dna_nudge: Found ${incompleteProducts.rows.length} products in early lifecycle`, { jobName: 'dna_nudge' });
   // In production: send email nudge via notification service
-  console.log('[JOB] scp_dna_nudge complete');
+  logger.info('scp_dna_nudge complete', { jobName: 'scp_dna_nudge' });
 }
 
 // ─── SCP v3: Lifecycle Rules — Every 4h ──────────────────────────────────────
 
 async function scpLifecycleRules(): Promise<void> {
-  console.log('[JOB] scp_lifecycle_rules starting');
+  logger.info('scp_lifecycle_rules starting', { jobName: 'scp_lifecycle_rules' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
     `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
@@ -1127,13 +1157,13 @@ async function scpLifecycleRules(): Promise<void> {
     const { rules_triggered } = await evaluateLifecycleRules((row as Record<string, unknown>).id as string);
     totalTriggered += rules_triggered;
   }
-  console.log(`[scp_lifecycle_rules] ${totalTriggered} rules triggered across ${products.rows.length} products`);
+  logger.info(`scp_lifecycle_rules: ${totalTriggered} rules triggered across ${products.rows.length} products`, { jobName: 'scp_lifecycle_rules' });
 }
 
 // ─── SCP v3: AI P&L Update — Daily 1:00 UTC ──────────────────────────────────
 
 async function scpPLUpdate(): Promise<void> {
-  console.log('[JOB] scp_pl_update starting');
+  logger.info('scp_pl_update starting', { jobName: 'scp_pl_update' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
     `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
@@ -1148,13 +1178,13 @@ async function scpPLUpdate(): Promise<void> {
       [pl.costs.total_usd, pl.revenue.total_usd, productId]
     );
   }
-  console.log(`[scp_pl_update] Updated P&L for ${products.rows.length} products`);
+  logger.info(`scp_pl_update: Updated P&L for ${products.rows.length} products`, { jobName: 'scp_pl_update' });
 }
 
 // ─── SCP v3: Monthly Strategy Synthesis — 1st of month ───────────────────────
 
 async function scpStrategySynthesis(): Promise<void> {
-  console.log('[JOB] scp_strategy_synthesis starting');
+  logger.info('scp_strategy_synthesis starting', { jobName: 'scp_strategy_synthesis' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
     `SELECT id FROM products WHERE scp_status = 'active' AND company_lifecycle_state NOT IN ('setup') LIMIT 50`
@@ -1166,16 +1196,16 @@ async function scpStrategySynthesis(): Promise<void> {
       await generateStrategicSynthesis((row as Record<string, unknown>).id as string);
       generated++;
     } catch (err) {
-      console.error(`[scp_strategy_synthesis] Failed for ${(row as Record<string, unknown>).id}:`, err);
+      logger.error(`scp_strategy_synthesis: Failed for ${(row as Record<string, unknown>).id}`, { jobName: 'scp_strategy_synthesis', error: String(err) });
     }
   }
-  console.log(`[scp_strategy_synthesis] Generated ${generated} syntheses`);
+  logger.info(`scp_strategy_synthesis: Generated ${generated} syntheses`, { jobName: 'scp_strategy_synthesis' });
 }
 
 // ─── SCP v3: Integration Fabric Sync — Every Hour ────────────────────────────
 
 async function scpIntegrationFabricSync(): Promise<void> {
-  console.log('[JOB] scp_integration_fabric_sync starting');
+  logger.info('scp_integration_fabric_sync starting', { jobName: 'scp_integration_fabric_sync' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
     `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
@@ -1198,13 +1228,13 @@ async function scpIntegrationFabricSync(): Promise<void> {
     } catch { /* non-fatal per product */ }
   }
 
-  console.log(`[scp_integration_fabric_sync] PostHog: ${posthogSynced} events, GitHub: ${githubSynced} events`);
+  logger.info(`scp_integration_fabric_sync: PostHog: ${posthogSynced} events, GitHub: ${githubSynced} events`, { jobName: 'scp_integration_fabric_sync' });
 }
 
 // ─── SCP v4: Extended Integrations Sync — Every 2h ───────────────────────────
 
 async function scpExtendedIntegrationsSync(): Promise<void> {
-  console.log('[JOB] scp_extended_integrations_sync starting');
+  logger.info('scp_extended_integrations_sync starting', { jobName: 'scp_extended_integrations_sync' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
 
@@ -1233,13 +1263,13 @@ async function scpExtendedIntegrationsSync(): Promise<void> {
       total += synced;
     } catch { /* non-fatal per product */ }
   }
-  console.log(`[scp_extended_integrations_sync] Synced ${total} events across ${products.rows.length} products`);
+  logger.info(`scp_extended_integrations_sync: Synced ${total} events across ${products.rows.length} products`, { jobName: 'scp_extended_integrations_sync' });
 }
 
 // ─── SCP v4: Benchmark Refresh — Sunday 3:00 UTC ────────────────────────────
 
 async function scpBenchmarkRefresh(): Promise<void> {
-  console.log('[JOB] scp_benchmark_refresh starting');
+  logger.info('scp_benchmark_refresh starting', { jobName: 'scp_benchmark_refresh' });
   try {
     const { refreshPercentiles, submitBenchmark } = await import('../services/benchmarking/pool.js');
     const { query: dbQuery } = await import('../db/client.js');
@@ -1273,16 +1303,16 @@ async function scpBenchmarkRefresh(): Promise<void> {
     }
 
     await refreshPercentiles();
-    console.log(`[scp_benchmark_refresh] Refreshed percentiles for ${products.rows.length} contributions`);
+    logger.info(`scp_benchmark_refresh: Refreshed percentiles for ${products.rows.length} contributions`, { jobName: 'scp_benchmark_refresh' });
   } catch (err) {
-    console.error('[scp_benchmark_refresh] Error:', err);
+    logger.error('scp_benchmark_refresh: Error:', { jobName: 'scp_benchmark_refresh', error: String(err) });
   }
 }
 
 // ─── SCP v4: Decision Retrospectives — Monday 9:00 UTC ───────────────────────
 
 async function scpDecisionRetrospectives(): Promise<void> {
-  console.log('[JOB] scp_decision_retrospectives starting');
+  logger.info('scp_decision_retrospectives starting', { jobName: 'scp_decision_retrospectives' });
   try {
     const { getDecisionsDueForRetrospective } = await import('../services/scp/decision-log.js');
     const { query: dbQuery } = await import('../db/client.js');
@@ -1307,16 +1337,16 @@ async function scpDecisionRetrospectives(): Promise<void> {
       );
       notified++;
     }
-    console.log(`[scp_decision_retrospectives] Notified ${notified} products`);
+    logger.info(`scp_decision_retrospectives: Notified ${notified} products`, { jobName: 'scp_decision_retrospectives' });
   } catch (err) {
-    console.error('[scp_decision_retrospectives] Error:', err);
+    logger.error('scp_decision_retrospectives: Error:', { jobName: 'scp_decision_retrospectives', error: String(err) });
   }
 }
 
 // ─── SCP v4: Wellbeing Focus Cleanup — Daily midnight ────────────────────────
 
 async function scpWellbeingFocusCleanup(): Promise<void> {
-  console.log('[JOB] scp_wellbeing_focus_cleanup starting');
+  logger.info('scp_wellbeing_focus_cleanup starting', { jobName: 'scp_wellbeing_focus_cleanup' });
   try {
     const { query: dbQuery } = await import('../db/client.js');
     // Clear expired focus areas
@@ -1331,32 +1361,32 @@ async function scpWellbeingFocusCleanup(): Promise<void> {
     await dbQuery(
       `DELETE FROM decision_snooze_log WHERE snoozed_until <= datetime('now')`
     );
-    console.log('[scp_wellbeing_focus_cleanup] Cleaned up expired focus and snooze records');
+    logger.info('scp_wellbeing_focus_cleanup: Cleaned up expired focus and snooze records', { jobName: 'scp_wellbeing_focus_cleanup' });
   } catch (err) {
-    console.error('[scp_wellbeing_focus_cleanup] Error:', err);
+    logger.error('scp_wellbeing_focus_cleanup: Error:', { jobName: 'scp_wellbeing_focus_cleanup', error: String(err) });
   }
 }
 
 // ─── SCP v4: Webhook Delivery Cleanup — Sunday 4:00 UTC ─────────────────────
 
 async function scpWebhookDeliveryCleanup(): Promise<void> {
-  console.log('[JOB] scp_webhook_delivery_cleanup starting');
+  logger.info('scp_webhook_delivery_cleanup starting', { jobName: 'scp_webhook_delivery_cleanup' });
   try {
     const { query: dbQuery } = await import('../db/client.js');
     // Keep last 30 days of delivery records, delete older ones
     const result = await dbQuery(
       `DELETE FROM webhook_deliveries WHERE created_at < datetime('now', '-30 days')`
     );
-    console.log(`[scp_webhook_delivery_cleanup] Cleaned up old webhook delivery records`);
+    logger.info(`scp_webhook_delivery_cleanup: Cleaned up old webhook delivery records`, { jobName: 'scp_webhook_delivery_cleanup' });
   } catch (err) {
-    console.error('[scp_webhook_delivery_cleanup] Error:', err);
+    logger.error('scp_webhook_delivery_cleanup: Error:', { jobName: 'scp_webhook_delivery_cleanup', error: String(err) });
   }
 }
 
 // ─── SCP v5: Prediction Accuracy Check — Daily 6:00 UTC ──────────────────────
 
 async function scpPredictionAccuracyCheck(): Promise<void> {
-  console.log('[JOB] scp_prediction_accuracy starting');
+  logger.info('scp_prediction_accuracy starting', { jobName: 'scp_prediction_accuracy' });
   try {
     const { measurePendingPredictions } = await import('../services/scp/accuracy/tracker.js');
     const { query: dbQuery } = await import('../db/client.js');
@@ -1369,16 +1399,16 @@ async function scpPredictionAccuracyCheck(): Promise<void> {
         totalMeasured += result.measured;
       } catch { /* non-fatal per product */ }
     }
-    console.log(`[scp_prediction_accuracy] Measured ${totalMeasured} predictions`);
+    logger.info(`scp_prediction_accuracy: Measured ${totalMeasured} predictions`, { jobName: 'scp_prediction_accuracy' });
   } catch (err) {
-    console.error('[scp_prediction_accuracy] Error:', err);
+    logger.error('scp_prediction_accuracy: Error:', { jobName: 'scp_prediction_accuracy', error: String(err) });
   }
 }
 
 // ─── SCP v5: Compressed Brief — Monday 7:00 UTC ───────────────────────────────
 
 async function scpCompressedBrief(): Promise<void> {
-  console.log('[JOB] scp_compressed_brief starting');
+  logger.info('scp_compressed_brief starting', { jobName: 'scp_compressed_brief' });
   try {
     const { generateCompressedWeeklyBrief } = await import('../services/scp/briefing/compressed.js');
     const { query: dbQuery } = await import('../db/client.js');
@@ -1391,16 +1421,16 @@ async function scpCompressedBrief(): Promise<void> {
         generated++;
       } catch { /* non-fatal per product */ }
     }
-    console.log(`[scp_compressed_brief] Generated ${generated} compressed briefs`);
+    logger.info(`scp_compressed_brief: Generated ${generated} compressed briefs`, { jobName: 'scp_compressed_brief' });
   } catch (err) {
-    console.error('[scp_compressed_brief] Error:', err);
+    logger.error('scp_compressed_brief: Error:', { jobName: 'scp_compressed_brief', error: String(err) });
   }
 }
 
 // ─── SCP v5: Scenario Refresh — Monday 5:00 UTC ───────────────────────────────
 
 async function scpScenarioRefresh(): Promise<void> {
-  console.log('[JOB] scp_scenario_refresh starting');
+  logger.info('scp_scenario_refresh starting', { jobName: 'scp_scenario_refresh' });
   try {
     const { generateScenariosForProduct } = await import('../services/scp/forecasting/runway.js');
     const { query: dbQuery } = await import('../db/client.js');
@@ -1415,16 +1445,16 @@ async function scpScenarioRefresh(): Promise<void> {
         generated++;
       } catch { /* non-fatal per product */ }
     }
-    console.log(`[scp_scenario_refresh] Generated scenarios for ${generated} products`);
+    logger.info(`scp_scenario_refresh: Generated scenarios for ${generated} products`, { jobName: 'scp_scenario_refresh' });
   } catch (err) {
-    console.error('[scp_scenario_refresh] Error:', err);
+    logger.error('scp_scenario_refresh: Error:', { jobName: 'scp_scenario_refresh', error: String(err) });
   }
 }
 
 // ─── SCP v6: Debate, Failure Pattern Scan, Prompt Evolution ──────────────────
 
 async function scpDebateRun(): Promise<void> {
-  console.log('[JOB] scp_debate_run starting');
+  logger.info('scp_debate_run starting', { jobName: 'scp_debate_run' });
   try {
     const { query } = await import('../db/client.js');
     const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
@@ -1438,14 +1468,14 @@ async function scpDebateRun(): Promise<void> {
         ran++;
       } catch { /* non-fatal per product */ }
     }
-    console.log(`[scp_debate_run] Ran debate for ${ran} products`);
+    logger.info(`scp_debate_run: Ran debate for ${ran} products`, { jobName: 'scp_debate_run' });
   } catch (err) {
-    console.error('[scp_debate_run] Error:', err);
+    logger.error('scp_debate_run: Error:', { jobName: 'scp_debate_run', error: String(err) });
   }
 }
 
 async function scpFailurePatternScan(): Promise<void> {
-  console.log('[JOB] scp_failure_pattern_scan starting');
+  logger.info('scp_failure_pattern_scan starting', { jobName: 'scp_failure_pattern_scan' });
   try {
     const { query } = await import('../db/client.js');
     const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
@@ -1459,14 +1489,14 @@ async function scpFailurePatternScan(): Promise<void> {
         scanned++;
       } catch { /* non-fatal */ }
     }
-    console.log(`[scp_failure_pattern_scan] Scanned ${scanned} products`);
+    logger.info(`scp_failure_pattern_scan: Scanned ${scanned} products`, { jobName: 'scp_failure_pattern_scan' });
   } catch (err) {
-    console.error('[scp_failure_pattern_scan] Error:', err);
+    logger.error('scp_failure_pattern_scan: Error:', { jobName: 'scp_failure_pattern_scan', error: String(err) });
   }
 }
 
 async function scpPromptEvolution(): Promise<void> {
-  console.log('[JOB] scp_prompt_evolution starting');
+  logger.info('scp_prompt_evolution starting', { jobName: 'scp_prompt_evolution' });
   try {
     const { query } = await import('../db/client.js');
     const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
@@ -1480,14 +1510,14 @@ async function scpPromptEvolution(): Promise<void> {
         evolved++;
       } catch { /* non-fatal */ }
     }
-    console.log(`[scp_prompt_evolution] Processed ${evolved} products`);
+    logger.info(`scp_prompt_evolution: Processed ${evolved} products`, { jobName: 'scp_prompt_evolution' });
   } catch (err) {
-    console.error('[scp_prompt_evolution] Error:', err);
+    logger.error('scp_prompt_evolution: Error:', { jobName: 'scp_prompt_evolution', error: String(err) });
   }
 }
 
 async function scpExecutionPlaybookEval(): Promise<void> {
-  console.log('[JOB] scp_playbook_eval starting');
+  logger.info('scp_playbook_eval starting', { jobName: 'scp_playbook_eval' });
   try {
     const { query } = await import('../db/client.js');
     const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
@@ -1500,16 +1530,16 @@ async function scpExecutionPlaybookEval(): Promise<void> {
         triggered += result.triggered;
       } catch { /* non-fatal */ }
     }
-    console.log(`[scp_playbook_eval] Triggered ${triggered} playbook actions`);
+    logger.info(`scp_playbook_eval: Triggered ${triggered} playbook actions`, { jobName: 'scp_playbook_eval' });
   } catch (err) {
-    console.error('[scp_playbook_eval] Error:', err);
+    logger.error('scp_playbook_eval: Error:', { jobName: 'scp_playbook_eval', error: String(err) });
   }
 }
 
 // ─── SCP v7: Signal Event Processing — Hourly ────────────────────────────────
 
 async function scpSignalEvents(): Promise<void> {
-  console.log('[JOB] scp_signal_events starting');
+  logger.info('scp_signal_events starting', { jobName: 'scp_signal_events' });
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { processPendingSignalEvents } = await import('../services/scp/events/dispatcher.js');
@@ -1522,38 +1552,40 @@ async function scpSignalEvents(): Promise<void> {
         total += processed;
       } catch { /* non-fatal per product */ }
     }
-    console.log(`[scp_signal_events] Processed ${total} signal events`);
+    logger.info(`scp_signal_events: Processed ${total} signal events`, { jobName: 'scp_signal_events' });
   } catch (err) {
-    console.error('[scp_signal_events] Error:', err);
+    logger.error('scp_signal_events: Error:', { jobName: 'scp_signal_events', error: String(err) });
   }
 }
 
 // ─── SCP v7: Monthly ROI Computation — 1st of month 8:00 UTC ─────────────────
 
 async function scpROIMonthly(): Promise<void> {
-  console.log('[JOB] scp_roi_monthly starting');
+  logger.info('scp_roi_monthly starting', { jobName: 'scp_roi_monthly' });
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { computeMonthlyROI } = await import('../services/scp/roi/calculator.js');
     const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let computed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
-        await computeMonthlyROI(productId);
+        await computeMonthlyROI(productId, month);
         computed++;
       } catch { /* non-fatal per product */ }
     }
-    console.log(`[scp_roi_monthly] Computed ROI for ${computed} products`);
+    logger.info(`scp_roi_monthly: Computed ROI for ${computed} products`, { jobName: 'scp_roi_monthly' });
   } catch (err) {
-    console.error('[scp_roi_monthly] Error:', err);
+    logger.error('scp_roi_monthly: Error:', { jobName: 'scp_roi_monthly', error: String(err) });
   }
 }
 
 // ─── SCP v7: Founder State Assessment — Daily 7:00 UTC ───────────────────────
 
 async function scpFounderStateAssessment(): Promise<void> {
-  console.log('[JOB] scp_founder_state starting');
+  logger.info('scp_founder_state starting', { jobName: 'scp_founder_state' });
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { detectBehavioralSignals, assessFounderState } = await import('../services/scp/founder/decision-quality.js');
@@ -1572,16 +1604,16 @@ async function scpFounderStateAssessment(): Promise<void> {
         assessed++;
       } catch { /* non-fatal per founder */ }
     }
-    console.log(`[scp_founder_state] Assessed ${assessed} founders`);
+    logger.info(`scp_founder_state: Assessed ${assessed} founders`, { jobName: 'scp_founder_state' });
   } catch (err) {
-    console.error('[scp_founder_state] Error:', err);
+    logger.error('scp_founder_state: Error:', { jobName: 'scp_founder_state', error: String(err) });
   }
 }
 
 // ─── SCP v7: Priority Queue Rebuild — Every 30 minutes ───────────────────────
 
 async function scpPriorityRebuild(): Promise<void> {
-  console.log('[JOB] scp_priority_rebuild starting');
+  logger.info('scp_priority_rebuild starting', { jobName: 'scp_priority_rebuild' });
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { rebuildPriorityQueue } = await import('../services/scp/priority/ranker.js');
@@ -1594,10 +1626,168 @@ async function scpPriorityRebuild(): Promise<void> {
         total += inserted;
       } catch { /* non-fatal per product */ }
     }
-    console.log(`[scp_priority_rebuild] Rebuilt ${total} priority actions`);
+    logger.info(`scp_priority_rebuild: Rebuilt ${total} priority actions`, { jobName: 'scp_priority_rebuild' });
   } catch (err) {
-    console.error('[scp_priority_rebuild] Error:', err);
+    logger.error('scp_priority_rebuild: Error:', { jobName: 'scp_priority_rebuild', error: String(err) });
   }
+}
+
+// ─── 20. Growth Stage Detection — Daily 5:30 UTC ─────────────────────────────
+export async function stageDetection(): Promise<void> {
+  logger.info('stage_detection starting', { jobName: 'stage_detection' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const detected = await detectGrowthStage(p.id);
+      const current = p.growth_stage ?? 'pre_launch';
+      if (detected !== current) {
+        await updateGrowthStage(p.id, detected);
+        logger.info(`stage_detection: ${p.name} ${current} → ${detected}`, { jobName: 'stage_detection' });
+      }
+    } catch (err) {
+      logger.error(`stage_detection error for ${p.id}:`, { jobName: 'stage_detection', error: String(err) });
+    }
+  }
+  logger.info('stage_detection complete', { jobName: 'stage_detection' });
+}
+
+// ─── 21. Founder Health Refresh — Daily 6:30 UTC ─────────────────────────────
+export async function founderHealthRefresh(): Promise<void> {
+  logger.info('founder_health_refresh starting', { jobName: 'founder_health_refresh' });
+  const founders = await query('SELECT id FROM founders WHERE tier IS NOT NULL', []);
+  for (const row of founders.rows) {
+    const f = row as Record<string, string>;
+    try {
+      await refreshFounderHealthMetrics(f.id);
+    } catch (err) {
+      logger.error(`founder_health_refresh error for ${f.id}:`, { jobName: 'founder_health_refresh', error: String(err) });
+    }
+  }
+  logger.info('founder_health_refresh complete', { jobName: 'founder_health_refresh' });
+}
+
+// ─── 22. Geopolitical Scan — Sunday 8:00 UTC ─────────────────────────────────
+export async function geopoliticalScan(): Promise<void> {
+  logger.info('geopolitical_scan starting', { jobName: 'geopolitical_scan' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const signals = await scanGeopoliticalRisks(p.id, p.owner_id);
+      if (signals.length > 0) {
+        logger.info(`geopolitical_scan: ${p.name} — ${signals.length} signals detected`, { jobName: 'geopolitical_scan' });
+      }
+    } catch (err) {
+      logger.error(`geopolitical_scan error for ${p.id}:`, { jobName: 'geopolitical_scan', error: String(err) });
+    }
+  }
+  logger.info('geopolitical_scan complete', { jobName: 'geopolitical_scan' });
+}
+
+// ─── 27. Customer Health Refresh — Daily 3:00 UTC ────────────────────────────
+export async function customerHealthRefresh(): Promise<void> {
+  logger.info('customer_health_refresh starting', { jobName: 'customer_health_refresh' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const count = await refreshAllCustomerHealth(p.id);
+      if (count > 0) logger.info(`customer_health_refresh: ${p.name} — ${count} customers refreshed`, { jobName: 'customer_health_refresh' });
+    } catch (err) {
+      logger.error(`customer_health_refresh error for ${p.id}:`, { jobName: 'customer_health_refresh', error: String(err) });
+    }
+  }
+  logger.info('customer_health_refresh complete', { jobName: 'customer_health_refresh' });
+}
+
+// ─── 28. Knowledge Graph Rebuild — Sunday 4:00 UTC ───────────────────────────
+export async function graphRebuild(): Promise<void> {
+  logger.info('graph_rebuild starting', { jobName: 'graph_rebuild' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const graph = await buildProductGraph(p.id);
+      logger.info(`graph_rebuild: ${p.name} — ${graph.entities} entities, ${graph.relationships} relationships`, { jobName: 'graph_rebuild' });
+      if (graph.entities > 5) {
+        const chains = await discoverCausalChains(p.id);
+        if (chains.length > 0) logger.info(`graph_rebuild: ${p.name} — ${chains.length} causal chains discovered`, { jobName: 'graph_rebuild' });
+      }
+    } catch (err) {
+      logger.error(`graph_rebuild error for ${p.id}:`, { jobName: 'graph_rebuild', error: String(err) });
+    }
+  }
+  logger.info('graph_rebuild complete', { jobName: 'graph_rebuild' });
+}
+
+// ─── 29. Portfolio Snapshots — Monday 6:00 UTC ───────────────────────────────
+export async function portfolioSnapshotJob(): Promise<void> {
+  logger.info('portfolio_snapshots starting', { jobName: 'portfolio_snapshots' });
+  const portfolios = await query('SELECT id, name FROM portfolios', []);
+  for (const row of portfolios.rows as unknown as Array<Record<string, string>>) {
+    try {
+      await generatePortfolioSnapshot(row.id);
+      logger.info(`portfolio_snapshots: ${row.name} snapshot generated`, { jobName: 'portfolio_snapshots' });
+    } catch (err) {
+      logger.error(`portfolio_snapshots error for ${row.id}:`, { jobName: 'portfolio_snapshots', error: String(err) });
+    }
+  }
+  logger.info('portfolio_snapshots complete', { jobName: 'portfolio_snapshots' });
+}
+
+// ─── 25. Predictive Intelligence — Wednesday 7:00 UTC ────────────────────────
+export async function predictiveIntelligence(): Promise<void> {
+  logger.info('predictive_intelligence starting', { jobName: 'predictive_intelligence' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const predictions = await generatePredictions(p.id, p.owner_id);
+      if (predictions.length > 0) {
+        logger.info(`predictive_intelligence: ${p.name} — ${predictions.length} predictions`, { jobName: 'predictive_intelligence' });
+      }
+    } catch (err) {
+      logger.error(`predictive_intelligence error for ${p.id}:`, { jobName: 'predictive_intelligence', error: String(err) });
+    }
+  }
+  logger.info('predictive_intelligence complete', { jobName: 'predictive_intelligence' });
+}
+
+// ─── 26. Action Draft Generation — Daily 7:30 UTC ───────────────────────────
+export async function actionDraftGeneration(): Promise<void> {
+  logger.info('action_draft_generation starting', { jobName: 'action_draft_generation' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const count = await generateDraftsForPendingDecisions(p.id, p.owner_id);
+      if (count > 0) {
+        logger.info(`action_draft_generation: ${p.name} — ${count} drafts generated`, { jobName: 'action_draft_generation' });
+      }
+    } catch (err) {
+      logger.error(`action_draft_generation error for ${p.id}:`, { jobName: 'action_draft_generation', error: String(err) });
+    }
+  }
+  logger.info('action_draft_generation complete', { jobName: 'action_draft_generation' });
+}
+
+// ─── 23. Regulatory Scan — Sunday 9:00 UTC ───────────────────────────────────
+export async function regulatoryScan(): Promise<void> {
+  logger.info('regulatory_scan starting', { jobName: 'regulatory_scan' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const changes = await scanRegulatoryChanges(p.id, p.owner_id);
+      if (changes.length > 0) {
+        logger.info(`regulatory_scan: ${p.name} — ${changes.length} changes detected`, { jobName: 'regulatory_scan' });
+      }
+    } catch (err) {
+      logger.error(`regulatory_scan error for ${p.id}:`, { jobName: 'regulatory_scan', error: String(err) });
+    }
+  }
+  logger.info('regulatory_scan complete', { jobName: 'regulatory_scan' });
 }
 
 // ─── Job Registry ─────────────────────────────────────────────────────────────
@@ -1664,4 +1854,13 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_roi_monthly:         { fn: scpROIMonthly,             schedule: '0 8 1 * *',   description: 'Compute monthly ROI summaries for all active products (1st of month 8:00 UTC)' },
   scp_founder_state:       { fn: scpFounderStateAssessment, schedule: '0 7 * * *',   description: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)' },
   scp_priority_rebuild:    { fn: scpPriorityRebuild,        schedule: '*/30 * * * *', description: 'Rebuild priority action queue for One Thing banner (every 30 min)' },
+  stage_detection:    { fn: stageDetection,    schedule: '30 5 * * *',  description: 'Auto-detect product growth stage (daily)' },
+  founder_health_refresh: { fn: founderHealthRefresh, schedule: '30 6 * * *', description: 'Refresh founder health metrics (daily)' },
+  geopolitical_scan: { fn: geopoliticalScan, schedule: '0 8 * * 0', description: 'Scan geopolitical risks (Sunday)' },
+  regulatory_scan: { fn: regulatoryScan, schedule: '0 9 * * 0', description: 'Scan regulatory changes (Sunday)' },
+  predictive_intelligence: { fn: predictiveIntelligence, schedule: '0 7 * * 3', description: 'Generate predictive insights (Wednesday)' },
+  action_draft_generation: { fn: actionDraftGeneration, schedule: '30 7 * * *', description: 'Auto-generate action drafts for pending decisions (daily)' },
+  customer_health_refresh: { fn: customerHealthRefresh, schedule: '0 3 * * *', description: 'Refresh all customer health scores (daily 3am)' },
+  graph_rebuild: { fn: graphRebuild, schedule: '0 4 * * 0', description: 'Rebuild knowledge graph and discover causal chains (Sunday)' },
+  portfolio_snapshots: { fn: portfolioSnapshotJob, schedule: '0 6 * * 1', description: 'Generate portfolio snapshots (Monday)' },
 };

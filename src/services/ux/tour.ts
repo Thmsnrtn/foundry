@@ -51,6 +51,36 @@ export const TOUR_STEPS: TourStep[] = [
     headline: 'Your Weekly Rhythm',
     body_template: 'Foundry runs automatically on a weekly cycle. Friday: synthesis and stressor identification. Sunday: competitive scan. Monday: your digest. Your job is to review decisions, merge PRs, and fill in context as your product evolves. The lifecycle bar tracks your position in the methodology.',
   },
+  {
+    step: 6,
+    target_selector: '.sidebar-nav',
+    headline: 'Navigation',
+    body_template: 'The sidebar organizes everything into sections: Operate (daily), Intelligence (strategic), Product (audit + revenue), Wisdom (your product DNA), and Fixes (automated remediations). Start with the dashboard, then explore as Foundry surfaces insights.',
+  },
+  {
+    step: 7,
+    target_selector: '.card',
+    headline: 'Product DNA',
+    body_template: 'As you fill in your Product DNA — ICP, positioning, objections, voice — Foundry calibrates every audit, recommendation, and fix to your specific product. At 60% completion, the Wisdom Layer activates. This is the single highest-leverage action you can take in Foundry.',
+  },
+  {
+    step: 8,
+    target_selector: '.header-right',
+    headline: 'Settings & Subscription',
+    body_template: 'In Settings, you can manage your subscription, connect additional products, generate share links for investors, and configure metric ingestion. Every feature unlocks more intelligence as your data grows.',
+  },
+  {
+    step: 9,
+    target_selector: '.stressor-report, .empty-state',
+    headline: 'Stressors & Signals',
+    body_template: 'Stressors are forward-looking risk signals — not just "something went wrong" but "something is about to go wrong." They drive your risk state and inform your weekly digest. Resolve them through decisions, and Foundry learns from the outcome.',
+  },
+  {
+    step: 10,
+    target_selector: 'body',
+    headline: 'You\'re Ready',
+    body_template: 'Foundry is now monitoring your product. It will surface stressors, propose decisions, generate your weekly digest, and keep you on the right track. Your next step: complete your Product DNA and review any pending decisions. Welcome aboard.',
+  },
 ];
 
 /**
@@ -111,7 +141,7 @@ export async function completeTour(founderId: string): Promise<void> {
   const now = new Date().toISOString();
   await query(
     'UPDATE onboarding_tour SET completed_at = ?, completed_steps = ? WHERE founder_id = ?',
-    [now, JSON.stringify([1, 2, 3, 4, 5]), founderId],
+    [now, JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), founderId],
   );
   await query(
     'UPDATE founders SET onboarding_completed_at = ? WHERE id = ?',

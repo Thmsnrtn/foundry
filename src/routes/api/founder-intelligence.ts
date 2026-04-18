@@ -1,0 +1,185 @@
+// =============================================================================
+// FOUNDRY — Founder Intelligence API Routes
+// All endpoints require founder authentication (thmsnrtn@gmail.com).
+// =============================================================================
+
+import { Hono } from 'hono';
+import type { AuthEnv } from '../../middleware/auth.js';
+import { query } from '../../db/client.js';
+import {
+  isFounder, getPulse, getMRRIntelligence, getChurnIntelligence,
+  getAutomationHealth, getCustomerHealthOverview, getForecast,
+  generateMorningBriefing, generateDailyDigest, getWellbeing,
+  getActivityTimeline, getGrowthSignals, getAICostData,
+} from '../../services/founder/intelligence.js';
+
+export const founderIntelRoutes = new Hono<AuthEnv>();
+
+// Guard: all routes require founder email
+founderIntelRoutes.use('*', async (c, next) => {
+  const founder = c.get('founder');
+  if (!isFounder(founder.email)) return c.json({ error: 'Forbidden' }, 403);
+  await next();
+});
+
+// ─── Core Intelligence ──────────────────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/intelligence/pulse', async (c) => {
+  const pulse = await getPulse();
+  return c.json(pulse);
+});
+
+founderIntelRoutes.get('/api/founder/intelligence/mrr', async (c) => {
+  const mrr = await getMRRIntelligence();
+  return c.json(mrr);
+});
+
+founderIntelRoutes.get('/api/founder/intelligence/churn', async (c) => {
+  const churn = await getChurnIntelligence();
+  return c.json(churn);
+});
+
+founderIntelRoutes.get('/api/founder/intelligence/automation', async (c) => {
+  const health = await getAutomationHealth();
+  return c.json(health);
+});
+
+founderIntelRoutes.get('/api/founder/intelligence/growth', async (c) => {
+  const growth = await getGrowthSignals();
+  return c.json(growth);
+});
+
+founderIntelRoutes.get('/api/founder/intelligence/ai-cost', async (c) => {
+  const cost = await getAICostData();
+  return c.json(cost);
+});
+
+founderIntelRoutes.get('/api/founder/intelligence/customer-health', async (c) => {
+  const health = await getCustomerHealthOverview();
+  return c.json(health);
+});
+
+founderIntelRoutes.get('/api/founder/intelligence/forecast', async (c) => {
+  const forecast = await getForecast();
+  return c.json(forecast);
+});
+
+// ─── Briefing & Digest ──────────────────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/intelligence/morning-briefing', async (c) => {
+  const briefing = await generateMorningBriefing();
+  return c.json({ briefing });
+});
+
+founderIntelRoutes.post('/api/founder/intelligence/digest/generate', async (c) => {
+  const digest = await generateDailyDigest();
+  return c.json(digest);
+});
+
+// ─── Wellbeing ──────────────────────────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/intelligence/wellbeing', async (c) => {
+  const founder = c.get('founder');
+  const wellbeing = await getWellbeing(founder.id);
+  return c.json(wellbeing);
+});
+
+// ─── Activity ───────────────────────────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/intelligence/activity-timeline', async (c) => {
+  const limit = parseInt(c.req.query('limit') ?? '50');
+  const timeline = await getActivityTimeline(limit);
+  return c.json({ timeline });
+});
+
+// ─── Decisions Inbox ────────────────────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/intelligence/decisions-inbox', async (c) => {
+  const decisions = await query(
+    `SELECT d.*, p.name as product_name FROM decisions d
+     JOIN products p ON d.product_id = p.id
+     WHERE d.status = 'pending'
+     ORDER BY CASE d.category WHEN 'urgent' THEN 1 WHEN 'strategic' THEN 2 WHEN 'product' THEN 3 WHEN 'marketing' THEN 4 ELSE 5 END, d.created_at ASC`,
+    []
+  );
+  return c.json({ decisions: decisions.rows, count: decisions.rows.length });
+});
+
+founderIntelRoutes.post('/api/founder/intelligence/decisions-inbox/:id/approve', async (c) => {
+  const id = c.req.param('id');
+  await query(
+    "UPDATE decisions SET status = 'approved', decided_at = datetime('now'), decided_by = 'founder' WHERE id = ?",
+    [id]
+  );
+  return c.json({ status: 'approved' });
+});
+
+founderIntelRoutes.post('/api/founder/intelligence/decisions-inbox/:id/reject', async (c) => {
+  const id = c.req.param('id');
+  await query(
+    "UPDATE decisions SET status = 'rejected', decided_at = datetime('now'), decided_by = 'founder' WHERE id = ?",
+    [id]
+  );
+  return c.json({ status: 'rejected' });
+});
+
+// ─── Stressor Overview ──────────────────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/intelligence/stressors', async (c) => {
+  const active = await query(
+    `SELECT sh.*, p.name as product_name FROM stressor_history sh
+     JOIN products p ON sh.product_id = p.id
+     WHERE sh.status = 'active'
+     ORDER BY CASE sh.severity WHEN 'critical' THEN 1 WHEN 'elevated' THEN 2 ELSE 3 END`,
+    []
+  );
+  return c.json({ stressors: active.rows });
+});
+
+// ─── Predictions Overview ───────────────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/intelligence/predictions', async (c) => {
+  const predictions = await query(
+    `SELECT pr.*, p.name as product_name FROM predictions pr
+     JOIN products p ON pr.product_id = p.id
+     WHERE pr.status = 'active'
+     ORDER BY pr.probability DESC`,
+    []
+  );
+  return c.json({ predictions: predictions.rows });
+});
+
+// ─── Aggregate Executive Dashboard ──────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/executive-dashboard', async (c) => {
+  const [pulse, mrr, churn, automation, growth, wellbeing, customerHealth, aiCost] = await Promise.all([
+    getPulse(),
+    getMRRIntelligence(),
+    getChurnIntelligence(),
+    getAutomationHealth(),
+    getGrowthSignals(),
+    getWellbeing(c.get('founder').id),
+    getCustomerHealthOverview(),
+    getAICostData(),
+  ]);
+
+  return c.json({
+    pulse, mrr, churn, automation, growth, wellbeing, customer_health: customerHealth, ai_cost: aiCost,
+  });
+});
+
+// ─── Products Overview ──────────────────────────────────────────────────────
+
+founderIntelRoutes.get('/api/founder/intelligence/products', async (c) => {
+  const products = await query(
+    `SELECT p.id, p.name, p.sector_profile, p.growth_stage, p.status, p.created_at,
+            ls.risk_state, ls.current_prompt,
+            (SELECT COUNT(*) FROM stressor_history sh WHERE sh.product_id = p.id AND sh.status = 'active') as active_stressors,
+            (SELECT COUNT(*) FROM decisions d WHERE d.product_id = p.id AND d.status = 'pending') as pending_decisions
+     FROM products p
+     LEFT JOIN lifecycle_state ls ON p.id = ls.product_id
+     WHERE p.status = 'active'
+     ORDER BY p.created_at DESC`, []
+  );
+  return c.json({ products: products.rows });
+});

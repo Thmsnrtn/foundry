@@ -13,6 +13,34 @@ export interface FounderRow {
   cohort_id: string | null;
   created_at: string;
   preferences: string | null; // JSON string
+  lifestyle_mode: number; // SQLite boolean
+  lifestyle_target_mrr: number | null;
+}
+
+export interface FounderHealthRow {
+  id: string;
+  founder_id: string;
+  personal_runway_months: number | null;
+  weekly_hours_available: number | null;
+  immigration_status: string | null;
+  visa_expiry_date: string | null;
+  key_persons: string | null; // JSON string
+  engagement_trend: string;
+  last_login_streak: number;
+  avg_decision_response_hours: number | null;
+  motivation_score: number | null;
+  updated_at: string;
+}
+
+export interface FounderHealthSnapshotRow {
+  id: string;
+  founder_id: string;
+  snapshot_date: string;
+  motivation_score: number | null;
+  engagement_trend: string | null;
+  weekly_hours_available: number | null;
+  personal_runway_months: number | null;
+  created_at: string;
 }
 
 export interface ProductRow {
@@ -28,6 +56,30 @@ export interface ProductRow {
   created_at: string;
   updated_at: string;
   status: string;
+  sector_profile: string | null;
+  growth_stage: string | null;
+  growth_stage_updated_at: string | null;
+  growth_stage_overridden: number; // SQLite boolean
+}
+
+export interface SectorScoringOverrideRow {
+  id: string;
+  sector: string;
+  dimension: string;
+  weight_override: number | null;
+  passing_threshold_override: number | null;
+  critical_findings_override: string | null; // JSON string
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SectorRemediationTemplateRow {
+  id: string;
+  sector: string;
+  dimension: string;
+  tone: string;
+  template_context: string | null; // JSON string
+  created_at: string;
 }
 
 export interface LifecycleStateRow {
@@ -137,6 +189,7 @@ export interface MetricSnapshotRow {
   mrr_health_ratio: number | null;
   custom_metrics: string | null;
   created_at: string;
+  // Added by growth stage detection — total customer count for stage classification
 }
 
 export interface StressorHistoryRow {

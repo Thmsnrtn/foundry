@@ -4,8 +4,9 @@
 
 import { callOpus, parseJSONResponse } from '../ai/client.js';
 import { AUDIT_DIMENSION_WEIGHTS, AUDIT_DIMENSION_NAMES } from '../../types/index.js';
-import type { AuditScoringRequest, ScoringOutput } from '../../types/ai.js';
-import type { WisdomContext } from '../../types/index.js';
+import type { AuditScoringRequest, ScoringOutput, Finding } from '../../types/ai.js';
+import type { WisdomContext, SectorProfile } from '../../types/index.js';
+import { getSectorProfile, getScoringOverrides, buildEffectiveWeights, collectSuppressedFindings, isFindingRelevant, getRemediationTone } from './sector-profiles.js';
 
 const SCORING_SYSTEM_PROMPT = `You are the Foundry Audit Engine. You score software products across 10 dimensions.
 
@@ -38,7 +39,11 @@ Respond in JSON format only:
   "blocking_issues": [{"id": "BLOCK-001", "dimension": "D5", "issue": "...", "evidence": "...", "definition_of_done": "...", "dependencies": []}]
 }`;
 
-export async function scoreAudit(request: AuditScoringRequest, wisdomContext?: WisdomContext): Promise<ScoringOutput> {
+export async function scoreAudit(
+  request: AuditScoringRequest,
+  wisdomContext?: WisdomContext,
+  productId?: string
+): Promise<ScoringOutput> {
   const userPrompt = buildScoringPrompt(request);
   let systemPrompt = SCORING_SYSTEM_PROMPT;
   if (wisdomContext) {
@@ -47,14 +52,40 @@ export async function scoreAudit(request: AuditScoringRequest, wisdomContext?: W
       : '';
     systemPrompt = SCORING_SYSTEM_PROMPT + wisdomInstruction + '\n' + wisdomContext.dna_context;
   }
+
+  // Load sector overrides
+  let effectiveWeights = AUDIT_DIMENSION_WEIGHTS;
+  let suppressedFindings: string[] = [];
+  let sector: SectorProfile = 'b2b_saas';
+
+  if (productId) {
+    sector = await getSectorProfile(productId);
+    const overrides = await getScoringOverrides(sector);
+    if (overrides.length > 0) {
+      effectiveWeights = buildEffectiveWeights(AUDIT_DIMENSION_WEIGHTS, overrides);
+      suppressedFindings = collectSuppressedFindings(overrides);
+    }
+    // Add sector context to the prompt
+    systemPrompt += `\n\nSECTOR: ${sector}. Adjust scoring expectations for this sector's norms.`;
+  }
+
   const response = await callOpus(systemPrompt, userPrompt, 8192);
   const output = parseJSONResponse<ScoringOutput>(response.content);
 
-  // Validate and recalculate composite using official weights
-  const weights = Object.values(AUDIT_DIMENSION_WEIGHTS);
+  // Filter out sector-irrelevant findings
+  if (suppressedFindings.length > 0) {
+    output.findings = output.findings.filter((f) =>
+      isFindingRelevant(f.finding.toLowerCase().replace(/\s+/g, '_'), sector, suppressedFindings)
+    );
+  }
+
+  // Recalculate composite using effective (possibly sector-adjusted) weights
+  const weightKeys = Object.keys(effectiveWeights);
   let weightedSum = 0;
   for (const dim of output.dimensions) {
-    const weight = weights[dim.dimension_number - 1] ?? 0;
+    const key = weightKeys[dim.dimension_number - 1];
+    const weight = key ? effectiveWeights[key]! : 0;
+    dim.weight = weight; // Update weight in output
     weightedSum += dim.score * weight;
   }
   output.composite = Math.round(weightedSum * 10) / 10;

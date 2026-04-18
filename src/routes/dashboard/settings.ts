@@ -16,6 +16,32 @@ import { randomBytes } from 'crypto';
 
 export const settingsRoutes = new Hono<AuthEnv>();
 
+// ─── Checkout → Stripe ──────────────────────────────────────────────────────
+
+settingsRoutes.post('/checkout', async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.parseBody() as Record<string, string>;
+  const tier = body.tier as 'solo' | 'growth' | 'investor_ready';
+  const validTiers = ['solo', 'growth', 'investor_ready'];
+  if (!tier || !validTiers.includes(tier)) return c.redirect('/settings');
+
+  let customerId = founder.stripe_customer_id;
+  if (!customerId) {
+    const { createCustomer } = await import('../../services/billing/stripe.js');
+    customerId = await createCustomer(founder.email, founder.name);
+    await query('UPDATE founders SET stripe_customer_id = ? WHERE id = ?', [customerId, founder.id]);
+  }
+
+  const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+  const checkoutUrl = await createCheckoutSession(
+    customerId, tier,
+    `${appUrl}/settings?checkout=success`,
+    `${appUrl}/settings?checkout=cancelled`
+  );
+  if (!checkoutUrl) return c.redirect('/settings?checkout=error');
+  return c.redirect(checkoutUrl);
+});
+
 settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings');
@@ -49,23 +75,35 @@ settingsRoutes.get('/settings', async (c) => {
     )}
     <div class="card">
       <h3>Subscription</h3>
-      <p><strong>Current Plan:</strong> <span class="tier-badge">${tierLabel}</span></p>
-      <p style="font-size:0.87rem;color:var(--text-muted);">You have access to ${capabilities.length} features.</p>
-      ${!founder.tier ? html`
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
-          <a href="/checkout?tier=solo" class="btn btn-secondary btn-sm">Solo — $79/mo</a>
-          <a href="/checkout?tier=growth" class="btn btn-primary btn-sm">Growth — $199/mo</a>
-          <a href="/checkout?tier=investor_ready" class="btn btn-secondary btn-sm">Investor-Ready — $399/mo</a>
-        </div>` : ''}
-      ${founder.tier === 'solo' ? html`
-        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
-          <a href="/checkout?tier=growth" class="btn btn-primary btn-sm">Upgrade to Growth — $199/mo</a>
-          <a href="/checkout?tier=investor_ready" class="btn btn-secondary btn-sm">Investor-Ready — $399/mo</a>
-        </div>` : ''}
-      ${founder.tier === 'growth' ? html`
-        <div style="margin-top:0.75rem;">
-          <a href="/checkout?tier=investor_ready" class="btn btn-primary btn-sm">Upgrade to Investor-Ready — $399/mo</a>
-        </div>` : ''}
+      <p><strong>Current Plan:</strong> <span class="badge badge-watch">${tierLabel}</span></p>
+      <p style="font-size:0.87rem;color:#6b7280;">You have access to ${capabilities.length} features.</p>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
+        ${!founder.tier ? html`
+          <form method="POST" action="/checkout"><input type="hidden" name="tier" value="solo" /><button type="submit" class="btn btn-secondary btn-sm">Solo — $79/mo</button></form>
+          <form method="POST" action="/checkout"><input type="hidden" name="tier" value="growth" /><button type="submit" class="btn btn-secondary btn-sm">Growth — $199/mo</button></form>
+          <form method="POST" action="/checkout"><input type="hidden" name="tier" value="investor_ready" /><button type="submit" class="btn btn-primary btn-sm">Investor Ready — $399/mo</button></form>
+        ` : ''}
+        ${founder.tier && founder.tier !== 'investor_ready' ? html`
+          <form method="POST" action="/checkout"><input type="hidden" name="tier" value="investor_ready" /><button type="submit" class="btn btn-primary btn-sm">Upgrade to Investor Ready</button></form>
+        ` : ''}
+        ${founder.stripe_customer_id ? html`
+          <form method="POST" action="/settings/manage-subscription"><button type="submit" class="btn btn-secondary btn-sm">Manage Subscription</button></form>
+        ` : ''}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Products</h3>
+      <p style="font-size:0.87rem;color:#6b7280;margin-bottom:0.75rem;">You have ${products.rows.length} product(s) connected.</p>
+      ${(products.rows as unknown as Array<Record<string, string>>).map((p) => html`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid #f3f4f6;">
+          <div>
+            <strong>${p.name}</strong>
+            ${p.github_repo_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.github_repo_url}</span>` : ''}
+          </div>
+          <a href="/products/${p.id}/audit" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">View</a>
+        </div>`)}
+      <a href="/onboarding" class="btn btn-primary btn-sm" style="margin-top:0.75rem;">+ Add Product</a>
     </div>
 
     <div class="card">
@@ -243,6 +281,36 @@ settingsRoutes.post('/settings/generate-ingest', async (c) => {
 
   await query('UPDATE products SET ingest_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
   return c.redirect('/settings');
+});
+
+// ─── Add Additional Product ──────────────────────────────────────────────────
+
+settingsRoutes.get('/settings/add-product', async (c) => {
+  return c.redirect('/onboarding');
+});
+
+// ─── Subscription Management (Stripe Customer Portal) ───────────────────────
+
+settingsRoutes.post('/settings/manage-subscription', async (c) => {
+  const founder = c.get('founder');
+  if (!founder.stripe_customer_id) return c.redirect('/settings?error=no_subscription');
+
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  if (!stripeKey) return c.redirect('/settings?error=billing_unavailable');
+
+  try {
+    const Stripe = (await import('stripe')).default;
+    const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16' });
+    const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+    const session = await stripe.billingPortal.sessions.create({
+      customer: founder.stripe_customer_id,
+      return_url: `${appUrl}/settings`,
+    });
+    return c.redirect(session.url);
+  } catch (err) {
+    console.error('[BILLING] Portal session failed:', err);
+    return c.redirect('/settings?error=billing_error');
+  }
 });
 
 // ─── Wisdom Toggle ────────────────────────────────────────────────────────────

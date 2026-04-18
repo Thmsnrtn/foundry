@@ -1,0 +1,250 @@
+// =============================================================================
+// FOUNDRY — Value Delivery Index
+// Measures how effectively the product delivers value to users.
+// =============================================================================
+
+import { query } from '../../db/client.js';
+import { nanoid } from 'nanoid';
+import type { StressorReportItem } from '../../types/index.js';
+
+export interface ValueDeliverySnapshot {
+  value_delivery_index: number;
+  core_workflow_completion_rate: number;
+  feature_utilization_breadth: number;
+  time_to_first_value_hours: number;
+  engagement_depth_score: number;
+  support_ticket_rate: number;
+}
+
+/**
+ * Compute the Value Delivery Index (0-100).
+ */
+export async function computeValueDeliveryIndex(productId: string): Promise<number> {
+  const result = await query(
+    'SELECT * FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
+    [productId]
+  );
+  const m = result.rows[0] as Record<string, unknown> | undefined;
+  if (!m) return 0;
+
+  const components = [
+    { value: (m.core_workflow_completion_rate as number) ?? 0, weight: 0.30 },
+    { value: (m.feature_utilization_breadth as number) ?? 0, weight: 0.15 },
+    { value: Math.max(0, 100 - ((m.time_to_first_value_hours as number) ?? 100)), weight: 0.20 },
+    { value: (m.engagement_depth_score as number) ?? 0, weight: 0.20 },
+    { value: Math.max(0, 100 - ((m.support_ticket_rate as number) ?? 0) * 10), weight: 0.15 },
+  ];
+
+  const index = components.reduce((sum, c) => sum + c.value * c.weight, 0);
+  return Math.round(Math.min(100, Math.max(0, index)));
+}
+
+/**
+ * Assess time to first value.
+ */
+export async function assessTimeToFirstValue(productId: string): Promise<{
+  hours: number;
+  benchmark: string;
+  recommendation: string | null;
+}> {
+  const result = await query(
+    'SELECT time_to_first_value_hours FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
+    [productId]
+  );
+  const hours = (result.rows[0] as Record<string, number> | undefined)?.time_to_first_value_hours ?? 0;
+
+  let benchmark: string;
+  let recommendation: string | null = null;
+
+  if (hours <= 0.5) {
+    benchmark = 'Excellent — users get value within minutes';
+  } else if (hours <= 2) {
+    benchmark = 'Good — value delivered within first session';
+  } else if (hours <= 24) {
+    benchmark = 'Acceptable — value delivered within first day';
+  } else if (hours <= 72) {
+    benchmark = 'Slow — many users will churn before experiencing value';
+    recommendation = 'Simplify onboarding. Consider a guided tutorial or template-based first experience.';
+  } else {
+    benchmark = 'Critical — time to value is too long for self-serve SaaS';
+    recommendation = 'Radically simplify the first-run experience. Pre-populate with sample data. Add quick-start templates.';
+  }
+
+  return { hours, benchmark, recommendation };
+}
+
+/**
+ * Detect declining value delivery trends.
+ */
+export async function detectValueDecline(productId: string): Promise<{
+  declining: boolean;
+  trend_description: string;
+  affected_components: string[];
+}> {
+  const snapshots = await query(
+    'SELECT * FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 4',
+    [productId]
+  );
+
+  if (snapshots.rows.length < 2) {
+    return { declining: false, trend_description: 'Insufficient data', affected_components: [] };
+  }
+
+  const rows = snapshots.rows as unknown as Array<Record<string, number>>;
+  const latest = rows[0]!;
+  const prior = rows[rows.length - 1]!;
+
+  const affected: string[] = [];
+
+  if ((latest.core_workflow_completion_rate ?? 0) < (prior.core_workflow_completion_rate ?? 0) - 5) {
+    affected.push('core_workflow_completion');
+  }
+  if ((latest.engagement_depth_score ?? 0) < (prior.engagement_depth_score ?? 0) - 5) {
+    affected.push('engagement_depth');
+  }
+  if ((latest.support_ticket_rate ?? 0) > (prior.support_ticket_rate ?? 0) + 2) {
+    affected.push('support_load');
+  }
+
+  const latestVDI = (latest.value_delivery_index ?? 0);
+  const priorVDI = (prior.value_delivery_index ?? 0);
+  const declining = latestVDI < priorVDI - 5;
+
+  return {
+    declining,
+    trend_description: declining
+      ? `VDI declined from ${priorVDI} to ${latestVDI} (${(priorVDI - latestVDI).toFixed(0)} point drop)`
+      : `VDI stable at ${latestVDI}`,
+    affected_components: affected,
+  };
+}
+
+/**
+ * Correlate VDI with churn: identify if low VDI predicts churn.
+ */
+export async function correlateValueToRetention(productId: string): Promise<{
+  correlation_strength: 'strong' | 'moderate' | 'weak' | 'insufficient_data';
+  description: string;
+}> {
+  const vdiResult = await query(
+    'SELECT value_delivery_index FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 6',
+    [productId]
+  );
+  const churnResult = await query(
+    'SELECT churn_rate FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 6',
+    [productId]
+  );
+
+  if (vdiResult.rows.length < 3 || churnResult.rows.length < 3) {
+    return { correlation_strength: 'insufficient_data', description: 'Need more data points to establish correlation.' };
+  }
+
+  const vdi = (vdiResult.rows as unknown as Array<Record<string, number>>).map((r) => r.value_delivery_index ?? 0);
+  const churn = (churnResult.rows as unknown as Array<Record<string, number>>).map((r) => r.churn_rate ?? 0);
+
+  // Simple correlation: do they move in opposite directions?
+  const vdiTrend = vdi[0]! - vdi[vdi.length - 1]!;
+  const churnTrend = churn[0]! - churn[churn.length - 1]!;
+
+  if (Math.abs(vdiTrend) < 3 && Math.abs(churnTrend) < 1) {
+    return { correlation_strength: 'weak', description: 'Both VDI and churn are relatively stable.' };
+  }
+
+  // Inverse relationship: VDI down, churn up (or vice versa)
+  if ((vdiTrend < -5 && churnTrend > 1) || (vdiTrend > 5 && churnTrend < -1)) {
+    return {
+      correlation_strength: 'strong',
+      description: `VDI moved ${vdiTrend > 0 ? 'up' : 'down'} ${Math.abs(vdiTrend).toFixed(0)} points while churn moved ${churnTrend > 0 ? 'down' : 'up'} ${Math.abs(churnTrend).toFixed(1)}%. Strong inverse correlation suggests VDI is a leading indicator of churn.`,
+    };
+  }
+
+  return { correlation_strength: 'moderate', description: 'Some relationship between VDI and churn detected, but not strongly correlated.' };
+}
+
+/**
+ * Identify value delivery stressors.
+ */
+export async function identifyValueDeliveryStressors(productId: string): Promise<StressorReportItem[]> {
+  const items: StressorReportItem[] = [];
+  const vdi = await computeValueDeliveryIndex(productId);
+  const decline = await detectValueDecline(productId);
+  const ttfv = await assessTimeToFirstValue(productId);
+
+  if (decline.declining) {
+    items.push({
+      name: 'Value delivery declining',
+      signal: decline.trend_description,
+      timeframe_days: 30,
+      neutralizing_action: `Focus on: ${decline.affected_components.join(', ')}. VDI decline predicts future churn.`,
+      severity: vdi < 40 ? 'critical' : 'elevated',
+      competitive_correlation: null,
+    });
+  }
+
+  if (ttfv.hours > 72) {
+    items.push({
+      name: 'Slow time to first value',
+      signal: `Users take ${ttfv.hours.toFixed(0)} hours to experience value`,
+      timeframe_days: 45,
+      neutralizing_action: ttfv.recommendation ?? 'Simplify onboarding experience.',
+      severity: 'elevated',
+      competitive_correlation: null,
+    });
+  }
+
+  // Check for feature underutilization
+  const latest = await query(
+    'SELECT feature_utilization_breadth FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
+    [productId]
+  );
+  const breadth = (latest.rows[0] as Record<string, number> | undefined)?.feature_utilization_breadth ?? 100;
+  if (breadth < 30) {
+    items.push({
+      name: 'Feature underutilization',
+      signal: `Only ${breadth.toFixed(0)}% of features used by average user`,
+      timeframe_days: 90,
+      neutralizing_action: 'Investigate: are features undiscoverable, unnecessary, or poorly designed? Consider removing unused features.',
+      severity: 'watch',
+      competitive_correlation: null,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * Report value delivery metrics (called via API).
+ */
+export async function reportValueDeliveryMetrics(
+  productId: string,
+  ownerId: string,
+  metrics: Partial<ValueDeliverySnapshot>
+): Promise<void> {
+  const today = new Date().toISOString().split('T')[0]!;
+
+  // Compute VDI from provided components
+  const components = [
+    { value: metrics.core_workflow_completion_rate ?? 0, weight: 0.30 },
+    { value: metrics.feature_utilization_breadth ?? 0, weight: 0.15 },
+    { value: Math.max(0, 100 - (metrics.time_to_first_value_hours ?? 100)), weight: 0.20 },
+    { value: metrics.engagement_depth_score ?? 0, weight: 0.20 },
+    { value: Math.max(0, 100 - (metrics.support_ticket_rate ?? 0) * 10), weight: 0.15 },
+  ];
+  const vdi = Math.round(components.reduce((sum, c) => sum + c.value * c.weight, 0));
+
+  await query(
+    `INSERT INTO value_delivery_metrics (id, product_id, owner_id, snapshot_date, core_workflow_completion_rate, feature_utilization_breadth, time_to_first_value_hours, outcome_achievement_rate, engagement_depth_score, value_delivery_index, nps_score, support_ticket_rate)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      nanoid(), productId, ownerId, today,
+      metrics.core_workflow_completion_rate ?? null,
+      metrics.feature_utilization_breadth ?? null,
+      metrics.time_to_first_value_hours ?? null,
+      null, // outcome_achievement_rate from input
+      metrics.engagement_depth_score ?? null,
+      vdi,
+      null, // nps_score
+      metrics.support_ticket_rate ?? null,
+    ]
+  );
+}

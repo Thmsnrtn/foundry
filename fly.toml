@@ -1,10 +1,10 @@
-app = "foundry"
+app = "foundry-intel"
 primary_region = "iad"
 kill_signal = "SIGINT"
 kill_timeout = 5
 
 [build]
-  builder = "heroku/buildpacks:20"
+  dockerfile = "Dockerfile"
 
 [env]
   NODE_ENV = "production"
@@ -22,20 +22,19 @@ kill_timeout = 5
     hard_limit = 250
     soft_limit = 200
 
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/internal/health"
+
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = "shared-cpu-2x"
+  memory = "1024mb"
   cpu_kind = "shared"
   cpus = 1
 
-# Scheduled jobs run on a separate process group
-# Configure via `fly machine run` or process groups
-# lifecycle_check: daily 6:00 UTC
-# competitive_scan: sunday 6:00 UTC
-# weekly_synthesis: friday 6:00 UTC
-# digest_generate: monday 7:00 AM per founder tz
-# behavioral_triggers: every 6 hours
-# metric_snapshot: daily midnight UTC
-# slot_enforcement: daily 9:00 UTC
-# cold_start_check: daily
-# scenario_accuracy: weekly after synthesis
+# Cron jobs run in the main process via the CronJob scheduler.
+# All 30 jobs are managed by src/jobs/index.ts and start automatically.
+# No separate process group needed — they run in-process on the primary machine.

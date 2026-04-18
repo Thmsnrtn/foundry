@@ -1,0 +1,217 @@
+// =============================================================================
+// FOUNDRY — Automated Growth Experiments
+// Design, execute, monitor, and interpret A/B tests.
+// =============================================================================
+
+import { query } from '../../db/client.js';
+import { callSonnet, callOpus, parseJSONResponse } from '../ai/client.js';
+import { nanoid } from 'nanoid';
+
+export interface ExperimentDesign {
+  name: string;
+  hypothesis: string;
+  experiment_type: 'pricing' | 'onboarding' | 'landing_page' | 'email' | 'feature_gate' | 'custom';
+  variants: ExperimentVariant[];
+  primary_metric: string;
+  secondary_metrics: string[];
+  traffic_split: Record<string, number>;
+  sample_size_target: number;
+}
+
+interface ExperimentVariant {
+  name: string;
+  description: string;
+  config: Record<string, unknown>;
+}
+
+export interface ExperimentResult {
+  winner: string | null;
+  confidence_level: number;
+  variant_metrics: Record<string, { sample_size: number; conversion: number; avg_value: number }>;
+  recommendation: string;
+  significant: boolean;
+}
+
+/**
+ * Design an experiment using AI.
+ */
+export async function designExperiment(
+  productId: string,
+  ownerId: string,
+  goal: string
+): Promise<ExperimentDesign> {
+  const product = await query('SELECT name, sector_profile, growth_stage FROM products WHERE id = ?', [productId]);
+  const p = product.rows[0] as Record<string, string> | undefined;
+
+  const prompt = `Design an A/B test for this SaaS product.
+
+Product: ${p?.name ?? 'Unknown'} (${p?.sector_profile ?? 'b2b_saas'}, ${p?.growth_stage ?? 'growth'} stage)
+Goal: ${goal}
+
+Return JSON:
+{
+  "name": "experiment name",
+  "hypothesis": "If we [change], then [metric] will [improve] because [reason]",
+  "experiment_type": "pricing|onboarding|landing_page|email|feature_gate|custom",
+  "variants": [
+    {"name": "control", "description": "current state", "config": {}},
+    {"name": "variant_b", "description": "the change", "config": {}}
+  ],
+  "primary_metric": "conversion_rate|activation_rate|retention_rate|revenue_per_user",
+  "secondary_metrics": ["other metrics to track"],
+  "traffic_split": {"control": 50, "variant_b": 50},
+  "sample_size_target": minimum_users_per_variant
+}`;
+
+  const response = await callSonnet(
+    'You are a growth experiment designer. Design statistically rigorous experiments.',
+    prompt,
+    2048
+  );
+
+  return parseJSONResponse<ExperimentDesign>(response.content);
+}
+
+/**
+ * Create and start an experiment.
+ */
+export async function createExperiment(
+  productId: string,
+  ownerId: string,
+  design: ExperimentDesign
+): Promise<string> {
+  const id = nanoid();
+  await query(
+    `INSERT INTO experiments (id, product_id, owner_id, name, hypothesis, experiment_type, status, variants, primary_metric, secondary_metrics, traffic_split, sample_size_target)
+     VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`,
+    [
+      id, productId, ownerId, design.name, design.hypothesis, design.experiment_type,
+      JSON.stringify(design.variants), design.primary_metric,
+      JSON.stringify(design.secondary_metrics),
+      JSON.stringify(design.traffic_split),
+      design.sample_size_target,
+    ]
+  );
+
+  await query('UPDATE experiments SET started_at = datetime(\'now\') WHERE id = ?', [id]);
+  return id;
+}
+
+/**
+ * Record an experiment event (conversion, view, etc).
+ */
+export async function recordExperimentEvent(
+  experimentId: string,
+  variant: string,
+  eventType: string,
+  value: number = 1
+): Promise<void> {
+  await query(
+    'INSERT INTO experiment_events (id, experiment_id, variant, event_type, value) VALUES (?, ?, ?, ?, ?)',
+    [nanoid(), experimentId, variant, eventType, value]
+  );
+
+  // Update sample size
+  await query(
+    'UPDATE experiments SET current_sample_size = (SELECT COUNT(DISTINCT id) FROM experiment_events WHERE experiment_id = ?) WHERE id = ?',
+    [experimentId, experimentId]
+  );
+}
+
+/**
+ * Analyze experiment results and determine significance.
+ */
+export async function analyzeExperiment(experimentId: string): Promise<ExperimentResult> {
+  const experiment = await query('SELECT * FROM experiments WHERE id = ?', [experimentId]);
+  const exp = experiment.rows[0] as Record<string, unknown> | undefined;
+  if (!exp) return { winner: null, confidence_level: 0, variant_metrics: {}, recommendation: 'Experiment not found', significant: false };
+
+  const variants = JSON.parse(exp.variants as string) as ExperimentVariant[];
+  const primaryMetric = exp.primary_metric as string;
+
+  const variantMetrics: Record<string, { sample_size: number; conversion: number; avg_value: number }> = {};
+
+  for (const variant of variants) {
+    const total = await query(
+      `SELECT COUNT(*) as c FROM experiment_events WHERE experiment_id = ? AND variant = ? AND event_type = 'exposure'`,
+      [experimentId, variant.name]
+    );
+    const conversions = await query(
+      `SELECT COUNT(*) as c, AVG(value) as avg_val FROM experiment_events WHERE experiment_id = ? AND variant = ? AND event_type = ?`,
+      [experimentId, variant.name, primaryMetric]
+    );
+
+    const sampleSize = (total.rows[0] as Record<string, number>)?.c ?? 0;
+    const convCount = (conversions.rows[0] as Record<string, number>)?.c ?? 0;
+    const avgVal = (conversions.rows[0] as Record<string, number>)?.avg_val ?? 0;
+
+    variantMetrics[variant.name] = {
+      sample_size: sampleSize,
+      conversion: sampleSize > 0 ? convCount / sampleSize : 0,
+      avg_value: avgVal,
+    };
+  }
+
+  // Statistical significance: simplified two-proportion z-test
+  const variantNames = Object.keys(variantMetrics);
+  let winner: string | null = null;
+  let confidence = 0;
+  let significant = false;
+
+  if (variantNames.length === 2) {
+    const a = variantMetrics[variantNames[0]!]!;
+    const b = variantMetrics[variantNames[1]!]!;
+
+    if (a.sample_size >= 30 && b.sample_size >= 30) {
+      const pA = a.conversion;
+      const pB = b.conversion;
+      const pPool = (pA * a.sample_size + pB * b.sample_size) / (a.sample_size + b.sample_size);
+      const se = Math.sqrt(pPool * (1 - pPool) * (1 / a.sample_size + 1 / b.sample_size));
+
+      if (se > 0) {
+        const zScore = Math.abs(pA - pB) / se;
+        // z=1.65 → 90%, z=1.96 → 95%, z=2.58 → 99%
+        confidence = zScore >= 2.58 ? 0.99 : zScore >= 1.96 ? 0.95 : zScore >= 1.65 ? 0.90 : zScore / 1.96 * 0.95;
+        significant = confidence >= 0.95;
+        winner = pA > pB ? variantNames[0]! : pB > pA ? variantNames[1]! : null;
+      }
+    }
+  }
+
+  const recommendation = significant
+    ? `${winner} wins with ${(confidence * 100).toFixed(0)}% confidence. Roll out to 100%.`
+    : `Not yet significant (${(confidence * 100).toFixed(0)}%). Need more data.`;
+
+  // Update experiment
+  if (significant) {
+    await query(
+      `UPDATE experiments SET status = 'completed', ended_at = datetime('now'), results = ?, winner = ?, confidence_level = ? WHERE id = ?`,
+      [JSON.stringify(variantMetrics), winner, confidence, experimentId]
+    );
+  }
+
+  return { winner, confidence_level: confidence, variant_metrics: variantMetrics, recommendation, significant };
+}
+
+/**
+ * Get active experiments for a product.
+ */
+export async function getActiveExperiments(productId: string): Promise<Array<Record<string, unknown>>> {
+  const result = await query(
+    "SELECT * FROM experiments WHERE product_id = ? AND status = 'running' ORDER BY started_at DESC",
+    [productId]
+  );
+  return result.rows as unknown as Array<Record<string, unknown>>;
+}
+
+/**
+ * Stop an experiment.
+ */
+export async function stopExperiment(experimentId: string): Promise<ExperimentResult> {
+  const result = await analyzeExperiment(experimentId);
+  await query(
+    `UPDATE experiments SET status = 'completed', ended_at = datetime('now') WHERE id = ?`,
+    [experimentId]
+  );
+  return result;
+}

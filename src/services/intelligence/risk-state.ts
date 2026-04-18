@@ -5,7 +5,7 @@
 
 import { query, insertAuditLog } from '../../db/client.js';
 import { nanoid } from 'nanoid';
-import type { RiskStateValue, StressorSeverity } from '../../types/index.js';
+import type { RiskStateValue, StressorSeverity, GrowthStage } from '../../types/index.js';
 
 interface RiskAssessmentInput {
   productId: string;
@@ -13,6 +13,8 @@ interface RiskAssessmentInput {
   mrrHealthRatio: number | null;
   pendingGate3AgeDays: number;
   currentState: RiskStateValue;
+  growthStage?: GrowthStage;
+  founderMotivationScore?: number | null;
 }
 
 interface RiskAssessmentResult {
@@ -56,6 +58,19 @@ export function assessRiskState(input: RiskAssessmentInput): RiskAssessmentResul
   if (input.pendingGate3AgeDays >= 7) {
     severity += 1;
     signals.push(`Gate 3 decision pending for ${input.pendingGate3AgeDays} days`);
+  }
+
+  // Founder health: sustained low motivation adds to severity
+  if (input.founderMotivationScore !== undefined && input.founderMotivationScore !== null && input.founderMotivationScore < 30) {
+    severity += 1;
+    signals.push(`Founder motivation score critically low (${input.founderMotivationScore})`);
+  }
+
+  // Stage-aware risk: pre-launch products can't go Red from metric absence alone
+  const stage = input.growthStage ?? 'growth';
+  if (stage === 'pre_launch' && signals.every((s) => s.includes('MRR') || s.includes('cohort') || s.includes('churn'))) {
+    // All signals are metric-based, which is expected for pre-launch — cap at Yellow
+    severity = Math.min(severity, 2);
   }
 
   let recommended: RiskStateValue;

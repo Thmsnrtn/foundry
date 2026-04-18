@@ -93,6 +93,8 @@ auditRoutes.post('/products/:id/audit/run', async (c) => {
     stack_description: null, market_category: null,
     created_at: product.created_at as string, updated_at: product.updated_at as string,
     status: 'active',
+    sector_profile: 'b2b_saas', growth_stage: 'pre_launch',
+    growth_stage_updated_at: null, growth_stage_overridden: false,
   }, runType);
 
   // UX Intelligence: milestones + dimension hints

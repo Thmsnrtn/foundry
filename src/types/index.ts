@@ -25,6 +25,90 @@ export type AuditVerdict = 'READY' | 'READY_WITH_CONDITIONS' | 'NOT_READY';
 
 export type ProductStatus = 'active' | 'paused' | 'archived';
 
+// ─── Sector Profiles ────────────────────────────────────────────────────────
+
+export type SectorProfile =
+  | 'b2b_saas'
+  | 'consumer'
+  | 'marketplace'
+  | 'healthcare'
+  | 'education'
+  | 'government'
+  | 'climate_impact'
+  | 'developer_tools'
+  | 'fintech'
+  | 'deep_tech'
+  | 'vertical_saas';
+
+export interface SectorScoringOverride {
+  id: string;
+  sector: string;
+  dimension: string;
+  weight_override: number | null;
+  passing_threshold_override: number | null;
+  critical_findings_override: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SectorRemediationTemplate {
+  id: string;
+  sector: string;
+  dimension: string;
+  tone: 'standard' | 'encouraging' | 'direct' | 'plain_english';
+  template_context: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// ─── Growth Stages ──────────────────────────────────────────────────────────
+
+export type GrowthStage = 'pre_launch' | 'early_traction' | 'growth' | 'scale' | 'mature';
+
+export interface GrowthStageConfig {
+  stage: GrowthStage;
+  suppressedStressors: string[];
+  focusDimensions: string[];
+  digestFocus: string;
+  stressorThresholdMultiplier: number;
+}
+
+// ─── Founder Health ─────────────────────────────────────────────────────────
+
+export type EngagementTrend = 'rising' | 'stable' | 'declining' | 'critical';
+
+export interface FounderHealth {
+  id: string;
+  founder_id: string;
+  personal_runway_months: number | null;
+  weekly_hours_available: number | null;
+  immigration_status: string | null;
+  visa_expiry_date: string | null;
+  key_persons: KeyPerson[] | null;
+  engagement_trend: EngagementTrend;
+  last_login_streak: number;
+  avg_decision_response_hours: number | null;
+  motivation_score: number | null;
+  updated_at: string;
+}
+
+export interface KeyPerson {
+  name: string;
+  role: string;
+  replaceability: number; // 1-5
+  departure_risk: 'low' | 'medium' | 'high';
+}
+
+export interface FounderHealthSnapshot {
+  id: string;
+  founder_id: string;
+  snapshot_date: string;
+  motivation_score: number | null;
+  engagement_trend: string | null;
+  weekly_hours_available: number | null;
+  personal_runway_months: number | null;
+  created_at: string;
+}
+
 export type CompetitiveSignalType =
   | 'pricing_change'
   | 'feature_launch'
@@ -66,6 +150,8 @@ export interface Founder {
   cohort_id: string | null;
   created_at: string;
   preferences: FounderPreferences | null;
+  lifestyle_mode: boolean;
+  lifestyle_target_mrr: number | null;
 }
 
 export interface FounderPreferences {
@@ -87,6 +173,10 @@ export interface Product {
   created_at: string;
   updated_at: string;
   status: ProductStatus;
+  sector_profile: SectorProfile;
+  growth_stage: GrowthStage;
+  growth_stage_updated_at: string | null;
+  growth_stage_overridden: boolean;
 }
 
 export interface LifecycleState {

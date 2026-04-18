@@ -5,8 +5,10 @@
 import { callOpus, callSonnet } from '../ai/client.js';
 import { getMRRDecomposition, computeHealthRatio } from '../intelligence/revenue.js';
 import { getLatestCohortSummary } from '../intelligence/cohort.js';
+import { getFounderHealthSummary, generateFounderHealthDigestSection } from '../intelligence/founder-health.js';
+import { getStageConfig } from '../lifecycle/stage-detection.js';
 import { query, getActiveStressors, getLatestMetrics } from '../../db/client.js';
-import type { Digest, RiskStateValue, StressorReportItem, DashboardMetrics, MRRDecomposition, MRRHealthRatio, CohortSummary, RiskState } from '../../types/index.js';
+import type { Digest, RiskStateValue, StressorReportItem, DashboardMetrics, MRRDecomposition, MRRHealthRatio, CohortSummary, RiskState, GrowthStage } from '../../types/index.js';
 
 export async function generateDigest(
   productId: string,
@@ -60,14 +62,40 @@ export async function generateDigest(
         .join('\n')
     : null;
 
-  // Generate narrative
-  const narrative = await generateNarrative(productId, riskState, metrics, mrr, stressors, digestType);
+  // Get product growth stage and lifestyle mode for context
+  const productRow = await query('SELECT growth_stage, owner_id FROM products WHERE id = ?', [productId]);
+  const product = productRow.rows[0] as Record<string, string> | undefined;
+  const growthStage = (product?.growth_stage as GrowthStage) ?? 'growth';
+  const stageConfig = getStageConfig(growthStage);
+
+  // Check lifestyle mode
+  const founderRow = product?.owner_id
+    ? await query('SELECT lifestyle_mode FROM founders WHERE id = ?', [product.owner_id])
+    : { rows: [] };
+  const isLifestyle = ((founderRow.rows[0] as Record<string, number> | undefined)?.lifestyle_mode ?? 0) === 1;
+
+  // Generate narrative with stage context
+  const narrative = await generateNarrative(productId, riskState, metrics, mrr, stressors, digestType, stageConfig.digestFocus, isLifestyle);
+
+  // Optional founder health section
+  let founderHealthSection: string | null = null;
+  if (product?.owner_id) {
+    const health = await getFounderHealthSummary(product.owner_id);
+    if (health) {
+      founderHealthSection = generateFounderHealthDigestSection(health);
+    }
+  }
+
+  // Append founder health to narrative if present
+  const fullNarrative = founderHealthSection
+    ? narrative + '\n\n---\n\n' + founderHealthSection
+    : narrative;
 
   return {
     risk_state: riskInfo,
     stressor_report: { stressors, evaluation_context: { mrr_health_ratio: mrr?.health_ratio ?? null, mrr_health_trend: null, latest_cohort_retention_vs_avg: cohort?.vs_historical_average_14 ?? null, high_significance_competitive_signals: compResult.rows.length }, generated_at: new Date().toISOString() },
     competitive_context: competitiveContext,
-    narrative,
+    narrative: fullNarrative,
     mrr: mrr ?? { new_cents: 0, expansion_cents: 0, contraction_cents: 0, churned_cents: 0, total_cents: 0, health_ratio: null },
     mrr_health: mrrHealth,
     metrics,
@@ -83,16 +111,29 @@ async function generateNarrative(
   metrics: DashboardMetrics,
   mrr: MRRDecomposition | null,
   stressors: StressorReportItem[],
-  digestType: string
+  digestType: string,
+  stageFocus?: string,
+  isLifestyle?: boolean
 ): Promise<string> {
   const model = digestType === 'weekly' ? callOpus : callSonnet;
-  const prompt = `Write a 3-5 sentence COO summary of this product's week.
+
+  let systemInstruction = 'You are a COO writing a weekly business briefing. Be concise and direct.';
+  if (isLifestyle) {
+    systemInstruction = 'You are a COO writing a weekly briefing for a founder in lifestyle mode. Focus on profitability, customer satisfaction, and operational efficiency. No growth pressure language.';
+  }
+
+  let prompt = `Write a 3-5 sentence COO summary of this product's week.
 Risk state: ${riskState}
 Metrics: ${JSON.stringify(metrics)}
 MRR: ${JSON.stringify(mrr)}
-Active stressors: ${stressors.length > 0 ? stressors.map((s) => s.name).join(', ') : 'None'}
-Be direct and specific. What happened and what it means.`;
+Active stressors: ${stressors.length > 0 ? stressors.map((s) => s.name).join(', ') : 'None'}`;
 
-  const response = await model('You are a COO writing a weekly business briefing. Be concise and direct.', prompt, 512);
+  if (stageFocus) {
+    prompt += `\nStage focus: ${stageFocus}`;
+  }
+
+  prompt += '\nBe direct and specific. What happened and what it means.';
+
+  const response = await model(systemInstruction, prompt, 512);
   return response.content;
 }

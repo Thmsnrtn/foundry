@@ -29,6 +29,7 @@ export interface UXContext {
 export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'founderName' | 'productName' | 'productId' | 'activeNav' | 'riskState' | 'riskReason'>> {
   founderId: string;
   founder: Founder;
+  founderEmail: string;
   dnaCompletionPct: number;
   wisdomLayerActive: boolean;
   openPRCount: number;
@@ -80,6 +81,7 @@ export async function getLayoutContext(
       riskReason: null,
       founderId: founder.id,
       founder,
+      founderEmail: founder.email,
       dnaCompletionPct: 0,
       wisdomLayerActive: false,
       openPRCount: 0,
@@ -155,6 +157,7 @@ export async function getLayoutContext(
     riskReason,
     founderId: founder.id,
     founder,
+    founderEmail: founder.email,
     dnaCompletionPct,
     wisdomLayerActive,
     openPRCount,

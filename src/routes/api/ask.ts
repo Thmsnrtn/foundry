@@ -213,7 +213,7 @@ apiAskRoutes.get('/api/threads/:id', async (c) => {
 
 apiAskRoutes.post('/api/threads/:id/messages', validateBody(threadMessageSchema), async (c) => {
   const founder = c.get('founder');
-  const threadId = c.req.param('id');
+  const threadId = c.req.param('id')!;
   const body = c.get('validatedBody' as never) as z.infer<typeof threadMessageSchema>;
 
   // Verify thread ownership

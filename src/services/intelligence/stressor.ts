@@ -6,7 +6,8 @@
 import { query } from '../../db/client.js';
 import { getRelevantFailures } from '../wisdom/failures.js';
 import { nanoid } from 'nanoid';
-import type { Stressor, StressorReport, StressorReportItem, StressorSeverity, RiskStateValue, MetricSnapshot, MRRDecomposition, CohortSummary, CompetitiveSignal } from '../../types/index.js';
+import { getStageConfig, getStageStressorThresholds } from '../lifecycle/stage-detection.js';
+import type { Stressor, StressorReport, StressorReportItem, StressorSeverity, RiskStateValue, MetricSnapshot, MRRDecomposition, CohortSummary, CompetitiveSignal, GrowthStage } from '../../types/index.js';
 
 export interface StressorInputs {
   productId: string;
@@ -17,6 +18,8 @@ export interface StressorInputs {
   historicalAvgRetention: { day_14: number; day_30: number } | null;
   highSignificanceSignals: CompetitiveSignal[];
   riskState: RiskStateValue;
+  growthStage?: GrowthStage;
+  lifestyleMode?: boolean;
 }
 
 /**
@@ -24,44 +27,53 @@ export interface StressorInputs {
  */
 export async function identifyStressors(inputs: StressorInputs): Promise<StressorReport> {
   const items: StressorReportItem[] = [];
+  const stage = inputs.growthStage ?? 'growth';
+  const stageConfig = getStageConfig(stage);
+  const thresholds = getStageStressorThresholds(stage);
+
+  // In lifestyle mode, suppress growth-oriented stressors
+  const isLifestyle = inputs.lifestyleMode === true;
 
   // 1. MRR Health Ratio evaluation
   if (inputs.mrrDecomposition && inputs.mrrDecomposition.health_ratio !== null) {
     const ratio = inputs.mrrDecomposition.health_ratio;
-    if (ratio >= 1.0) {
-      items.push({
-        name: 'Revenue drain exceeds acquisition',
-        signal: `MRR Health Ratio at ${ratio.toFixed(2)} — churned revenue exceeds new revenue`,
-        timeframe_days: 30,
-        neutralizing_action: 'Immediate churn root cause analysis. Pause expansion efforts until churn stabilized.',
-        severity: 'critical',
-        competitive_correlation: null,
-      });
-    } else if (ratio >= 0.8) {
-      items.push({
-        name: 'Churn approaching new revenue',
-        signal: `MRR Health Ratio at ${ratio.toFixed(2)} — churn is ${Math.round(ratio * 100)}% of new revenue`,
-        timeframe_days: 60,
-        neutralizing_action: 'Investigate churn patterns by cohort and plan. Identify high-churn segments.',
-        severity: 'elevated',
-        competitive_correlation: null,
-      });
-    } else if (ratio >= 0.6) {
-      items.push({
-        name: 'MRR health ratio rising',
-        signal: `MRR Health Ratio at ${ratio.toFixed(2)} — worth monitoring`,
-        timeframe_days: 90,
-        neutralizing_action: 'Review churn by cohort and feature usage correlation.',
-        severity: 'watch',
-        competitive_correlation: null,
-      });
+    // Skip if stage suppresses this stressor
+    if (!stageConfig.suppressedStressors.includes('mrr_health_ratio')) {
+      if (ratio >= thresholds.mrrHealthRatioCritical) {
+        items.push({
+          name: 'Revenue drain exceeds acquisition',
+          signal: `MRR Health Ratio at ${ratio.toFixed(2)} — churned revenue exceeds new revenue`,
+          timeframe_days: 30,
+          neutralizing_action: 'Immediate churn root cause analysis. Pause expansion efforts until churn stabilized.',
+          severity: 'critical',
+          competitive_correlation: null,
+        });
+      } else if (ratio >= thresholds.mrrHealthRatioElevated) {
+        items.push({
+          name: 'Churn approaching new revenue',
+          signal: `MRR Health Ratio at ${ratio.toFixed(2)} — churn is ${Math.round(ratio * 100)}% of new revenue`,
+          timeframe_days: 60,
+          neutralizing_action: 'Investigate churn patterns by cohort and plan. Identify high-churn segments.',
+          severity: 'elevated',
+          competitive_correlation: null,
+        });
+      } else if (ratio >= 0.6 * stageConfig.stressorThresholdMultiplier) {
+        items.push({
+          name: 'MRR health ratio rising',
+          signal: `MRR Health Ratio at ${ratio.toFixed(2)} — worth monitoring`,
+          timeframe_days: 90,
+          neutralizing_action: 'Review churn by cohort and feature usage correlation.',
+          severity: 'watch',
+          competitive_correlation: null,
+        });
+      }
     }
   }
 
-  // 2. Cohort retention deviation
-  if (inputs.latestCohort && inputs.historicalAvgRetention) {
+  // 2. Cohort retention deviation (skip if stage suppresses)
+  if (!stageConfig.suppressedStressors.includes('cohort_retention') && inputs.latestCohort && inputs.historicalAvgRetention) {
     const deviation14 = inputs.historicalAvgRetention.day_14 - inputs.latestCohort.retention_day_14;
-    if (deviation14 >= 25) {
+    if (deviation14 >= thresholds.cohortRetentionDeviation) {
       items.push({
         name: 'Severe cohort retention drop',
         signal: `Latest cohort day-14 retention ${inputs.latestCohort.retention_day_14.toFixed(1)}% vs average ${inputs.historicalAvgRetention.day_14.toFixed(1)}% (${deviation14.toFixed(0)}pt gap)`,
@@ -70,7 +82,7 @@ export async function identifyStressors(inputs: StressorInputs): Promise<Stresso
         severity: 'critical',
         competitive_correlation: null,
       });
-    } else if (deviation14 >= 15) {
+    } else if (deviation14 >= 15 * stageConfig.stressorThresholdMultiplier) {
       items.push({
         name: 'Cohort retention declining',
         signal: `Latest cohort day-14 retention ${deviation14.toFixed(0)} points below average`,
@@ -99,17 +111,29 @@ export async function identifyStressors(inputs: StressorInputs): Promise<Stresso
     // Activation rate decline
     if (inputs.currentMetrics.activation_rate !== null && inputs.priorMetrics.activation_rate !== null) {
       const drop = inputs.priorMetrics.activation_rate - inputs.currentMetrics.activation_rate;
-      if (drop >= 10) {
+      if (drop >= thresholds.activationRateDrop) {
         items.push({
           name: 'Activation rate erosion',
           signal: `Activation rate dropped from ${inputs.priorMetrics.activation_rate}% to ${inputs.currentMetrics.activation_rate}%`,
           timeframe_days: 45,
           neutralizing_action: 'Audit onboarding funnel. Identify drop-off step.',
-          severity: drop >= 20 ? 'critical' : 'elevated',
+          severity: drop >= 20 * stageConfig.stressorThresholdMultiplier ? 'critical' : 'elevated',
           competitive_correlation: null,
         });
       }
     }
+  }
+
+  // 5. Lifestyle mode: suppress growth-oriented stressors, keep retention/quality/operational
+  if (isLifestyle) {
+    const growthStressors = ['slow_growth', 'flat_mrr', 'low_expansion', 'Revenue drain exceeds acquisition'];
+    // Only keep stressors related to retention, quality, and operational health
+    const filtered = items.filter((item) => {
+      const isGrowthOriented = growthStressors.some((gs) => item.name.toLowerCase().includes(gs.toLowerCase()));
+      return !isGrowthOriented;
+    });
+    items.length = 0;
+    items.push(...filtered);
   }
 
   // Enrich with failure context

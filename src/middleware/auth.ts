@@ -77,7 +77,8 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     // Resolve founder from database
     let result = await getFounderByClerkId(clerkUserId);
 
-    // Auto-provision founder if the webhook hasn't fired yet (common in local dev)
+    // Auto-provision founder if the webhook hasn't fired yet
+    // This handles the race condition where the user logs in before the Clerk webhook arrives
     if (result.rows.length === 0) {
       try {
         const clerk = ClerkBackend({ secretKey });
@@ -117,6 +118,8 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
       cohort_id: row.cohort_id,
       created_at: row.created_at,
       preferences: row.preferences ? (JSON.parse(row.preferences) as FounderPreferences) : null,
+      lifestyle_mode: ((row as any).lifestyle_mode ?? 0) === 1,
+      lifestyle_target_mrr: (row as any).lifestyle_target_mrr ?? null,
     };
 
     c.set('founder', founder);

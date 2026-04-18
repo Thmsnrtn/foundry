@@ -34,7 +34,7 @@ apiMetricRoutes.get('/api/products/:id/metrics', async (c) => {
 
 apiMetricRoutes.post('/api/products/:id/metrics', validateBody(metricSnapshotSchema), async (c) => {
   const founder = c.get('founder');
-  const productId = c.req.param('id');
+  const productId = c.req.param('id')!;
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 

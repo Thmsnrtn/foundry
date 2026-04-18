@@ -12,8 +12,9 @@ if (process.env.NODE_ENV !== 'test') {
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
+import { logger as honoLogger } from 'hono/logger';
 import { CronJob } from 'cron';
+import { logger } from './services/logger.js';
 
 // Middleware
 import { authMiddleware } from './middleware/auth.js';

@@ -26,10 +26,26 @@ program
   .description('Run all database migrations')
   .action(async () => {
     console.log('Running migrations...');
-    const migrations = ['001_initial.sql', '002_wisdom_remediation.sql', '003_ux_intelligence.sql', '004_signal_wisdom.sql', '005_signal_history.sql', '006_intelligence_layer.sql', '007_operating_plan.sql'];
+    const migrations = [
+      '001_initial.sql', '002_wisdom_remediation.sql', '003_ux_intelligence.sql',
+      '004_sector_profiles.sql', '004_signal_wisdom.sql', '005_growth_stages.sql', '005_signal_history.sql',
+      '006_founder_health.sql', '006_intelligence_layer.sql', '007_lifestyle_mode.sql', '007_operating_plan.sql',
+      '008_non_code_track.sql', '009_marketplace_intelligence.sql', '010_cofounder_alignment.sql', '011_global_support.sql',
+      '012_business_model.sql', '013_regulatory_intelligence.sql', '014_competitive_v2.sql', '015_value_delivery.sql',
+      '016_founder_psychology.sql', '017_expansion_advisor.sql', '018_wisdom_network.sql', '019_ethical_ai.sql',
+      '020_conversational_coo.sql', '021_data_ingestion.sql', '022_action_execution.sql', '023_predictive_intelligence.sql',
+      '024_founder_network.sql', '025_ai_calibration.sql', '026_financial_simulator.sql',
+      '027_customer_intelligence.sql', '028_growth_experiments.sql', '029_event_bus.sql',
+      '030_investor_automation.sql', '031_voice_coo.sql', '032_knowledge_graph.sql', '033_portfolio_mode.sql',
+    ];
     for (const file of migrations) {
       console.log(`  Running ${file}...`);
-      const filePath = resolve(__dirname, '../db/migrations', file);
+      // In production (dist/cli/), migrations are at ../../src/db/migrations
+      // In development (src/cli/), migrations are at ../db/migrations
+      let filePath = resolve(__dirname, '../db/migrations', file);
+      try { readFileSync(filePath); } catch {
+        filePath = resolve(__dirname, '../../src/db/migrations', file);
+      }
       const sql = readFileSync(filePath, 'utf-8');
       // Split on statement-ending semicolons
       const statements = sql
@@ -58,6 +74,15 @@ program
   .action(async () => {
     const { seedDatabase } = await import('../db/seed.js');
     await seedDatabase();
+  });
+
+// ─── Demo Seed ──────────────────────────────────────────────────────────────
+program
+  .command('db:seed-demo')
+  .description('Seed a realistic demo founder (Maya / LabFlow) with 6 months of data')
+  .action(async () => {
+    const { seedDemoFounder } = await import('../db/seed-demo.js');
+    await seedDemoFounder();
   });
 
 // ─── Run Job ─────────────────────────────────────────────────────────────────
@@ -222,6 +247,8 @@ program
       stack_description: null, market_category: null,
       created_at: p.created_at as string, updated_at: p.updated_at as string,
       status: 'active',
+      sector_profile: 'b2b_saas', growth_stage: 'pre_launch',
+      growth_stage_updated_at: null, growth_stage_overridden: false,
     }, 'post_remediation');
     console.log(`Audit complete. Composite: ${audit.composite?.toFixed(1)}, Verdict: ${audit.verdict}`);
   });

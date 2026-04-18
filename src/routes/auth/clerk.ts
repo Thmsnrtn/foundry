@@ -11,28 +11,135 @@ export const authRoutes = new Hono();
 
 authRoutes.get('/auth/signup', (c) => {
   const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
-  return c.html(`<!DOCTYPE html><html><head><title>Sign Up — Foundry</title>
-  <script async crossorigin="anonymous" src="https://unpkg.com/@clerk/clerk-js/dist/clerk.browser.js" data-clerk-publishable-key="${publishableKey}"></script>
-  </head><body><div id="sign-up"></div>
-  <script>window.addEventListener('load',async()=>{await Clerk.load();if(Clerk.user){window.location.href='/dashboard';return;}Clerk.mountSignUp(document.getElementById('sign-up'),{forceRedirectUrl:'/dashboard',fallbackRedirectUrl:'/dashboard'});})</script>
-  </body></html>`);
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign Up — Foundry</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #0f172a; margin: 0; }
+    .auth-container { text-align: center; }
+    .auth-container h1 { color: white; margin-bottom: 1.5rem; font-size: 1.5rem; }
+    .auth-container a { color: #94a3b8; font-size: 0.87rem; }
+    #sign-up { min-height: 400px; }
+  </style>
+</head>
+<body>
+  <div class="auth-container">
+    <h1>Foundry</h1>
+    <div id="sign-up"></div>
+    <p style="margin-top:1rem;"><a href="/auth/login">Already have an account? Log in</a></p>
+  </div>
+  <script>
+    const pk = "${publishableKey}";
+    async function initClerk() {
+      const m = await import("https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm");
+      const clerk = new m.Clerk(pk);
+      await clerk.load();
+      if (clerk.user) { window.location.href = "/dashboard"; return; }
+      clerk.mountSignUp(document.getElementById("sign-up"), {
+        forceRedirectUrl: "/dashboard",
+        fallbackRedirectUrl: "/dashboard",
+      });
+    }
+    initClerk().catch(e => {
+      document.getElementById("sign-up").innerHTML = '<p style="color:#ef4444;">Failed to load authentication. Please refresh the page.</p><p style="color:#64748b;font-size:0.8rem;">' + e.message + '</p>';
+    });
+  </script>
+</body>
+</html>`);
 });
 
 authRoutes.get('/auth/login', (c) => {
   const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
-  return c.html(`<!DOCTYPE html><html><head><title>Login — Foundry</title>
-  <script async crossorigin="anonymous" src="https://unpkg.com/@clerk/clerk-js/dist/clerk.browser.js" data-clerk-publishable-key="${publishableKey}"></script>
-  </head><body><div id="sign-in"></div>
-  <script>window.addEventListener('load',async()=>{await Clerk.load();if(Clerk.user){window.location.href='/dashboard';return;}Clerk.mountSignIn(document.getElementById('sign-in'),{forceRedirectUrl:'/dashboard',fallbackRedirectUrl:'/dashboard'});})</script>
-  </body></html>`);
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Log In — Foundry</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #0f172a; margin: 0; }
+    .auth-container { text-align: center; }
+    .auth-container h1 { color: white; margin-bottom: 1.5rem; font-size: 1.5rem; }
+    .auth-container a { color: #94a3b8; font-size: 0.87rem; }
+    #sign-in { min-height: 400px; }
+  </style>
+</head>
+<body>
+  <div class="auth-container">
+    <h1>Foundry</h1>
+    <div id="sign-in"></div>
+    <p style="margin-top:1rem;"><a href="/auth/signup">Don't have an account? Sign up</a></p>
+  </div>
+  <script>
+    const pk = "${publishableKey}";
+    async function initClerk() {
+      const m = await import("https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm");
+      const clerk = new m.Clerk(pk);
+      await clerk.load();
+      if (clerk.user) { window.location.href = "/dashboard"; return; }
+      clerk.mountSignIn(document.getElementById("sign-in"), {
+        forceRedirectUrl: "/dashboard",
+        fallbackRedirectUrl: "/dashboard",
+      });
+    }
+    initClerk().catch(e => {
+      document.getElementById("sign-in").innerHTML = '<p style="color:#ef4444;">Failed to load authentication. Please refresh the page.</p><p style="color:#64748b;font-size:0.8rem;">' + e.message + '</p>';
+    });
+  </script>
+</body>
+</html>`);
 });
 
 // Clerk webhook: user.created event → create founder record
+// Verified via Svix signature (Clerk uses Svix for webhook delivery)
 authRoutes.post('/auth/webhook', async (c) => {
   const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
   if (!webhookSecret) return c.json({ error: 'Webhook not configured' }, 500);
 
-  const payload = await c.req.json() as { type: string; data: Record<string, unknown> };
+  // Verify Svix signature
+  const svixId = c.req.header('svix-id');
+  const svixTimestamp = c.req.header('svix-timestamp');
+  const svixSignature = c.req.header('svix-signature');
+
+  if (!svixId || !svixTimestamp || !svixSignature) {
+    return c.json({ error: 'Missing webhook signature headers' }, 401);
+  }
+
+  const rawBody = await c.req.text();
+
+  // Verify timestamp is within 5 minutes to prevent replay attacks
+  const timestampSeconds = parseInt(svixTimestamp, 10);
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - timestampSeconds) > 300) {
+    return c.json({ error: 'Webhook timestamp too old' }, 401);
+  }
+
+  // Verify HMAC signature
+  const { createHmac } = await import('node:crypto');
+  const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`;
+  // Clerk webhook secrets are prefixed with "whsec_" and base64-encoded
+  const secretBytes = Buffer.from(webhookSecret.replace('whsec_', ''), 'base64');
+  const expectedSignature = createHmac('sha256', secretBytes)
+    .update(signedContent)
+    .digest('base64');
+
+  // Svix sends multiple signatures separated by spaces (v1,signature)
+  const signatures = svixSignature.split(' ');
+  const verified = signatures.some((sig) => {
+    const [, sigValue] = sig.split(',');
+    return sigValue === expectedSignature;
+  });
+
+  if (!verified) {
+    return c.json({ error: 'Invalid webhook signature' }, 401);
+  }
+
+  const payload = JSON.parse(rawBody) as { type: string; data: Record<string, unknown> };
 
   if (payload.type === 'user.deleted') {
     const userId = payload.data.id as string;
