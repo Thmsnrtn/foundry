@@ -11,12 +11,18 @@ interface RateLimitEntry {
 }
 
 const store = new Map<string, RateLimitEntry>();
+const MAX_STORE_SIZE = 10000; // DEFECT-0046: Prevent unbounded memory growth
 
 // Clean up expired entries every 60 seconds
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of store) {
     if (entry.resetAt < now) store.delete(key);
+  }
+  // Emergency eviction if store grows too large (DDoS protection)
+  if (store.size > MAX_STORE_SIZE) {
+    const entries = Array.from(store.entries()).sort((a, b) => a[1].resetAt - b[1].resetAt);
+    for (let i = 0; i < entries.length / 2; i++) store.delete(entries[i]![0]);
   }
 }, 60000);
 
