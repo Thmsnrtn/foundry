@@ -1,9 +1,27 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { AuthEnv } from '../../middleware/auth.js';
+import { validateBody } from '../../middleware/validate.js';
 import { query, getProductByOwner, getLatestMetrics, getActiveStressors } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 
 export const apiMetricRoutes = new Hono<AuthEnv>();
+
+// ─── Schemas ─────────────────────────────────────────────────────────────────
+
+const metricSnapshotSchema = z.object({
+  signups_7d: z.number().int().min(0).nullable().optional(),
+  active_users: z.number().int().min(0).nullable().optional(),
+  new_mrr_cents: z.number().int().min(0).optional().default(0),
+  expansion_mrr_cents: z.number().int().min(0).optional().default(0),
+  contraction_mrr_cents: z.number().int().min(0).optional().default(0),
+  churned_mrr_cents: z.number().int().min(0).optional().default(0),
+  activation_rate: z.number().min(0).max(1).nullable().optional(),
+  day_30_retention: z.number().min(0).max(1).nullable().optional(),
+  support_volume_7d: z.number().int().min(0).nullable().optional(),
+  nps_score: z.number().min(-100).max(100).nullable().optional(),
+  churn_rate: z.number().min(0).max(1).nullable().optional(),
+});
 
 apiMetricRoutes.get('/api/products/:id/metrics', async (c) => {
   const founder = c.get('founder');
@@ -14,16 +32,16 @@ apiMetricRoutes.get('/api/products/:id/metrics', async (c) => {
   return c.json({ latest: latest.rows[0] ?? null });
 });
 
-apiMetricRoutes.post('/api/products/:id/metrics', async (c) => {
+apiMetricRoutes.post('/api/products/:id/metrics', validateBody(metricSnapshotSchema), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const body = await c.req.json() as Record<string, unknown>;
+  const body = c.get('validatedBody' as never) as z.infer<typeof metricSnapshotSchema>;
   const today = new Date().toISOString().split('T')[0];
-  const newMrr = (body.new_mrr_cents as number) ?? 0;
-  const churned = (body.churned_mrr_cents as number) ?? 0;
+  const newMrr = body.new_mrr_cents ?? 0;
+  const churned = body.churned_mrr_cents ?? 0;
   const healthRatio = newMrr > 0 ? churned / newMrr : null;
 
   await query(

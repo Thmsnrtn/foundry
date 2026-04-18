@@ -4,7 +4,9 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { AuthEnv } from '../../middleware/auth.js';
+import { validateBody } from '../../middleware/validate.js';
 import { query } from '../../db/client.js';
 import { listRepos } from '../../services/audit/github.js';
 import { runAudit } from '../../services/audit/engine.js';
@@ -18,8 +20,23 @@ import { startTour } from '../../services/ux/tour.js';
 import { generateDimensionHints } from '../../services/ux/hints.js';
 import { nanoid } from 'nanoid';
 import { encrypt, decrypt, isEncrypted } from '../../services/encryption.js';
+import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
 
 export const onboardingRoutes = new Hono<AuthEnv>();
+
+// ─── Schemas ─────────────────────────────────────────────────────────────────
+
+const createProductSchema = z.object({
+  name: z.string().min(1, 'Product name is required').max(100),
+  url: z.string().url('Must be a valid URL').max(500).optional().or(z.literal('')),
+  build_platform: z.enum([
+    'bubble', 'webflow', 'shopify', 'wordpress', 'retool', 'agency_built', 'other',
+  ]).optional().default('other'),
+  sector_profile: z.enum([
+    'b2b_saas', 'consumer', 'marketplace', 'healthcare', 'education',
+    'government', 'developer_tools', 'fintech', 'climate_impact', 'vertical_saas',
+  ]).optional().default('b2b_saas'),
+});
 
 /** Parse body from JSON or form-encoded data (supports both). */
 async function parseBody(c: { req: { header: (n: string) => string | undefined; json: () => Promise<any>; parseBody: () => Promise<any> } }): Promise<Record<string, unknown>> {
@@ -86,9 +103,9 @@ onboardingRoutes.get('/onboarding/no-code', async (c) => {
   return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
 });
 
-onboardingRoutes.post('/onboarding/create-product', async (c) => {
+onboardingRoutes.post('/onboarding/create-product', validateBody(createProductSchema), async (c) => {
   const founder = c.get('founder');
-  const body = await parseBody(c) as Record<string, string>;
+  const body = c.get('validatedBody' as never) as z.infer<typeof createProductSchema>;
 
   // Enforce per-tier product limits (mirrors the GitHub onboarding path)
   // Solo: 1, Growth: 3, Investor-Ready: unlimited, No tier: 1
@@ -165,14 +182,34 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
   if (!tokenData.access_token) return c.json({ error: 'GitHub auth failed' }, 400);
 
   const repos = await listRepos(tokenData.access_token);
-  const content = onboardingWizard('select_repo', { repos, _token: tokenData.access_token });
+
+  // SEC-10: Store encrypted token in httpOnly cookie instead of browser DOM.
+  // The token is never exposed in a hidden form field; it's read server-side
+  // from the cookie when the repo-select form is submitted.
+  const encryptedGhToken = encrypt(tokenData.access_token);
+  setCookie(c, '__gh_pending', encryptedGhToken, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    path: '/onboarding',
+    maxAge: 600, // 10 minutes
+  });
+
+  const content = onboardingWizard('select_repo', { repos });
   return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
 });
 
 // Step 3: Select repository
 onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const founder = c.get('founder');
-  const body = await parseBody(c) as { repo_owner: string; repo_name: string; access_token: string; market_category?: string };
+  const body = await parseBody(c) as { repo_owner: string; repo_name: string; market_category?: string };
+
+  // SEC-10: Read GitHub token from httpOnly cookie (never from form body / DOM)
+  const encryptedGhToken = getCookie(c, '__gh_pending');
+  if (!encryptedGhToken) return c.json({ error: 'GitHub session expired. Please reconnect.' }, 400);
+  const accessToken = decrypt(encryptedGhToken);
+  // Clean up the temporary cookie
+  deleteCookie(c, '__gh_pending', { path: '/onboarding' });
 
   // Enforce per-tier product limits
   // Solo: 1, Growth: 3, Investor-Ready: unlimited, No tier: 1
@@ -206,7 +243,7 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const repoUrl = `https://github.com/${body.repo_owner}/${body.repo_name}`;
 
   // SEC-01: Encrypt the GitHub access token before storing
-  const encryptedToken = encrypt(body.access_token);
+  const encryptedToken = encrypt(accessToken);
 
   await query(
     `INSERT INTO products (id, name, owner_id, github_repo_url, github_repo_owner, github_repo_name, github_access_token, market_category)

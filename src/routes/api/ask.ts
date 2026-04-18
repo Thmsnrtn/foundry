@@ -14,7 +14,9 @@
 
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
 import type { AuthEnv } from '../../middleware/auth.js';
+import { validateBody } from '../../middleware/validate.js';
 import { getProductByOwner, query, getPendingDecisions, getActiveStressors } from '../../db/client.js';
 import { callOpus, callSonnet } from '../../services/ai/client.js';
 import { buildConversationContext, formatContextForPrompt } from '../../services/conversation/context.js';
@@ -23,27 +25,51 @@ import type { ConversationIntent } from '../../types/index.js';
 
 export const apiAskRoutes = new Hono<AuthEnv>();
 
+// ─── Schemas ─────────────────────────────────────────────────────────────────
+
+const askSchema = z.object({
+  question: z.string().min(1, 'question is required').max(5000),
+  product_id: z.string().min(1, 'product_id is required').max(100),
+});
+
+const createThreadSchema = z.object({
+  product_id: z.string().min(1, 'product_id is required').max(100),
+  first_message: z.string().min(1).max(5000).optional(),
+  message: z.string().min(1).max(5000).optional(),
+}).refine(
+  (data) => (data.first_message ?? data.message ?? '').trim().length > 0,
+  { message: 'message is required', path: ['message'] },
+);
+
+const threadMessageSchema = z.object({
+  message: z.string().min(1, 'message is required').max(5000),
+});
+
+const saveInsightSchema = z.object({
+  message_id: z.string().min(1, 'message_id is required').max(100),
+  title: z.string().max(200).optional(),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+});
+
 // ─── POST /api/ask — Legacy single-turn (backward compat) ────────────────────
 
-apiAskRoutes.post('/api/ask', async (c) => {
+apiAskRoutes.post('/api/ask', validateBody(askSchema), async (c) => {
   const founder = c.get('founder');
-  const body = await c.req.json() as { question?: string; product_id?: string };
+  const body = c.get('validatedBody' as never) as z.infer<typeof askSchema>;
 
-  if (!body.question?.trim()) return c.json({ error: 'question is required' }, 400);
-  if (!body.product_id) return c.json({ error: 'product_id is required' }, 400);
-
+  const question = body.question.trim();
   const productResult = await getProductByOwner(body.product_id, founder.id);
   if (productResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const product = productResult.rows[0] as Record<string, unknown>;
 
   const [ctx, classified] = await Promise.all([
     buildConversationContext(body.product_id, product.name as string, product.market_category as string | null),
-    classifyIntent(body.question.trim()),
+    classifyIntent(question),
   ]);
 
   const systemPrompt = buildSystemPromptForIntent(classified.intent);
   const contextString = formatContextForPrompt(ctx);
-  const userPrompt = `${contextString}\n\nFounder's question: ${body.question.trim()}`;
+  const userPrompt = `${contextString}\n\nFounder's question: ${question}`;
 
   // Use Opus for scenario modeling; Sonnet for everything else
   const callFn = classified.intent === 'scenario' ? callOpus : callSonnet;
@@ -68,13 +94,11 @@ apiAskRoutes.post('/api/ask', async (c) => {
 
 // ─── POST /api/threads — Create a new conversation thread ────────────────────
 
-apiAskRoutes.post('/api/threads', async (c) => {
+apiAskRoutes.post('/api/threads', validateBody(createThreadSchema), async (c) => {
   const founder = c.get('founder');
-  const body = await c.req.json() as { product_id?: string; first_message?: string; message?: string };
+  const body = c.get('validatedBody' as never) as z.infer<typeof createThreadSchema>;
 
-  if (!body.product_id) return c.json({ error: 'product_id is required' }, 400);
   const firstMsg = (body.first_message ?? body.message ?? '').trim();
-  if (!firstMsg) return c.json({ error: 'message is required' }, 400);
 
   const productResult = await getProductByOwner(body.product_id, founder.id);
   if (productResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
@@ -187,12 +211,10 @@ apiAskRoutes.get('/api/threads/:id', async (c) => {
 
 // ─── POST /api/threads/:id/messages — Send a message ─────────────────────────
 
-apiAskRoutes.post('/api/threads/:id/messages', async (c) => {
+apiAskRoutes.post('/api/threads/:id/messages', validateBody(threadMessageSchema), async (c) => {
   const founder = c.get('founder');
   const threadId = c.req.param('id');
-  const body = await c.req.json() as { message?: string };
-
-  if (!body.message?.trim()) return c.json({ error: 'message is required' }, 400);
+  const body = c.get('validatedBody' as never) as z.infer<typeof threadMessageSchema>;
 
   // Verify thread ownership
   const threadResult = await query(
@@ -249,12 +271,10 @@ apiAskRoutes.delete('/api/threads/:id', async (c) => {
 
 // ─── POST /api/threads/:id/save — Save a message as insight ──────────────────
 
-apiAskRoutes.post('/api/threads/:id/save', async (c) => {
+apiAskRoutes.post('/api/threads/:id/save', validateBody(saveInsightSchema), async (c) => {
   const founder = c.get('founder');
   const threadId = c.req.param('id');
-  const body = await c.req.json() as { message_id?: string; title?: string; tags?: string[] };
-
-  if (!body.message_id) return c.json({ error: 'message_id is required' }, 400);
+  const body = c.get('validatedBody' as never) as z.infer<typeof saveInsightSchema>;
 
   const threadResult = await query(
     `SELECT product_id FROM conversation_threads WHERE id = ? AND founder_id = ?`,
