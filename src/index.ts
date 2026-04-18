@@ -135,6 +135,7 @@ import { handleWebhook } from './services/billing/stripe.js';
 
 // Scheduled jobs
 import { JOB_REGISTRY } from './jobs/index.js';
+import { acquireJobLock, releaseJobLock } from './services/job-lock.js';
 
 // Database migrations
 import { runMigrations } from './db/migrate.js';
@@ -467,11 +468,18 @@ function startScheduler(): void {
   for (const [name, job] of Object.entries(JOB_REGISTRY)) {
     try {
       new CronJob(job.schedule, async () => {
+        // Acquire distributed lock to prevent double-execution during rolling deploys
+        if (!(await acquireJobLock(name))) {
+          logger.info(`Job ${name} skipped (locked by another instance)`, { jobName: name });
+          return;
+        }
         logger.info(`Running: ${name}`, { jobName: name });
         try {
           await job.fn();
         } catch (err) {
           logger.error(`Error in ${name}`, { jobName: name, error: String(err) });
+        } finally {
+          await releaseJobLock(name);
         }
       }, null, true, 'UTC');
       logger.info(`Scheduled ${name} — ${job.schedule}`, { jobName: name });
