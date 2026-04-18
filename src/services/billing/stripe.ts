@@ -70,6 +70,11 @@ export async function handleWebhook(payload: string, signature: string): Promise
 
   const event = stripe.webhooks.constructEvent(payload, signature, secret);
 
+  // RT08-P0-03: Idempotency — skip already-processed events to prevent replay attacks
+  const existing = await query('SELECT id FROM stripe_webhook_events WHERE event_id = ?', [event.id]);
+  if (existing.rows.length > 0) return; // Already processed
+  await query('INSERT INTO stripe_webhook_events (event_id, event_type, processed_at) VALUES (?, ?, datetime("now"))', [event.id, event.type]);
+
   switch (event.type) {
     case 'customer.subscription.created':
     case 'customer.subscription.updated': {
