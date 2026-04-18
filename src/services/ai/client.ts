@@ -193,6 +193,8 @@ export async function callClaudeMultiTurn(
 
 /**
  * Parse a JSON response from Claude, handling markdown code fences.
+ * Throws a descriptive error instead of crashing on malformed JSON
+ * (e.g., truncated output from max_tokens limit).
  */
 export function parseJSONResponse<T>(content: string): T {
   let cleaned = content.trim();
@@ -205,5 +207,12 @@ export function parseJSONResponse<T>(content: string): T {
   if (cleaned.endsWith('```')) {
     cleaned = cleaned.slice(0, -3);
   }
-  return JSON.parse(cleaned.trim()) as T;
+  cleaned = cleaned.trim();
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch (err) {
+    // Provide context for debugging — truncated AI output is a common cause
+    const preview = cleaned.length > 200 ? cleaned.slice(0, 200) + '...' : cleaned;
+    throw new Error(`Failed to parse AI JSON response: ${(err as Error).message}. Preview: ${preview}`);
+  }
 }
