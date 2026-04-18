@@ -5,6 +5,7 @@
 
 import Stripe from 'stripe';
 import { query } from '../../db/client.js';
+import { createNotification } from '../ux/notifications.js';
 import { withRetry } from '../resilience.js';
 
 let _stripe: Stripe | null = null;
@@ -87,6 +88,26 @@ export async function handleWebhook(payload: string, signature: string): Promise
       } else {
         console.warn(`[STRIPE WEBHOOK] Unrecognised price ID: ${priceId} (customer: ${sub.customer}). Check STRIPE_*_PRICE_ID env vars.`);
       }
+      // DEFECT-0053: Dunning — notify founder when subscription goes past_due
+      if (sub.status === 'past_due') {
+        const pastDueCustomerId = sub.customer as string;
+        const pastDueFounder = await query(
+          'SELECT id FROM founders WHERE stripe_customer_id = ?',
+          [pastDueCustomerId],
+        );
+        if (pastDueFounder.rows.length > 0) {
+          const founder = pastDueFounder.rows[0] as Record<string, string>;
+          await createNotification(
+            founder.id,
+            null,
+            'system',
+            'Subscription Past Due',
+            'Your subscription is past due. Please update your payment method to continue using all features.',
+            '/settings/billing',
+            'Update Payment Method',
+          );
+        }
+      }
       break;
     }
     case 'customer.subscription.deleted': {
@@ -111,6 +132,30 @@ export async function handleWebhook(payload: string, signature: string): Promise
       }
       break;
     }
+
+    // DEFECT-0053: Dunning — handle failed payments
+    case 'invoice.payment_failed': {
+      const invoice = event.data.object as Stripe.Invoice;
+      const customerId = invoice.customer as string;
+      const founderResult = await query(
+        'SELECT id FROM founders WHERE stripe_customer_id = ?',
+        [customerId],
+      );
+      if (founderResult.rows.length > 0) {
+        const founder = founderResult.rows[0] as Record<string, string>;
+        await createNotification(
+          founder.id,
+          null,
+          'system',
+          'Payment Failed',
+          'Your last payment failed. Please update your payment method in Settings to avoid service interruption.',
+          '/settings/billing',
+          'Update Payment Method',
+        );
+      }
+      break;
+    }
+
   }
 }
 
