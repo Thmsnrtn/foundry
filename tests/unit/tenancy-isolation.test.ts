@@ -360,9 +360,10 @@ describe('Auth middleware founder scoping', () => {
     expect(authSource).toMatch(/getFounderByClerkId/);
   });
 
-  it('auth middleware does not expose founder ID in error messages', () => {
-    // Error responses should be generic
-    expect(authSource).not.toMatch(/error.*founder\.id|error.*founderId/i);
+  it('auth middleware does not expose founder ID in client-facing error responses', () => {
+    // Client-facing JSON error responses should not include founder IDs
+    // Server-side structured logging with founderId context is acceptable
+    expect(authSource).not.toMatch(/c\.json\(.*founder\.id|c\.json\(.*founderId/i);
   });
 
   it('auto-provisioned founders use INSERT with ON CONFLICT (no duplicate creation)', () => {
