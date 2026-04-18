@@ -692,7 +692,7 @@ export function onboardingWizard(
       </div>`)}
     </div>
     ${step === 'connect_github' ? onboardingGitHub(data.github_oauth_url as string) : ''}
-    ${step === 'select_repo' ? onboardingRepoSelect(data.repos as Array<Record<string, unknown>>, data._token as string) : ''}
+    ${step === 'select_repo' ? onboardingRepoSelect(data.repos as Array<Record<string, unknown>>) : ''}
     ${step === 'identify_competitors' ? onboardingCompetitors(data.product_id as string) : ''}
     ${step === 'running_audit' ? onboardingRunAudit(data.product_id as string) : ''}
     ${step === 'complete' ? onboardingComplete(data.audit as Record<string, unknown>) : ''}
@@ -702,13 +702,19 @@ export function onboardingWizard(
 function onboardingGitHub(githubUrl: string): HtmlContent {
   return html`
   <div class="step-card">
-    <h2><span class="step-number">1</span> Connect GitHub</h2>
-    <p>Foundry reads your codebase to run a ten-dimension product audit. We need read-only access to your repository.</p>
-    <a href="${githubUrl}" class="btn btn-primary" style="margin-top:1rem;">Connect GitHub →</a>
+    <h2><span class="step-number">1</span> Connect Your Product</h2>
+    <p>Foundry analyzes your product to run a ten-dimension audit. Connect your GitHub repo for a code-level analysis, or enter your product URL for a web-based audit.</p>
+    <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap;">
+      <a href="${githubUrl}" class="btn btn-primary">Connect GitHub →</a>
+      <a href="/onboarding/no-code" class="btn btn-secondary">I don't have a repo →</a>
+    </div>
+    <p style="font-size:0.8rem;color:#6b7280;margin-top:1rem;">Built with Bubble, Webflow, Shopify, or an agency? The URL-based path is for you.</p>
   </div>`;
 }
 
-function onboardingRepoSelect(repos: Array<Record<string, unknown>>, token: string): HtmlContent {
+function onboardingRepoSelect(repos: Array<Record<string, unknown>>): HtmlContent {
+  // SEC-10: GitHub token is stored in an httpOnly cookie, not in the DOM.
+  // The select-repo POST handler reads it server-side from the cookie.
   return html`
   <div class="step-card">
     <h2><span class="step-number">2</span> Select Repository</h2>
@@ -717,7 +723,6 @@ function onboardingRepoSelect(repos: Array<Record<string, unknown>>, token: stri
     <form method="POST" action="/onboarding/select-repo" style="display:inline;">
       <input type="hidden" name="repo_owner" value="${r.owner}" />
       <input type="hidden" name="repo_name" value="${r.name}" />
-      <input type="hidden" name="access_token" value="${token}" />
       <button type="submit" class="btn btn-secondary" style="margin:0.25rem;">${r.full_name ?? r.name}</button>
     </form>`)}
   </div>`;
