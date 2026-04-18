@@ -7,6 +7,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { sanitizeForPrompt } from '../../ai/sanitize.js';
 import type {
   AgentName,
   AgentInstance,
@@ -520,18 +521,18 @@ export abstract class BaseAgent {
       );
     }
 
-    // Inject integration events (v2)
+    // Inject integration events (v2) — sanitize summaries (user-controlled data)
     if (context.integrationEvents && context.integrationEvents.length > 0) {
       const eventLines = context.integrationEvents.slice(0, 15).map(e =>
-        `[${e.source}/${e.event_type}] ${e.summary}`
+        `[${sanitizeForPrompt(e.source)}/${sanitizeForPrompt(e.event_type)}] ${sanitizeForPrompt(e.summary)}`
       ).join('\n');
       parts.push(`INTEGRATION SIGNALS (${context.integrationEvents.length} since last run):\n${eventLines}`);
     }
 
-    // Inject unread agent messages (v2)
+    // Inject unread agent messages (v2) — sanitize subject/body (may contain external data)
     if (context.unreadMessages && context.unreadMessages.length > 0) {
       const msgLines = context.unreadMessages.map(m =>
-        `[${m.from_agent} · ${m.priority}] ${m.subject}: ${m.body.slice(0, 300)}`
+        `[${sanitizeForPrompt(m.from_agent)} · ${m.priority}] ${sanitizeForPrompt(m.subject)}: ${sanitizeForPrompt(m.body.slice(0, 300))}`
       ).join('\n');
       parts.push(`MESSAGES FROM AGENT NETWORK:\n${msgLines}`);
     }
@@ -603,9 +604,10 @@ Rules:
 
   private _summariseEvent(eventType: string, data: Record<string, unknown>): string {
     // Produce a compact ≤200-char summary for the agent prompt
-    const parts: string[] = [eventType];
+    // Sanitize values — data originates from external integrations (GitHub commits, tickets, etc.)
+    const parts: string[] = [sanitizeForPrompt(eventType)];
     for (const key of ['customer_id', 'customer_email', 'amount', 'plan', 'event', 'actor']) {
-      if (data[key] !== undefined) parts.push(`${key}=${String(data[key]).slice(0, 40)}`);
+      if (data[key] !== undefined) parts.push(`${key}=${sanitizeForPrompt(String(data[key]).slice(0, 40))}`);
     }
     return parts.join(' | ').slice(0, 200);
   }

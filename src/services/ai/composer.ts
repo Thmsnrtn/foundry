@@ -6,6 +6,7 @@
 
 import type { SystemPromptComponents } from '../../types/index.js';
 import type { ComponentPriority, PromptComposerConfig } from '../../types/ai.js';
+import { sanitizeForPrompt } from './sanitize.js';
 
 // Rough estimate: 1 token ≈ 4 characters for English text
 const CHARS_PER_TOKEN = 4;
@@ -40,19 +41,37 @@ export function composeSystemPrompt(
   components: SystemPromptComponents,
   maxTokens: number = 100000
 ): string {
+  // Sanitize components that may contain user-controlled data (competitive signals,
+  // cohort data, pattern context, prior outputs) to prevent prompt injection.
+  // Methodology, safety gates, constraints, and response format are system-authored.
+  const sanitized = {
+    methodology: components.methodology,
+    productContext: sanitizeForPrompt(components.productContext),
+    wisdomContext: components.wisdomContext,
+    riskContext: sanitizeForPrompt(components.riskContext),
+    revenueContext: sanitizeForPrompt(components.revenueContext),
+    cohortContext: sanitizeForPrompt(components.cohortContext),
+    safetyGates: components.safetyGates,
+    constraints: components.constraints,
+    responseFormat: components.responseFormat,
+    competitiveContext: sanitizeForPrompt(components.competitiveContext),
+    patternContext: sanitizeForPrompt(components.patternContext),
+    priorOutputs: sanitizeForPrompt(components.priorOutputs),
+  };
+
   const prioritized: ComponentPriority[] = [
-    { name: 'methodology', priority: PRIORITY.METHODOLOGY, content: components.methodology, estimatedTokens: estimateTokens(components.methodology) },
-    { name: 'productContext', priority: PRIORITY.PRODUCT_STATE, content: components.productContext, estimatedTokens: estimateTokens(components.productContext) },
-    { name: 'wisdomContext', priority: PRIORITY.WISDOM_CONTEXT, content: components.wisdomContext, estimatedTokens: estimateTokens(components.wisdomContext) },
-    { name: 'riskContext', priority: PRIORITY.RISK_CONTEXT, content: components.riskContext, estimatedTokens: estimateTokens(components.riskContext) },
-    { name: 'revenueContext', priority: PRIORITY.REVENUE_CONTEXT, content: components.revenueContext, estimatedTokens: estimateTokens(components.revenueContext) },
-    { name: 'cohortContext', priority: PRIORITY.COHORT_CONTEXT, content: components.cohortContext, estimatedTokens: estimateTokens(components.cohortContext) },
-    { name: 'safetyGates', priority: PRIORITY.SAFETY_GATES, content: components.safetyGates, estimatedTokens: estimateTokens(components.safetyGates) },
-    { name: 'constraints', priority: PRIORITY.CONSTRAINTS, content: components.constraints, estimatedTokens: estimateTokens(components.constraints) },
-    { name: 'responseFormat', priority: PRIORITY.RESPONSE_FORMAT, content: components.responseFormat, estimatedTokens: estimateTokens(components.responseFormat) },
-    { name: 'competitiveContext', priority: PRIORITY.COMPETITIVE, content: components.competitiveContext, estimatedTokens: estimateTokens(components.competitiveContext) },
-    { name: 'patternContext', priority: PRIORITY.PATTERN_CONTEXT, content: components.patternContext, estimatedTokens: estimateTokens(components.patternContext) },
-    { name: 'priorOutputs', priority: PRIORITY.PRIOR_OUTPUTS, content: components.priorOutputs, estimatedTokens: estimateTokens(components.priorOutputs) },
+    { name: 'methodology', priority: PRIORITY.METHODOLOGY, content: sanitized.methodology, estimatedTokens: estimateTokens(sanitized.methodology) },
+    { name: 'productContext', priority: PRIORITY.PRODUCT_STATE, content: sanitized.productContext, estimatedTokens: estimateTokens(sanitized.productContext) },
+    { name: 'wisdomContext', priority: PRIORITY.WISDOM_CONTEXT, content: sanitized.wisdomContext, estimatedTokens: estimateTokens(sanitized.wisdomContext) },
+    { name: 'riskContext', priority: PRIORITY.RISK_CONTEXT, content: sanitized.riskContext, estimatedTokens: estimateTokens(sanitized.riskContext) },
+    { name: 'revenueContext', priority: PRIORITY.REVENUE_CONTEXT, content: sanitized.revenueContext, estimatedTokens: estimateTokens(sanitized.revenueContext) },
+    { name: 'cohortContext', priority: PRIORITY.COHORT_CONTEXT, content: sanitized.cohortContext, estimatedTokens: estimateTokens(sanitized.cohortContext) },
+    { name: 'safetyGates', priority: PRIORITY.SAFETY_GATES, content: sanitized.safetyGates, estimatedTokens: estimateTokens(sanitized.safetyGates) },
+    { name: 'constraints', priority: PRIORITY.CONSTRAINTS, content: sanitized.constraints, estimatedTokens: estimateTokens(sanitized.constraints) },
+    { name: 'responseFormat', priority: PRIORITY.RESPONSE_FORMAT, content: sanitized.responseFormat, estimatedTokens: estimateTokens(sanitized.responseFormat) },
+    { name: 'competitiveContext', priority: PRIORITY.COMPETITIVE, content: sanitized.competitiveContext, estimatedTokens: estimateTokens(sanitized.competitiveContext) },
+    { name: 'patternContext', priority: PRIORITY.PATTERN_CONTEXT, content: sanitized.patternContext, estimatedTokens: estimateTokens(sanitized.patternContext) },
+    { name: 'priorOutputs', priority: PRIORITY.PRIOR_OUTPUTS, content: sanitized.priorOutputs, estimatedTokens: estimateTokens(sanitized.priorOutputs) },
   ].filter((c) => c.content.length > 0);
 
   // Sort by priority ascending (lowest priority first — these get trimmed first)
@@ -102,18 +121,19 @@ export function composeOperationalPrompt(
   recentTickets: string,
   riskState: string
 ): string {
+  // Sanitize user-controlled fields (tickets, user history) before injection
   return [
     '<productDocs>',
-    productDocs,
+    sanitizeForPrompt(productDocs),
     '</productDocs>',
     '<userHistory>',
-    userHistory,
+    sanitizeForPrompt(userHistory),
     '</userHistory>',
     '<recentTickets>',
-    recentTickets,
+    sanitizeForPrompt(recentTickets),
     '</recentTickets>',
     '<riskState>',
-    riskState,
+    sanitizeForPrompt(riskState),
     '</riskState>',
   ].join('\n');
 }
@@ -136,8 +156,10 @@ export function composeWeeklySynthesisPrompt(config: {
   decisionPatterns: string;
   currentRiskState: string;
 }): string {
+  // Sanitize all values — several fields (interviewSummaries, competitiveSignals,
+  // supportCategories) originate from external/user-controlled sources.
   return Object.entries(config)
     .filter(([, v]) => v.length > 0)
-    .map(([k, v]) => `<${k}>\n${v}\n</${k}>`)
+    .map(([k, v]) => `<${k}>\n${sanitizeForPrompt(v)}\n</${k}>`)
     .join('\n\n');
 }
