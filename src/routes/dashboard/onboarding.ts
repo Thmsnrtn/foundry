@@ -17,6 +17,7 @@ import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import { startTour } from '../../services/ux/tour.js';
 import { generateDimensionHints } from '../../services/ux/hints.js';
 import { nanoid } from 'nanoid';
+import { encrypt, decrypt, isEncrypted } from '../../services/encryption.js';
 
 export const onboardingRoutes = new Hono<AuthEnv>();
 
@@ -88,6 +89,36 @@ onboardingRoutes.get('/onboarding/no-code', async (c) => {
 onboardingRoutes.post('/onboarding/create-product', async (c) => {
   const founder = c.get('founder');
   const body = await parseBody(c) as Record<string, string>;
+
+  // Enforce per-tier product limits (mirrors the GitHub onboarding path)
+  const productLimits: Record<string, number> = {
+    solo: 1,
+    growth: 1,
+    investor_ready: 5,
+  };
+  const limit = founder.tier ? (productLimits[founder.tier] ?? 1) : 1;
+  const existing = await query(
+    "SELECT COUNT(*) as c FROM products WHERE owner_id = ? AND status != 'archived'",
+    [founder.id]
+  );
+  const count = ((existing.rows[0] as Record<string, number>)?.c ?? 0);
+  if (count >= limit) {
+    const upgradeHint = founder.tier === 'growth'
+      ? 'Upgrade to Investor-Ready for up to 5 products.'
+      : founder.tier === 'investor_ready'
+        ? 'You have reached the 5-product limit.'
+        : 'Your current plan supports 1 product. Upgrade to add more.';
+    const ctx = await getLayoutContext(founder, '', 'Product Limit Reached');
+    return c.html(dashboardLayout(ctx, html`
+      <div class="card" style="max-width:480px;margin:3rem auto;text-align:center;">
+        <h2>Product limit reached</h2>
+        <p style="color:var(--text-muted);margin:0.75rem 0 1.5rem;">${upgradeHint}</p>
+        <a href="/settings" class="btn btn-primary">View upgrade options</a>
+        <a href="/dashboard" class="btn btn-ghost" style="margin-left:0.5rem;">Back to dashboard</a>
+      </div>
+    `));
+  }
+
   const productId = nanoid();
 
   await query(
@@ -176,10 +207,13 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const productId = nanoid();
   const repoUrl = `https://github.com/${body.repo_owner}/${body.repo_name}`;
 
+  // SEC-01: Encrypt the GitHub access token before storing
+  const encryptedToken = encrypt(body.access_token);
+
   await query(
     `INSERT INTO products (id, name, owner_id, github_repo_url, github_repo_owner, github_repo_name, github_access_token, market_category)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [productId, body.repo_name, founder.id, repoUrl, body.repo_owner, body.repo_name, body.access_token, body.market_category ?? null]
+    [productId, body.repo_name, founder.id, repoUrl, body.repo_owner, body.repo_name, encryptedToken, body.market_category ?? null]
   );
 
   // Initialize lifecycle state
@@ -254,12 +288,17 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
   const product = prodResult.rows[0] as Record<string, unknown>;
+
+  // SEC-01: Decrypt the GitHub access token when reading from DB
+  const rawToken = product.github_access_token as string | null;
+  const githubToken = rawToken && isEncrypted(rawToken) ? decrypt(rawToken) : rawToken;
+
   const auditScore = await runAudit({
     id: product.id as string, name: product.name as string, owner_id: product.owner_id as string,
     github_repo_url: product.github_repo_url as string | null,
     github_repo_owner: product.github_repo_owner as string | null,
     github_repo_name: product.github_repo_name as string | null,
-    github_access_token: product.github_access_token as string | null,
+    github_access_token: githubToken,
     stack_description: product.stack_description as string | null,
     market_category: product.market_category as string | null,
     created_at: product.created_at as string, updated_at: product.updated_at as string,
