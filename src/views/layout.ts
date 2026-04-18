@@ -71,6 +71,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js" defer></script>
 </head>
 <body class="${bodyClass}">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
   <header class="site-header">
     <div class="header-left">
       <a href="${founderName ? '/dashboard' : '/'}" class="logo">Foundry</a>
@@ -95,7 +96,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
 
   ${!chamberMode && showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, dnaCompletionPct, openPRCount, opts.founderEmail) : ''}
 
-  <main class="${showNav && !chamberMode ? 'main-with-sidebar' : 'main-full'}">
+  <main id="main-content" class="${showNav && !chamberMode ? 'main-with-sidebar' : 'main-full'}">
     ${showNav && !chamberMode ? html`<div id="one-thing-banner"
       hx-get="/api/priority/one-thing"
       hx-trigger="load"

@@ -118,33 +118,39 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
 
 /**
  * Call Claude Opus for strategic/methodology execution.
+ * Pass productId to enforce per-product cost ceiling.
  */
 export async function callOpus(
   systemPrompt: string,
   userPrompt: string,
-  maxTokens: number = 8192
+  maxTokens: number = 8192,
+  productId?: string,
 ): Promise<AIResponse> {
   return callClaude({
     model: MODELS.OPUS,
     maxTokens,
     systemPrompt,
     userPrompt,
+    productId,
   });
 }
 
 /**
  * Call Claude Sonnet for operational intelligence.
+ * Pass productId to enforce per-product cost ceiling.
  */
 export async function callSonnet(
   systemPrompt: string,
   userPrompt: string,
-  maxTokens: number = 4096
+  maxTokens: number = 4096,
+  productId?: string,
 ): Promise<AIResponse> {
   return callClaude({
     model: MODELS.SONNET,
     maxTokens,
     systemPrompt,
     userPrompt,
+    productId,
   });
 }
 
