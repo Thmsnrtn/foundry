@@ -40,6 +40,12 @@ export const tenantMiddleware = createMiddleware<TenantEnv>(async (c, next) => {
   }
 
   const row = productResult.rows[0] as unknown as ProductRow;
+
+  // Archived products should not be accessible — treat as not found
+  if (row.status === 'archived') {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
   const product: Product = {
     id: row.id,
     name: row.name,
@@ -53,6 +59,10 @@ export const tenantMiddleware = createMiddleware<TenantEnv>(async (c, next) => {
     created_at: row.created_at,
     updated_at: row.updated_at,
     status: row.status as ProductStatus,
+    sector_profile: 'b2b_saas',
+    growth_stage: 'pre_launch',
+    growth_stage_updated_at: null,
+    growth_stage_overridden: false,
   };
 
   // Load lifecycle state
