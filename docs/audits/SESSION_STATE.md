@@ -1,48 +1,51 @@
 # Foundry Transformation v4 — Session State
-Last updated: 2026-04-18T14:00:00Z
-Last commit: 1ee62b7 — docs: final session state (v3)
+Last updated: 2026-04-18T15:00:00Z
+Last commit: f8ca835 — fix(ai-safety): strengthen prompt sanitizer
 
 ## Current Position
-Phase: 2 (150-Lens Audit — expanding from 50 to 150)
-Sub-task: Launching Tier 2 + Tier 3 lenses (51-150)
-Sweep number (if in §9 loop): N/A
+Phase: 2/4/7 (150-lens audit + continued P0 fixes)
+Sub-task: 6 lens agents running (Tiers 2+3), 1 fix agent running (productId wiring)
+Sweep number: N/A
 Consecutive clean sweeps: 0
-Red team personas completed: 10/10 (from v3)
-Simulations completed: 5/5 (from v3)
+Red team personas completed: 10/10
+Simulations completed: 5/5
 
 ## Lens Progress
-Initial audits complete: 50/150 (Tier 1 complete from v3)
-Tier 2 (51-100): 0/50 — launching now
-Tier 3 (101-150): 0/50 — launching now
-Most recent sweep: N/A
-Defect registry entries: needs v4 rebuild with DEFECT-NNNN schema
+Initial audits complete: 67/150 (growing — agents active)
+Tier 1 (001-050): 50/50 COMPLETE
+Tier 2 (051-100): ~17/50 in progress
+Tier 3 (101-150): ~0/50 in progress
+Defect registry: needs v4 rebuild after all 150 lenses complete
 
 ## Open Counts
-P0: ~3 (from red team findings not yet fixed)
-P1: ~8 (from v3 defect registry)
-Blockers unresolved: 0
+P0: ~2 (RT08 portfolio route leakage, RT09 conversation history unsanitized)
+P1: ~8 (inline styles, remaining console.log, test coverage, RBAC, dunning)
+Blockers: 0
 
-## v3 Carryforward
-- 127 commits, 346 tests (18 files), TSC clean
-- 50 Tier 1 lenses complete
-- 10/10 red team complete (security P0s fixed)
-- 5/5 simulations passing
-- 4/4 fleet meta-agent specs
-- Prior audit P0 debts all closed
-- Design tokens, CSS fixes, security headers, CSRF, encryption, retry logic all shipped
-- Gate script exits 0
+## v4 Session Fixes Committed (this session)
+1. RT08-P0-01: SCP pause at product level on cancel (a0101ae)
+2. RT08-P0-03: Webhook idempotency via event tracking (bc6e5ca)
+3. RT09-P0: Strengthened prompt sanitizer (f8ca835)
+4. RT09-P0: productId wiring to callOpus/callSonnet (agent running)
 
 ## Active Subagents
-None yet — about to launch Tier 2 + Tier 3 lens batches
+- Tier 2 engineering lenses 051-065 (running)
+- Tier 2 frontend+design lenses 066-085 (running)
+- Tier 2 ops+AI lenses 086-100 (running)
+- Tier 3 edge+security lenses 101-120 (running)
+- Tier 3 perf+fleet lenses 121-140 (running)
+- Tier 3 launch-meta lenses 141-150 (running)
+- productId wiring to SCP agent AI calls (running)
 
 ## Next Action
-Launch 100 remaining lenses in parallel batches (Tier 2: 51-100, Tier 3: 101-150).
-Then rebuild defect registry with v4 DEFECT-NNNN schema merging all 150 lens findings.
-Then formal convergence sweeps.
+1. Wait for lens agents to complete
+2. Wait for productId fix agent
+3. Launch registry builder subagent (§15.F) once all 150 lenses done
+4. Review registry, fix remaining P0/P1s
+5. Begin convergence sweeps
 
-## Notes for Next Orchestrator Session
-- v4 requires 150 lenses (100 more beyond the 50 from v3)
-- v4 requires formal Defect Deduplication Registry with DEFECT-NNNN IDs
-- v4 requires 3 consecutive clean sweeps across ALL 150 lenses
-- Red team and simulations carry forward (10/10 and 5/5)
-- The 50 Tier 1 lenses and all fixes from v3 carry forward
+## Build Metrics
+- Commits: 131
+- Tests: 346 passing (18 files)
+- TypeScript: 0 errors
+- Gate script: PASSES
