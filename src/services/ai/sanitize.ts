@@ -1,18 +1,36 @@
 /**
  * Sanitize user-controlled text before injecting into LLM prompts.
- * Strips common injection patterns while preserving useful content.
+ *
+ * Defense-in-depth approach:
+ * 1. Denylist filter (catches obvious patterns)
+ * 2. XML boundary wrapping via wrapUserContent() (primary defense)
+ * 3. Length truncation (prevents context-stuffing)
+ * 4. XML tag stripping (prevents breaking out of XML boundaries)
+ *
+ * The denylist alone is bypassable (RT09 finding). The primary defense
+ * is XML boundary wrapping — Claude respects XML tag boundaries, so
+ * user content wrapped in <user_data>...</user_data> is treated as data,
+ * not instructions. Always use wrapUserContent() for external data.
  */
 export function sanitizeForPrompt(input: string): string {
   if (!input || typeof input !== 'string') return '';
 
   let cleaned = input;
 
+  // Strip XML-like tags that could break out of boundary wrapping
+  // This is the most important defense — prevents </user_data> injection
+  cleaned = cleaned.replace(/<\/?[a-zA-Z_][\w.-]*[^>]*>/g, '[tag removed]');
+
   // Remove common prompt injection patterns (case-insensitive)
   const injectionPatterns = [
     /ignore\s+(all\s+)?previous\s+instructions/gi,
     /ignore\s+(all\s+)?above\s+instructions/gi,
-    /disregard\s+(all\s+)?previous/gi,
+    /disregard\s+(all\s+)?(previous|above|prior)/gi,
     /you\s+are\s+now\s+a/gi,
+    /act\s+as\s+(a\s+|an\s+)?/gi,
+    /pretend\s+(you('re|\s+are)\s+)/gi,
+    /new\s+instructions?\s*:/gi,
+    /override\s+(all\s+)?instructions/gi,
     /system\s*:\s*/gi,
     /\[INST\]/gi,
     /\[\/INST\]/gi,
@@ -20,6 +38,8 @@ export function sanitizeForPrompt(input: string): string {
     /<\|im_end\|>/gi,
     /<<SYS>>/gi,
     /<<\/SYS>>/gi,
+    /Human:\s*/gi,
+    /Assistant:\s*/gi,
   ];
 
   for (const pattern of injectionPatterns) {
