@@ -23,7 +23,7 @@ export const securityHeaders = createMiddleware(async (c, next) => {
   // Prevent embedding in iframes (modern)
   c.header('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://unpkg.com https://*.clerk.accounts.dev",
+    "script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "connect-src 'self' https://*.clerk.accounts.dev https://api.clerk.com",

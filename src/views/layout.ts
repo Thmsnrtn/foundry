@@ -68,7 +68,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <title>${title} — Foundry</title>
   <link rel="stylesheet" href="/static/styles.css" />
   <link rel="manifest" href="/manifest.json" />
-  <script src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js" defer></script>
+  <script src="/static/htmx.min.js" defer></script>
 </head>
 <body class="${bodyClass}">
   <a href="#main-content" class="skip-link">Skip to main content</a>

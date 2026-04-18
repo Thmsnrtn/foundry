@@ -103,7 +103,7 @@ onboardingChat.get('/setup', async (c) => {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Set up your AI team — Foundry</title>
-  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <script src="/static/htmx.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
