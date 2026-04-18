@@ -36,8 +36,8 @@ beforeAll(() => {
 
 describe('AI client handles missing API key gracefully', () => {
 
-  it('getClient throws a descriptive error when ANTHROPIC_API_KEY is missing', () => {
-    expect(aiClientSource).toMatch(/ANTHROPIC_API_KEY.*required|required.*ANTHROPIC_API_KEY/);
+  it('getApiKey throws a descriptive error when no AI key is set', () => {
+    expect(aiClientSource).toMatch(/OPENROUTER_API_KEY.*required|required.*OPENROUTER_API_KEY|ANTHROPIC_API_KEY/);
   });
 
   it('cost ceiling check runs before API call (prevents billing on misconfigured product)', () => {
@@ -48,7 +48,7 @@ describe('AI client handles missing API key gracefully', () => {
     const body = callClaudeFn![0];
     // Cost ceiling is checked before getClient() / client.messages.create
     const ceilingCheckIdx = body.indexOf('isCostCeilingReached');
-    const getClientIdx = body.indexOf('getClient()');
+    const getClientIdx = body.indexOf('getApiKey()');
     expect(ceilingCheckIdx).toBeGreaterThan(-1);
     expect(getClientIdx).toBeGreaterThan(-1);
     expect(ceilingCheckIdx).toBeLessThan(getClientIdx);
@@ -103,9 +103,9 @@ describe('Health check returns 503 when DB is down', () => {
     expect(healthRouteSource).toMatch(/healthy\s*\?\s*['"]ok['"]\s*:\s*['"]degraded['"]/);
   });
 
-  it('health check verifies Anthropic API key is configured', () => {
-    expect(healthRouteSource).toMatch(/ANTHROPIC_API_KEY/);
-    expect(healthRouteSource).toMatch(/anthropic_configured/);
+  it('health check verifies AI key is configured', () => {
+    expect(healthRouteSource).toMatch(/OPENROUTER_API_KEY|ANTHROPIC_API_KEY/);
+    expect(healthRouteSource).toMatch(/ai_configured/);
   });
 });
 

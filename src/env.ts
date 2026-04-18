@@ -18,7 +18,8 @@ const REQUIRED_VARS: EnvVar[] = [
   // Degraded without these — features disabled, app still runs
   { name: 'TURSO_AUTH_TOKEN', required: false, description: 'Turso auth token (required for remote DB)' },
   { name: 'CLERK_WEBHOOK_SECRET', required: false, description: 'Clerk webhook signing secret — webhook endpoint disabled without this' },
-  { name: 'ANTHROPIC_API_KEY', required: false, description: 'Anthropic API key — AI features disabled without this' },
+  { name: 'OPENROUTER_API_KEY', required: false, description: 'OpenRouter API key — primary AI gateway for all LLM calls' },
+  { name: 'ANTHROPIC_API_KEY', required: false, description: 'Anthropic API key — fallback if OpenRouter not set' },
   { name: 'STRIPE_SECRET_KEY', required: false, description: 'Stripe secret key — billing disabled without this' },
   { name: 'STRIPE_WEBHOOK_SECRET', required: false, description: 'Stripe webhook signing secret' },
   { name: 'STRIPE_FOUNDING_COHORT_PRICE_ID', required: false, description: 'Stripe Price ID for Founding Cohort ($99)' },

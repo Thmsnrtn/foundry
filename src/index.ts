@@ -151,8 +151,12 @@ const REQUIRED_ENV_VARS = [
   'STRIPE_SOLO_PRICE_ID',
   'STRIPE_GROWTH_PRICE_ID',
   'STRIPE_INVESTOR_READY_PRICE_ID',
-  'ANTHROPIC_API_KEY',
 ];
+
+// AI key: prefer OpenRouter, fall back to Anthropic
+if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+  console.warn('[STARTUP] Neither OPENROUTER_API_KEY nor ANTHROPIC_API_KEY set — AI features disabled.');
+}
 
 const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
 if (missing.length > 0) {

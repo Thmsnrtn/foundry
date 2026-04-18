@@ -209,7 +209,7 @@ async function callOpenAITTS(text: string, apiKey: string): Promise<string | nul
 
 async function generateAudioUrl(script: string): Promise<string | null> {
   const elevenKey = process.env.ELEVENLABS_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiKey = process.env.OPENROUTER_API_KEY ?? process.env.OPENAI_API_KEY;
 
   if (elevenKey) {
     try {

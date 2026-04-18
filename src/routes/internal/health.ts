@@ -16,9 +16,10 @@ healthRoutes.get('/internal/health', async (c) => {
     healthy = false;
   }
 
-  // Anthropic API key present (not a live call — just config check)
-  checks.anthropic_configured = process.env.ANTHROPIC_API_KEY ? 'ok' : 'error';
-  if (!process.env.ANTHROPIC_API_KEY) healthy = false;
+  // AI gateway configured (OpenRouter preferred, Anthropic fallback)
+  const aiConfigured = process.env.OPENROUTER_API_KEY || process.env.ANTHROPIC_API_KEY;
+  checks.ai_configured = aiConfigured ? 'ok' : 'error';
+  if (!aiConfigured) healthy = false;
 
   // Clerk configured
   checks.clerk_configured = process.env.CLERK_SECRET_KEY ? 'ok' : 'error';

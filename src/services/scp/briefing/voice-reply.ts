@@ -33,9 +33,10 @@ export interface VoiceReplyResult {
  * Requires OPENAI_API_KEY.
  */
 export async function transcribeAudio(audioBase64: string, mimeType: string): Promise<string> {
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) {
-    throw new Error('OPENAI_API_KEY is required for voice transcription');
+  // Use OpenRouter key (preferred) or fall back to direct OpenAI key
+  const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY (or OPENAI_API_KEY) is required for voice transcription');
   }
 
   // Determine file extension from mime type
@@ -58,10 +59,15 @@ export async function transcribeAudio(audioBase64: string, mimeType: string): Pr
   formData.append('model', 'whisper-1');
   formData.append('response_format', 'text');
 
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  // OpenRouter supports the same /audio/transcriptions endpoint
+  const baseUrl = process.env.OPENROUTER_API_KEY
+    ? 'https://openrouter.ai/api/v1'
+    : 'https://api.openai.com/v1';
+
+  const response = await fetch(`${baseUrl}/audio/transcriptions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${openaiKey}`,
+      Authorization: `Bearer ${apiKey}`,
     },
     body: formData,
   });

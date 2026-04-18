@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('AI client cost tracking', () => {
   beforeEach(() => {
-    vi.stubEnv('ANTHROPIC_API_KEY', 'sk-test-key');
+    vi.stubEnv('OPENROUTER_API_KEY', 'sk-or-test-key');
     vi.stubEnv('AI_DAILY_COST_CEILING_CENTS', '2500'); // $25
     vi.resetModules();
   });
@@ -94,8 +94,8 @@ describe('AI client cost tracking', () => {
   describe('MODELS constant', () => {
     it('exports correct model identifiers', async () => {
       const { MODELS } = await loadModule();
-      expect(MODELS.OPUS).toBe('claude-opus-4-6');
-      expect(MODELS.SONNET).toBe('claude-sonnet-4-5-20250929');
+      expect(MODELS.OPUS).toBe('anthropic/claude-opus-4-6');
+      expect(MODELS.SONNET).toBe('anthropic/claude-sonnet-4-5-20250929');
     });
   });
 });

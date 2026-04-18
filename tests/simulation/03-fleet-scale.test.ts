@@ -156,7 +156,7 @@ describe('AI cost ceiling is per-product, not global', () => {
     expect(callClaudeFn).toBeTruthy();
     const body = callClaudeFn![0];
     const ceilingCheckPos = body.indexOf('isCostCeilingReached');
-    const apiCallPos = body.indexOf('client.messages.create');
+    const apiCallPos = body.indexOf('fetch(');
     expect(ceilingCheckPos).toBeGreaterThan(-1);
     expect(apiCallPos).toBeGreaterThan(-1);
     expect(ceilingCheckPos).toBeLessThan(apiCallPos);

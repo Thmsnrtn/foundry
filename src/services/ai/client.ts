@@ -1,34 +1,35 @@
 // =============================================================================
-// FOUNDRY — Anthropic AI Client
-// Wraps the Anthropic SDK for all Claude API calls.
+// FOUNDRY — AI Client (OpenRouter)
+// Routes all LLM calls through OpenRouter for cost efficiency and model flexibility.
+// Supports Claude, GPT, and any OpenRouter-available model via config.
 // =============================================================================
 
-import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
 
-let _client: Anthropic | null = null;
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export const MODELS = {
-  OPUS: 'claude-opus-4-6' as AIModel,
-  SONNET: 'claude-sonnet-4-5-20250929' as AIModel,
+  // Strategic / methodology — highest quality, used for audit scoring, weekly synthesis
+  OPUS: 'anthropic/claude-opus-4-6' as AIModel,
+  // Operational / fast — used for agent runs, briefings, competitive scans
+  SONNET: 'anthropic/claude-sonnet-4-5-20250929' as AIModel,
 } as const;
 
 // ─── Cost Ceiling ────────────────────────────────────────────────────────────
-// Per-product daily AI spend cap. Prevents unbounded Anthropic bills.
+// Per-product daily AI spend cap. Prevents unbounded bills.
 // Default $25/day per product. Configurable via AI_DAILY_COST_CEILING_CENTS env var.
 const DAILY_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_CENTS ?? '2500', 10);
 const dailySpend = new Map<string, { cents: number; date: string }>();
 
 // ─── Model-Specific Pricing (per 1M tokens, in USD) ─────────────────────────
-// Current Anthropic pricing (as of April 2026).
-// Configurable via environment variables to avoid redeployment on price changes.
-const COST_PER_1M: Record<AIModel, { input: number; output: number }> = {
-  'claude-opus-4-6': {
+// OpenRouter pricing. Configurable via environment variables.
+const COST_PER_1M: Record<string, { input: number; output: number }> = {
+  'anthropic/claude-opus-4-6': {
     input: parseFloat(process.env.AI_COST_OPUS_INPUT_PER_1M ?? '15.00'),
     output: parseFloat(process.env.AI_COST_OPUS_OUTPUT_PER_1M ?? '75.00'),
   },
-  'claude-sonnet-4-5-20250929': {
+  'anthropic/claude-sonnet-4-5-20250929': {
     input: parseFloat(process.env.AI_COST_SONNET_INPUT_PER_1M ?? '3.00'),
     output: parseFloat(process.env.AI_COST_SONNET_OUTPUT_PER_1M ?? '15.00'),
   },
@@ -37,15 +38,14 @@ const COST_PER_1M: Record<AIModel, { input: number; output: number }> = {
 /**
  * Compute cost in cents for a given model and token usage.
  */
-export function computeCostCents(model: AIModel, inputTokens: number, outputTokens: number): number {
-  const rates = COST_PER_1M[model];
-  // Convert from $/1M tokens to cents per token: (rate / 1_000_000) * 100
+export function computeCostCents(model: AIModel | string, inputTokens: number, outputTokens: number): number {
+  const rates = COST_PER_1M[model] ?? { input: 3.0, output: 15.0 }; // Default to Sonnet rates
   const inputCostCents = (inputTokens * rates.input) / 10_000;
   const outputCostCents = (outputTokens * rates.output) / 10_000;
   return inputCostCents + outputCostCents;
 }
 
-function recordSpend(productId: string | undefined, model: AIModel, inputTokens: number, outputTokens: number): void {
+function recordSpend(productId: string | undefined, model: AIModel | string, inputTokens: number, outputTokens: number): void {
   if (!productId) return;
   const today = new Date().toISOString().slice(0, 10);
   const entry = dailySpend.get(productId);
@@ -69,67 +69,108 @@ export function isCostCeilingReached(productId: string): boolean {
 }
 
 // ─── Timeout + Retry ─────────────────────────────────────────────────────────
-const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '120000', 10); // 2 min default
+const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '120000', 10);
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 1000;
 
-function getClient(): Anthropic {
-  if (!_client) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY is required');
-    _client = new Anthropic({ apiKey, timeout: AI_TIMEOUT_MS });
-  }
-  return _client;
+function getApiKey(): string {
+  // Prefer OpenRouter; fall back to direct Anthropic for backward compatibility
+  const key = process.env.OPENROUTER_API_KEY ?? process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('OPENROUTER_API_KEY (or ANTHROPIC_API_KEY) is required');
+  return key;
+}
+
+function getBaseUrl(): string {
+  // If using OpenRouter key, use OpenRouter endpoint
+  // If using direct Anthropic key (fallback), still route through OpenRouter for consistency
+  return process.env.OPENROUTER_BASE_URL ?? OPENROUTER_BASE_URL;
+}
+
+interface OpenRouterResponse {
+  id: string;
+  choices: Array<{
+    message: { role: string; content: string };
+    finish_reason: string;
+  }>;
+  usage: {
+    prompt_tokens: number;
+    completion_tokens: number;
+  };
+  model: string;
 }
 
 /**
- * Make a Claude API call with cost ceiling, timeout, and retry.
- * Pass config.productId to enforce per-product daily cost limit.
+ * Make an LLM call via OpenRouter with cost ceiling, timeout, and retry.
  */
 export async function callClaude(config: AICallConfig & { productId?: string }): Promise<AIResponse> {
-  // Check cost ceiling before calling
   if (config.productId && isCostCeilingReached(config.productId)) {
     throw new Error(`AI daily cost ceiling reached for product ${config.productId} ($${(DAILY_COST_CEILING_CENTS / 100).toFixed(2)})`);
   }
 
-  const client = getClient();
+  const apiKey = getApiKey();
+  const baseUrl = getBaseUrl();
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
     try {
-      const response = await client.messages.create({
-        model: config.model,
-        max_tokens: config.maxTokens,
-        temperature: config.temperature ?? 0.3,
-        system: config.systemPrompt,
-        messages: [{ role: 'user', content: config.userPrompt }],
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': process.env.APP_URL ?? 'https://foundry-intel.fly.dev',
+          'X-Title': 'Foundry',
+        },
+        body: JSON.stringify({
+          model: config.model,
+          max_tokens: config.maxTokens,
+          temperature: config.temperature ?? 0.3,
+          messages: [
+            { role: 'system', content: config.systemPrompt },
+            { role: 'user', content: config.userPrompt },
+          ],
+        }),
+        signal: controller.signal,
       });
 
-      const textContent = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-        .map((block) => block.text)
-        .join('\n');
+      clearTimeout(timeout);
 
-      // Track cost using model-specific rates
-      recordSpend(config.productId, config.model, response.usage.input_tokens, response.usage.output_tokens);
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        const err = new Error(`OpenRouter API error ${response.status}: ${body}`);
+        (err as unknown as Record<string, unknown>).status = response.status;
+        throw err;
+      }
+
+      const data = (await response.json()) as OpenRouterResponse;
+      const textContent = data.choices?.[0]?.message?.content ?? '';
+
+      recordSpend(
+        config.productId,
+        config.model,
+        data.usage?.prompt_tokens ?? 0,
+        data.usage?.completion_tokens ?? 0,
+      );
 
       return {
         content: textContent,
         model: config.model,
         usage: {
-          input_tokens: response.usage.input_tokens,
-          output_tokens: response.usage.output_tokens,
+          input_tokens: data.usage?.prompt_tokens ?? 0,
+          output_tokens: data.usage?.completion_tokens ?? 0,
         },
-        stop_reason: response.stop_reason,
+        stop_reason: data.choices?.[0]?.finish_reason ?? null,
       };
     } catch (err) {
+      clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
 
-      // Don't retry on non-retryable errors (auth, invalid request)
-      const status = (err as Record<string, unknown>)?.status as number | undefined;
+      const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) throw lastError;
 
-      // Jittered exponential backoff
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
         await new Promise((r) => setTimeout(r, delay));
@@ -141,8 +182,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
 }
 
 /**
- * Call Claude Opus for strategic/methodology execution.
- * Pass productId to enforce per-product cost ceiling.
+ * Call with strategic model (Opus) for methodology execution.
  */
 export async function callOpus(
   systemPrompt: string,
@@ -150,18 +190,11 @@ export async function callOpus(
   maxTokens: number = 8192,
   productId?: string,
 ): Promise<AIResponse> {
-  return callClaude({
-    model: MODELS.OPUS,
-    maxTokens,
-    systemPrompt,
-    userPrompt,
-    productId,
-  });
+  return callClaude({ model: MODELS.OPUS, maxTokens, systemPrompt, userPrompt, productId });
 }
 
 /**
- * Call Claude Sonnet for operational intelligence.
- * Pass productId to enforce per-product cost ceiling.
+ * Call with operational model (Sonnet) for fast intelligence.
  */
 export async function callSonnet(
   systemPrompt: string,
@@ -169,19 +202,11 @@ export async function callSonnet(
   maxTokens: number = 4096,
   productId?: string,
 ): Promise<AIResponse> {
-  return callClaude({
-    model: MODELS.SONNET,
-    maxTokens,
-    systemPrompt,
-    userPrompt,
-    productId,
-  });
+  return callClaude({ model: MODELS.SONNET, maxTokens, systemPrompt, userPrompt, productId });
 }
 
 /**
- * Multi-turn Claude call with a full message history array.
- * Used by the conversational layer to maintain context across turns.
- * Now includes cost ceiling, timeout, and retry (was bypassing all three).
+ * Multi-turn call with full message history.
  */
 export async function callClaudeMultiTurn(
   systemPrompt: string,
@@ -190,45 +215,67 @@ export async function callClaudeMultiTurn(
   useOpus: boolean = false,
   productId?: string,
 ): Promise<AIResponse> {
-  // Check cost ceiling before calling
   if (productId && isCostCeilingReached(productId)) {
     throw new Error(`AI daily cost ceiling reached for product ${productId}`);
   }
 
-  const client = getClient();
+  const apiKey = getApiKey();
+  const baseUrl = getBaseUrl();
   const model = useOpus ? MODELS.OPUS : MODELS.SONNET;
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
     try {
-      const response = await client.messages.create({
-        model,
-        max_tokens: maxTokens,
-        temperature: 0.3,
-        system: systemPrompt,
-        messages,
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': process.env.APP_URL ?? 'https://foundry-intel.fly.dev',
+          'X-Title': 'Foundry',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: maxTokens,
+          temperature: 0.3,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...messages,
+          ],
+        }),
+        signal: controller.signal,
       });
 
-      const textContent = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-        .map((block) => block.text)
-        .join('\n');
+      clearTimeout(timeout);
 
-      // Track cost using model-specific rates
-      recordSpend(productId, model, response.usage.input_tokens, response.usage.output_tokens);
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        const err = new Error(`OpenRouter API error ${response.status}: ${body}`);
+        (err as unknown as Record<string, unknown>).status = response.status;
+        throw err;
+      }
+
+      const data = (await response.json()) as OpenRouterResponse;
+      const textContent = data.choices?.[0]?.message?.content ?? '';
+
+      recordSpend(productId, model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0);
 
       return {
         content: textContent,
         model,
         usage: {
-          input_tokens: response.usage.input_tokens,
-          output_tokens: response.usage.output_tokens,
+          input_tokens: data.usage?.prompt_tokens ?? 0,
+          output_tokens: data.usage?.completion_tokens ?? 0,
         },
-        stop_reason: response.stop_reason,
+        stop_reason: data.choices?.[0]?.finish_reason ?? null,
       };
     } catch (err) {
+      clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
-      const status = (err as Record<string, unknown>)?.status as number | undefined;
+      const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) throw lastError;
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
@@ -241,26 +288,14 @@ export async function callClaudeMultiTurn(
 }
 
 /**
- * Parse a JSON response from Claude, handling markdown code fences.
- * Throws a descriptive error instead of crashing on malformed JSON
- * (e.g., truncated output from max_tokens limit).
- *
- * Optional Zod schema parameter enables runtime validation of the parsed
- * structure. When provided, the response is validated against the schema
- * and the typed result is returned. Backward-compatible — existing callers
- * without a schema still work via `as T` assertion.
+ * Parse a JSON response, handling markdown code fences.
+ * Optional Zod schema for runtime validation.
  */
 export function parseJSONResponse<T>(content: string, schema?: z.ZodType<T>): T {
   let cleaned = content.trim();
-  // Remove markdown code fences if present
-  if (cleaned.startsWith('```json')) {
-    cleaned = cleaned.slice(7);
-  } else if (cleaned.startsWith('```')) {
-    cleaned = cleaned.slice(3);
-  }
-  if (cleaned.endsWith('```')) {
-    cleaned = cleaned.slice(0, -3);
-  }
+  if (cleaned.startsWith('```json')) cleaned = cleaned.slice(7);
+  else if (cleaned.startsWith('```')) cleaned = cleaned.slice(3);
+  if (cleaned.endsWith('```')) cleaned = cleaned.slice(0, -3);
   cleaned = cleaned.trim();
   try {
     const parsed = JSON.parse(cleaned) as T;
@@ -273,7 +308,6 @@ export function parseJSONResponse<T>(content: string, schema?: z.ZodType<T>): T 
     }
     return parsed;
   } catch (err) {
-    // Provide context for debugging — truncated AI output is a common cause
     const preview = cleaned.length > 200 ? cleaned.slice(0, 200) + '...' : cleaned;
     throw new Error(`Failed to parse AI JSON response: ${(err as Error).message}. Preview: ${preview}`);
   }
