@@ -3,7 +3,7 @@
 // Multi-tenant by design. Every query scopes by founder ID.
 // =============================================================================
 
-import { createClient, type Client, type InStatement, type ResultSet } from '@libsql/client';
+import { createClient, type Client, type InStatement, type InValue, type InArgs, type ResultSet } from '@libsql/client';
 
 let _client: Client | null = null;
 
@@ -32,7 +32,7 @@ export function getDb(): Client {
  */
 export async function query(sql: string, args: unknown[] = []): Promise<ResultSet> {
   const db = getDb();
-  return db.execute({ sql, args: args as any[] });
+  return db.execute({ sql, args: args as InArgs });
 }
 
 /**
@@ -43,7 +43,7 @@ export async function batch(statements: Array<{ sql: string; args?: unknown[] }>
   return db.batch(
     statements.map((s) => ({
       sql: s.sql,
-      args: (s.args || []) as any[],
+      args: (s.args || []) as InArgs,
     })),
     'write'
   );

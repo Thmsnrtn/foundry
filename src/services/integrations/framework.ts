@@ -73,7 +73,13 @@ export async function getIntegrations(productId: string): Promise<Array<{
     'SELECT id, provider, status, last_sync_at, last_sync_status FROM integrations WHERE product_id = ? ORDER BY provider',
     [productId]
   );
-  return result.rows as any;
+  return result.rows as unknown as Array<{
+    id: string;
+    provider: string;
+    status: string;
+    last_sync_at: string | null;
+    last_sync_status: string | null;
+  }>;
 }
 
 /**

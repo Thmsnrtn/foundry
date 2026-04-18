@@ -20,7 +20,7 @@ function getStripe(): Stripe {
   if (!_stripe) {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key) throw new Error('STRIPE_SECRET_KEY is required');
-    _stripe = new Stripe(key, { apiVersion: '2024-04-10' as any });
+    _stripe = new Stripe(key, { apiVersion: '2023-10-16' });
   }
   return _stripe;
 }
@@ -67,7 +67,7 @@ export async function processStripeEventChain(
   };
 
   // 1. Persist raw event
-  await processStripeWebhookEvent(productId, event.id, event.type, event.data.object as any);
+  await processStripeWebhookEvent(productId, event.id, event.type, event.data.object as Record<string, unknown>);
 
   // 2. Update metrics based on event type
   const metricsUpdated = await updateMetricsFromEvent(productId, event);
@@ -138,7 +138,7 @@ export async function processStripeEventChain(
     const ownerId = p.owner_id as string;
     if (event.type === 'customer.subscription.deleted') {
       const sub = event.data.object as Stripe.Subscription;
-      const customerEmail = (sub as any).customer_email ?? 'a customer';
+      const customerEmail = (sub as unknown as Record<string, unknown>).customer_email as string ?? 'a customer';
       const message = `A subscription was just cancelled (${customerEmail}). ${result.risk_changed ? `Risk state changed to ${riskState}.` : ''} I'm assessing the impact and drafting a rescue plan.`;
       await sendProactiveMessage(ownerId, productId, message);
       result.coo_notified = true;
@@ -212,7 +212,7 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
       const sub = event.data.object as Stripe.Subscription;
       const previousSub = event.data.previous_attributes as Record<string, unknown> | undefined;
       if (previousSub?.items) {
-        const oldMRR = computeSubscriptionMRR({ items: previousSub.items } as any);
+        const oldMRR = computeSubscriptionMRR({ items: previousSub.items } as unknown as Stripe.Subscription);
         const newMRR = computeSubscriptionMRR(sub);
         const delta = newMRR - oldMRR;
         if (delta > 0) {

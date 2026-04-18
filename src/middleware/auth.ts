@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { createMiddleware } from 'hono/factory';
-import { Clerk as ClerkBackend, verifyToken } from '@clerk/backend';
+import { Clerk as ClerkBackend, verifyToken, type VerifyTokenOptions } from '@clerk/backend';
 import { getFounderByClerkId, query } from '../db/client.js';
 import { nanoid } from 'nanoid';
 import type { Founder, FounderPreferences } from '../types/index.js';
@@ -65,7 +65,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     const payload = await verifyToken(token, {
       secretKey,
       issuer: (iss: string) => iss.includes('clerk'),
-    } as any);
+    } satisfies VerifyTokenOptions);
 
     const clerkUserId = payload.sub;
     if (!clerkUserId) {
@@ -119,8 +119,8 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
       cohort_id: row.cohort_id,
       created_at: row.created_at,
       preferences: row.preferences ? (JSON.parse(row.preferences) as FounderPreferences) : null,
-      lifestyle_mode: ((row as any).lifestyle_mode ?? 0) === 1,
-      lifestyle_target_mrr: (row as any).lifestyle_target_mrr ?? null,
+      lifestyle_mode: (row.lifestyle_mode ?? 0) === 1,
+      lifestyle_target_mrr: row.lifestyle_target_mrr ?? null,
     };
 
     c.set('founder', founder);

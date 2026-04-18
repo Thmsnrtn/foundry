@@ -103,7 +103,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
       lastError = err instanceof Error ? err : new Error(String(err));
 
       // Don't retry on non-retryable errors (auth, invalid request)
-      const status = (err as any)?.status;
+      const status = (err as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) throw lastError;
 
       // Jittered exponential backoff
@@ -205,7 +205,7 @@ export async function callClaudeMultiTurn(
       };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
-      const status = (err as any)?.status;
+      const status = (err as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) throw lastError;
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
