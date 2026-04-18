@@ -20,13 +20,36 @@ export const MODELS = {
 const DAILY_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_CENTS ?? '2500', 10);
 const dailySpend = new Map<string, { cents: number; date: string }>();
 
-function recordSpend(productId: string | undefined, inputTokens: number, outputTokens: number): void {
+// ─── Model-Specific Pricing (per 1M tokens, in USD) ─────────────────────────
+// Current Anthropic pricing (as of April 2026).
+// Configurable via environment variables to avoid redeployment on price changes.
+const COST_PER_1M: Record<AIModel, { input: number; output: number }> = {
+  'claude-opus-4-6': {
+    input: parseFloat(process.env.AI_COST_OPUS_INPUT_PER_1M ?? '15.00'),
+    output: parseFloat(process.env.AI_COST_OPUS_OUTPUT_PER_1M ?? '75.00'),
+  },
+  'claude-sonnet-4-5-20250929': {
+    input: parseFloat(process.env.AI_COST_SONNET_INPUT_PER_1M ?? '3.00'),
+    output: parseFloat(process.env.AI_COST_SONNET_OUTPUT_PER_1M ?? '15.00'),
+  },
+};
+
+/**
+ * Compute cost in cents for a given model and token usage.
+ */
+export function computeCostCents(model: AIModel, inputTokens: number, outputTokens: number): number {
+  const rates = COST_PER_1M[model];
+  // Convert from $/1M tokens to cents per token: (rate / 1_000_000) * 100
+  const inputCostCents = (inputTokens * rates.input) / 10_000;
+  const outputCostCents = (outputTokens * rates.output) / 10_000;
+  return inputCostCents + outputCostCents;
+}
+
+function recordSpend(productId: string | undefined, model: AIModel, inputTokens: number, outputTokens: number): void {
   if (!productId) return;
   const today = new Date().toISOString().slice(0, 10);
   const entry = dailySpend.get(productId);
-  // Opus: $15/M input, $75/M output; Sonnet: $3/M input, $15/M output
-  // Use Opus rates as conservative upper bound
-  const costCents = (inputTokens * 0.0015 + outputTokens * 0.0075);
+  const costCents = computeCostCents(model, inputTokens, outputTokens);
   if (!entry || entry.date !== today) {
     dailySpend.set(productId, { cents: costCents, date: today });
   } else {
@@ -87,8 +110,8 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
         .map((block) => block.text)
         .join('\n');
 
-      // Track cost
-      recordSpend(config.productId, response.usage.input_tokens, response.usage.output_tokens);
+      // Track cost using model-specific rates
+      recordSpend(config.productId, config.model, response.usage.input_tokens, response.usage.output_tokens);
 
       return {
         content: textContent,
@@ -191,8 +214,8 @@ export async function callClaudeMultiTurn(
         .map((block) => block.text)
         .join('\n');
 
-      // Track cost
-      recordSpend(productId, response.usage.input_tokens, response.usage.output_tokens);
+      // Track cost using model-specific rates
+      recordSpend(productId, model, response.usage.input_tokens, response.usage.output_tokens);
 
       return {
         content: textContent,
