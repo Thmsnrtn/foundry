@@ -18,12 +18,13 @@ import {
   submitDecisionVote,
 } from '../../services/team/members.js';
 import { query } from '../../db/client.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 
 export const teamRoutes = new Hono<AuthEnv>();
 
 // ─── GET /team ────────────────────────────────────────────────────────────────
 
-teamRoutes.get('/team', async (c) => {
+teamRoutes.get('/team', requireTier('team_mode'), async (c) => {
   const founder = c.get('founder');
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');

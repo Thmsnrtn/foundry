@@ -16,6 +16,7 @@ import {
   type SignalTimelineEntry,
 } from '../../services/scp/temporal.js';
 import { AGENT_DISPLAY_NAMES, AGENT_ROLES, type AgentName } from '../../services/scp/types.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 
 export const agentTemporalRoutes = new Hono<AuthEnv>();
 
@@ -73,7 +74,7 @@ function inflectionTypeBadge(type: string): string {
 
 // ─── GET /agents/temporal ─────────────────────────────────────────────────────
 
-agentTemporalRoutes.get('/agents/temporal', async (c) => {
+agentTemporalRoutes.get('/agents/temporal', requireTier('temporal'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents-temporal', 'Temporal Intelligence', undefined, c);
 

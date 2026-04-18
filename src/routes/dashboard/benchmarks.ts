@@ -9,6 +9,7 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 
 export const benchmarks = new Hono<AuthEnv>();
 
@@ -41,7 +42,7 @@ function fmtMetricValue(value: number | null, unit: string): string {
 
 // ─── GET /benchmarks ──────────────────────────────────────────────────────────
 
-benchmarks.get('/benchmarks', async (c) => {
+benchmarks.get('/benchmarks', requireTier('benchmarks'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'benchmarks', 'Benchmarks', undefined, c);
 

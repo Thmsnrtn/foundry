@@ -11,6 +11,7 @@ import { dashboardLayout } from '../../views/layout.js';
 import { generatePlaybook, getPlaybooks } from '../../services/playbook/generator.js';
 import { getRemediationSummary } from '../../services/scp/remediation.js';
 import type { PlaybookType } from '../../types/index.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 
 export const playbookRoutes = new Hono<AuthEnv>();
 
@@ -27,7 +28,7 @@ const PLAYBOOK_LABELS: Record<PlaybookType, { label: string; icon: string; descr
 
 // ─── GET /playbooks ───────────────────────────────────────────────────────────
 
-playbookRoutes.get('/playbooks', async (c) => {
+playbookRoutes.get('/playbooks', requireTier('playbooks'), async (c) => {
   const founder = c.get('founder');
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');

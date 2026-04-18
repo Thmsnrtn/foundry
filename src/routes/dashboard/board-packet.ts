@@ -25,6 +25,7 @@ import {
   listInvestorUpdates,
   markUpdateSent,
 } from '../../services/scp/investor/investor-update.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 
 export const boardPacket = new Hono<AuthEnv>();
 
@@ -80,7 +81,7 @@ function trendIcon(trend: 'up' | 'down' | 'flat'): string {
 
 // ─── GET /board — Investor Hub ─────────────────────────────────────────────────
 
-boardPacket.get('/', async (c) => {
+boardPacket.get('/', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'investors', 'Investor Hub', undefined, c);
 

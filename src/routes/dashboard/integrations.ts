@@ -11,6 +11,7 @@ import { buildSharedContext } from './_shared.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { nanoid } from 'nanoid';
 import type { IntegrationType } from '../../types/index.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 
 export const integrationsRoutes = new Hono<AuthEnv>();
 
@@ -120,7 +121,7 @@ const INTEGRATION_META: Record<IntegrationType, {
 
 // ─── GET /integrations ────────────────────────────────────────────────────────
 
-integrationsRoutes.get('/integrations', async (c) => {
+integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');

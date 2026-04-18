@@ -22,6 +22,7 @@ import {
   type Stakeholder,
 } from '../../services/scp/exit/cap-table.js';
 import { modelTermSheet, getTermSheetModels, compareToMarketTerms } from '../../services/scp/exit/term-sheet.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 
 export const exitRoutes = new Hono<AuthEnv>();
 
@@ -47,7 +48,7 @@ function fitBadge(score: number): string {
 
 // ─── GET /exit — Exit Intelligence Hub ───────────────────────────────────────
 
-exitRoutes.get('/exit', async (c) => {
+exitRoutes.get('/exit', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'exit', 'Exit Intelligence', undefined, c);
   if (!ctx.productId) return c.redirect('/products');

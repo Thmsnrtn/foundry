@@ -11,12 +11,13 @@ import { dashboardLayout } from '../../views/layout.js';
 import { query } from '../../db/client.js';
 import { generateBoardPacket, computeFundingReadiness, getSCPBoardSection } from '../../services/investor/board_packet.js';
 import { nanoid } from 'nanoid';
+import { requireTier } from '../../middleware/tier-gate.js';
 
 export const investorRoutes = new Hono<AuthEnv>();
 
 // ─── GET /investors ───────────────────────────────────────────────────────────
 
-investorRoutes.get('/investors', async (c) => {
+investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
