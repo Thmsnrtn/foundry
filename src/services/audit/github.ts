@@ -4,6 +4,8 @@
 // Rate limiting with exponential backoff.
 // =============================================================================
 
+import { withRetry } from '../resilience.js';
+
 interface GitHubTreeEntry {
   path: string;
   mode: string;
@@ -40,13 +42,16 @@ async function githubFetch(
   retries: number = 3
 ): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github.v3+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
+    const response = await withRetry(
+      () => fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      }),
+      { maxRetries: 0, timeoutMs: 30000 },
+    );
 
     if (response.status === 403) {
       const rateLimitRemaining = response.headers.get('X-RateLimit-Remaining');
@@ -399,16 +404,19 @@ async function githubFetchMutate(
   retries: number = 3,
 ): Promise<Response> {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify(body),
-    });
+    const response = await withRetry(
+      () => fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify(body),
+      }),
+      { maxRetries: 0, timeoutMs: 30000 },
+    );
 
     if (response.status === 403 || response.status === 429) {
       const backoff = Math.pow(2, attempt) * 1000;

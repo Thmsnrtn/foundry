@@ -5,6 +5,7 @@
 
 import Stripe from 'stripe';
 import { query } from '../../db/client.js';
+import { withRetry } from '../resilience.js';
 
 let _stripe: Stripe | null = null;
 
@@ -19,42 +20,42 @@ function getStripe(): Stripe {
 
 export async function createCustomer(email: string, name: string | null): Promise<string> {
   const stripe = getStripe();
-  const customer = await stripe.customers.create({ email, name: name ?? undefined });
+  const customer = await withRetry(() => stripe.customers.create({ email, name: name ?? undefined }));
   return customer.id;
 }
 
 export async function createSubscription(customerId: string, tier: 'solo' | 'growth' | 'investor_ready'): Promise<string> {
   const stripe = getStripe();
   const priceId = getPriceId(tier);
-  const subscription = await stripe.subscriptions.create({
+  const subscription = await withRetry(() => stripe.subscriptions.create({
     customer: customerId,
     items: [{ price: priceId }],
     payment_behavior: 'default_incomplete',
     expand: ['latest_invoice.payment_intent'],
-  });
+  }));
   return subscription.id;
 }
 
 export async function createCheckoutSession(customerId: string, tier: 'solo' | 'growth' | 'investor_ready', successUrl: string, cancelUrl: string): Promise<string> {
   const stripe = getStripe();
-  const session = await stripe.checkout.sessions.create({
+  const session = await withRetry(() => stripe.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: getPriceId(tier), quantity: 1 }],
     success_url: successUrl,
     cancel_url: cancelUrl,
-  });
+  }));
   return session.url ?? '';
 }
 
 export async function pauseSubscription(subscriptionId: string): Promise<void> {
   const stripe = getStripe();
-  await stripe.subscriptions.update(subscriptionId, { pause_collection: { behavior: 'void' } });
+  await withRetry(() => stripe.subscriptions.update(subscriptionId, { pause_collection: { behavior: 'void' } }));
 }
 
 export async function cancelSubscription(subscriptionId: string): Promise<void> {
   const stripe = getStripe();
-  await stripe.subscriptions.cancel(subscriptionId);
+  await withRetry(() => stripe.subscriptions.cancel(subscriptionId));
 }
 
 export async function getSoloSlotCount(): Promise<number> {

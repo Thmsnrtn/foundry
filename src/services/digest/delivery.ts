@@ -4,6 +4,7 @@
 
 import { Resend } from 'resend';
 import type { Digest } from '../../types/index.js';
+import { withRetry } from '../resilience.js';
 
 let _resend: Resend | null = null;
 
@@ -18,7 +19,7 @@ function getResend(): Resend {
 
 export async function sendDigestEmail(to: string, productName: string, digest: Digest): Promise<void> {
   const resend = getResend();
-  const from = process.env.RESEND_FROM_ADDRESS ?? 'foundry@example.com';
+  const from = process.env.RESEND_FROM_ADDRESS ?? (() => { throw new Error('RESEND_FROM_ADDRESS is required'); })();
 
   const subject = digest.digest_type === 'red_daily'
     ? `🔴 ${productName} — Daily Recovery Briefing`
@@ -48,11 +49,11 @@ export async function sendDigestEmail(to: string, productName: string, digest: D
       ${digest.cohort_snapshot ? `<h3>Latest Cohort</h3><p>${digest.cohort_snapshot.period} (${digest.cohort_snapshot.channel}): Day 14 retention ${digest.cohort_snapshot.retention_day_14.toFixed(1)}%</p>` : ''}
     </div>`;
 
-  await resend.emails.send({ from, to, subject, html });
+  await withRetry(() => resend.emails.send({ from, to, subject, html }));
 }
 
 export async function sendTriggerEmail(to: string, subject: string, body: string): Promise<void> {
   const resend = getResend();
-  const from = process.env.RESEND_FROM_ADDRESS ?? 'foundry@example.com';
-  await resend.emails.send({ from, to, subject, html: `<div style="font-family: system-ui, sans-serif;">${body}</div>` });
+  const from = process.env.RESEND_FROM_ADDRESS ?? (() => { throw new Error('RESEND_FROM_ADDRESS is required'); })();
+  await withRetry(() => resend.emails.send({ from, to, subject, html: `<div style="font-family: system-ui, sans-serif;">${body}</div>` }));
 }

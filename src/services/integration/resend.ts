@@ -6,6 +6,7 @@
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { getIntegration } from './fabric.js';
+import { withRetry } from '../resilience.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -152,19 +153,21 @@ export async function executeEmailSend(
 
   // Actual Resend API call
   try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${resendApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: (parameters.from as string) ?? 'Foundry <noreply@foundry.app>',
-        to: parameters.to,
-        subject: parameters.subject,
-        html: parameters.html,
+    const response = await withRetry(
+      () => fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: (parameters.from as string) ?? 'Foundry <noreply@foundry.app>',
+          to: parameters.to,
+          subject: parameters.subject,
+          html: parameters.html,
+        }),
       }),
-    });
+    );
 
     const responseData = await response.json() as Record<string, unknown>;
 
