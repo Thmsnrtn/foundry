@@ -7,12 +7,13 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { getProductsByOwner } from '../../db/client.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 import { computeSignal } from '../../services/signal.js';
 import { layout } from '../../views/layout.js';
 
 export const portfolioRoutes = new Hono<AuthEnv>();
 
-portfolioRoutes.get('/portfolio', async (c) => {
+portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
   const founder = c.get('founder');
   const products = await getProductsByOwner(founder.id);
 

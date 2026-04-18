@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner } from '../../db/client.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 import { isValidSector, getSectorProfile, getScoringOverrides } from '../../services/audit/sector-profiles.js';
 import { detectGrowthStage, getStageConfig } from '../../services/lifecycle/stage-detection.js';
 import { getFounderHealthSummary, updateFounderHealth } from '../../services/intelligence/founder-health.js';
@@ -14,7 +15,7 @@ export const tier1ApiRoutes = new Hono<AuthEnv>();
 
 // ─── Sector Profile ─────────────────────────────────────────────────────────
 
-tier1ApiRoutes.post('/api/products/:id/sector', async (c) => {
+tier1ApiRoutes.post('/api/products/:id/sector', requireTier('dashboard'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -33,7 +34,7 @@ tier1ApiRoutes.post('/api/products/:id/sector', async (c) => {
   return c.json({ status: 'updated', sector_profile: sector });
 });
 
-tier1ApiRoutes.get('/api/products/:id/sector', async (c) => {
+tier1ApiRoutes.get('/api/products/:id/sector', requireTier('dashboard'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -46,7 +47,7 @@ tier1ApiRoutes.get('/api/products/:id/sector', async (c) => {
 
 // ─── Growth Stage ───────────────────────────────────────────────────────────
 
-tier1ApiRoutes.get('/api/products/:id/growth-stage', async (c) => {
+tier1ApiRoutes.get('/api/products/:id/growth-stage', requireTier('dashboard'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -65,7 +66,7 @@ tier1ApiRoutes.get('/api/products/:id/growth-stage', async (c) => {
   });
 });
 
-tier1ApiRoutes.post('/api/products/:id/growth-stage', async (c) => {
+tier1ApiRoutes.post('/api/products/:id/growth-stage', requireTier('dashboard'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -99,14 +100,14 @@ tier1ApiRoutes.post('/api/products/:id/growth-stage', async (c) => {
 
 // ─── Founder Health ─────────────────────────────────────────────────────────
 
-tier1ApiRoutes.get('/api/founder-health', async (c) => {
+tier1ApiRoutes.get('/api/founder-health', requireTier('dashboard'), async (c) => {
   const founder = c.get('founder');
   const health = await getFounderHealthSummary(founder.id);
   if (!health) return c.json({ health: null });
   return c.json({ health });
 });
 
-tier1ApiRoutes.put('/api/founder-health', async (c) => {
+tier1ApiRoutes.put('/api/founder-health', requireTier('dashboard'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.json() as Record<string, unknown>;
 
@@ -124,7 +125,7 @@ tier1ApiRoutes.put('/api/founder-health', async (c) => {
 
 // ─── Lifestyle Mode ─────────────────────────────────────────────────────────
 
-tier1ApiRoutes.put('/api/settings/lifestyle-mode', async (c) => {
+tier1ApiRoutes.put('/api/settings/lifestyle-mode', requireTier('dashboard'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.json() as Record<string, unknown>;
   const enabled = body.enabled === true ? 1 : 0;
@@ -142,7 +143,7 @@ tier1ApiRoutes.put('/api/settings/lifestyle-mode', async (c) => {
   });
 });
 
-tier1ApiRoutes.get('/api/settings/lifestyle-mode', async (c) => {
+tier1ApiRoutes.get('/api/settings/lifestyle-mode', requireTier('dashboard'), async (c) => {
   const founder = c.get('founder');
   const result = await query('SELECT lifestyle_mode, lifestyle_target_mrr FROM founders WHERE id = ?', [founder.id]);
   const row = result.rows[0] as Record<string, unknown> | undefined;

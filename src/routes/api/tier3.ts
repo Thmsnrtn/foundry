@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner } from '../../db/client.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 import { computeUnitEconomics, generateBusinessModelInsights, identifyBusinessModelStressors, detectServicesDisguise } from '../../services/intelligence/business-model.js';
 import { classifyRegulatoryExposure, assessComplianceDebt, scanRegulatoryChanges, modelCompliancePathway, identifyRegulatoryStressors } from '../../services/intelligence/regulatory.js';
 import { modelIncumbentResponse, assessPlatformDependency, assessTechnologyMoat, analyzeSwitchingCosts, generateCompetitiveStrategyBrief } from '../../services/intelligence/competitive-v2.js';
@@ -16,7 +17,7 @@ export const tier3ApiRoutes = new Hono<AuthEnv>();
 
 // ─── Business Model Intelligence ────────────────────────────────────────────
 
-tier3ApiRoutes.get('/api/products/:id/unit-economics', async (c) => {
+tier3ApiRoutes.get('/api/products/:id/unit-economics', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -27,7 +28,7 @@ tier3ApiRoutes.get('/api/products/:id/unit-economics', async (c) => {
   return c.json({ unit_economics: economics, services_check: services });
 });
 
-tier3ApiRoutes.get('/api/products/:id/business-model-insights', async (c) => {
+tier3ApiRoutes.get('/api/products/:id/business-model-insights', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -38,7 +39,7 @@ tier3ApiRoutes.get('/api/products/:id/business-model-insights', async (c) => {
   return c.json({ insights, stressors });
 });
 
-tier3ApiRoutes.put('/api/products/:id/business-model', async (c) => {
+tier3ApiRoutes.put('/api/products/:id/business-model', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -71,7 +72,7 @@ tier3ApiRoutes.put('/api/products/:id/business-model', async (c) => {
 
 // ─── Regulatory Intelligence ────────────────────────────────────────────────
 
-tier3ApiRoutes.get('/api/products/:id/regulatory-exposure', async (c) => {
+tier3ApiRoutes.get('/api/products/:id/regulatory-exposure', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -83,7 +84,7 @@ tier3ApiRoutes.get('/api/products/:id/regulatory-exposure', async (c) => {
   return c.json({ exposure, compliance_debt_score: debt, stressors });
 });
 
-tier3ApiRoutes.post('/api/products/:id/regulatory-scan', async (c) => {
+tier3ApiRoutes.post('/api/products/:id/regulatory-scan', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -93,7 +94,7 @@ tier3ApiRoutes.post('/api/products/:id/regulatory-scan', async (c) => {
   return c.json({ changes });
 });
 
-tier3ApiRoutes.post('/api/products/:id/compliance-pathway', async (c) => {
+tier3ApiRoutes.post('/api/products/:id/compliance-pathway', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -109,7 +110,7 @@ tier3ApiRoutes.post('/api/products/:id/compliance-pathway', async (c) => {
 
 // ─── Competitive Intelligence 2.0 ──────────────────────────────────────────
 
-tier3ApiRoutes.get('/api/products/:id/competitive-strategy', async (c) => {
+tier3ApiRoutes.get('/api/products/:id/competitive-strategy', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -119,7 +120,7 @@ tier3ApiRoutes.get('/api/products/:id/competitive-strategy', async (c) => {
   return c.json({ strategy_brief: brief });
 });
 
-tier3ApiRoutes.get('/api/products/:id/platform-dependency', async (c) => {
+tier3ApiRoutes.get('/api/products/:id/platform-dependency', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -130,7 +131,7 @@ tier3ApiRoutes.get('/api/products/:id/platform-dependency', async (c) => {
   return c.json({ platform_dependency: dependency, technology_moat: moat });
 });
 
-tier3ApiRoutes.post('/api/products/:id/incumbent-response/:competitorId', async (c) => {
+tier3ApiRoutes.post('/api/products/:id/incumbent-response/:competitorId', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const competitorId = c.req.param('competitorId');
@@ -141,7 +142,7 @@ tier3ApiRoutes.post('/api/products/:id/incumbent-response/:competitorId', async 
   return c.json(response);
 });
 
-tier3ApiRoutes.get('/api/products/:id/switching-costs', async (c) => {
+tier3ApiRoutes.get('/api/products/:id/switching-costs', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -153,7 +154,7 @@ tier3ApiRoutes.get('/api/products/:id/switching-costs', async (c) => {
 
 // ─── Value Delivery Index ───────────────────────────────────────────────────
 
-tier3ApiRoutes.get('/api/products/:id/value-delivery', async (c) => {
+tier3ApiRoutes.get('/api/products/:id/value-delivery', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -174,7 +175,7 @@ tier3ApiRoutes.get('/api/products/:id/value-delivery', async (c) => {
   });
 });
 
-tier3ApiRoutes.post('/api/products/:id/value-delivery', async (c) => {
+tier3ApiRoutes.post('/api/products/:id/value-delivery', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);

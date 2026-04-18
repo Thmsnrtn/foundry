@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner } from '../../db/client.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 import { generatePsychologyInsights, dismissInsight } from '../../services/intelligence/psychology.js';
 import { estimateTAMCeiling, projectTAMSaturation, identifyExpansionOpportunities, modelDepthVsBreadth, generateExpansionBrief } from '../../services/intelligence/expansion.js';
 import { getRelevantInsights } from '../../services/wisdom/network.js';
@@ -15,7 +16,7 @@ export const tier4ApiRoutes = new Hono<AuthEnv>();
 
 // ─── Founder Psychology ─────────────────────────────────────────────────────
 
-tier4ApiRoutes.get('/api/psychology-insights', async (c) => {
+tier4ApiRoutes.get('/api/psychology-insights', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const result = await query(
     `SELECT * FROM founder_psychology_insights
@@ -26,7 +27,7 @@ tier4ApiRoutes.get('/api/psychology-insights', async (c) => {
   return c.json({ insights: result.rows });
 });
 
-tier4ApiRoutes.post('/api/psychology-insights/generate', async (c) => {
+tier4ApiRoutes.post('/api/psychology-insights/generate', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.json() as Record<string, unknown>;
   const productId = body.product_id as string;
@@ -39,7 +40,7 @@ tier4ApiRoutes.post('/api/psychology-insights/generate', async (c) => {
   return c.json({ insight });
 });
 
-tier4ApiRoutes.post('/api/psychology-insights/:id/dismiss', async (c) => {
+tier4ApiRoutes.post('/api/psychology-insights/:id/dismiss', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const insightId = c.req.param('id');
   await dismissInsight(insightId, founder.id);
@@ -48,7 +49,7 @@ tier4ApiRoutes.post('/api/psychology-insights/:id/dismiss', async (c) => {
 
 // ─── Market Expansion ───────────────────────────────────────────────────────
 
-tier4ApiRoutes.get('/api/products/:id/expansion', async (c) => {
+tier4ApiRoutes.get('/api/products/:id/expansion', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -67,7 +68,7 @@ tier4ApiRoutes.get('/api/products/:id/expansion', async (c) => {
   });
 });
 
-tier4ApiRoutes.get('/api/products/:id/expansion-brief', async (c) => {
+tier4ApiRoutes.get('/api/products/:id/expansion-brief', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -79,7 +80,7 @@ tier4ApiRoutes.get('/api/products/:id/expansion-brief', async (c) => {
 
 // ─── Wisdom Network ─────────────────────────────────────────────────────────
 
-tier4ApiRoutes.get('/api/products/:id/network-insights', async (c) => {
+tier4ApiRoutes.get('/api/products/:id/network-insights', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -89,7 +90,7 @@ tier4ApiRoutes.get('/api/products/:id/network-insights', async (c) => {
   return c.json({ insights });
 });
 
-tier4ApiRoutes.put('/api/settings/wisdom-network', async (c) => {
+tier4ApiRoutes.put('/api/settings/wisdom-network', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.json() as Record<string, unknown>;
   const optIn = body.opted_in === true;
@@ -104,7 +105,7 @@ tier4ApiRoutes.put('/api/settings/wisdom-network', async (c) => {
 
 // ─── Ethical Assessment ─────────────────────────────────────────────────────
 
-tier4ApiRoutes.get('/api/products/:id/ethics', async (c) => {
+tier4ApiRoutes.get('/api/products/:id/ethics', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -114,7 +115,7 @@ tier4ApiRoutes.get('/api/products/:id/ethics', async (c) => {
   return c.json({ assessment });
 });
 
-tier4ApiRoutes.post('/api/products/:id/ethics/assess', async (c) => {
+tier4ApiRoutes.post('/api/products/:id/ethics/assess', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -124,7 +125,7 @@ tier4ApiRoutes.post('/api/products/:id/ethics/assess', async (c) => {
   return c.json({ assessment });
 });
 
-tier4ApiRoutes.post('/api/products/:id/ethics/remediate', async (c) => {
+tier4ApiRoutes.post('/api/products/:id/ethics/remediate', requireTier('investor_layer'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);

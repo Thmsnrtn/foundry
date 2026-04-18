@@ -6,6 +6,7 @@
 import { Hono } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner } from '../../db/client.js';
+import { requireTier } from '../../middleware/tier-gate.js';
 import { runWebAudit, generateVendorRecommendations, assessMigrationReadiness } from '../../services/audit/intake-web.js';
 import { computeMarketplaceHealth, identifyMarketplaceStressors, auditTrustInfrastructure } from '../../services/intelligence/marketplace.js';
 import { getAlignmentScore, getDecisionAttribution, checkGateAgreement } from '../../services/wisdom/cofounder.js';
@@ -16,7 +17,7 @@ export const tier2ApiRoutes = new Hono<AuthEnv>();
 
 // ─── Non-Code Founder Track ─────────────────────────────────────────────────
 
-tier2ApiRoutes.post('/api/products/:id/web-audit', async (c) => {
+tier2ApiRoutes.post('/api/products/:id/web-audit', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -32,7 +33,7 @@ tier2ApiRoutes.post('/api/products/:id/web-audit', async (c) => {
   return c.json({ audit: result, vendor_recommendations: vendorRecs });
 });
 
-tier2ApiRoutes.get('/api/products/:id/vendor-recommendations', async (c) => {
+tier2ApiRoutes.get('/api/products/:id/vendor-recommendations', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -45,7 +46,7 @@ tier2ApiRoutes.get('/api/products/:id/vendor-recommendations', async (c) => {
   return c.json({ recommendations: result.rows });
 });
 
-tier2ApiRoutes.get('/api/products/:id/migration-assessment', async (c) => {
+tier2ApiRoutes.get('/api/products/:id/migration-assessment', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -55,7 +56,7 @@ tier2ApiRoutes.get('/api/products/:id/migration-assessment', async (c) => {
   return c.json(assessment);
 });
 
-tier2ApiRoutes.post('/api/products/:id/build-platform', async (c) => {
+tier2ApiRoutes.post('/api/products/:id/build-platform', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -77,7 +78,7 @@ tier2ApiRoutes.post('/api/products/:id/build-platform', async (c) => {
 
 // ─── Marketplace Intelligence ───────────────────────────────────────────────
 
-tier2ApiRoutes.post('/api/products/:id/marketplace-metrics', async (c) => {
+tier2ApiRoutes.post('/api/products/:id/marketplace-metrics', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -107,7 +108,7 @@ tier2ApiRoutes.post('/api/products/:id/marketplace-metrics', async (c) => {
   return c.json({ status: 'recorded' });
 });
 
-tier2ApiRoutes.get('/api/products/:id/marketplace-health', async (c) => {
+tier2ApiRoutes.get('/api/products/:id/marketplace-health', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -118,7 +119,7 @@ tier2ApiRoutes.get('/api/products/:id/marketplace-health', async (c) => {
   return c.json({ health, stressors });
 });
 
-tier2ApiRoutes.post('/api/products/:id/marketplace-trust-audit', async (c) => {
+tier2ApiRoutes.post('/api/products/:id/marketplace-trust-audit', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -138,7 +139,7 @@ tier2ApiRoutes.post('/api/products/:id/marketplace-trust-audit', async (c) => {
 
 // ─── Co-Founder Alignment ───────────────────────────────────────────────────
 
-tier2ApiRoutes.get('/api/products/:id/alignment-score', async (c) => {
+tier2ApiRoutes.get('/api/products/:id/alignment-score', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -149,7 +150,7 @@ tier2ApiRoutes.get('/api/products/:id/alignment-score', async (c) => {
   return c.json({ alignment: score, attribution });
 });
 
-tier2ApiRoutes.post('/api/products/:id/cofounder-dna', async (c) => {
+tier2ApiRoutes.post('/api/products/:id/cofounder-dna', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -171,7 +172,7 @@ tier2ApiRoutes.post('/api/products/:id/cofounder-dna', async (c) => {
   return c.json({ status: 'recorded', fields: Object.keys(responses).length });
 });
 
-tier2ApiRoutes.put('/api/products/:id/gate-agreements', async (c) => {
+tier2ApiRoutes.put('/api/products/:id/gate-agreements', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -199,7 +200,7 @@ tier2ApiRoutes.put('/api/products/:id/gate-agreements', async (c) => {
 
 // ─── Global Founder Support ─────────────────────────────────────────────────
 
-tier2ApiRoutes.get('/api/geopolitical-signals/:productId', async (c) => {
+tier2ApiRoutes.get('/api/geopolitical-signals/:productId', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('productId');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -212,13 +213,13 @@ tier2ApiRoutes.get('/api/geopolitical-signals/:productId', async (c) => {
   return c.json({ signals: result.rows });
 });
 
-tier2ApiRoutes.get('/api/currency-health', async (c) => {
+tier2ApiRoutes.get('/api/currency-health', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const erosion = await detectCurrencyErosion(founder.id);
   return c.json({ currency_health: erosion });
 });
 
-tier2ApiRoutes.put('/api/settings/global', async (c) => {
+tier2ApiRoutes.put('/api/settings/global', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.json() as Record<string, unknown>;
 
