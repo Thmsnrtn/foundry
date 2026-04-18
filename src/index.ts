@@ -162,6 +162,8 @@ if (missing.length > 0) {
 const app = new Hono();
 
 // Global middleware
+import { securityHeaders } from './middleware/security-headers.js';
+app.use('*', securityHeaders);
 app.use('*', logger());
 app.use('*', cors({
   origin: process.env.APP_URL ?? 'http://localhost:8080',

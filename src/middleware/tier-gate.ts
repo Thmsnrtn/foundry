@@ -152,7 +152,7 @@ export function getTierBadge(tier: string | null): string {
     case 'solo': return 'Solo';
     case 'growth': return 'Growth';
     case 'investor_ready': return 'Investor-Ready';
-    default: return 'Free Trial';
+    default: return 'No Plan';
   }
 }
 

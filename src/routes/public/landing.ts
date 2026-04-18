@@ -133,7 +133,7 @@ landingRoutes.get('/', (c) => {
       <div style="text-align:center;padding:2rem 0;">
         <h2 style="margin:0 0 1rem;">Your product deserves a team.</h2>
         <p style="color:var(--text-dim);margin:0 0 1.5rem;">Connect it to Foundry today.</p>
-        <a href="/auth/signup" class="btn btn-primary" style="padding:0.875rem 2.5rem;font-size:1.05rem;">Get Started Free</a>
+        <a href="/auth/signup" class="btn btn-primary" style="padding:0.875rem 2.5rem;font-size:1.05rem;">Give my product a team →</a>
       </div>
 
     </div>
