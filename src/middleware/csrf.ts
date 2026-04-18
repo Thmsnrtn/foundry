@@ -50,10 +50,18 @@ export const csrfMiddleware = createMiddleware(async (c, next) => {
         const body = await c.req.parseBody();
         submittedToken = body[CSRF_FIELD] as string;
       } else if (ct.includes('application/json')) {
-        // For JSON APIs, the header is required (cookie is sufficient via SameSite)
-        // Skip CSRF for JSON API routes — they use Bearer auth, not cookies
-        await next();
-        return;
+        // JSON requests must send CSRF token via X-CSRF-Token header.
+        // We do NOT skip CSRF for JSON — cookie-authenticated API routes
+        // are still vulnerable to cross-origin fetch() with credentials.
+        // Only skip if request uses Bearer auth (not cookies).
+        const authHeader = c.req.header('Authorization') ?? '';
+        if (authHeader.startsWith('Bearer ')) {
+          // Bearer-authenticated API requests don't need CSRF
+          await next();
+          return;
+        }
+        // Cookie-authenticated JSON requests require the header token
+        // submittedToken is already checked from the header above
       }
     } catch {
       // Body parsing failed — reject

@@ -252,8 +252,12 @@ platformApiRoutes.post('/api/products/:id/fundraise-readiness', async (c) => {
 platformApiRoutes.post('/api/voice/memo', async (c) => {
   const founder = c.get('founder');
   const body = await c.req.json() as Record<string, unknown>;
+  // RT02-03: Verify founder owns the product before accepting voice memo
+  const productId = body.product_id as string;
+  const prodCheck = await getProductByOwner(productId, founder.id);
+  if (prodCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const result = await processVoiceMemo(
-    founder.id, body.product_id as string,
+    founder.id, productId,
     body.audio_url as string, body.transcript as string,
     body.duration_seconds as number
   );
@@ -278,8 +282,18 @@ platformApiRoutes.post('/api/voice/session/start', async (c) => {
 });
 
 platformApiRoutes.post('/api/voice/session/:id/end', async (c) => {
+  const founder = c.get('founder');
+  const sessionId = c.req.param('id')!;
+  // RT02-02: Verify founder owns this voice session before ending it
+  const sessionCheck = await query(
+    `SELECT vs.id FROM voice_sessions vs
+     JOIN products p ON vs.product_id = p.id
+     WHERE vs.id = ? AND p.owner_id = ?`,
+    [sessionId, founder.id]
+  );
+  if (sessionCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const body = await c.req.json() as Record<string, unknown>;
-  await endVoiceSession(c.req.param('id'), body.transcript as string, body.duration_seconds as number);
+  await endVoiceSession(sessionId, body.transcript as string, body.duration_seconds as number);
   return c.json({ status: 'completed' });
 });
 
