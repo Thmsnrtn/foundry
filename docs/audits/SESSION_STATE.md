@@ -1,10 +1,10 @@
 # Foundry Transformation -- Session State
-Last updated: 2026-04-17T03:30:00Z
-Last commit: d07b078 — fix(security): add AI cost ceiling, timeout, and retry [Phase 4]
+Last updated: 2026-04-17T04:30:00Z
+Last commit: 0e06ab3 — fix(devops): add .dockerignore, halt on migration failure [Phase 4]
 
 ## Current Position
-Phase: 4 (All 50 lenses complete, 11 P0 fixes committed)
-Sub-task: Continue P0 fixes in priority order
+Phase: 4 (Engineering Hardening — deep into P0 fixes)
+Sub-task: 2 fix agents running (remaining P0 batch + Zod validation); continuing orchestrator fixes
 Sweep number (if in loop): N/A
 Consecutive clean sweeps: 0
 Red team personas completed: none
@@ -12,64 +12,60 @@ Simulations completed: none
 
 ## Phase Completion
 - Phase 0: COMPLETE
-- Phase 1: COMPLETE (9 competitors, 3 differentiators in docs/strategy/)
+- Phase 1: COMPLETE (9 competitors, 3 differentiators)
 - Phase 2: COMPLETE (50/50 lenses, all committed)
-- Phase 3: NOT STARTED (design system)
-- Phase 4: IN PROGRESS (11 P0 fixes committed, ~25+ P0s remaining)
+- Phase 3: NOT STARTED (design system — blocked on Phase 4 P0 completion)
+- Phase 4: IN PROGRESS (~18 P0 fixes committed, agents working on more)
 
-## P0 Fixes Committed (9)
+## All P0 Fixes Committed (18)
 1. SEC-04: XSS escaping on share page (a3ff527)
 2. SEC-06: Timing-safe service key comparison (a3ff527)
-3. REL-04: Health check verifies database (a3ff527)
+3. REL-04: Real health check with DB verification (a3ff527)
 4. MTI-01: Portfolio API ownership validation (2f8b14d)
 5. MTI-02: Experiment API tenant scoping (2f8b14d)
 6. SEC-02: GitHub OAuth CSRF state parameter (7c4beef)
 7. REL-05: Graceful SIGTERM/SIGINT shutdown (f4581ec)
 8. DB-01: FK enforcement via PRAGMA (3ac3666)
-9. AI-12/25/26: Cost ceiling + timeout + retry on LLM calls (d07b078)
-10. SEC-03: CSRF middleware for all POST forms (e392202)
-11. EDGE-02: Pause SCP on subscription cancellation (fad14ea)
+9. AI-12/25/26: Cost ceiling + timeout + retry (d07b078)
+10. SEC-03: CSRF middleware for all forms (e392202)
+11. EDGE-02: Pause SCP on subscription cancel (fad14ea)
+12. PRI-01: MRR calculation tier names (c343f7d)
+13. EDGE-01: Block archived products (b8bffbf)
+14. SEC-01: Envelope encryption for tokens (b0b24da)
+15. AI-01: Prompt injection sanitization (2f8706b)
+16. PM-01: Fix false 'Get Started Free' CTA (3096df4)
+17. SEC-09: Security headers (3096df4)
+18. LEGAL-01: Privacy Policy + Terms of Service (13d5666)
+19. DEVOPS-04: .dockerignore (0e06ab3)
+20. REL-06: Migration failures halt in production (0e06ab3)
 
-## Remaining P0 Fixes (Priority Order)
-1. ~SEC-03: CSRF middleware~ DONE
-2. SEC-01: Envelope encryption for all tokens/credentials
-3. SEC-07: Zod validation at all HTTP boundaries
-4. SEC-10: Remove GitHub token from browser DOM (hidden form field)
-5. AI-01: Prompt injection sanitization
-6. EDGE-02: Stop agents for cancelled founders
-7. EDGE-01: Check product status in tenant middleware
-8. PRI-01: Fix MRR calculation tier names
-9. PRI-03: Enforce product limits on no-code path
-10. Legal: Create privacy policy + TOS pages
-11. PM-01: Fix "Get Started Free" CTA (or add free tier/trial)
-12. REL: Migration failures should halt server in production
-13. DB: Fix duplicate migration prefixes
-14. Backend: SCP provisioning during onboarding
-15. A11Y: Color-only risk state communication
-16. A11Y: Command palette screen reader accessibility
+## Fixes In Progress (Background Agents)
+- PRI-03: Product limit enforcement on no-code path
+- SEC-10: Remove GitHub token from browser DOM
+- A11Y-04: Risk state text labels for color-blind
+- SEC-07: Zod validation middleware + critical schemas
+
+## Remaining P0s After Current Agents Complete
+- Backend: Fix duplicate migration prefixes (30 duplicates)
+- Backend: Use batch() for atomic SCP provisioning
+- A11Y-05: Command palette screen reader accessibility
+- Billing: Dunning/failed payment recovery
+- Billing: Tier gates on 6+ unprotected dashboard route groups
+
+## Remaining Phase Work
+- Phase 3: Design system tokens, inline style migration, responsive fixes
+- Phase 5: Feature refinement, competitive gap closure
+- Phase 6: SCP fleet architecture (fleet meta-agents, cross-company intelligence)
+- Phase 7: OWASP full checklist, multi-tenancy isolation test suite
+- Phase 8: Zero-touch ops verification
+- Phase 9: Convergence loop (3 consecutive clean sweeps)
+- Phase 10: 10 adversarial red team reviews
+- Phase 11: 5 pre-launch simulations
+- Phase 12: Gate script pass
+- Phase 13: Evidence ledger + handoff
 
 ## Build Metrics
 - TypeScript: compiles clean (0 errors)
 - Tests: 75/75 passing
-- Linting: not configured (no eslint)
-- Coverage: ~1% (7 test files covering 7 of 288 source files)
-
-## Subagent Summary (Session 1)
-- Total subagents spawned: ~20 (4 competitive + ~16 lens audit batches)
-- Competitive: 4 agents, 9 competitor profiles
-- Lens audits: ~16 batches covering all 50 lenses (some batched multiple lenses)
-- All completed agents verified quality: Good to Excellent
-
-## Next Action
-Continue Phase 4 P0 fixes in priority order above. Once all 50 lenses complete, compile a finding index at docs/audits/finding-index.md. Begin Phase 3 design token decisions. Plan Phase 5-6 work.
-
-## Context for Session 2
-- The codebase uses Hono (server-rendered HTML) + Turso (libSQL) + Clerk auth + Stripe billing
-- The UI is in src/views/layout.ts (650 lines) and src/views/components.ts (1200 lines)
-- 2,900+ inline styles bypass the design system — Phase 3 must address this
-- The 12 SCP agents are architecturally sound but infrastructure needs hardening
-- The prompt engineering is excellent; the issues are infrastructure (no retry, injection defense, cost caps)
-- The legal/compliance gap is severe (no TOS, no privacy policy, no consent at signup)
-- The fleet/multi-company architecture doesn't exist yet — the product is single-company with a portfolio overlay
-- The 5-stage lifecycle exists but needs mapping to the fleet model
-- Performance will limit scaling past ~20 products due to serial job execution
+- Total Phase 4 commits: ~20
+- Total repo commits: ~95+
