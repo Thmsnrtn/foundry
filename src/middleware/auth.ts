@@ -9,6 +9,7 @@ import { getFounderByClerkId, query } from '../db/client.js';
 import { nanoid } from 'nanoid';
 import type { Founder, FounderPreferences } from '../types/index.js';
 import type { FounderRow } from '../types/database.js';
+import { logger } from '../services/logger.js';
 
 export interface AuthEnv {
   Variables: {
@@ -125,7 +126,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     c.set('founder', founder);
 
     // Update last_seen_at (fire-and-forget)
-    query('UPDATE founders SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [founder.id]).catch(() => {});
+    query('UPDATE founders SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [founder.id]).catch((err) => { logger.error(`last_seen_at update failed: ${err}`); });
 
     await next();
   } catch {

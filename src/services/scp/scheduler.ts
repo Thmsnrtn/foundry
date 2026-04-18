@@ -129,7 +129,7 @@ export async function generateBriefingsForAllProducts(): Promise<void> {
       await generateDailyBriefing(productId);
       generated++;
       // Fire-and-forget: send briefing to Slack if connected
-      _sendBriefingToSlack(productId).catch(() => {});
+      _sendBriefingToSlack(productId).catch((err) => { logger.error(`_sendBriefingToSlack failed for ${productId}: ${err}`); });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error(`generateBriefing failed for ${productId}: ${msg}`, { productId });

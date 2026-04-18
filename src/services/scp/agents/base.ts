@@ -8,6 +8,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { sanitizeForPrompt } from '../../ai/sanitize.js';
+import { logger } from '../../logger.js';
 import type {
   AgentName,
   AgentInstance,
@@ -173,8 +174,8 @@ export abstract class BaseAgent {
         writeAgentFinding(productId, agentName, {
           position: result.briefingContribution,
           confidence: result.domainHealthScore !== undefined ? result.domainHealthScore / 100 : 0.5,
-        }).catch(() => {});
-      }).catch(() => {});
+        }).catch((err) => { logger.error(`writeAgentFinding failed for ${agentName}/${productId}: ${err}`); });
+      }).catch((err) => { logger.error(`import scratchpad.js failed: ${err}`); });
     }
 
     // 13. On success: update session row
@@ -248,8 +249,8 @@ export abstract class BaseAgent {
           amountUsd: costUsd,
           sessionId,
           details: { tokens: result.tokensUsed, session: sessionId },
-        }).catch(() => {});
-      }).catch(() => {});
+        }).catch((err) => { logger.error(`logCost failed for ${agentName}/${productId}: ${err}`); });
+      }).catch((err) => { logger.error(`import economics.js failed: ${err}`); });
     }
 
     // 16. Process v2/v3 signal fields (all fire-and-forget, non-fatal)
@@ -277,14 +278,14 @@ export abstract class BaseAgent {
                 feature_depth_score: health_feature_score,
                 support_sentiment_score: health_sentiment_score,
                 billing_health_score: health_billing_score,
-              }).catch(() => {});
+              }).catch((err) => { logger.error(`updateHealthScore failed for customer ${customer.id}: ${err}`); });
             }
             if (note) {
-              await addAgentNote(customer.id, agentName, note).catch(() => {});
+              await addAgentNote(customer.id, agentName, note).catch((err) => { logger.error(`addAgentNote failed for customer ${customer.id}: ${err}`); });
             }
-          }).catch(() => {});
+          }).catch((err) => { logger.error(`upsertCustomer failed for ${agentName}/${productId}: ${err}`); });
         }
-      }).catch(() => {});
+      }).catch((err) => { logger.error(`import customer/intelligence.js failed: ${err}`); });
     }
 
     // Agent messages → agent_messages bus
@@ -304,9 +305,9 @@ export abstract class BaseAgent {
             subject: msg.subject,
             body: msg.body,
             context: { sessionId },
-          }).catch(() => {});
+          }).catch((err) => { logger.error(`sendMessage failed from ${agentName} to ${msg.to_agent}: ${err}`); });
         }
-      }).catch(() => {});
+      }).catch((err) => { logger.error(`import messages.js failed: ${err}`); });
     }
 
     // Outbound actions → outbound_actions queue
@@ -324,9 +325,9 @@ export abstract class BaseAgent {
             rationale: action.description,
             previewText: action.description.slice(0, 200),
             confidence: 0.8,
-          }).catch(() => {});
+          }).catch((err) => { logger.error(`proposeAction failed for ${agentName}/${productId}: ${err}`); });
         }
-      }).catch(() => {});
+      }).catch((err) => { logger.error(`import outbound/executor.js failed: ${err}`); });
     }
 
     // Hypotheses → experiments engine
@@ -342,14 +343,14 @@ export abstract class BaseAgent {
             predictedEffectSize: hyp.success_threshold,
             estimatedDurationDays: hyp.test_duration_days,
             riskAssessment: `Proposed by ${agentName} — requires human validation before running.`,
-          }).catch(() => {});
+          }).catch((err) => { logger.error(`proposeHypothesis failed for ${agentName}/${productId}: ${err}`); });
         }
-      }).catch(() => {});
+      }).catch((err) => { logger.error(`import experiments.js failed: ${err}`); });
     }
 
     // Mark integration events as processed
     if (integrationEvents && integrationEvents.length > 0) {
-      this._markEventsProcessed(productId, agentName).catch(() => {});
+      this._markEventsProcessed(productId, agentName).catch((err) => { logger.error(`_markEventsProcessed failed for ${agentName}/${productId}: ${err}`); });
     }
 
     // Auto-extract predictions from agent output (v4 accuracy tracking)
@@ -358,16 +359,16 @@ export abstract class BaseAgent {
         customerSignals: result.customerSignals,
         outboundActions: result.outboundActions,
         hypotheses: result.hypotheses,
-      }).catch(() => {});
-    }).catch(() => {});
+      }).catch((err) => { logger.error(`extractPredictionsFromAnalysis failed for ${agentName}/${productId}: ${err}`); });
+    }).catch((err) => { logger.error(`import accuracy/calibrator.js failed: ${err}`); });
 
     // 17. Trigger evolution check if there are candidates (fire-and-forget)
     if (result.evolutionCandidates.length > 0) {
       import('../evolution.js').then(({ checkEvolutionCandidates }) => {
-        checkEvolutionCandidates(productId, agentName, sessionId, result.evolutionCandidates).catch(() => {
-          // Evolution failure is non-fatal
+        checkEvolutionCandidates(productId, agentName, sessionId, result.evolutionCandidates).catch((err) => {
+          logger.error(`checkEvolutionCandidates failed for ${agentName}/${productId}: ${err}`);
         });
-      }).catch(() => {});
+      }).catch((err) => { logger.error(`import evolution.js failed: ${err}`); });
     }
 
     const durationMs = Date.now() - startTime;

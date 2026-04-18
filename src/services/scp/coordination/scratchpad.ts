@@ -6,6 +6,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { logger } from '../../logger.js';
 
 export interface AgentFinding {
   position: string;           // agent's main position (1-2 sentences)
@@ -82,7 +83,7 @@ export async function writeAgentFinding(
 
   // If >= 3 agents have written findings today, detect consensus/conflicts asynchronously
   if (Object.keys(updatedFindings).length >= 3) {
-    detectConsensusAndConflicts(productId).catch(() => {});
+    detectConsensusAndConflicts(productId).catch((err) => { logger.error(`detectConsensusAndConflicts failed for ${productId}: ${err}`); });
   }
 }
 
