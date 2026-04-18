@@ -502,13 +502,13 @@ runMigrations()
       for (const row of products.rows) {
         const p = row as Record<string, string>;
         await ensureProvisioned(p.id, p.owner_id).catch((err) => {
-          console.warn(`[STARTUP] SCP provision skipped for ${p.id}:`, err);
+          logger.warn(`SCP provision skipped for ${p.id}`, { productId: p.id, error: String(err) });
         });
       }
-      console.log(`[STARTUP] SCP: provisioned for ${products.rows.length} product(s)`);
+      logger.info(`SCP: provisioned for ${products.rows.length} product(s)`);
     } catch (err) {
       // Non-fatal: SCP provisioning failure should not block server startup
-      console.warn('[STARTUP] SCP provisioning error (non-fatal):', err);
+      logger.warn('SCP provisioning error (non-fatal)', { error: String(err) });
     }
 
     if (process.env.NODE_ENV === 'production') {
@@ -518,20 +518,20 @@ runMigrations()
       fetch: app.fetch,
       port,
     }, (info) => {
-      console.log(`Listening on http://localhost:${info.port}`);
+      logger.info(`Listening on http://localhost:${info.port}`);
     });
   })
   .catch((err) => {
-    console.error('[STARTUP] Migration error:', err?.message ?? err);
+    logger.error('Migration error', { error: String(err?.message ?? err) });
     if (process.env.NODE_ENV === 'production') {
       // In production, migration failures are fatal — don't serve with inconsistent schema
-      console.error('[STARTUP] FATAL: Migrations failed in production. Exiting.');
+      logger.error('FATAL: Migrations failed in production. Exiting.');
       process.exit(1);
     }
     // In development, start anyway with a warning
     const port = parseInt(process.env.PORT ?? '8080');
     serve({ fetch: app.fetch, port }, (info) => {
-      console.log(`Listening on http://localhost:${info.port} (with migration warnings — DEV ONLY)`);
+      logger.info(`Listening on http://localhost:${info.port} (with migration warnings — DEV ONLY)`);
     });
   });
 
@@ -542,14 +542,14 @@ let isShuttingDown = false;
 function gracefulShutdown(signal: string) {
   if (isShuttingDown) return;
   isShuttingDown = true;
-  console.log(`[SHUTDOWN] Received ${signal}, draining...`);
+  logger.info(`Received ${signal}, draining...`);
 
   // Stop accepting new cron jobs
   // The CronJob instances will be garbage-collected
 
   // Give in-flight requests 4 seconds to complete (Fly.io kill_timeout is 5s)
   setTimeout(() => {
-    console.log('[SHUTDOWN] Drain complete, exiting.');
+    logger.info('Drain complete, exiting.');
     process.exit(0);
   }, 4000);
 }

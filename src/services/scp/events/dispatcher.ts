@@ -6,6 +6,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { logger } from '../../logger.js';
 
 // Maps event types to the agents best positioned to analyze them
 const EVENT_AGENT_MAP: Record<string, string[]> = {
@@ -52,15 +53,16 @@ export async function emitSignalEvent(
     ],
   );
 
-  console.log(
-    `[dispatcher] Signal emitted: ${event.event_type} (${event.severity}) for product ${productId} — id=${id}`,
+  logger.info(
+    `Signal emitted: ${event.event_type} (${event.severity}) for product ${productId} — id=${id}`,
+    { productId },
   );
 
   // For high/critical severity: trigger processing immediately (fire-and-forget)
   if (event.severity === 'high' || event.severity === 'critical') {
     processSignalEvent(id).catch((err) => {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[dispatcher] processSignalEvent(${id}) fire-and-forget failed: ${msg}`);
+      logger.error(`processSignalEvent(${id}) fire-and-forget failed: ${msg}`, { productId });
     });
   }
 
@@ -77,7 +79,7 @@ export async function processSignalEvent(eventId: string): Promise<void> {
   );
 
   if (eventResult.rows.length === 0) {
-    console.warn(`[dispatcher] processSignalEvent: event ${eventId} not found`);
+    logger.warn(`processSignalEvent: event ${eventId} not found`);
     return;
   }
 
@@ -110,8 +112,9 @@ export async function processSignalEvent(eventId: string): Promise<void> {
     return;
   }
 
-  console.log(
-    `[dispatcher] Processing signal ${eventId}: ${eventType} → agents [${relevantAgents.join(', ')}]`,
+  logger.info(
+    `Processing signal ${eventId}: ${eventType} → agents [${relevantAgents.join(', ')}]`,
+    { productId },
   );
 
   // Insert a synthetic integration event so each agent's context is enriched
@@ -132,7 +135,7 @@ export async function processSignalEvent(eventId: string): Promise<void> {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[dispatcher] Could not insert synthetic integration event: ${msg}`);
+    logger.warn(`Could not insert synthetic integration event: ${msg}`, { productId });
   }
 
   // Track the last session id created (for linking)
@@ -177,7 +180,7 @@ export async function processSignalEvent(eventId: string): Promise<void> {
       }
 
       if (!agent) {
-        console.warn(`[dispatcher] Agent module '${agentName}' has no runnable export — skipping`);
+        logger.warn(`Agent module '${agentName}' has no runnable export — skipping`, { productId, agentName });
         continue;
       }
 
@@ -186,10 +189,10 @@ export async function processSignalEvent(eventId: string): Promise<void> {
         lastSessionId = output.sessionId;
       }
 
-      console.log(`[dispatcher] Agent '${agentName}' ran for signal ${eventId}`);
+      logger.info(`Agent '${agentName}' ran for signal ${eventId}`, { productId, agentName });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[dispatcher] Agent '${agentName}' failed for signal ${eventId}: ${msg}`);
+      logger.error(`Agent '${agentName}' failed for signal ${eventId}: ${msg}`, { productId, agentName });
       // Non-fatal — continue with remaining agents
     }
   }
@@ -231,7 +234,7 @@ export async function processPendingSignalEvents(productId: string): Promise<num
       count++;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[dispatcher] processPendingSignalEvents — event ${eventId} failed: ${msg}`);
+      logger.error(`processPendingSignalEvents — event ${eventId} failed: ${msg}`, { productId });
     }
   }
 

@@ -9,6 +9,7 @@ import { callSonnet } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import { runAllGates } from './gates.js';
 import { applyConfigChange, rollbackConfig } from './agent-config.js';
+import { logger } from '../logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,7 +121,7 @@ What behavioral observations can you extract? What specific config changes would
 
     return JSON.parse(cleaned.trim()) as ObservationResult;
   } catch (err) {
-    console.error('[SCP EVOLUTION] Observation extraction failed:', err);
+    logger.error('Observation extraction failed', { error: String(err) });
     return {
       hasObservations: false,
       observations: [],
@@ -187,7 +188,7 @@ As an independent critic: what additional specific, minimal changes would improv
 
     return JSON.parse(cleaned.trim()) as CritiqueResult;
   } catch (err) {
-    console.error('[SCP EVOLUTION] Self-critique failed:', err);
+    logger.error('Self-critique failed', { error: String(err) });
     return { critiques: [], additionalChanges: [] };
   }
 }
@@ -269,7 +270,7 @@ export async function evolveAgent(session: EvolutionSession): Promise<EvolutionR
   const { productId, agentName, sessionTranscript, isCorrection = false } = session;
   const sessionId = session.sessionId ?? nanoid();
 
-  console.log(`[SCP EVOLUTION] Starting evolution for ${agentName} (session ${sessionId})`);
+  logger.info(`Starting evolution for ${agentName} (session ${sessionId})`, { agentName, productId });
 
   // Get session count for adaptive cadence
   const totalSessions = await getSessionCount(productId, agentName);
@@ -286,7 +287,7 @@ export async function evolveAgent(session: EvolutionSession): Promise<EvolutionR
   );
 
   if (!shouldEvolve) {
-    console.log(`[SCP EVOLUTION] Skipping evolution for ${agentName} — cadence check`);
+    logger.info(`Skipping evolution for ${agentName} — cadence check`, { agentName, productId });
     return {
       evolved: false,
       reason: `Cadence check: session ${totalSessions}, no observations or major events`,
@@ -368,7 +369,7 @@ export async function evolveAgent(session: EvolutionSession): Promise<EvolutionR
         rationale: proposed.rationale,
       });
 
-      console.log(`[SCP EVOLUTION] Applied change to ${agentName}/${proposed.configType}`);
+      logger.info(`Applied change to ${agentName}/${proposed.configType}`, { agentName, productId });
     } else {
       changes.push({
         configType: proposed.configType,
@@ -377,8 +378,9 @@ export async function evolveAgent(session: EvolutionSession): Promise<EvolutionR
         rationale: proposed.rationale,
       });
 
-      console.log(
-        `[SCP EVOLUTION] Rejected change to ${agentName}/${proposed.configType} by gate: ${validationResult.rejected_by}`
+      logger.info(
+        `Rejected change to ${agentName}/${proposed.configType} by gate: ${validationResult.rejected_by}`,
+        { agentName, productId }
       );
     }
   }
@@ -391,8 +393,9 @@ export async function evolveAgent(session: EvolutionSession): Promise<EvolutionR
     const successRate = await getRecentSuccessRate(productId, agentName, 5);
     if (successRate !== null && successRate < 0.5) {
       // Success rate is critically low — check if it dropped significantly
-      console.warn(
-        `[SCP EVOLUTION] Success rate for ${agentName} is ${(successRate * 100).toFixed(1)}% — initiating rollback check`
+      logger.warn(
+        `Success rate for ${agentName} is ${(successRate * 100).toFixed(1)}% — initiating rollback check`,
+        { agentName, productId }
       );
 
       // Rollback all approved changes by reverting to previous version
@@ -413,7 +416,7 @@ export async function evolveAgent(session: EvolutionSession): Promise<EvolutionR
             }
           }
         } catch (err) {
-          console.error(`[SCP EVOLUTION] Rollback failed for ${agentName}/${change.configType}:`, err);
+          logger.error(`Rollback failed for ${agentName}/${change.configType}`, { agentName, productId, error: String(err) });
         }
       }
 

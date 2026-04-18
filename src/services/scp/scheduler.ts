@@ -9,6 +9,7 @@ import { generateDailyBriefing } from './briefing.js';
 import { runEvolutionSynthesis } from './evolution.js';
 import type { AgentName, AgentSessionOutput } from './types.js';
 import { ALL_AGENTS } from './types.js';
+import { logger } from '../logger.js';
 
 // ─── runDueAgentsForProduct ───────────────────────────────────────────────────
 
@@ -18,7 +19,7 @@ export async function runDueAgentsForProduct(productId: string): Promise<void> {
     await instance.runAllDueAgents();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`[scheduler] runDueAgentsForProduct(${productId}) failed: ${msg}`);
+    logger.error(`runDueAgentsForProduct(${productId}) failed: ${msg}`, { productId });
     throw err;
   }
 }
@@ -42,16 +43,16 @@ export async function runDueAgentsForAllProducts(): Promise<void> {
       const outputs: AgentSessionOutput[] = await instance.runAllDueAgents();
       totalSessionsRun += outputs.length;
       totalCostUsd += outputs.reduce((acc, o) => acc + o.costUsd, 0);
-      console.log(`[scheduler] ${productId}: ran ${outputs.length} agents`);
+      logger.info(`${productId}: ran ${outputs.length} agents`, { productId });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[scheduler] runDueAgentsForAllProducts — product ${productId} failed: ${msg}`);
+      logger.error(`runDueAgentsForAllProducts — product ${productId} failed: ${msg}`, { productId });
       // Continue to next product
     }
   }
 
-  console.log(
-    `[scheduler] runDueAgentsForAllProducts complete. ` +
+  logger.info(
+    `runDueAgentsForAllProducts complete. ` +
     `Products: ${result.rows.length}, Sessions: ${totalSessionsRun}, Cost: $${totalCostUsd.toFixed(4)}`
   );
 }
@@ -101,11 +102,11 @@ export async function runEvolutionForAllProducts(): Promise<void> {
       try {
         const outcome = await runEvolutionSynthesis(productId, agentName);
         if (outcome.evolved) {
-          console.log(`[scheduler] Evolution: ${productId}/${agentName} → v${outcome.newVersion}: ${outcome.description}`);
+          logger.info(`Evolution: ${productId}/${agentName} → v${outcome.newVersion}: ${outcome.description}`, { productId, agentName });
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[scheduler] Evolution failed for ${productId}/${agentName}: ${msg}`);
+        logger.error(`Evolution failed for ${productId}/${agentName}: ${msg}`, { productId, agentName });
         // Non-fatal — continue
       }
     }
@@ -131,11 +132,11 @@ export async function generateBriefingsForAllProducts(): Promise<void> {
       _sendBriefingToSlack(productId).catch(() => {});
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[scheduler] generateBriefing failed for ${productId}: ${msg}`);
+      logger.error(`generateBriefing failed for ${productId}: ${msg}`, { productId });
     }
   }
 
-  console.log(`[scheduler] generateBriefingsForAllProducts complete. Generated: ${generated}/${result.rows.length}`);
+  logger.info(`generateBriefingsForAllProducts complete. Generated: ${generated}/${result.rows.length}`);
 }
 
 // ─── Internal: Slack Briefing Delivery ────────────────────────────────────────
