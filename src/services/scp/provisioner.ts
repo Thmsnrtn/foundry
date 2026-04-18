@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { query, batch } from '../../db/client.js';
 import type {
   AgentName,
   ProvisionResult,
@@ -61,14 +61,18 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
   const prod = productResult.rows[0] as Record<string, unknown>;
 
   try {
+    // Build all statements up-front, then execute as a single atomic batch transaction.
+    // This ensures all-or-nothing: if any INSERT fails, the entire provision is rolled back.
+    const statements: Array<{ sql: string; args: unknown[] }> = [];
+
     // 2. Insert scp_constitutions row
     const constitutionId = nanoid();
-    await query(
-      `INSERT INTO scp_constitutions
+    statements.push({
+      sql: `INSERT INTO scp_constitutions
          (id, product_id, version, core_values, operating_principles, authority_framework, evolution_policy)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(product_id) DO NOTHING`,
-      [
+      args: [
         constitutionId,
         productId,
         DEFAULT_CONSTITUTION.version,
@@ -76,8 +80,8 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
         JSON.stringify(DEFAULT_CONSTITUTION.operating_principles),
         JSON.stringify(DEFAULT_CONSTITUTION.authority_framework),
         JSON.stringify(DEFAULT_CONSTITUTION.evolution_policy),
-      ]
-    );
+      ],
+    });
 
     // 3. Create agent instances (staggered: each index × 30min offset)
     let agentsCreated = 0;
@@ -89,15 +93,15 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
       const nextRunAt = new Date(Date.now() + cadenceHours * 3600 * 1000 + staggerOffsetMs).toISOString();
       const instanceId = nanoid();
 
-      await query(
-        `INSERT INTO agent_instances
+      statements.push({
+        sql: `INSERT INTO agent_instances
            (id, product_id, agent_name, display_name, version, authority_level,
             activation_cadence_hours, status, total_sessions, successful_sessions,
             total_decisions_proposed, total_decisions_approved, total_evolution_cycles,
             domain_health_score, next_run_at)
          VALUES (?, ?, ?, ?, 1, ?, ?, 'active', 0, 0, 0, 0, 0, 50, ?)
          ON CONFLICT(product_id, agent_name) DO NOTHING`,
-        [
+        args: [
           instanceId,
           productId,
           agentName,
@@ -105,16 +109,16 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
           DEFAULT_AUTHORITY_LEVELS[agentName],
           cadenceHours,
           nextRunAt,
-        ]
-      );
+        ],
+      });
 
       // Create initial evolution version row
-      await query(
-        `INSERT INTO agent_evolution_versions
+      statements.push({
+        sql: `INSERT INTO agent_evolution_versions
            (id, product_id, agent_name, version, change_type, change_description,
             trigger_session_id, previous_config, new_config, validation_score, validation_notes, promoted_at)
          VALUES (?, ?, ?, 1, 'initial_provision', ?, NULL, NULL, ?, NULL, 'Initial provisioning', CURRENT_TIMESTAMP)`,
-        [
+        args: [
           nanoid(),
           productId,
           agentName,
@@ -127,8 +131,8 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
             behavioral_constraints: [],
             version: 1,
           }),
-        ]
-      );
+        ],
+      });
 
       agentsCreated++;
     }
@@ -138,15 +142,18 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
     const currentState = (prod.company_lifecycle_state as string) ?? 'setup';
     const newLifecycleState = currentState === 'setup' ? 'learning' : currentState;
 
-    await query(
-      `UPDATE products SET
+    statements.push({
+      sql: `UPDATE products SET
          scp_status='active',
          company_lifecycle_state=?,
          scp_constitution_version=1,
          updated_at=CURRENT_TIMESTAMP
        WHERE id=?`,
-      [newLifecycleState, productId]
-    );
+      args: [newLifecycleState, productId],
+    });
+
+    // Execute all statements as a single atomic transaction
+    await batch(statements);
 
     return {
       success: true,
