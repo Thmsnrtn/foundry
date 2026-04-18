@@ -162,7 +162,7 @@ priorityApi.post('/api/priority/:id/complete', async (c) => {
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function _renderAllClear(): string {
-  return `<div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;min-height:44px;max-height:60px;font-family:inherit;">
+  return `<div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:rgba(78,204,163,0.08);border:1px solid rgba(78,204,163,0.2);border-radius:8px;min-height:44px;max-height:60px;font-family:inherit;">
   <span style="color:#16a34a;font-size:13px;font-weight:500;">All clear — no urgent actions right now</span>
 </div>`;
 }

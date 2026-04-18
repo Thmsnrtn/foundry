@@ -37,7 +37,7 @@ function renderMessageBubble(msg: OnboardingMessage) {
     return html`
       <div style="display:flex;gap:10px;align-items:flex-start;">
         <div style="width:32px;height:32px;border-radius:8px;background:#1e40af;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;margin-top:2px;">🏗️</div>
-        <div style="max-width:85%;background:#1e293b;border:1px solid #334155;border-radius:0 12px 12px 12px;padding:12px 16px;color:#e2e8f0;font-size:0.9375rem;line-height:1.6;">${raw(safeContent)}</div>
+        <div style="max-width:85%;background:var(--surface-2);border:1px solid var(--border);border-radius:0 12px 12px 12px;padding:12px 16px;color:#e2e8f0;font-size:0.9375rem;line-height:1.6;">${raw(safeContent)}</div>
       </div>
     `;
   }
@@ -160,7 +160,7 @@ onboardingChat.get('/setup', async (c) => {
             autofocus
             autocomplete="off"
             required
-            style="flex:1;background:#1e293b;border:1px solid #334155;color:#f8fafc;padding:10px 14px;border-radius:8px;font-size:0.9375rem;"
+            style="flex:1;background:var(--surface-2);border:1px solid var(--border);color:#f8fafc;padding:10px 14px;border-radius:8px;font-size:0.9375rem;"
           />
           <button
             type="submit"

@@ -254,7 +254,7 @@ function experimentPortfolioCard(
       </div>
 
       ${summary.recent_win ? html`
-        <div style="background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;padding:10px 14px;">
+        <div style="background:rgba(78,204,163,0.1);border:1px solid rgba(78,204,163,0.3);border-radius:6px;padding:10px 14px;">
           <strong style="color:#065f46;font-size:13px;">Recent Win:</strong>
           <span style="color:#047857;font-size:13px;margin-left:6px;">${summary.recent_win.name}</span>
           <span style="color:#6b7280;font-size:12px;margin-left:8px;">
@@ -308,7 +308,7 @@ function competitorCards(competitors: Awaited<ReturnType<typeof getCompetitorPro
               </div>` : ''}
 
             ${c.recommended_response ? html`
-              <div style="margin-top:8px;padding:8px;background:#fffbeb;border-radius:4px;font-size:12px;color:#78350f;">
+              <div style="margin-top:8px;padding:8px;background:rgba(255,179,71,0.1);border-radius:4px;font-size:12px;color:var(--text-muted);">
                 <strong>Response:</strong> ${c.recommended_response}
               </div>` : ''}
 

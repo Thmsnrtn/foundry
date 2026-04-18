@@ -166,7 +166,7 @@ function hypothesisQueueCard(hypotheses: HypothesisRecord[], productId: string) 
                   ${h.estimated_duration_days ? html` · Est. duration: <strong>${h.estimated_duration_days}d</strong>` : ''}
                   ${h.estimated_cost_usd ? html` · Est. cost: <strong>$${h.estimated_cost_usd.toFixed(2)}</strong>` : ''}
                 </div>
-                ${h.risk_assessment ? html`<div style="font-size:12px;color:#78350f;background:#fffbeb;padding:6px 10px;border-radius:4px;margin-bottom:8px;">Risk: ${h.risk_assessment}</div>` : ''}
+                ${h.risk_assessment ? html`<div style="font-size:12px;color:var(--text-muted);background:rgba(255,179,71,0.1);padding:6px 10px;border-radius:4px;margin-bottom:8px;">Risk: ${h.risk_assessment}</div>` : ''}
                 <details style="margin-top:8px;">
                   <summary style="cursor:pointer;font-size:13px;color:#2563eb;font-weight:600;">Approve &amp; Create Experiment</summary>
                   <form method="POST" action="/products/${productId}/agents/experiments/${h.id}/approve" style="margin-top:12px;display:grid;gap:8px;">
@@ -276,7 +276,7 @@ function runningExperimentsCard(experiments: ExperimentRecord[], productId: stri
           }
 
           return html`
-            <div style="border:1px solid #dbeafe;border-radius:8px;padding:14px;background:#eff6ff;">
+            <div style="border:1px solid rgba(108,99,255,0.15);border-radius:8px;padding:14px;background:var(--surface-2);">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
                 <div>
                   <span style="font-weight:600;font-size:14px;">${e.name}</span>

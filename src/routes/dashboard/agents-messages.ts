@@ -138,7 +138,7 @@ agentMessageRoutes.get('/agents/messages', async (c) => {
 
       <!-- Critical alerts -->
       ${criticalMessages.length > 0 ? html`
-      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:16px;margin-bottom:16px">
+      <div style="background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.3);border-radius:8px;padding:16px;margin-bottom:16px">
         <div style="font-size:13px;font-weight:700;color:#dc2626;margin-bottom:10px">🚨 Critical Alerts</div>
         ${criticalMessages.map((m: AgentMessage) => html`
         <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #fecaca;last-child:border-bottom:none">
