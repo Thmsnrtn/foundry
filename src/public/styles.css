@@ -33,6 +33,33 @@
   --sidebar-w:    192px;
 
   --transition:   150ms ease;
+
+  /* ─── Spacing Scale (Phase 3) ──────────────────────────────────────────── */
+  --space-1:   0.25rem;  /* 4px  */
+  --space-2:   0.5rem;   /* 8px  */
+  --space-3:   0.75rem;  /* 12px */
+  --space-4:   1rem;     /* 16px */
+  --space-5:   1.5rem;   /* 24px */
+  --space-6:   2rem;     /* 32px */
+  --space-7:   3rem;     /* 48px */
+  --space-8:   4rem;     /* 64px */
+
+  /* ─── Type Scale (Phase 3) ─────────────────────────────────────────────── */
+  --text-xs:   0.75rem;
+  --text-sm:   0.82rem;
+  --text-base: 1rem;
+  --text-lg:   1.15rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.55rem;
+  --text-3xl:  2rem;
+  --text-4xl:  3rem;
+
+  /* ─── Font Weight Scale ────────────────────────────────────────────────── */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
 }
 
 /* ─── Reset & Base ──────────────────────────────────────────────────────────── */
@@ -1442,3 +1469,212 @@ textarea { resize: vertical; min-height: 100px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   Phase 3 — Design System Additions
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── Focus Visible (A11Y) ─────────────────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Remove browser default focus ring — only show on keyboard navigation */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Specific focus styles for interactive elements */
+a:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sidebar-nav a:focus-visible {
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ─── Reduced Motion (A11Y / WCAG) ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─── Skip Link (A11Y) ────────────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  padding: 0.5rem 1rem;
+  background: var(--accent);
+  color: #fff;
+  z-index: 1000;
+  transition: top 0.2s;
+}
+.skip-link:focus {
+  top: 0;
+}
+
+/* ─── Mobile Bottom Nav Fix (5 tabs) ──────────────────────────────────────── */
+.mobile-bottom-nav {
+  display: none; /* Hidden on desktop */
+}
+
+@media (max-width: 768px) {
+  .mobile-bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr); /* Fixed: was 4, now 5 for 5 tabs */
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 300;
+    padding: 0.25rem 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .mbn-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    padding: 0.4rem 0;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 0.65rem;
+    min-height: 44px; /* Touch target minimum */
+    min-width: 44px;
+  }
+
+  .mbn-tab svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .mbn-active {
+    color: var(--accent);
+  }
+
+  /* Add bottom padding to main content so it's not hidden behind nav */
+  .main-with-sidebar {
+    padding-bottom: 4.5rem;
+  }
+}
+
+/* ─── Loading Skeleton (Phase 3) ──────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-line {
+  height: 0.85rem;
+  margin-bottom: 0.5rem;
+  composes: skeleton;
+}
+
+.skeleton-heading {
+  height: 1.5rem;
+  width: 60%;
+  margin-bottom: 1rem;
+}
+
+.skeleton-card {
+  height: 8rem;
+  border-radius: var(--radius);
+}
+
+/* ─── Pricing Page Styles (missing per audit) ─────────────────────────────── */
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.pricing-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 2rem;
+}
+
+.pricing-card.featured {
+  border-color: var(--accent);
+  position: relative;
+}
+
+.pricing-card.featured::before {
+  content: 'Most Popular';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.75rem;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pricing-tier {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  margin-bottom: 0.5rem;
+}
+
+.pricing-price {
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-extrabold);
+  margin-bottom: 0.5rem;
+}
+
+.pricing-price span {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  color: var(--text-muted);
+}
+
+.pricing-features {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+}
+
+.pricing-features li {
+  padding: 0.35rem 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.pricing-features li::before {
+  content: '✓ ';
+  color: var(--signal-high);
+  font-weight: bold;
+}
