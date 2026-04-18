@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.gitignore
+*.md
+docs/
+tests/
+mockups/
+ios/
+packages/
+foundry.db
+.env
+.env.*
+!.env.example
+vitest.config.ts
+.claude/

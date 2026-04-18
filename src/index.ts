@@ -527,11 +527,16 @@ runMigrations()
     });
   })
   .catch((err) => {
-    console.error('[STARTUP] Migration error (non-fatal):', err?.message ?? err);
-    // Don't exit — migrations may have partially succeeded and app can still serve
+    console.error('[STARTUP] Migration error:', err?.message ?? err);
+    if (process.env.NODE_ENV === 'production') {
+      // In production, migration failures are fatal — don't serve with inconsistent schema
+      console.error('[STARTUP] FATAL: Migrations failed in production. Exiting.');
+      process.exit(1);
+    }
+    // In development, start anyway with a warning
     const port = parseInt(process.env.PORT ?? '8080');
     serve({ fetch: app.fetch, port }, (info) => {
-      console.log(`Listening on http://localhost:${info.port} (with migration warnings)`);
+      console.log(`Listening on http://localhost:${info.port} (with migration warnings — DEV ONLY)`);
     });
   });
 
