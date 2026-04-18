@@ -147,7 +147,7 @@ describe('CSRF middleware integration', () => {
     expect(res.status).toBe(200);
   });
 
-  it('skips CSRF validation for JSON API requests', async () => {
+  it('skips CSRF for Bearer-authenticated JSON requests', async () => {
     const { Hono } = await import('hono');
     const { csrfMiddleware } = await import('../../src/middleware/csrf.js');
 
@@ -155,13 +155,33 @@ describe('CSRF middleware integration', () => {
     app.use('*', csrfMiddleware);
     app.post('/api/data', (c) => c.json({ success: true }));
 
-    // JSON requests should bypass CSRF (they use Bearer auth)
+    // Bearer-auth JSON requests should bypass CSRF
+    const res = await app.request('/api/data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token',
+      },
+      body: JSON.stringify({ test: true }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('requires CSRF for cookie-authenticated JSON requests', async () => {
+    const { Hono } = await import('hono');
+    const { csrfMiddleware } = await import('../../src/middleware/csrf.js');
+
+    const app = new Hono();
+    app.use('*', csrfMiddleware);
+    app.post('/api/data', (c) => c.json({ success: true }));
+
+    // Cookie-auth JSON requests WITHOUT CSRF header should be rejected
     const res = await app.request('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ test: true }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
   });
 
   it('rejects POST with mismatched token', async () => {
