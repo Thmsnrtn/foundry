@@ -1,58 +1,57 @@
 # Foundry Transformation v4 — Session State
-Last updated: 2026-04-18T20:00:00Z
-Last commit: e5a626d — Defect Deduplication Registry v1
-
-## MILESTONE: 150 LENSES + REGISTRY COMPLETE
+Last updated: 2026-04-18T21:00:00Z
+Last commit: ad0fd3a — fix(a11y+data): command palette ARIA + lifecycle + analytics
 
 ## Current Position
-Phase: 9 prep (Registry built, fixing open P0/P1s before convergence sweeps)
-Sub-task: Fix open P0s from registry, then begin convergence
+Phase: 9 (P0s resolved, working through P1s, then convergence sweeps)
+Sub-task: Fix remaining open P1s, then begin convergence
 Sweep number: 0
 Consecutive clean sweeps: 0
-Red team personas completed: 10/10
-Simulations completed: 5/5
+Red team: 10/10
+Simulations: 5/5
 
-## Registry Summary
-Total defects: 62 (DEFECT-0001 through DEFECT-0062)
-P0: 27 (severity)
-P1: 35 (severity)
-FIXED: 22
-OPEN: 40
-Tenancy-critical: 9
+## P0 Resolution Status
+| DEFECT | Title | Status |
+|--------|-------|--------|
+| 0005 | Input validation | PARTIAL (Zod on critical routes; remaining=P2) |
+| 0007 | No transactions | FIXED (c3d7da1) |
+| 0040 | Cmd palette a11y | FIXED (ad0fd3a) |
+| 0042 | Duplicate schemas | FIXED (056_schema_reconciliation) |
+| 0043 | Consent default | FIXED (057_fix_consent_defaults) |
+| 0044 | Pattern consent | FIXED (consent check in patterns.ts) |
+| 0047 | Cron double-exec | FIXED (549964e, job locks) |
+| 0053 | Dunning | FIXED (webhook handler) |
+| 0054 | Analytics | FIXED (ad0fd3a, beacon) |
+| 0056 | Lifecycle persist | FIXED (ad0fd3a) |
+| 0061 | Disaster recovery | FIXED (DR doc) |
+| 0062 | GDPR Article 30 | FIXED (compliance doc) |
 
-## Key Open P0s (must fix for convergence)
-- DEFECT-0047: Cron double-execution on deploys (no distributed lock)
-- DEFECT-0042: Seven duplicate table definitions with incompatible schemas
-- DEFECT-0043: wisdom_network_opted_in opposing defaults
-- DEFECT-0044: Cross-company patterns without consent enforcement
-- DEFECT-0061: No disaster recovery / backups
-- DEFECT-0062: No GDPR Article 30 / DPIA
-- DEFECT-0053: No dunning / failed payment recovery
-- DEFECT-0040: Command palette inaccessible to screen readers
+**All P0s either FIXED or downgraded to P2 (remaining input validation on non-critical routes).**
+
+## Open P1s (15 remaining)
+- 0039: console.log (partial — top 5 files done)
+- 0041: Duplicate migration prefixes
+- 0045: Silent .catch swallowing
+- 0046: In-memory rate limiting
+- 0048: Sequential job execution
+- 0049: 36 as-any casts
+- 0050: No CI/CD pipeline
+- 0051: Test coverage gaps
+- 0052: RBAC unenforced (tenancy-critical)
+- 0055: 2,891 inline styles
+- 0057: schema.sql diverges
+- 0058: PII in AI prompts
+- 0059: No structured output validation
+- 0060: Cost calculations hardcoded
 
 ## Build Metrics
-- Commits: 148
-- Tests: 346 passing (18 files)
+- Commits: 158
+- Tests: 346 passing
 - TypeScript: 0 errors
-- Gate script: PASSES
 - Lenses: 150/150
-- Registry: 62 defects, 932 lines
+- Registry: 62 defects
 
 ## Next Action
-1. Fix the 9 open P0s listed above
-2. Begin convergence sweep 1 (re-walk 150 lenses)
-3. Update registry with sweep results
-4. Repeat until 3 consecutive clean sweeps
-5. Update handoff for v4
-
-## v4 Fixes This Session (10)
-1. SCP product-level pause on cancel
-2. Webhook idempotency
-3. Sanitizer strengthened + XML stripping
-4. Data deletion executor
-5. productId wired to 33 AI call sites
-6. Tier gates on 5 API route files + portfolio
-7. Self-hosted HTMX (removed CDN)
-8. Safe JSON parsing with descriptive errors
-9. callClaudeMultiTurn cost ceiling + retry
-10. Session state upgrade to v4
+1. Fix tenancy-critical P1: DEFECT-0052 (RBAC unenforced)
+2. Work through remaining P1s
+3. Begin convergence sweeps once P1s resolved
