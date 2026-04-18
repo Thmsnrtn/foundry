@@ -4,6 +4,7 @@
 // =============================================================================
 
 import Anthropic from '@anthropic-ai/sdk';
+import { z } from 'zod';
 import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
 
 let _client: Anthropic | null = null;
@@ -220,8 +221,13 @@ export async function callClaudeMultiTurn(
  * Parse a JSON response from Claude, handling markdown code fences.
  * Throws a descriptive error instead of crashing on malformed JSON
  * (e.g., truncated output from max_tokens limit).
+ *
+ * Optional Zod schema parameter enables runtime validation of the parsed
+ * structure. When provided, the response is validated against the schema
+ * and the typed result is returned. Backward-compatible — existing callers
+ * without a schema still work via `as T` assertion.
  */
-export function parseJSONResponse<T>(content: string): T {
+export function parseJSONResponse<T>(content: string, schema?: z.ZodType<T>): T {
   let cleaned = content.trim();
   // Remove markdown code fences if present
   if (cleaned.startsWith('```json')) {
@@ -234,7 +240,15 @@ export function parseJSONResponse<T>(content: string): T {
   }
   cleaned = cleaned.trim();
   try {
-    return JSON.parse(cleaned) as T;
+    const parsed = JSON.parse(cleaned) as T;
+    if (schema) {
+      const result = schema.safeParse(parsed);
+      if (!result.success) {
+        throw new Error(`AI response schema validation failed: ${result.error.message}`);
+      }
+      return result.data;
+    }
+    return parsed;
   } catch (err) {
     // Provide context for debugging — truncated AI output is a common cause
     const preview = cleaned.length > 200 ? cleaned.slice(0, 200) + '...' : cleaned;
