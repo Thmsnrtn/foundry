@@ -16,14 +16,21 @@ export function riskStateBadge(
   reason: string | null,
   changedAt: string | null
 ): HtmlContent {
-  const stateLabel = state.toUpperCase();
+  // A11Y-04: Pair each color with a distinct symbol so the risk state
+  // is not communicated by color alone (WCAG 1.4.1).
+  const stateIndicators: Record<string, string> = {
+    green: 'GREEN \u2713',   // check mark
+    yellow: 'YELLOW \u26A0', // warning sign
+    red: 'RED \u25CF',       // filled circle
+  };
+  const stateLabel = stateIndicators[state] ?? state.toUpperCase();
   const messages: Record<string, string> = {
     green: 'Your product is operating normally. No immediate risks detected.',
     yellow: `Heightened monitoring active. ${reason ?? ''}`,
     red: `Recovery mode. ${reason ?? 'See Recovery Protocol below.'}`,
   };
   return html`
-  <div class="risk-state-card risk-bg-${state}">
+  <div class="risk-state-card risk-bg-${state}" role="status" aria-label="Risk state: ${stateLabel}">
     <div class="risk-state-header">
       <span class="risk-badge risk-${state}">${stateLabel}</span>
       ${changedAt ? html`<span class="risk-changed">Since ${formatDate(changedAt)}</span>` : ''}
@@ -1262,7 +1269,7 @@ export function remediationPRList(
       <div style="font-size:0.8rem;margin-top:0.25rem;">
         Score: ${pr.pre_fix_dimension_score} → ${pr.post_fix_dimension_score}
         <span style="color:${(pr.post_fix_dimension_score as number) > (pr.pre_fix_dimension_score as number) ? '#059669' : '#dc2626'};">
-          (${(pr.post_fix_dimension_score as number) > (pr.pre_fix_dimension_score as number) ? '+' : ''}${((pr.post_fix_dimension_score as number) - (pr.pre_fix_dimension_score as number)).toFixed(1)})
+          (${(pr.post_fix_dimension_score as number) > (pr.pre_fix_dimension_score as number) ? '\u2191 +' : '\u2193 '}${((pr.post_fix_dimension_score as number) - (pr.pre_fix_dimension_score as number)).toFixed(1)})
         </span>
       </div>` : ''}
     </div>`)}
