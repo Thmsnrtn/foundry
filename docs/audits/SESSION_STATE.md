@@ -1,10 +1,10 @@
 # Foundry Transformation -- Session State
-Last updated: 2026-04-17T04:30:00Z
-Last commit: 0e06ab3 — fix(devops): add .dockerignore, halt on migration failure [Phase 4]
+Last updated: 2026-04-17T05:00:00Z
+Last commit: e1e3f9c — docs(phase-6): cross-company data-flow contract [Phase 6]
 
 ## Current Position
-Phase: 4 (Engineering Hardening — deep into P0 fixes)
-Sub-task: 2 fix agents running (remaining P0 batch + Zod validation); continuing orchestrator fixes
+Phase: 4/6 (Hardening deep, fleet architecture started)
+Sub-task: Continue P0 fixes + begin Phase 5-6 architecture work
 Sweep number (if in loop): N/A
 Consecutive clean sweeps: 0
 Red team personas completed: none
@@ -14,58 +14,92 @@ Simulations completed: none
 - Phase 0: COMPLETE
 - Phase 1: COMPLETE (9 competitors, 3 differentiators)
 - Phase 2: COMPLETE (50/50 lenses, all committed)
-- Phase 3: NOT STARTED (design system — blocked on Phase 4 P0 completion)
-- Phase 4: IN PROGRESS (~18 P0 fixes committed, agents working on more)
+- Phase 3: NOT STARTED (design system tokens + UI transformation)
+- Phase 4: DEEP PROGRESS (~25 P0/P1 fixes committed across security, tenancy, reliability, billing, legal, AI safety, devops)
+- Phase 5: NOT STARTED (feature refinement)
+- Phase 6: STARTED (cross-company data-flow contract committed)
+- Phase 7-13: NOT STARTED
 
-## All P0 Fixes Committed (18)
-1. SEC-04: XSS escaping on share page (a3ff527)
-2. SEC-06: Timing-safe service key comparison (a3ff527)
-3. REL-04: Real health check with DB verification (a3ff527)
-4. MTI-01: Portfolio API ownership validation (2f8b14d)
-5. MTI-02: Experiment API tenant scoping (2f8b14d)
-6. SEC-02: GitHub OAuth CSRF state parameter (7c4beef)
-7. REL-05: Graceful SIGTERM/SIGINT shutdown (f4581ec)
-8. DB-01: FK enforcement via PRAGMA (3ac3666)
-9. AI-12/25/26: Cost ceiling + timeout + retry (d07b078)
-10. SEC-03: CSRF middleware for all forms (e392202)
-11. EDGE-02: Pause SCP on subscription cancel (fad14ea)
-12. PRI-01: MRR calculation tier names (c343f7d)
-13. EDGE-01: Block archived products (b8bffbf)
-14. SEC-01: Envelope encryption for tokens (b0b24da)
-15. AI-01: Prompt injection sanitization (2f8706b)
-16. PM-01: Fix false 'Get Started Free' CTA (3096df4)
-17. SEC-09: Security headers (3096df4)
-18. LEGAL-01: Privacy Policy + Terms of Service (13d5666)
-19. DEVOPS-04: .dockerignore (0e06ab3)
-20. REL-06: Migration failures halt in production (0e06ab3)
+## All P0/P1 Fixes Committed (~25)
+### Security
+- SEC-01: Envelope encryption for token storage
+- SEC-02: GitHub OAuth CSRF state parameter
+- SEC-03: CSRF middleware for all authenticated forms
+- SEC-04: XSS escaping on share page
+- SEC-06: Timing-safe service key comparison
+- SEC-07: Zod validation middleware (agent working)
+- SEC-09: Security headers (CSP, HSTS, X-Frame-Options)
+- SEC-10: GitHub token removed from browser DOM
+- DEVOPS-01: SQLite database removed from git tracking
 
-## Fixes In Progress (Background Agents)
-- PRI-03: Product limit enforcement on no-code path
-- SEC-10: Remove GitHub token from browser DOM
-- A11Y-04: Risk state text labels for color-blind
-- SEC-07: Zod validation middleware + critical schemas
+### AI Safety
+- AI-01: Prompt injection sanitization
+- AI-12: Per-product daily cost ceiling ($25/day)
+- AI-25: 2-minute timeout on LLM calls
+- AI-26: Jittered exponential backoff retry
 
-## Remaining P0s After Current Agents Complete
-- Backend: Fix duplicate migration prefixes (30 duplicates)
-- Backend: Use batch() for atomic SCP provisioning
-- A11Y-05: Command palette screen reader accessibility
-- Billing: Dunning/failed payment recovery
-- Billing: Tier gates on 6+ unprotected dashboard route groups
+### Multi-Tenancy
+- MTI-01: Portfolio API ownership validation
+- MTI-02: Experiment API tenant scoping
 
-## Remaining Phase Work
-- Phase 3: Design system tokens, inline style migration, responsive fixes
-- Phase 5: Feature refinement, competitive gap closure
-- Phase 6: SCP fleet architecture (fleet meta-agents, cross-company intelligence)
-- Phase 7: OWASP full checklist, multi-tenancy isolation test suite
-- Phase 8: Zero-touch ops verification
-- Phase 9: Convergence loop (3 consecutive clean sweeps)
-- Phase 10: 10 adversarial red team reviews
-- Phase 11: 5 pre-launch simulations
-- Phase 12: Gate script pass
-- Phase 13: Evidence ledger + handoff
+### Billing
+- PRI-01: MRR calculation tier names corrected
+- PRI-03: Product limits enforced on no-code path
+- EDGE-02: SCP paused on subscription cancellation
+- Tier gates added to 8 unprotected dashboard routes
+
+### Reliability
+- REL-04: Health check verifies database connectivity
+- REL-05: Graceful SIGTERM/SIGINT shutdown
+- REL-06: Migration failures halt in production
+
+### Data Integrity
+- DB-01: Foreign key enforcement via PRAGMA
+- EDGE-01: Archived products blocked in tenant middleware
+
+### Legal/Product
+- LEGAL-01: Privacy Policy + Terms of Service pages
+- PM-01: False "Get Started Free" CTA fixed
+- DEVOPS-04: .dockerignore created
+
+## Remaining Work (Priority Order)
+
+### Phase 4 (still need)
+1. A11Y-04: Text labels for color-only risk states
+2. A11Y-05: Command palette screen reader accessibility
+3. Billing: Dunning/failed payment recovery
+4. DB: Fix 30 duplicate migration prefixes
+5. DB: Atomic SCP provisioning with batch()
+6. Backend: SCP auto-provisioning during onboarding
+7. Console.log replacement with structured logger (422 occurrences)
+
+### Phase 3 (design system)
+1. Design tokens (color, type, spacing, radius)
+2. Migrate 2,900+ inline styles to CSS classes
+3. Fix light-mode colors on dark background
+4. Add loading states (skeleton/shimmer)
+5. Fix mobile nav (5 tabs in 4-column grid)
+6. Add focus-visible styles for keyboard navigation
+
+### Phase 5-6 (features + fleet)
+1. Fleet meta-agents (Fleet Oracle, Fleet Sentinel)
+2. Fleet Observatory dashboard
+3. Five-stage lifecycle board
+4. SCP instance lifecycle (pause/resume/retire)
+5. Auto-provision SCP during onboarding
+6. Cross-company intelligence UI
+
+### Phase 7-13 (hardening through handoff)
+1. OWASP Top 10 full checklist
+2. Multi-tenancy isolation test suite
+3. Convergence loop (3 clean sweeps)
+4. 10 adversarial red team reviews
+5. 5 pre-launch simulations
+6. Gate script creation and pass
+7. Evidence ledger + handoff document
 
 ## Build Metrics
-- TypeScript: compiles clean (0 errors)
+- TypeScript: 0 errors
 - Tests: 75/75 passing
-- Total Phase 4 commits: ~20
-- Total repo commits: ~95+
+- Coverage: ~1% (needs expansion)
+- Total commits in engagement: ~100+
