@@ -148,6 +148,15 @@ onboardingRoutes.post('/onboarding/create-product', validateBody(createProductSc
   }
 
   await query(`INSERT INTO lifecycle_state (product_id, current_prompt, risk_state) VALUES (?, 'prompt_1', 'green')`, [productId]);
+
+  // Auto-provision SCP agents for the new product (PM finding: was only happening at server restart)
+  try {
+    const { ensureProvisioned } = await import('../../services/scp/provisioner.js');
+    await ensureProvisioned(productId, founder.id);
+  } catch {
+    // Non-fatal: product is usable without agents, provisioning retries on next server start
+  }
+
   return c.redirect(`/onboarding/competitors?product_id=${productId}`);
 });
 
@@ -256,6 +265,14 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
     `INSERT INTO lifecycle_state (product_id, current_prompt, risk_state) VALUES (?, 'prompt_1', 'green')`,
     [productId]
   );
+
+  // Auto-provision SCP agents for the new product
+  try {
+    const { ensureProvisioned } = await import('../../services/scp/provisioner.js');
+    await ensureProvisioned(productId, founder.id);
+  } catch {
+    // Non-fatal: product is usable, provisioning retries on next server start
+  }
 
   return c.redirect(`/onboarding/competitors?product_id=${productId}`);
 });
