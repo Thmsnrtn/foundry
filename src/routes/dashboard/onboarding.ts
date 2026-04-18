@@ -91,12 +91,13 @@ onboardingRoutes.post('/onboarding/create-product', async (c) => {
   const body = await parseBody(c) as Record<string, string>;
 
   // Enforce per-tier product limits (mirrors the GitHub onboarding path)
+  // Solo: 1, Growth: 3, Investor-Ready: unlimited, No tier: 1
   const productLimits: Record<string, number> = {
     solo: 1,
-    growth: 1,
-    investor_ready: 5,
+    growth: 3,
   };
-  const limit = founder.tier ? (productLimits[founder.tier] ?? 1) : 1;
+  const isUnlimited = founder.tier === 'investor_ready';
+  const limit = isUnlimited ? Infinity : (founder.tier ? (productLimits[founder.tier] ?? 1) : 1);
   const existing = await query(
     "SELECT COUNT(*) as c FROM products WHERE owner_id = ? AND status != 'archived'",
     [founder.id]
@@ -104,10 +105,8 @@ onboardingRoutes.post('/onboarding/create-product', async (c) => {
   const count = ((existing.rows[0] as Record<string, number>)?.c ?? 0);
   if (count >= limit) {
     const upgradeHint = founder.tier === 'growth'
-      ? 'Upgrade to Investor-Ready for up to 5 products.'
-      : founder.tier === 'investor_ready'
-        ? 'You have reached the 5-product limit.'
-        : 'Your current plan supports 1 product. Upgrade to add more.';
+      ? 'Upgrade to Investor-Ready for unlimited products.'
+      : 'Your current plan supports 1 product. Upgrade to add more.';
     const ctx = await getLayoutContext(founder, '', 'Product Limit Reached');
     return c.html(dashboardLayout(ctx, html`
       <div class="card" style="max-width:480px;margin:3rem auto;text-align:center;">
@@ -176,12 +175,13 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const body = await parseBody(c) as { repo_owner: string; repo_name: string; access_token: string; market_category?: string };
 
   // Enforce per-tier product limits
+  // Solo: 1, Growth: 3, Investor-Ready: unlimited, No tier: 1
   const productLimits: Record<string, number> = {
     solo: 1,
-    growth: 1,
-    investor_ready: 5,
+    growth: 3,
   };
-  const limit = founder.tier ? (productLimits[founder.tier] ?? 1) : 1;
+  const isUnlimited = founder.tier === 'investor_ready';
+  const limit = isUnlimited ? Infinity : (founder.tier ? (productLimits[founder.tier] ?? 1) : 1);
   const existing = await query(
     "SELECT COUNT(*) as c FROM products WHERE owner_id = ? AND status != 'archived'",
     [founder.id]
@@ -189,10 +189,8 @@ onboardingRoutes.post('/onboarding/select-repo', async (c) => {
   const count = ((existing.rows[0] as Record<string, number>)?.c ?? 0);
   if (count >= limit) {
     const upgradeHint = founder.tier === 'growth'
-      ? 'Upgrade to Investor-Ready for up to 5 products.'
-      : founder.tier === 'investor_ready'
-        ? 'You have reached the 5-product limit.'
-        : 'Your current plan supports 1 product. Upgrade to add more.';
+      ? 'Upgrade to Investor-Ready for unlimited products.'
+      : 'Your current plan supports 1 product. Upgrade to add more.';
     const ctx = await getLayoutContext(founder, '', 'Product Limit Reached');
     return c.html(dashboardLayout(ctx, html`
       <div class="card" style="max-width:480px;margin:3rem auto;text-align:center;">
