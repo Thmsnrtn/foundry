@@ -98,7 +98,7 @@ Return JSON only (no markdown fences):
 
 Include up to 3 key_conflicts and up to 5 confidence_weighted_recommendations, ordered by weight descending.`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 2048);
+  const response = await callSonnet(systemPrompt, userPrompt, 2048, productId);
 
   let parsed: SynthesizerResponse;
   try {

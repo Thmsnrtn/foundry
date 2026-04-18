@@ -187,7 +187,7 @@ Write the update in this exact markdown format:
 ### Asks
 [1-2 specific asks from investors, or "No specific asks this month." if none]`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 1500);
+  const response = await callSonnet(systemPrompt, userPrompt, 1500, productId);
   const draftText = response.content.trim();
 
   // INSERT into investor_updates

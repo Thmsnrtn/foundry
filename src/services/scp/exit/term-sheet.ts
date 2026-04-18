@@ -131,7 +131,7 @@ Is this founder-friendly, market standard, or investor-friendly? Explain in 2-3 
 
   let market_context = '';
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 300);
+    const response = await callSonnet(systemPrompt, userPrompt, 300, productId);
     market_context = response.content;
   } catch {
     market_context = `This ${round_type} round results in ${investor_ownership_pct}% dilution. Market standard for this stage is ${benchmark.typical_dilution_min}-${benchmark.typical_dilution_max}%. ${liquidation_preference === '1x_non_participating' ? 'The 1x non-participating liquidation preference is market standard.' : 'Review liquidation preference terms carefully.'}`;

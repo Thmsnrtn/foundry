@@ -227,7 +227,7 @@ Return a JSON object with this exact structure:
   "agent_insights": ["top 3 insights from AI agent work this quarter"]
 }`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 2000);
+  const response = await callSonnet(systemPrompt, userPrompt, 2000, productId);
   const narrative = parseJSONResponse<BoardPacketNarrative>(response.content);
 
   // 8. INSERT into board_packets

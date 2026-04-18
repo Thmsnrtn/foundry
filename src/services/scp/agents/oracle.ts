@@ -251,7 +251,7 @@ Return JSON only (no markdown fences):
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callOpus(systemPrompt, userPrompt, 4096);
+    const response = await callOpus(systemPrompt, userPrompt, 4096, context.productId);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = (response.usage.input_tokens ?? 0) * 0.000015 + (response.usage.output_tokens ?? 0) * 0.000075;
 

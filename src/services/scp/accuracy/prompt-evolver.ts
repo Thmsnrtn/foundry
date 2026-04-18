@@ -87,7 +87,7 @@ Return JSON only:
 }`;
 
     try {
-      const response = await callSonnet(systemPrompt, userPrompt, 512);
+      const response = await callSonnet(systemPrompt, userPrompt, 512, productId);
       const parsed = parseJSONResponse<{
         mutationType: 'emphasis_shift' | 'context_addition' | 'framing_change';
         deltaInstructions: string;

@@ -178,7 +178,7 @@ Assess infrastructure and deployment health. Return JSON only (no markdown fence
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 2500);
+    const response = await callSonnet(systemPrompt, userPrompt, 2500, context.productId);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 

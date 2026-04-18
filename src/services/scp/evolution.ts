@@ -111,7 +111,7 @@ ${session.sessionTranscript}
 What behavioral observations can you extract? What specific config changes would improve this agent's performance?`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 2048, session.productId);
     const content = response.content.trim();
 
     let cleaned = content;
@@ -178,7 +178,7 @@ ${initialObservations.observations.join('\n')}
 As an independent critic: what additional specific, minimal changes would improve this agent's performance?`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 2048, session.productId);
     const content = response.content.trim();
 
     let cleaned = content;

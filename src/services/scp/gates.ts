@@ -57,7 +57,8 @@ const SAFETY_VIOLATION_PATTERNS = [
 async function runConstitutionGate(
   proposedContent: string,
   agentName: string,
-  rationale: string
+  rationale: string,
+  productId?: string
 ): Promise<GateResult> {
   // First: check regex patterns for obvious violations
   for (const pattern of CONSTITUTION_VIOLATION_PATTERNS) {
@@ -94,7 +95,7 @@ Rationale for change: ${rationale}
 
 Does this proposed change comply with the SCP constitution?`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 1024);
+    const response = await callSonnet(systemPrompt, userPrompt, 1024, productId);
     const content = response.content.trim();
 
     // Parse JSON response
@@ -128,7 +129,8 @@ Does this proposed change comply with the SCP constitution?`;
 async function runRegressionGate(
   proposedContent: string,
   agentName: string,
-  goldenLessons: string[]
+  goldenLessons: string[],
+  productId?: string
 ): Promise<GateResult> {
   if (goldenLessons.length === 0) {
     return {
@@ -156,7 +158,7 @@ ${proposedContent}
 
 Does this proposed change CONTRADICT any of these golden lessons? Answer YES or NO with the specific lesson if YES.`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 1024);
+    const response = await callSonnet(systemPrompt, userPrompt, 1024, productId);
     const content = response.content.trim();
 
     let cleaned = content;
@@ -319,7 +321,8 @@ async function runDriftGate(
 async function runSafetyGate(
   proposedContent: string,
   agentName: string,
-  rationale: string
+  rationale: string,
+  productId?: string
 ): Promise<GateResult> {
   // Regex check first — reject immediately if any pattern found
   for (const pattern of SAFETY_VIOLATION_PATTERNS) {
@@ -354,7 +357,7 @@ Rationale: ${rationale}
 
 Is this change safe?`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 512);
+    const response = await callSonnet(systemPrompt, userPrompt, 512, productId);
     const content = response.content.trim();
 
     let cleaned = content;
@@ -396,7 +399,7 @@ export async function runAllGates(params: {
   let rejected_by: string | undefined;
 
   // Gate 1: Constitution
-  const constitutionResult = await runConstitutionGate(proposedContent, agentName, rationale);
+  const constitutionResult = await runConstitutionGate(proposedContent, agentName, rationale, productId);
   gates.push(constitutionResult);
   if (!constitutionResult.passed) {
     rejected_by = 'constitution';
@@ -409,7 +412,7 @@ export async function runAllGates(params: {
   }
 
   // Gate 2: Regression
-  const regressionResult = await runRegressionGate(proposedContent, agentName, goldenLessons);
+  const regressionResult = await runRegressionGate(proposedContent, agentName, goldenLessons, productId);
   gates.push(regressionResult);
   if (!regressionResult.passed) {
     rejected_by = 'regression';
@@ -453,7 +456,7 @@ export async function runAllGates(params: {
   }
 
   // Gate 5: Safety
-  const safetyResult = await runSafetyGate(proposedContent, agentName, rationale);
+  const safetyResult = await runSafetyGate(proposedContent, agentName, rationale, productId);
   gates.push(safetyResult);
   if (!safetyResult.passed) {
     rejected_by = 'safety';

@@ -71,7 +71,7 @@ Return JSON only (no markdown fences):
 
 Return exactly 3 challenges, ordered by severity (highest first).`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 2048);
+  const response = await callSonnet(systemPrompt, userPrompt, 2048, productId);
 
   let parsed: ChallengerResponse;
   try {

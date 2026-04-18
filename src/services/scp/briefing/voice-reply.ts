@@ -82,7 +82,7 @@ interface IntentResult {
   summary: string;
 }
 
-async function classifyIntent(transcript: string, context: string): Promise<IntentResult> {
+async function classifyIntent(transcript: string, context: string, productId?: string): Promise<IntentResult> {
   const systemPrompt = `You classify founder voice notes into one of four action types:
 - "decision": Founder is making or recording a strategic decision ("I've decided to...", "We're going to...", "My call is...")
 - "approval": Founder is approving a proposed action ("Yes, do it", "Approved", "Go ahead with...")
@@ -102,7 +102,7 @@ Classify this voice note. Return ONLY valid JSON:
 }`;
 
   try {
-    const aiResponse = await callSonnet(systemPrompt, userPrompt, 256);
+    const aiResponse = await callSonnet(systemPrompt, userPrompt, 256, productId);
     const parsed = parseJSONResponse<IntentResult>(aiResponse.content);
     if (['decision', 'approval', 'question', 'note'].includes(parsed.action_type)) {
       return parsed;
@@ -227,7 +227,7 @@ export async function processVoiceReply(
   const transcript = await transcribeAudio(data.audio_base64, data.mime_type);
 
   // 2. Classify intent
-  const intent = await classifyIntent(transcript, data.context);
+  const intent = await classifyIntent(transcript, data.context, productId);
 
   // 3. Route based on intent
   let routedTo: string;

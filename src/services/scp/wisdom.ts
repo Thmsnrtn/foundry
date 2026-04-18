@@ -186,7 +186,8 @@ Notes:
   const response = await callSonnet(
     'You are a decision pattern synthesizer for a SaaS company. Analyze decision outcomes to find patterns. Return valid JSON only.',
     userPrompt,
-    2048
+    2048,
+    productId
   );
 
   let synthesis: SynthesisResponse;

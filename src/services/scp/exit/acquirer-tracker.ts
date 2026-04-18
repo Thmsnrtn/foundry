@@ -185,6 +185,6 @@ Generate a strategic acquisition thesis that covers:
 3. What the company should do in the next 12 months to become a more attractive target
 4. Any timing considerations or market dynamics that affect exit windows`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 1500);
+  const response = await callSonnet(systemPrompt, userPrompt, 1500, productId);
   return response.content;
 }

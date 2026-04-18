@@ -304,7 +304,7 @@ ${JSON.stringify(summaryData, null, 2)}
 
 Write exactly 2-3 sentences describing: what's driving the trend, what it means for the company, and what to watch for.`;
 
-    const trendResponse = await callSonnet(systemPrompt, userPrompt, 256);
+    const trendResponse = await callSonnet(systemPrompt, userPrompt, 256, productId);
     trend_description = trendResponse.content.trim();
   } catch {
     // Use fallback description
@@ -323,7 +323,7 @@ Best signal week: ${Math.round(bestWeekAvg)}, worst: ${Math.round(worstWeekAvg =
 
 Write 2-3 sentences evaluating what these patterns suggest about prediction accuracy and system learning quality.`;
 
-    const predResponse = await callSonnet(systemPrompt, userPrompt, 200);
+    const predResponse = await callSonnet(systemPrompt, userPrompt, 200, productId);
     prediction_notes = predResponse.content.trim();
   } catch {
     // Use fallback

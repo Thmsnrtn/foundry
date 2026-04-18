@@ -302,7 +302,7 @@ If all scores are >= 7, return an empty array [].`;
 
   let gaps: FundraisingReadiness['gaps'] = [];
   try {
-    const gapResponse = await callSonnet(systemPrompt, userPrompt, 1000);
+    const gapResponse = await callSonnet(systemPrompt, userPrompt, 1000, productId);
     gaps = parseJSONResponse<FundraisingReadiness['gaps']>(gapResponse.content);
   } catch {
     // Fallback: generate basic gaps from low scores

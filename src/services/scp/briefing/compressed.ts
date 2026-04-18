@@ -206,7 +206,8 @@ Be specific: use actual numbers when available.`,
   "agent_consensus": "...",
   "one_decision_to_make": "..."
 }`,
-      512
+      512,
+      productId
     );
 
     interface BriefAIResponse {

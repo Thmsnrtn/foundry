@@ -266,7 +266,7 @@ Return ONLY valid JSON in this exact format:
   };
 
   try {
-    const aiResponse = await callSonnet(systemPrompt, userPrompt, 1024);
+    const aiResponse = await callSonnet(systemPrompt, userPrompt, 1024, productId);
     const parsed = parseJSONResponse<AIEmailResponse>(aiResponse.content);
     aiResult = { ...aiResult, ...parsed };
   } catch {

@@ -214,7 +214,8 @@ export async function generateDailyBriefing(
       const headlineResponse = await callSonnet(
         'You write precise, specific one-line business summaries. No generic statements.',
         `In max 120 characters, summarize the key development for ${companyName} today based on these agent observations:\n${observationsList}\n\nBe specific and concrete, not generic. Return only the headline text.`,
-        150
+        150,
+        productId
       );
       headline = headlineResponse.content.trim().slice(0, 120);
       tokensUsed = headlineResponse.usage.input_tokens + headlineResponse.usage.output_tokens;
