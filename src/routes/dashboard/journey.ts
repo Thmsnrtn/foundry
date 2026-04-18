@@ -17,7 +17,7 @@ journeyRoutes.get('/products/:id/journey', async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'journey', 'Journey', productId);
+  const ctx = await getLayoutContext(founder, 'journey', 'Journey', productId, c);
   const artifacts = await getStoryArtifacts(productId);
 
   // UX: fetch all milestones for timeline + mark unseen as seen

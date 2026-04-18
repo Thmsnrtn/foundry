@@ -8,7 +8,9 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner, getScenarioModels, getRelevantPatterns } from '../../db/client.js';
 import { getDecisionQueue, resolveDecision, recordOutcome } from '../../services/decisions/queue.js';
-import { dashboardLayout, chamberLayout } from '../../views/layout.js';
+import { dashboardLayout, layout } from '../../views/layout.js';
+// chamberLayout = full-screen focused mode without sidebar
+const chamberLayout = (opts: any, content: any) => layout({ ...opts, showNav: false }, content);
 import { decisionList, type DecisionData } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';

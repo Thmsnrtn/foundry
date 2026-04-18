@@ -33,6 +33,8 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
   dnaCompletionPct: number;
   wisdomLayerActive: boolean;
   openPRCount: number;
+  /** CSRF token for form auto-injection */
+  csrfToken: string;
   /** All products owned by this founder, for the switcher */
   allProducts: Array<{ id: string; name: string }>;
   /** UX intelligence layer context */
@@ -70,6 +72,9 @@ export async function getLayoutContext(
     canAccess: (featureKey: string) => canAccessFn(founder, featureKey),
   };
 
+  // Extract CSRF token from Hono context
+  const csrfToken = honoCtx ? ((honoCtx as any).get?.('csrfToken') as string ?? '') : '';
+
   if (products.rows.length === 0) {
     return {
       title,
@@ -79,6 +84,7 @@ export async function getLayoutContext(
       activeNav,
       riskState: null,
       riskReason: null,
+      csrfToken,
       founderId: founder.id,
       founder,
       founderEmail: founder.email,
@@ -155,6 +161,7 @@ export async function getLayoutContext(
     activeNav,
     riskState,
     riskReason,
+    csrfToken,
     founderId: founder.id,
     founder,
     founderEmail: founder.email,

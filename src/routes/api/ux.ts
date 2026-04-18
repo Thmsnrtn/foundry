@@ -62,7 +62,19 @@ apiUXRoutes.post('/api/notifications/read-all', async (c) => {
   const accept = c.req.header('Accept') ?? '';
   if (accept.includes('text/html')) {
     const referer = c.req.header('Referer') ?? '/dashboard';
-    return c.redirect(referer);
+    // Prevent open redirect — only allow same-origin paths
+    let safePath = '/dashboard';
+    try {
+      const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+      const refUrl = new URL(referer, appUrl);
+      const appOrigin = new URL(appUrl).origin;
+      if (refUrl.origin === appOrigin) {
+        safePath = refUrl.pathname + refUrl.search;
+      }
+    } catch {
+      // Invalid URL, use default
+    }
+    return c.redirect(safePath);
   }
   return c.json({ status: 'all_read' });
 });

@@ -11,6 +11,8 @@ import { dnaEditor, failureLogView, judgmentPatternsView, remediationPRList, rem
 import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import { requireTier } from '../../middleware/tier-gate.js';
+import { productDNAUpdateSchema, failureLogSchema, validate } from '../../lib/validation.js';
+import { log } from '../../lib/logger.js';
 import type { FailureCategory } from '../../types/index.js';
 
 /** Parse body from JSON or form-encoded data. */
@@ -45,7 +47,7 @@ productRoutes.get('/products/:id/dna', requireTier('wisdom'), async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'dna', 'Product DNA', productId);
+  const ctx = await getLayoutContext(founder, 'dna', 'Product DNA', productId, c);
   const dna = await getProductDNA(productId);
   const completionPct = dna?.completion_pct ?? 0;
   const saved = c.req.query('saved') === '1';
@@ -64,11 +66,14 @@ productRoutes.post('/products/:id/dna', requireTier('wisdom'), async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const body = await parseBody(c);
+  const rawBody = await parseBody(c);
+  const body = validate(productDNAUpdateSchema, rawBody);
   await upsertProductDNA(productId, founder.id, body as Record<string, string | null>);
 
   // UX Intelligence: check milestones after DNA save
-  checkAndAwardMilestones(productId, founder.id).catch(() => {});
+  checkAndAwardMilestones(productId, founder.id).catch((err) => {
+    log.error('Failed to check milestones after DNA save', err, { productId, founderId: founder.id });
+  });
 
   return c.redirect(`/products/${productId}/dna?saved=1`);
 });
@@ -81,7 +86,7 @@ productRoutes.get('/products/:id/failures', requireTier('wisdom'), async (c) => 
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'failures', 'Failure Log', productId);
+  const ctx = await getLayoutContext(founder, 'failures', 'Failure Log', productId, c);
   const failures = await getAllFailures(productId);
 
   const content = html`
@@ -97,14 +102,15 @@ productRoutes.post('/products/:id/failures', requireTier('wisdom'), async (c) =>
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const body = await parseBody(c);
+  const rawBody = await parseBody(c);
+  const body = validate(failureLogSchema, rawBody);
   await logFailure(productId, founder.id, {
-    category: body.category as FailureCategory,
-    what_was_tried: body.what_was_tried as string,
-    timeframe: (body.timeframe as string) || undefined,
-    outcome: body.outcome as string,
-    founder_hypothesis: (body.founder_hypothesis as string) || undefined,
-    linked_stressor_id: (body.linked_stressor as string) || undefined,
+    category: body.category,
+    what_was_tried: body.what_was_tried,
+    timeframe: body.timeframe || undefined,
+    outcome: body.outcome,
+    founder_hypothesis: body.founder_hypothesis || undefined,
+    linked_stressor_id: body.linked_stressor_id || undefined,
   });
   return c.redirect(`/products/${productId}/failures`);
 });
@@ -117,7 +123,7 @@ productRoutes.get('/products/:id/patterns', requireTier('wisdom'), async (c) => 
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'patterns', 'Judgment Patterns', productId);
+  const ctx = await getLayoutContext(founder, 'patterns', 'Judgment Patterns', productId, c);
   const patternsResult = await query(
     'SELECT * FROM founder_judgment_patterns WHERE product_id = ? ORDER BY confidence DESC',
     [productId]
@@ -149,7 +155,7 @@ productRoutes.get('/products/:id/remediation', requireTier('remediation'), async
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const ctx = await getLayoutContext(founder, 'remediation', 'Remediation', productId);
+  const ctx = await getLayoutContext(founder, 'remediation', 'Remediation', productId, c);
   const stats = await getRemediationStats(productId);
   const prsResult = await query(
     'SELECT * FROM remediation_prs WHERE product_id = ? ORDER BY created_at DESC',

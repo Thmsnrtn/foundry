@@ -62,18 +62,29 @@ export async function upsertProductDNA(
     updates.voice_principles = JSON.stringify(updates.voice_principles);
   }
 
+  // Whitelist of allowed column names to prevent SQL injection via dynamic field names
+  const ALLOWED_COLUMNS = new Set([
+    'icp_description', 'icp_pain', 'icp_trigger', 'icp_sophistication',
+    'positioning_statement', 'positioning_history', 'what_we_are_not',
+    'primary_objection', 'objection_response', 'voice_principles',
+    'market_insight', 'retention_hypothesis', 'growth_hypothesis',
+  ]);
+
+  // Filter updates to only allowed columns
+  const safeUpdates = Object.entries(updates).filter(
+    ([key, val]) => val !== undefined && ALLOWED_COLUMNS.has(key)
+  );
+
   if (!existing) {
     const id = nanoid();
     const fields = ['id', 'product_id', 'created_at', 'updated_at'];
     const placeholders = ['?', '?', '?', '?'];
     const values: unknown[] = [id, productId, now, now];
 
-    for (const [key, val] of Object.entries(updates)) {
-      if (val !== undefined) {
-        fields.push(key);
-        placeholders.push('?');
-        values.push(val);
-      }
+    for (const [key, val] of safeUpdates) {
+      fields.push(key);
+      placeholders.push('?');
+      values.push(val);
     }
 
     await query(
@@ -83,11 +94,9 @@ export async function upsertProductDNA(
   } else {
     const setClauses: string[] = ['updated_at = ?'];
     const values: unknown[] = [now];
-    for (const [key, val] of Object.entries(updates)) {
-      if (val !== undefined) {
-        setClauses.push(`${key} = ?`);
-        values.push(val);
-      }
+    for (const [key, val] of safeUpdates) {
+      setClauses.push(`${key} = ?`);
+      values.push(val);
     }
     values.push(productId);
     await query(

@@ -116,20 +116,8 @@ function gatePageHtml(feature: FeatureGateConfig, founder: Founder): string {
       <h1 class="gate-feature-name">${feature.name}</h1>
       <p class="gate-description">${feature.description}</p>
 
-      <div class="gate-preview">
-        <div style="display:flex;flex-direction:column;gap:0.75rem;">
-          <div style="height:12px;background:#e5e7eb;border-radius:4px;width:80%;"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;">
-            <div style="height:48px;background:#f3f4f6;border-radius:6px;"></div>
-            <div style="height:48px;background:#f3f4f6;border-radius:6px;"></div>
-            <div style="height:48px;background:#f3f4f6;border-radius:6px;"></div>
-          </div>
-          <div style="height:80px;background:#f3f4f6;border-radius:6px;"></div>
-          <div style="display:grid;grid-template-columns:2fr 1fr;gap:0.5rem;">
-            <div style="height:32px;background:#f3f4f6;border-radius:6px;"></div>
-            <div style="height:32px;background:#e5e7eb;border-radius:6px;"></div>
-          </div>
-        </div>
+      <div class="gate-preview" style="opacity:1;text-align:left;">
+        ${getFeaturePreview(feature.name)}
       </div>
 
       ${feature.upgradeMessage ? `<div class="gate-upgrade-message">${feature.upgradeMessage}</div>` : ''}
@@ -142,6 +130,44 @@ function gatePageHtml(feature: FeatureGateConfig, founder: Founder): string {
   </main>
 </body>
 </html>`;
+}
+
+/**
+ * Feature-specific preview content for the gate page.
+ */
+function getFeaturePreview(featureName: string): string {
+  const previews: Record<string, string> = {
+    'Wisdom Layer': `
+      <h3 style="margin-bottom:0.5rem;">What you get with Wisdom Layer</h3>
+      <ul style="font-size:0.9rem;color:#374151;padding-left:1.25rem;list-style:disc;">
+        <li style="margin-bottom:0.35rem;"><strong>Product DNA</strong> — Define your ICP, positioning, voice principles, and retention hypotheses. Foundry uses this to calibrate every audit, every decision, and every automated fix.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Failure Log</strong> — Record what you tried and why it failed. Foundry avoids recommending things you've already proven don't work.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Judgment Patterns</strong> — After 3+ resolved decisions, Foundry synthesizes how you make choices and factors your decision-making style into future recommendations.</li>
+      </ul>`,
+    'Remediation Engine': `
+      <h3 style="margin-bottom:0.5rem;">What you get with Remediation</h3>
+      <ul style="font-size:0.9rem;color:#374151;padding-left:1.25rem;list-style:disc;">
+        <li style="margin-bottom:0.35rem;"><strong>Auto-Fix</strong> — For blocking issues in D5 (Operational Readiness), D7 (Self-Sufficiency), and D9 (Launch Readiness), Foundry generates targeted code fixes.</li>
+        <li style="margin-bottom:0.35rem;"><strong>GitHub PRs</strong> — Fixes are opened as pull requests on your repo. Review, test, and merge at your pace.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Re-Audit</strong> — After merge, the affected dimension is automatically re-scored to verify improvement.</li>
+      </ul>`,
+    'Competitive Intelligence': `
+      <h3 style="margin-bottom:0.5rem;">What you get with Competitive Intelligence</h3>
+      <ul style="font-size:0.9rem;color:#374151;padding-left:1.25rem;list-style:disc;">
+        <li style="margin-bottom:0.35rem;"><strong>Weekly Scans</strong> — Claude Sonnet monitors your competitors every Sunday for pricing changes, feature launches, and positioning shifts.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Signal Classification</strong> — Each signal is rated low/medium/high significance. High signals automatically create stressors in your risk engine.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Digest Integration</strong> — Competitive context appears in your weekly digest alongside MRR and stressor data.</li>
+      </ul>`,
+    'Cohort Analysis': `
+      <h3 style="margin-bottom:0.5rem;">What you get with Cohort Analysis</h3>
+      <ul style="font-size:0.9rem;color:#374151;padding-left:1.25rem;list-style:disc;">
+        <li style="margin-bottom:0.35rem;"><strong>Retention Curves</strong> — Day 7, 14, 30, 60, 90 retention by acquisition period and channel.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Channel Attribution</strong> — Which acquisition source retains best? Organic vs. paid vs. referral vs. content.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Historical Comparison</strong> — Every new cohort compared against your historical average. Deviations trigger stressors automatically.</li>
+      </ul>`,
+  };
+  return previews[featureName] ?? `
+    <p style="font-size:0.9rem;color:#374151;">This feature provides advanced intelligence capabilities to help you make better decisions faster.</p>`;
 }
 
 /**

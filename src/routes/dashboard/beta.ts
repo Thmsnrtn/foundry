@@ -6,12 +6,20 @@ import { dashboardLayout } from '../../views/layout.js';
 import { betaStatus } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
+import { validate } from '../../lib/validation.js';
+
+const betaIntakeInputSchema = z.object({
+  product_id: z.string().min(1),
+  participant_name: z.string().min(1).max(200),
+  hypothesis_signals: z.record(z.unknown()).optional(),
+});
 
 export const betaRoutes = new Hono<AuthEnv>();
 
 betaRoutes.get('/beta', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'beta', 'Beta');
+  const ctx = await getLayoutContext(founder, 'beta', 'Beta', undefined, c);
   const products = await query('SELECT id FROM products WHERE owner_id = ?', [founder.id]);
   const productId = products.rows.length > 0 ? (products.rows[0] as Record<string, string>).id : null;
   const intakes = productId ? await getBetaIntakes(productId) : { rows: [] };
@@ -29,7 +37,7 @@ betaRoutes.get('/beta', async (c) => {
 
 betaRoutes.post('/beta/intake', async (c) => {
   const founder = c.get('founder');
-  const body = await c.req.json() as { product_id: string; participant_name: string; hypothesis_signals?: Record<string, unknown> };
+  const body = validate(betaIntakeInputSchema, await c.req.json());
   const prodResult = await getProductByOwner(body.product_id, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   await query(

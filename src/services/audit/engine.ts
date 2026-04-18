@@ -8,6 +8,7 @@ import { classifyRemediability, generateFix } from './remediation.js';
 import { buildWisdomContext } from '../wisdom/dna.js';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
+import { getPlaintextToken } from '../../lib/crypto.js';
 import type { AuditScore, Product } from '../../types/index.js';
 import type { AnalysisPipelineOutput, PriorAuditContext } from '../../types/ai.js';
 
@@ -19,7 +20,12 @@ export async function runAudit(
     throw new Error('Product must have GitHub repository connected');
   }
 
-  const { github_repo_owner: owner, github_repo_name: repo, github_access_token: token } = product;
+  const owner = product.github_repo_owner;
+  const repo = product.github_repo_name;
+  const token = getPlaintextToken(product.github_access_token) ?? '';
+  if (!token) {
+    throw new Error('GitHub access token is missing or corrupted');
+  }
   const tree = await getRepoTree(owner, repo, token);
   const keyFiles = await getKeyFiles(owner, repo, token, tree);
 
@@ -109,7 +115,7 @@ export async function runAudit(
 
       // Log classification to audit_log
       await query(
-        `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'remediation_classified', ?, ?)`,
+        `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'remediation_classified', 1, 'audit_engine', ?, ?)`,
         [nanoid(), product.id, JSON.stringify({ issue_id: issue.id, classification: classification.classification }), new Date().toISOString()]
       );
 
@@ -119,7 +125,7 @@ export async function runAudit(
         const relevantFiles = new Map<string, string>();
         generateFix(product.id, product.owner_id, auditId, blockingIssue, relevantFiles, wisdomContext).then(async (remId) => {
           await query(
-            `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'remediation_fix_queued', ?, ?)`,
+            `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'remediation_fix_queued', 1, 'audit_engine', ?, ?)`,
             [nanoid(), product.id, JSON.stringify({ issue_id: issue.id, remediation_pr_id: remId }), new Date().toISOString()]
           );
         }).catch((err) => {

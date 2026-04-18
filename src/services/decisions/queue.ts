@@ -53,6 +53,16 @@ export async function resolveDecision(
      WHERE id = ? AND product_id = ?`,
     [chosenOption, now, decidedBy, decisionId, productId]
   );
+
+  // Dispatch webhook
+  const ownerResult = await query('SELECT owner_id FROM products WHERE id = ?', [productId]);
+  const ownerId = (ownerResult.rows[0] as Record<string, string>)?.owner_id;
+  if (ownerId) {
+    const { dispatchWebhook } = await import('../../lib/webhooks.js');
+    dispatchWebhook(ownerId, 'decision.resolved', {
+      decision_id: decisionId, product_id: productId, chosen_option: chosenOption, decided_by: decidedBy,
+    }).catch(() => {});
+  }
 }
 
 export async function recordOutcome(
