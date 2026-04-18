@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { createMiddleware } from 'hono/factory';
-import { getProductByOwner, getLifecycleState } from '../db/client.js';
+import { query, getProductByOwner, getLifecycleState } from '../db/client.js';
 import type { Product, LifecycleState, RiskStateValue, ProductStatus } from '../types/index.js';
 import type { ProductRow, LifecycleStateRow } from '../types/database.js';
 
@@ -70,7 +70,7 @@ export const tenantMiddleware = createMiddleware<TenantEnv>(async (c, next) => {
   let lifecycleState: LifecycleState;
 
   if (lifecycleResult.rows.length === 0) {
-    // Create default lifecycle state if none exists
+    // DEFECT-0056: Create AND PERSIST default lifecycle state
     lifecycleState = {
       product_id: productId,
       current_prompt: 'prompt_1',
@@ -99,6 +99,16 @@ export const tenantMiddleware = createMiddleware<TenantEnv>(async (c, next) => {
       prompt_9_started_at: null,
       updated_at: new Date().toISOString(),
     };
+    // Persist to DB so jobs and services see the same state
+    try {
+      await query(
+        `INSERT OR IGNORE INTO lifecycle_state (product_id, current_prompt, risk_state)
+         VALUES (?, 'prompt_1', 'green')`,
+        [productId]
+      );
+    } catch {
+      // Non-fatal — in-memory default still works for this request
+    }
   } else {
     const lsRow = lifecycleResult.rows[0] as unknown as LifecycleStateRow;
     lifecycleState = {

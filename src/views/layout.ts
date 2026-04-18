@@ -108,10 +108,10 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   ${!chamberMode && showNav && productId ? mobilBottomNav(activeNav, navBadges?.decisions_count ?? 0) : ''}
 
   <!-- Command Palette -->
-  <div id="cmd-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;backdrop-filter:blur(4px)" onclick="closeCmdPalette()"></div>
-  <div id="cmd-palette" style="display:none;position:fixed;top:15vh;left:50%;transform:translateX(-50%);width:min(640px,90vw);background:#1e293b;border:1px solid rgba(255,255,255,0.12);border-radius:12px;z-index:9999;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
+  <div id="cmd-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;backdrop-filter:blur(4px)" onclick="closeCmdPalette()" aria-hidden="true"></div>
+  <div id="cmd-palette" role="dialog" aria-label="Command palette" aria-modal="true" style="display:none;position:fixed;top:15vh;left:50%;transform:translateX(-50%);width:min(640px,90vw);background:#1e293b;border:1px solid rgba(255,255,255,0.12);border-radius:12px;z-index:9999;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
     <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.08)">
-      <input id="cmd-input" type="text" placeholder="Go anywhere... (type a page or action)"
+      <input id="cmd-input" type="text" role="combobox" aria-label="Search pages and actions" aria-expanded="true" aria-controls="cmd-results" aria-autocomplete="list" placeholder="Go anywhere... (type a page or action)"
         style="width:100%;background:transparent;border:none;outline:none;color:#f1f5f9;font-size:16px;font-family:inherit"
         oninput="filterCmdPalette(this.value)" onkeydown="handleCmdKey(event)" autocomplete="off" />
     </div>
@@ -156,13 +156,15 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
     function filterCmdPalette(q){var r=q?CMD_ROUTES.filter(function(x){return x.label.toLowerCase().includes(q.toLowerCase())||x.section.toLowerCase().includes(q.toLowerCase());}):CMD_ROUTES;cmdIdx=0;renderCmdResults(r);}
     function renderCmdResults(routes){var el=document.getElementById('cmd-results');if(!routes.length){el.innerHTML='<div style="padding:16px 20px;color:#64748b;font-size:14px">No results</div>';return;}var html='',sec='';routes.slice(0,12).forEach(function(r,i){if(r.section!==sec){sec=r.section;html+='<div style="padding:4px 16px 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+sec+'</div>';}html+='<div class="cmd-item'+(i===cmdIdx?' cmd-selected':'')+'" data-href="'+r.href+'" onclick="location.href=\''+r.href+'\'" style="padding:8px 16px;cursor:pointer;font-size:14px;color:'+(i===cmdIdx?'#f1f5f9':'#cbd5e1')+';background:'+(i===cmdIdx?'rgba(255,255,255,0.07)':'transparent')+';transition:background 0.1s">'+r.label+'</div>';});el.innerHTML=html;}
     function handleCmdKey(e){var items=document.querySelectorAll('.cmd-item');if(e.key==='ArrowDown'){e.preventDefault();cmdIdx=Math.min(cmdIdx+1,items.length-1);}else if(e.key==='ArrowUp'){e.preventDefault();cmdIdx=Math.max(cmdIdx-1,0);}else if(e.key==='Enter'){if(items[cmdIdx])location.href=items[cmdIdx].dataset.href;closeCmdPalette();return;}else if(e.key==='Escape'){closeCmdPalette();return;}items.forEach(function(el,i){el.style.background=i===cmdIdx?'rgba(255,255,255,0.07)':'transparent';el.style.color=i===cmdIdx?'#f1f5f9':'#cbd5e1';});}
-    document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openCmdPalette();}});
+    document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openCmdPalette();}if(e.key==='Escape'&&document.getElementById('cmd-palette').style.display!=='none'){closeCmdPalette();}});
   </script>
   <script>
     // Register service worker
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(function() {});
     }
+    // DEFECT-0054: Minimal page view analytics (first-party, no third-party)
+    try { navigator.sendBeacon('/api/analytics/pageview', JSON.stringify({path:location.pathname,ts:Date.now()})); } catch(e) {}
   </script>
 </body>
 </html>`;
