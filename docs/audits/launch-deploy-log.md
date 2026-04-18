@@ -1,8 +1,8 @@
 # Launch Deploy Log — Phase 4
 
-## Deploy Status: BLOCKED
-**Reason:** Fly.io CLI not authenticated. See docs/blockers/BLOCKER-FLY-TOKEN.md.
-**Resolution:** Founder authenticates with `fly auth login`, then runs `fly deploy`.
+## Deploy Status: DEPLOYED BUT MACHINE STOPPED
+**Reason:** Image built and pushed successfully (89MB). Machine started but stopped because `ENCRYPTION_KEY` environment variable is not set in Fly.io secrets.
+**Resolution:** Founder sets missing secrets (ENCRYPTION_KEY, STRIPE_WEBHOOK_SECRET, ECOSYSTEM_SERVICE_KEY). See docs/blockers/BLOCKER-FLY-TOKEN.md for commands.
 
 ## Deploy SHA (when ready): 86536f6
 ## Pre-Deploy Verification: ALL PASS
