@@ -140,6 +140,11 @@ landingRoutes.get('/', (c) => {
 
     <div class="page-footer" style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:0.8rem;">
       Foundry — Sovereign Company Platform for SaaS Founders
+      <div style="margin-top:0.5rem;display:flex;gap:1.5rem;justify-content:center;">
+        <a href="/privacy" style="color:var(--text-dim);font-size:0.75rem;">Privacy</a>
+        <a href="/terms" style="color:var(--text-dim);font-size:0.75rem;">Terms</a>
+        <a href="/pricing" style="color:var(--text-dim);font-size:0.75rem;">Pricing</a>
+      </div>
     </div>
   `));
 });
@@ -242,5 +247,127 @@ caseStudyRoutes.get('/case-studies/:id', async (c) => {
       <span style="color:#9ca3af;font-size:0.8rem;">Created: ${artifact.created_at}</span>
     </div>
     <div class="card">${artifact.content}</div>
+  `));
+});
+
+// ─── Legal Pages ────────────────────────────────────────────────────────────
+
+export const legalRoutes = new Hono();
+
+legalRoutes.get('/privacy', (c) => {
+  return c.html(publicLayout('Privacy Policy — Foundry', html`
+    <div style="max-width:720px;margin:0 auto;padding:2rem 1rem;">
+      <h1>Privacy Policy</h1>
+      <p style="color:var(--text-dim);margin-bottom:1.5rem;">Last updated: April 2026</p>
+
+      <h2>What We Collect</h2>
+      <p>When you use Foundry, we collect:</p>
+      <ul style="margin:0.5rem 0 1rem 1.5rem;color:var(--text);line-height:1.8;">
+        <li><strong>Account information:</strong> Name, email address (via Clerk authentication)</li>
+        <li><strong>Product data:</strong> GitHub repository metadata, code analysis results, business metrics you provide</li>
+        <li><strong>Usage data:</strong> Pages visited, features used, AI interactions</li>
+        <li><strong>Payment information:</strong> Processed by Stripe; we never store card numbers</li>
+      </ul>
+
+      <h2>How We Use Your Data</h2>
+      <ul style="margin:0.5rem 0 1rem 1.5rem;color:var(--text);line-height:1.8;">
+        <li>To operate your AI agent team and generate business intelligence</li>
+        <li>To improve Foundry through anonymized, aggregated usage patterns</li>
+        <li>To send you operational digests and alerts (which you can configure in Settings)</li>
+      </ul>
+
+      <h2>Cross-Company Intelligence</h2>
+      <p>Foundry's Decision Patterns system aggregates anonymized decision outcomes across all companies
+         to improve scenario modeling. This data contains no product names, founder identifiers, or
+         confidential metrics. You can opt out of contributing to this pool in Settings → Privacy.</p>
+
+      <h2>Third-Party Processors</h2>
+      <ul style="margin:0.5rem 0 1rem 1.5rem;color:var(--text);line-height:1.8;">
+        <li><strong>Anthropic (Claude AI):</strong> Processes your business context to generate agent analyses. Subject to Anthropic's data retention policy.</li>
+        <li><strong>Clerk:</strong> Authentication and user management</li>
+        <li><strong>Stripe:</strong> Payment processing</li>
+        <li><strong>Turso:</strong> Database hosting</li>
+        <li><strong>Resend:</strong> Email delivery for digests and alerts</li>
+        <li><strong>GitHub:</strong> Repository analysis (when you connect a repo)</li>
+      </ul>
+
+      <h2>Data Retention</h2>
+      <p>Your data is retained while your account is active. When you delete your account,
+         we remove all personal data and product data within 30 days. Anonymized decision patterns
+         are retained indefinitely as they contain no identifying information.</p>
+
+      <h2>Your Rights</h2>
+      <p>You have the right to:</p>
+      <ul style="margin:0.5rem 0 1rem 1.5rem;color:var(--text);line-height:1.8;">
+        <li>Export all your data (Settings → Privacy → Data Export)</li>
+        <li>Delete your account and all associated data (Settings → Privacy → Delete Account)</li>
+        <li>Opt out of cross-company intelligence sharing</li>
+        <li>Configure what data your AI agents can access</li>
+      </ul>
+
+      <h2>Contact</h2>
+      <p>Questions about privacy? Email <a href="mailto:privacy@foundry.so">privacy@foundry.so</a>.</p>
+    </div>
+  `));
+});
+
+legalRoutes.get('/terms', (c) => {
+  return c.html(publicLayout('Terms of Service — Foundry', html`
+    <div style="max-width:720px;margin:0 auto;padding:2rem 1rem;">
+      <h1>Terms of Service</h1>
+      <p style="color:var(--text-dim);margin-bottom:1.5rem;">Last updated: April 2026</p>
+
+      <h2>1. Service Description</h2>
+      <p>Foundry provides an AI-powered business intelligence platform ("the Service") that runs
+         autonomous agents to analyze, monitor, and advise on your SaaS business operations.</p>
+
+      <h2>2. Account Terms</h2>
+      <ul style="margin:0.5rem 0 1rem 1.5rem;color:var(--text);line-height:1.8;">
+        <li>You must provide a valid email address to create an account</li>
+        <li>You are responsible for maintaining the security of your account credentials</li>
+        <li>You must not use the Service for any illegal or unauthorized purpose</li>
+        <li>One person or legal entity may maintain no more than one account</li>
+      </ul>
+
+      <h2>3. Payment Terms</h2>
+      <p>Subscriptions are billed monthly in advance. You may cancel at any time; access continues
+         through the end of your billing period. Refunds are not provided for partial months.</p>
+
+      <h2>4. AI Agent Limitations</h2>
+      <p>Foundry's AI agents provide analysis and recommendations, not guarantees. You remain
+         responsible for all business decisions. Agents operate within configured authority gates
+         — review Gate 2+ actions before they take effect. AI-generated content may contain errors;
+         always verify critical information independently.</p>
+
+      <h2>5. Data and Intellectual Property</h2>
+      <p>You retain all rights to your data. By using the Service, you grant Foundry a limited
+         license to process your data as needed to provide the Service. We may use anonymized,
+         aggregated data to improve the Service.</p>
+
+      <h2>6. GitHub Integration</h2>
+      <p>When you connect a GitHub repository, Foundry's audit engine reads repository structure
+         and code to generate quality assessments. The Remediation Engine may create pull requests
+         with suggested improvements — these require your explicit approval before merging.</p>
+
+      <h2>7. Service Level</h2>
+      <p>We target 99.9% uptime but do not guarantee it. Scheduled maintenance will be announced
+         in advance. AI agent availability depends on third-party AI provider uptime.</p>
+
+      <h2>8. Termination</h2>
+      <p>Either party may terminate this agreement at any time. Upon termination, you may export
+         your data for 30 days, after which it will be permanently deleted.</p>
+
+      <h2>9. Limitation of Liability</h2>
+      <p>Foundry is provided "as is." We are not liable for business decisions made based on AI
+         agent recommendations, lost revenue, or indirect damages. Our maximum liability is limited
+         to the amount you paid in the 12 months preceding the claim.</p>
+
+      <h2>10. Changes to Terms</h2>
+      <p>We may update these terms with 30 days notice via email. Continued use after the notice
+         period constitutes acceptance of the updated terms.</p>
+
+      <h2>Contact</h2>
+      <p>Questions? Email <a href="mailto:legal@foundry.so">legal@foundry.so</a>.</p>
+    </div>
   `));
 });

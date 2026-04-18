@@ -21,7 +21,7 @@ import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit } from '
 import { internalMiddleware } from './middleware/internal.js';
 
 // Public routes (no auth)
-import { landingRoutes, pricingRoutes, caseStudyRoutes } from './routes/public/landing.js';
+import { landingRoutes, pricingRoutes, caseStudyRoutes, legalRoutes } from './routes/public/landing.js';
 
 // Auth routes
 import { authRoutes } from './routes/auth/clerk.js';
@@ -217,6 +217,7 @@ app.use('/auth/*', authRateLimit);
 app.route('/', landingRoutes);
 app.route('/', pricingRoutes);
 app.route('/', caseStudyRoutes);
+app.route('/', legalRoutes);
 app.route('/', authRoutes);
 app.route('/', shareRoutes);
 app.route('/', ingestRoutes);
