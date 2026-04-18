@@ -128,6 +128,20 @@ When a founder requests full data deletion:
 5. Verify deletion: `npm run cli -- product:status` should return not found
 6. Log the deletion in compliance records
 
+## Backup & Disaster Recovery
+
+See [disaster-recovery.md](./disaster-recovery.md) for the full DR plan with RPO/RTO per failure scenario.
+
+### Daily Backup Reminder
+```bash
+# Run daily (recommend adding to CI or cron)
+turso db shell foundry-intel ".dump" > backup-$(date +%Y%m%d).sql
+```
+
+Retain daily backups for 30 days, weekly copies for 90 days. Always take a manual backup before running migrations.
+
+---
+
 ## Monitoring
 
 ### Key Metrics to Watch
