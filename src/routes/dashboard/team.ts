@@ -19,6 +19,7 @@ import {
 } from '../../services/team/members.js';
 import { query } from '../../db/client.js';
 import { requireTier } from '../../middleware/tier-gate.js';
+import { requireRole } from '../../middleware/rbac.js';
 
 export const teamRoutes = new Hono<AuthEnv>();
 
@@ -137,7 +138,7 @@ teamRoutes.get('/team', requireTier('team_mode'), async (c) => {
 
 // ─── POST /team/invite ────────────────────────────────────────────────────────
 
-teamRoutes.post('/team/invite', async (c) => {
+teamRoutes.post('/team/invite', requireRole('admin'), async (c) => {
   const founder = c.get('founder');
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
@@ -179,7 +180,7 @@ teamRoutes.get('/team/accept/:token', async (c) => {
 
 // ─── POST /team/remove/:id ────────────────────────────────────────────────────
 
-teamRoutes.post('/team/remove/:id', async (c) => {
+teamRoutes.post('/team/remove/:id', requireRole('admin'), async (c) => {
   const founder = c.get('founder');
   const memberId = c.req.param('id');
   const ctx = await buildSharedContext(c);
@@ -197,7 +198,7 @@ teamRoutes.post('/team/remove/:id', async (c) => {
 
 // ─── POST /team/revoke-invitation/:id ────────────────────────────────────────
 
-teamRoutes.post('/team/revoke-invitation/:id', async (c) => {
+teamRoutes.post('/team/revoke-invitation/:id', requireRole('admin'), async (c) => {
   const founder = c.get('founder');
   const invId = c.req.param('id');
   const ctx = await buildSharedContext(c);

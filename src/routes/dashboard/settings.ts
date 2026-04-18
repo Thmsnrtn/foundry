@@ -11,6 +11,7 @@ import { dashboardLayout } from '../../views/layout.js';
 import { settingsPage } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
+import { requireRole } from '../../middleware/rbac.js';
 import { nanoid } from 'nanoid';
 import { randomBytes } from 'crypto';
 
@@ -18,7 +19,7 @@ export const settingsRoutes = new Hono<AuthEnv>();
 
 // ─── Checkout → Stripe ──────────────────────────────────────────────────────
 
-settingsRoutes.post('/checkout', async (c) => {
+settingsRoutes.post('/checkout', requireRole('owner'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const tier = body.tier as 'solo' | 'growth' | 'investor_ready';
@@ -257,7 +258,7 @@ settingsRoutes.get('/checkout', async (c) => {
 
 // ─── Share Token Generation ───────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/generate-share', async (c) => {
+settingsRoutes.post('/settings/generate-share', requireRole('admin'), async (c) => {
   const founder = c.get('founder');
   const products = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
   if (products.rows.length === 0) return c.redirect('/settings');
@@ -271,7 +272,7 @@ settingsRoutes.post('/settings/generate-share', async (c) => {
 
 // ─── Ingest Token Generation ──────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/generate-ingest', async (c) => {
+settingsRoutes.post('/settings/generate-ingest', requireRole('admin'), async (c) => {
   const founder = c.get('founder');
   const products = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
   if (products.rows.length === 0) return c.redirect('/settings');
@@ -291,7 +292,7 @@ settingsRoutes.get('/settings/add-product', async (c) => {
 
 // ─── Subscription Management (Stripe Customer Portal) ───────────────────────
 
-settingsRoutes.post('/settings/manage-subscription', async (c) => {
+settingsRoutes.post('/settings/manage-subscription', requireRole('owner'), async (c) => {
   const founder = c.get('founder');
   if (!founder.stripe_customer_id) return c.redirect('/settings?error=no_subscription');
 
@@ -315,7 +316,7 @@ settingsRoutes.post('/settings/manage-subscription', async (c) => {
 
 // ─── Wisdom Toggle ────────────────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/wisdom-toggle', async (c) => {
+settingsRoutes.post('/settings/wisdom-toggle', requireRole('admin'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const optedIn = body.opted_in === '1' ? 1 : 0;
