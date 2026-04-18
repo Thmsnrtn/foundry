@@ -87,10 +87,17 @@ export async function handleWebhook(payload: string, signature: string): Promise
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
       await query('UPDATE founders SET tier = NULL WHERE stripe_customer_id = ?', [sub.customer]);
-      // EDGE-02: Pause all SCP instances for cancelled founder to stop AI credit burn
+      // EDGE-02 + RT08-P0: Pause SCP at BOTH levels to stop AI credit burn
+      // The scheduler checks products.scp_status, not scp_instances.status
       const cancelledFounder = await query('SELECT id FROM founders WHERE stripe_customer_id = ?', [sub.customer]);
       if (cancelledFounder.rows.length > 0) {
         const founderId = (cancelledFounder.rows[0] as Record<string, string>).id;
+        // Pause at product level (scheduler checks this)
+        await query(
+          `UPDATE products SET scp_status = 'paused' WHERE owner_id = ?`,
+          [founderId]
+        );
+        // Also pause individual instances
         await query(
           `UPDATE scp_instances SET status = 'paused', updated_at = datetime('now')
            WHERE product_id IN (SELECT id FROM products WHERE owner_id = ?)`,
