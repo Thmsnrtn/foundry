@@ -157,38 +157,63 @@ export async function callSonnet(
 /**
  * Multi-turn Claude call with a full message history array.
  * Used by the conversational layer to maintain context across turns.
+ * Now includes cost ceiling, timeout, and retry (was bypassing all three).
  */
 export async function callClaudeMultiTurn(
   systemPrompt: string,
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   maxTokens: number = 1024,
   useOpus: boolean = false,
+  productId?: string,
 ): Promise<AIResponse> {
+  // Check cost ceiling before calling
+  if (productId && isCostCeilingReached(productId)) {
+    throw new Error(`AI daily cost ceiling reached for product ${productId}`);
+  }
+
   const client = getClient();
   const model = useOpus ? MODELS.OPUS : MODELS.SONNET;
+  let lastError: Error | null = null;
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    temperature: 0.3,
-    system: systemPrompt,
-    messages,
-  });
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await client.messages.create({
+        model,
+        max_tokens: maxTokens,
+        temperature: 0.3,
+        system: systemPrompt,
+        messages,
+      });
 
-  const textContent = response.content
-    .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n');
+      const textContent = response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+        .map((block) => block.text)
+        .join('\n');
 
-  return {
-    content: textContent,
-    model,
-    usage: {
-      input_tokens: response.usage.input_tokens,
-      output_tokens: response.usage.output_tokens,
-    },
-    stop_reason: response.stop_reason,
-  };
+      // Track cost
+      recordSpend(productId, response.usage.input_tokens, response.usage.output_tokens);
+
+      return {
+        content: textContent,
+        model,
+        usage: {
+          input_tokens: response.usage.input_tokens,
+          output_tokens: response.usage.output_tokens,
+        },
+        stop_reason: response.stop_reason,
+      };
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const status = (err as any)?.status;
+      if (status && status < 500 && status !== 429) throw lastError;
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+
+  throw lastError ?? new Error('AI multi-turn call failed after retries');
 }
 
 /**
