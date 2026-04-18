@@ -4,9 +4,11 @@
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
+import { hasConsent } from '../privacy/consent.js';
 import type { DecisionPattern, OutcomeDirection, OutcomeMagnitude, RiskStateValue } from '../../types/index.js';
 
 export async function generatePatternFromOutcome(input: {
+  productId: string;
   decisionType: string;
   lifecycleStage: string;
   riskState: RiskStateValue;
@@ -18,7 +20,10 @@ export async function generatePatternFromOutcome(input: {
   marketCategory: string | null;
   contributingFactors: Record<string, unknown> | null;
   scenarioAccuracyScore: number | null;
-}): Promise<string> {
+}): Promise<string | null> {
+  // DEFECT-0044: Cross-company decision patterns must not be written without consent
+  if (!(await hasConsent(input.productId, 'cross_company_patterns'))) return null;
+
   const id = nanoid();
   await query(
     `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage, risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction, outcome_magnitude, outcome_timeframe_days, market_category, contributing_factors, scenario_accuracy_score)

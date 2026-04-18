@@ -285,6 +285,7 @@ export async function scenarioAccuracy(): Promise<void> {
       const lsRow = ls.rows[0] as Record<string, string> | undefined;
 
       await generatePatternFromOutcome({
+        productId: d.product_id as string,
         decisionType: d.category as string,
         lifecycleStage: lsRow?.current_prompt ?? 'unknown',
         riskState: (lsRow?.risk_state as RiskStateValue) ?? 'green',

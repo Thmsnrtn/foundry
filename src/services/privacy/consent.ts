@@ -10,13 +10,15 @@ export type ConsentType =
   | 'benchmark_contribution'
   | 'aggregate_insights'
   | 'product_improvement'
-  | 'ai_training_opt_out';
+  | 'ai_training_opt_out'
+  | 'cross_company_patterns';
 
 export type ConsentSummary = {
   benchmark_contribution: boolean;
   aggregate_insights: boolean;
   product_improvement: boolean;
   ai_training_opt_out: boolean;
+  cross_company_patterns: boolean;
 };
 
 export type DataResidencySettings = {
@@ -86,6 +88,7 @@ export async function getConsentSummary(productId: string): Promise<ConsentSumma
     aggregate_insights: map['aggregate_insights'] ?? false,
     product_improvement: map['product_improvement'] ?? false,
     ai_training_opt_out: map['ai_training_opt_out'] ?? false,
+    cross_company_patterns: map['cross_company_patterns'] ?? false,
   };
 }
 
@@ -108,6 +111,7 @@ export async function getOrInitConsents(productId: string): Promise<ConsentSumma
       aggregate_insights: true,
       product_improvement: true,
       ai_training_opt_out: false,
+      cross_company_patterns: false,
     };
   }
 
@@ -122,6 +126,7 @@ export async function getOrInitConsents(productId: string): Promise<ConsentSumma
     aggregate_insights: map['aggregate_insights'] ?? true,
     product_improvement: map['product_improvement'] ?? true,
     ai_training_opt_out: map['ai_training_opt_out'] ?? false,
+    cross_company_patterns: map['cross_company_patterns'] ?? false,
   };
 }
 
