@@ -155,7 +155,7 @@ const REQUIRED_ENV_VARS = [
 
 const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
 if (missing.length > 0) {
-  console.warn(`[STARTUP] Optional env vars missing: ${missing.join(', ')} — some features disabled.`);
+  logger.warn(`Optional env vars missing: ${missing.join(', ')} — some features disabled`);
 }
 
 // ─── App Setup ───────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ const app = new Hono();
 // Global middleware
 import { securityHeaders } from './middleware/security-headers.js';
 app.use('*', securityHeaders);
-app.use('*', logger());
+app.use('*', honoLogger());
 app.use('*', cors({
   origin: process.env.APP_URL ?? 'http://localhost:8080',
   credentials: true,
@@ -234,7 +234,7 @@ app.post('/webhooks/stripe', async (c) => {
     await handleWebhook(body, signature);
     return c.json({ received: true });
   } catch (err) {
-    console.error('Stripe webhook error:', err);
+    logger.error('Stripe webhook error', { error: String(err) });
     return c.json({ error: 'Webhook processing failed' }, 400);
   }
 });
@@ -253,7 +253,7 @@ app.post('/webhooks/stripe/:productId', async (c) => {
     const result = await processStripeEventChain(productId, event);
     return c.json({ received: true, ...result });
   } catch (err) {
-    console.error(`Stripe webhook error for ${productId}:`, err);
+    logger.error(`Stripe webhook error for ${productId}`, { productId, error: String(err) });
     return c.json({ error: 'Webhook processing failed' }, 400);
   }
 });
@@ -456,27 +456,27 @@ app.notFound((c) => {
 // ─── Error Handler ───────────────────────────────────────────────────────────
 
 app.onError((err, c) => {
-  console.error('Unhandled error:', err);
+  logger.error('Unhandled error', { error: String(err) });
   return c.json({ error: 'Internal server error' }, 500);
 });
 
 // ─── Cron Scheduler ──────────────────────────────────────────────────────────
 
 function startScheduler(): void {
-  console.log('Starting job scheduler...');
+  logger.info('Starting job scheduler...');
   for (const [name, job] of Object.entries(JOB_REGISTRY)) {
     try {
       new CronJob(job.schedule, async () => {
-        console.log(`[CRON] Running: ${name}`);
+        logger.info(`Running: ${name}`, { jobName: name });
         try {
           await job.fn();
         } catch (err) {
-          console.error(`[CRON] Error in ${name}:`, err);
+          logger.error(`Error in ${name}`, { jobName: name, error: String(err) });
         }
       }, null, true, 'UTC');
-      console.log(`  ✓ ${name} — ${job.schedule}`);
+      logger.info(`Scheduled ${name} — ${job.schedule}`, { jobName: name });
     } catch (err) {
-      console.error(`  ✗ ${name} — failed to schedule:`, err);
+      logger.error(`Failed to schedule ${name}`, { jobName: name, error: String(err) });
     }
   }
 }
@@ -485,13 +485,7 @@ function startScheduler(): void {
 
 const port = parseInt(process.env.PORT ?? '8080', 10);
 
-console.log(`
-╔══════════════════════════════════════════════════╗
-║  FOUNDRY — Sovereign Company Platform            ║
-║  Port: ${String(port).padEnd(42)}║
-║  Environment: ${(process.env.NODE_ENV ?? 'development').padEnd(35)}║
-╚══════════════════════════════════════════════════╝
-`);
+logger.info(`FOUNDRY starting — port=${port}, env=${process.env.NODE_ENV ?? 'development'}`);
 
 // ─── Serve ───────────────────────────────────────────────────────────────────
 
