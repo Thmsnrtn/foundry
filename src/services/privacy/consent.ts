@@ -301,3 +301,67 @@ export async function scheduleDataDeletion(
     ]
   );
 }
+
+/**
+ * Process pending data deletions.
+ * RT07-P0: This was missing — deletion was scheduled but never executed.
+ * Finds products with data_deletion_scheduled events older than their
+ * delete_after_days threshold and actually deletes the data.
+ */
+export async function processScheduledDeletions(): Promise<number> {
+  // Find scheduled deletions that are past their threshold
+  const pending = await query(
+    `SELECT DISTINCT target_id as product_id, metadata_json FROM agent_audit_log
+     WHERE event_type = 'data_deletion_scheduled'
+       AND target_id NOT IN (
+         SELECT target_id FROM agent_audit_log WHERE event_type = 'data_deletion_completed'
+       )`,
+    []
+  );
+
+  let deleted = 0;
+
+  for (const row of pending.rows) {
+    const r = row as Record<string, unknown>;
+    const productId = r.product_id as string;
+    const metadata = JSON.parse((r.metadata_json as string) || '{}');
+    const scheduledAt = new Date(metadata.scheduled_at || 0);
+    const deleteAfterDays = metadata.delete_after_days || 30;
+    const deletionDate = new Date(scheduledAt.getTime() + deleteAfterDays * 24 * 60 * 60 * 1000);
+
+    if (new Date() < deletionDate) continue; // Not yet time
+
+    // Actually delete the product's data across all tables
+    const tables = [
+      'metric_snapshots', 'stressor_history', 'decisions', 'scenario_models',
+      'audit_scores', 'lifecycle_conditions', 'lifecycle_state',
+      'founding_story_artifacts', 'beta_intake', 'competitive_signals',
+      'competitors', 'cohorts', 'scp_instances', 'agent_instances',
+    ];
+
+    for (const table of tables) {
+      try {
+        await query(`DELETE FROM ${table} WHERE product_id = ?`, [productId]);
+      } catch {
+        // Table may not exist in all migration states — continue
+      }
+    }
+
+    // Archive the product itself
+    await query(`UPDATE products SET status = 'deleted', github_access_token = NULL WHERE id = ?`, [productId]);
+
+    // Log completion
+    await query(
+      `INSERT INTO agent_audit_log
+         (id, product_id, event_type, actor_type, actor_id, target_type, target_id,
+          description, created_at)
+       VALUES (?, ?, 'data_deletion_completed', 'system', 'system', 'product', ?,
+               'Data deletion completed. Product data has been removed.', datetime('now'))`,
+      [nanoid(), productId, productId]
+    );
+
+    deleted++;
+  }
+
+  return deleted;
+}
