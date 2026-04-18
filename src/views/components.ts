@@ -371,7 +371,7 @@ export function decisionDetail(
     </div>
     <p>${decision.why_now ?? ''}</p>
     ${decision.recommendation ? html`
-    <div style="margin-top:0.75rem;padding:0.75rem;background:#f0f9ff;border-radius:6px;">
+    <div style="margin-top:0.75rem;padding:0.75rem;background:var(--surface-2);border-radius:6px;">
       <strong>Recommendation:</strong> ${decision.recommendation}
     </div>` : ''}
     ${decision.options ? optionsList(decision.options as Array<{ label: string; description: string }>) : ''}
@@ -400,9 +400,9 @@ function scenarioCards(scenarios: Array<Record<string, unknown>>): HtmlContent {
     <details style="margin-bottom:0.75rem;">
       <summary><strong>${s.option_label}</strong></summary>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
-        <div style="padding:0.75rem;background:#ecfdf5;border-radius:6px;"><strong>Best Case</strong><br/>${summarizeCase(s.best_case)}</div>
-        <div style="padding:0.75rem;background:#f0f9ff;border-radius:6px;"><strong>Base Case</strong><br/>${summarizeCase(s.base_case)}</div>
-        <div style="padding:0.75rem;background:#fef2f2;border-radius:6px;"><strong>Stress Case</strong><br/>${summarizeCase(s.stress_case)}</div>
+        <div style="padding:0.75rem;background:rgba(78,204,163,0.1);border-radius:6px;"><strong>Best Case</strong><br/>${summarizeCase(s.best_case)}</div>
+        <div style="padding:0.75rem;background:var(--surface-2);border-radius:6px;"><strong>Base Case</strong><br/>${summarizeCase(s.base_case)}</div>
+        <div style="padding:0.75rem;background:rgba(255,107,107,0.1);border-radius:6px;"><strong>Stress Case</strong><br/>${summarizeCase(s.stress_case)}</div>
       </div>
     </details>`)}
   </div>`;
@@ -459,7 +459,7 @@ export function cohortTable(
         <span>Period</span><span>Users</span><span>D7</span><span>D14</span><span>D30</span><span>D60</span>
       </div>
       ${historicalAvg ? html`
-      <div class="comp-row" style="background:#f0f9ff;">
+      <div class="comp-row" style="background:var(--surface-2);">
         <span><em>Historical Avg</em></span>
         <span>—</span>
         <span>${historicalAvg.retention_day_7 !== null ? historicalAvg.retention_day_7.toFixed(0) + '%' : '—'}</span>
@@ -819,12 +819,12 @@ export function lifecycleConditions(
 export function nextActionCard(action: NextAction): HtmlContent {
   if (action.urgency === 'positive') {
     return html`
-    <div class="card" style="background:#f0fdf4;border-color:#bbf7d0;">
+    <div class="card" style="background:rgba(78,204,163,0.08);border-color:rgba(78,204,163,0.2);">
       <p style="font-size:0.9rem;color:#065f46;margin:0;"><strong>${action.headline}</strong></p>
       <p style="font-size:0.85rem;color:#047857;margin:0.25rem 0 0;">${action.subtext}</p>
     </div>`;
   }
-  const bgMap = { critical: '#fef2f2', elevated: '#fffbeb', normal: '#f8fafc' };
+  const bgMap = { critical: 'rgba(255,107,107,0.1)', elevated: 'rgba(255,179,71,0.1)', normal: 'var(--surface-3)' };
   const borderMap = { critical: '#fecaca', elevated: '#fde68a', normal: '#e2e5ea' };
   return html`
   <div class="card" style="background:${bgMap[action.urgency]};border-color:${borderMap[action.urgency]};">
@@ -959,10 +959,10 @@ export function auditRunButton(productId: string): HtmlContent {
 export function pageHintBanner(hints: PageHint[]): HtmlContent {
   if (hints.length === 0) return html``;
   return html`${hints.map((h) => {
-    const bgMap: Record<string, string> = { warning: '#fffbeb', tip: '#f0fdf4', contextual: '#f0f9ff', empty_state: '#f8fafc' };
-    const borderMap: Record<string, string> = { warning: '#fde68a', tip: '#bbf7d0', contextual: '#bae6fd', empty_state: '#e2e5ea' };
+    const bgMap: Record<string, string> = { warning: 'rgba(255,179,71,0.1)', tip: 'rgba(78,204,163,0.08)', contextual: 'var(--surface-2)', empty_state: 'var(--surface-3)' };
+    const borderMap: Record<string, string> = { warning: '#fde68a', tip: 'rgba(78,204,163,0.2)', contextual: '#bae6fd', empty_state: '#e2e5ea' };
     return html`
-    <div style="padding:0.75rem 1rem;background:${bgMap[h.type] ?? '#f8fafc'};border:1px solid ${borderMap[h.type] ?? '#e2e5ea'};border-radius:6px;margin-bottom:0.75rem;font-size:0.87rem;">
+    <div style="padding:0.75rem 1rem;background:${bgMap[h.type] ?? 'var(--surface-3)'};border:1px solid ${borderMap[h.type] ?? '#e2e5ea'};border-radius:6px;margin-bottom:0.75rem;font-size:0.87rem;">
       <strong>${h.headline}</strong>
       <p style="margin:0.25rem 0 0;color:#4b5563;">${h.body}</p>
       ${h.action_url ? html`<a href="${h.action_url}" style="font-size:0.8rem;">${h.action_label}</a>` : ''}
@@ -1138,7 +1138,7 @@ export function remediationSummaryCard(
       ${metricCard('PRs Failed', stats.prs_failed, 'number')}
     </div>
     ${delta !== null ? html`
-    <div style="margin-top:0.75rem;padding:0.75rem;background:${delta >= 0 ? '#ecfdf5' : '#fef2f2'};border-radius:6px;text-align:center;">
+    <div style="margin-top:0.75rem;padding:0.75rem;background:${delta >= 0 ? 'rgba(78,204,163,0.1)' : 'rgba(255,107,107,0.1)'};border-radius:6px;text-align:center;">
       <strong>Composite Delta:</strong> <span style="color:${delta >= 0 ? '#059669' : '#dc2626'};">${delta > 0 ? '+' : ''}${delta.toFixed(1)}</span>
     </div>` : ''}
   </div>`;
