@@ -177,12 +177,13 @@ function riskBadgeSmall(state: string, reason: string | null): HtmlContent {
 function productSwitcher(products: Array<{ id: string; name: string }>, currentId: string | null, _currentName: string | null): HtmlContent {
   return html`
   <div style="position:relative;display:inline-block;margin-left:0.5rem;">
-    <form id="product-switcher-form" method="POST" action="/switch-product" style="display:inline;">
+    <form id="product-switcher-form" method="POST" action="/switch-product" style="display:inline-flex;align-items:center;gap:0.35rem;">
       <span class="breadcrumb" style="display:inline-flex;align-items:center;gap:0.25rem;">/
-        <select name="product_id" onchange="this.form.submit()" style="border:none;background:transparent;font-size:inherit;font-weight:600;color:inherit;cursor:pointer;padding:0.15rem 0.25rem;border-radius:4px;outline:none;">
+        <select name="product_id" aria-label="Switch company" style="border:none;background:transparent;font-size:inherit;font-weight:600;color:inherit;cursor:pointer;padding:0.15rem 0.25rem;border-radius:4px;outline:none;">
           ${products.map((p) => html`<option value="${p.id}" ${p.id === currentId ? 'selected' : ''}>${p.name}</option>`)}
         </select>
       </span>
+      <button type="submit" class="btn btn-sm btn-ghost" style="padding:0.15rem 0.5rem;font-size:0.75rem;">Go</button>
     </form>
   </div>`;
 }
@@ -192,7 +193,7 @@ function productSwitcher(products: Array<{ id: string; name: string }>, currentI
 function notificationBell(notifications: AppNotification[], count: number): HtmlContent {
   return html`
   <details class="notif-bell" style="position:relative;">
-    <summary style="list-style:none;cursor:pointer;padding:4px 8px;position:relative;">
+    <summary aria-label="Notifications" style="list-style:none;cursor:pointer;padding:4px 8px;position:relative;">
       🔔${count > 0 ? html`<span class="notif-count">${count}</span>` : ''}
     </summary>
     <div class="notif-dropdown">
@@ -290,7 +291,7 @@ function groupedSidebar(
   ];
 
   return html`
-  <nav class="sidebar ${riskClass}">
+  <nav class="sidebar ${riskClass}" aria-label="Main navigation">
     <button onclick="openCmdPalette()" style="display:flex;align-items:center;gap:6px;width:calc(100% - 24px);margin:10px 12px 14px;padding:7px 12px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#94a3b8;font-size:13px;cursor:pointer;text-align:left;">
       <span style="font-size:12px;opacity:0.7;">⌘K</span>
       <span>Go anywhere</span>

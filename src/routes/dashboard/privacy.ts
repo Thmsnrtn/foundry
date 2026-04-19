@@ -288,7 +288,7 @@ privacySettings.get('/privacy', async (c) => {
     </div>
 
     <!-- Delete Confirmation Modal -->
-    <div id="delete-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:1rem;">
+    <div id="delete-modal" role="dialog" aria-modal="true" aria-label="Confirm product deletion" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:1rem;">
       <div style="background:var(--bg-card);border:1px solid rgba(255,107,107,0.3);border-radius:12px;padding:2rem;max-width:440px;width:100%;">
         <h2 style="margin:0 0 0.75rem;color:#ff6b6b;font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>
         <p style="margin:0 0 1rem;font-size:0.875rem;color:var(--text-dim);line-height:1.55;">
@@ -308,6 +308,16 @@ privacySettings.get('/privacy', async (c) => {
         </div>
       </div>
     </div>
+    <script>
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          var modal = document.getElementById('delete-modal');
+          if (modal && modal.style.display === 'flex') {
+            modal.style.display = 'none';
+          }
+        }
+      });
+    </script>
   `;
 
   return c.html(dashboardLayout(ctx, content));
