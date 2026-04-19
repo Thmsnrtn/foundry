@@ -4,6 +4,7 @@
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import { getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { createCheckoutSession } from '../../services/billing/stripe.js';
@@ -45,10 +46,16 @@ settingsRoutes.post('/checkout', requireRole('owner'), async (c) => {
 
 settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'settings', 'Settings');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
 
-  const products = await query('SELECT id, name, github_repo_url, share_token, ingest_token FROM products WHERE owner_id = ?', [founder.id]);
-  const firstProduct = products.rows.length > 0 ? (products.rows[0] as Record<string, string>) : null;
+  const products = await query('SELECT id, name, github_repo_url, share_token, ingest_token, status FROM products WHERE owner_id = ?', [founder.id]);
+
+  // Use the cookie-selected product (consistent with ctx.productId), fall back to first
+  const cookieProductId = getCookie(c, 'foundry_product');
+  const selectedProduct = cookieProductId
+    ? (products.rows.find((r) => (r as Record<string, string>).id === cookieProductId) as Record<string, string> | undefined)
+    : undefined;
+  const firstProduct = selectedProduct ?? (products.rows.length > 0 ? (products.rows[0] as Record<string, string>) : null);
   const productId = firstProduct?.id ?? null;
   const shareToken = firstProduct?.share_token ?? null;
   const ingestToken = firstProduct?.ingest_token ?? null;
@@ -67,7 +74,16 @@ settingsRoutes.get('/settings', async (c) => {
   const tierLabel = getTierBadge(founder.tier);
   const capabilities = getTierCapabilities(founder.tier);
 
+  // Success banner for settings actions
+  const successParam = c.req.query('success');
+  const successMessages: Record<string, string> = {
+    company_paused: 'Product paused. All agent activity and data ingestion are suspended.',
+    company_resumed: 'Product resumed. Agent activity and data ingestion are active.',
+  };
+  const successBannerMsg = successParam ? successMessages[successParam] ?? null : null;
+
   const content = html`
+    ${successBannerMsg ? html`<div style="background:#4ecca322;border:1px solid #4ecca344;border-radius:8px;padding:0.75rem 1.25rem;margin-bottom:1.5rem;color:#4ecca3;font-size:0.875rem;font-weight:500;">${successBannerMsg}</div>` : ''}
     <h1>Settings</h1>
     ${settingsPage(
       { id: founder.id, email: founder.email, name: founder.name, tier: founder.tier },
@@ -105,6 +121,64 @@ settingsRoutes.get('/settings', async (c) => {
           <a href="/products/${p.id}/audit" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">View</a>
         </div>`)}
       <a href="/onboarding" class="btn btn-primary btn-sm" style="margin-top:0.75rem;">+ Add Product</a>
+    </div>
+
+    <!-- Manage Company (F-061-A) -->
+    <div class="card" style="border:1px solid rgba(255,255,255,0.08);">
+      <h3>Manage Company</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        Pause, export, or delete your products. These actions apply to your currently selected product${products.rows.length > 1 ? ' — switch products above to target a different one' : ''}.
+      </p>
+
+      ${productId ? html`
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <!-- Pause / Resume -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+          <div>
+            <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">Pause Product</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">Suspend all agent activity and data ingestion. Your data is preserved.</div>
+          </div>
+          <form method="POST" action="/settings/toggle-product-status">
+            <input type="hidden" name="product_id" value="${productId}" />
+            <button type="submit" class="btn btn-secondary btn-sm" aria-label="Pause or resume product">
+              ${(firstProduct as Record<string, string> | null)?.status === 'paused' ? 'Resume' : 'Pause'}
+            </button>
+          </form>
+        </div>
+
+        <!-- Export Data -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+          <div>
+            <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">Export Data</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">Download all metrics, decisions, briefings, and configuration.</div>
+          </div>
+          <div style="display:flex;gap:0.5rem;">
+            <a href="/privacy/export" class="btn btn-secondary btn-sm" aria-label="Export product data as JSON">JSON</a>
+            <a href="/privacy/export?format=csv" class="btn btn-secondary btn-sm" aria-label="Export product data as CSV">CSV</a>
+          </div>
+        </div>
+
+        <!-- Delete -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,107,107,0.04);border-radius:8px;border:1px solid rgba(255,107,107,0.12);">
+          <div>
+            <div style="font-size:0.875rem;font-weight:600;color:#ff6b6b;">Delete Product</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">Permanently remove this product and all data after a 30-day grace period.</div>
+          </div>
+          <a href="/privacy" class="btn btn-sm" style="color:#ff6b6b;border-color:#ff6b6b44;" aria-label="Go to privacy settings to delete product">Delete</a>
+        </div>
+
+        ${products.rows.length > 1 ? html`
+        <!-- Fleet-wide actions -->
+        <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:1rem;margin-top:0.25rem;">
+          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem;">Fleet-wide</div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <a href="/settings/export-all" class="btn btn-ghost btn-sm" aria-label="Export all products data">Export All Products</a>
+            <a href="/settings/delete-all-products" class="btn btn-ghost btn-sm" style="color:#ff6b6b;" aria-label="Delete all products">Delete All Products</a>
+          </div>
+        </div>
+        ` : ''}
+      </div>
+      ` : html`<p style="font-size:0.87rem;color:var(--text-dim);">No product selected.</p>`}
     </div>
 
     <div class="card">
@@ -393,4 +467,37 @@ settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) 
   );
 
   return c.redirect('/settings?success=company_resumed');
+});
+
+// ─── Toggle Product Status (Pause/Resume from Manage Company UI) ─────────────
+
+settingsRoutes.post('/settings/toggle-product-status', requireRole('owner'), async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.parseBody() as Record<string, string>;
+  const productId = body.product_id;
+
+  if (!productId) return c.redirect('/settings');
+
+  // Verify ownership
+  const prodResult = await query(
+    'SELECT id, status FROM products WHERE id = ? AND owner_id = ?',
+    [productId, founder.id]
+  );
+  if (prodResult.rows.length === 0) return c.redirect('/settings');
+
+  const currentStatus = (prodResult.rows[0] as Record<string, string>).status;
+  const newStatus = currentStatus === 'paused' ? 'active' : 'paused';
+  const newScpStatus = currentStatus === 'paused' ? 'active' : 'paused';
+
+  await query(
+    "UPDATE products SET status = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    [newStatus, productId, founder.id]
+  );
+
+  await query(
+    "UPDATE lifecycle_state SET scp_status = ?, updated_at = datetime('now') WHERE product_id = ?",
+    [newScpStatus, productId]
+  ).catch(() => { /* lifecycle_state row may not exist yet */ });
+
+  return c.redirect(`/settings?success=company_${newStatus === 'paused' ? 'paused' : 'resumed'}`);
 });
