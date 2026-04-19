@@ -1,37 +1,39 @@
 # Foundry v5 — Deep Simulated User Transformation — Session State
-Last updated: 2026-04-16T22:00:00Z
-Last commit: pending — docs(v5-phase-4): simulation run 1 -- runs 051-075
+Last updated: 2026-04-19T04:00:00Z
+Last commit: ac28a7e — simulation run 1 runs 001-025
 
 ## Current Position
-Phase: 4 (Simulation Execution)
-Sub-task: Simulation Run 1 complete (runs 051-075)
-Simulation run: 1
+Phase: 5 (Friction Registry v1 populated, beginning remediation)
+Sub-task: Triage CRITICAL friction; begin fix loop
+Simulation run: 1 complete
 Consecutive threshold-meeting runs: 0
 
-## Precondition Verification
-- v4 gate: PASSES (LAUNCH READY)
-- Tests: 346 passing
-- TypeScript: 0 errors
-- HEAD: 0c4e97c (OpenRouter migration)
+## Run 1 Results
+- Total runs: 100 (4 batches × 25)
+- Verdicts: ~14 SUCCESS, ~27 FAILED/BLOCKED, ~6 PARTIAL, ~3 ABANDONED
+- Friction entries: 54 (16 CRITICAL, 25 HIGH, 10 MEDIUM, 3 LOW)
+- Boundary confusion events: 3 (runs 007, 031, 032) — CRITICAL
+- Fleet-scale-dependent: 22 entries
+- Tenancy-critical: 0 (technical isolation holds)
 
-## v5 Progress
-- Personas defined: 10/10
-- Journeys defined: 10/10
-- Condition matrix: 100 runs defined
-- Simulation runs completed: 25 (runs 051-075)
-- Friction registry entries: 54 (16 CRITICAL, 25 HIGH, 10 MEDIUM, 3 LOW)
-- Tenancy experiential tests: PASS (0 boundary confusion in 25 runs)
-- Agent surface tests: not started
-
-## Key Findings from Run 1
-1. **Zero cross-company boundary confusion** -- tenant isolation via cookie + owner_id is solid
-2. **Fleet-scale features are aspirational** -- no fleet view, no cross-company intelligence, no batch operations
-3. **Accessibility CRITICAL failures** -- product switcher, notification bell, delete modal all lack ARIA
-4. **Compliance gaps** -- audit log capped at 100 entries, no bulk export, JSON-only format
-5. **No company lifecycle management** -- no pause/archive/retire; only permanent deletion
-6. **ERR-DB resilience: zero** -- no timeout, no circuit breaker, no progressive loading
+## Top CRITICAL Friction Themes
+1. No fleet view / fleet dashboard (compounds at 5+ companies)
+2. No company lifecycle management (no pause/archive/retire)
+3. Accessibility gaps (product switcher, notification bell, delete modal)
+4. No fleet-level data export or deletion
+5. Cross-company intelligence doesn't exist in UI
+6. Deletion is cosmetic (billing continues, agents run)
 
 ## Next Action
-1. Begin remediation of CRITICAL findings
-2. Execute Simulation Run 2 (next 25 runs)
-3. Re-test fixed findings in subsequent runs
+1. Fix the 3 boundary-confusion events (CRITICAL priority)
+2. Fix accessibility CRITICALs (product switcher, delete modal)
+3. Fix deletion flow (data, billing, agents must actually stop)
+4. Address fleet-view gap (portfolio route + fleet dashboard)
+5. Re-simulate after fixes
+
+## Context Note
+The v5 simulation confirms: single-company SCP works well. Fleet-layer UX
+is where the product breaks. This is consistent with v4 findings (fleet
+meta-agents specified but not implemented). The remediation loop will focus
+on making the existing multi-product flow coherent rather than building
+new fleet features from scratch.
