@@ -48,7 +48,7 @@ landingRoutes.get('/', (c) => {
           </div>
           <div class="card" style="padding:1.25rem;border-top:3px solid var(--accent);">
             <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Portfolio operators &amp; studios</h3>
-            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Running 15+ companies at scale. Cross-portfolio pattern detection, shared playbooks, and fleet-wide intelligence that compounds across every company you add.</p>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Running 5+ companies at scale. Each company gets its own 12-agent team. Portfolio view shows Signal scores, risk states, and pending decisions across all your companies at a glance.</p>
           </div>
         </div>
       </div>
@@ -144,7 +144,7 @@ landingRoutes.get('/', (c) => {
 
       <!-- CTA -->
       <div style="text-align:center;padding:2rem 0;">
-        <h2 style="margin:0 0 1rem;">Your portfolio deserves a control plane.</h2>
+        <h2 style="margin:0 0 1rem;">Your products deserve a team.</h2>
         <p style="color:var(--text-dim);margin:0 0 1.5rem;">Try it with your first company — add the rest when you're ready.</p>
         <a href="/auth/signup" class="btn btn-primary" style="padding:0.875rem 2.5rem;font-size:1.05rem;">Start managing your portfolio →</a>
       </div>
