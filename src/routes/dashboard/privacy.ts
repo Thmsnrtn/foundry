@@ -88,9 +88,17 @@ privacySettings.get('/privacy', async (c) => {
     getDataResidencySettings(productId),
   ]);
 
-  const successBanner = successMsg
-    ? html`<div style="background:#4ecca322;border:1px solid #4ecca344;border-radius:8px;padding:0.75rem 1.25rem;margin-bottom:1.5rem;color:#4ecca3;font-size:0.875rem;font-weight:500;">
-        Settings saved successfully.
+  const successBannerText = successMsg === 'all_deletion_scheduled'
+    ? `Deletion scheduled for all ${ctx.allProducts.length} product${ctx.allProducts.length !== 1 ? 's' : ''}. Data will be removed after 30 days.`
+    : successMsg === 'deletion_scheduled'
+    ? 'Deletion scheduled. Product data will be removed after 30 days.'
+    : successMsg
+    ? 'Settings saved successfully.'
+    : null;
+
+  const successBanner = successBannerText
+    ? html`<div style="background:${successMsg?.includes('deletion') ? '#ff6b6b22' : '#4ecca322'};border:1px solid ${successMsg?.includes('deletion') ? '#ff6b6b44' : '#4ecca344'};border-radius:8px;padding:0.75rem 1.25rem;margin-bottom:1.5rem;color:${successMsg?.includes('deletion') ? '#ff6b6b' : '#4ecca3'};font-size:0.875rem;font-weight:500;">
+        ${successBannerText}
       </div>`
     : '';
 
