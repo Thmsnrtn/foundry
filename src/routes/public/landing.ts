@@ -13,40 +13,50 @@ export const caseStudyRoutes = new Hono();
 
 landingRoutes.get('/', (c) => {
   const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
-  return c.html(publicLayout('Give Your Product a Team', html`
+  return c.html(publicLayout('Foundry — One Control Plane for All Your Companies', html`
     <script async crossorigin="anonymous" src="https://unpkg.com/@clerk/clerk-js/dist/clerk.browser.js" data-clerk-publishable-key="${publishableKey}"></script>
     <script>window.addEventListener('load',async()=>{if(window.Clerk){await Clerk.load();if(Clerk.user){window.location.href='/dashboard';}}})</script>
 
     <div class="hero" style="text-align:center;padding:4rem 1rem 3rem;">
-      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent);margin-bottom:1.25rem;">Sovereign Company Protocol</div>
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent);margin-bottom:1.25rem;">The Operating System for Portfolio Founders</div>
       <h1 style="font-size:clamp(2rem,5vw,3.25rem);line-height:1.15;margin:0 0 1.25rem;max-width:760px;margin-left:auto;margin-right:auto;">
-        Connect your product.<br/>Get a company.
+        One control plane for<br/>all your companies.
       </h1>
-      <p style="font-size:1.05rem;color:var(--text-dim);max-width:580px;margin:0 auto 2rem;line-height:1.6;">
-        Foundry gives your SaaS product a team of 12 specialized AI agents — Atlas the CTO,
-        Oracle the analyst, Harbor for customer success, Beacon the CMO, and 8 more.
-        They operate, learn, and grow your business while you sleep.
+      <p style="font-size:1.05rem;color:var(--text-dim);max-width:620px;margin:0 auto 2rem;line-height:1.6;">
+        Every company you add to Foundry gets a team of 12 AI agents that run it autonomously — marketing, engineering, finance, support, and more.
+        You get one dashboard, one morning briefing, and cross-portfolio intelligence that no single company could generate alone.
       </p>
       <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;">
-        <a href="/auth/signup" class="btn btn-primary" style="padding:0.75rem 2rem;font-size:1rem;">Give my product a team →</a>
+        <a href="/auth/signup" class="btn btn-primary" style="padding:0.75rem 2rem;font-size:1rem;">Start managing your portfolio →</a>
         <a href="/pricing" class="btn btn-ghost" style="padding:0.75rem 1.5rem;font-size:1rem;">See pricing</a>
       </div>
     </div>
 
     <div style="max-width:900px;margin:0 auto;padding:0 1rem 3rem;">
 
-      <!-- The vision statement -->
-      <div class="card" style="text-align:center;padding:2.5rem;margin-bottom:2.5rem;border:1px solid rgba(108,99,255,0.2);">
-        <p style="font-size:1.05rem;line-height:1.7;color:var(--text-primary);margin:0;font-style:italic;">
-          "A founder opens Foundry, connects their product, and gets a company.
-          Not a dashboard. Not a chatbot. A company — with a team of specialized AI agents
-          that market, sell, support, analyze, and improve their product while they sleep."
-        </p>
+      <!-- Who is this for -->
+      <div style="margin-bottom:2.5rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">Who Is Foundry For?</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;">
+          <div class="card" style="padding:1.25rem;border-top:3px solid var(--accent);">
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Going from 1 to 2</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Solo founders ready to launch their second product without doubling their workload. Foundry runs your first company so you can build the next one.</p>
+          </div>
+          <div class="card" style="padding:1.25rem;border-top:3px solid var(--accent);">
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Multi-product founders</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Managing 2-15 companies and losing context switching between them. One briefing, one dashboard, one place to see everything that matters.</p>
+          </div>
+          <div class="card" style="padding:1.25rem;border-top:3px solid var(--accent);">
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Portfolio operators &amp; studios</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Running 15+ companies at scale. Cross-portfolio pattern detection, shared playbooks, and fleet-wide intelligence that compounds across every company you add.</p>
+          </div>
+        </div>
       </div>
 
       <!-- The 12 agents -->
       <div style="margin-bottom:2.5rem;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">Your AI Team</div>
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:0.75rem;text-align:center;">Your AI Team — Per Company</div>
+        <p style="font-size:0.88rem;color:var(--text-dim);max-width:600px;margin:0 auto 1.25rem;text-align:center;line-height:1.5;">Each company gets its own team of 12 AI agents. They run independently, but Foundry sees patterns across your entire portfolio.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:0.75rem;">
           ${[
             ['Atlas', 'CTO', 'Code quality · architecture · technical debt'],
@@ -77,23 +87,23 @@ landingRoutes.get('/', (c) => {
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:1rem;">
           <div class="card" style="padding:1.25rem;">
             <div style="font-size:1.5rem;margin-bottom:0.5rem;">1</div>
-            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Connect your product</h3>
-            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Link your GitHub repo, fill in your Company DNA — ICP, positioning, voice, market insight.</p>
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Add a company</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Connect a GitHub repo and fill in the Company DNA — ICP, positioning, voice, market insight. Takes about 10 minutes.</p>
           </div>
           <div class="card" style="padding:1.25rem;">
             <div style="font-size:1.5rem;margin-bottom:0.5rem;">2</div>
-            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Agents activate</h3>
-            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">12 agents spin up. They start cautious, run on their cadences, and earn trust by being right.</p>
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">12 agents activate</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Each company gets its own agent team. They start cautious, run on their cadences, and earn trust by being right.</p>
           </div>
           <div class="card" style="padding:1.25rem;">
             <div style="font-size:1.5rem;margin-bottom:0.5rem;">3</div>
-            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Read your briefing</h3>
-            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Every morning, one briefing from your company. What they did. What needs your approval. What's working.</p>
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">One briefing, all companies</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Every morning, one unified briefing across your portfolio. What happened overnight. What needs your call. What's working.</p>
           </div>
           <div class="card" style="padding:1.25rem;">
             <div style="font-size:1.5rem;margin-bottom:0.5rem;">4</div>
-            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Agents evolve</h3>
-            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Every correction you make becomes a golden lesson. Every session makes the next one better. Trust compounds.</p>
+            <h3 style="margin:0 0 0.5rem;font-size:0.95rem;">Portfolio intelligence compounds</h3>
+            <p style="margin:0;font-size:0.82rem;color:var(--text-dim);line-height:1.5;">Lessons learned in one company sharpen every other. Patterns emerge across your fleet that no single product could reveal.</p>
           </div>
         </div>
       </div>
@@ -114,32 +124,35 @@ landingRoutes.get('/', (c) => {
 
       <!-- Daily briefing example -->
       <div style="margin-bottom:2.5rem;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">Your Daily CEO Briefing</div>
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">Your Daily Portfolio Briefing</div>
         <div class="card" style="padding:1.75rem;font-family:monospace;font-size:0.82rem;line-height:1.7;color:var(--text-primary);">
-          <div style="color:var(--accent);font-weight:700;margin-bottom:0.5rem;">ACREOS · CEO BRIEFING · March 30, 2026</div>
-          <div style="color:var(--text-dim);margin-bottom:1rem;">Signal: 87/100 ↑+3 · Risk: GREEN · Health: 91/100</div>
-          <div style="margin-bottom:0.75rem;"><strong>Overnight:</strong></div>
+          <div style="color:var(--accent);font-weight:700;margin-bottom:0.5rem;">PORTFOLIO BRIEFING · 3 COMPANIES · March 30, 2026</div>
+          <div style="color:var(--text-dim);margin-bottom:1rem;">Portfolio Signal: 84/100 · Combined MRR: $18,430 ↑$920 · 4 decisions waiting</div>
+          <div style="margin-bottom:0.75rem;"><strong>AcreOS</strong> <span style="color:var(--text-dim);">(Signal 87 · GREEN)</span></div>
           <div style="color:var(--text-dim);margin-bottom:0.25rem;">→ Atlas: Closed a security gap in the auth flow automatically.</div>
-          <div style="color:var(--text-dim);margin-bottom:0.25rem;">→ Oracle: Churn improved 0.4% this week — retention emails working.</div>
-          <div style="color:#ffb347;margin-bottom:1rem;">→ Harbor: 3 trial users went silent after onboarding. Suspects step 3 friction.</div>
-          <div style="margin-bottom:0.75rem;"><strong>Decisions waiting (2):</strong></div>
-          <div style="color:var(--text-dim);margin-bottom:0.25rem;">  [1] Beacon: Publish case study from last 3 wins. Est. 2-4 leads. <span style="color:var(--accent);">[Approve]</span></div>
-          <div style="color:var(--text-dim);margin-bottom:1rem;">  [2] Harbor: Re-engagement campaign for 12 silent users. $240/mo impact. <span style="color:var(--accent);">[Approve]</span></div>
-          <div style="color:var(--text-dim);">MRR: $4,230 ↑$340 · AI Cost: $12.40 · ROI: 14.2x</div>
+          <div style="color:#ffb347;margin-bottom:0.75rem;">→ Harbor: 3 trial users went silent. Suspects step 3 friction.</div>
+          <div style="margin-bottom:0.75rem;"><strong>InvoiceKit</strong> <span style="color:var(--text-dim);">(Signal 79 · YELLOW)</span></div>
+          <div style="color:var(--text-dim);margin-bottom:0.25rem;">→ Oracle: Churn improved 0.4% — retention emails working.</div>
+          <div style="color:var(--text-dim);margin-bottom:0.75rem;">→ Forge: Pricing experiment B outperforming control by 18%.</div>
+          <div style="margin-bottom:0.75rem;"><strong>MailDeck</strong> <span style="color:var(--text-dim);">(Signal 91 · GREEN)</span></div>
+          <div style="color:var(--text-dim);margin-bottom:1rem;">→ Beacon: Publish case study from last 3 wins. Est. 2-4 leads. <span style="color:var(--accent);">[Approve]</span></div>
+          <div style="margin-bottom:0.75rem;"><strong>Cross-portfolio pattern:</strong></div>
+          <div style="color:var(--accent);margin-bottom:1rem;">Onboarding friction at step 3 detected in both AcreOS and InvoiceKit — Harbor recommends shared fix.</div>
+          <div style="color:var(--text-dim);">AI Cost: $34.20 across 3 companies · Portfolio ROI: 22.4x</div>
         </div>
       </div>
 
       <!-- CTA -->
       <div style="text-align:center;padding:2rem 0;">
-        <h2 style="margin:0 0 1rem;">Your product deserves a team.</h2>
-        <p style="color:var(--text-dim);margin:0 0 1.5rem;">Connect it to Foundry today.</p>
-        <a href="/auth/signup" class="btn btn-primary" style="padding:0.875rem 2.5rem;font-size:1.05rem;">Give my product a team →</a>
+        <h2 style="margin:0 0 1rem;">Your portfolio deserves a control plane.</h2>
+        <p style="color:var(--text-dim);margin:0 0 1.5rem;">Try it with your first company — add the rest when you're ready.</p>
+        <a href="/auth/signup" class="btn btn-primary" style="padding:0.875rem 2.5rem;font-size:1.05rem;">Start managing your portfolio →</a>
       </div>
 
     </div>
 
     <div class="page-footer" style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:0.8rem;">
-      Foundry — Sovereign Company Platform for SaaS Founders
+      Foundry — The operating system for multi-company founders
       <div style="margin-top:0.5rem;display:flex;gap:1.5rem;justify-content:center;">
         <a href="/privacy" style="color:var(--text-dim);font-size:0.75rem;">Privacy</a>
         <a href="/terms" style="color:var(--text-dim);font-size:0.75rem;">Terms</a>
