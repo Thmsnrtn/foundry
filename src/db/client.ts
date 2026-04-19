@@ -7,6 +7,8 @@ import { createClient, type Client, type InStatement, type InValue, type InArgs,
 
 let _client: Client | null = null;
 
+const QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS ?? '10000', 10);
+
 export function getDb(): Client {
   if (!_client) {
     const url = process.env.TURSO_DATABASE_URL;
@@ -29,10 +31,17 @@ export function getDb(): Client {
 
 /**
  * Execute a query and return the result set.
+ * Includes a configurable timeout (default 10s) to prevent hung queries
+ * from blocking the event loop indefinitely.
  */
 export async function query(sql: string, args: unknown[] = []): Promise<ResultSet> {
   const db = getDb();
-  return db.execute({ sql, args: args as InArgs });
+  return Promise.race([
+    db.execute({ sql, args: args as InArgs }),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`DB query timeout after ${QUERY_TIMEOUT_MS}ms`)), QUERY_TIMEOUT_MS)
+    ),
+  ]);
 }
 
 /**
