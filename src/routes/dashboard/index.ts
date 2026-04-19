@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import { setCookie, getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
+import { query, getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
 import { computeSignal, getSignalHistory, getDailyInsight, getPreviousSignalScore } from '../../services/signal.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { stressorReport, milestoneToastScript, type StressorData } from '../../views/components.js';
@@ -163,8 +163,84 @@ dashboardRoutes.get('/dashboard', async (c) => {
   const deltaStr = delta === null ? '' : delta > 0 ? `+${delta}` : delta < 0 ? String(delta) : '±0';
   const deltaCls = delta === null || delta === 0 ? '' : delta > 0 ? 'signal-delta-up' : 'signal-delta-down';
 
+  // ─── Catch-up summary for returning users (F-068-A) ──────────────────────
+  // Uses founders.last_seen_at to determine if the founder has been away.
+  // The auth middleware updates last_seen_at on every request, so we query the
+  // value that was set *before* this page load — which is the stored value.
+  const lastSeenResult = await query(
+    'SELECT last_seen_at FROM founders WHERE id = ?',
+    [founder.id]
+  );
+  const lastSeenRow = lastSeenResult.rows[0] as Record<string, unknown> | undefined;
+  const lastSeenAt = lastSeenRow?.last_seen_at as string | null | undefined;
+
+  let catchUpHtml = '';
+  if (lastSeenAt) {
+    const lastSeen = new Date(lastSeenAt);
+    const now = new Date();
+    const msDiff = now.getTime() - lastSeen.getTime();
+    const daysSince = Math.floor(msDiff / (1000 * 60 * 60 * 24));
+
+    // Only show catch-up if the founder has been away for 2+ days
+    if (daysSince >= 2) {
+      const [decisionsResult, newStressorsResult, signalThenResult] = await Promise.all([
+        query(
+          `SELECT COUNT(*) as cnt FROM decisions
+           WHERE product_id = ? AND status != 'pending' AND created_at >= ?`,
+          [productId, lastSeenAt]
+        ),
+        query(
+          `SELECT COUNT(*) as cnt FROM stressor_history
+           WHERE product_id = ? AND created_at >= ?`,
+          [productId, lastSeenAt]
+        ),
+        query(
+          `SELECT score FROM signal_history
+           WHERE product_id = ? AND snapshot_date <= date(?)
+           ORDER BY snapshot_date DESC LIMIT 1`,
+          [productId, lastSeenAt]
+        ),
+      ]);
+
+      const decisionsMade = (decisionsResult.rows[0] as Record<string, number>)?.cnt ?? 0;
+      const newStressors = (newStressorsResult.rows[0] as Record<string, number>)?.cnt ?? 0;
+      const scoreThen = (signalThenResult.rows[0] as Record<string, number>)?.score ?? null;
+      const scoreChange = scoreThen !== null ? signal.score - scoreThen : null;
+      const scoreChangeStr = scoreChange === null ? 'N/A'
+        : scoreChange > 0 ? `+${scoreChange}`
+        : scoreChange < 0 ? String(scoreChange)
+        : '±0';
+      const scoreChangeCls = scoreChange === null || scoreChange === 0 ? ''
+        : scoreChange > 0 ? 'signal-delta-up'
+        : 'signal-delta-down';
+
+      catchUpHtml = `
+      <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--accent);background:rgba(78,204,163,0.04);">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent);margin-bottom:0.75rem;">
+          Welcome back — ${daysSince} day${daysSince !== 1 ? 's' : ''} since your last visit
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1rem;">
+          <div>
+            <div style="font-size:1.25rem;font-weight:700;color:var(--text-primary);">${decisionsMade}</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">decision${decisionsMade !== 1 ? 's' : ''} made by agents</div>
+          </div>
+          <div>
+            <div style="font-size:1.25rem;font-weight:700;color:${newStressors > 0 ? 'var(--warning)' : 'var(--text-primary)'};">${newStressors}</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">new stressor${newStressors !== 1 ? 's' : ''}</div>
+          </div>
+          <div>
+            <div style="font-size:1.25rem;font-weight:700;" class="${scoreChangeCls}">${scoreChangeStr}</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">Signal score change</div>
+          </div>
+        </div>
+      </div>`;
+    }
+  }
+
   const content = html`
     <div class="signal-home" data-product-id="${productId}">
+
+      ${raw(catchUpHtml)}
 
       <div class="signal-display signal-${signal.tier}">
         <button
