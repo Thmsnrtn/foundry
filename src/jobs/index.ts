@@ -1864,4 +1864,13 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   customer_health_refresh: { fn: customerHealthRefresh, schedule: '0 3 * * *', description: 'Refresh all customer health scores (daily 3am)' },
   graph_rebuild: { fn: graphRebuild, schedule: '0 4 * * 0', description: 'Rebuild knowledge graph and discover causal chains (Sunday)' },
   portfolio_snapshots: { fn: portfolioSnapshotJob, schedule: '0 6 * * 1', description: 'Generate portfolio snapshots (Monday)' },
+  data_deletion_processor: {
+    fn: async () => {
+      const { processScheduledDeletions } = await import('../services/privacy/consent.js');
+      const deleted = await processScheduledDeletions();
+      if (deleted > 0) logger.info(`Processed ${deleted} scheduled deletions`, { jobName: 'data_deletion_processor' });
+    },
+    schedule: '0 3 * * *', // Daily at 3:00 UTC
+    description: 'Process scheduled data deletions (30-day delay)',
+  },
 };
