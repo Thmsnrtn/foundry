@@ -1,5 +1,18 @@
 # Foundry — Autonomous Business Intelligence Platform
 
+> ## What Foundry Actually Is (as of 2026-04-19)
+>
+> Foundry is an autonomous AI operations layer for solo SaaS founders
+> running 1-5 products. Signup → connect repo → audit → Signal score →
+> 12 agents monitor and act → briefings and decisions → risk state
+> adapts over time. Built to run without constant founder attention.
+>
+> It is NOT (yet) a multi-company control plane with fleet-level meta-
+> agents. Fleet-layer architecture documented in `docs/audits/v3/` through
+> `docs/audits/v6/` describes a future direction, not current capability.
+>
+> See `docs/audits/reality-check.md` for full state.
+
 **Architecture C → D**: Web application evolving to AI agent. Built for SaaS founders who are good at building product but need an autonomous operational layer.
 
 ## Quick Start
