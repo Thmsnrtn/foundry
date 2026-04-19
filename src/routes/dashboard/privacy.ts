@@ -290,9 +290,9 @@ privacySettings.get('/privacy', async (c) => {
     <!-- Delete Confirmation Modal -->
     <div id="delete-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:1rem;">
       <div style="background:var(--bg-card);border:1px solid rgba(255,107,107,0.3);border-radius:12px;padding:2rem;max-width:440px;width:100%;">
-        <h2 style="margin:0 0 0.75rem;color:#ff6b6b;font-size:1.1rem;">Confirm Data Deletion</h2>
+        <h2 style="margin:0 0 0.75rem;color:#ff6b6b;font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>
         <p style="margin:0 0 1rem;font-size:0.875rem;color:var(--text-dim);line-height:1.55;">
-          This will permanently schedule deletion of all your product data including metrics, briefings, decisions, and agent logs.
+          This will permanently schedule deletion of all data for <strong>${ctx.productName}</strong> including metrics, briefings, decisions, and agent logs.
           This cannot be undone.
         </p>
         <p style="margin:0 0 1.5rem;font-size:0.8rem;color:var(--text-muted);">
@@ -302,7 +302,7 @@ privacySettings.get('/privacy', async (c) => {
           <button type="button" class="btn btn-ghost" onclick="document.getElementById('delete-modal').style.display='none'">Cancel</button>
           <form method="POST" action="/privacy/delete" style="display:inline;">
             <button type="submit" class="btn" style="color:#ff6b6b;border-color:#ff6b6b44;background:rgba(255,107,107,0.1);">
-              Yes, Delete Everything
+              Yes, Delete ${ctx.productName}
             </button>
           </form>
         </div>
