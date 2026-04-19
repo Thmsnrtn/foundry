@@ -260,10 +260,19 @@ settingsRoutes.get('/checkout', async (c) => {
 
 settingsRoutes.post('/settings/generate-share', requireRole('admin'), async (c) => {
   const founder = c.get('founder');
-  const products = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
-  if (products.rows.length === 0) return c.redirect('/settings');
-
-  const productId = (products.rows[0] as Record<string, string>).id;
+  // Use current product from cookie, not LIMIT 1 (FRICTION: settings targeting wrong product)
+  const { getCookie } = await import('hono/cookie');
+  const cookieProductId = getCookie(c, 'foundry_product');
+  const products = await query(
+    'SELECT id FROM products WHERE owner_id = ? AND id = ?',
+    [founder.id, cookieProductId ?? '']
+  );
+  if (products.rows.length === 0) {
+    // Fallback to first product if cookie not set
+    const fallback = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
+    if (fallback.rows.length === 0) return c.redirect('/settings');
+  }
+  const productId = (products.rows[0] as Record<string, string>)?.id ?? cookieProductId;
   const token = randomBytes(24).toString('hex');
 
   await query('UPDATE products SET share_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
