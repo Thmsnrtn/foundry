@@ -426,6 +426,9 @@ privacySettings.post('/privacy/residency', async (c) => {
 
 // ─── CSV Conversion Helper ────────────────────────────────────────────────────
 
+/** UTF-8 BOM for Excel compatibility */
+const CSV_BOM = '\uFEFF';
+
 function jsonToCsv(rows: unknown[]): string {
   if (rows.length === 0) return '';
   const headers = Object.keys(rows[0] as Record<string, unknown>);
@@ -442,6 +445,16 @@ function jsonToCsv(rows: unknown[]): string {
     lines.push(headers.map((h) => escape(r[h])).join(','));
   }
   return lines.join('\n');
+}
+
+function csvResponse(body: string, filename: string): Response {
+  return new Response(CSV_BOM + body, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  });
 }
 
 // ─── GET /privacy/export ───────────────────────────────────────────────────────
@@ -465,14 +478,7 @@ privacySettings.get('/privacy/export', async (c) => {
       .map(([name, rows]) => `# ${name}\n${jsonToCsv(rows)}`)
       .join('\n\n');
 
-    const filename = `foundry-export-${today}.csv`;
-    return new Response(csvParts, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    });
+    return csvResponse(csvParts, `foundry-export-${today}.csv`);
   }
 
   const filename = `foundry-export-${today}.json`;
@@ -532,14 +538,7 @@ privacySettings.get('/settings/export-all', async (c) => {
       }
       csvParts.push('');
     }
-    const filename = `foundry-fleet-export-${today}.csv`;
-    return new Response(csvParts.join('\n\n'), {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    });
+    return csvResponse(csvParts.join('\n\n'), `foundry-fleet-export-${today}.csv`);
   }
 
   const payload = {
