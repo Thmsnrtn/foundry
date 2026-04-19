@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { createMiddleware } from 'hono/factory';
+import { html } from 'hono/html';
 import { query, getProductByOwner, getLifecycleState } from '../db/client.js';
 import type { Product, LifecycleState, RiskStateValue, ProductStatus } from '../types/index.js';
 import type { ProductRow, LifecycleStateRow } from '../types/database.js';
@@ -44,6 +45,14 @@ export const tenantMiddleware = createMiddleware<TenantEnv>(async (c, next) => {
   // Archived products should not be accessible — treat as not found
   if (row.status === 'archived') {
     return c.json({ error: 'Not found' }, 404);
+  }
+
+  // Paused products show a static page instead of 404 — agents are stopped
+  if (row.status === 'paused') {
+    return c.html(html`<div style="text-align:center;padding:4rem;">
+      <h2>Company Paused</h2>
+      <p>This company is paused. Agents are not running. <a href="/settings">Resume in Settings</a>.</p>
+    </div>`);
   }
 
   const product: Product = {

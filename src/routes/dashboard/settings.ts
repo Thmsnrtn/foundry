@@ -337,3 +337,60 @@ settingsRoutes.post('/settings/wisdom-toggle', requireRole('admin'), async (c) =
 
   return c.redirect('/settings');
 });
+
+// ─── Company Pause / Resume ─────────────────────────────────────────────────
+
+settingsRoutes.post('/settings/pause-company', requireRole('owner'), async (c) => {
+  const founder = c.get('founder');
+  const { getCookie } = await import('hono/cookie');
+  const cookieProductId = getCookie(c, 'foundry_product');
+
+  if (!cookieProductId) return c.redirect('/settings');
+
+  // Verify ownership before pausing
+  const ownership = await query(
+    'SELECT id FROM products WHERE id = ? AND owner_id = ?',
+    [cookieProductId, founder.id]
+  );
+  if (ownership.rows.length === 0) return c.redirect('/settings');
+
+  await query(
+    "UPDATE products SET status = 'paused', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    [cookieProductId, founder.id]
+  );
+
+  // Also pause the SCP lifecycle to stop agent runs
+  await query(
+    "UPDATE lifecycle_state SET scp_status = 'paused', updated_at = datetime('now') WHERE product_id = ?",
+    [cookieProductId]
+  );
+
+  return c.redirect('/settings?success=company_paused');
+});
+
+settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) => {
+  const founder = c.get('founder');
+  const { getCookie } = await import('hono/cookie');
+  const cookieProductId = getCookie(c, 'foundry_product');
+
+  if (!cookieProductId) return c.redirect('/settings');
+
+  // Verify ownership before resuming
+  const ownership = await query(
+    'SELECT id FROM products WHERE id = ? AND owner_id = ?',
+    [cookieProductId, founder.id]
+  );
+  if (ownership.rows.length === 0) return c.redirect('/settings');
+
+  await query(
+    "UPDATE products SET status = 'active', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    [cookieProductId, founder.id]
+  );
+
+  await query(
+    "UPDATE lifecycle_state SET scp_status = 'active', updated_at = datetime('now') WHERE product_id = ?",
+    [cookieProductId]
+  );
+
+  return c.redirect('/settings?success=company_resumed');
+});
