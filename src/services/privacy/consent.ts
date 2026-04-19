@@ -95,9 +95,9 @@ export async function getConsentSummary(productId: string): Promise<ConsentSumma
 // ─── getOrInitConsents ─────────────────────────────────────────────────────────
 
 /**
- * Returns existing consents, or sensible defaults if none recorded yet.
- * Default: benchmark_contribution=true, aggregate_insights=true,
- *          product_improvement=true, ai_training_opt_out=false
+ * Returns existing consents, or GDPR-compliant defaults (all opt-out).
+ * Per GDPR Article 7: pre-ticked boxes are NOT valid consent.
+ * All data sharing defaults to false (opt-out). User must actively consent.
  */
 export async function getOrInitConsents(productId: string): Promise<ConsentSummary> {
   const result = await query(
@@ -106,10 +106,11 @@ export async function getOrInitConsents(productId: string): Promise<ConsentSumma
   );
 
   if (result.rows.length === 0) {
+    // GDPR: all defaults are opt-out (false)
     return {
-      benchmark_contribution: true,
-      aggregate_insights: true,
-      product_improvement: true,
+      benchmark_contribution: false,
+      aggregate_insights: false,
+      product_improvement: false,
       ai_training_opt_out: false,
       cross_company_patterns: false,
     };
@@ -121,10 +122,11 @@ export async function getOrInitConsents(productId: string): Promise<ConsentSumma
     map[r.consent_type as string] = r.granted === 1;
   }
 
+  // GDPR: default to false (opt-out) for any consent type not yet recorded
   return {
-    benchmark_contribution: map['benchmark_contribution'] ?? true,
-    aggregate_insights: map['aggregate_insights'] ?? true,
-    product_improvement: map['product_improvement'] ?? true,
+    benchmark_contribution: map['benchmark_contribution'] ?? false,
+    aggregate_insights: map['aggregate_insights'] ?? false,
+    product_improvement: map['product_improvement'] ?? false,
     ai_training_opt_out: map['ai_training_opt_out'] ?? false,
     cross_company_patterns: map['cross_company_patterns'] ?? false,
   };
