@@ -8,6 +8,7 @@ in code. Specifically:
 
 - Fleet-level meta-agents (FleetOracle, FleetSentinel, PortfolioLedger,
   FleetObservatory) — specs only at `docs/scp/fleet-agents/`, no implementation
+  on master or any branch (verified via `docs/audits/unmerged-work-inventory.md`)
 - Multi-organization / multi-tenant control plane architecture — the
   current codebase is single-tenant with multi-product support (one founder,
   multiple products), not multi-organization
@@ -19,6 +20,7 @@ in code. Specifically:
 - Fleet Observatory — documented, not built
 
 For current product reality, see `docs/audits/reality-check.md`.
+For git-state verification (branches, stashes, PRs), see `docs/audits/unmerged-work-inventory.md`.
 
 These audit documents remain committed because:
 1. The security, reliability, and compliance findings within them are

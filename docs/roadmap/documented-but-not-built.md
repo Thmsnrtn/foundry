@@ -9,7 +9,7 @@ Operator decision column left blank for the operator to fill in.
 ### FleetOracle — Cross-Company Pattern Identification Agent
 - **Documented at:** `docs/scp/fleet-agents/fleet-oracle.md`
 - **What it would do:** Identify patterns across a founder's companies (e.g., "Company A's churn pattern matches Company B's 3 months ago")
-- **Current state:** Spec with 20+ golden eval cases. Zero implementation.
+- **Current state:** Spec with 20+ golden eval cases. Zero implementation on master, branches, or stashes (verified via `docs/audits/unmerged-work-inventory.md`).
 - **Effort:** 2-3 weeks (service + scheduler + UI surface)
 - **Required for control-plane positioning?** Yes — this is the core differentiation
 - **Operator decision:** _______________

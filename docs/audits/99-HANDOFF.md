@@ -1,4 +1,4 @@
-> **REALITY NOTICE:** Portions of this handoff document describe fleet-layer architecture that was documented but not implemented. See docs/audits/00-README-FIRST.md and docs/audits/reality-check.md for the current state of what Foundry actually is as shipped.
+> **REALITY NOTICE:** Portions of this handoff document describe fleet-layer architecture that was documented but not implemented. See docs/audits/00-README-FIRST.md, docs/audits/reality-check.md, and docs/audits/unmerged-work-inventory.md for the current state of what Foundry actually is as shipped.
 
 # Foundry — Transformation Handoff
 
