@@ -1,3 +1,5 @@
+> **REALITY NOTICE:** Portions of this handoff document describe fleet-layer architecture that was documented but not implemented. See docs/audits/00-README-FIRST.md and docs/audits/reality-check.md for the current state of what Foundry actually is as shipped.
+
 # Foundry v6 — Public Reception & Competitor Translation Handoff
 
 ## v6 Gate Result

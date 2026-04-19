@@ -1,3 +1,5 @@
+> **REALITY NOTICE:** Portions of this handoff document describe fleet-layer architecture that was documented but not implemented. See docs/audits/00-README-FIRST.md and docs/audits/reality-check.md for the current state of what Foundry actually is as shipped.
+
 # Foundry v5 — Deep Simulated User Transformation Handoff
 
 ## v5 Gate Result
