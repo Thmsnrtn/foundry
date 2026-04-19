@@ -58,26 +58,44 @@ auditLog.get('/audit-log', async (c) => {
   const action = c.req.query('action') ?? '';
   const since = c.req.query('since') ?? '';
 
+  const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10));
+  const PAGE_SIZE = 500;
+  const offset = (page - 1) * PAGE_SIZE;
+
   let sql = `SELECT * FROM agent_audit_log WHERE product_id=?`;
+  let countSql = `SELECT COUNT(*) as total FROM agent_audit_log WHERE product_id=?`;
   const params: unknown[] = [productId];
+  const countParams: unknown[] = [productId];
 
   if (actorType) {
     sql += ` AND actor_type=?`;
+    countSql += ` AND actor_type=?`;
     params.push(actorType);
+    countParams.push(actorType);
   }
   if (action) {
     sql += ` AND action=?`;
+    countSql += ` AND action=?`;
     params.push(action);
+    countParams.push(action);
   }
   if (since) {
     sql += ` AND created_at >= ?`;
+    countSql += ` AND created_at >= ?`;
     params.push(since);
+    countParams.push(since);
   }
 
-  sql += ` ORDER BY created_at DESC LIMIT 100`;
+  sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+  params.push(PAGE_SIZE, offset);
 
-  const result = await query(sql, params);
+  const [result, countResult] = await Promise.all([
+    query(sql, params),
+    query(countSql, countParams),
+  ]);
   const entries = result.rows as Array<Record<string, unknown>>;
+  const totalEntries = (countResult.rows[0] as Record<string, number>)?.total ?? 0;
+  const totalPages = Math.ceil(totalEntries / PAGE_SIZE);
 
   // Collect distinct actor types and actions for filter suggestions
   const ACTOR_TYPES = ['agent', 'user', 'system', 'api'];
@@ -95,6 +113,7 @@ auditLog.get('/audit-log', async (c) => {
     if (actorType) params.set('actor_type', actorType);
     if (action) params.set('action', action);
     if (since) params.set('since', since);
+    if (page > 1) params.set('page', String(page));
     for (const [k, v] of Object.entries(overrides)) {
       if (v) params.set(k, v); else params.delete(k);
     }
@@ -131,7 +150,10 @@ auditLog.get('/audit-log', async (c) => {
   const content = html`
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:0.5rem;">
       <h1 style="margin:0;">Audit Log</h1>
-      <span style="font-size:0.8rem;color:var(--text-muted);">${entries.length} entries</span>
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <span style="font-size:0.8rem;color:var(--text-muted);">${totalEntries} entries (page ${page} of ${Math.max(1, totalPages)})</span>
+        <a href="${buildUrl({ export: 'csv' })}" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:4px 10px;" aria-label="Export audit log as CSV">Export CSV</a>
+      </div>
     </div>
 
     <!-- Filters -->
@@ -176,7 +198,82 @@ auditLog.get('/audit-log', async (c) => {
           </table>
         `}
     </div>
+
+    <!-- Pagination -->
+    ${totalPages > 1 ? html`
+    <div style="display:flex;justify-content:center;align-items:center;gap:0.75rem;margin-top:1.25rem;">
+      ${page > 1
+        ? html`<a href="${buildUrl({ page: String(page - 1) })}" class="btn btn-ghost btn-sm" style="font-size:0.78rem;">Previous</a>`
+        : html`<span class="btn btn-ghost btn-sm" style="font-size:0.78rem;opacity:0.3;pointer-events:none;">Previous</span>`}
+      <span style="font-size:0.8rem;color:var(--text-muted);">Page ${page} of ${totalPages}</span>
+      ${page < totalPages
+        ? html`<a href="${buildUrl({ page: String(page + 1) })}" class="btn btn-ghost btn-sm" style="font-size:0.78rem;">Next</a>`
+        : html`<span class="btn btn-ghost btn-sm" style="font-size:0.78rem;opacity:0.3;pointer-events:none;">Next</span>`}
+    </div>` : ''}
   `;
 
   return c.html(dashboardLayout(ctx, content));
+});
+
+// ─── GET /audit-log/export — CSV Export ───────────────────────────────────────
+
+auditLog.get('/audit-log/export', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'audit-log', 'Audit Log', undefined, c);
+
+  if (!ctx.productId) {
+    return c.json({ error: 'No product selected' }, 400);
+  }
+
+  const productId = ctx.productId;
+  const actorType = c.req.query('actor_type') ?? '';
+  const action = c.req.query('action') ?? '';
+  const since = c.req.query('since') ?? '';
+
+  let sql = `SELECT * FROM agent_audit_log WHERE product_id=?`;
+  const params: unknown[] = [productId];
+
+  if (actorType) {
+    sql += ` AND actor_type=?`;
+    params.push(actorType);
+  }
+  if (action) {
+    sql += ` AND action=?`;
+    params.push(action);
+  }
+  if (since) {
+    sql += ` AND created_at >= ?`;
+    params.push(since);
+  }
+
+  sql += ` ORDER BY created_at DESC`;
+
+  const result = await query(sql, params);
+  const entries = result.rows as Array<Record<string, unknown>>;
+
+  // Build CSV
+  const csvHeaders = ['created_at', 'actor_type', 'actor_name', 'actor_id', 'action', 'resource_type', 'resource_id', 'details', 'ip_address'];
+  const csvRows = entries.map((e) => {
+    return csvHeaders.map((h) => {
+      const val = e[h];
+      if (val === null || val === undefined) return '';
+      const str = typeof val === 'string' ? val : JSON.stringify(val);
+      // Escape CSV: wrap in quotes if contains comma, quote, or newline
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    }).join(',');
+  });
+
+  const csv = [csvHeaders.join(','), ...csvRows].join('\n');
+  const today = new Date().toISOString().slice(0, 10);
+
+  return new Response(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="audit-log-${today}.csv"`,
+    },
+  });
 });
