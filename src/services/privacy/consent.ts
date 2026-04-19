@@ -239,13 +239,7 @@ export async function updateDataResidencySettings(
 export async function exportProductData(
   productId: string,
   _format: 'json' | 'csv'
-): Promise<{
-  metrics: unknown[];
-  briefings: unknown[];
-  decisions: unknown[];
-  customers: unknown[];
-  agent_config: unknown[];
-}> {
+): Promise<Record<string, unknown[]>> {
   const [metricsResult, briefingsResult, decisionsResult, customersResult, agentConfigResult] =
     await Promise.all([
       query(
@@ -274,12 +268,27 @@ export async function exportProductData(
       ).catch(() => ({ rows: [] })),
     ]);
 
+  // v5 FRICTION: Export was 60% incomplete. Add missing tables.
+  const [stressorsResult, auditResult, lifecycleResult, competitorsResult, signalsResult] =
+    await Promise.all([
+      query('SELECT * FROM stressor_history WHERE product_id = ? ORDER BY identified_at DESC', [productId]).catch(() => ({ rows: [] })),
+      query('SELECT * FROM audit_scores WHERE product_id = ? ORDER BY created_at DESC', [productId]).catch(() => ({ rows: [] })),
+      query('SELECT * FROM lifecycle_state WHERE product_id = ?', [productId]).catch(() => ({ rows: [] })),
+      query('SELECT * FROM competitors WHERE product_id = ?', [productId]).catch(() => ({ rows: [] })),
+      query('SELECT * FROM competitive_signals WHERE product_id = ? ORDER BY detected_at DESC', [productId]).catch(() => ({ rows: [] })),
+    ]);
+
   return {
     metrics: metricsResult.rows,
     briefings: briefingsResult.rows,
     decisions: decisionsResult.rows,
     customers: customersResult.rows,
     agent_config: agentConfigResult.rows,
+    stressors: stressorsResult.rows,
+    audit_scores: auditResult.rows,
+    lifecycle_state: lifecycleResult.rows,
+    competitors: competitorsResult.rows,
+    competitive_signals: signalsResult.rows,
   };
 }
 
