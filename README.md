@@ -1,206 +1,109 @@
-# Foundry — Autonomous Business Intelligence Platform
+# Foundry
 
-> ## What Foundry Actually Is (as of 2026-04-19)
->
-> Foundry is an autonomous AI operations layer for solo SaaS founders
-> running 1-5 products. Signup → connect repo → audit → Signal score →
-> 12 agents monitor and act → briefings and decisions → risk state
-> adapts over time. Built to run without constant founder attention.
->
-> It is NOT (yet) a multi-company control plane with fleet-level meta-
-> agents. Fleet-layer architecture documented in `docs/audits/v3/` through
-> `docs/audits/v6/` describes a future direction, not current capability.
->
-> See `docs/audits/reality-check.md` for full state.
+Autonomous AI operations layer for solo SaaS founders running 1-5 products.
 
-**Architecture C → D**: Web application evolving to AI agent. Built for SaaS founders who are good at building product but need an autonomous operational layer.
+Connect your GitHub repo, get a 10-dimension audit, and let 12 specialized AI agents monitor, analyze, and advise on your business — while you focus on building product.
+
+## Who It's For
+
+Solo SaaS founders who are good at building product but need operational support without hiring a team. Ideal for 1-5 products per account.
+
+## What It Does
+
+1. **Audit** — Connect a GitHub repo. Foundry analyzes code structure, configuration, billing, trust signals, error handling, analytics, and dependencies across 10 dimensions. Produces a composite score and blocking issues.
+
+2. **Signal Score** — A single 0-100 number representing business health, updated from metrics, stressor activity, and agent observations.
+
+3. **12 AI Agents** — Each product gets 12 specialized agents (Atlas/CTO, Compass/PM, Oracle/Analytics, Beacon/CMO, Harbor/CS, Sentinel/DevOps, Ledger/Finance, Shield/Legal, Scribe/Content, Forge/Revenue, Prism/UX, Crucible/QA). They run on configurable cadences (6h to 168h) and propose actions via a gate-controlled decision queue.
+
+4. **Risk State** — Green/Yellow/Red adaptive system. Yellow triggers elevated monitoring. Red suspends autonomous actions and generates recovery protocols.
+
+5. **Briefings** — Daily/weekly synthesized intelligence from all 12 agents. Delivered in-app and via email digest.
+
+6. **Decisions Inbox** — Gate 0 (autonomous) through Gate 4 (human-only). Scenario modeling for strategic decisions. Cross-product pattern matching from anonymized outcomes.
+
+7. **Multi-Product** — Growth tier supports up to 3 products, Investor-Ready supports up to 5. Portfolio view shows Signal scores and risk states across products. Per-product pause/resume and export/delete.
+
+## What It Does NOT (Yet) Do
+
+- **Fleet-level meta-agents** — FleetOracle, FleetSentinel, PortfolioLedger, FleetObservatory are specified in `docs/scp/fleet-agents/` but not implemented
+- **Cross-company intelligence** — The `decision_patterns` table collects anonymized data but no service generates insights from it for users
+- **Multi-organization** — Single-founder-per-account. No organization entity, no team roles across companies
+- **Validated lifecycle transitions** — Lifecycle stages exist but transitions aren't enforced
+
+See `docs/roadmap/documented-but-not-built.md` for the full list.
 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Copy environment variables
-cp .env.example .env
-# Fill in all values (Turso, Clerk, Stripe, Anthropic, Resend, GitHub)
-
-# 3. Run database migrations
+cp .env.example .env   # Fill in: Turso, Clerk, OpenRouter, Stripe, Resend, Encryption key
 npm run cli -- db:migrate
-
-# 4. Seed development data
-npm run cli -- db:seed
-
-# 5. Start development server
-npm run dev
-# → http://localhost:8080
-```
-
-## Architecture
-
-```
-src/
-├── index.ts                 # Hono server entry point, route mounting, cron scheduler
-├── db/
-│   ├── client.ts            # Turso client, multi-tenant query helpers
-│   ├── schema.sql           # Complete 16-table schema
-│   └── migrations/          # SQL migration files
-├── types/
-│   ├── index.ts             # Core domain types (gates, risk states, entities)
-│   ├── database.ts          # Raw SQL row types
-│   ├── ai.ts                # AI pipeline types (analysis, scoring, scenarios)
-│   └── api.ts               # Request/response types
-├── middleware/
-│   ├── auth.ts              # Clerk JWT validation → founder resolution
-│   ├── tenant.ts            # Product ownership validation (404, not 403)
-│   └── internal.ts          # Ecosystem service key for /internal/* routes
-├── services/
-│   ├── ai/
-│   │   ├── client.ts        # Anthropic SDK wrapper (Opus + Sonnet)
-│   │   ├── composer.ts      # Context-window-aware system prompt assembly
-│   │   └── gates.ts         # Safety gate logic with risk-state thresholds
-│   ├── audit/
-│   │   ├── engine.ts        # 8-step GitHub analysis pipeline
-│   │   ├── github.ts        # GitHub REST API integration
-│   │   ├── scorer.ts        # Claude Opus 10-dimension scoring
-│   │   └── comparator.ts    # Pre/post audit comparison
-│   ├── intelligence/
-│   │   ├── stressor.ts      # Forward-looking risk identification
-│   │   ├── risk-state.ts    # Green/Yellow/Red calculation + transitions
-│   │   ├── scenario.ts      # Best/base/stress scenario generation
-│   │   ├── recovery.ts      # Red state recovery protocol
-│   │   ├── revenue.ts       # MRR decomposition + health ratio
-│   │   ├── cohort.ts        # Cohort retention analysis
-│   │   └── competitive.ts   # Weekly competitive scan via Claude Sonnet
-│   ├── decisions/
-│   │   ├── queue.ts         # Decision queue management
-│   │   └── patterns.ts      # Cross-product learning loop
-│   ├── lifecycle/
-│   │   ├── monitor.ts       # Lifecycle condition evaluation
-│   │   └── conditions.ts    # Activation condition definitions
-│   ├── digest/
-│   │   ├── generator.ts     # Digest assembly (weekly, yellow pulse, red daily)
-│   │   ├── narrative.ts     # AI narrative generation
-│   │   └── delivery.ts      # Resend email delivery
-│   ├── story/
-│   │   ├── engine.ts        # Founding story artifact capture
-│   │   └── publisher.ts     # Case study publishing
-│   ├── billing/
-│   │   ├── stripe.ts        # Stripe integration (3 tiers)
-│   │   └── cohort.ts        # Founding cohort slot enforcement
-│   └── triggers/
-│       └── behavioral.ts    # Gate 0 behavioral trigger emails
-├── routes/
-│   ├── public/              # No auth: landing, pricing, case studies
-│   ├── auth/                # Clerk signup/login, webhooks
-│   ├── dashboard/           # Authenticated: operator dashboard, onboarding, all views
-│   ├── api/                 # Authenticated: products, metrics, audit log
-│   └── internal/            # Ecosystem key: health, ICP, conversions, dashboard data
-├── jobs/
-│   └── index.ts             # All 14 scheduled jobs with cron expressions
-└── cli/
-    └── index.ts             # CLI: migrate, seed, run jobs, status checks
+npm run cli -- db:seed  # Optional: demo data
+npm run dev             # → http://localhost:8080
 ```
 
 ## Stack
 
 | Component | Technology |
 |-----------|-----------|
-| Runtime | Node.js 20+ TypeScript |
-| Framework | Hono |
+| Runtime | Node.js 20+, TypeScript (strict) |
+| Framework | Hono (server-rendered HTML + HTMX) |
 | Database | Turso (libSQL) |
 | Auth | Clerk |
-| AI | Claude Opus 4.6 (strategic) + Claude Sonnet 4.5 (operational) |
+| AI | OpenRouter (Claude Opus + Sonnet via single API key) |
 | Email | Resend |
-| Payments | Stripe (3 tiers) |
+| Payments | Stripe |
 | Deployment | Fly.io |
 
-## Database Schema (16 Tables)
+## Pricing
 
-`founders` · `products` · `lifecycle_state` · `audit_scores` · `decisions` · `audit_log` · `beta_intake` · `lifecycle_conditions` · `founding_story_artifacts` · `metric_snapshots` · `stressor_history` · `scenario_models` · `decision_patterns` · `cohorts` · `competitors` · `competitive_signals`
+| Tier | Price | Products | Key Features |
+|------|-------|----------|-------------|
+| Solo | $79/mo | 1 | 12 agents, Signal score, briefings, decision queue, audit engine |
+| Growth | $199/mo | Up to 3 | + Integrations, Wisdom Layer, Remediation Engine, team mode |
+| Investor-Ready | $399/mo | Up to 5 | + Investor layer, competitive intelligence, playbooks, temporal |
 
-Multi-tenant by design. Every query scopes by `owner_id`. Exception: `decision_patterns` is intentionally cross-product and anonymized.
-
-## Gate System
-
-| Gate | Behavior | Examples |
-|------|----------|---------|
-| 0 | Fully autonomous — acts immediately | Behavioral trigger emails, metric snapshots |
-| 1 | Notify and proceed — acts, notifies after | Stressor identification, competitive signals |
-| 2 | Recommend and wait — suggests, waits for approval | Risk state transitions, weekly synthesis |
-| 3 | Human decision required — presents options with scenarios | Pricing changes, pivots, feature kills |
-| 4 | Human only — system never acts | Live trading, risk limit changes |
-
-Thresholds adjust by risk state. In Red: Gate 0/1 suspended except behavioral triggers.
-
-## Risk State System
-
-- **Green**: Normal operations. All gates active.
-- **Yellow**: Elevated monitoring. Thursday pulse digest. Retention-relevant decisions prioritized.
-- **Red**: Recovery mode. Daily briefings. Gate 0/1 suspended. Recovery protocol generated.
-
-## Intelligence Layers
-
-1. **Stressor Identification**: Forward-looking risks from MRR health ratio, cohort deviation, competitive signals
-2. **MRR Decomposition**: New + Expansion − Contraction − Churned. Health ratio = churned/new (lower is better)
-3. **Cohort Intelligence**: Retention curves, channel analysis, historical comparison
-4. **Competitive Monitoring**: Weekly Claude Sonnet scan. High-significance signals auto-create stressors
-5. **Scenario Modeling**: Best/base/stress for Gate 3 decisions. Uses cross-product decision patterns
-6. **Recovery Protocol**: Red state only. Diagnosis → root variable → stabilization plan
-
-## 14 Scheduled Jobs
+## Architecture
 
 ```
-lifecycle_check       0 6 * * *       Daily lifecycle condition evaluation
-competitive_scan      0 6 * * 0       Sunday competitive scan
-weekly_synthesis      0 6 * * 5       Friday intelligence synthesis
-digest_generate       0 7 * * 1       Monday weekly digests
-behavioral_triggers   0 */6 * * *     Behavioral trigger emails
-metric_snapshot       0 0 * * *       Daily metric snapshot placeholder
-slot_enforcement      0 9 * * *       Founding cohort activation window
-cold_start_check      0 5 * * *       Cold start exit evaluation
-scenario_accuracy     0 8 * * 5       Friday scenario prediction accuracy
-yellow_pulse          0 7 * * 4       Thursday Yellow state pulse
-red_daily             0 7 * * *       Daily Red state briefing
-stressor_cleanup      0 4 * * *       Auto-escalate expired stressors
-pattern_aggregation   0 9 * * 0       Sunday pattern stats
-story_capture         0 23 * * *      Daily milestone capture
+src/
+├── index.ts              # Hono server, route mounting, 26+ cron jobs
+├── db/                   # Turso client, 16-table schema, 59 migrations
+├── middleware/            # Auth, tenant, CSRF, security headers, rate limit, RBAC, tier gate
+├── services/
+│   ├── ai/               # OpenRouter client, prompt composer, safety gates, sanitizer
+│   ├── audit/            # 8-step GitHub analysis, 10-dimension scoring, remediation
+│   ├── scp/              # 12 per-product agents, provisioner, scheduler, evolution, briefings
+│   ├── intelligence/     # Stressor, risk state, revenue, cohort, competitive
+│   ├── decisions/        # Queue, patterns, action execution
+│   └── billing/          # Stripe integration, dunning
+├── routes/
+│   ├── public/           # Landing, pricing, legal pages
+│   ├── auth/             # Clerk signup/login
+│   ├── dashboard/        # 67 authenticated page routes
+│   └── api/              # JSON API routes
+└── views/                # Server-rendered HTML layouts + components
 ```
-
-## CLI Commands
-
-```bash
-npm run cli -- db:migrate              # Run migrations
-npm run cli -- db:seed                 # Seed dev data
-npm run cli -- db:status               # Table row counts
-npm run cli -- job:list                # List all jobs
-npm run cli -- job:run weekly_synthesis # Run a specific job
-npm run cli -- product:status <id>     # Full product status
-```
-
-## Pricing Tiers
-
-| Tier | Price | Features |
-|------|-------|----------|
-| Founding Cohort | $99/mo | Full methodology. Rate locked permanently. 30 slots. 7-day activation window. |
-| Growth | $199/mo | Full methodology + dashboard. |
-| Scale | $399/mo | Multi-product management. Priority support. |
-
-## Ecosystem Integration
-
-Internal API routes (`/internal/*`) enable communication between Foundry, Koldly (outbound), AcreOS, and Apex Micro. Authenticated via `X-Ecosystem-Key` header.
 
 ## Deployment
 
 ```bash
-# Fly.io
-fly deploy
-
-# Or Docker
-docker build -t foundry .
-docker run -p 8080:8080 --env-file .env foundry
+fly deploy                # Fly.io (see fly.toml)
+# Or:
+docker build -t foundry . && docker run -p 8080:8080 --env-file .env foundry
 ```
 
-## Week 0 Self-Audit Protocol
+## Limitations
 
-Before shipping to any founder, Foundry runs its own ten-dimension audit against itself. The acceptance criterion: Foundry must score READY_WITH_CONDITIONS or higher on its own audit engine. This is encoded in the lifecycle system — Foundry is Product #1.
+- **Scale ceiling:** Current architecture processes products sequentially in cron jobs. Works well for <25 products per instance. Beyond that, a job queue (BullMQ) would be needed.
+- **Single-founder model:** No organization entity. Each Clerk user is one founder. Multi-seat/team features exist (Growth+) but are scoped to one founder's account.
+- **In-memory state:** AI cost ceiling and rate limiting are per-instance. Deploy resets the cost ceiling counter.
+
+## Documentation
+
+- `docs/audits/reality-check.md` — Honest assessment of what's built vs documented
+- `docs/audits/00-README-FIRST.md` — Guide to the 859 audit docs and what they describe
+- `docs/operations/runbook.md` — Deployment, incidents, key rotation, backup
+- `docs/features/README.md` — Feature catalog
+- `docs/scp/cross-company-contract.md` — Data flow boundaries (for future fleet layer)
