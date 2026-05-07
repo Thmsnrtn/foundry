@@ -5,6 +5,8 @@
 
 import { nanoid } from 'nanoid';
 import { query, batch } from '../../db/client.js';
+import { isBlocked } from '../discipline/freeze-periods.js';
+import { queueProposal } from '../discipline/proposals-queue.js';
 import type {
   AgentName,
   ProvisionResult,
@@ -40,6 +42,27 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
       agentsCreated: 0,
       constitutionCreated: false,
       error: 'Already provisioned',
+    };
+  }
+
+  // V3.1 Layer A: architecture freeze gate — refuse new agent provisioning
+  // when freeze is active. Queue the request for review at end of freeze.
+  const freezeCheck = await isBlocked(productId, 'agent_provision');
+  if (freezeCheck.blocked) {
+    await queueProposal(productId, {
+      source_type: 'agent_provision',
+      source_id: productId,
+      proposed_change: `Provision SCP for product ${productId}`,
+      proposed_by: 'system',
+      rationale: 'Initial SCP provisioning request',
+      blocked_during_freeze_id: freezeCheck.freeze?.id ?? null,
+    });
+    return {
+      success: false,
+      productId,
+      agentsCreated: 0,
+      constitutionCreated: false,
+      error: `architecture_freeze active (${freezeCheck.freeze?.reason ?? 'no reason'}); provisioning queued`,
     };
   }
 

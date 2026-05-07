@@ -9,6 +9,8 @@ import { callSonnet } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import { runAllGates } from './gates.js';
 import { applyConfigChange, rollbackConfig } from './agent-config.js';
+import { isBlocked, type ChangeCategory } from '../discipline/freeze-periods.js';
+import { queueProposal } from '../discipline/proposals-queue.js';
 import { logger } from '../logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -260,6 +262,31 @@ async function getSessionCount(productId: string, agentName: string): Promise<nu
   }
 }
 
+// ─── Architecture Freeze Classifier (V3.1 Layer A) ───────────────────────────
+
+/**
+ * Map an evolution config-change to a freeze ChangeCategory.
+ *
+ * Tightening (always allowed during freeze):
+ *   - 'behavioral_constraints' (constraint_added by another name)
+ *
+ * Correction (always allowed during freeze):
+ *   - any change where isCorrection=true (founder is the trigger)
+ *
+ * Prompt refinement (blocked under architecture_class freeze):
+ *   - 'system_prompt', 'system_prompt_core', 'domain_context',
+ *     'decision_framework', and any other config type that changes how
+ *     the agent thinks
+ */
+export function classifyEvolutionChange(
+  configType: string,
+  isCorrection: boolean
+): ChangeCategory {
+  if (isCorrection) return 'correction';
+  if (configType === 'behavioral_constraints') return 'tightening';
+  return 'prompt_refinement';
+}
+
 // ─── Main Evolution Function ───────────────────────────────────────────────────
 
 /**
@@ -344,6 +371,34 @@ export async function evolveAgent(session: EvolutionSession): Promise<EvolutionR
     });
 
     if (validationResult.approved) {
+      // V3.1 Layer A: architecture freeze gate.
+      // Classify the change and check freeze before applying. Tightening
+      // (constraint additions) and founder corrections always pass; other
+      // change classes route to phase_beta_proposals when freeze is active.
+      const category = classifyEvolutionChange(proposed.configType, isCorrection);
+      const freezeCheck = await isBlocked(productId, category);
+      if (freezeCheck.blocked) {
+        await queueProposal(productId, {
+          source_type: 'evolution',
+          source_id: sessionId,
+          proposed_change: `${agentName}/${proposed.configType}: ${proposed.rationale}`,
+          proposed_by: agentName,
+          rationale: proposed.rationale,
+          blocked_during_freeze_id: freezeCheck.freeze?.id ?? null,
+        });
+        changes.push({
+          configType: proposed.configType,
+          approved: false,
+          rejectedBy: 'architecture_freeze',
+          rationale: `Blocked by architecture freeze; queued to phase_beta_proposals`,
+        });
+        logger.info(
+          `Freeze blocked ${agentName}/${proposed.configType} (${category}); queued`,
+          { agentName, productId }
+        );
+        continue;
+      }
+
       // Apply the change
       const gateScores: Record<string, number> = {};
       for (const gate of validationResult.gates) {
