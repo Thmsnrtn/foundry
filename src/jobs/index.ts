@@ -1791,6 +1791,37 @@ export async function regulatoryScan(): Promise<void> {
   logger.info('regulatory_scan complete', { jobName: 'regulatory_scan' });
 }
 
+// ─── V3.1 Layer A: Team Health Aggregate — Monday 5:30 UTC ───────────────────
+// Computes Ambros's six metrics weekly per product. Reads from existing
+// tables (decisions, agent_messages, agent_evolution_versions,
+// agent_predictions); writes to team_health_metrics.
+
+export async function teamHealthAggregate(): Promise<void> {
+  const { computeAndStoreHealth } = await import('../services/discipline/team-health.js');
+  const products = await getAllActiveProducts();
+  const weekStart = mondayOfWeek(new Date());
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      await computeAndStoreHealth({ product_id: p.id, week_starting: weekStart });
+    } catch (err) {
+      logger.error(`team_health_aggregate error for ${p.id}:`, {
+        jobName: 'team_health_aggregate',
+        error: String(err),
+      });
+    }
+  }
+  logger.info('team_health_aggregate complete', { jobName: 'team_health_aggregate' });
+}
+
+function mondayOfWeek(d: Date): string {
+  const copy = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = copy.getUTCDay(); // 0 = Sunday, 1 = Monday, ...
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setUTCDate(copy.getUTCDate() + diff);
+  return copy.toISOString().slice(0, 10);
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1872,5 +1903,11 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     },
     schedule: '0 3 * * *', // Daily at 3:00 UTC
     description: 'Process scheduled data deletions (30-day delay)',
+  },
+  // V3.1 Layer A
+  team_health_aggregate: {
+    fn: teamHealthAggregate,
+    schedule: '30 5 * * 1', // Monday 5:30 UTC
+    description: 'Aggregate Ambros six metrics weekly per product',
   },
 };
