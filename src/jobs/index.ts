@@ -1814,6 +1814,26 @@ export async function teamHealthAggregate(): Promise<void> {
   logger.info('team_health_aggregate complete', { jobName: 'team_health_aggregate' });
 }
 
+// ─── V3.1 Layer C: Idempotency Cleanup — Daily 4:00 UTC ──────────────────────
+// Delete expired outbound idempotency keys so the table stays bounded.
+
+export async function idempotencyCleanup(): Promise<void> {
+  const { cleanupExpired } = await import('../services/outbound/idempotency.js');
+  try {
+    const removed = await cleanupExpired();
+    if (removed > 0) {
+      logger.info(`idempotency_cleanup removed ${removed} expired keys`, {
+        jobName: 'idempotency_cleanup',
+      });
+    }
+  } catch (err) {
+    logger.error('idempotency_cleanup error', {
+      jobName: 'idempotency_cleanup',
+      error: String(err),
+    });
+  }
+}
+
 function mondayOfWeek(d: Date): string {
   const copy = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const day = copy.getUTCDay(); // 0 = Sunday, 1 = Monday, ...
@@ -1909,5 +1929,11 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     fn: teamHealthAggregate,
     schedule: '30 5 * * 1', // Monday 5:30 UTC
     description: 'Aggregate Ambros six metrics weekly per product',
+  },
+  // V3.1 Layer C
+  idempotency_cleanup: {
+    fn: idempotencyCleanup,
+    schedule: '0 4 * * *', // Daily 4:00 UTC
+    description: 'Delete expired outbound idempotency keys',
   },
 };
