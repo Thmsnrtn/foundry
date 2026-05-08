@@ -6,6 +6,7 @@
 import { query, insertAuditLog } from '../../db/client.js';
 import { callSonnet, callOpus, parseJSONResponse } from '../ai/client.js';
 import { buildWisdomContext } from '../wisdom/dna.js';
+import { voiceGateDraft } from '../calibration/voice-gate.js';
 import { nanoid } from 'nanoid';
 
 export type ArtifactType =
@@ -106,6 +107,26 @@ Return JSON:
     status: autoExecutable ? 'auto_approved' : 'draft',
   };
 
+  // V3.1 Layer B: voice gate. If the artifact reaches a customer/public
+  // surface and an active fingerprint exists, score it. On warn or block,
+  // strip auto-execution so the founder reviews. Errors are non-fatal —
+  // an LLM hiccup in voice scoring must not break draft generation.
+  try {
+    const verdict = await voiceGateDraft(productId, {
+      artifact_type: draft.artifact_type,
+      draft_content: draft.draft_content,
+    });
+    if (verdict.verdict === 'block' || verdict.verdict === 'warn') {
+      draft.auto_executable = false;
+      draft.status = 'draft';
+      const tag =
+        verdict.score !== null
+          ? `[voice:${verdict.verdict} ${verdict.score}] `
+          : `[voice:${verdict.verdict}] `;
+      draft.description = tag + draft.description;
+    }
+  } catch { /* voice-gate failure is non-fatal */ }
+
   await query(
     `INSERT INTO action_drafts (id, decision_id, product_id, owner_id, action_type, title, description, draft_content, artifact_type, metadata, gate, auto_executable, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -117,8 +138,8 @@ Return JSON:
     ]
   );
 
-  // Auto-execute Gate 0 actions
-  if (autoExecutable) {
+  // Auto-execute Gate 0 actions (unless voice-gate forced manual review)
+  if (draft.auto_executable) {
     await executeAction(draft.id, productId);
   }
 

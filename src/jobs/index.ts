@@ -1791,6 +1791,87 @@ export async function regulatoryScan(): Promise<void> {
   logger.info('regulatory_scan complete', { jobName: 'regulatory_scan' });
 }
 
+// ─── V3.1 Layer A: Team Health Aggregate — Monday 5:30 UTC ───────────────────
+// Computes Ambros's six metrics weekly per product. Reads from existing
+// tables (decisions, agent_messages, agent_evolution_versions,
+// agent_predictions); writes to team_health_metrics.
+
+export async function teamHealthAggregate(): Promise<void> {
+  const { computeAndStoreHealth } = await import('../services/discipline/team-health.js');
+  const products = await getAllActiveProducts();
+  const weekStart = mondayOfWeek(new Date());
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      await computeAndStoreHealth({ product_id: p.id, week_starting: weekStart });
+    } catch (err) {
+      logger.error(`team_health_aggregate error for ${p.id}:`, {
+        jobName: 'team_health_aggregate',
+        error: String(err),
+      });
+    }
+  }
+  logger.info('team_health_aggregate complete', { jobName: 'team_health_aggregate' });
+}
+
+// ─── V3.1 Layer A revisit: Outcome Tree Health — Monday 6:00 UTC ─────────────
+// Pull latest metric_snapshots into branches' current_value where metric_key
+// matches. Mark stale (>90d, no current_value) branches as superseded.
+// LLM-driven tree generation is deferred.
+
+export async function outcomeTreeHealth(): Promise<void> {
+  const { refreshOutcomeTreeHealth } = await import(
+    '../services/destination/outcome-tree-refresh.js'
+  );
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const r = await refreshOutcomeTreeHealth(p.id);
+      if (r.refreshed > 0 || r.superseded > 0) {
+        logger.info(
+          `outcome_tree_health ${p.id}: refreshed=${r.refreshed} superseded=${r.superseded} active=${r.total_active}`,
+          { jobName: 'outcome_tree_health' }
+        );
+      }
+    } catch (err) {
+      logger.error(`outcome_tree_health error for ${p.id}:`, {
+        jobName: 'outcome_tree_health',
+        error: String(err),
+      });
+    }
+  }
+  logger.info('outcome_tree_health complete', { jobName: 'outcome_tree_health' });
+}
+
+// ─── V3.1 Layer C: Idempotency Cleanup — Daily 4:00 UTC ──────────────────────
+// Delete expired outbound idempotency keys so the table stays bounded.
+
+export async function idempotencyCleanup(): Promise<void> {
+  const { cleanupExpired } = await import('../services/outbound/idempotency.js');
+  try {
+    const removed = await cleanupExpired();
+    if (removed > 0) {
+      logger.info(`idempotency_cleanup removed ${removed} expired keys`, {
+        jobName: 'idempotency_cleanup',
+      });
+    }
+  } catch (err) {
+    logger.error('idempotency_cleanup error', {
+      jobName: 'idempotency_cleanup',
+      error: String(err),
+    });
+  }
+}
+
+function mondayOfWeek(d: Date): string {
+  const copy = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = copy.getUTCDay(); // 0 = Sunday, 1 = Monday, ...
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setUTCDate(copy.getUTCDate() + diff);
+  return copy.toISOString().slice(0, 10);
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -1872,5 +1953,23 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     },
     schedule: '0 3 * * *', // Daily at 3:00 UTC
     description: 'Process scheduled data deletions (30-day delay)',
+  },
+  // V3.1 Layer A
+  team_health_aggregate: {
+    fn: teamHealthAggregate,
+    schedule: '30 5 * * 1', // Monday 5:30 UTC
+    description: 'Aggregate Ambros six metrics weekly per product',
+  },
+  // V3.1 Layer C
+  idempotency_cleanup: {
+    fn: idempotencyCleanup,
+    schedule: '0 4 * * *', // Daily 4:00 UTC
+    description: 'Delete expired outbound idempotency keys',
+  },
+  // V3.1 Layer A revisit
+  outcome_tree_health: {
+    fn: outcomeTreeHealth,
+    schedule: '0 6 * * 1', // Monday 6:00 UTC
+    description: 'Refresh outcome tree current_value from metrics; supersede stale branches',
   },
 };

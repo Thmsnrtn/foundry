@@ -7,6 +7,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { buildDestinationContext } from '../destination/briefing-context.js';
 import type {
   SCPBriefing,
   AgentBriefingContribution,
@@ -199,6 +200,16 @@ export async function generateDailyBriefing(
     });
   }
 
+  // V3.1 Layer A: pull destination context (North Star + outcome tree).
+  // Best-effort — briefing proceeds without it if anything fails.
+  let destinationBlock = '';
+  try {
+    const ctx = await buildDestinationContext(productId);
+    if (ctx.has_north_star) destinationBlock = ctx.briefing_block;
+  } catch {
+    // Non-blocking; older products without a North Star are unaffected.
+  }
+
   // Generate headline via Claude
   let headline = `${companyName} — Daily Operations Summary`;
   let tokensUsed = 0;
@@ -211,9 +222,13 @@ export async function generateDailyBriefing(
         .map((c) => `${c.display_name}: ${c.contribution}`)
         .join('\n');
 
+      const destinationFrame = destinationBlock
+        ? `\nNorth Star context:\n${destinationBlock}\n`
+        : '';
+
       const headlineResponse = await callSonnet(
         'You write precise, specific one-line business summaries. No generic statements.',
-        `In max 120 characters, summarize the key development for ${companyName} today based on these agent observations:\n${observationsList}\n\nBe specific and concrete, not generic. Return only the headline text.`,
+        `In max 120 characters, summarize the key development for ${companyName} today based on these agent observations:\n${observationsList}\n${destinationFrame}\nBe specific and concrete, not generic. When North Star context is provided, prefer phrasings that reference progress or pace toward it. Return only the headline text.`,
         150,
         productId
       );
@@ -246,7 +261,7 @@ export async function generateDailyBriefing(
     created_at: new Date().toISOString(),
   };
 
-  briefing.full_briefing = formatBriefingAsMarkdown(briefing);
+  briefing.full_briefing = formatBriefingAsMarkdown(briefing, destinationBlock);
 
   // UPSERT into scp_briefings
   await query(
@@ -313,7 +328,7 @@ export async function getBriefingHistory(productId: string, limit = 30): Promise
 
 // ─── formatBriefingAsMarkdown ─────────────────────────────────────────────────
 
-export function formatBriefingAsMarkdown(briefing: SCPBriefing): string {
+export function formatBriefingAsMarkdown(briefing: SCPBriefing, destinationBlock?: string): string {
   const lines: string[] = [];
 
   // Fetch company name from briefing context — we store it in agent_contributions
@@ -330,6 +345,17 @@ export function formatBriefingAsMarkdown(briefing: SCPBriefing): string {
   lines.push('');
   lines.push(`**Signal:** ${signalDisplay} · Risk: ${riskDisplay.toUpperCase()} · Health: ${healthDisplay}`);
   lines.push('');
+
+  // V3.1 Layer A: surface destination context just below the signal/risk/health
+  // line so it's the first thing after the top-level health summary.
+  if (destinationBlock && destinationBlock.trim().length > 0) {
+    lines.push('## Destination');
+    lines.push('');
+    // Use markdown line breaks so multi-line block renders cleanly
+    lines.push(destinationBlock.split('\n').join('  \n'));
+    lines.push('');
+  }
+
   lines.push('---');
   lines.push('');
 
