@@ -1814,6 +1814,36 @@ export async function teamHealthAggregate(): Promise<void> {
   logger.info('team_health_aggregate complete', { jobName: 'team_health_aggregate' });
 }
 
+// ─── V3.1 Layer A revisit: Outcome Tree Health — Monday 6:00 UTC ─────────────
+// Pull latest metric_snapshots into branches' current_value where metric_key
+// matches. Mark stale (>90d, no current_value) branches as superseded.
+// LLM-driven tree generation is deferred.
+
+export async function outcomeTreeHealth(): Promise<void> {
+  const { refreshOutcomeTreeHealth } = await import(
+    '../services/destination/outcome-tree-refresh.js'
+  );
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const r = await refreshOutcomeTreeHealth(p.id);
+      if (r.refreshed > 0 || r.superseded > 0) {
+        logger.info(
+          `outcome_tree_health ${p.id}: refreshed=${r.refreshed} superseded=${r.superseded} active=${r.total_active}`,
+          { jobName: 'outcome_tree_health' }
+        );
+      }
+    } catch (err) {
+      logger.error(`outcome_tree_health error for ${p.id}:`, {
+        jobName: 'outcome_tree_health',
+        error: String(err),
+      });
+    }
+  }
+  logger.info('outcome_tree_health complete', { jobName: 'outcome_tree_health' });
+}
+
 // ─── V3.1 Layer C: Idempotency Cleanup — Daily 4:00 UTC ──────────────────────
 // Delete expired outbound idempotency keys so the table stays bounded.
 
@@ -1935,5 +1965,11 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     fn: idempotencyCleanup,
     schedule: '0 4 * * *', // Daily 4:00 UTC
     description: 'Delete expired outbound idempotency keys',
+  },
+  // V3.1 Layer A revisit
+  outcome_tree_health: {
+    fn: outcomeTreeHealth,
+    schedule: '0 6 * * 1', // Monday 6:00 UTC
+    description: 'Refresh outcome tree current_value from metrics; supersede stale branches',
   },
 };
