@@ -5,6 +5,7 @@
 
 import { query, insertAuditLog } from '../../db/client.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
+import { shieldOrLog } from '../ai/prompt-shield.js';
 import { getDefaultBranchSha, createBranch, commitFiles, createPullRequest } from './github.js';
 import { scoreAudit } from './scorer.js';
 import { captureArtifact } from '../story/engine.js';
@@ -134,10 +135,13 @@ export async function generateFix(
     return remId;
   }
 
-  // Build file context for Opus
+  // Build file context for Opus. File contents are untrusted input — strip
+  // obvious prompt-injection patterns before they land in the system prompt.
+  // shieldOrLog logs a warning when patterns fire so the operator can audit.
   const fileContextParts: string[] = [];
   for (const [path, content] of relevantFileContents) {
-    fileContextParts.push(`--- ${path} ---\n${content}\n`);
+    const sanitized = shieldOrLog(content, { source: 'audit_remediation', productId });
+    fileContextParts.push(`--- ${path} ---\n${sanitized}\n`);
   }
   const fileContext = fileContextParts.join('\n');
 

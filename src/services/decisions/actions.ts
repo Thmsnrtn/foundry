@@ -7,6 +7,7 @@ import { query, insertAuditLog } from '../../db/client.js';
 import { callSonnet, callOpus, parseJSONResponse } from '../ai/client.js';
 import { buildWisdomContext } from '../wisdom/dna.js';
 import { voiceGateDraft } from '../calibration/voice-gate.js';
+import { recordDecisionActed } from '../intelligence/briefing-telemetry.js';
 import { nanoid } from 'nanoid';
 
 export type ArtifactType =
@@ -162,6 +163,17 @@ export async function approveDraft(draftId: string, ownerId: string): Promise<{ 
     [draftId]
   );
 
+  // Briefing → decision telemetry: link this approval to the founder's most
+  // recent briefing view if any. Fire-and-forget; telemetry failure must not
+  // block the action.
+  recordDecisionActed(
+    ownerId,
+    d.product_id as string,
+    draftId,
+    (d.decision_id as string | null) ?? null,
+    'approved'
+  ).catch(() => {});
+
   return executeAction(draftId, d.product_id as string);
 }
 
@@ -169,10 +181,29 @@ export async function approveDraft(draftId: string, ownerId: string): Promise<{ 
  * Reject a draft.
  */
 export async function rejectDraft(draftId: string, ownerId: string, reason?: string): Promise<void> {
+  // Look up product_id and decision_id before the UPDATE so we have the
+  // attribution context. Skip on failure — rejection is the operator's
+  // judgment, not a request we should block on telemetry.
+  const before = await query(
+    'SELECT product_id, decision_id FROM action_drafts WHERE id = ? AND owner_id = ?',
+    [draftId, ownerId]
+  ).catch(() => null);
+
   await query(
     `UPDATE action_drafts SET status = 'rejected', metadata = json_set(COALESCE(metadata, '{}'), '$.rejection_reason', ?) WHERE id = ? AND owner_id = ?`,
     [reason ?? 'Rejected by founder', draftId, ownerId]
   );
+
+  if (before && before.rows.length > 0) {
+    const row = before.rows[0] as Record<string, unknown>;
+    recordDecisionActed(
+      ownerId,
+      row.product_id as string,
+      draftId,
+      (row.decision_id as string | null) ?? null,
+      'rejected'
+    ).catch(() => {});
+  }
 }
 
 /**

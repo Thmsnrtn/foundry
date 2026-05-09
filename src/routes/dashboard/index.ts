@@ -10,6 +10,7 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
 import { computeSignal, getSignalHistory, getDailyInsight, getPreviousSignalScore } from '../../services/signal.js';
 import { computeWeeklyOutcome } from '../../services/intelligence/weekly-outcome.js';
+import { recordBriefingView, getBriefingOutcome } from '../../services/intelligence/briefing-telemetry.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { stressorReport, milestoneToastScript, type StressorData } from '../../views/components.js';
 import type { SignalComponents } from '../../services/signal.js';
@@ -139,7 +140,7 @@ dashboardRoutes.get('/dashboard', async (c) => {
   const ctx = await getLayoutContext(founder, 'dashboard', 'Dashboard', undefined, c);
   const productId = ctx.productId!;
 
-  const [signal, stressors, history, dailyInsight, previousScore, latestBriefing, weeklyOutcome] = await Promise.all([
+  const [signal, stressors, history, dailyInsight, previousScore, latestBriefing, weeklyOutcome, briefingOutcome] = await Promise.all([
     computeSignal(productId),
     getActiveStressors(productId),
     getSignalHistory(productId, 60),
@@ -154,7 +155,23 @@ dashboardRoutes.get('/dashboard', async (c) => {
       }
     })(),
     computeWeeklyOutcome(productId).catch(() => null),
-  ]);
+    getBriefingOutcome(productId).catch(() => null),
+  ]) as [
+    Awaited<ReturnType<typeof computeSignal>>,
+    Awaited<ReturnType<typeof getActiveStressors>>,
+    Awaited<ReturnType<typeof getSignalHistory>>,
+    Awaited<ReturnType<typeof getDailyInsight>>,
+    Awaited<ReturnType<typeof getPreviousSignalScore>>,
+    SCPBriefing | null,
+    Awaited<ReturnType<typeof computeWeeklyOutcome>> | null,
+    Awaited<ReturnType<typeof getBriefingOutcome>> | null,
+  ];
+
+  // Record that the founder viewed today's briefing — fire-and-forget so a
+  // telemetry write failure doesn't break the page render.
+  if (latestBriefing?.id) {
+    recordBriefingView(founder.id, productId, latestBriefing.id).catch(() => {});
+  }
 
   const stressorRows = stressors.rows as unknown as StressorData[];
   const criticalCount = stressorRows.filter((s) => s.severity === 'critical').length;
@@ -301,6 +318,11 @@ dashboardRoutes.get('/dashboard', async (c) => {
           <div>
             <div style="font-size:1.4rem;font-weight:700;color:var(--warning);">${weeklyOutcome.expired_7d}</div>
             <div style="font-size:0.78rem;color:var(--text-dim);">decisions expired unhandled</div>
+          </div>` : ''}
+          ${briefingOutcome && briefingOutcome.fast_actions_7d > 0 ? html`
+          <div>
+            <div style="font-size:1.4rem;font-weight:700;color:var(--accent);">${briefingOutcome.fast_actions_7d}</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">acted within 5 min of reading</div>
           </div>` : ''}
         </div>
       </div>` : ''}

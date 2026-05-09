@@ -145,6 +145,16 @@ landingRoutes.get('/', (c) => {
         </div>
       </div>
 
+      <!-- Trust + privacy callout -->
+      <div style="margin-bottom:2.5rem;padding:1rem 1.25rem;border-radius:8px;background:rgba(78,204,163,0.04);border:1px solid rgba(78,204,163,0.15);">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:0.5rem;">Your data, your data</div>
+        <p style="margin:0;font-size:0.85rem;color:var(--text-dim);line-height:1.6;">
+          GitHub access tokens and integration credentials are encrypted at rest.
+          <strong style="color:var(--text-primary);">Your business data is never used to train AI models</strong> — Foundry calls Anthropic with the standard no-training API terms.
+          A DPA is available on request.
+        </p>
+      </div>
+
       <!-- CTA -->
       <div style="text-align:center;padding:2rem 0;">
         <h2 style="margin:0 0 1rem;">Your product deserves a team.</h2>
@@ -167,14 +177,56 @@ landingRoutes.get('/', (c) => {
 });
 
 pricingRoutes.get('/pricing', async (c) => {
+  // Founding Cohort remaining slots — read live from DB so the scarcity
+  // message stays honest. Falls back gracefully if the table doesn't yet
+  // exist (e.g., fresh dev DB without all migrations).
+  let foundingSlotsRemaining: number | null = null;
+  try {
+    const r = await query(
+      "SELECT COUNT(*) AS taken FROM founders WHERE tier = 'founding_cohort'",
+      []
+    );
+    const taken = Number((r.rows[0] as Record<string, unknown>)?.taken ?? 0);
+    foundingSlotsRemaining = Math.max(0, 30 - taken);
+  } catch { /* slot table not present yet; leave null */ }
+
+  // Annual mode is a query param toggle on the pricing page so the
+  // operator can A/B test by sharing the URL. Defaults to monthly.
+  const isAnnual = c.req.query('billing') === 'annual';
+  const annualMul = 12;
+  const annualDiscount = 0.83; // ~17% off — two months free
+  const fmt = (monthly: number) =>
+    isAnnual ? `$${Math.round(monthly * annualMul * annualDiscount)}` : `$${monthly}`;
+  const period = (monthly: number) =>
+    isAnnual
+      ? `/year ($${Math.round(monthly * annualDiscount)}/mo)`
+      : '/month';
+
   return c.html(publicLayout('Pricing — Foundry', html`
     <div style="max-width:960px;margin:0 auto;padding:2rem 1rem;">
       <h1 style="text-align:center;margin-bottom:0.5rem;">Give your product a team.</h1>
-      <p style="text-align:center;color:var(--text-dim);margin-bottom:2.5rem;font-size:0.95rem;">All plans include 12 AI agents, CEO briefings, and the evolution engine.</p>
+      <p style="text-align:center;color:var(--text-dim);margin-bottom:1.5rem;font-size:0.95rem;">All plans include 12 AI agents, CEO briefings, and the evolution engine.</p>
+
+      ${foundingSlotsRemaining !== null && foundingSlotsRemaining > 0 ? html`
+      <div style="text-align:center;margin-bottom:1.5rem;padding:0.75rem 1.25rem;border-radius:8px;background:rgba(78,204,163,0.06);border:1px solid rgba(78,204,163,0.2);max-width:560px;margin-left:auto;margin-right:auto;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:0.25rem;">Founding Cohort</div>
+        <div style="font-size:0.85rem;color:var(--text-primary);">
+          <strong>${foundingSlotsRemaining} of 30</strong> founding-rate slots remaining — locked at $79/mo for life.
+        </div>
+      </div>` : ''}
+
+      <!-- Monthly / Annual toggle -->
+      <div style="text-align:center;margin-bottom:2rem;">
+        <div style="display:inline-flex;border:1px solid var(--border);border-radius:999px;padding:0.25rem;">
+          <a href="/pricing" class="pricing-toggle ${!isAnnual ? 'active' : ''}" style="padding:0.4rem 1.25rem;font-size:0.85rem;border-radius:999px;text-decoration:none;color:${!isAnnual ? 'var(--bg)' : 'var(--text-dim)'};background:${!isAnnual ? 'var(--accent)' : 'transparent'};">Monthly</a>
+          <a href="/pricing?billing=annual" class="pricing-toggle ${isAnnual ? 'active' : ''}" style="padding:0.4rem 1.25rem;font-size:0.85rem;border-radius:999px;text-decoration:none;color:${isAnnual ? 'var(--bg)' : 'var(--text-dim)'};background:${isAnnual ? 'var(--accent)' : 'transparent'};">Annual <span style="opacity:0.85;font-weight:600;">(2 months free)</span></a>
+        </div>
+      </div>
+
       <div class="pricing-grid">
         <div class="pricing-card">
           <div class="pricing-tier">Solo</div>
-          <div class="pricing-price">$79<span>/month</span></div>
+          <div class="pricing-price">${fmt(79)}<span>${period(79)}</span></div>
           <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem;">One company. Full agent team. For solo founders.</p>
           <ul class="pricing-features">
             <li>1 company · 12 AI agents</li>
@@ -189,7 +241,7 @@ pricingRoutes.get('/pricing', async (c) => {
         </div>
         <div class="pricing-card featured">
           <div class="pricing-tier">Growth</div>
-          <div class="pricing-price">$199<span>/month</span></div>
+          <div class="pricing-price">${fmt(199)}<span>${period(199)}</span></div>
           <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem;">Live integrations + Intelligence Network. For scaling teams.</p>
           <ul class="pricing-features">
             <li>Everything in Solo</li>
@@ -205,7 +257,7 @@ pricingRoutes.get('/pricing', async (c) => {
         </div>
         <div class="pricing-card">
           <div class="pricing-tier">Investor-Ready</div>
-          <div class="pricing-price">$399<span>/month</span></div>
+          <div class="pricing-price">${fmt(399)}<span>${period(399)}</span></div>
           <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem;">Full platform + investor layer. For founders approaching investors.</p>
           <ul class="pricing-features">
             <li>Everything in Growth</li>
@@ -292,6 +344,26 @@ legalRoutes.get('/privacy', (c) => {
         <li>To improve Foundry through anonymized, aggregated usage patterns</li>
         <li>To send you operational digests and alerts (which you can configure in Settings)</li>
       </ul>
+
+      <h2>AI Model Training — We Don't Do It</h2>
+      <p>Your business data is never used to train AI models. Foundry sends prompts to
+        Anthropic (Claude) under the standard API terms, which contractually forbid using
+        prompt content for model training. We do not run our own training pipelines on your
+        data, do not share it with third-party AI vendors for training purposes, and do not
+        sell or license it. If Anthropic's API terms change in a way that affects this, we
+        will notify you 30 days before any change takes effect.</p>
+
+      <h2>Encryption at Rest</h2>
+      <p>Sensitive credentials — GitHub access tokens, Stripe API keys, integration
+        credentials — are encrypted at rest using AES-256-GCM with a key managed by Foundry.
+        Encryption key rotation procedure is documented and tested.</p>
+
+      <h2>Data Processing Addendum (DPA)</h2>
+      <p>For founders in GDPR-region countries or any founder who needs a DPA for their
+        own compliance program, we provide one on request. Email
+        <a href="mailto:thomas@foundry.so">thomas@foundry.so</a> with subject "DPA request"
+        and we'll send the latest version within one business day. Standard contractual
+        clauses (SCCs) are included.</p>
 
       <h2>Cross-Company Intelligence</h2>
       <p>Foundry's Decision Patterns system aggregates anonymized decision outcomes across all companies
