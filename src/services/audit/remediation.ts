@@ -6,7 +6,7 @@
 import { query, insertAuditLog } from '../../db/client.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
 import { shieldOrLog } from '../ai/prompt-shield.js';
-import { getDefaultBranchSha, createBranch, commitFiles, createPullRequest } from './github.js';
+import { getDefaultBranchSha, createBranch, commitFiles } from './github.js';
 import { scoreAudit } from './scorer.js';
 import { captureArtifact } from '../story/engine.js';
 import { nanoid } from 'nanoid';
@@ -247,12 +247,42 @@ export async function openRemediationPR(
     // Build PR body
     const prBody = buildPRBody(blockingIssue, fixSummary, files, wisdomContext);
 
-    // Open PR
-    const pr = await createPullRequest(
-      owner, repo,
-      `[Foundry] Fix ${blockingIssue.id}: ${fixSummary}`,
-      prBody, branchName, baseBranch, accessToken,
+    // Wave 4 — open PR through the V3.1 tool gateway (gatewayCreatePR).
+    // Inherits idempotency (dedup on remediationPrId so a retry doesn't
+    // open a duplicate PR), kill-switch (founder-controllable disable),
+    // classification, and audit. Falls through to the existing handler
+    // registered at module load by github-gateway.ts.
+    const productRow = await query(
+      'SELECT product_id FROM remediation_prs WHERE id = ?',
+      [remediationPrId]
     );
+    const remProductId = (productRow.rows[0] as Record<string, string> | undefined)?.product_id;
+    if (!remProductId) {
+      throw new Error(`remediation_prs row ${remediationPrId} missing product_id`);
+    }
+
+    const { gatewayCreatePR } = await import('../integration/github-gateway.js');
+    const gatewayResult = await gatewayCreatePR({
+      productId: remProductId,
+      agent: 'system',
+      repo: `${owner}/${repo}`,
+      title: `[Foundry] Fix ${blockingIssue.id}: ${fixSummary}`,
+      body: prBody,
+      head: branchName,
+      base: baseBranch,
+      accessToken,
+      // Stable dedup: re-running this code path for the same remediation
+      // returns the cached result instead of opening a second PR.
+      dedupKey: `remediation:${remediationPrId}`,
+    });
+
+    if (!gatewayResult.ok) {
+      throw new Error(
+        `gateway refused PR creation (${gatewayResult.phase}): ${gatewayResult.reason}`
+      );
+    }
+    const handlerResult = gatewayResult.result as { url: string; number: number };
+    const pr = { number: handlerResult.number, url: handlerResult.url };
 
     // Update record
     await query(

@@ -504,6 +504,167 @@ interface PreflightCheck {
   detail: string;
 }
 
+// ─── Capture agent decision fixtures ─────────────────────────────────────────
+//
+// Wave 1 #1 / Council 29 (AI safety): per-agent eval fixtures need real
+// captured input/output pairs. This command samples the most recent N
+// decisions for a product and writes a fixtures JSON the eval framework
+// can run against. Pure read; no DB mutations.
+program
+  .command('capture:fixtures <productId>')
+  .description("Capture the latest 5 decisions as eval fixtures (writes tests/evals/cases/captured-<productId>.json)")
+  .action(async (productId: string) => {
+    const productCheck = await query('SELECT id, name FROM products WHERE id = ?', [productId]);
+    if (productCheck.rows.length === 0) {
+      console.error(`Product ${productId} not found.`);
+      process.exit(1);
+    }
+    const productName = (productCheck.rows[0] as Record<string, string>).name;
+
+    // Pull the 5 most recent decisions with at least an action_draft (where
+    // there's something to test the mapping against). Join is intentional —
+    // a decision with no draft is incomplete for fixture purposes.
+    const r = await query(
+      `SELECT
+         d.id AS decision_id, d.what, d.why_now, d.gate, d.category, d.status,
+         d.recommendation, d.created_at AS decision_created_at,
+         ad.id AS draft_id, ad.title AS draft_title, ad.description AS draft_description,
+         ad.artifact_type, ad.auto_executable, ad.status AS draft_status,
+         ad.created_at AS draft_created_at
+       FROM decisions d
+       JOIN action_drafts ad ON ad.decision_id = d.id
+       WHERE d.product_id = ?
+       ORDER BY d.created_at DESC
+       LIMIT 5`,
+      [productId]
+    );
+
+    if (r.rows.length === 0) {
+      console.log(`No decision/draft pairs found for ${productName}. Run agents and approve a few decisions first.`);
+      return;
+    }
+
+    interface CapturedFixture {
+      name: string;
+      notes: string;
+      input: Record<string, unknown>;
+      expected: Record<string, unknown>;
+    }
+
+    const fixtures: CapturedFixture[] = r.rows.map((row, idx) => {
+      const rec = row as Record<string, unknown>;
+      const gate = Number(rec.gate ?? 2);
+      return {
+        name: `${productName.toLowerCase().replace(/\s+/g, '-')}-decision-${idx + 1}`,
+        notes: `Captured ${rec.decision_created_at} from product ${productName}`,
+        input: {
+          decision_id: rec.decision_id,
+          what: rec.what,
+          why_now: rec.why_now,
+          gate,
+          category: rec.category,
+          recommendation: rec.recommendation,
+        },
+        expected: {
+          draft_artifact_type: rec.artifact_type,
+          draft_auto_executable: rec.auto_executable === 1,
+          draft_status_after_voice_gate: rec.draft_status,
+        },
+      };
+    });
+
+    const fname = `tests/evals/cases/captured-${productId.slice(0, 8)}.json`;
+    const fs = await import('node:fs/promises');
+    const path = await import('node:path');
+    const outPath = path.resolve(process.cwd(), fname);
+    await fs.mkdir(path.dirname(outPath), { recursive: true });
+    await fs.writeFile(outPath, JSON.stringify(fixtures, null, 2) + '\n', 'utf-8');
+
+    console.log(`Captured ${fixtures.length} fixtures from ${productName} → ${fname}`);
+    console.log('Add a *.eval.test.ts wrapper that runs them via tests/evals/_framework.ts.');
+    console.log('See tests/evals/voice-gate.eval.test.ts for the canonical pattern.');
+  });
+
+// ─── Chaos self-test ──────────────────────────────────────────────────────────
+//
+// Wave 1 #3 / Council 30 (reliability): the chaos drill named in the
+// readiness assessment. Automates the manual-drill steps so the operator
+// can re-run them against staging or prod without forgetting any.
+//
+// The drill: temporarily disable Resend (via products.disabled_tools, which
+// the V3.1 kill-switch reads), queue a customer-facing email through the
+// gateway, observe that the gateway refuses with phase=kill_switch, then
+// re-enable. The point is to verify the trust boundary actually fires —
+// not to test Resend itself.
+program
+  .command('chaos:drill <productId>')
+  .description('Run the V3.1 trust-boundary chaos drill on a product')
+  .action(async (productId: string) => {
+    const { disableTool, enableTool } = await import(
+      '../services/outbound/kill-switch.js'
+    );
+    const { invoke } = await import('../services/outbound/gateway.js');
+
+    const productCheck = await query('SELECT id, name FROM products WHERE id = ?', [productId]);
+    if (productCheck.rows.length === 0) {
+      console.error(`Product ${productId} not found.`);
+      process.exit(1);
+    }
+    const productName = (productCheck.rows[0] as Record<string, string>).name;
+
+    console.log(`\nChaos drill on ${productName} (${productId})\n${'─'.repeat(60)}`);
+
+    // Step 1: disable send_email.
+    console.log('1. Disabling send_email via kill-switch...');
+    await disableTool(productId, 'send_email');
+
+    // Step 2: queue a synthetic email through the gateway.
+    console.log('2. Invoking gateway with a synthetic send_email request...');
+    const start = Date.now();
+    const result = await invoke({
+      productId,
+      agent: 'chaos_drill',
+      tool: 'send_email',
+      action: 'chaos drill: synthetic email that should be refused',
+      params: {
+        to: ['chaos-drill@invalid.local'],
+        subject: 'Chaos drill (you should not see this)',
+        html: '<p>Synthetic test email.</p>',
+      },
+      dedupKey: `chaos:${Date.now()}`,
+      customerExternalId: 'chaos-drill@invalid.local',
+      surface: 'email_outbound',
+      dataClass: 'customer',
+    });
+    const elapsedMs = Date.now() - start;
+
+    // Step 3: verify refusal.
+    let pass: boolean;
+    if (!result.ok && result.phase === 'kill_switch') {
+      console.log(`3. ✓ Gateway refused with phase=kill_switch (${elapsedMs}ms): ${result.reason}`);
+      pass = true;
+    } else if (result.ok) {
+      console.log(`3. ✗ Gateway ALLOWED the request — kill-switch did not fire`);
+      pass = false;
+    } else {
+      console.log(`3. ⚠ Gateway refused but with phase=${result.phase}: ${result.reason}`);
+      pass = false;
+    }
+
+    // Step 4: re-enable.
+    console.log('4. Re-enabling send_email...');
+    await enableTool(productId, 'send_email');
+
+    console.log(`${'─'.repeat(60)}`);
+    if (pass) {
+      console.log('✓ Chaos drill passed. Trust boundary is active.\n');
+      console.log('Document the result in docs/operations/runbooks/agent-silently-failing.md');
+    } else {
+      console.log('✗ Chaos drill FAILED. Investigate the gateway / kill-switch path.');
+      process.exit(1);
+    }
+  });
+
 program
   .command('preflight')
   .description('Pre-deploy readiness check: env vars, DB, migrations, secrets')
