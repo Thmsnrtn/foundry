@@ -1972,6 +1972,26 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '0 6 * * 1', // Monday 6:00 UTC
     description: 'Refresh outcome tree current_value from metrics; supersede stale branches',
   },
+  // Wave 4 / Council 8: data retention policy — archive/delete old rows
+  // from agent_messages, audit_log, briefing_decision_links,
+  // ai_cost_log, integration_events. Daily, batch-bounded.
+  retention_policy: {
+    fn: async () => {
+      const { runRetentionPolicy } = await import(
+        '../services/maintenance/retention.js'
+      );
+      const results = await runRetentionPolicy();
+      const total = results.reduce((acc, r) => acc + r.deleted, 0);
+      if (total > 0) {
+        logger.info(`retention_policy: deleted ${total} rows total`, {
+          jobName: 'retention_policy',
+          per_table: results,
+        });
+      }
+    },
+    schedule: '0 5 * * *', // Daily at 5 UTC
+    description: 'Drop rows past the per-table retention horizon',
+  },
   // Wave 2 / Council 16: Foundry's own customer onboarding sequence
   welcome_sequence_tick: {
     fn: async () => {

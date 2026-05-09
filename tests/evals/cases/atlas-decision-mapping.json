@@ -1,0 +1,45 @@
+[
+  {
+    "name": "high-confidence-fix-becomes-gate-1",
+    "notes": "Atlas finds a high-confidence security gap; output mapping should set gate=1 for notify-and-execute",
+    "input": {
+      "agent_response": {
+        "domain_health_score": 78,
+        "observations": ["dependency CVE detected"],
+        "recommended_actions": [
+          { "type": "remediation", "title": "Patch vulnerable dependency", "confidence": 0.92 }
+        ],
+        "briefing_priority": "high"
+      }
+    },
+    "expected": { "decision_gate": 1, "is_high_priority": true }
+  },
+  {
+    "name": "low-confidence-fix-becomes-gate-2",
+    "notes": "Atlas finds a possible issue; gate=2 for review",
+    "input": {
+      "agent_response": {
+        "domain_health_score": 65,
+        "observations": ["test coverage degraded"],
+        "recommended_actions": [
+          { "type": "code_change", "title": "Add tests for new module", "confidence": 0.55 }
+        ],
+        "briefing_priority": "normal"
+      }
+    },
+    "expected": { "decision_gate": 2, "is_high_priority": false }
+  },
+  {
+    "name": "no-recommendations-no-decisions",
+    "notes": "Healthy state with no actions; the briefing entry exists but no decision",
+    "input": {
+      "agent_response": {
+        "domain_health_score": 92,
+        "observations": ["no issues this period"],
+        "recommended_actions": [],
+        "briefing_priority": "low"
+      }
+    },
+    "expected": { "decision_gate": null, "is_high_priority": false }
+  }
+]

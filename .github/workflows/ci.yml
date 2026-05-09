@@ -20,3 +20,21 @@ jobs:
       - run: npm run build
       - run: npm test -- --run
       - run: npm audit --audit-level=high || true
+
+  schema-drift:
+    name: Schema snapshot up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y sqlite3
+      - name: Regenerate snapshot
+        run: bash scripts/schema-snapshot.sh
+      - name: Verify clean diff
+        run: |
+          if ! git diff --exit-code docs/db/schema.snapshot.sql; then
+            echo ""
+            echo "❌ Schema snapshot is out of date."
+            echo "   Run: bash scripts/schema-snapshot.sh"
+            echo "   Then commit the updated docs/db/schema.snapshot.sql."
+            exit 1
+          fi
