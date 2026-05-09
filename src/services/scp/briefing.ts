@@ -7,6 +7,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { buildBriefingHeadlinePrompt } from '../../prompts/briefing-headline.js';
 import { buildDestinationContext } from '../destination/briefing-context.js';
 import type {
   SCPBriefing,
@@ -217,19 +218,21 @@ export async function generateDailyBriefing(
 
   if (agentContributions.length > 0) {
     try {
-      const observationsList = agentContributions
-        .filter((c) => c.contribution)
-        .map((c) => `${c.display_name}: ${c.contribution}`)
-        .join('\n');
-
-      const destinationFrame = destinationBlock
-        ? `\nNorth Star context:\n${destinationBlock}\n`
-        : '';
+      // Centralized prompt builder — see src/prompts/briefing-headline.ts.
+      // The builder is testable in isolation via tests/evals/.
+      const prompt = buildBriefingHeadlinePrompt({
+        companyName,
+        observations: agentContributions.map((c) => ({
+          display_name: c.display_name,
+          contribution: c.contribution ?? null,
+        })),
+        destinationBlock,
+      });
 
       const headlineResponse = await callSonnet(
-        'You write precise, specific one-line business summaries. No generic statements.',
-        `In max 120 characters, summarize the key development for ${companyName} today based on these agent observations:\n${observationsList}\n${destinationFrame}\nBe specific and concrete, not generic. When North Star context is provided, prefer phrasings that reference progress or pace toward it. Return only the headline text.`,
-        150,
+        prompt.system,
+        prompt.user,
+        prompt.maxTokens,
         productId
       );
       headline = headlineResponse.content.trim().slice(0, 120);
