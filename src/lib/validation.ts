@@ -37,10 +37,15 @@ export const recordOutcomeSchema = z.object({
 
 // ─── Onboarding ─────────────────────────────────────────────────────────────
 
+/**
+ * Body schema for POST /onboarding/select-repo. The GitHub access token
+ * is no longer carried in the body — it lives in the __gh_pending httpOnly
+ * cookie set during OAuth (SEC-10). The body only carries the chosen
+ * repo path and an optional market category.
+ */
 export const selectRepoSchema = z.object({
   repo_owner: z.string().min(1).max(200).regex(/^[\w.-]+$/),
   repo_name: z.string().min(1).max(200).regex(/^[\w.-]+$/),
-  access_token: z.string().min(1),
   market_category: z.string().max(200).optional(),
 });
 

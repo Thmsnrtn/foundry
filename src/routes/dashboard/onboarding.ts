@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { validateBody } from '../../middleware/validate.js';
+import { selectRepoSchema, addCompetitorsSchema } from '../../lib/validation.js';
 import { query } from '../../db/client.js';
 import { listRepos } from '../../services/audit/github.js';
 import { runAudit } from '../../services/audit/engine.js';
@@ -209,9 +210,11 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
 });
 
 // Step 3: Select repository
-onboardingRoutes.post('/onboarding/select-repo', async (c) => {
+onboardingRoutes.post('/onboarding/select-repo', validateBody(selectRepoSchema), async (c) => {
   const founder = c.get('founder');
-  const body = await parseBody(c) as { repo_owner: string; repo_name: string; market_category?: string };
+  // selectRepoSchema enforces repo_owner / repo_name match /^[\w.-]+$/ so
+  // the URL we construct below cannot be path-injected.
+  const body = c.get('validatedBody' as never) as z.infer<typeof selectRepoSchema>;
 
   // SEC-10: Read GitHub token from httpOnly cookie (never from form body / DOM)
   const encryptedGhToken = getCookie(c, '__gh_pending');
@@ -291,27 +294,53 @@ onboardingRoutes.get('/onboarding/competitors', async (c) => {
 });
 
 // Step 4: Identify competitors
+//
+// Accepts either:
+//   - JSON: { product_id, competitors: [{ name, website?, positioning? }, ...] }
+//   - Form fields: product_id, competitor_1..competitor_5 (or
+//     'competitors[i].name' for richer payloads)
+//
+// Validation runs after normalization so both shapes pass through the same
+// guardrails (max 10 competitors, max field lengths, optional URL well-formed).
 onboardingRoutes.post('/onboarding/competitors', async (c) => {
   const founder = c.get('founder');
   const raw = await parseBody(c);
   const productId = raw.product_id as string;
+  if (!productId || typeof productId !== 'string' || productId.length > 64) {
+    return c.json({ error: 'Invalid product_id' }, 400);
+  }
 
   const prodCheck = await query('SELECT id FROM products WHERE id = ? AND owner_id = ?', [productId, founder.id]);
   if (prodCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  // Support both JSON array and flat form fields (competitor_1, competitor_2, ...)
-  let competitors: Array<{ name: string; website?: string; positioning?: string }>;
+  // Normalize JSON array vs flat form fields into a single shape, then run
+  // the addCompetitorsSchema validator over it.
+  let competitorsRaw: Array<{ name: string; website?: string; positioning?: string }>;
   if (Array.isArray(raw.competitors)) {
-    competitors = raw.competitors as typeof competitors;
+    competitorsRaw = raw.competitors as typeof competitorsRaw;
   } else {
-    competitors = [];
+    competitorsRaw = [];
     for (let i = 0; i < 5; i++) {
       const name = (raw[`competitors[${i}].name`] ?? raw[`competitor_${i + 1}`]) as string | undefined;
-      if (name) competitors.push({ name });
+      if (name) competitorsRaw.push({ name });
     }
   }
 
-  for (const comp of competitors) {
+  const validation = addCompetitorsSchema.safeParse({
+    product_id: productId,
+    competitors: competitorsRaw,
+  });
+  if (!validation.success) {
+    return c.json(
+      {
+        error: 'Validation failed',
+        details: validation.error.flatten().fieldErrors,
+      },
+      422
+    );
+  }
+
+  for (const comp of validation.data.competitors ?? []) {
     if (!comp.name) continue;
     await query(
       `INSERT INTO competitors (id, product_id, name, website, positioning) VALUES (?, ?, ?, ?, ?)`,
