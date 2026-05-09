@@ -1,12 +1,16 @@
 // =============================================================================
 // FOUNDRY — Resend Email Integration
-// Queues and executes outbound email actions via Resend API.
+// Queues outbound email actions and executes them through the V3.1 tool
+// gateway: kill-switch → classification → communication budget →
+// idempotency → registered send_email handler → audit.
 // =============================================================================
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { getIntegration } from './fabric.js';
 import { withRetry } from '../resilience.js';
+import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/gateway.js';
+import { log } from '../../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,11 +23,22 @@ export interface EmailMetrics {
   click_rate: number;
 }
 
+interface SendEmailParams {
+  to: string[];
+  subject: string;
+  html: string;
+  from?: string;
+}
+
+interface ResendSuccess {
+  message_id: string;
+  raw: Record<string, unknown>;
+}
+
+const RESEND_TIMEOUT_MS = 10_000;
+
 // ─── Connection Check ─────────────────────────────────────────────────────────
 
-/**
- * Check if Resend is connected and active for a product.
- */
 export async function isResendConnected(productId: string): Promise<boolean> {
   const integration = await getIntegration(productId, 'resend');
   return integration !== null && integration.status === 'active';
@@ -97,18 +112,23 @@ export async function queueEmail(
   return id;
 }
 
-// ─── Email Execution ──────────────────────────────────────────────────────────
+// ─── Email Execution (gateway-routed) ─────────────────────────────────────────
 
 /**
- * Execute a pending email action.
- * Uses Resend API if RESEND_API_KEY is set, otherwise logs to console.
+ * Execute a pending email action through the tool gateway.
+ *
+ * Flow: load the outbound_actions row → build a GatewayRequest with the
+ * action ID as dedup key (at-most-once per decision) and the first
+ * recipient as customer_external_id (per-customer-week budget). The
+ * gateway runs kill-switch / classification / budget / idempotency
+ * pre-flights, then dispatches to the registered 'send_email' handler
+ * which calls the Resend API with explicit timeout + retry.
  */
 export async function executeEmailSend(
   actionId: string,
 ): Promise<{ success: boolean; message_id?: string }> {
-  // Fetch the action
   const result = await query(
-    `SELECT oa.*, i.config_json, i.credentials_json
+    `SELECT oa.*, i.config_json
      FROM outbound_actions oa
      LEFT JOIN integrations i ON i.product_id = oa.product_id AND i.name = 'resend'
      WHERE oa.id = ?`,
@@ -120,79 +140,160 @@ export async function executeEmailSend(
   }
 
   const row = result.rows[0] as Record<string, unknown>;
-  let parameters: Record<string, unknown> = {};
+  const productId = row.product_id as string;
+  const agentName = (row.agent_name as string) ?? 'system';
+  let parameters: SendEmailParams = { to: [], subject: '', html: '' };
   try {
-    parameters = JSON.parse(row.parameters_json as string || '{}');
+    parameters = JSON.parse(row.parameters_json as string || '{}') as SendEmailParams;
   } catch {
-    parameters = {};
+    parameters = { to: [], subject: '', html: '' };
   }
+  const toList = Array.isArray(parameters.to) ? parameters.to : [String(parameters.to)];
+  const primaryRecipient = toList[0];
 
-  const resendApiKey = process.env.RESEND_API_KEY;
   const now = new Date().toISOString();
-
   await query(
     `UPDATE outbound_actions SET status = 'executing', approved_by = COALESCE(approved_by, 'auto'), approved_at = COALESCE(approved_at, ?), executed_at = ? WHERE id = ?`,
     [now, now, actionId],
   );
 
-  if (!resendApiKey) {
-    // Log mode — no actual send
-    console.log(`[Resend] Would send email:`, {
-      to: parameters.to,
-      subject: parameters.subject,
-      htmlLength: (parameters.html as string)?.length ?? 0,
-    });
+  const req: GatewayRequest = {
+    productId,
+    agent: agentName,
+    tool: 'send_email',
+    action: `send "${parameters.subject ?? ''}" to ${primaryRecipient ?? 'unknown'}`,
+    params: { ...parameters, to: toList },
+    dedupKey: actionId,                      // at-most-once per outbound_actions row
+    customerExternalId: primaryRecipient,    // per-customer-week budget
+    surface: 'email_outbound',
+    dataClass: 'customer',
+  };
 
+  const gatewayResult = await invoke(req);
+
+  if (!gatewayResult.ok) {
     await query(
-      `UPDATE outbound_actions SET status = 'executed', result_json = ? WHERE id = ?`,
-      [JSON.stringify({ mode: 'logged', message: 'No RESEND_API_KEY set — email logged only' }), actionId],
+      `UPDATE outbound_actions SET status = 'refused', result_json = ? WHERE id = ?`,
+      [JSON.stringify({ phase: gatewayResult.phase, reason: gatewayResult.reason }), actionId],
     );
-
-    return { success: true };
+    log.warn('resend.send_email.refused', {
+      productId,
+      actionId,
+      phase: gatewayResult.phase,
+      reason: gatewayResult.reason,
+    });
+    if (toList.length > 1) {
+      log.warn('resend.send_email.bulk_partial_budget', {
+        productId,
+        actionId,
+        recipientCount: toList.length,
+        note: 'budget check applied to first recipient only',
+      });
+    }
+    // Bubble up only as failed return — pre-flight refusal is not an
+    // exception path.
+    return { success: false };
   }
 
-  // Actual Resend API call
-  try {
-    const response = await withRetry(
-      () => fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: (parameters.from as string) ?? 'Foundry <noreply@foundry.app>',
-          to: parameters.to,
-          subject: parameters.subject,
-          html: parameters.html,
-        }),
-      }),
-    );
+  const handlerResult = gatewayResult.result as ResendSuccess | { logged: true } | null;
 
-    const responseData = await response.json() as Record<string, unknown>;
-
-    if (!response.ok) {
-      throw new Error(`Resend API error: ${JSON.stringify(responseData)}`);
-    }
-
-    const messageId = responseData.id as string;
-
+  if (handlerResult && 'message_id' in handlerResult) {
     await query(
       `UPDATE outbound_actions SET status = 'executed', result_json = ? WHERE id = ?`,
-      [JSON.stringify({ message_id: messageId, resend_response: responseData }), actionId],
+      [
+        JSON.stringify({
+          message_id: handlerResult.message_id,
+          resend_response: handlerResult.raw,
+          gateway_invocation_id: gatewayResult.invocation_id,
+          cached: gatewayResult.cached,
+        }),
+        actionId,
+      ],
+    );
+    return { success: true, message_id: handlerResult.message_id };
+  }
+
+  // Logged-mode (no API key) or unrecognized result: still mark executed.
+  await query(
+    `UPDATE outbound_actions SET status = 'executed', result_json = ? WHERE id = ?`,
+    [
+      JSON.stringify({
+        mode: 'logged',
+        message: 'No RESEND_API_KEY set — email logged only',
+        gateway_invocation_id: gatewayResult.invocation_id,
+        cached: gatewayResult.cached,
+      }),
+      actionId,
+    ],
+  );
+  return { success: true };
+}
+
+// ─── send_email Handler (registered with the gateway) ────────────────────────
+
+/**
+ * The actual Resend HTTP call. Registered as the gateway's 'send_email'
+ * tool handler at module load. Explicit 10-second timeout per Collison's
+ * recommendation; existing withRetry layered on top for transient failures.
+ *
+ * Returns either a ResendSuccess (real send) or { logged: true } in the
+ * no-API-key dev path.
+ */
+async function sendEmailHandler(req: GatewayRequest): Promise<ResendSuccess | { logged: true }> {
+  const params = req.params as unknown as SendEmailParams;
+  const apiKey = process.env.RESEND_API_KEY;
+
+  if (!apiKey) {
+    log.info('resend.send_email.logged_only', {
+      productId: req.productId,
+      to: params.to,
+      subject: params.subject,
+      htmlLength: (params.html ?? '').length,
+    });
+    return { logged: true };
+  }
+
+  let lastError: unknown;
+  try {
+    const response = await withRetry(
+      () =>
+        fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: params.from ?? 'Foundry <noreply@foundry.app>',
+            to: params.to,
+            subject: params.subject,
+            html: params.html,
+          }),
+        }),
+      { timeoutMs: RESEND_TIMEOUT_MS, maxRetries: 2 },
     );
 
-    return { success: true, message_id: messageId };
+    const responseData = (await response.json()) as Record<string, unknown>;
+
+    if (!response.ok) {
+      throw new Error(`Resend API error ${response.status}: ${JSON.stringify(responseData)}`);
+    }
+
+    const messageId = responseData.id as string | undefined;
+    if (!messageId) {
+      throw new Error(`Resend response missing id: ${JSON.stringify(responseData)}`);
+    }
+
+    log.info('resend.send_email.success', {
+      productId: req.productId,
+      messageId,
+      to: params.to,
+    });
+    return { message_id: messageId, raw: responseData };
   } catch (err) {
-    const errorMsg = String(err);
-
-    await query(
-      `UPDATE outbound_actions SET status = 'failed', result_json = ? WHERE id = ?`,
-      [JSON.stringify({ error: errorMsg }), actionId],
-    );
-
-    // Update error tracking on integration
-    const actionRow = result.rows[0] as Record<string, unknown>;
+    lastError = err;
+    // Update integration error tracking. The gateway audit row is already
+    // written by gateway.invoke; this tracks per-integration error count.
     await query(
       `UPDATE integrations SET
         last_error = ?,
@@ -200,12 +301,15 @@ export async function executeEmailSend(
         status = 'errored',
         updated_at = ?
        WHERE product_id = ? AND name = 'resend'`,
-      [errorMsg, now, actionRow.product_id as string],
+      [String(err), new Date().toISOString(), req.productId],
     );
-
-    throw err;
+    throw lastError;
   }
 }
+
+// Side-effect at module load: register the handler. The gateway's
+// registry is process-global; importing this module wires the tool.
+registerToolHandler('send_email', sendEmailHandler);
 
 // ─── Email Metrics ────────────────────────────────────────────────────────────
 
