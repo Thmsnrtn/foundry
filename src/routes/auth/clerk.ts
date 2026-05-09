@@ -120,19 +120,30 @@ authRoutes.post('/auth/webhook', async (c) => {
   }
 
   // Verify HMAC signature
-  const { createHmac } = await import('node:crypto');
+  const { createHmac, timingSafeEqual } = await import('node:crypto');
   const signedContent = `${svixId}.${svixTimestamp}.${rawBody}`;
   // Clerk webhook secrets are prefixed with "whsec_" and base64-encoded
   const secretBytes = Buffer.from(webhookSecret.replace('whsec_', ''), 'base64');
   const expectedSignature = createHmac('sha256', secretBytes)
     .update(signedContent)
     .digest('base64');
+  const expectedBuf = Buffer.from(expectedSignature, 'base64');
 
-  // Svix sends multiple signatures separated by spaces (v1,signature)
+  // Svix sends multiple signatures separated by spaces, each as "vN,signature"
+  // Compare in constant time to prevent timing-side-channel attacks against
+  // the HMAC secret.
   const signatures = svixSignature.split(' ');
   const verified = signatures.some((sig) => {
     const [, sigValue] = sig.split(',');
-    return sigValue === expectedSignature;
+    if (!sigValue) return false;
+    let provided: Buffer;
+    try {
+      provided = Buffer.from(sigValue, 'base64');
+    } catch {
+      return false;
+    }
+    if (provided.length !== expectedBuf.length) return false;
+    return timingSafeEqual(provided, expectedBuf);
   });
 
   if (!verified) {
