@@ -5,15 +5,24 @@
 
 import { createMiddleware } from 'hono/factory';
 import { nanoid } from 'nanoid';
+import { withTrace, newTraceId } from '../lib/trace.js';
 
 /**
- * Request ID middleware. Assigns a unique ID to every request for log correlation.
+ * Request ID + trace context middleware. Assigns a unique trace ID to every
+ * request, returns it in X-Request-ID, and installs an AsyncLocalStorage
+ * trace context so downstream services (logger, AI client, DB) auto-tag
+ * their output with the trace ID without explicit threading.
  */
 export const requestIdMiddleware = createMiddleware(async (c, next) => {
-  const requestId = c.req.header('X-Request-ID') ?? nanoid(12);
-  c.set('requestId', requestId);
-  c.header('X-Request-ID', requestId);
-  await next();
+  const incoming = c.req.header('X-Request-ID');
+  const traceId = incoming ?? newTraceId();
+  // Per-request tag: stable across the full lifecycle even if downstream
+  // generates additional internal IDs.
+  c.set('requestId', traceId);
+  c.header('X-Request-ID', traceId);
+  // Wrap the rest of the request inside the trace scope. Anything async
+  // run from `next()` sees this context via currentTrace().
+  await withTrace({ traceId }, () => next());
 });
 
 /**

@@ -1,7 +1,11 @@
 // =============================================================================
 // FOUNDRY — Structured Logger
 // JSON-based structured logging for production observability.
+// Auto-tags entries with the current trace ID (see src/lib/trace.ts) so
+// agent run → AI call → DB query are linkable across the request lifecycle.
 // =============================================================================
+
+import { currentTrace } from './trace.js';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -10,8 +14,10 @@ interface LogEntry {
   message: string;
   timestamp: string;
   requestId?: string;
+  traceId?: string;
   founderId?: string;
   productId?: string;
+  agentName?: string;
   path?: string;
   method?: string;
   statusCode?: number;
@@ -36,6 +42,16 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 function emit(entry: LogEntry): void {
   if (LOG_LEVELS[entry.level] < MIN_LEVEL) return;
+
+  // Pull trace context if present. Explicit fields on the entry win over
+  // ambient context — callers can always override.
+  const traceCtx = currentTrace();
+  if (traceCtx) {
+    entry.traceId = entry.traceId ?? traceCtx.traceId;
+    entry.founderId = entry.founderId ?? traceCtx.founderId;
+    entry.productId = entry.productId ?? traceCtx.productId;
+    if (traceCtx.agentName && !entry.agentName) entry.agentName = traceCtx.agentName;
+  }
 
   if (IS_PRODUCTION) {
     // Structured JSON for production log aggregation

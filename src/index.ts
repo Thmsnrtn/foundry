@@ -169,6 +169,10 @@ const app = new Hono();
 
 // Global middleware
 import { securityHeaders } from './middleware/security-headers.js';
+import { requestIdMiddleware } from './middleware/security.js';
+// Trace context first — every downstream log line / AI call / error
+// report picks up the trace ID via AsyncLocalStorage.
+app.use('*', requestIdMiddleware);
 app.use('*', securityHeaders);
 app.use('*', honoLogger());
 app.use('*', cors({

@@ -6,6 +6,8 @@
 
 import { z } from 'zod';
 import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
+import { log } from '../../lib/logger.js';
+import { reportError } from '../../lib/error-reporter.js';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
@@ -109,6 +111,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
 
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
+  const startedAt = Date.now();
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -155,6 +158,15 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
         data.usage?.completion_tokens ?? 0,
       );
 
+      log.info('ai_call.complete', {
+        model: config.model,
+        productId: config.productId,
+        attempt,
+        durationMs: Date.now() - startedAt,
+        inputTokens: data.usage?.prompt_tokens ?? 0,
+        outputTokens: data.usage?.completion_tokens ?? 0,
+      });
+
       return {
         content: textContent,
         model: config.model,
@@ -169,15 +181,37 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
       lastError = err instanceof Error ? err : new Error(String(err));
 
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
-      if (status && status < 500 && status !== 429) throw lastError;
+      if (status && status < 500 && status !== 429) {
+        log.error('ai_call.failed_non_retryable', lastError, {
+          model: config.model,
+          productId: config.productId,
+          status,
+        });
+        reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { status } });
+        throw lastError;
+      }
 
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
+        log.warn('ai_call.retry', {
+          model: config.model,
+          productId: config.productId,
+          attempt,
+          status,
+          delayMs: Math.round(delay),
+          error: lastError.message,
+        });
         await new Promise((r) => setTimeout(r, delay));
       }
     }
   }
 
+  log.error('ai_call.exhausted', lastError, {
+    model: config.model,
+    productId: config.productId,
+    attempts: MAX_RETRIES + 1,
+  });
+  reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts: MAX_RETRIES + 1 } });
   throw lastError ?? new Error('AI call failed after retries');
 }
 
