@@ -5,6 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { logger } from '../logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -114,7 +115,7 @@ Does this proposed change comply with the SCP constitution?`;
     };
   } catch (err) {
     // Fail-closed: if LLM call errors, REJECT the change
-    console.error('[SCP GATES] Constitution gate LLM error:', err);
+    logger.error('[SCP GATES] Constitution gate LLM error', { error: String(err) });
     return {
       gate: 'constitution',
       passed: false,
@@ -187,7 +188,7 @@ Does this proposed change CONTRADICT any of these golden lessons? Answer YES or 
     };
   } catch (err) {
     // Regression gate does NOT fail-closed — pass on error
-    console.error('[SCP GATES] Regression gate LLM error:', err);
+    logger.error('[SCP GATES] Regression gate LLM error', { error: String(err) });
     return {
       gate: 'regression',
       passed: true,
@@ -374,7 +375,7 @@ Is this change safe?`;
     };
   } catch (err) {
     // Fail-closed: if error, REJECT
-    console.error('[SCP GATES] Safety gate LLM error:', err);
+    logger.error('[SCP GATES] Safety gate LLM error', { error: String(err) });
     return {
       gate: 'safety',
       passed: false,

@@ -97,7 +97,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
 
         result = await getFounderByClerkId(clerkUserId);
       } catch (e) {
-        console.error('Auto-provision founder failed:', e);
+        logger.error('Auto-provision founder failed', { error: String(e) });
       }
     }
 

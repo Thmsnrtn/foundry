@@ -7,6 +7,7 @@ import { nanoid } from 'nanoid';
 import { query, batch } from '../../db/client.js';
 import { isBlocked } from '../discipline/freeze-periods.js';
 import { queueProposal } from '../discipline/proposals-queue.js';
+import { logger } from '../logger.js';
 import type {
   AgentName,
   ProvisionResult,
@@ -186,7 +187,7 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
     };
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    console.error(`[provisioner] provisionSCP(${productId}) failed: ${error}`);
+    logger.error(`[provisioner] provisionSCP failed`, { productId, error });
     return {
       success: false,
       productId,

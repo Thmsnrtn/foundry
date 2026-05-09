@@ -9,6 +9,7 @@ import { buildWisdomContext } from '../wisdom/dna.js';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { getPlaintextToken } from '../../lib/crypto.js';
+import { logger } from '../logger.js';
 import type { AuditScore, Product } from '../../types/index.js';
 import type { AnalysisPipelineOutput, PriorAuditContext } from '../../types/ai.js';
 
@@ -129,7 +130,7 @@ export async function runAudit(
             [nanoid(), product.id, JSON.stringify({ issue_id: issue.id, remediation_pr_id: remId }), new Date().toISOString()]
           );
         }).catch((err) => {
-          console.error(`[engine] remediation fix failed for issue ${issue.id}:`, err);
+          logger.error(`[engine] remediation fix failed`, { issueId: issue.id, error: String(err) });
         });
       }
     }

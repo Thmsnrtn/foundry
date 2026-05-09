@@ -11,6 +11,7 @@ import { syncPostHogMetrics } from './posthog.js';
 import { syncIntercomMetrics } from './intercom.js';
 import { syncLinearMetrics } from './linear.js';
 import { decryptCredentialPayload } from '../encryption.js';
+import { logger } from '../logger.js';
 import type { IntegrationType } from '../../types/index.js';
 
 interface IntegrationRow {
@@ -41,7 +42,7 @@ export async function syncProductIntegrations(productId: string): Promise<void> 
 // ─── Sync All Products (Cron) ─────────────────────────────────────────────────
 
 export async function syncAllIntegrations(): Promise<void> {
-  console.log('[integrations] sync_all starting');
+  logger.info('[integrations] sync_all starting', { jobName: 'integrations_sync_all' });
   const products = await getAllActiveProducts();
 
   for (const productRow of products.rows) {
@@ -49,11 +50,11 @@ export async function syncAllIntegrations(): Promise<void> {
     try {
       await syncProductIntegrations(productId);
     } catch (err) {
-      console.error(`[integrations] sync_all error for product ${productId}:`, err);
+      logger.error('[integrations] sync_all error', { jobName: 'integrations_sync_all', productId, error: String(err) });
     }
   }
 
-  console.log('[integrations] sync_all complete');
+  logger.info('[integrations] sync_all complete', { jobName: 'integrations_sync_all' });
 }
 
 // ─── Single Integration Sync ─────────────────────────────────────────────────
