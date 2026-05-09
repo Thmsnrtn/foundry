@@ -1,0 +1,62 @@
+[
+  {
+    "name": "always-evolve-on-correction",
+    "notes": "founder said something is wrong — evolve regardless of session count",
+    "input": { "totalSessions": 200, "observationsFound": false, "isCorrection": true, "hasMajorEvent": false },
+    "expected": true
+  },
+  {
+    "name": "early-aggressive-session-0",
+    "notes": "first 10 sessions: always evolve to learn fast",
+    "input": { "totalSessions": 0, "observationsFound": false, "isCorrection": false, "hasMajorEvent": false },
+    "expected": true
+  },
+  {
+    "name": "early-aggressive-session-9",
+    "notes": "still in the early window (< 10)",
+    "input": { "totalSessions": 9, "observationsFound": false, "isCorrection": false, "hasMajorEvent": false },
+    "expected": true
+  },
+  {
+    "name": "moderate-with-observations",
+    "notes": "sessions 10-49: evolve only when observations were extracted",
+    "input": { "totalSessions": 25, "observationsFound": true, "isCorrection": false, "hasMajorEvent": false },
+    "expected": true
+  },
+  {
+    "name": "moderate-without-observations",
+    "notes": "sessions 10-49: skip when no observations",
+    "input": { "totalSessions": 25, "observationsFound": false, "isCorrection": false, "hasMajorEvent": false },
+    "expected": false
+  },
+  {
+    "name": "moderate-boundary-session-49",
+    "notes": "boundary: still moderate window",
+    "input": { "totalSessions": 49, "observationsFound": true, "isCorrection": false, "hasMajorEvent": false },
+    "expected": true
+  },
+  {
+    "name": "conservative-no-major-event",
+    "notes": "session >= 50, observations found but no major event → skip",
+    "input": { "totalSessions": 100, "observationsFound": true, "isCorrection": false, "hasMajorEvent": false },
+    "expected": false
+  },
+  {
+    "name": "conservative-with-major-event",
+    "notes": "session >= 50: evolve only when observations + major event",
+    "input": { "totalSessions": 100, "observationsFound": true, "isCorrection": false, "hasMajorEvent": true },
+    "expected": true
+  },
+  {
+    "name": "conservative-major-event-without-observations",
+    "notes": "session >= 50: major event without observations → skip",
+    "input": { "totalSessions": 100, "observationsFound": false, "isCorrection": false, "hasMajorEvent": true },
+    "expected": false
+  },
+  {
+    "name": "conservative-correction-overrides-everything",
+    "notes": "founder correction always overrides session-count gate",
+    "input": { "totalSessions": 1000, "observationsFound": false, "isCorrection": true, "hasMajorEvent": false },
+    "expected": true
+  }
+]
