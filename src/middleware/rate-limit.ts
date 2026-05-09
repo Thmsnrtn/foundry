@@ -66,3 +66,21 @@ export const publicRateLimit = rateLimit(60, 60000);   // 60 req/min for public 
 export const apiRateLimit = rateLimit(120, 60000);      // 120 req/min for authenticated API
 export const webhookRateLimit = rateLimit(300, 60000);  // 300 req/min for webhooks
 export const authRateLimit = rateLimit(10, 60000);      // 10 req/min for auth endpoints
+
+/**
+ * AI rate limit — 30 requests / hour per founder. Front-stop to the
+ * AI client's per-product daily cost ceiling (which is a backstop): a
+ * confused founder hammering an "Ask AI" button is bounded to one call
+ * every two minutes on average, plenty for real interaction. The cost
+ * ceiling still catches a coordinated abuse case where the per-user
+ * limit is bypassed.
+ *
+ * Keys on the founder id when authenticated, falls back to IP for
+ * pre-auth paths so an unauthenticated burst can't drain quota.
+ */
+export const aiRateLimit = rateLimit(30, 60 * 60 * 1000, (c) => {
+  const founder = c.get('founder' as never) as { id?: string } | undefined;
+  if (founder?.id) return `ai:founder:${founder.id}`;
+  const ip = c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
+  return `ai:ip:${ip}`;
+});

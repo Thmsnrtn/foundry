@@ -18,7 +18,7 @@ import { logger } from './services/logger.js';
 
 // Middleware
 import { authMiddleware } from './middleware/auth.js';
-import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit } from './middleware/rate-limit.js';
+import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateLimit } from './middleware/rate-limit.js';
 import { internalMiddleware } from './middleware/internal.js';
 
 // Public routes (no auth)
@@ -344,6 +344,17 @@ app.use('/network/*', authMiddleware);
 app.use('/exit', authMiddleware);
 app.use('/exit/*', authMiddleware);
 app.use('/api/*', apiRateLimit);
+
+// Per-user AI rate limit (30/hr) — front-stop to the AI client's
+// per-product daily cost ceiling. Mounted AFTER auth so the founder
+// id is available on the context for the keyFn. Routes covered: any
+// path that issues an LLM call directly from a user-driven request.
+app.use('/api/ask/*', aiRateLimit);
+app.use('/api/chat/*', aiRateLimit);
+app.use('/decisions/*', aiRateLimit);          // action-draft generation triggers Sonnet
+app.use('/validate', aiRateLimit);
+app.use('/validate/*', aiRateLimit);
+app.use('/plan/*', aiRateLimit);                // weekly plan generation
 app.use('/founder-ops', authMiddleware);
 app.use('/founder-ops/*', authMiddleware);
 

@@ -399,5 +399,23 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   await startTour(founder.id, body.product_id);
   generateDimensionHints(auditScore.id, body.product_id).catch(() => {});
 
+  // Trigger an immediate first briefing so the founder doesn't wait for
+  // the next 5:30 UTC cron tick. Fire-and-forget — the redirect must not
+  // block on a 10-20s LLM call. The briefing card on the dashboard will
+  // populate on the next page load (typically <60s away).
+  (async () => {
+    try {
+      const { generateDailyBriefing } = await import('../../services/scp/briefing.js');
+      await generateDailyBriefing(body.product_id);
+    } catch (err) {
+      // Non-fatal: the daily cron will produce a briefing tomorrow regardless.
+      const { logger } = await import('../../services/logger.js');
+      logger.warn('immediate post-onboarding briefing failed', {
+        productId: body.product_id,
+        error: String(err),
+      });
+    }
+  })();
+
   return c.redirect('/dashboard?tour=1');
 });
