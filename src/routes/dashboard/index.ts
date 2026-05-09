@@ -9,6 +9,7 @@ import { setCookie, getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
 import { computeSignal, getSignalHistory, getDailyInsight, getPreviousSignalScore } from '../../services/signal.js';
+import { computeWeeklyOutcome } from '../../services/intelligence/weekly-outcome.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { stressorReport, milestoneToastScript, type StressorData } from '../../views/components.js';
 import type { SignalComponents } from '../../services/signal.js';
@@ -138,7 +139,7 @@ dashboardRoutes.get('/dashboard', async (c) => {
   const ctx = await getLayoutContext(founder, 'dashboard', 'Dashboard', undefined, c);
   const productId = ctx.productId!;
 
-  const [signal, stressors, history, dailyInsight, previousScore, latestBriefing] = await Promise.all([
+  const [signal, stressors, history, dailyInsight, previousScore, latestBriefing, weeklyOutcome] = await Promise.all([
     computeSignal(productId),
     getActiveStressors(productId),
     getSignalHistory(productId, 60),
@@ -152,6 +153,7 @@ dashboardRoutes.get('/dashboard', async (c) => {
         return null;
       }
     })(),
+    computeWeeklyOutcome(productId).catch(() => null),
   ]);
 
   const stressorRows = stressors.rows as unknown as StressorData[];
@@ -275,6 +277,33 @@ dashboardRoutes.get('/dashboard', async (c) => {
           ${dailyInsight.action ? html`<div class="daily-insight-action">${dailyInsight.action}</div>` : ''}
         </div>
       </details>` : ''}
+
+      ${weeklyOutcome && (weeklyOutcome.surfaced_7d > 0 || weeklyOutcome.agent_actions_7d > 0) ? html`
+      <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.25rem;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+          <span style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);">This week — what Foundry did</span>
+          <span style="font-size:0.7rem;color:var(--text-muted);">trailing 7 days</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.75rem;">
+          <div>
+            <div style="font-size:1.4rem;font-weight:700;color:var(--text-primary);">
+              ${weeklyOutcome.acted_on_7d}<span style="font-size:0.85rem;color:var(--text-dim);font-weight:500;"> / ${weeklyOutcome.surfaced_7d}</span>
+            </div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">
+              decisions you handled${weeklyOutcome.percent_acted !== null ? ` (${weeklyOutcome.percent_acted}%)` : ''}
+            </div>
+          </div>
+          <div>
+            <div style="font-size:1.4rem;font-weight:700;color:var(--text-primary);">${weeklyOutcome.agent_actions_7d}</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">agent actions executed</div>
+          </div>
+          ${weeklyOutcome.expired_7d > 0 ? html`
+          <div>
+            <div style="font-size:1.4rem;font-weight:700;color:var(--warning);">${weeklyOutcome.expired_7d}</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);">decisions expired unhandled</div>
+          </div>` : ''}
+        </div>
+      </div>` : ''}
 
       ${latestBriefing ? html`
       <div class="card" style="margin-bottom:1.5rem;border-left:3px solid var(--accent);">
