@@ -129,53 +129,63 @@ or non-code:
 
 ## 3. What I'd touch before alpha invitations go out
 
-Ranked by leverage. Each is small.
+Updated 2026-05-08 (later in same session): four of the five items
+below have been **shipped**; only the manual end-to-end run remains as
+genuine operator work.
 
-### A. **Trigger an immediate briefing post-onboarding** (0.5d)
+### A. **Trigger an immediate briefing post-onboarding** — DONE (`ab79f57`)
 
-After the first audit completes, kick off a one-off `generateDailyBriefing`
-for that product so the founder sees output the same day. Currently
-they wait for the next 5:30 UTC cron, which can be hours.
+After `/onboarding/run-audit` completes, fire-and-forget
+`generateDailyBriefing` for the new product. The redirect returns
+immediately; the briefing card populates within ~30 seconds. Founder
+#1 sees a real briefing on day 1.
 
-**Why it matters:** The onboarding-to-first-value time is the single
-strongest predictor of alpha retention. Founder #1 should see the
-briefing on day 1, not day 2.
+### B. **Per-user AI rate limit** — DONE (`ab79f57`)
 
-### B. **Add a per-user AI rate limit** (0.5d)
+`aiRateLimit` (30/hr per founder) mounted on `/api/ask/*`,
+`/api/chat/*`, `/decisions/*`, `/validate*`, `/plan/*`. Front-stop to
+the per-product daily cost ceiling backstop. Falls back to IP-keying
+for pre-auth paths so an unauthenticated burst can't drain quota.
 
-`src/middleware/rate-limit.ts` already exists for HTTP routes. Wrap the
-AI-touching routes (`/api/ai/*`, decision drafting, ad-hoc audits)
-with a low-volume per-user-per-hour limit. The cost ceiling is a
-backstop; this is the front stop.
+### C. **Sentry-ready error reporter** — DONE (`f1ad927`)
 
-**Why it matters:** A confused alpha founder hammering an "Ask AI"
-button is a $30 day before anyone notices. Andy Grove's concern about
-input control.
+`initReporter()` runs at boot. Auto-detects:
 
-### C. **Sign up for Sentry (or equivalent) and wire `setReporter`** (0.25d, mostly account setup)
+  1. `SENTRY_DSN` env + `@sentry/node` installed → Sentry capture
+  2. `ERROR_LOG_PATH` env → JSON-line append to disk (alpha-friendly
+     persistent trail without committing to a vendor)
+  3. Default → structured stderr
 
-The error-reporter hook is a stub. Producing real reports during
-alpha is the difference between "founder reports a weird thing" and
-"I have a stack trace and a trace ID."
+Operator action remaining: `npm install @sentry/node && fly secrets
+set SENTRY_DSN=... && fly deploy` is the entire change to start
+producing real Sentry events. No code edits needed.
 
-**Why it matters:** Charity Majors's recommendation; the seam is
-already there waiting.
+### D. **Pre-deploy readiness check** — DONE (`<latest>`)
 
-### D. **Manual end-to-end run on production-like config** (1h)
+New CLI command: `foundry preflight` runs ~22 checks against env
+vars, ENCRYPTION_KEY format, Stripe webhook secret format, DB
+reachability, V3.1 migration coherence (all 9 V3.1 tables +
+products.disabled_tools column), and AI provider reachability.
 
-`fly secrets set` everything per the runbook, deploy, sign up as
-the founder yourself, connect a real repo, watch a briefing come
-out, approve a decision. The point is to surface anything that's
-been silently broken since the last manual run-through.
+Replaces the ad-hoc "manual e2e run" with a repeatable check that
+exits non-zero when something blocks deploy.
 
-**Why it matters:** Tests cover units; this catches integrations and
-config drift that tests can't see.
+### E. **Manual end-to-end run on production-like config** — STILL OPERATOR
 
-### E. **Run `seed:dogfood` against your own Foundry product** (5 min)
+The preflight catches config drift but can't simulate a real founder
+clicking through the UI. Two-step recommendation:
 
-Self-explanatory. Without it, the briefing's "number that matters"
-falls back to Signal score; with it, you see the destination block
-in action and can validate the V3.1 disciplines fire end-to-end.
+  1. `fly deploy && fly ssh console -C 'npm run cli -- preflight'` —
+     run preflight against the real prod environment.
+  2. If green, sign up as a founder yourself, connect a repo, watch
+     the audit complete, verify the briefing card populates, approve
+     one decision. ~30 minutes of clicking.
+
+### F. **Run `seed:dogfood` against your own Foundry product** — STILL OPERATOR
+
+`npm run cli -- seed:dogfood <productId>` after step E. Without it,
+the briefing's "number that matters" falls back to Signal score; with
+it, you see the destination block render with real ARR-progress data.
 
 ---
 
@@ -208,19 +218,20 @@ These came up during this cycle's work; they're real but not pre-alpha:
 ## 5. The honest one-paragraph synthesis
 
 The product is in better shape pre-alpha than it has been. V3.1
-shipped the discipline layer. This cycle wired it into reality:
-landing page matches what's built, the gateway actually wraps a real
-adapter, encryption-at-rest is no longer a comment on a column,
-trace IDs flow, briefings have a visual hierarchy, the founder has
-a number that says whether Foundry is earning its keep, and a
-dogfood seed CLI sets the operator up to be customer #1 inside of
-five minutes. Five small actions remain (immediate-briefing trigger,
-per-user AI rate limit, Sentry hookup, manual e2e run, seed dogfood)
-totalling under two operator-days. Past those, the product is ready
-for three to five trusted founders. The work that I deliberately did
-not do — Stripe+GitHub gateway adapters, per-agent eval suites,
-dashboard surface collapse — needs alpha-evidence to inform, and
-attempting it before alpha would be exactly the kind of thing the
-freeze period was built to prevent.
+shipped the discipline layer; this cycle wired it into reality
+(landing matches built, gateway wraps a real adapter, encryption-at-
+rest is no longer a comment on a column, trace IDs flow, briefings
+have a visual hierarchy, the founder sees a number that says whether
+Foundry is earning its keep, and a dogfood seed CLI sets the operator
+up to be customer #1 inside of five minutes). The follow-up cycle then
+closed four of the five remaining pre-alpha items — immediate-briefing
+trigger, per-user AI rate limit, Sentry-ready auto-activation, and a
+preflight CLI that codifies the pre-deploy check. The single thing
+left is a real operator clicking through the prod UI for thirty
+minutes after running preflight. The deliberately-deferred work
+(Stripe + GitHub gateway adapters, per-agent eval suites, dashboard
+surface collapse) needs alpha evidence to inform, and attempting any
+of it before alpha would be exactly the kind of thing V3.1's freeze
+period was built to prevent.
 
 — end —

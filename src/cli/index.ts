@@ -484,4 +484,189 @@ program
     console.log(`  foundry job:run scp_daily_briefing`);
   });
 
+// ─── Preflight: pre-deploy readiness check ───────────────────────────────────
+//
+// Replaces the ad-hoc 'manual end-to-end run' from
+// docs/audits/pre-alpha-readiness-2026-05-08.md with a repeatable check.
+// Run this against a production-like environment (Fly secrets imported,
+// Turso URL pointing at the prod DB, etc.) before sending alpha invites.
+//
+// Each check is one of:
+//   ok    — passes
+//   warn  — non-blocking concern (degraded feature)
+//   fail  — blocking — fix before deploy
+//
+// Exits 1 if any check fails. Exits 0 if only warnings or all-ok.
+
+interface PreflightCheck {
+  name: string;
+  status: 'ok' | 'warn' | 'fail';
+  detail: string;
+}
+
+program
+  .command('preflight')
+  .description('Pre-deploy readiness check: env vars, DB, migrations, secrets')
+  .action(async () => {
+    const checks: PreflightCheck[] = [];
+
+    // 1. Required env vars — must be present.
+    const requiredEnv = ['TURSO_DATABASE_URL', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY'];
+    for (const v of requiredEnv) {
+      checks.push(
+        process.env[v]
+          ? { name: `env: ${v}`, status: 'ok', detail: 'set' }
+          : { name: `env: ${v}`, status: 'fail', detail: 'missing — app will not start' }
+      );
+    }
+
+    // 2. Critical optional env vars.
+    const opt: Array<{ name: string; reason: string }> = [
+      { name: 'ENCRYPTION_KEY', reason: 'integration credentials encryption' },
+      { name: 'OPENROUTER_API_KEY', reason: 'primary AI provider' },
+      { name: 'STRIPE_WEBHOOK_SECRET', reason: 'billing webhook verification' },
+      { name: 'CLERK_WEBHOOK_SECRET', reason: 'auth webhook verification' },
+      { name: 'RESEND_API_KEY', reason: 'outbound email' },
+    ];
+    for (const v of opt) {
+      checks.push(
+        process.env[v.name]
+          ? { name: `env: ${v.name}`, status: 'ok', detail: 'set' }
+          : { name: `env: ${v.name}`, status: 'warn', detail: `${v.reason} disabled without this` }
+      );
+    }
+
+    // 3. ENCRYPTION_KEY format.
+    const ek = process.env.ENCRYPTION_KEY;
+    if (ek) {
+      const isValid = ek.length === 64 && /^[0-9a-f]+$/i.test(ek);
+      checks.push({
+        name: 'ENCRYPTION_KEY format',
+        status: isValid ? 'ok' : 'fail',
+        detail: isValid
+          ? '64 hex chars (32 bytes)'
+          : `expected 64 hex chars, got ${ek.length} chars — generate with: openssl rand -hex 32`,
+      });
+    }
+
+    // 4. Stripe webhook secret format.
+    const sws = process.env.STRIPE_WEBHOOK_SECRET;
+    if (sws) {
+      checks.push({
+        name: 'STRIPE_WEBHOOK_SECRET format',
+        status: sws.startsWith('whsec_') ? 'ok' : 'warn',
+        detail: sws.startsWith('whsec_')
+          ? 'whsec_ prefix present'
+          : "expected 'whsec_' prefix — copy from Stripe Dashboard → Webhooks",
+      });
+    }
+
+    // 5. Database reachability + critical tables exist.
+    try {
+      const fr = await query('SELECT id FROM founders LIMIT 1', []);
+      checks.push({ name: 'database reachable', status: 'ok', detail: 'SELECT founders ok' });
+      const _ = fr; // silence unused
+    } catch (err) {
+      checks.push({
+        name: 'database reachable',
+        status: 'fail',
+        detail: `SELECT founders failed: ${String(err)}`,
+      });
+    }
+
+    // 6. V3.1 migration coherence — verify the most recent migrations' tables exist.
+    const v31Tables = [
+      'north_stars',
+      'outcome_trees',
+      'freeze_periods',
+      'team_health_metrics',
+      'product_voice_fingerprints',
+      'taste_journals',
+      'idempotency_keys',
+      'data_classifications',
+      'communication_budgets',
+    ];
+    for (const t of v31Tables) {
+      try {
+        await query(`SELECT 1 FROM ${t} LIMIT 1`, []);
+        checks.push({ name: `table: ${t}`, status: 'ok', detail: 'present' });
+      } catch {
+        checks.push({
+          name: `table: ${t}`,
+          status: 'fail',
+          detail: `missing — run: foundry db:migrate`,
+        });
+      }
+    }
+
+    // 7. products.disabled_tools column (V3.1 migration 068).
+    try {
+      await query('SELECT disabled_tools FROM products LIMIT 1', []);
+      checks.push({
+        name: 'column: products.disabled_tools',
+        status: 'ok',
+        detail: 'present',
+      });
+    } catch {
+      checks.push({
+        name: 'column: products.disabled_tools',
+        status: 'fail',
+        detail: 'missing — run: foundry db:migrate (migration 068)',
+      });
+    }
+
+    // 8. AI provider reachability — only when OPENROUTER_API_KEY is set.
+    //    Cheap: a model-list ping. Skip when offline.
+    if (process.env.OPENROUTER_API_KEY) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch('https://openrouter.ai/api/v1/models', {
+          headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` },
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        checks.push({
+          name: 'AI provider reachable',
+          status: res.ok ? 'ok' : 'warn',
+          detail: res.ok ? `${res.status} OK` : `HTTP ${res.status} — check OPENROUTER_API_KEY`,
+        });
+      } catch (err) {
+        checks.push({
+          name: 'AI provider reachable',
+          status: 'warn',
+          detail: `unreachable: ${String(err).slice(0, 100)} — network or key issue`,
+        });
+      }
+    }
+
+    // ── Render ─────────────────────────────────────────────────────────────
+    const fails = checks.filter((c) => c.status === 'fail');
+    const warns = checks.filter((c) => c.status === 'warn');
+    const oks = checks.filter((c) => c.status === 'ok');
+
+    console.log(`\nFoundry preflight — ${checks.length} checks`);
+    console.log('─'.repeat(70));
+    for (const c of checks) {
+      const icon = c.status === 'ok' ? '✓' : c.status === 'warn' ? '⚠' : '✗';
+      console.log(`${icon} ${c.name.padEnd(40)} ${c.detail}`);
+    }
+    console.log('─'.repeat(70));
+    console.log(`${oks.length} ok  ·  ${warns.length} warn  ·  ${fails.length} fail`);
+
+    if (fails.length > 0) {
+      console.log(
+        '\nDeploy is NOT ready. Fix the failing checks above, then re-run preflight.'
+      );
+      process.exit(1);
+    }
+    if (warns.length > 0) {
+      console.log(
+        '\nDeploy is ready with degraded features. Address warnings post-deploy if they matter to you.'
+      );
+    } else {
+      console.log('\nDeploy is ready.');
+    }
+  });
+
 program.parse();
