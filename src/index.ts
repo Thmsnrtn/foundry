@@ -167,6 +167,17 @@ if (missing.length > 0) {
 
 const app = new Hono();
 
+// Wire the error reporter once at boot. SENTRY_DSN env activates Sentry
+// (when @sentry/node is installed), ERROR_LOG_PATH activates the file
+// reporter, otherwise structured stderr stays. Non-blocking — boot
+// continues even if reporter init fails.
+import { initReporter } from './lib/error-reporter.js';
+initReporter().catch((err) => {
+  process.stderr.write(
+    JSON.stringify({ type: 'reporter_init_error', error: String(err) }) + '\n'
+  );
+});
+
 // Global middleware
 import { securityHeaders } from './middleware/security-headers.js';
 import { requestIdMiddleware } from './middleware/security.js';

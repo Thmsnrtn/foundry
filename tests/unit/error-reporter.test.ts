@@ -3,7 +3,10 @@
 // =============================================================================
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { reportError, setReporter } from '../../src/lib/error-reporter.js';
+import { tmpdir } from 'node:os';
+import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { reportError, setReporter, initReporter } from '../../src/lib/error-reporter.js';
 import { withTrace } from '../../src/lib/trace.js';
 
 describe('error-reporter', () => {
@@ -46,6 +49,67 @@ describe('error-reporter', () => {
     expect(parsed.type).toBe('error_report');
     expect(parsed.error_message).toBe('default-path');
     expect(parsed.source).toBe('unit-test');
+  });
+
+  describe('initReporter', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      setReporter(null);
+    });
+
+    it('falls back to default when neither SENTRY_DSN nor ERROR_LOG_PATH set', async () => {
+      vi.stubEnv('SENTRY_DSN', '');
+      vi.stubEnv('ERROR_LOG_PATH', '');
+      delete process.env.SENTRY_DSN;
+      delete process.env.ERROR_LOG_PATH;
+      await initReporter();
+      // Default reporter writes to stderr — verify by spying.
+      const writes: string[] = [];
+      const stub = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+        writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+        return true;
+      });
+      reportError(new Error('default-after-init'));
+      stub.mockRestore();
+      expect(writes.some((w) => w.includes('default-after-init'))).toBe(true);
+    });
+
+    it('writes to ERROR_LOG_PATH when set (and SENTRY_DSN absent)', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'foundry-err-'));
+      const logPath = join(dir, 'errors.log');
+      delete process.env.SENTRY_DSN;
+      vi.stubEnv('ERROR_LOG_PATH', logPath);
+
+      await initReporter();
+      reportError(new Error('to-file'), { source: 'test' });
+
+      // appendFile is async; wait one tick so it lands.
+      await new Promise((r) => setTimeout(r, 50));
+      expect(existsSync(logPath)).toBe(true);
+      const contents = readFileSync(logPath, 'utf-8');
+      expect(contents).toContain('to-file');
+      const parsed = JSON.parse(contents.trim().split('\n')[0]);
+      expect(parsed.error_message).toBe('to-file');
+      expect(parsed.source).toBe('test');
+    });
+
+    it('logs a warning and falls through when SENTRY_DSN is set but @sentry/node is missing', async () => {
+      vi.stubEnv('SENTRY_DSN', 'https://example@example.ingest.sentry.io/1');
+      delete process.env.ERROR_LOG_PATH;
+
+      const writes: string[] = [];
+      const stub = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+        writes.push(typeof chunk === 'string' ? chunk : String(chunk));
+        return true;
+      });
+      await initReporter();
+      stub.mockRestore();
+
+      const warnLine = writes.find((w) => w.includes('reporter_init_warning'));
+      expect(warnLine).toBeDefined();
+      const parsed = JSON.parse(warnLine!.trim());
+      expect(parsed.message).toMatch(/@sentry\/node not installed/);
+    });
   });
 
   it('picks up trace context (trace_id, founder, product) when inside withTrace', () => {

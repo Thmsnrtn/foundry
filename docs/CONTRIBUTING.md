@@ -148,6 +148,30 @@ not exhaustively. Always include test count delta when tests changed.
 | `audit_log` schema | Compliance + V3.1 gateway depends on it. |
 | `agent_instances.status` semantics | The kill-switch reads this; renaming a status value silently breaks the gateway. |
 
+## Wiring an error reporter (Sentry, Honeybadger, etc.)
+
+`src/lib/error-reporter.ts` auto-detects on boot:
+
+| Env | Effect |
+|-----|--------|
+| `SENTRY_DSN` set + `@sentry/node` installed | Sentry captures every `reportError(...)` call automatically. |
+| `ERROR_LOG_PATH` set | Reports append as JSON lines to that path. Useful for alpha when you want a persistent trail without a vendor. |
+| Neither | Structured stderr — visible in `fly logs`. |
+
+To enable Sentry on production:
+
+```bash
+npm install @sentry/node
+fly secrets set SENTRY_DSN=https://...
+fly deploy
+```
+
+No code changes — `initReporter()` runs at boot, sees the DSN + the
+installed package, and registers the Sentry capture. Every `reportError`
+call site that exists today (AI client retry-exhaustion, gateway
+handler failure, etc.) starts producing Sentry events on the first
+post-deploy request.
+
 ## Where to put new things
 
 - **New service**: `src/services/<domain>/<name>.ts`. File header banner
