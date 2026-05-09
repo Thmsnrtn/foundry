@@ -1972,4 +1972,22 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '0 6 * * 1', // Monday 6:00 UTC
     description: 'Refresh outcome tree current_value from metrics; supersede stale branches',
   },
+  // Wave 2 / Council 16: Foundry's own customer onboarding sequence
+  welcome_sequence_tick: {
+    fn: async () => {
+      const { runWelcomeSequenceTick } = await import(
+        '../services/founder/welcome-sequence.js'
+      );
+      const counts = await runWelcomeSequenceTick();
+      const total = counts.day_0 + counts.day_3 + counts.day_7;
+      if (total > 0) {
+        logger.info(
+          `welcome_sequence_tick sent: day_0=${counts.day_0} day_3=${counts.day_3} day_7=${counts.day_7}`,
+          { jobName: 'welcome_sequence_tick' }
+        );
+      }
+    },
+    schedule: '0 */6 * * *', // Every 6 hours; gateway idempotency dedups duplicate sends
+    description: "Send Foundry's own day-0 / day-3 / day-7 founder onboarding emails",
+  },
 };

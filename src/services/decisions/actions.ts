@@ -8,6 +8,7 @@ import { callSonnet, callOpus, parseJSONResponse } from '../ai/client.js';
 import { buildWisdomContext } from '../wisdom/dna.js';
 import { voiceGateDraft } from '../calibration/voice-gate.js';
 import { recordDecisionActed } from '../intelligence/briefing-telemetry.js';
+import { recordApproval, recordRejection } from '../founder/rejection-streak.js';
 import { nanoid } from 'nanoid';
 
 export type ArtifactType =
@@ -174,6 +175,13 @@ export async function approveDraft(draftId: string, ownerId: string): Promise<{ 
     'approved'
   ).catch(() => {});
 
+  // An approval breaks any rejection streak. Fire-and-forget.
+  recordApproval(
+    ownerId,
+    d.product_id as string,
+    null  // agent name — could be derived if useful, but the aggregate streak is what surfaces to the founder
+  ).catch(() => {});
+
   return executeAction(draftId, d.product_id as string);
 }
 
@@ -202,6 +210,11 @@ export async function rejectDraft(draftId: string, ownerId: string, reason?: str
       draftId,
       (row.decision_id as string | null) ?? null,
       'rejected'
+    ).catch(() => {});
+    recordRejection(
+      ownerId,
+      row.product_id as string,
+      null
     ).catch(() => {});
   }
 }

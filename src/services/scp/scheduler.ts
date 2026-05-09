@@ -64,7 +64,20 @@ export async function scheduleNextRun(
   agentName: AgentName,
   cadenceHours: number
 ): Promise<void> {
-  const nextRunAt = new Date(Date.now() + cadenceHours * 3600 * 1000).toISOString();
+  // Wave 2: weekend mode multiplier. A product with cadence_mode='weekend'
+  // (Council 14: side-project founder) drops every cadence to weekly.
+  // Failure to read the column is non-fatal — falls back to standard.
+  let effectiveHours = cadenceHours;
+  try {
+    const r = await query('SELECT cadence_mode FROM products WHERE id = ?', [productId]);
+    const mode = (r.rows[0] as Record<string, string | null> | undefined)?.cadence_mode;
+    if (mode === 'weekend') {
+      // Weekend mode: clamp every cadence to weekly (168h) minimum.
+      effectiveHours = Math.max(cadenceHours, 168);
+    }
+  } catch { /* schema lacks column on dev DBs; continue with default */ }
+
+  const nextRunAt = new Date(Date.now() + effectiveHours * 3600 * 1000).toISOString();
   await query(
     `UPDATE agent_instances SET next_run_at=?, updated_at=CURRENT_TIMESTAMP
      WHERE product_id=? AND agent_name=?`,
