@@ -238,8 +238,13 @@ export async function executeEmailSend(
  *
  * Returns either a ResendSuccess (real send) or { logged: true } in the
  * no-API-key dev path.
+ *
+ * Exported so tests that share a vitest worker with gateway.test.ts (which
+ * calls clearToolHandlers in beforeEach) can re-register without a cold
+ * module reload. Production callers should not invoke directly — use
+ * gateway.invoke().
  */
-async function sendEmailHandler(req: GatewayRequest): Promise<ResendSuccess | { logged: true }> {
+export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSuccess | { logged: true }> {
   const params = req.params as unknown as SendEmailParams;
   const apiKey = process.env.RESEND_API_KEY;
 

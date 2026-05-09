@@ -16,9 +16,12 @@ import { nanoid } from 'nanoid';
 import { query, executeRaw } from '../../src/db/client.js';
 
 // Importing resend.ts has the side-effect of registering the gateway
-// handler — that's what we're testing.
-import { executeEmailSend } from '../../src/services/integration/resend.js';
+// handler at module load — that's what we're testing. The handler is
+// also exported so tests can re-register on a warm module cache when
+// gateway.test.ts has cleared the registry earlier in the same worker.
+import { executeEmailSend, sendEmailHandler } from '../../src/services/integration/resend.js';
 import { disableTool } from '../../src/services/outbound/kill-switch.js';
+import { registerToolHandler } from '../../src/services/outbound/gateway.js';
 
 let founderId: string;
 let productId: string;
@@ -134,14 +137,20 @@ beforeEach(async () => {
     'Test',
     founderId,
   ]);
-  // Reset cross-test state. The send_email handler is re-registered
-  // before each test.
+  // Reset cross-test state.
   await executeRaw(`DELETE FROM idempotency_keys`);
   await executeRaw(`DELETE FROM data_classifications`);
   await executeRaw(`DELETE FROM communication_budgets`);
   await executeRaw(`DELETE FROM agent_instances`);
   await executeRaw(`DELETE FROM audit_log`);
   await executeRaw(`DELETE FROM outbound_actions`);
+
+  // Defensive re-registration: gateway.test.ts calls clearToolHandlers()
+  // in its own beforeEach. If both files share a vitest worker / module
+  // cache, the module-load registration in resend.ts has been wiped by
+  // the time we run. Re-register the exported handler so this suite is
+  // order-independent.
+  registerToolHandler('send_email', sendEmailHandler);
 });
 
 afterEach(() => {

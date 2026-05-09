@@ -328,38 +328,73 @@ export async function getBriefingHistory(productId: string, limit = 30): Promise
 
 // ─── formatBriefingAsMarkdown ─────────────────────────────────────────────────
 
+/**
+ * Render the briefing in the V3.1 visual contract from
+ * docs/design/surface-collapse-proposal.md (Surface 3):
+ *
+ *   1. Headline (already Sonnet-drafted)
+ *   2. The number that matters — North Star progress when present, else
+ *      a compact Signal/Risk/Health line.
+ *   3. "Decide today" — top decisions front and center.
+ *   4. "Overnight Activity" — agent contributions as a tight bulleted list.
+ *   5. What's working / Needs attention — only when non-empty.
+ *   6. Destination block (legacy, for callers passing pre-formatted text
+ *      and for the briefing-destination test).
+ *   7. Compact footer line: Signal · Risk · Health · MRR · AI 30d.
+ *
+ * Goal: a 90-second read on a phone. Most-touched user surface — see
+ * elite-persona-review-2026-05-08.md (Tobi, Chesky, Norman, Tufte).
+ */
 export function formatBriefingAsMarkdown(briefing: SCPBriefing, destinationBlock?: string): string {
   const lines: string[] = [];
 
-  // Fetch company name from briefing context — we store it in agent_contributions
-  const firstContrib = briefing.agent_contributions?.[0];
-
-  const signalDelta = briefing.signal_score !== null
-    ? (briefing.signal_score >= 70 ? '↑' : briefing.signal_score >= 40 ? '→' : '↓')
-    : '';
-  const signalDisplay = briefing.signal_score !== null ? `${briefing.signal_score}/100 ${signalDelta}` : 'N/A';
-  const healthDisplay = briefing.health_score !== null ? `${briefing.health_score}/100` : 'N/A';
-  const riskDisplay = briefing.risk_state ?? 'unknown';
-
-  lines.push(`# CEO Briefing · ${briefing.briefing_date}`);
-  lines.push('');
-  lines.push(`**Signal:** ${signalDisplay} · Risk: ${riskDisplay.toUpperCase()} · Health: ${healthDisplay}`);
+  // ─── Headline ─────────────────────────────────────────────────────────
+  lines.push(`# ${briefing.headline}`);
   lines.push('');
 
-  // V3.1 Layer A: surface destination context just below the signal/risk/health
-  // line so it's the first thing after the top-level health summary.
-  if (destinationBlock && destinationBlock.trim().length > 0) {
-    lines.push('## Destination');
+  // ─── The number that matters ──────────────────────────────────────────
+  // When the destination block carries a Progress line ("$X / $Y ARR"),
+  // surface it as the prominent metric. Otherwise fall back to Signal.
+  const progressLine = extractProgressLine(destinationBlock);
+  if (progressLine) {
+    lines.push(`> **${progressLine}**`);
     lines.push('');
-    // Use markdown line breaks so multi-line block renders cleanly
-    lines.push(destinationBlock.split('\n').join('  \n'));
+  } else if (briefing.signal_score !== null) {
+    const arrow = briefing.signal_score >= 70 ? '↑' : briefing.signal_score >= 40 ? '→' : '↓';
+    lines.push(`> **Signal: ${briefing.signal_score}/100 ${arrow}**`);
     lines.push('');
   }
 
-  lines.push('---');
-  lines.push('');
+  // ─── Decide today ─────────────────────────────────────────────────────
+  const decisions = briefing.pending_decisions ?? [];
+  if (decisions.length > 0) {
+    lines.push(`## Decide today (${decisions.length})`);
+    lines.push('');
+    // Top decision gets the most attention.
+    const [top, ...rest] = decisions;
+    lines.push(`**${top.title}** — ${AGENT_ROLES[top.agent_name] ?? top.agent_name}  `);
+    lines.push(top.description);
+    if (top.estimated_impact_usd) {
+      lines.push(`Estimated value: $${top.estimated_impact_usd.toLocaleString()} · ${top.expected_impact}`);
+    } else if (top.expected_impact) {
+      lines.push(`Expected: ${top.expected_impact}`);
+    }
+    lines.push('');
+    if (rest.length > 0) {
+      lines.push(`<details><summary>${rest.length} more decision${rest.length === 1 ? '' : 's'} waiting</summary>`);
+      lines.push('');
+      for (const d of rest) {
+        lines.push(`- **${d.title}** (${AGENT_ROLES[d.agent_name] ?? d.agent_name}): ${d.description}`);
+      }
+      lines.push('');
+      lines.push('</details>');
+      lines.push('');
+    }
+    lines.push('---');
+    lines.push('');
+  }
 
-  // Overnight Activity
+  // ─── Overnight Activity ───────────────────────────────────────────────
   lines.push('## Overnight Activity');
   lines.push('');
 
@@ -369,43 +404,18 @@ export function formatBriefingAsMarkdown(briefing: SCPBriefing, destinationBlock
   if (highPriority.length === 0 && normalPriority.length === 0) {
     lines.push('_No agent activity recorded for this period._');
   } else {
+    // High-priority items get full sentences; normal gets a compact bullet list.
     for (const contrib of highPriority) {
       lines.push(`**${contrib.display_name} (${contrib.role}):** ${contrib.contribution}`);
-      lines.push('');
     }
+    if (highPriority.length > 0 && normalPriority.length > 0) lines.push('');
     for (const contrib of normalPriority) {
       lines.push(`- **${contrib.display_name}:** ${contrib.contribution}`);
     }
   }
-
-  lines.push('');
-  lines.push('---');
   lines.push('');
 
-  // Decisions Waiting
-  const decisions = briefing.pending_decisions ?? [];
-  lines.push(`## Decisions Waiting (${decisions.length})`);
-  lines.push('');
-
-  if (decisions.length === 0) {
-    lines.push('_No pending decisions._');
-  } else {
-    for (const decision of decisions) {
-      lines.push(`### ${decision.title}`);
-      lines.push(decision.description);
-      lines.push(`**Expected impact:** ${decision.expected_impact}`);
-      lines.push(`**Proposed by:** ${decision.agent_name} (${AGENT_ROLES[decision.agent_name] ?? ''})`);
-      if (decision.estimated_impact_usd) {
-        lines.push(`**Estimated value:** $${decision.estimated_impact_usd.toLocaleString()}`);
-      }
-      lines.push('');
-    }
-  }
-
-  lines.push('---');
-  lines.push('');
-
-  // What's Working / Needs Attention — scan all contributions
+  // ─── What's working / Needs attention ─────────────────────────────────
   const positiveObs = briefing.agent_contributions
     .filter((c) => c.contribution?.toLowerCase().includes('improv') || c.contribution?.toLowerCase().includes('increas') || c.contribution?.toLowerCase().includes('strong'))
     .map((c) => `- **${c.display_name}:** ${c.contribution}`);
@@ -415,35 +425,64 @@ export function formatBriefingAsMarkdown(briefing: SCPBriefing, destinationBlock
     .map((c) => `- **${c.display_name}:** ${c.contribution}`);
 
   if (positiveObs.length > 0) {
-    lines.push('## What\'s Working');
+    lines.push('## What\'s working');
     lines.push('');
     lines.push(...positiveObs);
     lines.push('');
   }
 
   if (criticalObs.length > 0) {
-    lines.push('## Needs Attention');
+    lines.push('## Needs attention');
     lines.push('');
     lines.push(...criticalObs);
     lines.push('');
   }
 
-  lines.push('---');
-  lines.push('');
-
-  // Financial Snapshot
-  lines.push('## Financial Snapshot');
-  lines.push('');
-  const fin = briefing.financial_summary;
-  if (fin) {
-    const mrrDisplay = fin.mrr_cents !== null ? `$${(fin.mrr_cents / 100).toLocaleString()}` : 'N/A';
-    const roiDisplay = fin.roi !== null ? `${fin.roi.toFixed(1)}x` : 'N/A';
-    lines.push(`MRR: ${mrrDisplay} | AI Cost (30d): $${fin.ai_cost_30d_usd.toFixed(2)} | ROI: ${roiDisplay}`);
-  } else {
-    lines.push('_No financial data available._');
+  // ─── Destination (legacy block, kept for test compat & callers that
+  //     pass pre-formatted text). Only renders when supplied. ───────────
+  if (destinationBlock && destinationBlock.trim().length > 0) {
+    lines.push('## Destination');
+    lines.push('');
+    lines.push(destinationBlock.split('\n').join('  \n'));
+    lines.push('');
   }
 
+  // ─── Footer ───────────────────────────────────────────────────────────
+  lines.push('---');
+  lines.push('');
+  const footer = buildBriefingFooter(briefing);
+  lines.push(footer);
+
   return lines.join('\n');
+}
+
+function buildBriefingFooter(b: SCPBriefing): string {
+  const parts: string[] = [];
+  if (b.signal_score !== null) parts.push(`Signal ${b.signal_score}/100`);
+  if (b.risk_state) parts.push(`Risk ${String(b.risk_state).toUpperCase()}`);
+  if (b.health_score !== null) parts.push(`Health ${b.health_score}/100`);
+  const fin = b.financial_summary;
+  if (fin) {
+    if (fin.mrr_cents !== null) parts.push(`MRR $${(fin.mrr_cents / 100).toLocaleString()}`);
+    parts.push(`AI 30d $${fin.ai_cost_30d_usd.toFixed(2)}`);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * Pull the most-prominent progress sentence out of a destination block —
+ * looks for a "Progress: ..." line written by destination/briefing-context.ts.
+ * Returns null when the block has no Progress line.
+ */
+function extractProgressLine(block: string | undefined): string | null {
+  if (!block) return null;
+  for (const raw of block.split('\n')) {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('Progress:')) {
+      return trimmed.replace(/^Progress:\s*/, '');
+    }
+  }
+  return null;
 }
 
 // ─── formatBriefingAsHTML ─────────────────────────────────────────────────────
