@@ -305,6 +305,23 @@ export async function generateDailyBriefing(
     ]
   );
 
+  // V3.1 outbound webhook event: briefing_ready. Founders configured to
+  // receive Foundry events in Linear/Slack/Notion get one entry per
+  // product per day. Fire-and-forget; failure must not break briefing.
+  try {
+    const { dispatchEvent } = await import('../distribution/outbound-webhooks.js');
+    dispatchEvent(productId, {
+      event_type: 'briefing_ready',
+      product_id: productId,
+      product_name: companyName,
+      headline: `Briefing for ${companyName}: ${headline}`,
+      detail: allPendingDecisions.length > 0
+        ? `${allPendingDecisions.length} decision${allPendingDecisions.length === 1 ? '' : 's'} waiting`
+        : undefined,
+      url: `${process.env.APP_URL ?? ''}/dashboard`,
+    }).catch(() => {});
+  } catch { /* dispatcher unavailable — non-fatal */ }
+
   return briefing;
 }
 

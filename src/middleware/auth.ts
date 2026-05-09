@@ -88,12 +88,34 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
         const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || null;
         const founderId = nanoid();
 
+        // Wave 3 — referral attribution. The __foundry_ref cookie was set
+        // when the visitor arrived via ?ref=<code>. Capture it on the
+        // founder row so the 'paid' conversion event later resolves
+        // without the cookie (Stripe webhook arrives without browser
+        // context).
+        const cookieHeader = c.req.header('cookie') ?? '';
+        const refMatch = cookieHeader.match(/(?:^|;\s*)__foundry_ref=([\w-]{4,32})/);
+        const referredByCode = refMatch ? refMatch[1] : null;
+
         await query(
-          `INSERT INTO founders (id, clerk_user_id, email, name)
-           VALUES (?, ?, ?, ?)
+          `INSERT INTO founders (id, clerk_user_id, email, name, referred_by_code)
+           VALUES (?, ?, ?, ?, ?)
            ON CONFLICT (clerk_user_id) DO NOTHING`,
-          [founderId, clerkUserId, email, name]
+          [founderId, clerkUserId, email, name, referredByCode]
         );
+
+        // Fire signup conversion event when the row was created via this
+        // path (a no-op when the ON CONFLICT branch took the INSERT).
+        if (referredByCode) {
+          try {
+            const { recordReferralEvent } = await import(
+              '../services/distribution/referrals.js'
+            );
+            await recordReferralEvent(referredByCode, 'signup', {
+              invited_founder_id: founderId,
+            });
+          } catch { /* attribution failure is non-fatal */ }
+        }
 
         result = await getFounderByClerkId(clerkUserId);
       } catch (e) {

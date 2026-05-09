@@ -123,12 +123,24 @@ export async function transitionRiskState(
   });
 
   // Dispatch webhook for risk state change
-  const ownerResult = await query('SELECT owner_id FROM products WHERE id = ?', [productId]);
-  const ownerId = (ownerResult.rows[0] as Record<string, string>)?.owner_id;
+  const ownerResult = await query('SELECT owner_id, name FROM products WHERE id = ?', [productId]);
+  const ownerRow = ownerResult.rows[0] as Record<string, string> | undefined;
+  const ownerId = ownerRow?.owner_id;
   if (ownerId) {
     const { dispatchWebhook } = await import('../../lib/webhooks.js');
     dispatchWebhook(ownerId, 'risk_state.changed', {
       product_id: productId, from_state: fromState, to_state: toState, reason, triggering_signals: triggeringSignals,
+    }).catch(() => {});
+
+    // V3.1 outbound webhooks (Linear/Slack/Notion) via the gateway.
+    const { dispatchEvent } = await import('../distribution/outbound-webhooks.js');
+    dispatchEvent(productId, {
+      event_type: 'signal_tier_shift',
+      product_id: productId,
+      product_name: ownerRow?.name ?? 'product',
+      headline: `Risk state ${fromState} → ${toState.toUpperCase()} for ${ownerRow?.name ?? 'product'}`,
+      detail: reason,
+      url: `${process.env.APP_URL ?? ''}/dashboard`,
     }).catch(() => {});
   }
 }

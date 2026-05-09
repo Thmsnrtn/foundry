@@ -143,6 +143,20 @@ Return JSON:
   // Auto-execute Gate 0 actions (unless voice-gate forced manual review)
   if (draft.auto_executable) {
     await executeAction(draft.id, productId);
+  } else if (draft.gate >= 1) {
+    // Wave 3 — outbound webhook for decision_needed. Only fire when
+    // the founder has to do something (gate >= 1 and not auto-executable).
+    try {
+      const { dispatchEvent } = await import('../distribution/outbound-webhooks.js');
+      dispatchEvent(productId, {
+        event_type: 'decision_needed',
+        product_id: productId,
+        product_name: productName,
+        headline: `Foundry surfaced a decision: ${draft.title}`,
+        detail: draft.description,
+        url: `${process.env.APP_URL ?? ''}/decisions/${decisionId}`,
+      }).catch(() => {});
+    } catch { /* dispatcher unavailable */ }
   }
 
   return draft;
@@ -273,6 +287,23 @@ async function executeAction(draftId: string, productId: string): Promise<{ succ
       `UPDATE decisions SET status = 'executed', decided_at = datetime('now') WHERE id = ? AND status = 'pending'`,
       [d.decision_id]
     );
+  }
+
+  // Wave 3 — outbound webhook for agent_action_executed.
+  if (success) {
+    try {
+      const productRow = await query('SELECT name FROM products WHERE id = ?', [productId]);
+      const productName = (productRow.rows[0] as Record<string, string> | undefined)?.name ?? 'product';
+      const { dispatchEvent } = await import('../distribution/outbound-webhooks.js');
+      dispatchEvent(productId, {
+        event_type: 'agent_action_executed',
+        product_id: productId,
+        product_name: productName,
+        headline: `Foundry executed: ${d.title as string}`,
+        detail: result,
+        url: `${process.env.APP_URL ?? ''}/dashboard`,
+      }).catch(() => {});
+    } catch { /* dispatcher unavailable */ }
   }
 
   return { success, result };

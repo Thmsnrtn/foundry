@@ -11,6 +11,9 @@ import { query, getProductsByOwner, getProductByOwner, getActiveStressors } from
 import { computeSignal, getSignalHistory, getDailyInsight, getPreviousSignalScore } from '../../services/signal.js';
 import { computeWeeklyOutcome } from '../../services/intelligence/weekly-outcome.js';
 import { recordBriefingView, getBriefingOutcome } from '../../services/intelligence/briefing-telemetry.js';
+import { isDueForNps } from '../../services/founder/feedback.js';
+import { getStreak } from '../../services/founder/rejection-streak.js';
+import { topPeerValidatedDecisionTypes } from '../../services/intelligence/peer-signal.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { stressorReport, milestoneToastScript, type StressorData } from '../../views/components.js';
 import type { SignalComponents } from '../../services/signal.js';
@@ -140,7 +143,7 @@ dashboardRoutes.get('/dashboard', async (c) => {
   const ctx = await getLayoutContext(founder, 'dashboard', 'Dashboard', undefined, c);
   const productId = ctx.productId!;
 
-  const [signal, stressors, history, dailyInsight, previousScore, latestBriefing, weeklyOutcome, briefingOutcome] = await Promise.all([
+  const [signal, stressors, history, dailyInsight, previousScore, latestBriefing, weeklyOutcome, briefingOutcome, npsDue, streak, peerSignals] = await Promise.all([
     computeSignal(productId),
     getActiveStressors(productId),
     getSignalHistory(productId, 60),
@@ -156,6 +159,18 @@ dashboardRoutes.get('/dashboard', async (c) => {
     })(),
     computeWeeklyOutcome(productId).catch(() => null),
     getBriefingOutcome(productId).catch(() => null),
+    isDueForNps(founder.id).catch(() => false),
+    getStreak(founder.id, productId).catch(() => ({ consecutive: 0, last_rejected_at: null })),
+    // Peer signal — match decision_patterns on the product's lifecycle
+    // stage. Read it from the DB so the right stage is used; default
+    // 'growth' on fetch failure.
+    (async () => {
+      try {
+        const r = await query('SELECT growth_stage FROM products WHERE id = ?', [productId]);
+        const stage = (r.rows[0] as Record<string, string | null> | undefined)?.growth_stage ?? 'growth';
+        return await topPeerValidatedDecisionTypes(stage, 3);
+      } catch { return []; }
+    })(),
   ]) as [
     Awaited<ReturnType<typeof computeSignal>>,
     Awaited<ReturnType<typeof getActiveStressors>>,
@@ -165,6 +180,9 @@ dashboardRoutes.get('/dashboard', async (c) => {
     SCPBriefing | null,
     Awaited<ReturnType<typeof computeWeeklyOutcome>> | null,
     Awaited<ReturnType<typeof getBriefingOutcome>> | null,
+    boolean,
+    Awaited<ReturnType<typeof getStreak>>,
+    Awaited<ReturnType<typeof topPeerValidatedDecisionTypes>>,
   ];
 
   // Record that the founder viewed today's briefing — fire-and-forget so a
@@ -325,6 +343,42 @@ dashboardRoutes.get('/dashboard', async (c) => {
             <div style="font-size:0.78rem;color:var(--text-dim);">acted within 5 min of reading</div>
           </div>` : ''}
         </div>
+      </div>` : ''}
+
+      ${streak.consecutive >= 3 ? html`
+      <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.25rem;border-left:3px solid var(--warning, #ffb347);background:rgba(255,179,71,0.04);">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--warning, #ffb347);margin-bottom:0.5rem;">
+          ${streak.consecutive} rejections in a row
+        </div>
+        <p style="margin:0 0 0.5rem;font-size:0.88rem;color:var(--text-primary);line-height:1.55;">
+          Your agents have been off-target this week. Two minutes of calibration would help.
+        </p>
+        <a href="/agents/wisdom" style="font-size:0.8rem;color:var(--accent);font-weight:600;">Open the taste journal →</a>
+      </div>` : ''}
+
+      ${peerSignals.length > 0 ? html`
+      <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.25rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:0.5rem;">Peer signal — what's working for founders like you</div>
+        ${peerSignals.map((p) => html`
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:0.5rem 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.85rem;">
+            <span style="color:var(--text-primary);">${p.decision_type.replace(/_/g, ' ')}</span>
+            <span style="color:var(--text-dim);font-size:0.78rem;">${Math.round(p.positive_outcome_rate * 100)}% positive · n=${p.sample_size}</span>
+          </div>
+        `)}
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.5rem;">Anonymized aggregate across founders at the same growth stage.</div>
+      </div>` : ''}
+
+      ${npsDue ? html`
+      <div class="card" id="nps-prompt" style="margin-bottom:1.5rem;padding:1rem 1.25rem;border:1px dashed var(--accent);">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:0.5rem;">A monthly check-in</div>
+        <p style="margin:0 0 0.75rem;font-size:0.88rem;color:var(--text-primary);">How likely are you to recommend Foundry?</p>
+        <form hx-post="/api/feedback/nps" hx-target="#nps-prompt" hx-swap="outerHTML" style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
+          ${[0,1,2,3,4,5,6,7,8,9,10].map((n) => html`
+            <button type="submit" name="score" value="${n.toString()}" class="btn-ghost" style="min-width:34px;padding:0.4rem 0.6rem;border:1px solid var(--border);border-radius:6px;background:transparent;color:var(--text-primary);font-size:0.85rem;cursor:pointer;">${n.toString()}</button>
+          `)}
+          <input type="hidden" name="product_id" value="${productId}" />
+        </form>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem;">0 = not at all · 10 = absolutely</div>
       </div>` : ''}
 
       ${latestBriefing ? html`

@@ -4,14 +4,43 @@
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import { setCookie } from 'hono/cookie';
 import { query } from '../../db/client.js';
 import { publicLayout } from '../../views/layout.js';
+import {
+  resolveReferralCode,
+  recordReferralEvent,
+} from '../../services/distribution/referrals.js';
 
 export const landingRoutes = new Hono();
 export const pricingRoutes = new Hono();
 export const caseStudyRoutes = new Hono();
+export const manifestoRoutes = new Hono();
 
-landingRoutes.get('/', (c) => {
+landingRoutes.get('/', async (c) => {
+  // Wave 3 — referral capture. If the visitor arrived via ?ref=<code> and
+  // the code resolves to a real referral link, set a 30-day cookie so the
+  // attribution survives across the auth flow, and record the click event.
+  const refParam = c.req.query('ref');
+  if (refParam) {
+    const link = await resolveReferralCode(refParam).catch(() => null);
+    if (link) {
+      setCookie(c, '__foundry_ref', refParam, {
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60,
+        httpOnly: true,
+        sameSite: 'Lax',
+      });
+      // Fire-and-forget: a click that fails to log is acceptable.
+      recordReferralEvent(refParam, 'click', {
+        metadata: {
+          ua: c.req.header('user-agent') ?? null,
+          ref_header: c.req.header('referer') ?? null,
+        },
+      }).catch(() => {});
+    }
+  }
+
   const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
   return c.html(publicLayout('Foundry — Autonomous AI Operations for Solo SaaS Founders', html`
     <script async crossorigin="anonymous" src="https://unpkg.com/@clerk/clerk-js/dist/clerk.browser.js" data-clerk-publishable-key="${publishableKey}"></script>
@@ -316,6 +345,81 @@ caseStudyRoutes.get('/case-studies/:id', async (c) => {
       <span style="color:#9ca3af;font-size:0.8rem;">Created: ${artifact.created_at}</span>
     </div>
     <div class="card">${artifact.content}</div>
+  `));
+});
+
+// ─── Manifesto ──────────────────────────────────────────────────────────────
+
+manifestoRoutes.get('/manifesto', (c) => {
+  return c.html(publicLayout('Autonomous Operations: A Founder\'s New Category — Foundry', html`
+    <article style="max-width:720px;margin:0 auto;padding:3rem 1.25rem;color:var(--text-primary);line-height:1.7;">
+      <header style="margin-bottom:2.5rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent);margin-bottom:0.75rem;">A Manifesto</div>
+        <h1 style="font-size:clamp(2rem,5vw,3rem);line-height:1.15;margin:0;">Autonomous Operations:<br/>A Founder's New Category</h1>
+        <p style="margin-top:1rem;color:var(--text-dim);font-size:0.9rem;">
+          A solo SaaS founder in 2026 spends roughly 60% of their working week on operating tasks. The other 40% is what they actually signed up for — building product. This is the gap.
+        </p>
+      </header>
+
+      <section style="margin-bottom:2rem;">
+        <h2 style="font-size:1.25rem;margin:2rem 0 0.75rem;">What broke</h2>
+        <p>Operating-task complexity doubled in the last decade. Hiring help to absorb it got harder — a fractional COO costs more than the operator's gross margin permits at the under-$50K-MRR stage where most indie SaaS lives. The result is a working class of founder-operators running profitable but stressed businesses where the constraint isn't product imagination — it's the operator's hours.</p>
+      </section>
+
+      <section style="margin-bottom:2rem;">
+        <h2 style="font-size:1.25rem;margin:2rem 0 0.75rem;">What's been tried</h2>
+        <p>Three categories of tool exist today, none of which closes the gap:</p>
+        <ul style="margin:0.5rem 0 1rem 1.25rem;">
+          <li><strong>Dashboards.</strong> Show what's happening; don't show what to do.</li>
+          <li><strong>Automation tools.</strong> Execute defined workflows; don't decide what workflows to run.</li>
+          <li><strong>AI chat assistants.</strong> Answer when asked; don't surface when not asked.</li>
+        </ul>
+        <p>What none provide is the layer between observation and action: an operating system that watches continuously, decides what's worth surfacing, drafts the action, and presents it for one-click approval.</p>
+      </section>
+
+      <section style="margin-bottom:2rem;">
+        <h2 style="font-size:1.25rem;margin:2rem 0 0.75rem;">What autonomous operations is</h2>
+        <ol style="margin:0.5rem 0 1rem 1.25rem;">
+          <li><strong>Continuous observation</strong> — every signal, on the founder's behalf.</li>
+          <li><strong>Specialized agent perspectives</strong> — different domains require different lenses.</li>
+          <li><strong>Decision-grade synthesis</strong> — specific decisions, not piles of metrics.</li>
+          <li><strong>Calibrated voice</strong> — customer-reaching artifacts pass through the founder's voice fingerprint.</li>
+          <li><strong>Trust earned over time</strong> — agents start cautious, earn autonomy by being right.</li>
+          <li><strong>Audit trail by default</strong> — no silent decisions; no untraceable side effects.</li>
+        </ol>
+      </section>
+
+      <section style="margin-bottom:2rem;">
+        <h2 style="font-size:1.25rem;margin:2rem 0 0.75rem;">What it is <em>not</em></h2>
+        <p>Not a dashboard. Not a workflow automator. Not a general AI assistant. Not a fleet control plane. Not an agent framework. Not a replacement for the founder.</p>
+      </section>
+
+      <section style="margin-bottom:2rem;">
+        <h2 style="font-size:1.25rem;margin:2rem 0 0.75rem;">Why now</h2>
+        <p>Three forces converge in 2026:</p>
+        <ul style="margin:0.5rem 0 1rem 1.25rem;">
+          <li>LLMs got reliable enough for operating decisions.</li>
+          <li>Operating tasks got expensive enough to outsource at SaaS scale.</li>
+          <li>Compounding data — voice fingerprints, taste journals, decision history — became the moat.</li>
+        </ul>
+      </section>
+
+      <section style="margin-bottom:2rem;">
+        <h2 style="font-size:1.25rem;margin:2rem 0 0.75rem;">The simple version</h2>
+        <p>Solo founders' time is the constraint. Software that does the operating tasks on their behalf is the answer. <strong>Autonomous Operations</strong> is the name. The first systems are shipping in 2026, calibrated per founder via voice fingerprints, taste journals, and decision history. The defensibility is per-founder data compounding monthly. The wedge is solo SaaS founders running 1-5 products.</p>
+        <p style="margin-top:1.5rem;">If you're running a SaaS and want to see what AO looks like in practice, that's what we built.</p>
+      </section>
+
+      <div style="display:flex;gap:1rem;margin-top:2.5rem;flex-wrap:wrap;">
+        <a href="/auth/signup" class="btn btn-primary" style="padding:0.75rem 1.75rem;font-size:0.95rem;">Try Foundry →</a>
+        <a href="/" class="btn btn-ghost" style="padding:0.75rem 1.5rem;font-size:0.95rem;color:var(--text-dim);">Back to home</a>
+      </div>
+
+      <footer style="margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--border);font-size:0.78rem;color:var(--text-muted);">
+        Full manifesto with annotations and operator notes lives in the
+        repo at <code>docs/strategy/category-manifesto.md</code>.
+      </footer>
+    </article>
   `));
 });
 

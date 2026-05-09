@@ -227,6 +227,7 @@
   ON experiment_holdouts(product_id, is_active);
   ON experiment_results_timeline(experiment_id, checkpoint_date);
   ON founder_journal_entries(product_id, is_agent_visible, created_at);
+  ON founders(referred_by_code) WHERE referred_by_code IS NOT NULL;
   ON freeze_periods(product_id, ended_at);
   ON freeze_periods(product_id, started_at DESC);
   ON idempotency_keys(product_id, action_type, dedup_key);
@@ -3112,7 +3113,7 @@
 , month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
 , name TEXT, secret_hash TEXT, is_active INTEGER DEFAULT 1, updated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);
-, onboarding_completed_at DATETIME, last_seen_at DATETIME, wisdom_network_opted_in INTEGER NOT NULL DEFAULT 1, lifestyle_mode INTEGER DEFAULT 0, lifestyle_target_mrr REAL, country_code TEXT DEFAULT 'US', local_currency TEXT DEFAULT 'USD', ppp_factor REAL DEFAULT 1.0, network_opt_in INTEGER NOT NULL DEFAULT 0, wisdom_network_consent_date TEXT);
+, onboarding_completed_at DATETIME, last_seen_at DATETIME, wisdom_network_opted_in INTEGER NOT NULL DEFAULT 1, lifestyle_mode INTEGER DEFAULT 0, lifestyle_target_mrr REAL, country_code TEXT DEFAULT 'US', local_currency TEXT DEFAULT 'USD', ppp_factor REAL DEFAULT 1.0, network_opt_in INTEGER NOT NULL DEFAULT 0, wisdom_network_consent_date TEXT, referred_by_code TEXT);
 , power_check_passed          INTEGER NOT NULL DEFAULT 0, conflict_check_passed       INTEGER NOT NULL DEFAULT 0);
 , pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT);
 , provider TEXT, sync_type TEXT, errors TEXT, duration_ms INTEGER);
@@ -3271,6 +3272,7 @@ CREATE INDEX idx_founder_state_product ON founder_state_assessments(product_id, 
 CREATE INDEX idx_founders_clerk ON founders(clerk_user_id);
 CREATE INDEX idx_founders_created ON founders(created_at);
 CREATE INDEX idx_founders_email ON founders(email);
+CREATE INDEX idx_founders_referred_by
 CREATE INDEX idx_founders_tier ON founders(tier);
 CREATE INDEX idx_freeze_periods_product_active
 CREATE INDEX idx_freeze_periods_started

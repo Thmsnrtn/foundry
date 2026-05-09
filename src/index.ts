@@ -22,7 +22,7 @@ import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateL
 import { internalMiddleware } from './middleware/internal.js';
 
 // Public routes (no auth)
-import { landingRoutes, pricingRoutes, caseStudyRoutes, legalRoutes } from './routes/public/landing.js';
+import { landingRoutes, pricingRoutes, caseStudyRoutes, legalRoutes, manifestoRoutes } from './routes/public/landing.js';
 
 // Auth routes
 import { authRoutes } from './routes/auth/clerk.js';
@@ -118,6 +118,7 @@ import { apiMetricRoutes } from './routes/api/metrics.js';
 import { apiAuditLogRoutes } from './routes/api/audit-log.js';
 import { apiUXRoutes } from './routes/api/ux.js';
 import { apiAskRoutes } from './routes/api/ask.js';
+import { feedbackRoutes } from './routes/api/feedback.js';
 import { mobileRoutes } from './routes/api/mobile.js';
 import { tier1ApiRoutes } from './routes/api/tier1.js';
 import { tier2ApiRoutes } from './routes/api/tier2.js';
@@ -239,6 +240,7 @@ app.route('/', landingRoutes);
 app.route('/', pricingRoutes);
 app.route('/', caseStudyRoutes);
 app.route('/', legalRoutes);
+app.route('/', manifestoRoutes);
 app.route('/', authRoutes);
 app.route('/', shareRoutes);
 app.route('/', ingestRoutes);
@@ -300,6 +302,7 @@ app.use('/setup/*', authMiddleware);
 app.use('/products/*', authMiddleware);
 app.use('/decisions/*', authMiddleware);
 app.use('/api/decisions/*', authMiddleware);
+app.use('/api/feedback/*', authMiddleware);
 app.use('/digest/*', authMiddleware);
 app.use('/beta/*', authMiddleware);
 app.use('/koldly/*', authMiddleware);
@@ -469,6 +472,7 @@ app.route('/', apiMetricRoutes);
 app.route('/', apiAuditLogRoutes);
 app.route('/', apiUXRoutes);
 app.route('/', apiAskRoutes);
+app.route('/', feedbackRoutes);
 app.route('/', mobileRoutes);
 app.route('/', tier1ApiRoutes);
 app.route('/', tier2ApiRoutes);
