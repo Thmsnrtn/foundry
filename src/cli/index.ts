@@ -374,4 +374,114 @@ program
     }
   });
 
+// ─── Dogfood: seed Foundry's own North Star + voice fingerprint ──────────────
+//
+// Persona review Cluster A (PG, Butterfield, Cagan, Maples, Chesky) all said
+// the same thing: dogfood the product before adding to it. The disciplines
+// shipped in V3.1 (North Star, voice gate) need seed data to operate. This
+// command idempotently seeds sensible defaults derived from the existing
+// docs/audits/narrow-launch-readiness.md (5 friendly alpha founders) and
+// the codebase voice that's already evident in commit messages and
+// CONTRIBUTING.md (terse, plainspoken, judgment-first).
+//
+// Usage: foundry seed:dogfood <productId>
+//
+// Re-running is safe: upserts the North Star, only creates a fingerprint if
+// none is currently active.
+program
+  .command('seed:dogfood <productId>')
+  .description("Seed Foundry's own North Star and voice fingerprint with sensible defaults")
+  .action(async (productId: string) => {
+    const productCheck = await query('SELECT id, name FROM products WHERE id = ?', [productId]);
+    if (productCheck.rows.length === 0) {
+      console.error(`Product ${productId} not found.`);
+      process.exit(1);
+    }
+    const productName = (productCheck.rows[0] as Record<string, string>).name;
+
+    const { upsertNorthStar, getNorthStar } = await import('../services/destination/north-star.js');
+    const { getActiveFingerprint, createDraftFingerprint, activateFingerprint } = await import(
+      '../services/calibration/voice-fingerprint.js'
+    );
+
+    // North Star — narrow-launch-readiness.md targets 5 friendly alpha
+    // founders. ARR target is conservative: 5 × $199 (Growth tier) × 12 months.
+    // Adjust target_date to ~13 weeks from now.
+    const targetDate = new Date(Date.now() + 91 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    const ns = await upsertNorthStar(productId, {
+      arr_target_dollars: 11_940, // 5 × $199 × 12
+      paying_accounts_target: 5,
+      nrr_floor_pct: 80,
+      target_date: targetDate,
+      destination_summary:
+        '5 paying alpha founders by end of Q3 — proven friendly-alpha narrow positioning before scaling.',
+    });
+    console.log(`North Star seeded for ${productName}:`);
+    console.log(`  ARR target:      $${ns.arr_target_dollars?.toLocaleString()} by ${ns.target_date}`);
+    console.log(`  Paying accounts: ${ns.paying_accounts_target}`);
+    console.log(`  NRR floor:       ${ns.nrr_floor_pct}%`);
+    console.log(`  Summary:         ${ns.destination_summary}`);
+
+    // Voice fingerprint — only seed if none is active.
+    const existing = await getActiveFingerprint(productId);
+    if (existing) {
+      console.log(`\nVoice fingerprint already active (version ${existing.version}). Skipping.`);
+    } else {
+      // Defaults derived from the codebase's own voice: docs/CONTRIBUTING.md,
+      // commit messages, the 18-persona review. Founder editable later.
+      const fp = await createDraftFingerprint(productId, {
+        register: 'plainspoken',
+        energy: 'measured',
+        pov: 'second-person operator',
+        sentence_rhythm: 'short and direct; one idea per sentence; resist multi-clause hedging',
+        lexical_preferences: [
+          'specific over abstract',
+          'verbs over nouns',
+          'concrete numbers over vague qualifiers',
+        ],
+        banned_words: [
+          'leverage',
+          'synergy',
+          'game-changer',
+          'paradigm',
+          'unleash',
+          'cutting-edge',
+          'world-class',
+          'best-in-class',
+          'transform your business',
+          'next-generation',
+        ],
+        anti_exemplars: [
+          'We leverage cutting-edge AI to transform your business operations.',
+          'Foundry is a best-in-class, world-class operating system.',
+          'Unleash the power of next-generation autonomous agents.',
+        ],
+        exemplar_sentences: [
+          'Foundry runs a small council of AI agents on your repo and tells you one thing to do each morning.',
+          "Built for solo SaaS founders running one to five products. Single founder, full team.",
+          'You set the pace. They earn the trust.',
+          "The product is more built than it is used; the leverage this month is in dogfooding.",
+          'Run your SaaS like there is a team behind it.',
+          'Decisions, not noise.',
+          "Agents that prove themselves earn autonomy.",
+        ],
+        source: 'founder',
+        notes:
+          'Initial dogfood seed. Calibrate against actual artifacts via taste journal once you have a few weeks of usage.',
+      });
+      await activateFingerprint(fp.id);
+      console.log(`\nVoice fingerprint seeded and activated (version ${fp.version}):`);
+      console.log(`  Register:           ${fp.register}`);
+      console.log(`  Energy:             ${fp.energy}`);
+      console.log(`  Banned words:       ${fp.banned_words.length}`);
+      console.log(`  Exemplar sentences: ${fp.exemplar_sentences.length}`);
+    }
+
+    console.log('\nDone. Run the briefing to see the destination block in action:');
+    console.log(`  foundry job:run scp_daily_briefing`);
+  });
+
 program.parse();
