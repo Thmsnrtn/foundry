@@ -5,6 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
+import { encryptCredentialPayload } from '../encryption.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -138,6 +139,7 @@ export async function connectIntegration(
   const configJson = JSON.stringify(config.config_json ?? {});
   const authorizedAgents = JSON.stringify(config.authorized_agents ?? ['all']);
   const now = new Date().toISOString();
+  const credentialsCiphertext = encryptCredentialPayload(config.credentials_json);
 
   if (existing) {
     await query(
@@ -149,13 +151,13 @@ export async function connectIntegration(
         authorized_agents = ?,
         updated_at = ?
        WHERE product_id = ? AND name = ?`,
-      [type, config.credentials_json ?? null, configJson, authorizedAgents, now, productId, name],
+      [type, credentialsCiphertext, configJson, authorizedAgents, now, productId, name],
     );
   } else {
     await query(
       `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
-      [nanoid(), productId, name, type, config.credentials_json ?? null, configJson, authorizedAgents, now, now],
+      [nanoid(), productId, name, type, credentialsCiphertext, configJson, authorizedAgents, now, now],
     );
   }
 }

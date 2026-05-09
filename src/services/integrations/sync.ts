@@ -10,6 +10,7 @@ import { syncStripeMetrics } from './stripe.js';
 import { syncPostHogMetrics } from './posthog.js';
 import { syncIntercomMetrics } from './intercom.js';
 import { syncLinearMetrics } from './linear.js';
+import { decryptCredentialPayload } from '../encryption.js';
 import type { IntegrationType } from '../../types/index.js';
 
 interface IntegrationRow {
@@ -72,7 +73,13 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
 
   try {
     if (integration.credentials_json) {
-      credentials = JSON.parse(integration.credentials_json) as Record<string, string>;
+      // Decrypt at-rest credentials. Backward compatible with legacy
+      // plaintext rows: decryptCredentialPayload returns plaintext as-is
+      // when the value isn't recognizably encrypted.
+      const plaintext = decryptCredentialPayload(integration.credentials_json);
+      if (plaintext) {
+        credentials = JSON.parse(plaintext) as Record<string, string>;
+      }
     }
     if (integration.config_json) {
       config = JSON.parse(integration.config_json) as Record<string, unknown>;

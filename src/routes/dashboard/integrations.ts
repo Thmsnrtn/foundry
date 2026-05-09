@@ -12,6 +12,7 @@ import { dashboardLayout } from '../../views/layout.js';
 import { nanoid } from 'nanoid';
 import type { IntegrationType } from '../../types/index.js';
 import { requireTier } from '../../middleware/tier-gate.js';
+import { encryptCredentialPayload } from '../../services/encryption.js';
 
 export const integrationsRoutes = new Hono<AuthEnv>();
 
@@ -264,17 +265,21 @@ integrationsRoutes.post('/integrations/:type/connect', async (c) => {
     [ctx.product.id, type],
   );
 
+  // Encrypt credentials at rest. config_json stays plaintext — it's
+  // non-sensitive (event names, account ids).
+  const credentialsCiphertext = encryptCredentialPayload(JSON.stringify(credentials));
+
   if (existing.rows.length > 0) {
     await query(
       `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
        last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE product_id = ? AND type = ?`,
-      [JSON.stringify(credentials), JSON.stringify(config), ctx.product.id, type],
+      [credentialsCiphertext, JSON.stringify(config), ctx.product.id, type],
     );
   } else {
     await query(
       `INSERT INTO integrations (id, product_id, type, status, credentials_json, config_json)
        VALUES (?, ?, ?, 'active', ?, ?)`,
-      [nanoid(), ctx.product.id, type, JSON.stringify(credentials), JSON.stringify(config)],
+      [nanoid(), ctx.product.id, type, credentialsCiphertext, JSON.stringify(config)],
     );
   }
 

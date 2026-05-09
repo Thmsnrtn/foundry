@@ -161,4 +161,37 @@ describe('encryption service', () => {
       expect(isEncrypted('aa:bb:cc:dd')).toBe(false);
     });
   });
+
+  describe('encryptCredentialPayload / decryptCredentialPayload', () => {
+    it('round-trips a JSON credentials blob', async () => {
+      const { encryptCredentialPayload, decryptCredentialPayload } = await loadModule();
+      const json = JSON.stringify({ access_token: 'sk_live_xyz', stripe_account_id: 'acct_123' });
+      const ciphertext = encryptCredentialPayload(json)!;
+      expect(ciphertext).not.toBe(json);
+      expect(ciphertext).toMatch(/^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/i);
+      expect(decryptCredentialPayload(ciphertext)).toBe(json);
+    });
+
+    it('returns null for null/undefined/empty inputs', async () => {
+      const { encryptCredentialPayload, decryptCredentialPayload } = await loadModule();
+      expect(encryptCredentialPayload(null)).toBeNull();
+      expect(encryptCredentialPayload(undefined)).toBeNull();
+      expect(encryptCredentialPayload('')).toBeNull();
+      expect(decryptCredentialPayload(null)).toBeNull();
+      expect(decryptCredentialPayload(undefined)).toBeNull();
+      expect(decryptCredentialPayload('')).toBeNull();
+    });
+
+    it('encryptCredentialPayload is idempotent — already-encrypted values are returned unchanged', async () => {
+      const { encrypt, encryptCredentialPayload } = await loadModule();
+      const ciphertext = encrypt('payload');
+      expect(encryptCredentialPayload(ciphertext)).toBe(ciphertext);
+    });
+
+    it('decryptCredentialPayload returns plaintext as-is when value is not encrypted (legacy rows)', async () => {
+      const { decryptCredentialPayload } = await loadModule();
+      const legacyPlaintext = '{"access_token":"sk_live_legacy"}';
+      expect(decryptCredentialPayload(legacyPlaintext)).toBe(legacyPlaintext);
+    });
+  });
 });

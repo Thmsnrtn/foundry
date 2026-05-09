@@ -77,3 +77,26 @@ export function decrypt(encrypted: string): string {
 export function isEncrypted(value: string): boolean {
   return HEX_PATTERN.test(value);
 }
+
+/**
+ * Encrypt a credential JSON payload (e.g. integrations.credentials_json).
+ * Idempotent: if the value is already encrypted, returns it unchanged so
+ * callers can safely round-trip through this helper. Returns null for
+ * null/empty inputs so the caller's NULL semantics are preserved.
+ */
+export function encryptCredentialPayload(value: string | null | undefined): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (isEncrypted(value)) return value;
+  return encrypt(value);
+}
+
+/**
+ * Decrypt a credential JSON payload. Backward compatible with plaintext
+ * rows that pre-date encryption: if the value isn't recognizably encrypted,
+ * returns it as-is. Returns null for null/empty inputs.
+ */
+export function decryptCredentialPayload(value: string | null | undefined): string | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (!isEncrypted(value)) return value;
+  return decrypt(value);
+}
