@@ -1,0 +1,62 @@
+[
+  {
+    "name": "default-threshold-pass",
+    "notes": "score 80 vs default threshold 70 → pass (ship)",
+    "input": { "score": 80, "threshold": 70, "warnBand": 15, "hasBannedWord": false },
+    "expected": { "verdict": "pass", "suggested_action": "ship" }
+  },
+  {
+    "name": "default-threshold-warn-upper",
+    "notes": "score 69 (just under threshold) → warn",
+    "input": { "score": 69, "threshold": 70, "warnBand": 15, "hasBannedWord": false },
+    "expected": { "verdict": "warn", "suggested_action": "review" }
+  },
+  {
+    "name": "default-threshold-warn-lower",
+    "notes": "score 55 (at threshold - warnBand) → warn boundary",
+    "input": { "score": 55, "threshold": 70, "warnBand": 15, "hasBannedWord": false },
+    "expected": { "verdict": "warn", "suggested_action": "review" }
+  },
+  {
+    "name": "default-threshold-block-just-below",
+    "notes": "score 54 (just below warn band) → block",
+    "input": { "score": 54, "threshold": 70, "warnBand": 15, "hasBannedWord": false },
+    "expected": { "verdict": "block", "suggested_action": "rewrite" }
+  },
+  {
+    "name": "default-threshold-block-far-below",
+    "notes": "score 10 → block (rewrite)",
+    "input": { "score": 10, "threshold": 70, "warnBand": 15, "hasBannedWord": false },
+    "expected": { "verdict": "block", "suggested_action": "rewrite" }
+  },
+  {
+    "name": "lenient-threshold",
+    "notes": "score 65 with threshold 60 → pass",
+    "input": { "score": 65, "threshold": 60, "warnBand": 15, "hasBannedWord": false },
+    "expected": { "verdict": "pass", "suggested_action": "ship" }
+  },
+  {
+    "name": "strict-threshold-block",
+    "notes": "score 80 with threshold 95 → block (95-15=80, not >=)",
+    "input": { "score": 80, "threshold": 95, "warnBand": 15, "hasBannedWord": false },
+    "expected": { "verdict": "warn", "suggested_action": "review" }
+  },
+  {
+    "name": "strict-threshold-block-clear",
+    "notes": "score 50 with threshold 90, warnBand 15 → block (75 cutoff)",
+    "input": { "score": 50, "threshold": 90, "warnBand": 15, "hasBannedWord": false },
+    "expected": { "verdict": "block", "suggested_action": "rewrite" }
+  },
+  {
+    "name": "narrow-warn-band",
+    "notes": "score 65 with threshold 70, warnBand 5 → block (65 < 65? no, equal → warn)",
+    "input": { "score": 65, "threshold": 70, "warnBand": 5, "hasBannedWord": false },
+    "expected": { "verdict": "warn", "suggested_action": "review" }
+  },
+  {
+    "name": "banned-word-overrides-pass",
+    "notes": "even at score 95, presence of a banned word → block 0",
+    "input": { "score": 95, "threshold": 70, "warnBand": 15, "hasBannedWord": true },
+    "expected": { "verdict": "block", "suggested_action": "rewrite", "scoreOverride": 0 }
+  }
+]
