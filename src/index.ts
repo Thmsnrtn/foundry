@@ -30,7 +30,6 @@ import { authRoutes } from './routes/auth/clerk.js';
 // Dashboard routes (auth required)
 import { dashboardRoutes } from './routes/dashboard/index.js';
 import { onboardingRoutes } from './routes/dashboard/onboarding.js';
-import { onboardingChat } from './routes/dashboard/onboarding-chat.js';
 import { productRoutes } from './routes/dashboard/products.js';
 import { auditRoutes } from './routes/dashboard/audit.js';
 import { decisionRoutes } from './routes/dashboard/decisions.js';
@@ -298,8 +297,6 @@ app.route('/', ecosystemRoutes);
 // Apply auth middleware to all dashboard and API routes
 app.use('/dashboard/*', authMiddleware);
 app.use('/onboarding/*', authMiddleware);
-app.use('/setup', authMiddleware);
-app.use('/setup/*', authMiddleware);
 app.use('/products/*', authMiddleware);
 app.use('/decisions/*', authMiddleware);
 app.use('/api/decisions/*', authMiddleware);
@@ -399,7 +396,6 @@ app.use('/founder-ops/*', csrfMiddleware);
 // Dashboard routes
 app.route('/', dashboardRoutes);
 app.route('/', onboardingRoutes);
-app.route('/', onboardingChat);
 app.route('/', productRoutes);
 app.route('/', auditRoutes);
 app.route('/', decisionRoutes);
