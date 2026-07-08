@@ -180,6 +180,7 @@ initReporter().catch((err) => {
 
 // Global middleware
 import { errorPage, wantsHtml } from './views/error-page.js';
+import { getProcessRole, schedulerEnabledForRole } from './lib/process-role.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { requestIdMiddleware } from './middleware/security.js';
 // Trace context first — every downstream log line / AI call / error
@@ -562,14 +563,21 @@ runMigrations()
       logger.warn('SCP provisioning error (non-fatal)', { error: String(err) });
     }
 
+    // Phase 3.1: only the worker (or an all-in-one) process runs the scheduler.
+    // The 'web' process group serves HTTP without the 73 in-process crons.
+    const role = getProcessRole();
     if (process.env.NODE_ENV === 'production') {
-      startScheduler();
+      if (schedulerEnabledForRole(role)) {
+        startScheduler();
+      } else {
+        logger.info(`Scheduler disabled for PROCESS_ROLE=${role}`);
+      }
     }
     serve({
       fetch: app.fetch,
       port,
     }, (info) => {
-      logger.info(`Listening on http://localhost:${info.port}`);
+      logger.info(`Listening on http://localhost:${info.port} (role=${role})`);
     });
   })
   .catch((err) => {

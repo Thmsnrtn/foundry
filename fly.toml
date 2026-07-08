@@ -10,12 +10,22 @@ kill_timeout = 5
   NODE_ENV = "production"
   PORT = "8080"
 
+# ─── Process groups (Phase 3.1) ─────────────────────────────────────────────
+# Split the HTTP server from the scheduler so the 73 in-process cron jobs no
+# longer share one machine with request handling. PROCESS_ROLE gates the
+# scheduler (see src/lib/process-role.ts). DB-backed job locks keep double-runs
+# impossible even across a rolling deploy.
+[processes]
+  web = "sh -c 'PROCESS_ROLE=web node dist/index.js'"
+  worker = "sh -c 'PROCESS_ROLE=worker node dist/index.js'"
+
 [http_service]
   internal_port = 8080
   force_https = true
   auto_stop_machines = false
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 2   # web: 2 machines for zero-downtime deploy overlap
+  processes = ["web"]        # only web sits behind the public load balancer
 
   [http_service.concurrency]
     type = "requests"
@@ -34,7 +44,3 @@ kill_timeout = 5
   memory = "1024mb"
   cpu_kind = "shared"
   cpus = 1
-
-# Cron jobs run in the main process via the CronJob scheduler.
-# All 30 jobs are managed by src/jobs/index.ts and start automatically.
-# No separate process group needed — they run in-process on the primary machine.
