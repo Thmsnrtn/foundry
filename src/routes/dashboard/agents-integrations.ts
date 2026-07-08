@@ -336,7 +336,7 @@ agentIntegrationRoutes.get('/agents/integrations', async (c) => {
   const content = html`
     <div class="section-header">
       <h1>Integration Fabric</h1>
-      <span class="text-muted" style="font-size:14px;">${integrations.filter((i) => i.status === 'active').length} of ${SUPPORTED_INTEGRATIONS.length} connected</span>
+      <span class="text-muted" style="font-size:14px;">${integrations.filter((i) => i.status === 'connected').length} of ${SUPPORTED_INTEGRATIONS.length} connected</span>
     </div>
 
     ${pendingActions.length > 0 ? html`

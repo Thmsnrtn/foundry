@@ -151,8 +151,8 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
     <div class="integration-grid">
       ${Object.entries(INTEGRATION_META).map(([type, meta]) => {
         const connected = connectedTypes.get(type);
-        const isConnected = connected?.status === 'active';
-        const hasError = connected?.status === 'error';
+        const isConnected = connected?.status === 'connected';
+        const hasError = connected?.status === 'error' || connected?.status === 'errored';
 
         return html`
           <div class="integration-card ${isConnected ? 'connected' : ''} ${hasError ? 'error' : ''}">
@@ -271,14 +271,14 @@ integrationsRoutes.post('/integrations/:type/connect', async (c) => {
 
   if (existing.rows.length > 0) {
     await query(
-      `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
+      `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'connected',
        last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE product_id = ? AND type = ?`,
       [credentialsCiphertext, JSON.stringify(config), ctx.product.id, type],
     );
   } else {
     await query(
       `INSERT INTO integrations (id, product_id, type, status, credentials_json, config_json)
-       VALUES (?, ?, ?, 'active', ?, ?)`,
+       VALUES (?, ?, ?, 'connected', ?, ?)`,
       [nanoid(), ctx.product.id, type, credentialsCiphertext, JSON.stringify(config)],
     );
   }

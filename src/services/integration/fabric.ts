@@ -111,7 +111,12 @@ export async function getIntegration(productId: string, name: string): Promise<I
 }
 
 /**
- * Connect/update an integration (upsert). Sets status to 'active'.
+ * Connect/update an integration (upsert). Sets status to 'connected'.
+ *
+ * NOTE: 'connected' is the canonical healthy-integration status across the
+ * entire codebase. Every sync adapter guards on status === 'connected'; a
+ * previous version wrote 'active' here, which silently no-op'd every sync.
+ * Do not reintroduce 'active' — see migration 074_integration_status_fix.sql.
  */
 export async function connectIntegration(
   productId: string,
@@ -144,7 +149,7 @@ export async function connectIntegration(
   if (existing) {
     await query(
       `UPDATE integrations SET
-        status = 'active',
+        status = 'connected',
         type = ?,
         credentials_json = COALESCE(?, credentials_json),
         config_json = ?,
@@ -156,7 +161,7 @@ export async function connectIntegration(
   } else {
     await query(
       `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, 'connected', ?, ?, ?, ?, ?)`,
       [nanoid(), productId, name, type, credentialsCiphertext, configJson, authorizedAgents, now, now],
     );
   }
@@ -365,7 +370,7 @@ export async function getIntegrationHealth(productId: string): Promise<{
     const r = row as Record<string, unknown>;
     const count = r.count as number;
     total += count;
-    if (r.status === 'active') active += count;
+    if (r.status === 'connected') active += count;
     if (r.status === 'errored') errored += count;
     if (r.status === 'pending_auth') pending_auth += count;
   }
