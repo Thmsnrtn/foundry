@@ -144,6 +144,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
       {label:'Signal Dashboard',href:'/dashboard',section:'Navigate'},
       {label:'CEO Briefing',href:'/agents/briefings/latest',section:'Navigate'},
       {label:'Decisions',href:'/decisions',section:'Navigate'},
+      {label:'Fleet Observatory',href:'/fleet',section:'Navigate'},
       {label:'Action Queue',href:'/agents/actions',section:'Navigate'},
       {label:'Agent Debate',href:'/agents/debate',section:'Agents'},
       {label:'Agent Accuracy',href:'/agents/accuracy',section:'Agents'},
