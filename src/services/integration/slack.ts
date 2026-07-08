@@ -36,7 +36,7 @@ interface SlackChannelInfoResponse {
 
 export async function isSlackConnected(productId: string): Promise<boolean> {
   const integration = await getIntegration(productId, 'slack');
-  return integration?.status === 'connected';
+  return integration?.status === 'active';
 }
 
 /**
@@ -45,7 +45,7 @@ export async function isSlackConnected(productId: string): Promise<boolean> {
  */
 export async function syncSlackEvents(productId: string): Promise<{ synced: number; error?: string }> {
   const integration = await getIntegration(productId, 'slack');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return { synced: 0 };
   }
 
@@ -102,7 +102,7 @@ export async function sendSlackNotification(
   }
 ): Promise<boolean> {
   const integration = await getIntegration(productId, 'slack');
-  if (!integration || integration.status !== 'connected') return false;
+  if (!integration || integration.status !== 'active') return false;
 
   const botToken = integration.config_json.bot_token as string | undefined;
   const defaultChannel = integration.config_json.channel_id as string | undefined;
@@ -137,7 +137,7 @@ export async function sendAgentBriefing(
   }
 ): Promise<boolean> {
   const integration = await getIntegration(productId, 'slack');
-  if (!integration || integration.status !== 'connected') return false;
+  if (!integration || integration.status !== 'active') return false;
 
   const botToken = integration.config_json.bot_token as string | undefined;
   const defaultChannel = integration.config_json.channel_id as string | undefined;
@@ -191,7 +191,7 @@ export async function getSlackSummary(productId: string): Promise<{
   lastNotification: string | null;
 }> {
   const integration = await getIntegration(productId, 'slack');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return {
       connected: false,
       channelName: null,

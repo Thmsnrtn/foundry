@@ -36,4 +36,7 @@ CREATE TABLE IF NOT EXISTS investor_updates (
   sent_at TEXT,
   generated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_investor_updates_month ON investor_updates(product_id, month);
+-- idx_investor_updates_month moved to 056_schema_reconciliation: the `month`
+-- column is added there (investor_updates was first defined in
+-- 030_investor_automation without it), so it couldn't be indexed at 039 time
+-- (Phase 2.4).

@@ -41,7 +41,7 @@ const RESEND_TIMEOUT_MS = 10_000;
 
 export async function isResendConnected(productId: string): Promise<boolean> {
   const integration = await getIntegration(productId, 'resend');
-  return integration !== null && integration.status === 'connected';
+  return integration !== null && integration.status === 'active';
 }
 
 // ─── Email Queuing ────────────────────────────────────────────────────────────

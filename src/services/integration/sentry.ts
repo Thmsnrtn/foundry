@@ -23,7 +23,7 @@ interface SentryIssue {
 
 export async function isSentryConnected(productId: string): Promise<boolean> {
   const integration = await getIntegration(productId, 'sentry');
-  return integration?.status === 'connected';
+  return integration?.status === 'active';
 }
 
 /**
@@ -32,7 +32,7 @@ export async function isSentryConnected(productId: string): Promise<boolean> {
  */
 export async function syncSentryEvents(productId: string): Promise<{ synced: number; error?: string }> {
   const integration = await getIntegration(productId, 'sentry');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return { synced: 0 };
   }
 
@@ -128,7 +128,7 @@ export async function getSentrySummary(productId: string): Promise<{
   releaseHealth: string | null;
 }> {
   const integration = await getIntegration(productId, 'sentry');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return {
       connected: false,
       openIssues: null,

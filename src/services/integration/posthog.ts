@@ -28,7 +28,7 @@ interface PostHogFunnelResult {
 
 export async function isPostHogConnected(productId: string): Promise<boolean> {
   const integration = await getIntegration(productId, 'posthog');
-  return integration?.status === 'connected';
+  return integration?.status === 'active';
 }
 
 /**
@@ -37,7 +37,7 @@ export async function isPostHogConnected(productId: string): Promise<boolean> {
  */
 export async function syncPostHogEvents(productId: string): Promise<{ synced: number; error?: string }> {
   const integration = await getIntegration(productId, 'posthog');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return { synced: 0 };
   }
 
@@ -113,7 +113,7 @@ export async function getPostHogSummary(productId: string): Promise<{
   topEvents: Array<{ name: string; count: number }>;
 }> {
   const integration = await getIntegration(productId, 'posthog');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return { connected: false, activeUsers7d: null, signups7d: null, topEvents: [] };
   }
 

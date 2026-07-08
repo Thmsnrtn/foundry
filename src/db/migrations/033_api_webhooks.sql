@@ -23,8 +23,9 @@ CREATE TABLE IF NOT EXISTS outbound_webhooks (
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_webhooks_product
-  ON outbound_webhooks(product_id, is_active);
+-- idx_webhooks_product moved to 056_schema_reconciliation: outbound_webhooks'
+-- is_active column is added there (the canonical table is 013_voice_push's),
+-- so it couldn't be indexed at 033 time (Phase 2.4).
 
 -- webhook_deliveries: one row per attempted delivery of an event to a webhook
 -- attempt_count increments on each retry; next_retry_at drives the retry scheduler
@@ -46,7 +47,8 @@ CREATE TABLE IF NOT EXISTS webhook_deliveries (
 CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook
   ON webhook_deliveries(webhook_id, created_at);
 
--- Partial index for the retry queue: only pending deliveries need to be scanned
-CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_retry
-  ON webhook_deliveries(next_retry_at)
-  WHERE failed_at IS NULL AND delivered_at IS NULL;
+-- Partial index for the retry queue REMOVED (Phase 2.4): the canonical
+-- webhook_deliveries table (006_api_keys_webhooks) has no next_retry_at /
+-- failed_at columns — 033's richer redefinition is a no-op CREATE. Indexing
+-- those columns failed on a fresh DB. (The 006-vs-033 webhook_deliveries
+-- dual-schema is tracked with the broader integrations consolidation.)

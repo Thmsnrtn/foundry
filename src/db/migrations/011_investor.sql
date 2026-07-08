@@ -93,9 +93,14 @@ CREATE TABLE IF NOT EXISTS funding_readiness (
   verdict TEXT CHECK(verdict IN ('raise_ready', 'almost_ready', 'not_ready')),
   key_gaps TEXT,                       -- JSON: string[] — what's blocking raise readiness
   narrative TEXT,                      -- AI-generated 3-sentence assessment
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(product_id, date(created_at))
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- One row per product per day. libSQL prohibits expressions in table-level
+-- UNIQUE constraints, so daily-uniqueness is enforced via an expression index
+-- instead (Phase 2.4 / fresh-DB migration fix).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_funding_readiness_product_day
+  ON funding_readiness(product_id, date(created_at));
 
 CREATE INDEX IF NOT EXISTS idx_funding_readiness_product ON funding_readiness(product_id, created_at DESC);
 

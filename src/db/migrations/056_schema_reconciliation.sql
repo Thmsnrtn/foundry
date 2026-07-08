@@ -30,6 +30,10 @@ ALTER TABLE integrations ADD COLUMN total_outbound_actions INTEGER DEFAULT 0;
 ALTER TABLE integrations ADD COLUMN error_count_trailing_7d INTEGER DEFAULT 0;
 ALTER TABLE integrations ADD COLUMN cost_trailing_30d_usd REAL DEFAULT 0.0;
 
+-- Index moved here from 021_data_ingestion — `provider` only exists after the
+-- ALTER above, so it couldn't be indexed at 021 time (Phase 2.4).
+CREATE INDEX IF NOT EXISTS idx_integrations_provider ON integrations(provider, status);
+
 -- ─── integration_sync_log (first: 008_integrations, dupe: 021_data_ingestion) ──
 
 ALTER TABLE integration_sync_log ADD COLUMN provider TEXT;
@@ -53,12 +57,20 @@ ALTER TABLE outbound_webhooks ADD COLUMN secret_hash TEXT;
 ALTER TABLE outbound_webhooks ADD COLUMN is_active INTEGER DEFAULT 1;
 ALTER TABLE outbound_webhooks ADD COLUMN updated_at TEXT;
 
+-- Index moved from 033_api_webhooks — is_active only exists after the ALTER
+-- above (Phase 2.4).
+CREATE INDEX IF NOT EXISTS idx_webhooks_product ON outbound_webhooks(product_id, is_active);
+
 -- ─── investor_updates (first: 030_investor_automation, dupe: 039_investor_layer) ──
 
 ALTER TABLE investor_updates ADD COLUMN month TEXT;
 ALTER TABLE investor_updates ADD COLUMN draft_text TEXT;
 ALTER TABLE investor_updates ADD COLUMN key_metrics_json TEXT DEFAULT '{}';
 ALTER TABLE investor_updates ADD COLUMN generated_at TEXT;
+
+-- Index moved from 039_investor_layer — `month` only exists after the ALTER
+-- above (Phase 2.4).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_investor_updates_month ON investor_updates(product_id, month);
 
 -- ─── experiments (first: 023_experiments_strategy, dupe: 028_growth_experiments) ──
 

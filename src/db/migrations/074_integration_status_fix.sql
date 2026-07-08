@@ -1,16 +1,19 @@
 -- =============================================================================
--- Migration 074: Standardize integration status on 'connected' (Phase 0.1)
+-- Migration 074: Standardize integration status on 'active' (Phase 0.1 / 2.4)
 --
--- The integration fabric wrote status = 'active' when connecting an integration
--- (fabric.ts connectIntegration + the OAuth callback in routes/dashboard/
--- integrations.ts), but all six sync adapters (posthog, sentry, linear, slack,
--- intercom, github) guard on status === 'connected'. Nothing ever wrote
--- 'connected', so the hourly scpIntegrationFabricSync and 2-hourly extended sync
--- were silent no-ops: integration_events stayed empty and every agent reasoned
+-- The sync adapters (posthog/sentry/linear/slack/intercom/github) guard on a
+-- healthy integration status. The original bug was that they checked
+-- 'connected' — a value that nothing wrote AND that no `integrations` schema's
+-- status CHECK constraint even permits (008: pending/active/error/paused/
+-- revoked; 021_integration_fabric: active/paused/errored/pending_auth/
+-- disconnected). So the hourly fabric sync silently no-op'd and agents reasoned
 -- over zero telemetry.
 --
--- The code now writes 'connected' everywhere. This migration repairs existing
--- rows so already-connected integrations start syncing immediately.
+-- The code now standardizes on 'active' everywhere (connectIntegration writes
+-- it, every adapter guards on it, and every schema's CHECK allows it). This
+-- migration repairs any rows that a transient earlier build may have written as
+-- 'connected' back to the canonical 'active'. It's a no-op on databases that
+-- never wrote 'connected'.
 -- =============================================================================
 
-UPDATE integrations SET status = 'connected' WHERE status = 'active';
+UPDATE integrations SET status = 'active' WHERE status = 'connected';

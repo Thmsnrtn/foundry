@@ -30,7 +30,7 @@ interface IntercomConversationList {
 
 export async function isIntercomConnected(productId: string): Promise<boolean> {
   const integration = await getIntegration(productId, 'intercom');
-  return integration?.status === 'connected';
+  return integration?.status === 'active';
 }
 
 /**
@@ -39,7 +39,7 @@ export async function isIntercomConnected(productId: string): Promise<boolean> {
  */
 export async function syncIntercomEvents(productId: string): Promise<{ synced: number; error?: string }> {
   const integration = await getIntegration(productId, 'intercom');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return { synced: 0 };
   }
 
@@ -141,7 +141,7 @@ export async function getIntercomSummary(productId: string): Promise<{
   npsScore: number | null;
 }> {
   const integration = await getIntegration(productId, 'intercom');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return {
       connected: false,
       openConversations: null,

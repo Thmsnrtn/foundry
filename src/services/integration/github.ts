@@ -44,7 +44,7 @@ interface GitHubDeploymentStatus {
 
 export async function isGitHubConnected(productId: string): Promise<boolean> {
   const integration = await getIntegration(productId, 'github');
-  return integration?.status === 'connected';
+  return integration?.status === 'active';
 }
 
 /**
@@ -53,7 +53,7 @@ export async function isGitHubConnected(productId: string): Promise<boolean> {
  */
 export async function syncGitHubEvents(productId: string): Promise<{ synced: number; error?: string }> {
   const integration = await getIntegration(productId, 'github');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return { synced: 0 };
   }
 
@@ -151,7 +151,7 @@ export async function getGitHubSummary(productId: string): Promise<{
   commitsThisWeek: number | null;
 }> {
   const integration = await getIntegration(productId, 'github');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return {
       connected: false,
       openPRs: null,

@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS stripe_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_integrations_product ON integrations(product_id);
-CREATE INDEX IF NOT EXISTS idx_integrations_provider ON integrations(provider, status);
+-- idx_integrations_provider moved to 056_schema_reconciliation: `provider` is
+-- added there (the canonical table is 008_integrations, which has no provider
+-- column), so indexing it here failed on a fresh DB (Phase 2.4).
 CREATE INDEX IF NOT EXISTS idx_sync_log_integration ON integration_sync_log(integration_id);
 CREATE INDEX IF NOT EXISTS idx_stripe_events_product ON stripe_events(product_id, processed);

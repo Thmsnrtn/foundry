@@ -23,9 +23,14 @@ CREATE TABLE IF NOT EXISTS network_contributions (
   founder_id TEXT NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   contributed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  metrics_contributed INTEGER DEFAULT 0,
-  UNIQUE(product_id, date(contributed_at))
+  metrics_contributed INTEGER DEFAULT 0
 );
+
+-- One contribution row per product per day. libSQL prohibits expressions in
+-- table-level UNIQUE constraints, so enforce via an expression index instead
+-- (Phase 2.4 / fresh-DB migration fix).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_network_contributions_product_day
+  ON network_contributions(product_id, date(contributed_at));
 
 -- ─── Network opt-in on founders ───────────────────────────────────────────────
 

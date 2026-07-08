@@ -98,4 +98,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
   revoked_at   TEXT                                -- NULL = active
 );
 
-CREATE INDEX IF NOT EXISTS idx_api_keys_product ON api_keys(product_id);
+-- api_keys is founder-scoped in the canonical schema (006_api_keys_webhooks);
+-- 024's product_id redefinition is a no-op CREATE, so index the real column
+-- (founder_id) instead of the non-existent product_id (Phase 2.4).
+CREATE INDEX IF NOT EXISTS idx_api_keys_founder ON api_keys(founder_id);

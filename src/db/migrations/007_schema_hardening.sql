@@ -88,24 +88,14 @@ CREATE TABLE IF NOT EXISTS usage_limits (
 );
 
 -- ─── Integrations Table ─────────────────────────────────────────────────────
--- Generalized third-party integration credentials (Stripe, GitHub, etc.)
-
-CREATE TABLE IF NOT EXISTS integrations (
-  id TEXT PRIMARY KEY,
-  founder_id TEXT NOT NULL REFERENCES founders(id),
-  provider TEXT NOT NULL CHECK(provider IN ('stripe', 'github', 'slack', 'discord', 'zapier')),
-  access_token_encrypted TEXT,
-  refresh_token_encrypted TEXT,
-  token_expires_at DATETIME,
-  scope TEXT,
-  metadata TEXT,
-  active INTEGER DEFAULT 1,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(founder_id, provider)
-);
-
-CREATE INDEX IF NOT EXISTS idx_integrations_founder ON integrations(founder_id);
+-- REMOVED (Phase 2.4): this migration previously created `integrations` with a
+-- founder_id/provider shape. It ran BEFORE 008_integrations' canonical
+-- product_id/type table, so `CREATE TABLE IF NOT EXISTS` made 008 a no-op and
+-- 008's product_id indexes then failed on a fresh DB — the whole runtime fabric
+-- (services/integration/*) and the 056 reconciliation assume 008's schema.
+-- The canonical `integrations` table is now created solely by 008_integrations
+-- and widened by 056_schema_reconciliation. Existing databases are unaffected
+-- (007 is already recorded as applied and won't re-run).
 
 -- ─── Onboarding Checklist ───────────────────────────────────────────────────
 -- Persistent onboarding progress per founder.

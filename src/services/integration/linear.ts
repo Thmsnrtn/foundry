@@ -30,7 +30,7 @@ interface LinearIssuesResponse {
 
 export async function isLinearConnected(productId: string): Promise<boolean> {
   const integration = await getIntegration(productId, 'linear');
-  return integration?.status === 'connected';
+  return integration?.status === 'active';
 }
 
 /**
@@ -39,7 +39,7 @@ export async function isLinearConnected(productId: string): Promise<boolean> {
  */
 export async function syncLinearEvents(productId: string): Promise<{ synced: number; error?: string }> {
   const integration = await getIntegration(productId, 'linear');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return { synced: 0 };
   }
 
@@ -138,7 +138,7 @@ export async function getLinearSummary(productId: string): Promise<{
   velocity: number | null;
 }> {
   const integration = await getIntegration(productId, 'linear');
-  if (!integration || integration.status !== 'connected') {
+  if (!integration || integration.status !== 'active') {
     return {
       connected: false,
       inProgressIssues: null,
