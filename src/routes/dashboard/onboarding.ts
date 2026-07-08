@@ -11,6 +11,15 @@ import { selectRepoSchema, addCompetitorsSchema } from '../../lib/validation.js'
 import { query } from '../../db/client.js';
 import { listRepos } from '../../services/audit/github.js';
 import { runAudit } from '../../services/audit/engine.js';
+import {
+  startAuditProgress,
+  updateAuditProgress,
+  completeAuditProgress,
+  failAuditProgress,
+  getAuditProgress,
+  AUDIT_TOTAL_STEPS,
+  type AuditProgress,
+} from '../../services/audit/progress.js';
 import { captureArtifact } from '../../services/story/engine.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { html } from 'hono/html';
@@ -360,7 +369,13 @@ onboardingRoutes.get('/onboarding/audit', async (c) => {
   return c.html(dashboardLayout({ ...ctx, showNav: false } as any, content));
 });
 
-// Step 5: Trigger first audit
+// Step 5: Trigger first audit.
+// This is the flagship onboarding moment. Rather than block the request for
+// 2-5 minutes, we kick the audit off asynchronously and immediately return a
+// progress page that HTMX-polls /onboarding/audit-status. The audit reports
+// step-by-step progress; when it (and the first briefing) finish, the poll
+// redirects to /dashboard?tour=1 — so the founder never lands on an empty
+// flagship card (Phase 1.1 + 1.2).
 onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   const founder = c.get('founder');
   const body = await parseBody(c) as { product_id: string };
@@ -374,65 +389,145 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   const rawToken = product.github_access_token as string | null;
   const githubToken = rawToken && isEncrypted(rawToken) ? decrypt(rawToken) : rawToken;
 
-  const auditScore = await runAudit({
-    id: product.id as string, name: product.name as string, owner_id: product.owner_id as string,
-    github_repo_url: product.github_repo_url as string | null,
-    github_repo_owner: product.github_repo_owner as string | null,
-    github_repo_name: product.github_repo_name as string | null,
-    github_access_token: githubToken,
-    stack_description: product.stack_description as string | null,
-    market_category: product.market_category as string | null,
-    created_at: product.created_at as string, updated_at: product.updated_at as string,
-    status: product.status as 'active',
-    sector_profile: 'b2b_saas', growth_stage: 'pre_launch',
-    growth_stage_updated_at: null, growth_stage_overridden: false,
-  }, 'initial');
+  const productId = body.product_id;
+  const founderId = founder.id;
+  const founderEmail = founder.email;
+  const productName = product.name as string;
 
-  await captureArtifact({
-    productId: body.product_id, phase: 'prompt_1', artifactType: 'audit',
-    title: `Initial Audit: ${product.name} — ${auditScore.composite?.toFixed(1)}/10`,
-    content: JSON.stringify({ composite: auditScore.composite, verdict: auditScore.verdict }),
-  });
+  await startAuditProgress(productId);
 
-  // UX Intelligence: award milestones, start tour, generate dimension hints (fire-and-forget)
-  await checkAndAwardMilestones(body.product_id, founder.id);
-  await startTour(founder.id, body.product_id);
-  generateDimensionHints(auditScore.id, body.product_id).catch(() => {});
-
-  // Day-1 activation: email the audit results through the gateway
-  // (idempotent per product). Fire-and-forget — the redirect must not block
-  // on email delivery.
-  (async () => {
+  // Run the audit + first briefing off the request path. Progress is persisted
+  // to onboarding_audit_progress and polled by the progress page below.
+  void (async () => {
     try {
-      const { sendAuditResultsEmail } = await import('../../lib/onboarding-emails.js');
-      await sendAuditResultsEmail(
-        founder.email,
-        product.name as string,
-        auditScore.composite ?? 0,
-        (auditScore.verdict as string) ?? 'NOT_READY',
-        auditScore.blocking_issues?.length ?? 0,
-        body.product_id,
-      );
-    } catch { /* non-fatal */ }
-  })();
+      const auditScore = await runAudit({
+        id: product.id as string, name: productName, owner_id: product.owner_id as string,
+        github_repo_url: product.github_repo_url as string | null,
+        github_repo_owner: product.github_repo_owner as string | null,
+        github_repo_name: product.github_repo_name as string | null,
+        github_access_token: githubToken,
+        stack_description: product.stack_description as string | null,
+        market_category: product.market_category as string | null,
+        created_at: product.created_at as string, updated_at: product.updated_at as string,
+        status: product.status as 'active',
+        sector_profile: 'b2b_saas', growth_stage: 'pre_launch',
+        growth_stage_updated_at: null, growth_stage_overridden: false,
+      }, 'initial', (step, label) => updateAuditProgress(productId, step, label));
 
-  // Trigger an immediate first briefing so the founder doesn't wait for
-  // the next 5:30 UTC cron tick. Fire-and-forget — the redirect must not
-  // block on a 10-20s LLM call. The briefing card on the dashboard will
-  // populate on the next page load (typically <60s away).
-  (async () => {
-    try {
-      const { generateDailyBriefing } = await import('../../services/scp/briefing.js');
-      await generateDailyBriefing(body.product_id);
-    } catch (err) {
-      // Non-fatal: the daily cron will produce a briefing tomorrow regardless.
-      const { logger } = await import('../../services/logger.js');
-      logger.warn('immediate post-onboarding briefing failed', {
-        productId: body.product_id,
-        error: String(err),
+      await updateAuditProgress(productId, 8, 'Preparing your dashboard');
+      await captureArtifact({
+        productId, phase: 'prompt_1', artifactType: 'audit',
+        title: `Initial Audit: ${productName} — ${auditScore.composite?.toFixed(1)}/10`,
+        content: JSON.stringify({ composite: auditScore.composite, verdict: auditScore.verdict }),
       });
+
+      await checkAndAwardMilestones(productId, founderId);
+      await startTour(founderId, productId);
+      generateDimensionHints(auditScore.id, productId).catch(() => {});
+
+      // Day-1 activation email (idempotent via the gateway). Fire-and-forget.
+      (async () => {
+        try {
+          const { sendAuditResultsEmail } = await import('../../lib/onboarding-emails.js');
+          await sendAuditResultsEmail(
+            founderEmail,
+            productName,
+            auditScore.composite ?? 0,
+            (auditScore.verdict as string) ?? 'NOT_READY',
+            auditScore.blocking_issues?.length ?? 0,
+            productId,
+          );
+        } catch { /* non-fatal */ }
+      })();
+
+      // Step 9: await the first briefing so the CEO-briefing card is populated
+      // before we redirect the founder to the dashboard.
+      await updateAuditProgress(productId, 9, 'Writing your first briefing');
+      try {
+        const { generateDailyBriefing } = await import('../../services/scp/briefing.js');
+        await generateDailyBriefing(productId);
+      } catch (err) {
+        // Non-fatal: the daily cron will produce a briefing tomorrow regardless.
+        const { logger } = await import('../../services/logger.js');
+        logger.warn('immediate post-onboarding briefing failed', { productId, error: String(err) });
+      }
+
+      await completeAuditProgress(productId);
+    } catch (err) {
+      const { logger } = await import('../../services/logger.js');
+      logger.error('onboarding audit failed', { productId, error: String(err) });
+      await failAuditProgress(productId, err instanceof Error ? err.message : String(err));
     }
   })();
 
-  return c.redirect('/dashboard?tour=1');
+  const ctx = await getLayoutContext(founder, '', 'Running Audit');
+  return c.html(dashboardLayout({ ...ctx, showNav: false } as any, auditProgressPage(productId)));
 });
+
+// HTMX poll target — returns the live progress fragment. On completion it sets
+// HX-Redirect so the browser navigates to the (now non-empty) dashboard.
+onboardingRoutes.get('/onboarding/audit-status', async (c) => {
+  const founder = c.get('founder');
+  const productId = c.req.query('product_id') ?? '';
+
+  // Tenant scope: only the owner may poll their product's progress.
+  const owned = await query('SELECT id FROM products WHERE id = ? AND owner_id = ?', [productId, founder.id]);
+  if (owned.rows.length === 0) return c.html(auditProgressFragment(null), 404);
+
+  const progress = await getAuditProgress(productId);
+  if (progress?.status === 'completed') {
+    c.header('HX-Redirect', '/dashboard?tour=1');
+    return c.html(html`<div>Done — taking you to your dashboard…</div>`);
+  }
+  return c.html(auditProgressFragment(progress));
+});
+
+// ─── Audit progress UI (Phase 1.1 / 1.2) ─────────────────────────────────────
+
+/** Full progress page shown immediately after the audit is kicked off. */
+function auditProgressPage(productId: string) {
+  return html`
+  <div class="step-card" style="max-width:560px;margin:6vh auto 0;text-align:center;">
+    <h2 style="margin-bottom:0.5rem;">Analyzing your product</h2>
+    <p style="color:var(--color-text-muted,#9ca3af);margin-bottom:1.5rem;">
+      Foundry is reading your codebase across ten dimensions and writing your first briefing.
+      This usually takes 2–5 minutes — you can watch it happen below.
+    </p>
+    <div id="audit-progress"
+         hx-get="/onboarding/audit-status?product_id=${productId}"
+         hx-trigger="load, every 1500ms"
+         hx-swap="innerHTML">
+      ${auditProgressFragment(null)}
+    </div>
+  </div>`;
+}
+
+/** Inner fragment re-rendered on every poll. */
+function auditProgressFragment(progress: AuditProgress | null) {
+  if (progress?.status === 'error') {
+    return html`
+      <div style="padding:1rem;border-radius:8px;background:rgba(220,38,38,0.1);color:#fca5a5;">
+        <p style="margin-bottom:0.75rem;">The audit hit a problem: ${progress.error ?? 'unknown error'}.</p>
+        <form method="POST" action="/onboarding/run-audit">
+          <input type="hidden" name="product_id" value="${progress.product_id}" />
+          <button type="submit" class="btn btn-secondary">Try again</button>
+        </form>
+      </div>`;
+  }
+
+  const total = progress?.total_steps ?? AUDIT_TOTAL_STEPS;
+  const step = Math.min(progress?.current_step ?? 0, total);
+  const label = progress?.step_label ?? 'Starting…';
+  const pct = Math.round((step / total) * 100);
+
+  return html`
+    <div style="text-align:left;">
+      <div style="display:flex;justify-content:space-between;font-size:0.85rem;color:var(--color-text-muted,#9ca3af);margin-bottom:0.4rem;">
+        <span>${label}…</span>
+        <span>Step ${step} / ${total}</span>
+      </div>
+      <div style="height:10px;border-radius:6px;background:rgba(255,255,255,0.08);overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:var(--color-accent,#6366f1);transition:width 0.4s ease;"></div>
+      </div>
+    </div>`;
+}

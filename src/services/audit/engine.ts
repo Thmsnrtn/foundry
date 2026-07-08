@@ -13,10 +13,22 @@ import { logger } from '../logger.js';
 import type { AuditScore, Product } from '../../types/index.js';
 import type { AnalysisPipelineOutput, PriorAuditContext } from '../../types/ai.js';
 
+/**
+ * Optional progress reporter. Called at phase boundaries so the onboarding
+ * progress UI can render "step X of N". Never throws into the audit.
+ */
+export type AuditProgressReporter = (step: number, label: string) => void | Promise<void>;
+
 export async function runAudit(
   product: Product,
-  runType: 'initial' | 'post_remediation' | 'periodic' = 'initial'
+  runType: 'initial' | 'post_remediation' | 'periodic' = 'initial',
+  onProgress?: AuditProgressReporter,
 ): Promise<AuditScore> {
+  const report = async (step: number, label: string): Promise<void> => {
+    if (!onProgress) return;
+    try { await onProgress(step, label); } catch { /* progress is best-effort */ }
+  };
+
   if (!product.github_repo_owner || !product.github_repo_name || !product.github_access_token) {
     throw new Error('Product must have GitHub repository connected');
   }
@@ -27,10 +39,13 @@ export async function runAudit(
   if (!token) {
     throw new Error('GitHub access token is missing or corrupted');
   }
+  await report(1, 'Fetching repository structure');
   const tree = await getRepoTree(owner, repo, token);
+  await report(2, 'Reading key files');
   const keyFiles = await getKeyFiles(owner, repo, token, tree);
 
   // Run all 8 analysis steps
+  await report(3, 'Analyzing architecture, routes & billing');
   const pipelineOutput: AnalysisPipelineOutput = {
     discovery: analyzeDiscovery(tree, keyFiles),
     configuration: analyzeConfiguration(tree, keyFiles),
@@ -41,6 +56,7 @@ export async function runAudit(
     analytics: analyzeAnalytics(keyFiles),
     dependencies: analyzeDependencies(keyFiles),
   };
+  await report(4, 'Analyzing trust signals & error handling');
 
   // Load prior audit for comparison context
   const priorResult = await query(
@@ -68,9 +84,11 @@ export async function runAudit(
   }
 
   // Build wisdom context for scoring
+  await report(5, 'Loading prior audit & wisdom context');
   const wisdomContext = await buildWisdomContext(product.id);
 
-  // Score with Claude Opus (wisdom-aware)
+  // Score with Claude Opus (wisdom-aware) — the deep read; this is the dwell.
+  await report(6, 'Scoring across 10 dimensions with AI');
   const scoringOutput = await scoreAudit({
     product_name: product.name,
     analysis_results: pipelineOutput,
@@ -78,6 +96,7 @@ export async function runAudit(
   }, wisdomContext);
 
   // Persist
+  await report(7, 'Finalizing audit & queuing fixes');
   const auditId = nanoid();
   const dims = scoringOutput.dimensions;
   await query(
