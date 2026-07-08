@@ -207,6 +207,37 @@ interface OpenRouterResponse {
   model: string;
 }
 
+// ─── Prompt caching (Phase 2.2) ─────────────────────────────────────────────
+// Callers assemble system prompts stable-first and insert this sentinel between
+// the stable prefix (persona, constitution, golden lessons, output standard —
+// identical across an agent's runs) and the volatile suffix (integration
+// events, messages, scratchpad, date). The client marks everything up to the
+// sentinel with Anthropic prompt caching (cache_control: ephemeral), which
+// OpenRouter passes through — a 60–90% input-cost cut on repeated agent runs.
+export const CACHE_BREAKPOINT = ' __FOUNDRY_CACHE_BREAKPOINT__ ';
+
+/**
+ * Build the system message content. When the prompt contains a cache
+ * breakpoint, emit structured content blocks with cache_control on the stable
+ * prefix; otherwise emit a plain string (unchanged behavior).
+ */
+function buildSystemMessageContent(
+  systemPrompt: string,
+): string | Array<Record<string, unknown>> {
+  const idx = systemPrompt.indexOf(CACHE_BREAKPOINT);
+  if (idx === -1) return systemPrompt;
+
+  const prefix = systemPrompt.slice(0, idx);
+  const suffix = systemPrompt.slice(idx + CACHE_BREAKPOINT.length);
+  const blocks: Array<Record<string, unknown>> = [
+    { type: 'text', text: prefix, cache_control: { type: 'ephemeral' } },
+  ];
+  if (suffix.trim().length > 0) {
+    blocks.push({ type: 'text', text: suffix });
+  }
+  return blocks;
+}
+
 /**
  * Make an LLM call via OpenRouter with cost ceiling, timeout, and retry.
  */
@@ -238,7 +269,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
           max_tokens: config.maxTokens,
           temperature: config.temperature ?? 0.3,
           messages: [
-            { role: 'system', content: config.systemPrompt },
+            { role: 'system', content: buildSystemMessageContent(config.systemPrompt) },
             { role: 'user', content: config.userPrompt },
           ],
         }),
@@ -395,7 +426,7 @@ export async function callClaudeMultiTurn(
           max_tokens: maxTokens,
           temperature: 0.3,
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: buildSystemMessageContent(systemPrompt) },
             ...messages,
           ],
         }),

@@ -7,7 +7,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
-import { computeCostCents, MODELS } from '../../ai/client.js';
+import { computeCostCents, MODELS, CACHE_BREAKPOINT } from '../../ai/client.js';
 import { sanitizeForPrompt } from '../../ai/sanitize.js';
 import { logger } from '../../logger.js';
 import type {
@@ -498,60 +498,44 @@ export abstract class BaseAgent {
   // ─── Prompt helpers ───────────────────────────────────────────────────────
 
   protected buildSystemPrompt(context: AgentRunContext, domainSystemPrompt: string): string {
-    const parts: string[] = [domainSystemPrompt];
+    // Assemble STABLE blocks first (persona, domain knowledge, golden lessons,
+    // constitution, output standard — identical across this agent's runs), then
+    // a cache breakpoint, then VOLATILE blocks (integration events, messages,
+    // scratchpad, date). The AI client marks everything before the breakpoint
+    // with Anthropic prompt caching, cutting input cost 60–90% on repeat runs.
+    // Reordering matters: caching only helps when the cached prefix is byte-
+    // identical, so nothing volatile may appear before the breakpoint (2.2).
+    const stable: string[] = [domainSystemPrompt];
 
     // Inject typed config sections (v2) — persona and domain_knowledge enrich the prompt
     if (context.agentConfig) {
       const { persona, domain_knowledge, task_patterns } = context.agentConfig;
       if (persona && !domainSystemPrompt.includes(persona.slice(0, 50))) {
-        parts.push(`AGENT PERSONA:\n${persona}`);
+        stable.push(`AGENT PERSONA:\n${persona}`);
       }
       if (domain_knowledge) {
-        parts.push(`DOMAIN EXPERTISE:\n${domain_knowledge}`);
+        stable.push(`DOMAIN EXPERTISE:\n${domain_knowledge}`);
       }
       if (task_patterns) {
-        parts.push(`TASK PATTERNS:\n${task_patterns}`);
+        stable.push(`TASK PATTERNS:\n${task_patterns}`);
       }
     }
 
     const formattedLessons = this.formatGoldenLessons(context.goldenLessons);
     if (formattedLessons) {
-      parts.push(formattedLessons);
+      stable.push(formattedLessons);
     }
 
     if (context.constitution && context.constitution.operating_principles.length > 0) {
       const topPrinciples = context.constitution.operating_principles.slice(0, 3);
-      parts.push(
+      stable.push(
         'OPERATING PRINCIPLES:\n' +
         topPrinciples.map((p, i) => `${i + 1}. ${p}`).join('\n')
       );
     }
 
-    // Inject integration events (v2) — sanitize summaries (user-controlled data)
-    if (context.integrationEvents && context.integrationEvents.length > 0) {
-      const eventLines = context.integrationEvents.slice(0, 15).map(e =>
-        `[${sanitizeForPrompt(e.source)}/${sanitizeForPrompt(e.event_type)}] ${sanitizeForPrompt(e.summary)}`
-      ).join('\n');
-      parts.push(`INTEGRATION SIGNALS (${context.integrationEvents.length} since last run):\n${eventLines}`);
-    }
-
-    // Inject unread agent messages (v2) — sanitize subject/body (may contain external data)
-    if (context.unreadMessages && context.unreadMessages.length > 0) {
-      const msgLines = context.unreadMessages.map(m =>
-        `[${sanitizeForPrompt(m.from_agent)} · ${m.priority}] ${sanitizeForPrompt(m.subject)}: ${sanitizeForPrompt(m.body.slice(0, 300))}`
-      ).join('\n');
-      parts.push(`MESSAGES FROM AGENT NETWORK:\n${msgLines}`);
-    }
-
-    // Inject scratchpad context — what other agents found today
-    if (context.scratchpadContext) {
-      parts.push(context.scratchpadContext);
-    }
-
-    parts.push(`Today's date: ${context.runDate}`);
-
-    // ── C-Suite Output Standard (injected into every agent) ───────────────────
-    parts.push(`
+    // ── C-Suite Output Standard (stable — identical for every agent/run) ──────
+    stable.push(`
 REQUIRED OUTPUT FORMAT — C-SUITE STANDARD:
 You are advising the CEO. Every significant finding MUST be structured as follows:
 
@@ -569,7 +553,34 @@ Rules:
 - Maximum 3 significant findings per run. Quality over volume.
 - If you have insufficient data to form a confident view, say exactly that and describe what data would change your analysis.`);
 
-    return parts.join('\n\n');
+    // ── VOLATILE blocks (change every run — must sit AFTER the cache breakpoint)
+    const volatile: string[] = [];
+
+    // Inject integration events (v2) — sanitize summaries (user-controlled data)
+    if (context.integrationEvents && context.integrationEvents.length > 0) {
+      const eventLines = context.integrationEvents.slice(0, 15).map(e =>
+        `[${sanitizeForPrompt(e.source)}/${sanitizeForPrompt(e.event_type)}] ${sanitizeForPrompt(e.summary)}`
+      ).join('\n');
+      volatile.push(`INTEGRATION SIGNALS (${context.integrationEvents.length} since last run):\n${eventLines}`);
+    }
+
+    // Inject unread agent messages (v2) — sanitize subject/body (may contain external data)
+    if (context.unreadMessages && context.unreadMessages.length > 0) {
+      const msgLines = context.unreadMessages.map(m =>
+        `[${sanitizeForPrompt(m.from_agent)} · ${m.priority}] ${sanitizeForPrompt(m.subject)}: ${sanitizeForPrompt(m.body.slice(0, 300))}`
+      ).join('\n');
+      volatile.push(`MESSAGES FROM AGENT NETWORK:\n${msgLines}`);
+    }
+
+    // Inject scratchpad context — what other agents found today
+    if (context.scratchpadContext) {
+      volatile.push(context.scratchpadContext);
+    }
+
+    volatile.push(`Today's date: ${context.runDate}`);
+
+    // Stable prefix (cached) + breakpoint + volatile suffix (not cached).
+    return stable.join('\n\n') + CACHE_BREAKPOINT + volatile.join('\n\n');
   }
 
   protected formatGoldenLessons(lessons: GoldenSuiteEntry[]): string {
