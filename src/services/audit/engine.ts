@@ -4,6 +4,7 @@
 
 import { getRepoTree, getKeyFiles } from './github.js';
 import { scoreAudit } from './scorer.js';
+import { selectReviewFiles } from './review-files.js';
 import { classifyRemediability, generateFix } from './remediation.js';
 import { buildWisdomContext } from '../wisdom/dna.js';
 import { query } from '../../db/client.js';
@@ -88,11 +89,15 @@ export async function runAudit(
   const wisdomContext = await buildWisdomContext(product.id);
 
   // Score with Claude Opus (wisdom-aware) — the deep read; this is the dwell.
+  // Include real source excerpts for the highest-stakes dimensions so the
+  // scorer reviews code, not just regex counts (Phase 2.3).
   await report(6, 'Scoring across 10 dimensions with AI');
+  const keyFileExcerpts = selectReviewFiles(keyFiles);
   const scoringOutput = await scoreAudit({
     product_name: product.name,
     analysis_results: pipelineOutput,
     prior_audit: priorAudit,
+    key_file_excerpts: keyFileExcerpts,
   }, wisdomContext);
 
   // Persist

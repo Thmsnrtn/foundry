@@ -59,6 +59,12 @@ export interface AuditScoringRequest {
   product_name: string;
   analysis_results: AnalysisPipelineOutput;
   prior_audit: PriorAuditContext | null;
+  /**
+   * Actual source excerpts for the highest-stakes dimensions (auth, billing,
+   * error handling, config). Sanitized + budget-capped. Moves scoring from
+   * "checklist over regex counts" to "review over real code" (Phase 2.3).
+   */
+  key_file_excerpts?: Array<{ path: string; content: string }>;
 }
 
 export interface AnalysisPipelineOutput {
