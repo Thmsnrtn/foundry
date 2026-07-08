@@ -8,10 +8,12 @@ import { nanoid } from 'nanoid';
 import { log } from './logger.js';
 import type { AIResponse } from '../types/ai.js';
 
-// Approximate pricing per 1M tokens (as of 2025)
+// Approximate pricing per 1M tokens. Keys match the AIResponse.model values
+// (OpenRouter slugs, anthropic/ prefixed) so lookups actually hit.
 const PRICING: Record<string, { input: number; output: number; cache_read: number }> = {
-  'claude-opus-4-6':             { input: 15.0,  output: 75.0, cache_read: 1.5 },
-  'claude-sonnet-4-5-20250929':  { input: 3.0,   output: 15.0, cache_read: 0.3 },
+  'anthropic/claude-opus-4-8':   { input: 15.0,  output: 75.0, cache_read: 1.5 },
+  'anthropic/claude-sonnet-5':   { input: 3.0,   output: 15.0, cache_read: 0.3 },
+  'anthropic/claude-haiku-4-5':  { input: 1.0,   output: 5.0,  cache_read: 0.1 },
 };
 
 /**
@@ -23,7 +25,7 @@ export async function trackUsage(
   callType: string,
 ): Promise<void> {
   try {
-    const pricing = PRICING[response.model] ?? PRICING['claude-sonnet-4-5-20250929'];
+    const pricing = PRICING[response.model] ?? PRICING['anthropic/claude-sonnet-5'];
     const inputTokens = response.usage.input_tokens;
     const outputTokens = response.usage.output_tokens;
     const cacheRead = response.usage.cache_read_input_tokens ?? 0;

@@ -4,7 +4,10 @@
 
 import type { Gate, RiskStateValue } from './index.js';
 
-export type AIModel = 'anthropic/claude-opus-4-6' | 'anthropic/claude-sonnet-4-5-20250929';
+export type AIModel =
+  | 'anthropic/claude-opus-4-8'
+  | 'anthropic/claude-sonnet-5'
+  | 'anthropic/claude-haiku-4-5';
 
 export interface AICallConfig {
   model: AIModel;

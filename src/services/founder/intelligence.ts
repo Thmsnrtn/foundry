@@ -525,7 +525,7 @@ export async function getAICostData(): Promise<AICostData> {
     total_tokens_24h: totalTokens,
     total_cost_24h: Math.round(estimatedCost * 100) / 100,
     avg_latency_ms: 0,
-    calls_by_model: { 'claude-opus-4-6': 0, 'claude-sonnet-4-5': 0 },
+    calls_by_model: { 'claude-opus-4-8': 0, 'claude-sonnet-5': 0, 'claude-haiku-4-5': 0 },
     cost_per_founder: Math.round((estimatedCost / founderCount) * 100) / 100,
   };
 }

@@ -14,9 +14,11 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 export const MODELS = {
   // Strategic / methodology — highest quality, used for audit scoring, weekly synthesis
-  OPUS: 'anthropic/claude-opus-4-6' as AIModel,
+  OPUS: 'anthropic/claude-opus-4-8' as AIModel,
   // Operational / fast — used for agent runs, briefings, competitive scans
-  SONNET: 'anthropic/claude-sonnet-4-5-20250929' as AIModel,
+  SONNET: 'anthropic/claude-sonnet-5' as AIModel,
+  // Cheap classification — scratchpad analysis, relevance scoring, injection screening
+  HAIKU: 'anthropic/claude-haiku-4-5' as AIModel,
 } as const;
 
 // ─── Cost Ceiling ────────────────────────────────────────────────────────────
@@ -105,13 +107,17 @@ async function incrementScopeSpend(scope: Scope, scopeId: string, costCents: num
 // ─── Model-Specific Pricing (per 1M tokens, in USD) ─────────────────────────
 // OpenRouter pricing. Configurable via environment variables.
 const COST_PER_1M: Record<string, { input: number; output: number }> = {
-  'anthropic/claude-opus-4-6': {
+  'anthropic/claude-opus-4-8': {
     input: parseFloat(process.env.AI_COST_OPUS_INPUT_PER_1M ?? '15.00'),
     output: parseFloat(process.env.AI_COST_OPUS_OUTPUT_PER_1M ?? '75.00'),
   },
-  'anthropic/claude-sonnet-4-5-20250929': {
+  'anthropic/claude-sonnet-5': {
     input: parseFloat(process.env.AI_COST_SONNET_INPUT_PER_1M ?? '3.00'),
     output: parseFloat(process.env.AI_COST_SONNET_OUTPUT_PER_1M ?? '15.00'),
+  },
+  'anthropic/claude-haiku-4-5': {
+    input: parseFloat(process.env.AI_COST_HAIKU_INPUT_PER_1M ?? '1.00'),
+    output: parseFloat(process.env.AI_COST_HAIKU_OUTPUT_PER_1M ?? '5.00'),
   },
 };
 
@@ -337,6 +343,19 @@ export async function callSonnet(
   productId?: string,
 ): Promise<AIResponse> {
   return callClaude({ model: MODELS.SONNET, maxTokens, systemPrompt, userPrompt, productId });
+}
+
+/**
+ * Call with the cheap classification model (Haiku) — scratchpad analysis,
+ * relevance scoring, prompt-injection screening. Not for reasoning-heavy work.
+ */
+export async function callHaiku(
+  systemPrompt: string,
+  userPrompt: string,
+  maxTokens: number = 1024,
+  productId?: string,
+): Promise<AIResponse> {
+  return callClaude({ model: MODELS.HAIKU, maxTokens, systemPrompt, userPrompt, productId });
 }
 
 /**

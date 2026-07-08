@@ -127,7 +127,7 @@ Rules:
     signal_at_briefing: signal.score, risk_state_at_briefing: signal.riskState,
     transcript: null, structured_updates: null,
     decisions_created: null, stressors_updated: null, metrics_updated: null,
-    duration_seconds: null, model_used: 'claude-sonnet-4-5',
+    duration_seconds: null, model_used: 'claude-sonnet-5',
     created_at: new Date().toISOString(),
   };
 }

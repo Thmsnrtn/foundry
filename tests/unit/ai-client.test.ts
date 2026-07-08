@@ -99,8 +99,9 @@ describe('AI client cost tracking', () => {
   describe('MODELS constant', () => {
     it('exports correct model identifiers', async () => {
       const { MODELS } = await loadModule();
-      expect(MODELS.OPUS).toBe('anthropic/claude-opus-4-6');
-      expect(MODELS.SONNET).toBe('anthropic/claude-sonnet-4-5-20250929');
+      expect(MODELS.OPUS).toBe('anthropic/claude-opus-4-8');
+      expect(MODELS.SONNET).toBe('anthropic/claude-sonnet-5');
+      expect(MODELS.HAIKU).toBe('anthropic/claude-haiku-4-5');
     });
   });
 });
