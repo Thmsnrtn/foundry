@@ -18,7 +18,7 @@ export function errorPage(
       <p style="color:var(--color-text-muted,#9ca3af);margin-bottom:2rem;">${message}</p>
       <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap;">
         <a href="/" class="btn btn-primary" style="text-decoration:none;">Back to home</a>
-        <a href="/dashboard" class="btn btn-secondary" style="text-decoration:none;">Dashboard</a>
+        <a href="/help" class="btn btn-secondary" style="text-decoration:none;">Get help</a>
       </div>
     </div>
   `);

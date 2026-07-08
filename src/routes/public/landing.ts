@@ -16,6 +16,9 @@ export const landingRoutes = new Hono();
 export const pricingRoutes = new Hono();
 export const caseStudyRoutes = new Hono();
 export const manifestoRoutes = new Hono();
+export const helpRoutes = new Hono();
+
+const SUPPORT_EMAIL = process.env.SUPPORT_EMAIL ?? 'thomas@foundry.so';
 
 landingRoutes.get('/', async (c) => {
   // Wave 3 — referral capture. If the visitor arrived via ?ref=<code> and
@@ -199,6 +202,8 @@ landingRoutes.get('/', async (c) => {
         <a href="/privacy" style="color:var(--text-dim);font-size:0.75rem;">Privacy</a>
         <a href="/terms" style="color:var(--text-dim);font-size:0.75rem;">Terms</a>
         <a href="/pricing" style="color:var(--text-dim);font-size:0.75rem;">Pricing</a>
+        <a href="/manifesto" style="color:var(--text-dim);font-size:0.75rem;">Manifesto</a>
+        <a href="/help" style="color:var(--text-dim);font-size:0.75rem;">Help</a>
         <a href="mailto:thomas@foundry.so" style="color:var(--text-dim);font-size:0.75rem;">Support</a>
       </div>
     </div>
@@ -419,6 +424,57 @@ manifestoRoutes.get('/manifesto', (c) => {
         Full manifesto with annotations and operator notes lives in the
         repo at <code>docs/strategy/category-manifesto.md</code>.
       </footer>
+    </article>
+  `));
+});
+
+// ─── Help / Support ──────────────────────────────────────────────────────────
+
+const FAQ: Array<{ q: string; a: string }> = [
+  {
+    q: 'What does Foundry actually do?',
+    a: 'Connect a GitHub repo (or your product URL) and Foundry runs a 10-dimension audit, provisions a team of AI agents that watch your product on a cadence, proposes gate-controlled decisions, and writes you a daily CEO briefing — one number that matters and one decision to make today.',
+  },
+  {
+    q: 'How do I get started?',
+    a: 'Sign up, connect a repo, and watch the audit run. Your first briefing is written before you land on the dashboard. From there, review the audit, enter (or auto-draft) your Product DNA, and start acting on the decision queue.',
+  },
+  {
+    q: 'Is there a free trial?',
+    a: 'Yes — a 14-day trial. You add a card up front and are not charged until the trial ends; cancel any time before then and you pay nothing.',
+  },
+  {
+    q: 'My integrations aren\'t showing data — why?',
+    a: 'After connecting an integration it can take up to an hour for the first sync to populate events. If it stays empty, check the integration status on the Integrations page and re-connect if it shows an error.',
+  },
+  {
+    q: 'How do I cancel or change my plan?',
+    a: 'Manage your subscription from Settings → Billing. Cancelling stops future charges and pauses your agents; your data is retained.',
+  },
+  {
+    q: 'Something is broken or I have a question not covered here.',
+    a: `Email ${SUPPORT_EMAIL} — a real person reads every message.`,
+  },
+];
+
+helpRoutes.get('/help', (c) => {
+  return c.html(publicLayout('Help & Support — Foundry', html`
+    <article style="max-width:720px;margin:0 auto;padding:3rem 1.25rem;color:var(--text-primary);line-height:1.7;">
+      <h1 style="font-size:clamp(1.8rem,4vw,2.5rem);margin:0 0 0.5rem;">Help & Support</h1>
+      <p style="color:var(--text-dim);margin-bottom:2rem;">
+        Answers to common questions. Still stuck? Email
+        <a href="mailto:${SUPPORT_EMAIL}" style="color:var(--accent);">${SUPPORT_EMAIL}</a>.
+      </p>
+      ${FAQ.map((item) => html`
+        <section style="margin-bottom:1.5rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border);">
+          <h2 style="font-size:1.05rem;margin:0 0 0.5rem;">${item.q}</h2>
+          <p style="margin:0;color:var(--text-muted);">${item.a}</p>
+        </section>
+      `)}
+      <div style="display:flex;gap:1rem;margin-top:2rem;flex-wrap:wrap;">
+        <a href="mailto:${SUPPORT_EMAIL}" class="btn btn-primary" style="padding:0.7rem 1.5rem;">Email support</a>
+        <a href="/dashboard" class="btn btn-ghost" style="padding:0.7rem 1.5rem;color:var(--text-dim);">Back to dashboard</a>
+      </div>
     </article>
   `));
 });

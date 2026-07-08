@@ -22,7 +22,7 @@ import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateL
 import { internalMiddleware } from './middleware/internal.js';
 
 // Public routes (no auth)
-import { landingRoutes, pricingRoutes, caseStudyRoutes, legalRoutes, manifestoRoutes } from './routes/public/landing.js';
+import { landingRoutes, pricingRoutes, caseStudyRoutes, legalRoutes, manifestoRoutes, helpRoutes } from './routes/public/landing.js';
 
 // Auth routes
 import { authRoutes } from './routes/auth/clerk.js';
@@ -242,6 +242,7 @@ app.route('/', pricingRoutes);
 app.route('/', caseStudyRoutes);
 app.route('/', legalRoutes);
 app.route('/', manifestoRoutes);
+app.route('/', helpRoutes);
 app.route('/', authRoutes);
 app.route('/', shareRoutes);
 app.route('/', ingestRoutes);
