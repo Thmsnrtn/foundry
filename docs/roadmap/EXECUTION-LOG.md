@@ -79,3 +79,57 @@ These cannot be done from the codebase and gate a real deploy:
 
 Migrations `074` (integration status repair) and `075` (`ai_daily_spend`) run on
 next `npm run migrate` / boot. Both are idempotent.
+
+---
+
+## Phase 1 — First ten minutes + first dollar
+
+**Status:** complete. **Tests:** 676 → 700 passing (50 files), `npm run check` green.
+
+### What shipped
+
+- **1.1 + 1.2 — Async audit with live progress + first briefing on arrival.**
+  The onboarding audit was a blocking 2–5 minute POST that redirected to an
+  often-empty dashboard. `runAudit` now takes an `onProgress` reporter; the POST
+  kicks the audit off asynchronously, persists progress to
+  `onboarding_audit_progress` (migration `076`), and returns a progress page that
+  HTMX-polls `/onboarding/audit-status` (tenant-scoped). The first briefing is
+  now **awaited as step 9** before the poll redirects to `/dashboard?tour=1`, so
+  the flagship card is never empty on first login.
+
+- **1.3 — 14-day card-upfront trial + conversion surfaces.** `createCheckoutSession`
+  starts a `trial_period_days: 14` trial; the webhook persists/clears
+  `trial_ends_at` (migration `077`). New pure `getTrialStatus` drives a header
+  "N days left · Upgrade" badge, an expiry banner, and a "Start your 14-day free
+  trial" CTA on every dashboard page — checkout is no longer buried in Settings.
+  Expiry is a preview/nudge (existing null-tier gates already gate paid features),
+  not a hard data lock, per the brief.
+
+- **1.4 — Removed the orphaned `/setup` conversational onboarding** (route +
+  exclusively-backing service + wiring). One onboarding path now.
+
+- **1.5 — Branded HTML error pages.** `onError`/`notFound` content-negotiate:
+  browsers get a branded 404/500 (reusing `publicLayout`), API paths get JSON.
+
+- **1.6 — DNA auto-fill wired.** The Wave-2 extractor was never called. Now
+  onboarding auto-drafts DNA from the repo README after the audit, and the DNA
+  page has a "Draft with AI" button. A pure clobber-guard fills only empty fields.
+
+- **1.7 — Honest mobile claim.** Replaced the unbuildable "iOS app + voice
+  briefings + Watch complication" pricing claim with "installable mobile app (PWA)".
+
+### Deferred / notes
+
+- Trial enforcement is intentionally soft (preview banner + existing feature
+  gates), not a hard dashboard lock — matches the brief's "rather than
+  hard-locking data." If a harder gate is wanted post-alpha, add a
+  trial-expired middleware in front of `/dashboard`.
+- DNA auto-fill uses README + product metadata; the landing-page/Stripe-catalog
+  sources are supported by the extractor but not yet gathered server-side
+  (arbitrary-URL fetch deferred for SSRF safety).
+
+### Operator notes
+
+- Set `STRIPE_*_PRICE_ID` env vars so `getTierFromPrice` resolves; otherwise the
+  webhook logs "Unrecognised price ID" and tier/trial won't update.
+- `TRIAL_PERIOD_DAYS` (default 14) overrides the trial length everywhere.
