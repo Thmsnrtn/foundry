@@ -414,6 +414,15 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
         growth_stage_updated_at: null, growth_stage_overridden: false,
       }, 'initial', (step, label) => updateAuditProgress(productId, step, label));
 
+      // Activation funnel: repo connected + audit completed (Phase 5.2).
+      void (async () => {
+        try {
+          const { recordFunnelStep } = await import('../../services/telemetry/funnel.js');
+          await recordFunnelStep('repo_connected', { founderId, productId });
+          await recordFunnelStep('audit_done', { founderId, productId });
+        } catch { /* non-fatal */ }
+      })();
+
       await updateAuditProgress(productId, 8, 'Preparing your dashboard');
       await captureArtifact({
         productId, phase: 'prompt_1', artifactType: 'audit',

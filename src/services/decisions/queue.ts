@@ -83,6 +83,14 @@ export async function resolveDecision(
     dispatchWebhook(ownerId, 'decision.resolved', {
       decision_id: decisionId, product_id: productId, chosen_option: chosenOption, decided_by: decidedBy,
     }).catch(() => {});
+
+    // Activation funnel: first decision approved (Phase 5.2).
+    void (async () => {
+      try {
+        const { recordFunnelStep } = await import('../telemetry/funnel.js');
+        await recordFunnelStep('decision_approved', { founderId: ownerId, productId });
+      } catch { /* non-fatal */ }
+    })();
   }
 }
 

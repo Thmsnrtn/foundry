@@ -107,6 +107,19 @@ export async function handleWebhook(payload: string, signature: string): Promise
           [tier, trialEndsAt, sub.customer],
         );
 
+        // Activation funnel: trial_started (trialing) / paid (active) — Phase 5.2.
+        void (async () => {
+          try {
+            const fr = await query('SELECT id FROM founders WHERE stripe_customer_id = ?', [sub.customer]);
+            const fid = (fr.rows[0] as Record<string, string> | undefined)?.id;
+            if (fid) {
+              const { recordFunnelStep } = await import('../telemetry/funnel.js');
+              if (sub.status === 'trialing') await recordFunnelStep('trial_started', { founderId: fid });
+              if (sub.status === 'active') await recordFunnelStep('paid', { founderId: fid });
+            }
+          } catch { /* non-fatal */ }
+        })();
+
         // Wave 3 — referral attribution. On subscription.created (only),
         // fire the 'paid' conversion event for whoever invited this
         // founder. Idempotent dedup is in the referrals service, but as

@@ -151,6 +151,17 @@ agentBriefingRoutes.get('/agents/briefings/:date', async (c) => {
     [productId, dateParam]
   );
 
+  // Activation funnel: first briefing viewed (Phase 5.2). Only when a briefing
+  // actually exists for this date. Fire-and-forget.
+  if (briefingResult.rows.length > 0) {
+    void (async () => {
+      try {
+        const { recordFunnelStep } = await import('../../services/telemetry/funnel.js');
+        await recordFunnelStep('briefing_viewed', { founderId: founder.id, productId });
+      } catch { /* non-fatal */ }
+    })();
+  }
+
   // Load adjacent briefings for prev/next nav
   const [prevResult, nextResult] = await Promise.all([
     query(

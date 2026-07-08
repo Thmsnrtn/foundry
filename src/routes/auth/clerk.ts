@@ -201,6 +201,14 @@ authRoutes.post('/auth/webhook', async (c) => {
         })();
       }
 
+      // Activation funnel: signup (Phase 5.2).
+      void (async () => {
+        try {
+          const { recordFunnelStep } = await import('../../services/telemetry/funnel.js');
+          await recordFunnelStep('signup', { founderId });
+        } catch { /* non-fatal */ }
+      })();
+
       // Create or update cohort (for Foundry's own tracking)
       const foundryProduct = await query("SELECT id FROM products WHERE name = 'Foundry' LIMIT 1", []);
       if (foundryProduct.rows.length > 0) {

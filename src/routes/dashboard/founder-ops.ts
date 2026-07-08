@@ -52,6 +52,12 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
     safe(getAICostData, defaultAICost),
   ]);
 
+  // Activation funnel — last 30 days (Phase 5.2).
+  const funnel = await safe(async () => {
+    const { getFunnelReadout } = await import('../../services/telemetry/funnel.js');
+    return getFunnelReadout(new Date(Date.now() - 30 * 86_400_000).toISOString());
+  }, [] as Awaited<ReturnType<typeof import('../../services/telemetry/funnel.js').getFunnelReadout>>);
+
   const products = await query("SELECT * FROM products WHERE owner_id = ? AND status = 'active'", [founder.id]).catch(() => ({ rows: [] }));
   const pendingDecisions = await query(
     `SELECT d.*, p.name as product_name FROM decisions d JOIN products p ON d.product_id = p.id WHERE d.status = 'pending' ORDER BY d.created_at ASC LIMIT 10`, []).catch(() => ({ rows: [] }));
@@ -176,6 +182,28 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
             </div>
           </div>
         </div>`)}
+    </div>` : ''}
+
+    <!-- Activation Funnel (last 30 days) -->
+    ${funnel.length > 0 && (funnel[0]?.count ?? 0) > 0 ? html`
+    <div class="card" style="margin-bottom:1.5rem;">
+      <h3>Activation Funnel <span style="font-size:0.75rem;color:#6b7280;font-weight:400;">· last 30 days</span></h3>
+      <div style="margin-top:0.75rem;">
+        ${funnel.map((row) => {
+          const pct = Math.round(row.fromTop * 100);
+          const stepPct = Math.round(row.fromPrev * 100);
+          return html`
+          <div style="display:flex;align-items:center;gap:0.75rem;padding:0.3rem 0;">
+            <div style="width:150px;font-size:0.8rem;color:#374151;text-transform:capitalize;">${row.step.replace(/_/g, ' ')}</div>
+            <div style="flex:1;background:#f3f4f6;border-radius:4px;height:18px;overflow:hidden;">
+              <div style="height:100%;width:${pct}%;background:#6366f1;"></div>
+            </div>
+            <div style="width:120px;text-align:right;font-size:0.78rem;color:#6b7280;">
+              ${row.count} · ${pct}%${row.step !== 'signup' ? ` <span style="color:#9ca3af;">(${stepPct}% step)</span>` : ''}
+            </div>
+          </div>`;
+        })}
+      </div>
     </div>` : ''}
 
     <!-- Two-column: Automation + Growth -->
