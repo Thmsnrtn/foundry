@@ -51,10 +51,19 @@ productRoutes.get('/products/:id/dna', requireTier('wisdom'), async (c) => {
   const dna = await getProductDNA(productId);
   const completionPct = dna?.completion_pct ?? 0;
   const saved = c.req.query('saved') === '1';
+  const draftedParam = c.req.query('drafted');
+  const drafted = draftedParam !== undefined ? parseInt(draftedParam, 10) : null;
 
   const content = html`
     <h1>Product DNA</h1>
     ${saved ? html`<div style="padding:0.75rem 1rem;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:1rem;font-size:0.9rem;">✓ Product DNA saved successfully. ${completionPct >= 60 ? 'Wisdom Layer is active.' : `${completionPct}% complete — reach 60% to activate Wisdom Layer.`}</div>` : ''}
+    ${drafted !== null ? html`<div style="padding:0.75rem 1rem;background:${drafted > 0 ? '#dbeafe' : '#fef3c7'};color:${drafted > 0 ? '#1e40af' : '#92400e'};border-radius:6px;margin-bottom:1rem;font-size:0.9rem;">${drafted > 0 ? `✓ Drafted ${drafted} field${drafted === 1 ? '' : 's'} from your repo. Review and edit below, then save.` : 'Not enough signal to draft — connect a repo with a README, or fill the fields in yourself.'}</div>` : ''}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+      <p style="color:var(--text-muted);font-size:0.9rem;margin:0;">Let Foundry draft these from your README and product metadata — then edit instead of typing from blank.</p>
+      <form method="POST" action="/products/${productId}/dna/autodraft" style="margin:0;">
+        <button type="submit" class="btn btn-secondary btn-sm">✨ Draft with AI</button>
+      </form>
+    </div>
     ${dnaEditor(dna as unknown as Record<string, unknown> | null, completionPct, productId)}
   `;
   return c.html(dashboardLayout(ctx, content));
@@ -76,6 +85,25 @@ productRoutes.post('/products/:id/dna', requireTier('wisdom'), async (c) => {
   });
 
   return c.redirect(`/products/${productId}/dna?saved=1`);
+});
+
+// Draft the DNA fields from the founder's existing assets (README, metadata)
+// with one AI call. Only fills empty fields — never overwrites the founder's
+// own words (Phase 1.6).
+productRoutes.post('/products/:id/dna/autodraft', requireTier('wisdom'), async (c) => {
+  const founder = c.get('founder');
+  const productId = c.req.param('id');
+  const prodResult = await getProductByOwner(productId, founder.id);
+  if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  let drafted = 0;
+  try {
+    const { autofillProductDNA } = await import('../../services/wisdom/dna-autofill.js');
+    drafted = await autofillProductDNA(productId, founder.id);
+  } catch (err) {
+    log.error('DNA autodraft failed', err, { productId });
+  }
+  return c.redirect(`/products/${productId}/dna?drafted=${drafted}`);
 });
 
 // ─── Failure Log Routes ──────────────────────────────────────────────────────

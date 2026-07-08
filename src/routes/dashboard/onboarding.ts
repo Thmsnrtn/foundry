@@ -425,6 +425,16 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
       await startTour(founderId, productId);
       generateDimensionHints(auditScore.id, productId).catch(() => {});
 
+      // Phase 1.6: auto-draft Product DNA from the repo README so the founder
+      // edits instead of typing 10 fields from blank. Fire-and-forget — the
+      // DNA page shows a "Draft with AI" button for a manual pass too.
+      (async () => {
+        try {
+          const { autofillProductDNA } = await import('../../services/wisdom/dna-autofill.js');
+          await autofillProductDNA(productId, founderId);
+        } catch { /* non-fatal */ }
+      })();
+
       // Day-1 activation email (idempotent via the gateway). Fire-and-forget.
       (async () => {
         try {

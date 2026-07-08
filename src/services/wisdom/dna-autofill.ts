@@ -15,6 +15,10 @@
 
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
 import { shieldOrLog } from '../ai/prompt-shield.js';
+import { query } from '../../db/client.js';
+import { getFileContent } from '../audit/github.js';
+import { getPlaintextToken } from '../../lib/crypto.js';
+import { log } from '../../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -118,6 +122,96 @@ Return only the JSON object specified.`;
     objection_response: clamp(parsed.objection_response),
     market_insight: clamp(parsed.market_insight),
   };
+}
+
+// ─── Asset gathering + persistence (Phase 1.6 wiring) ───────────────────────────
+
+const MAX_README_CHARS = 6000;
+
+/** Best-effort fetch of a repo README, tolerating casing variants. */
+async function fetchReadme(owner: string, repo: string, token: string): Promise<string | undefined> {
+  for (const path of ['README.md', 'readme.md', 'Readme.md', 'docs/README.md']) {
+    try {
+      const content = await getFileContent(owner, repo, path, token);
+      if (content && content.trim().length > 0) return content.slice(0, MAX_README_CHARS);
+    } catch { /* try next */ }
+  }
+  return undefined;
+}
+
+/**
+ * Gather the source assets for a product from already-available data —
+ * the GitHub README and product name. (No arbitrary URL fetching here, to
+ * avoid SSRF; landing/Stripe text can be passed in by callers that already
+ * hold it.)
+ */
+export async function gatherAutofillSources(productId: string): Promise<AutofillSourceMaterial> {
+  const prodResult = await query('SELECT * FROM products WHERE id = ?', [productId]);
+  if (prodResult.rows.length === 0) return {};
+  const p = prodResult.rows[0] as Record<string, unknown>;
+
+  const source: AutofillSourceMaterial = {
+    productName: (p.name as string | null) ?? undefined,
+  };
+
+  const owner = p.github_repo_owner as string | null;
+  const repo = p.github_repo_name as string | null;
+  const token = getPlaintextToken(p.github_access_token as string | null) ?? '';
+  if (owner && repo && token) {
+    source.readme = await fetchReadme(owner, repo, token);
+  }
+
+  return source;
+}
+
+/**
+ * Draft DNA from a product's assets and persist the results — but only into
+ * fields the founder hasn't filled yet. An auto-draft must never clobber a
+ * founder's own words. Returns the number of fields populated.
+ */
+export async function autofillProductDNA(productId: string, ownerId: string): Promise<number> {
+  const source = await gatherAutofillSources(productId);
+  if (!source.readme && !source.landingPage && !source.stripeDescriptions) {
+    return 0; // Nothing but a name — a draft would be generic.
+  }
+
+  let draft: DNADraft;
+  try {
+    draft = await extractDNAFromAssets(source, productId);
+  } catch (err) {
+    log.warn('dna_autofill.extract_failed', { productId, error: (err as Error).message });
+    return 0;
+  }
+
+  const { getProductDNA, upsertProductDNA } = await import('./dna.js');
+  const existing = await getProductDNA(productId);
+  const updates = pickEmptyFieldUpdates(
+    existing as unknown as Record<string, unknown> | null,
+    draft,
+  );
+  if (Object.keys(updates).length === 0) return 0;
+
+  await upsertProductDNA(productId, ownerId, updates);
+  return Object.keys(updates).length;
+}
+
+/**
+ * From a draft, keep only the fields that are non-empty in the draft AND
+ * currently empty on the existing record. This is the clobber-guard: an
+ * auto-draft must never overwrite a founder's own words.
+ */
+export function pickEmptyFieldUpdates(
+  existing: Record<string, unknown> | null,
+  draft: DNADraft,
+): Record<string, string> {
+  const updates: Record<string, string> = {};
+  for (const [field, value] of Object.entries(draft)) {
+    if (typeof value !== 'string' || value.trim().length === 0) continue;
+    const current = existing ? existing[field] : null;
+    const isEmpty = current === null || current === undefined || String(current).trim().length === 0;
+    if (isEmpty) updates[field] = value;
+  }
+  return updates;
 }
 
 // ─── Internals ────────────────────────────────────────────────────────────────
