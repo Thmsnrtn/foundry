@@ -36,6 +36,27 @@ export async function createDecision(input: {
     // In production, this would be queued; here we note it for the job to pick up
   }
 
+  // Phase 4.3: notify configured outbound destinations (Slack/Linear/Notion)
+  // when a founder-facing decision (Gate 3+) lands, so founders see it where
+  // they already work. Routed through the V3.1 gateway. Fire-and-forget.
+  if (input.gate >= 3) {
+    void (async () => {
+      try {
+        const nameRes = await query('SELECT name FROM products WHERE id = ?', [input.productId]);
+        const productName = (nameRes.rows[0] as Record<string, string>)?.name ?? 'your product';
+        const { dispatchEvent } = await import('../distribution/outbound-webhooks.js');
+        await dispatchEvent(input.productId, {
+          event_type: 'decision_needed',
+          product_id: input.productId,
+          product_name: productName,
+          headline: `Decision needed for ${productName}: ${input.what}`,
+          detail: input.whyNow,
+          url: `${process.env.APP_URL ?? ''}/decisions`,
+        });
+      } catch { /* dispatcher unavailable / no destinations — non-fatal */ }
+    })();
+  }
+
   return id;
 }
 
