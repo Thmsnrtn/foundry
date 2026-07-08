@@ -285,11 +285,30 @@ consolidation first. This is now documented and tracked.
 |-------|----------|-------|
 | 0 — Stop the bleeding | ✅ all 6 | alpha-blocking bugs fixed |
 | 1 — First ten minutes + first dollar | ✅ all 7 | alpha-sellable milestone |
-| 2 — Intelligence | 2.1, 2.2, 2.3, 2.5 ✅ · 2.4 partial · 2.6, 2.7 deferred | model/caching/audit/self-improvement done |
+| 2 — Intelligence | 2.1, 2.2, 2.3, 2.5 ✅ · 2.4 deploy-unblock ✅ (code consolidation deferred) · 2.6, 2.7 deferred | model/caching/audit/self-improvement + fresh-DB migration fixed |
 | 3 — Survive real users | 3.1, 3.2, 3.3, 3.5 ✅ · 3.4 deferred | web/worker, migrations, SLO, retention |
-| 4 — Visible moat | 4.3 ✅ · 4.1, 4.2, 4.4 remain | Slack/decision distribution done |
-| 5 — Launch | 5.1, 5.4, 5.5 ✅ · 5.2, 5.3 remain | help, manifesto, iOS archived |
+| 4 — Visible moat | 4.1, 4.2, 4.3 ✅ · 4.4 remains | peer signal, FleetObservatory, Slack/decision distribution |
+| 5 — Launch | 5.1, 5.2, 5.4, 5.5 ✅ · 5.3 remains | funnel telemetry, help, manifesto, iOS archived |
 
-Test suite grew from ~590 baseline to **725 passing**; `npm run check` is
-deterministic (Phase 2 test-infra fix). Every change is committed atomically
-with a descriptive message.
+### Phase 2.4 — fresh-DB migration unblocked
+The full migration chain now applies to an empty database with **0 failures**
+(guarded by a DB-backed test). Removed 007's rogue `integrations` table,
+converted expression UNIQUE constraints to indexes, moved reconciled-column
+indexes into 056, and standardized integration status on `'active'` (the value
+every schema CHECK permits — `'connected'` failed the constraint). The
+integration *code*-subsystem consolidation (deleting the framework, porting its
+adapters into the fabric) is still deferred — it spans 12 files / 7+ callers
+including Stripe webhook processing and needs an incremental, verified pass.
+
+### Phase 4.1 / 4.2 — moat surfaces
+- **4.1** `getPeerSignal` ("founders at your stage who chose X saw Y", abstains
+  below n=5), surfaced in the decision chamber.
+- **4.2** `/fleet` FleetObservatory: every agent's status/last-run/next-run/health
+  and pending decisions across all products.
+
+### Phase 5.2 — activation funnel
+`funnel_events` + `recordFunnelStep` instrumented at all 7 transition points;
+30-day funnel readout with conversion on the founder-ops dashboard.
+
+Test suite grew from ~590 baseline to **738 passing**; `npm run check` is
+deterministic. Every change is committed atomically with a descriptive message.
