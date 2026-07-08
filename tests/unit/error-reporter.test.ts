@@ -93,7 +93,9 @@ describe('error-reporter', () => {
       expect(parsed.source).toBe('test');
     });
 
-    it('logs a warning and falls through when SENTRY_DSN is set but @sentry/node is missing', async () => {
+    it('registers the Sentry reporter when SENTRY_DSN is set and @sentry/node is installed', async () => {
+      // @sentry/node is now a real dependency (Phase 0.3), so the DSN path
+      // resolves to the Sentry reporter rather than falling through.
       vi.stubEnv('SENTRY_DSN', 'https://example@example.ingest.sentry.io/1');
       delete process.env.ERROR_LOG_PATH;
 
@@ -103,12 +105,14 @@ describe('error-reporter', () => {
         return true;
       });
       await initReporter();
+      reportError(new Error('sentry-path'), { source: 'test' });
       stub.mockRestore();
 
-      const warnLine = writes.find((w) => w.includes('reporter_init_warning'));
-      expect(warnLine).toBeDefined();
-      const parsed = JSON.parse(warnLine!.trim());
-      expect(parsed.message).toMatch(/@sentry\/node not installed/);
+      // Module loaded successfully → no fallback warning emitted.
+      expect(writes.find((w) => w.includes('reporter_init_warning'))).toBeUndefined();
+      // Sentry.captureException handled the error, so the default stderr
+      // error_report payload was NOT written.
+      expect(writes.find((w) => w.includes('"error_message":"sentry-path"'))).toBeUndefined();
     });
   });
 

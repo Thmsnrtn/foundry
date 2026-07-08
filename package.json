@@ -20,10 +20,10 @@
     "mcp:dna": "tsx src/mcp/cli.ts dna"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.20.0",
     "@clerk/clerk-sdk-node": "^4.13.0",
     "@hono/node-server": "^1.19.9",
     "@libsql/client": "^0.5.0",
+    "@sentry/node": "^8.47.0",
     "commander": "^12.0.0",
     "cron": "^3.1.0",
     "hono": "^4.0.0",
