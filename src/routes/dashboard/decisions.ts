@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner, getScenarioModels, getRelevantPatterns } from '../../db/client.js';
+import { getPeerSignal } from '../../services/decisions/patterns.js';
 import { getDecisionQueue, resolveDecision, recordOutcome } from '../../services/decisions/queue.js';
 import { dashboardLayout, layout } from '../../views/layout.js';
 // chamberLayout = full-screen focused mode without sidebar
@@ -79,6 +80,14 @@ decisionRoutes.get('/decisions/:id', async (c) => {
   );
   const relevantPatterns = patterns.rows as Array<Record<string, unknown>>;
 
+  // Phase 4.1: cross-product peer signal — "founders at your stage who chose X
+  // saw Y", abstaining below n=5. Surfaced right where the decision is made.
+  const peerSignal = await getPeerSignal({
+    decisionType: (decision.category as string) ?? 'product',
+    lifecycleStage: ls.current_prompt ?? 'prompt_1',
+    marketCategory: null,
+  });
+
   // Parse options
   let options: Array<{ label: string; description: string; trade_offs?: string }> = [];
   try {
@@ -112,6 +121,15 @@ decisionRoutes.get('/decisions/:id', async (c) => {
     <div class="chamber-section">
       <div class="chamber-section-label">Pattern from similar decisions</div>
       ${chamberPatternBlock(relevantPatterns)}
+    </div>` : ''}
+
+    ${peerSignal ? html`
+    <div class="chamber-section">
+      <div class="chamber-section-label">Peer signal · Intelligence Network</div>
+      <p class="chamber-why" style="margin:0;">${peerSignal.summary}</p>
+      <p class="text-muted" style="font-size:0.75rem;margin-top:0.35rem;">
+        Based on ${peerSignal.sampleSize} anonymized peer outcome${peerSignal.sampleSize === 1 ? '' : 's'} · abstains below ${5}.
+      </p>
     </div>` : ''}
 
     ${options.length > 0 ? html`
