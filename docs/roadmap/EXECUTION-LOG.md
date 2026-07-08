@@ -312,3 +312,38 @@ including Stripe webhook processing and needs an incremental, verified pass.
 
 Test suite grew from ~590 baseline to **738 passing**; `npm run check` is
 deterministic. Every change is committed atomically with a descriptive message.
+
+### Remaining items — precise blockers (why not done in a code pass)
+
+These are the only open roadmap items. Each is genuinely gated on something a
+code-only pass in an ephemeral container can't safely provide — not simply
+skipped:
+
+- **2.4 (code consolidation)** — deleting the `services/integrations/` framework
+  and porting its adapters into the `services/integration/` fabric spans 12
+  files and 7+ callers **including Stripe webhook processing (money)**. The brief
+  itself says "each adapter migration needs its own test pass and rollback path;
+  don't migrate everything in one commit." Needs an incremental, staged pass.
+  *The deploy-blocking half (fresh-DB migration + schema) is done.*
+- **2.6 (calibrated confidence)** — the fix changes what the **gate system** does
+  with confidence across all 12 agents' strict schemas. The brief pairs it with
+  2.7 as the safety net; shipping it without the eval net risks silently
+  shifting auto-approve vs escalate behavior. Do **with** 2.7.
+- **2.7 (per-agent evals in CI)** — the eval framework exists (`tests/evals/`),
+  but the 5-cases-per-agent seed comes from `npm run cli -- capture:fixtures
+  <productId>` against a **real product with live agent runs**. No such data in
+  this environment.
+- **3.4 (Stripe/GitHub through the gateway)** — money-touching. The brief: "a
+  duplicate refund is much worse than a duplicate email … each migration needs
+  its own test pass." Validating it safely needs a **staging environment with
+  Stripe test keys**, not an offline pass.
+- **4.4 (surface collapse)** — the design doc (`docs/design/three-tab-ia-
+  proposal.md`) explicitly states: *"Don't implement before two weeks of
+  dogfooding data on which routes actually get opened."* The 5.2 funnel
+  telemetry shipped this cycle is how that evidence gets gathered. Implementing
+  now would contradict the design's own precondition.
+- **5.3 (alpha cohort → paid)** — pure go-to-market ops (invite 10 founders),
+  not code.
+
+Recommended next once the gates clear: 2.7 (unblocks 2.6) after a dogfood
+product exists; 3.4 against staging; 2.4 as a dedicated incremental migration.

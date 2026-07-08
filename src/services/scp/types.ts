@@ -287,6 +287,12 @@ export interface OutboundActionSignal {
   parameters: Record<string, unknown>;
   authority_level: 0 | 1 | 2;
   estimated_value_usd?: number;
+  /**
+   * Agent's self-assessed confidence in this action (0–1). Feeds the gate
+   * system instead of a hardcoded constant (Phase 2.6). Validated on use; when
+   * an agent doesn't emit it, the caller applies a documented fallback.
+   */
+  confidence?: number;
 }
 
 /** A message an agent wants to send to another agent. */

@@ -22,6 +22,19 @@ import type {
   IncomingAgentMessage,
 } from '../types.js';
 
+/**
+ * Validate an agent's self-assessed confidence to [0, 1] (Phase 2.6). Returns
+ * the fallback when the value is missing, non-finite, or out of range — so an
+ * agent that doesn't (yet) emit confidence keeps the documented default rather
+ * than the gate silently keying on a hardcoded constant.
+ */
+export function clampConfidence(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
 export abstract class BaseAgent {
   // ─── Abstract interface — must implement in subclasses ────────────────────
 
@@ -329,7 +342,9 @@ export abstract class BaseAgent {
             parameters: action.parameters,
             rationale: action.description,
             previewText: action.description.slice(0, 200),
-            confidence: 0.8,
+            // Use the agent's self-assessed confidence when it emits one,
+            // validated to [0,1]; else the documented 0.8 fallback (Phase 2.6).
+            confidence: clampConfidence(action.confidence, 0.8),
           }).catch((err) => { logger.error(`proposeAction failed for ${agentName}/${productId}: ${err}`); });
         }
       }).catch((err) => { logger.error(`import outbound/executor.js failed: ${err}`); });
