@@ -177,21 +177,28 @@ deterministic (see test-infra note).
   other's tables (intermittent, varying failures). Set `fileParallelism: false`
   — deterministic green, ~15s.
 
+- **2.5 (complete) — Feed the evolution engine real session data.**
+  `buildRecentSessionsTranscript` reads actual `agent_sessions` rows
+  (observations / actions / decisions / briefing contribution);
+  `checkEvolutionCandidates` uses the specific session + candidate hypotheses,
+  and `runEvolutionSynthesis` synthesizes over the last 5 completed sessions
+  (falling back to the generic prompt only when none exist). DB-backed tests.
+
 ### Deferred (with rationale)
 
 - **2.4 (full) — Unify the two integration subsystems.** Porting the framework's
   Stripe/GitHub pulls into the fabric, implementing the stubbed analytics
   adapter, migrating callers, and deleting the loser is a large, high-blast-
-  radius refactor touching the `integrations` table's dual schema. Left for a
-  dedicated pass so it gets its own test/rollback cycle rather than being
-  rushed. The status-string fix (0.1) already restored the fabric's sync path.
-- **2.5 (evolution engine) — Feed real session data** to
-  `checkEvolutionCandidates` / `runEvolutionSynthesis` (currently synthetic
-  one-liners). Bounded but needs care around the 5-gate validation; deferred.
+  radius refactor touching the `integrations` table's dual schema (and is the
+  documented fresh-DB migration blocker — see Phase 3.2). Left for a dedicated
+  pass with its own test/rollback cycle. The status-string fix (0.1) already
+  restored the fabric's sync path.
 - **2.6 — Calibrated confidence** (agents emit self-assessed confidence in their
   JSON contract; track calibration vs outcomes). Touches every agent's strict
-  schema + the gate system; deferred to a focused pass.
-- **2.7 — Per-agent evals in CI.** Depends on `capture:fixtures` output; deferred.
+  schema + the gate system and shifts gate behavior — best done *with* 2.7 as
+  the safety net. Deferred.
+- **2.7 — Per-agent evals in CI.** Depends on `capture:fixtures <productId>`
+  output (live product data); deferred.
 
 ### Operator notes
 
@@ -251,10 +258,38 @@ consolidation first. This is now documented and tracked.
 
 ---
 
+## Phase 4 — Visible moat (partial)
+
+- **4.3 — Show up where founders live.** The V3.1 outbound-webhook plumbing
+  already dispatched `briefing_ready` and `signal_tier_shift`;
+  `createDecision` now also fires `decision_needed` through the gateway for
+  Gate 3+ decisions, so founder-facing decisions reach Slack/Linear/Notion.
+- 4.1 (cross-product intelligence reader), 4.2 (FleetObservatory), and 4.4
+  (surface collapse) remain — each is a substantial feature/UI build.
+
 ## Phase 5 — Launch (partial)
 
 - **5.1 — Manifesto** was already live at `/manifesto`; added the footer link.
+- **5.4 — iOS decision.** Archived `ios/Foundry/` with an unambiguous
+  `ARCHIVED.md` (no Xcode project → not buildable; PWA covers mobile).
 - **5.5 — Support surface.** New `/help` page (FAQ + operator email via
   `SUPPORT_EMAIL`), linked from the footer and the branded error pages.
-- 5.2 (activation-funnel instrumentation), 5.3 (alpha cohort), 5.4 (iOS
-  decision) remain — product/ops work outside a single code pass.
+- 5.2 (activation-funnel instrumentation) and 5.3 (alpha cohort) remain —
+  product/ops work outside a single code pass.
+
+---
+
+## Overall status
+
+| Phase | Complete | Notes |
+|-------|----------|-------|
+| 0 — Stop the bleeding | ✅ all 6 | alpha-blocking bugs fixed |
+| 1 — First ten minutes + first dollar | ✅ all 7 | alpha-sellable milestone |
+| 2 — Intelligence | 2.1, 2.2, 2.3, 2.5 ✅ · 2.4 partial · 2.6, 2.7 deferred | model/caching/audit/self-improvement done |
+| 3 — Survive real users | 3.1, 3.2, 3.3, 3.5 ✅ · 3.4 deferred | web/worker, migrations, SLO, retention |
+| 4 — Visible moat | 4.3 ✅ · 4.1, 4.2, 4.4 remain | Slack/decision distribution done |
+| 5 — Launch | 5.1, 5.4, 5.5 ✅ · 5.2, 5.3 remain | help, manifesto, iOS archived |
+
+Test suite grew from ~590 baseline to **725 passing**; `npm run check` is
+deterministic (Phase 2 test-infra fix). Every change is committed atomically
+with a descriptive message.
