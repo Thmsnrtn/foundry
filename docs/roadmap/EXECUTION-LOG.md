@@ -200,3 +200,61 @@ deterministic (see test-infra note).
 - After deploy, confirm prompt-cache hits in OpenRouter usage (input-token drop
   on repeated agent runs) and eyeball one generated briefing before/after the
   model swap, per the roadmap's verification step 6.
+
+---
+
+## Phase 3 — Survive real users (in progress)
+
+**Status:** 3.1, 3.2, 3.3, 3.5 done; 3.4 deferred.
+**Tests:** 704 → 722 passing, `npm run check` green (deterministic).
+
+### What shipped
+
+- **3.1 — Split web from worker.** `PROCESS_ROLE` gates the scheduler
+  (`src/lib/process-role.ts`): `web` serves HTTP with no crons, `worker` runs
+  the 73 crons off the request path, `all` is the default. `fly.toml` now
+  declares `web`/`worker` process groups, binds `http_service` to `web`, and
+  scales web to 2 machines for deploy overlap. DB job locks already prevent
+  double-runs.
+
+- **3.2 — Migration hygiene.** Replaced the fragile `;\n` statement splitter
+  with `splitSqlStatements` (respects string literals, comments, trigger
+  bodies) — verified behavior-equivalent across all 109 migrations, with tests
+  for the cases the old one broke. Fixed two dead index defs in
+  `007_schema_hardening.sql` (columns that never existed). Documented the
+  numbering rule + a **found blocker**: fresh-DB migration fails at
+  `008_integrations.sql` because the `integrations` table is created by four
+  migrations with incompatible schemas — this is the Phase 2.4 dual-subsystem
+  problem and must be fixed there before a from-scratch deploy works. Existing
+  DBs are unaffected. See `docs/db/migrations.md`.
+
+- **3.3 — SLO alerting.** New hourly `slo_check` cron evaluates SLOs and emails
+  the operator through the gateway on breach (dedup'd per day). First check:
+  global AI daily spend vs the fleet cap. Extensible for job-lag / webhook
+  backlog once those signals are surfaced.
+
+- **3.5 — Data retention.** New daily `data_retention` cron purges
+  `agent_messages` and `audit_log` rows past `DATA_RETENTION_DAYS` (default
+  180), failing soft per table. DB-backed tests cover the boundary.
+
+### Deferred
+
+- **3.4 — Finish the gateway migration (Stripe/GitHub adapters).** Moderate;
+  Resend + remediation PRs already route through the gateway. Deferred to a
+  focused pass.
+
+### ⚠️ Important finding
+
+Fresh-database migration is currently broken (see 3.2 / `docs/db/migrations.md`).
+Production is fine, but a from-scratch deploy needs the Phase 2.4 integrations
+consolidation first. This is now documented and tracked.
+
+---
+
+## Phase 5 — Launch (partial)
+
+- **5.1 — Manifesto** was already live at `/manifesto`; added the footer link.
+- **5.5 — Support surface.** New `/help` page (FAQ + operator email via
+  `SUPPORT_EMAIL`), linked from the footer and the branded error pages.
+- 5.2 (activation-funnel instrumentation), 5.3 (alpha cohort), 5.4 (iOS
+  decision) remain — product/ops work outside a single code pass.
