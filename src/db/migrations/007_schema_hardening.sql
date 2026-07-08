@@ -9,8 +9,11 @@
 CREATE INDEX IF NOT EXISTS idx_audit_scores_product_verdict ON audit_scores(product_id, verdict);
 CREATE INDEX IF NOT EXISTS idx_decisions_product_gate ON decisions(product_id, gate);
 CREATE INDEX IF NOT EXISTS idx_metric_snapshots_created ON metric_snapshots(created_at);
-CREATE INDEX IF NOT EXISTS idx_stressor_history_created ON stressor_history(created_at);
-CREATE INDEX IF NOT EXISTS idx_competitive_signals_created ON competitive_signals(created_at);
+-- stressor_history's timestamp column is identified_at, not created_at — the
+-- original referenced a non-existent column and broke fresh-DB migration.
+CREATE INDEX IF NOT EXISTS idx_stressor_history_created ON stressor_history(identified_at);
+-- competitive_signals' timestamp column is detected_at, not created_at.
+CREATE INDEX IF NOT EXISTS idx_competitive_signals_created ON competitive_signals(detected_at);
 CREATE INDEX IF NOT EXISTS idx_cohorts_product_channel ON cohorts(product_id, acquisition_channel);
 CREATE INDEX IF NOT EXISTS idx_ai_usage_model ON ai_usage_log(model);
 CREATE INDEX IF NOT EXISTS idx_founders_created ON founders(created_at);

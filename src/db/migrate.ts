@@ -12,6 +12,80 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Split a SQL migration into individual statements.
+ *
+ * A naive `split(/;\s*\n/)` breaks on any semicolon-then-newline, including
+ * ones inside string literals or a CREATE TRIGGER ... BEGIN ... END body, and
+ * a blanket `--` strip corrupts dashes inside string literals. This walks the
+ * text tracking string/comment state and trigger depth, and only splits on a
+ * top-level `;`. Comments are stripped only when genuinely outside a string.
+ */
+export function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inSingle = false;   // '...'  (SQLite escapes an inner quote as '')
+  let inLine = false;     // -- ... to end of line
+  let inBlock = false;    // /* ... */
+  let triggerDepth = 0;   // BEGIN..END nesting, only tracked inside CREATE TRIGGER
+
+  const isTriggerStmt = () => /\bcreate\s+trigger\b/i.test(current);
+  const wordEndsAt = (i: number, word: string): boolean => {
+    if (sql.slice(i, i + word.length).toLowerCase() !== word) return false;
+    const before = sql[i - 1];
+    const after = sql[i + word.length];
+    const boundary = (c: string | undefined) => c === undefined || !/[A-Za-z0-9_]/.test(c);
+    return boundary(before) && boundary(after);
+  };
+
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    const next = sql[i + 1];
+
+    if (inLine) {
+      if (ch === '\n') { inLine = false; current += ch; }
+      continue; // drop comment characters
+    }
+    if (inBlock) {
+      if (ch === '*' && next === '/') { inBlock = false; i++; }
+      continue;
+    }
+    if (inSingle) {
+      current += ch;
+      if (ch === "'") {
+        if (next === "'") { current += next; i++; } // escaped quote, stay in string
+        else inSingle = false;
+      }
+      continue;
+    }
+
+    // Outside strings/comments:
+    if (ch === '-' && next === '-') { inLine = true; i++; continue; }
+    if (ch === '/' && next === '*') { inBlock = true; i++; continue; }
+    if (ch === "'") { inSingle = true; current += ch; continue; }
+
+    // Trigger body tracking so semicolons inside BEGIN..END don't split.
+    if (isTriggerStmt()) {
+      if (wordEndsAt(i, 'begin')) { triggerDepth++; }
+      else if (wordEndsAt(i, 'end')) { if (triggerDepth > 0) triggerDepth--; }
+    }
+
+    if (ch === ';' && triggerDepth === 0) {
+      const trimmed = current.trim();
+      if (trimmed.length > 0) statements.push(trimmed);
+      current = '';
+      triggerDepth = 0;
+      continue;
+    }
+
+    current += ch;
+  }
+
+  const tail = current.trim();
+  if (tail.length > 0) statements.push(tail);
+  return statements;
+}
+
 export async function runMigrations(): Promise<void> {
   const db = getDb();
 
@@ -39,12 +113,9 @@ export async function runMigrations(): Promise<void> {
     console.log(`[MIGRATE] Applying ${file}...`);
     const sql = readFileSync(resolve(migrationsDir, file), 'utf-8');
 
-    // Split on semicolons followed by a newline (statement boundaries).
-    // Ignore semicolons inside parenthesised expressions (CHECK, IN, etc.).
-    const statements = sql
-      .split(/;\s*\n/)
-      .map((s) => s.replace(/--[^\n]*/g, '').trim())
-      .filter((s) => s.length > 0);
+    // Split into statements, respecting string literals, comments, and trigger
+    // BEGIN..END bodies (see splitSqlStatements).
+    const statements = splitSqlStatements(sql);
 
     for (const stmt of statements) {
       try {
