@@ -570,6 +570,59 @@ export async function getEvolutionHistory(
 import type { AgentName, EvolutionCandidate } from './types.js';
 
 /**
+ * Build a real session transcript from agent_sessions rows so the evolution
+ * engine reasons over what the agent actually observed/did/decided rather than
+ * a synthetic one-liner (Phase 2.5). Returns '' when there's nothing to show.
+ */
+export async function buildRecentSessionsTranscript(
+  productId: string,
+  agentName: string,
+  limit: number,
+  specificSessionId?: string,
+): Promise<string> {
+  const fmt = (v: unknown): string[] => {
+    try {
+      const arr = JSON.parse(String(v ?? '[]'));
+      if (!Array.isArray(arr)) return [];
+      return arr.map((el) => (typeof el === 'string' ? el : JSON.stringify(el)));
+    } catch {
+      return [];
+    }
+  };
+  try {
+    const result = specificSessionId
+      ? await query(
+          `SELECT observations, actions_taken, pending_decisions, briefing_contribution, completed_at
+             FROM agent_sessions WHERE id = ?`,
+          [specificSessionId],
+        )
+      : await query(
+          `SELECT observations, actions_taken, pending_decisions, briefing_contribution, completed_at
+             FROM agent_sessions
+            WHERE product_id = ? AND agent_name = ? AND status = 'completed'
+            ORDER BY completed_at DESC LIMIT ?`,
+          [productId, agentName, limit],
+        );
+    if (result.rows.length === 0) return '';
+    const blocks = result.rows.map((row, i) => {
+      const r = row as Record<string, unknown>;
+      const obs = fmt(r.observations);
+      const acts = fmt(r.actions_taken);
+      const decs = fmt(r.pending_decisions);
+      const parts = [`--- Session ${i + 1} (${(r.completed_at as string) ?? 'n/a'}) ---`];
+      if (obs.length) parts.push('Observations:\n' + obs.map((o) => `- ${o}`).join('\n'));
+      if (acts.length) parts.push('Actions taken:\n' + acts.map((a) => `- ${a}`).join('\n'));
+      if (decs.length) parts.push('Pending decisions:\n' + decs.map((d) => `- ${d}`).join('\n'));
+      if (r.briefing_contribution) parts.push(`Briefing contribution: ${String(r.briefing_contribution)}`);
+      return parts.join('\n');
+    });
+    return blocks.join('\n\n');
+  } catch {
+    return '';
+  }
+}
+
+/**
  * @deprecated Use evolveAgent() instead. Kept for backward compatibility.
  * Called from BaseAgent after a session — wraps the new evolution pipeline.
  */
@@ -590,11 +643,15 @@ export async function checkEvolutionCandidates(
     const totalSessions = (row.total_sessions as number) ?? 0;
     if (!shouldEvolveThisSession(totalSessions, candidates.length > 0, false)) return;
 
+    // Feed the actual session (observations/actions/decisions) plus the
+    // candidate hypotheses, not just a synthetic summary line (Phase 2.5).
+    const realTranscript = await buildRecentSessionsTranscript(productId, agentName, 1, sessionId);
+    const candidateLine = `Evolution candidates this session: ${candidates.map(c => c.hypothesis).join('; ')}`;
     await evolveAgent({
       productId,
       agentName: agentName as AgentName,
       sessionId,
-      sessionTranscript: `Session produced ${candidates.length} evolution candidate(s). Candidates: ${candidates.map(c => c.hypothesis).join('; ')}`,
+      sessionTranscript: realTranscript ? `${realTranscript}\n\n${candidateLine}` : candidateLine,
       isCorrection: false,
     });
   } catch {
@@ -636,10 +693,16 @@ export async function runEvolutionSynthesis(
   agentName: string
 ): Promise<{ evolved: boolean; newVersion: number | null; description: string }> {
   try {
+    // Synthesize over the agent's actual recent sessions, not a synthetic
+    // prompt (Phase 2.5). Fall back to the generic instruction only when there
+    // are no completed sessions yet.
+    const realTranscript = await buildRecentSessionsTranscript(productId, agentName, 5);
     const result = await evolveAgent({
       productId,
       agentName: agentName as AgentName,
-      sessionTranscript: 'Scheduled evolution synthesis — review recent sessions and propose improvements.',
+      sessionTranscript: realTranscript
+        ? `Scheduled evolution synthesis — review these recent sessions and propose improvements:\n\n${realTranscript}`
+        : 'Scheduled evolution synthesis — review recent sessions and propose improvements.',
       isCorrection: false,
     });
     const appliedCount = result.changes?.filter(c => c.approved).length ?? 0;
