@@ -133,3 +133,70 @@ next `npm run migrate` / boot. Both are idempotent.
 - Set `STRIPE_*_PRICE_ID` env vars so `getTierFromPrice` resolves; otherwise the
   webhook logs "Unrecognised price ID" and tier/trial won't update.
 - `TRIAL_PERIOD_DAYS` (default 14) overrides the trial length everywhere.
+
+---
+
+## Phase 2 — Make the intelligence actually intelligent (in progress)
+
+**Status:** 2.1–2.3 complete; 2.4/2.5 partial; 2.6/2.7 deferred.
+**Tests:** 700 → 704 passing (51 files), `npm run check` green and now
+deterministic (see test-infra note).
+
+### What shipped
+
+- **2.1 — Model generation upgrade.** OPUS → `anthropic/claude-opus-4-8`,
+  SONNET → `anthropic/claude-sonnet-5`; added a HAIKU tier
+  (`anthropic/claude-haiku-4-5`) + `callHaiku()` for cheap classification.
+  Updated the `AIModel` union, `COST_PER_1M`, and `usage-tracking` PRICING
+  (whose keys were bare and never matched `response.model` — a latent
+  cost-tracking miss, now fixed) plus the two hardcoded model strings.
+
+- **2.2 — Prompt caching (biggest cost lever).** Added a `CACHE_BREAKPOINT`
+  sentinel: the client marks the stable system-prompt prefix with Anthropic
+  prompt caching (`cache_control: ephemeral`, passed through by OpenRouter).
+  Reordered `base.ts buildSystemPrompt` stable-first so the cached prefix is
+  byte-identical across runs. Expected 60–90% input-cost cut on repeat agent
+  runs. Non-agent callers (no sentinel) are unaffected.
+
+- **2.3 — Audit gets real code visibility.** New `selectReviewFiles` picks a
+  budget-capped set (≤8 files / ≤14KB) of the most decision-relevant files
+  (auth/security, billing, error handling, config) from the already-fetched key
+  files; the scorer now includes those excerpts (sanitized, framed as untrusted
+  data). Moves the audit from checklist-over-counts to review-over-code.
+
+- **2.4 (partial) — Deleted the duplicate `src/lib/job-lock.ts`** (zero
+  importers; `src/services/job-lock.ts` is canonical).
+
+- **2.5 (partial) — Scratchpad consensus/conflict now uses a Haiku classifier**
+  instead of the bag-of-words heuristic that flagged "consensus" on any shared
+  5-char token. Fails closed (empty) rather than emitting nonsense into a
+  founder-visible briefing.
+
+- **Test infra — fixed a pre-existing flake.** Many suites share one in-process
+  `file::memory:` DB; running test files concurrently let them clobber each
+  other's tables (intermittent, varying failures). Set `fileParallelism: false`
+  — deterministic green, ~15s.
+
+### Deferred (with rationale)
+
+- **2.4 (full) — Unify the two integration subsystems.** Porting the framework's
+  Stripe/GitHub pulls into the fabric, implementing the stubbed analytics
+  adapter, migrating callers, and deleting the loser is a large, high-blast-
+  radius refactor touching the `integrations` table's dual schema. Left for a
+  dedicated pass so it gets its own test/rollback cycle rather than being
+  rushed. The status-string fix (0.1) already restored the fabric's sync path.
+- **2.5 (evolution engine) — Feed real session data** to
+  `checkEvolutionCandidates` / `runEvolutionSynthesis` (currently synthetic
+  one-liners). Bounded but needs care around the 5-gate validation; deferred.
+- **2.6 — Calibrated confidence** (agents emit self-assessed confidence in their
+  JSON contract; track calibration vs outcomes). Touches every agent's strict
+  schema + the gate system; deferred to a focused pass.
+- **2.7 — Per-agent evals in CI.** Depends on `capture:fixtures` output; deferred.
+
+### Operator notes
+
+- Optional model-cost overrides: `AI_COST_HAIKU_INPUT_PER_1M` /
+  `AI_COST_HAIKU_OUTPUT_PER_1M` (defaults 1.00 / 5.00).
+- After deploy, confirm prompt-cache hits in OpenRouter usage (input-token drop
+  on repeated agent runs) and eyeball one generated briefing before/after the
+  model swap, per the roadmap's verification step 6.
