@@ -264,7 +264,7 @@ pricingRoutes.get('/pricing', async (c) => {
             <li>Signal score + risk state monitoring</li>
             <li>AI Ask — conversational business advisor</li>
             <li>Decision queue (Gate 0–4)</li>
-            <li>iOS app + voice briefings + Watch complication</li>
+            <li>Installable mobile app (PWA) — briefings on the go</li>
           </ul>
           <a href="/auth/signup" class="btn btn-secondary" style="width:100%;margin-top:1rem;text-align:center;">Get Started</a>
         </div>
@@ -304,7 +304,7 @@ pricingRoutes.get('/pricing', async (c) => {
         </div>
       </div>
       <div style="text-align:center;margin-top:2rem;color:var(--text-muted);font-size:0.82rem;">
-        All plans include the iOS native app, agent evolution, and CEO briefings. Cancel anytime.
+        All plans include the installable mobile app, agent evolution, and CEO briefings. Cancel anytime.
       </div>
     </div>
   `));

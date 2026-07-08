@@ -180,6 +180,7 @@ initReporter().catch((err) => {
 });
 
 // Global middleware
+import { errorPage, wantsHtml } from './views/error-page.js';
 import { securityHeaders } from './middleware/security-headers.js';
 import { requestIdMiddleware } from './middleware/security.js';
 // Trace context first — every downstream log line / AI call / error
@@ -485,6 +486,12 @@ app.route('/', founderIntelRoutes);
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 
 app.notFound((c) => {
+  if (wantsHtml(c.req.header('accept'), c.req.path)) {
+    return c.html(
+      errorPage(404, 'Page not found', "This page doesn't exist or has moved."),
+      404,
+    );
+  }
   return c.json({ error: 'Not found' }, 404);
 });
 
@@ -492,6 +499,12 @@ app.notFound((c) => {
 
 app.onError((err, c) => {
   logger.error('Unhandled error', { error: String(err) });
+  if (wantsHtml(c.req.header('accept'), c.req.path)) {
+    return c.html(
+      errorPage(500, 'Something went wrong', 'An unexpected error occurred. The team has been notified.'),
+      500,
+    );
+  }
   return c.json({ error: 'Internal server error' }, 500);
 });
 
