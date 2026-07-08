@@ -204,6 +204,14 @@ export async function dataRetention(): Promise<void> {
   logger.info('data_retention complete', { jobName: 'data_retention', counts });
 }
 
+// ─── SLO / degradation check — hourly ────────────────────────────────────────
+export async function sloCheck(): Promise<void> {
+  logger.info('slo_check starting', { jobName: 'slo_check' });
+  const { runSloChecksAndAlert } = await import('../services/slo.js');
+  const breaches = await runSloChecksAndAlert();
+  logger.info('slo_check complete', { jobName: 'slo_check', breachCount: breaches.length });
+}
+
 // ─── 6. Metric Snapshot — Daily midnight UTC ──────────────────────────────────
 export async function metricSnapshot(): Promise<void> {
   logger.info('metric_snapshot starting', { jobName: 'metric_snapshot' });
@@ -1897,6 +1905,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   behavioral_triggers:  { fn: behavioralTriggers,   schedule: '0 */6 * * *',     description: 'Evaluate behavioral trigger emails (every 6h)' },
   metric_snapshot:      { fn: metricSnapshot,       schedule: '0 0 * * *',       description: 'Ensure daily metric snapshots exist' },
   data_retention:       { fn: dataRetention,        schedule: '30 3 * * *',      description: 'Purge operational log rows past the retention window (daily)' },
+  slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
   slot_enforcement:     { fn: slotEnforcement,      schedule: '0 9 * * *',       description: 'Enforce founding cohort activation window' },
   cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },
   scenario_accuracy:    { fn: scenarioAccuracy,     schedule: '0 8 * * 5',       description: 'Evaluate scenario prediction accuracy (Friday)' },

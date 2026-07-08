@@ -163,6 +163,17 @@ export async function getGlobalDailySpend(): Promise<number> {
   return readScopeSpend('global', GLOBAL_SCOPE_ID);
 }
 
+/** Global daily spend vs the global cap, for SLO/ops monitoring (Phase 3.3). */
+export async function getGlobalSpendStatus(): Promise<{
+  spentCents: number;
+  capCents: number;
+  pctOfCap: number;
+}> {
+  const spentCents = await readScopeSpend('global', GLOBAL_SCOPE_ID);
+  const capCents = GLOBAL_COST_CEILING_CENTS;
+  return { spentCents, capCents, pctOfCap: capCents > 0 ? spentCents / capCents : 0 };
+}
+
 /**
  * True if any applicable cap (product, founder, or global) is exhausted for
  * today. Reads are cached and fail-open on DB errors.
