@@ -37,6 +37,7 @@ const { fleetRoutes } = await import('../../src/routes/dashboard/fleet.js');
 const { settingsRoutes } = await import('../../src/routes/dashboard/settings.js');
 const { agentBriefingRoutes } = await import('../../src/routes/dashboard/agents-briefings.js');
 const { integrationsRoutes } = await import('../../src/routes/dashboard/integrations.js');
+const { agentIntegrationRoutes } = await import('../../src/routes/dashboard/agents-integrations.js');
 const { founderOpsRoutes } = await import('../../src/routes/dashboard/founder-ops.js');
 const { onboardingRoutes } = await import('../../src/routes/dashboard/onboarding.js');
 const { productRoutes } = await import('../../src/routes/dashboard/products.js');
@@ -46,6 +47,7 @@ const {
 
 type Founder = Record<string, unknown> | null;
 let currentFounder: Founder = null;
+let currentProductId: string | null = null;
 
 const AUTHED_PREFIXES = ['/dashboard', '/decisions', '/fleet', '/settings', '/agents', '/integrations', '/founder-ops', '/onboarding', '/products'];
 const app = new (Hono as any)();
@@ -56,6 +58,10 @@ app.use('*', async (c: any, next: any) => {
   const path = new URL(c.req.url).pathname;
   if (currentFounder) {
     c.set('founder', currentFounder);
+    // Mirror what the real auth + tenant middleware put on context, so RBAC
+    // (requireRole) and product-scoped handlers resolve.
+    c.set('userId', currentFounder.id);
+    if (currentProductId) c.set('productId', currentProductId);
   } else if (AUTHED_PREFIXES.some((p) => path === p || path.startsWith(p + '/'))) {
     return c.redirect('/auth/login');
   }
@@ -71,7 +77,7 @@ app.onError((err: any, c: any) => {
 for (const r of [
   landingRoutes, pricingRoutes, manifestoRoutes, helpRoutes, legalRoutes,
   dashboardRoutes, decisionRoutes, fleetRoutes, settingsRoutes,
-  agentBriefingRoutes, integrationsRoutes, founderOpsRoutes,
+  agentBriefingRoutes, integrationsRoutes, agentIntegrationRoutes, founderOpsRoutes,
   onboardingRoutes, productRoutes,
 ]) app.route('/', r);
 
@@ -158,9 +164,28 @@ interface Finding { persona: string; method: string; path: string; status: numbe
 const findings: Finding[] = [];
 let requests = 0;
 
-async function hit(persona: string, method: string, path: string, opts: { expectStatus?: number[]; label?: string } = {}): Promise<Response> {
+// Assert a post-condition (a write actually happened / isolation held).
+async function assertDb(persona: string, ok: boolean, note: string): Promise<void> {
+  if (!ok) findings.push({ persona, method: 'ASSERT', path: '', status: 0, note });
+}
+
+async function hit(persona: string, method: string, path: string, opts: { expectStatus?: number[]; label?: string; body?: unknown; json?: boolean } = {}): Promise<Response> {
   requests++;
-  const res = await app.request(path, { method });
+  const init: any = { method };
+  if (opts.body !== undefined) {
+    if (opts.json) {
+      // JSON AJAX endpoints (c.req.json()).
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = JSON.stringify(opts.body);
+    } else {
+      // Form-encoded — what real HTML forms submit; works for parseBody + validateBody.
+      const form = new URLSearchParams();
+      for (const [k, v] of Object.entries(opts.body as Record<string, unknown>)) form.set(k, String(v));
+      init.headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+      init.body = form.toString();
+    }
+  }
+  const res = await app.request(path, init);
   const loc = res.headers.get('location');
   const expected = opts.expectStatus ?? [200, 302, 303, 304];
   if (res.status >= 500) {
@@ -273,6 +298,82 @@ async function main(): Promise<void> {
   // 14. Logged-out user hitting an authed route → should redirect to login, not 500.
   currentFounder = null;
   await hit('14 logged-out on authed route', 'GET', '/dashboard', { expectStatus: [302, 401, 200] });
+
+  // ══ POST / mutation flows ════════════════════════════════════════════════════
+  // Exercise DB writes, validation, and business logic. External services
+  // (Stripe/AI/GitHub) aren't reachable — flows that call them should FAIL
+  // GRACEFULLY (redirect/error), never 5xx.
+
+  // P1. No-code product creation (validated body).
+  {
+    const f = await seedFounder({ email: 'create@a.co' });
+    currentFounder = founderObj(f); currentProductId = null;
+    await hit('P1 create-product', 'POST', '/onboarding/create-product',
+      { body: { name: 'SimApp', url: 'https://sim.app', build_platform: 'bubble', sector_profile: 'b2b_saas' }, expectStatus: [200, 302] });
+    const created = await query('SELECT id FROM products WHERE owner_id = ? AND name = ?', [f.id, 'SimApp']);
+    await assertDb('P1 create-product', created.rows.length === 1, 'product row was NOT created after a 2xx/3xx response');
+    // Malformed: missing required name → clean validation error, not 5xx.
+    await hit('P1 create-product (invalid)', 'POST', '/onboarding/create-product',
+      { body: { url: 'not-a-url' }, expectStatus: [400, 422] });
+  }
+
+  // P2. Resolve a decision (DB write + funnel + dispatch).
+  {
+    const f = await seedFounder({ email: 'resolve@a.co', tier: 'solo' });
+    const prod = await seedProduct(f.id as string, { name: 'ResolveApp' });
+    const did = await seedDecision(prod, 2);
+    currentFounder = founderObj(f); currentProductId = prod;
+    await hit('P2 resolve-decision', 'POST', `/decisions/${did}/resolve`,
+      { body: { chosen_option: 'Raise the price' }, json: true, expectStatus: [200, 302] });
+    const resolved = await query('SELECT status, chosen_option FROM decisions WHERE id = ?', [did]);
+    const rrow = resolved.rows[0] as Record<string, unknown>;
+    await assertDb('P2 resolve-decision', rrow?.status === 'approved', `decision not approved after resolve (status=${rrow?.status})`);
+
+    // Cross-tenant resolve attempt → must not change the decision.
+    const other = await seedFounder({ email: 'resolve-attacker@a.co', tier: 'growth' });
+    currentFounder = founderObj(other); currentProductId = null;
+    await hit('P2 resolve-decision (cross-tenant)', 'POST', `/decisions/${did}/resolve`,
+      { body: { chosen_option: 'hijack' }, json: true, expectStatus: [403, 404, 302] });
+    const after = await query('SELECT chosen_option FROM decisions WHERE id = ?', [did]);
+    await assertDb('P2 resolve-decision (cross-tenant)', (after.rows[0] as Record<string, unknown>)?.chosen_option !== 'hijack',
+      'TENANT LEAK: another founder overwrote this decision');
+  }
+
+  // P3. Save Product DNA (wisdom-gated write).
+  {
+    const f = await seedFounder({ email: 'dna@a.co', tier: 'growth' });
+    const prod = await seedProduct(f.id as string, { name: 'DnaApp' });
+    currentFounder = founderObj(f); currentProductId = prod;
+    await hit('P3 save-dna', 'POST', `/products/${prod}/dna`,
+      { body: { icp_description: 'Solo SaaS founders', primary_objection: 'Another tool to learn' }, expectStatus: [200, 302] });
+  }
+
+  // P4. Connect + disconnect an integration (credential encryption write).
+  {
+    const f = await seedFounder({ email: 'integ@a.co', tier: 'growth' });
+    const prod = await seedProduct(f.id as string, { name: 'IntegApp' });
+    currentFounder = founderObj(f); currentProductId = prod;
+    await hit('P4 connect-integration', 'POST', '/agents/integrations/posthog/connect',
+      { body: { product_id: prod, api_key: 'phc_test', host: 'https://app.posthog.com' }, expectStatus: [200, 302] });
+    // Exercises connectIntegration writing status='active' against the real
+    // integrations CHECK constraint (the Phase 2.4 fix) end-to-end.
+    const integ = await query('SELECT status FROM integrations WHERE product_id = ? AND name = ?', [prod, 'posthog']);
+    await assertDb('P4 connect-integration', (integ.rows[0] as Record<string, unknown>)?.status === 'active',
+      `integration not 'active' after connect (status=${(integ.rows[0] as Record<string, unknown>)?.status ?? 'none'})`);
+    await hit('P4 disconnect-integration', 'POST', '/agents/integrations/posthog/disconnect',
+      { body: { product_id: prod }, expectStatus: [200, 302] });
+  }
+
+  // P5. Checkout — Stripe unreachable here; must fail gracefully (redirect), not 5xx.
+  {
+    const f = await seedFounder({ email: 'checkout@a.co' });
+    const prod = await seedProduct(f.id as string, { name: 'CheckoutApp' });
+    currentFounder = founderObj(f); currentProductId = prod;
+    await hit('P5 checkout', 'POST', '/checkout',
+      { body: { tier: 'solo' }, expectStatus: [302, 303, 200, 400, 500] });
+  }
+
+  currentProductId = null;
 
   // ── Report ──────────────────────────────────────────────────────────────────
   const bugs = findings.filter((f) => f.status >= 500);

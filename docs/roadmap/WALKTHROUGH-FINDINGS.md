@@ -48,10 +48,35 @@ cross-tenant.
    both. (An earlier false positive was the tier-gate *upgrade preview*, which
    shows no data.)
 
+## Round 2 — POST / mutation flows
+
+Extended the sim with mutation flows (create-product, resolve-decision, save-DNA,
+connect/disconnect integration, checkout) plus **post-condition assertions** (the
+write actually happened; cross-tenant writes are blocked). 109 requests total.
+Two more real bugs, one launch-critical:
+
+6. **🔴 Connecting any integration 500'd.** `connectIntegration` writes the
+   direction (`'inbound'/'outbound'/'bidirectional'`) to `integrations.type`, but
+   that column's CHECK only allowed provider names (`'stripe','posthog',…`) — the
+   2.4 dual-subsystem conflict. So integrations (a Growth-tier feature) could
+   never connect. The implicit `UNIQUE(product_id, type)` would also collide the
+   moment a founder connected two same-direction integrations. Migration 081
+   rebuilds `integrations` dropping the `type`/`status` CHECKs and re-keying
+   uniqueness on `(product_id, name)` — what the fabric actually uses. The sim
+   now asserts the row lands with `status='active'`.
+
+7. **🟡 Checkout 500'd on a Stripe failure** instead of degrading. `POST
+   /checkout` called Stripe without a try/catch, so an outage/bad-key 500'd the
+   founder mid-upgrade. Now redirects to `/settings?checkout=error`.
+
+Post-condition assertions that PASSED (verifying real behavior, not just "no
+5xx"): product row created; decision moved to `approved`; a cross-tenant resolve
+attempt did **not** overwrite the decision; integration landed `active`.
+
 ## Caveat
 
-This exercises the **rendered route/DB/tenant surface** — where most
+This exercises the **rendered + mutation route/DB/tenant surface** — where most
 "stranger" gaps live — but not flows that require live external services
-(the audit's GitHub+AI calls, real Stripe events, Clerk JWT verification).
-Those still need the staging walkthrough in `GO-LIVE-CHECKLIST.md §1–2`.
-Run `npm run sim:walkthrough` before every deploy.
+(the audit's GitHub+AI calls, real Stripe checkout redirect, Clerk JWT
+verification). Those still need the staging walkthrough in
+`GO-LIVE-CHECKLIST.md §1–2`. Run `npm run sim:walkthrough` before every deploy.

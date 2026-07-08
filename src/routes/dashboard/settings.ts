@@ -27,21 +27,29 @@ settingsRoutes.post('/checkout', requireRole('owner'), async (c) => {
   const validTiers = ['solo', 'growth', 'investor_ready'];
   if (!tier || !validTiers.includes(tier)) return c.redirect('/settings');
 
-  let customerId = founder.stripe_customer_id;
-  if (!customerId) {
-    const { createCustomer } = await import('../../services/billing/stripe.js');
-    customerId = await createCustomer(founder.email, founder.name);
-    await query('UPDATE founders SET stripe_customer_id = ? WHERE id = ?', [customerId, founder.id]);
-  }
+  // Stripe calls can fail (outage, bad key, network). Degrade gracefully to an
+  // error redirect rather than 500ing the founder mid-upgrade.
+  try {
+    let customerId = founder.stripe_customer_id;
+    if (!customerId) {
+      const { createCustomer } = await import('../../services/billing/stripe.js');
+      customerId = await createCustomer(founder.email, founder.name);
+      await query('UPDATE founders SET stripe_customer_id = ? WHERE id = ?', [customerId, founder.id]);
+    }
 
-  const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
-  const checkoutUrl = await createCheckoutSession(
-    customerId, tier,
-    `${appUrl}/settings?checkout=success`,
-    `${appUrl}/settings?checkout=cancelled`
-  );
-  if (!checkoutUrl) return c.redirect('/settings?checkout=error');
-  return c.redirect(checkoutUrl);
+    const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+    const checkoutUrl = await createCheckoutSession(
+      customerId, tier,
+      `${appUrl}/settings?checkout=success`,
+      `${appUrl}/settings?checkout=cancelled`
+    );
+    if (!checkoutUrl) return c.redirect('/settings?checkout=error');
+    return c.redirect(checkoutUrl);
+  } catch (err) {
+    const { logger } = await import('../../services/logger.js');
+    logger.error('checkout failed', { founderId: founder.id, tier, error: String(err) });
+    return c.redirect('/settings?checkout=error');
+  }
 });
 
 settingsRoutes.get('/settings', async (c) => {
