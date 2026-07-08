@@ -84,3 +84,17 @@ export const aiRateLimit = rateLimit(30, 60 * 60 * 1000, (c) => {
   const ip = c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
   return `ai:ip:${ip}`;
 });
+
+/**
+ * Audit rate limit — the onboarding audit is the single most expensive
+ * operation (a full repo scrape + multi-call Opus scoring, minutes long and
+ * real dollars each). 6/hour per founder is far more than any legitimate use
+ * (you audit a product once, occasionally re-run) while stopping a stranger
+ * from cost-bombing us by hammering run-audit. Keys on founder id, IP fallback.
+ */
+export const auditRateLimit = rateLimit(6, 60 * 60 * 1000, (c) => {
+  const founder = c.get('founder' as never) as { id?: string } | undefined;
+  if (founder?.id) return `audit:founder:${founder.id}`;
+  const ip = c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
+  return `audit:ip:${ip}`;
+});

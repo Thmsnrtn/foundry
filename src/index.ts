@@ -18,7 +18,7 @@ import { logger } from './services/logger.js';
 
 // Middleware
 import { authMiddleware } from './middleware/auth.js';
-import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateLimit } from './middleware/rate-limit.js';
+import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateLimit, auditRateLimit } from './middleware/rate-limit.js';
 import { internalMiddleware } from './middleware/internal.js';
 
 // Public routes (no auth)
@@ -143,25 +143,45 @@ import { runMigrations } from './db/migrate.js';
 
 // ─── Startup Validation ───────────────────────────────────────────────────────
 
-const REQUIRED_ENV_VARS = [
-  'TURSO_DATABASE_URL',
-  'CLERK_SECRET_KEY',
-  'CLERK_PUBLISHABLE_KEY',
-  'STRIPE_SECRET_KEY',
-  'STRIPE_WEBHOOK_SECRET',
-  'STRIPE_SOLO_PRICE_ID',
-  'STRIPE_GROWTH_PRICE_ID',
-  'STRIPE_INVESTOR_READY_PRICE_ID',
+// Config the app genuinely cannot run without. Missing any of these means a
+// broken deploy — fail FAST and LOUD in production rather than crash-looping or
+// (worse) serving a silently half-working app. AI counts as fatal: Foundry is
+// an AI product, so no key = no product.
+const FATAL_ENV_VARS = ['TURSO_DATABASE_URL', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY'];
+
+// Config that disables a feature when absent but lets the app run. We warn
+// loudly (with the concrete consequence) so a misconfiguration is visible in
+// logs the moment it boots, not when the first founder hits the broken path.
+const DEGRADED_ENV_VARS: Array<{ name: string; consequence: string }> = [
+  { name: 'STRIPE_SECRET_KEY', consequence: 'billing/checkout disabled' },
+  { name: 'STRIPE_WEBHOOK_SECRET', consequence: 'subscription + trial state will not update' },
+  { name: 'STRIPE_SOLO_PRICE_ID', consequence: 'Solo checkout disabled' },
+  { name: 'STRIPE_GROWTH_PRICE_ID', consequence: 'Growth checkout disabled' },
+  { name: 'STRIPE_INVESTOR_READY_PRICE_ID', consequence: 'Investor-Ready checkout disabled' },
+  { name: 'ENCRYPTION_KEY', consequence: 'integration credentials cannot be encrypted at rest' },
+  { name: 'RESEND_API_KEY', consequence: 'all outbound email (welcome, digests, alerts) disabled' },
+  { name: 'SENTRY_DSN', consequence: 'error tracking falls back to stderr only' },
 ];
 
-// AI key: prefer OpenRouter, fall back to Anthropic
+const fatalMissing = FATAL_ENV_VARS.filter((v) => !process.env[v]);
 if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-  console.warn('[STARTUP] Neither OPENROUTER_API_KEY nor ANTHROPIC_API_KEY set — AI features disabled.');
+  fatalMissing.push('OPENROUTER_API_KEY (or ANTHROPIC_API_KEY)');
+}
+if (fatalMissing.length > 0) {
+  const msg = `FATAL: required config missing — ${fatalMissing.join(', ')}. The app cannot function; set these before deploying.`;
+  logger.error(msg);
+  // In production a misconfigured boot must fail visibly, not serve a broken app.
+  if (process.env.NODE_ENV === 'production') {
+    console.error(`[STARTUP] ${msg}`);
+    process.exit(1);
+  } else {
+    console.warn(`[STARTUP] ${msg} (continuing in non-production)`);
+  }
 }
 
-const missing = REQUIRED_ENV_VARS.filter((v) => !process.env[v]);
-if (missing.length > 0) {
-  logger.warn(`Optional env vars missing: ${missing.join(', ')} — some features disabled`);
+const degradedMissing = DEGRADED_ENV_VARS.filter((d) => !process.env[d.name]);
+for (const d of degradedMissing) {
+  logger.warn(`Config missing: ${d.name} — ${d.consequence}`);
 }
 
 // ─── App Setup ───────────────────────────────────────────────────────────────
@@ -371,6 +391,7 @@ app.use('/decisions/*', aiRateLimit);          // action-draft generation trigge
 app.use('/validate', aiRateLimit);
 app.use('/validate/*', aiRateLimit);
 app.use('/plan/*', aiRateLimit);                // weekly plan generation
+app.use('/onboarding/run-audit', auditRateLimit); // the most expensive op — stricter cap (6/hr)
 app.use('/founder-ops', authMiddleware);
 app.use('/founder-ops/*', authMiddleware);
 
