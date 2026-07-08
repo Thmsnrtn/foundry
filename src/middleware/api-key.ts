@@ -76,6 +76,7 @@ export const apiKeyAuth = createMiddleware<ApiKeyEnv>(async (c, next) => {
     preferences: row.preferences ? JSON.parse(row.preferences as string) : null,
     lifestyle_mode: Boolean(row.lifestyle_mode ?? 0),
     lifestyle_target_mrr: (row.lifestyle_target_mrr as number) ?? 0,
+    trial_ends_at: (row.trial_ends_at as string | null) ?? null,
   };
 
   c.set('founder', founder);

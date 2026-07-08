@@ -37,12 +37,23 @@ export async function createSubscription(customerId: string, tier: 'solo' | 'gro
   return subscription.id;
 }
 
-export async function createCheckoutSession(customerId: string, tier: 'solo' | 'growth' | 'investor_ready', successUrl: string, cancelUrl: string): Promise<string> {
+/** Default trial length for new subscriptions (Phase 1.3). Env-overridable. */
+export const TRIAL_PERIOD_DAYS = parseInt(process.env.TRIAL_PERIOD_DAYS ?? '14', 10);
+
+export async function createCheckoutSession(
+  customerId: string,
+  tier: 'solo' | 'growth' | 'investor_ready',
+  successUrl: string,
+  cancelUrl: string,
+  trialDays: number = TRIAL_PERIOD_DAYS,
+): Promise<string> {
   const stripe = getStripe();
   const session = await withRetry(() => stripe.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: getPriceId(tier), quantity: 1 }],
+    // Card-upfront 14-day trial: collect payment method now, charge after trial.
+    subscription_data: trialDays > 0 ? { trial_period_days: trialDays } : undefined,
     success_url: successUrl,
     cancel_url: cancelUrl,
   }));
@@ -84,7 +95,17 @@ export async function handleWebhook(payload: string, signature: string): Promise
       const priceId = sub.items.data[0]?.price.id;
       const tier = getTierFromPrice(priceId ?? '');
       if (tier) {
-        await query('UPDATE founders SET tier = ? WHERE stripe_customer_id = ?', [tier, sub.customer]);
+        // Persist the trial window: sub.trial_end is set while status is
+        // 'trialing' and cleared once the trial converts to 'active'. This
+        // drives the trial-days-remaining badge and expiry gating (Phase 1.3).
+        const trialEndsAt =
+          sub.status === 'trialing' && sub.trial_end
+            ? new Date(sub.trial_end * 1000).toISOString()
+            : null;
+        await query(
+          'UPDATE founders SET tier = ?, trial_ends_at = ? WHERE stripe_customer_id = ?',
+          [tier, trialEndsAt, sub.customer],
+        );
 
         // Wave 3 — referral attribution. On subscription.created (only),
         // fire the 'paid' conversion event for whoever invited this
@@ -137,7 +158,7 @@ export async function handleWebhook(payload: string, signature: string): Promise
     }
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
-      await query('UPDATE founders SET tier = NULL WHERE stripe_customer_id = ?', [sub.customer]);
+      await query('UPDATE founders SET tier = NULL, trial_ends_at = NULL WHERE stripe_customer_id = ?', [sub.customer]);
       // EDGE-02 + RT08-P0: Pause SCP at BOTH levels to stop AI credit burn
       // The scheduler checks products.scp_status, not scp_instances.status
       const cancelledFounder = await query('SELECT id FROM founders WHERE stripe_customer_id = ?', [sub.customer]);

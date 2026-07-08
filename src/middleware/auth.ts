@@ -161,6 +161,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
       preferences: row.preferences ? (JSON.parse(row.preferences) as FounderPreferences) : null,
       lifestyle_mode: (row.lifestyle_mode ?? 0) === 1,
       lifestyle_target_mrr: row.lifestyle_target_mrr ?? null,
+      trial_ends_at: (row as unknown as Record<string, unknown>).trial_ends_at as string | null ?? null,
     };
 
     c.set('founder', founder);

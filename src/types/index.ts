@@ -152,6 +152,8 @@ export interface Founder {
   preferences: FounderPreferences | null;
   lifestyle_mode: boolean;
   lifestyle_target_mrr: number | null;
+  /** ISO timestamp the 14-day trial ends; null when not on a trial. */
+  trial_ends_at: string | null;
 }
 
 export interface FounderPreferences {

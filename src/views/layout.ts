@@ -6,6 +6,7 @@
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { NextAction, AppNotification, MilestoneEvent, NavBadges } from '../types/index.js';
+import type { TrialStatus } from '../services/billing/trial.js';
 
 /** Hono's html`` returns this union type when templates contain interpolated expressions */
 export type HtmlContent = HtmlEscapedString | Promise<HtmlEscapedString>;
@@ -32,6 +33,10 @@ export interface LayoutOptions {
   dnaCompletionPct?: number;
   openPRCount?: number;
   founderEmail?: string | null;
+  /** Trial state for the header badge / expiry banner (Phase 1.3). */
+  trialStatus?: TrialStatus | null;
+  /** True when the founder has never started a trial or paid — show the CTA. */
+  showStartTrial?: boolean;
 }
 
 export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
@@ -82,6 +87,9 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
           : productName ? html`<span class="breadcrumb">/ ${productName}</span>` : ''}
     </div>
     <div class="header-right">
+      ${!chamberMode && founderName && opts.trialStatus?.state === 'trialing'
+        ? html`<a href="/settings" class="header-link" style="color:#a5b4fc;font-weight:600;" title="Upgrade to keep your agents running after the trial">${opts.trialStatus.daysRemaining} day${opts.trialStatus.daysRemaining === 1 ? '' : 's'} left · Upgrade</a>`
+        : ''}
       ${!chamberMode && riskState ? riskBadgeSmall(riskState, riskReason) : ''}
       ${!chamberMode && founderName ? notificationBell(unreadNotifications, unreadNotificationCount) : ''}
       ${founderName
@@ -91,6 +99,17 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
                <a href="/auth/signup" class="btn btn-primary btn-sm">Get Started</a>`}
     </div>
   </header>
+
+  ${!chamberMode && founderName && opts.trialStatus?.state === 'expired'
+    ? html`<div style="background:rgba(220,38,38,0.14);border-bottom:1px solid rgba(220,38,38,0.3);color:#fca5a5;padding:0.6rem 1rem;text-align:center;font-size:0.9rem;">
+        Your free trial has ended. <a href="/settings" style="color:#fff;font-weight:700;text-decoration:underline;">Start your subscription</a> to keep your agents running.
+      </div>`
+    : !chamberMode && founderName && opts.showStartTrial
+      ? html`<div style="background:rgba(99,102,241,0.14);border-bottom:1px solid rgba(99,102,241,0.3);color:#c7d2fe;padding:0.6rem 1rem;text-align:center;font-size:0.9rem;">
+          Start your <strong>14-day free trial</strong> to keep your AI agents running.
+          <a href="/settings" style="color:#fff;font-weight:700;text-decoration:underline;margin-left:0.4rem;">Choose a plan →</a>
+        </div>`
+      : ''}
 
   ${!chamberMode && showNav && nextAction ? nextActionBanner(nextAction) : ''}
 

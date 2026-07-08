@@ -12,6 +12,7 @@ import { getUnreadNotifications, getUnreadCount } from '../../services/ux/notifi
 import { getUnseenMilestones } from '../../services/ux/milestones.js';
 import { getTourState } from '../../services/ux/tour.js';
 import { canAccess as canAccessFn } from '../../middleware/tier-gate.js';
+import { getTrialStatus, type TrialStatus } from '../../services/billing/trial.js';
 import { getCookie } from 'hono/cookie';
 import type { Context } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
@@ -39,6 +40,10 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
   allProducts: Array<{ id: string; name: string }>;
   /** UX intelligence layer context */
   ux: UXContext;
+  /** Trial state for the header badge / expiry banner (Phase 1.3). */
+  trialStatus: TrialStatus;
+  /** True when the founder has never started a trial or paid. */
+  showStartTrial: boolean;
 }
 
 /**
@@ -93,6 +98,8 @@ export async function getLayoutContext(
       openPRCount: 0,
       allProducts: [],
       ux: emptyUx,
+      trialStatus: getTrialStatus(founder.trial_ends_at, founder.tier),
+      showStartTrial: !founder.tier && getTrialStatus(founder.trial_ends_at, founder.tier).state === 'none',
     };
   }
 
@@ -170,6 +177,8 @@ export async function getLayoutContext(
     openPRCount,
     allProducts,
     ux,
+    trialStatus: getTrialStatus(founder.trial_ends_at, founder.tier),
+    showStartTrial: !founder.tier && getTrialStatus(founder.trial_ends_at, founder.tier).state === 'none',
   };
 }
 
