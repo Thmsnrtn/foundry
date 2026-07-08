@@ -27,20 +27,40 @@ existing duplicates requires rewriting the tracked filenames in
 `schema_migrations` in the same transaction (so already-applied DBs don't
 re-run them) and is deferred until the integrations-schema cleanup below lands.
 
-## ⚠️ Fresh-DB migration is currently blocked (tracked)
+## Fresh-DB migration (fixed — verify before relying on it)
 
-Applying the full chain against an empty database fails in `008_integrations.sql`
-because the `integrations` table is created by **four** migrations (`007`,
-`008`, `021_data_ingestion`, `021_integration_fabric`) with **incompatible
-columns** (`founder_id` vs `product_id`). `CREATE TABLE IF NOT EXISTS` means the
-first creator wins, so later indexes reference columns that don't exist.
+Applying the full chain against an empty database now completes with **0
+failures** (verified in-memory). Getting there required fixing a run of
+accumulated schema drift — all fixes touch only fresh DBs, since existing
+databases already recorded these migrations as applied and never re-run them:
 
-This is the Phase 2.4 "two integration subsystems" problem and must be resolved
-there (consolidate on one `integrations` schema, drop the losers). Until then,
-existing/production databases are fine (they applied migrations incrementally),
-but a from-scratch deploy needs 2.4 first.
+- **`007_schema_hardening`** created a rogue `integrations` table
+  (`founder_id`/`provider`) *before* `008_integrations`' canonical
+  `product_id`/`type` table. `CREATE TABLE IF NOT EXISTS` made 008 a no-op, so
+  008's indexes failed. Removed 007's copy; the canonical table is 008, widened
+  by `056_schema_reconciliation`. Also fixed two 007 indexes that referenced
+  non-existent columns (`stressor_history.created_at` → `identified_at`,
+  `competitive_signals.created_at` → `detected_at`).
+- **Expression UNIQUE constraints** (`funding_readiness`,
+  `network_contributions`) moved to `CREATE UNIQUE INDEX` — libSQL prohibits
+  expressions in table-level UNIQUE constraints.
+- **Indexes referencing reconciled columns** (`integrations.provider`,
+  `outbound_webhooks.is_active`, `investor_updates.month`) moved into `056`
+  after the `ALTER … ADD COLUMN`s. `api_keys` index re-pointed to its real
+  column (`founder_id`); a `webhook_deliveries` retry index referencing columns
+  absent from the canonical schema was dropped.
 
-Two unrelated bad column references in `007_schema_hardening.sql` (indexes on
-`stressor_history.created_at` and `competitive_signals.created_at`, neither of
-which exists) were corrected to the real timestamp columns (`identified_at`,
-`detected_at`) — no code referenced the wrong names.
+### Integration status is 'active', not 'connected'
+
+Every `integrations` schema's `status` CHECK permits `'active'` but **none**
+permits `'connected'`. The code standardizes on `'active'` (writer, all sync
+adapter guards, and the schema CHECK all agree). Writing `'connected'` fails the
+constraint — don't.
+
+### Still open (Phase 2.4 code consolidation)
+
+The migration/deploy blocker is fixed, but the two integration *code* subsystems
+(`services/integration/` fabric vs `services/integrations/` framework) still
+coexist over the reconciled table. Consolidating on the fabric (porting the
+framework's metric pulls, implementing the stubbed analytics adapter, deleting
+the loser) remains — see the roadmap 2.4.
