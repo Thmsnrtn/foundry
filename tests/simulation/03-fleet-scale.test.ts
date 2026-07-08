@@ -119,17 +119,22 @@ describe('Query functions accept any product count', () => {
 // 3. Cost Ceiling Is Per-Product (Not Global)
 // =============================================================================
 
-describe('AI cost ceiling is per-product, not global', () => {
+describe('AI cost ceiling is persisted and multi-scoped', () => {
 
-  it('dailySpend tracks by product ID key', () => {
-    // Should use a Map keyed by productId
-    expect(aiClientSource).toMatch(/dailySpend.*Map/);
-    expect(aiClientSource).toMatch(/dailySpend\.(get|set)\(productId/);
+  it('spend is persisted to the ai_daily_spend table (survives deploys)', () => {
+    // Must write through to the DB, not just an in-process Map.
+    expect(aiClientSource).toMatch(/ai_daily_spend/);
+    expect(aiClientSource).toMatch(/INSERT INTO ai_daily_spend/);
+  });
+
+  it('keeps an in-process read-through cache to avoid a DB hit per AI call', () => {
+    expect(aiClientSource).toMatch(/spendCache.*Map/);
+    expect(aiClientSource).toMatch(/CACHE_TTL_MS/);
   });
 
   it('isCostCeilingReached accepts a productId parameter', () => {
     expect(aiClientSource).toMatch(
-      /function\s+isCostCeilingReached\(\s*productId:\s*string\s*\)/
+      /function\s+isCostCeilingReached\(\s*productId\??:\s*string\s*\)/
     );
   });
 
@@ -139,12 +144,18 @@ describe('AI cost ceiling is per-product, not global', () => {
     );
   });
 
-  it('cost ceiling is configurable via environment variable', () => {
+  it('enforces fleet-level caps (per-founder and global) with env overrides', () => {
+    expect(aiClientSource).toMatch(/AI_DAILY_COST_CEILING_FOUNDER_CENTS/);
+    expect(aiClientSource).toMatch(/AI_DAILY_COST_CEILING_GLOBAL_CENTS/);
+    expect(aiClientSource).toMatch(/GLOBAL_COST_CEILING_CENTS/);
+  });
+
+  it('per-product cost ceiling is configurable via environment variable', () => {
     expect(aiClientSource).toMatch(/AI_DAILY_COST_CEILING_CENTS/);
     expect(aiClientSource).toMatch(/process\.env\.AI_DAILY_COST_CEILING_CENTS/);
   });
 
-  it('cost ceiling has a sensible default ($25/day = 2500 cents)', () => {
+  it('per-product cost ceiling has a sensible default ($25/day = 2500 cents)', () => {
     expect(aiClientSource).toMatch(/2500/);
   });
 

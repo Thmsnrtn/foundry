@@ -12,7 +12,7 @@ import type {
   AgentName, AgentRunContext, AgentAnalysisResult, AgentDecision, AgentAction,
   OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
 } from '../types.js';
-import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { callSonnet, parseJSONResponse, computeCostCents } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 
 interface AtlasClaudeResponse {
@@ -213,7 +213,7 @@ Return JSON only (no markdown fences):
 
     const response = await callSonnet(systemPrompt, userPrompt, 3000, context.productId);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
-    const costUsd = tokensUsed * 0.000003;
+    const costUsd = computeCostCents(response.model, response.usage.input_tokens ?? 0, response.usage.output_tokens ?? 0) / 100;
 
     let parsed: AtlasClaudeResponse;
     try {

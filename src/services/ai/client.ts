@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
 import { log } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
+import { query } from '../../db/client.js';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
@@ -19,10 +20,87 @@ export const MODELS = {
 } as const;
 
 // ─── Cost Ceiling ────────────────────────────────────────────────────────────
-// Per-product daily AI spend cap. Prevents unbounded bills.
-// Default $25/day per product. Configurable via AI_DAILY_COST_CEILING_CENTS env var.
+// Daily AI spend caps at three scopes: per-product, per-founder (fleet), and
+// global. Spend is PERSISTED to the ai_daily_spend table so it survives deploys
+// and is shared across machines — the in-process Map is only a read-through
+// cache (short TTL) so we don't hit the DB on every one of the 73 AI crons.
+//
+//   product default $25/day  (AI_DAILY_COST_CEILING_CENTS)
+//   founder default $100/day (AI_DAILY_COST_CEILING_FOUNDER_CENTS)
+//   global  default $500/day (AI_DAILY_COST_CEILING_GLOBAL_CENTS)
 const DAILY_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_CENTS ?? '2500', 10);
-const dailySpend = new Map<string, { cents: number; date: string }>();
+const FOUNDER_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_FOUNDER_CENTS ?? '10000', 10);
+const GLOBAL_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_GLOBAL_CENTS ?? '50000', 10);
+
+const GLOBAL_SCOPE_ID = '__global__';
+const CACHE_TTL_MS = 60_000; // re-read from DB at most once per minute per scope
+
+type Scope = 'product' | 'founder' | 'global';
+
+// Read-through cache: `${scope}:${scopeId}:${date}` -> { cents, readAt }
+const spendCache = new Map<string, { cents: number; readAt: number }>();
+// productId -> founderId, to enforce the per-founder cap without a lookup per call
+const productOwnerCache = new Map<string, string>();
+
+function utcDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function cacheKey(scope: Scope, scopeId: string, date: string): string {
+  return `${scope}:${scopeId}:${date}`;
+}
+
+async function resolveFounderId(productId: string): Promise<string | null> {
+  const cached = productOwnerCache.get(productId);
+  if (cached) return cached;
+  try {
+    const res = await query('SELECT owner_id FROM products WHERE id = ?', [productId]);
+    const owner = res.rows.length ? String((res.rows[0] as Record<string, unknown>).owner_id) : null;
+    if (owner) productOwnerCache.set(productId, owner);
+    return owner;
+  } catch (err) {
+    log.warn('ai_spend.owner_lookup_failed', { productId, error: (err as Error).message });
+    return null;
+  }
+}
+
+/** Read today's spend for a scope, using the DB as source of truth (cached). */
+async function readScopeSpend(scope: Scope, scopeId: string): Promise<number> {
+  const date = utcDate();
+  const key = cacheKey(scope, scopeId, date);
+  const cached = spendCache.get(key);
+  if (cached && Date.now() - cached.readAt < CACHE_TTL_MS) return cached.cents;
+  try {
+    const res = await query(
+      'SELECT spent_cents FROM ai_daily_spend WHERE scope = ? AND scope_id = ? AND date = ?',
+      [scope, scopeId, date],
+    );
+    const cents = res.rows.length ? Number((res.rows[0] as Record<string, unknown>).spent_cents) : 0;
+    spendCache.set(key, { cents, readAt: Date.now() });
+    return cents;
+  } catch (err) {
+    // On DB error, fall back to any cached value (fail-open — never block AI on a read error)
+    log.warn('ai_spend.read_failed', { scope, scopeId, error: (err as Error).message });
+    return cached?.cents ?? 0;
+  }
+}
+
+/** Atomically add spend to a scope's daily row and update the cache optimistically. */
+async function incrementScopeSpend(scope: Scope, scopeId: string, costCents: number): Promise<void> {
+  const date = utcDate();
+  const now = new Date().toISOString();
+  await query(
+    `INSERT INTO ai_daily_spend (scope, scope_id, date, spent_cents, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(scope, scope_id, date)
+     DO UPDATE SET spent_cents = spent_cents + excluded.spent_cents, updated_at = excluded.updated_at`,
+    [scope, scopeId, date, costCents, now],
+  );
+  const key = cacheKey(scope, scopeId, date);
+  const cached = spendCache.get(key);
+  // Optimistic bump; keep readAt so the entry still expires and re-syncs from DB.
+  spendCache.set(key, { cents: (cached?.cents ?? 0) + costCents, readAt: cached?.readAt ?? 0 });
+}
 
 // ─── Model-Specific Pricing (per 1M tokens, in USD) ─────────────────────────
 // OpenRouter pricing. Configurable via environment variables.
@@ -47,27 +125,49 @@ export function computeCostCents(model: AIModel | string, inputTokens: number, o
   return inputCostCents + outputCostCents;
 }
 
-function recordSpend(productId: string | undefined, model: AIModel | string, inputTokens: number, outputTokens: number): void {
-  if (!productId) return;
-  const today = new Date().toISOString().slice(0, 10);
-  const entry = dailySpend.get(productId);
+async function recordSpend(
+  productId: string | undefined,
+  model: AIModel | string,
+  inputTokens: number,
+  outputTokens: number,
+): Promise<void> {
   const costCents = computeCostCents(model, inputTokens, outputTokens);
-  if (!entry || entry.date !== today) {
-    dailySpend.set(productId, { cents: costCents, date: today });
-  } else {
-    entry.cents += costCents;
+  if (costCents <= 0) return;
+  try {
+    // Global scope is always tracked, even for product-less system calls.
+    await incrementScopeSpend('global', GLOBAL_SCOPE_ID, costCents);
+    if (productId) {
+      await incrementScopeSpend('product', productId, costCents);
+      const founderId = await resolveFounderId(productId);
+      if (founderId) await incrementScopeSpend('founder', founderId, costCents);
+    }
+  } catch (err) {
+    // Never fail a completed AI call because spend accounting hiccupped.
+    log.warn('ai_spend.record_failed', { productId, error: (err as Error).message });
   }
 }
 
-export function getDailySpend(productId: string): number {
-  const today = new Date().toISOString().slice(0, 10);
-  const entry = dailySpend.get(productId);
-  if (!entry || entry.date !== today) return 0;
-  return entry.cents;
+/** Today's persisted product-level spend in cents. */
+export async function getDailySpend(productId: string): Promise<number> {
+  return readScopeSpend('product', productId);
 }
 
-export function isCostCeilingReached(productId: string): boolean {
-  return getDailySpend(productId) >= DAILY_COST_CEILING_CENTS;
+/** Today's persisted global (fleet-wide) spend in cents. */
+export async function getGlobalDailySpend(): Promise<number> {
+  return readScopeSpend('global', GLOBAL_SCOPE_ID);
+}
+
+/**
+ * True if any applicable cap (product, founder, or global) is exhausted for
+ * today. Reads are cached and fail-open on DB errors.
+ */
+export async function isCostCeilingReached(productId?: string): Promise<boolean> {
+  if (await readScopeSpend('global', GLOBAL_SCOPE_ID) >= GLOBAL_COST_CEILING_CENTS) return true;
+  if (!productId) return false;
+  if (await readScopeSpend('product', productId) >= DAILY_COST_CEILING_CENTS) return true;
+  const founderId = await resolveFounderId(productId);
+  if (founderId && (await readScopeSpend('founder', founderId)) >= FOUNDER_COST_CEILING_CENTS) return true;
+  return false;
 }
 
 // ─── Timeout + Retry ─────────────────────────────────────────────────────────
@@ -105,8 +205,8 @@ interface OpenRouterResponse {
  * Make an LLM call via OpenRouter with cost ceiling, timeout, and retry.
  */
 export async function callClaude(config: AICallConfig & { productId?: string }): Promise<AIResponse> {
-  if (config.productId && isCostCeilingReached(config.productId)) {
-    throw new Error(`AI daily cost ceiling reached for product ${config.productId} ($${(DAILY_COST_CEILING_CENTS / 100).toFixed(2)})`);
+  if (await isCostCeilingReached(config.productId)) {
+    throw new Error(`AI daily cost ceiling reached (product ${config.productId ?? 'n/a'})`);
   }
 
   const apiKey = getApiKey();
@@ -151,7 +251,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
       const data = (await response.json()) as OpenRouterResponse;
       const textContent = data.choices?.[0]?.message?.content ?? '';
 
-      recordSpend(
+      await recordSpend(
         config.productId,
         config.model,
         data.usage?.prompt_tokens ?? 0,
@@ -249,8 +349,8 @@ export async function callClaudeMultiTurn(
   useOpus: boolean = false,
   productId?: string,
 ): Promise<AIResponse> {
-  if (productId && isCostCeilingReached(productId)) {
-    throw new Error(`AI daily cost ceiling reached for product ${productId}`);
+  if (await isCostCeilingReached(productId)) {
+    throw new Error(`AI daily cost ceiling reached for product ${productId ?? 'n/a'}`);
   }
 
   const apiKey = getApiKey();
@@ -295,7 +395,7 @@ export async function callClaudeMultiTurn(
       const data = (await response.json()) as OpenRouterResponse;
       const textContent = data.choices?.[0]?.message?.content ?? '';
 
-      recordSpend(productId, model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0);
+      await recordSpend(productId, model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0);
 
       return {
         content: textContent,

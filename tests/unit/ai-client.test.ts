@@ -22,24 +22,29 @@ describe('AI client cost tracking', () => {
   describe('getDailySpend()', () => {
     it('returns 0 for unknown product', async () => {
       const { getDailySpend } = await loadModule();
-      expect(getDailySpend('nonexistent-product')).toBe(0);
+      expect(await getDailySpend('nonexistent-product')).toBe(0);
     });
 
     it('returns 0 for a product with no recorded spend', async () => {
       const { getDailySpend } = await loadModule();
-      expect(getDailySpend('brand-new-product')).toBe(0);
+      expect(await getDailySpend('brand-new-product')).toBe(0);
     });
   });
 
   describe('isCostCeilingReached()', () => {
     it('returns false when no spend recorded (under limit)', async () => {
       const { isCostCeilingReached } = await loadModule();
-      expect(isCostCeilingReached('fresh-product')).toBe(false);
+      expect(await isCostCeilingReached('fresh-product')).toBe(false);
     });
 
     it('returns false for unknown product', async () => {
       const { isCostCeilingReached } = await loadModule();
-      expect(isCostCeilingReached('unknown-product-id')).toBe(false);
+      expect(await isCostCeilingReached('unknown-product-id')).toBe(false);
+    });
+
+    it('returns false with no product id (global scope only)', async () => {
+      const { isCostCeilingReached } = await loadModule();
+      expect(await isCostCeilingReached()).toBe(false);
     });
   });
 

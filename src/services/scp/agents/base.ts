@@ -7,6 +7,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { computeCostCents, MODELS } from '../../ai/client.js';
 import { sanitizeForPrompt } from '../../ai/sanitize.js';
 import { logger } from '../../logger.js';
 import type {
@@ -229,7 +230,11 @@ export abstract class BaseAgent {
     );
 
     // 15. Log cost — both to legacy agent_cost_log and new P&L cost_events (v2)
-    const costUsd = result.costUsd !== undefined ? result.costUsd : result.tokensUsed * 0.000015;
+    // Fallback when an agent didn't compute its own cost: charge the combined
+    // token count at the operational (Sonnet) output rate via computeCostCents.
+    const costUsd = result.costUsd !== undefined
+      ? result.costUsd
+      : computeCostCents(MODELS.SONNET, 0, result.tokensUsed) / 100;
     if (costUsd > 0 || result.tokensUsed > 0) {
       await query(
         `UPDATE agent_sessions SET cost_usd=? WHERE id=?`,
