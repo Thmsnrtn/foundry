@@ -4,9 +4,12 @@
 // so they can build on (not duplicate) each other's work.
 // =============================================================================
 
+import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { logger } from '../../logger.js';
+import { callHaiku, parseJSONResponse } from '../../ai/client.js';
+import { sanitizeForPrompt } from '../../ai/sanitize.js';
 
 export interface AgentFinding {
   position: string;           // agent's main position (1-2 sentences)
@@ -166,66 +169,15 @@ async function detectConsensusAndConflicts(productId: string): Promise<void> {
 
   if (agentEntries.length < 2) return;
 
-  const consensus_points: string[] = [];
-  const conflict_points: string[] = [];
-
-  // Build a keyword frequency map from positions and recommended actions
-  const keywordAgents: Record<string, string[]> = {};
-
-  for (const [agentName, finding] of agentEntries) {
-    const text = [
-      finding.position,
-      finding.action_recommended ?? '',
-      finding.key_metric ?? '',
-    ].join(' ').toLowerCase();
-
-    // Extract meaningful tokens (words 5+ chars, excluding common words)
-    const stopwords = new Set(['should', 'could', 'would', 'their', 'there', 'where', 'which', 'about', 'after', 'before']);
-    const tokens = text
-      .split(/\W+/)
-      .filter(w => w.length >= 5 && !stopwords.has(w));
-
-    for (const token of new Set(tokens)) {
-      if (!keywordAgents[token]) keywordAgents[token] = [];
-      keywordAgents[token].push(agentName);
-    }
-  }
-
-  // Consensus: same keyword appears in 2+ agents' findings
-  const seenConsensusKeywords = new Set<string>();
-  for (const [keyword, agents] of Object.entries(keywordAgents)) {
-    if (agents.length >= 2 && !seenConsensusKeywords.has(keyword)) {
-      seenConsensusKeywords.add(keyword);
-      const agentList = agents.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(' and ');
-      consensus_points.push(`${agentList} both flagged "${keyword}"`);
-      // Limit to top 5 consensus points
-      if (consensus_points.length >= 5) break;
-    }
-  }
-
-  // Conflict: agents with opposing high-confidence positions
-  // Heuristic: look for agents where one mentions "strong"/"increase"/"growing" and another
-  // mentions "weak"/"decrease"/"declining" for the same keyword
-  const positiveWords = new Set(['strong', 'increase', 'growing', 'improve', 'opportunity', 'upside', 'positive', 'growth']);
-  const negativeWords = new Set(['weak', 'decrease', 'declining', 'worsen', 'risk', 'threat', 'negative', 'churn', 'losing']);
-
-  const positiveAgents: string[] = [];
-  const negativeAgents: string[] = [];
-
-  for (const [agentName, finding] of agentEntries) {
-    if (finding.confidence < 0.5) continue; // Only consider confident findings
-    const text = finding.position.toLowerCase();
-    const hasPositive = [...positiveWords].some(w => text.includes(w));
-    const hasNegative = [...negativeWords].some(w => text.includes(w));
-    if (hasPositive && !hasNegative) positiveAgents.push(agentName);
-    if (hasNegative && !hasPositive) negativeAgents.push(agentName);
-  }
-
-  if (positiveAgents.length > 0 && negativeAgents.length > 0) {
-    const posNames = positiveAgents.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ');
-    const negNames = negativeAgents.map(a => a.charAt(0).toUpperCase() + a.slice(1)).join(', ');
-    conflict_points.push(`${posNames} sees opportunity while ${negNames} flags risk — review both findings`);
-  }
+  // Classify genuine consensus/conflict with a cheap Haiku call rather than the
+  // old bag-of-words heuristic (which flagged "consensus" on any shared 5-char
+  // token — e.g. two agents both saying "customer" — and would eventually
+  // surface an embarrassing note in a founder-visible briefing). On any failure
+  // we drop the feature for the day rather than emit noise (Phase 2.5).
+  const { consensus_points, conflict_points } = await classifyConsensusConflict(
+    productId,
+    agentEntries,
+  );
 
   await query(
     `UPDATE agent_scratchpad
@@ -238,6 +190,64 @@ async function detectConsensusAndConflicts(productId: string): Promise<void> {
       scratchpadDate,
     ]
   );
+}
+
+const ConsensusConflictSchema = z.object({
+  consensus_points: z.array(z.string()).max(5),
+  conflict_points: z.array(z.string()).max(5),
+});
+
+/**
+ * Ask Haiku to identify genuine substantive consensus and conflict across the
+ * agents' findings. Returns empty arrays on any failure — we would rather show
+ * nothing than a nonsense "consensus" note in the founder's briefing.
+ */
+async function classifyConsensusConflict(
+  productId: string,
+  agentEntries: Array<[string, AgentFinding]>,
+): Promise<{ consensus_points: string[]; conflict_points: string[] }> {
+  const empty = { consensus_points: [], conflict_points: [] };
+
+  const findingsBlock = agentEntries
+    .map(([agentName, f]) => {
+      const parts = [
+        `Agent: ${sanitizeForPrompt(agentName)}`,
+        `Position: ${sanitizeForPrompt(f.position)}`,
+        f.action_recommended ? `Action: ${sanitizeForPrompt(f.action_recommended)}` : '',
+        f.key_metric ? `Metric: ${sanitizeForPrompt(f.key_metric)}` : '',
+        `Confidence: ${f.confidence}`,
+      ].filter(Boolean);
+      return parts.join('\n');
+    })
+    .join('\n\n');
+
+  const systemPrompt = `You compare the day's findings from a company's AI agents and identify where they GENUINELY agree or disagree on substance — not merely share a word.
+
+Rules:
+- Consensus = two or more agents making the same substantive point (same risk, same opportunity, same recommended direction). Shared vocabulary is NOT consensus.
+- Conflict = agents recommending opposing directions or contradicting each other on the same subject.
+- If there is no real agreement or disagreement, return empty arrays. Empty is the correct, common answer.
+- Each point is one short sentence naming the agents involved and the substance.
+- At most 5 of each.
+
+Return ONLY JSON: {"consensus_points": string[], "conflict_points": string[]}`;
+
+  const userPrompt = `Agent findings for today:\n\n${findingsBlock}\n\nReturn the JSON now.`;
+
+  try {
+    const response = await callHaiku(systemPrompt, userPrompt, 600, productId);
+    const parsed = parseJSONResponse(response.content, ConsensusConflictSchema);
+    return {
+      consensus_points: parsed.consensus_points.map((p) => p.trim()).filter(Boolean).slice(0, 5),
+      conflict_points: parsed.conflict_points.map((p) => p.trim()).filter(Boolean).slice(0, 5),
+    };
+  } catch (err) {
+    logger.warn('scratchpad consensus classification failed', {
+      productId,
+      error: (err as Error).message,
+    });
+    return empty;
+  }
 }
 
 function _rowToScratchpad(row: Record<string, unknown>): {
