@@ -175,13 +175,17 @@ async function getOrGenerateProse(
 async function generateProse(score: number, ctx: ProseContext): Promise<string> {
   const { riskState, currentPrompt, stressors, metrics, decisions, critical, elevated, watch } = ctx;
 
-  const healthRatio = metrics.mrr_health_ratio as number | null;
-  const newMrr = metrics.new_mrr_cents as number | null;
-  const churnedMrr = metrics.churned_mrr_cents as number | null;
+  // Use loose != null so BOTH null and undefined are treated as "no data".
+  // A brand-new founder has no metrics row, so these keys are undefined — a
+  // strict !== null guard let undefined through and crashed .toFixed() on the
+  // core dashboard for every new user.
+  const healthRatio = (metrics.mrr_health_ratio ?? null) as number | null;
+  const newMrr = (metrics.new_mrr_cents ?? null) as number | null;
+  const churnedMrr = (metrics.churned_mrr_cents ?? null) as number | null;
 
-  const mrrSummary = healthRatio !== null
+  const mrrSummary = healthRatio != null
     ? `Health ratio ${healthRatio.toFixed(2)} (${healthRatio > 1 ? 'churning faster than growing' : 'growing faster than churning'})`
-    : newMrr !== null
+    : newMrr != null
       ? `New MRR $${Math.round(newMrr / 100)}, Churned MRR $${Math.round((churnedMrr ?? 0) / 100)}`
       : 'No MRR data available';
 

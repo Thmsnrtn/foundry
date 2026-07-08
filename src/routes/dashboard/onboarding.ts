@@ -378,7 +378,13 @@ onboardingRoutes.get('/onboarding/audit', async (c) => {
 // flagship card (Phase 1.1 + 1.2).
 onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   const founder = c.get('founder');
-  const body = await parseBody(c) as { product_id: string };
+  const body = await parseBody(c) as { product_id?: string };
+
+  // Validate input before touching the DB — a missing/blank product_id must be
+  // a clean 400, not an "undefined passed to database" 500.
+  if (!body.product_id || typeof body.product_id !== 'string') {
+    return c.json({ error: 'product_id is required' }, 400);
+  }
 
   const prodResult = await query('SELECT * FROM products WHERE id = ? AND owner_id = ?', [body.product_id, founder.id]);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
