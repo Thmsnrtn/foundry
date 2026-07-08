@@ -1,12 +1,56 @@
 // =============================================================================
 // FOUNDRY — Onboarding Email Sequence
-// Sends targeted emails during the founder's first week to drive activation.
+// Sends targeted activation emails during the founder's first week. All sends
+// route through the V3.1 tool gateway (kill-switch / classification / budget /
+// idempotency + audit) via the registered 'send_email' handler — same path as
+// the digest and welcome sequence. The gateway's idempotency layer guarantees
+// at-most-once per (product, dedupKey), so a retried job never double-sends.
 // =============================================================================
 
 import { query } from '../db/client.js';
-import { sendTriggerEmail } from '../services/digest/delivery.js';
+import { invoke } from '../services/outbound/gateway.js';
 import { log } from './logger.js';
 import { nanoid } from 'nanoid';
+// Side-effect import: registers the 'send_email' tool handler on the gateway
+// so invoke() below can dispatch even if no agent has run yet this process.
+import '../services/integration/resend.js';
+
+const FROM = process.env.RESEND_FROM_ADDRESS ?? 'Foundry <thomas@foundry.so>';
+
+/**
+ * Send an onboarding email through the gateway. Returns true when the send was
+ * accepted (or dedup'd), false when a pre-flight refused it.
+ */
+async function sendOnboardingEmail(opts: {
+  productId: string;
+  email: string;
+  subject: string;
+  html: string;
+  dedupKey: string;
+  action: string;
+}): Promise<boolean> {
+  const result = await invoke({
+    productId: opts.productId,
+    agent: 'system',
+    tool: 'send_email',
+    action: opts.action,
+    params: { to: [opts.email], subject: opts.subject, html: opts.html, from: FROM },
+    dedupKey: opts.dedupKey,
+    customerExternalId: opts.email,
+    surface: 'email_outbound',
+    dataClass: 'customer',
+  });
+  if (!result.ok) {
+    log.warn('onboarding_email.refused', {
+      productId: opts.productId,
+      dedupKey: opts.dedupKey,
+      phase: result.phase,
+      reason: result.reason,
+    });
+    return false;
+  }
+  return true;
+}
 
 /**
  * Day 1: Send audit results email after first audit completes.
@@ -24,7 +68,13 @@ export async function sendAuditResultsEmail(
   const verdictText = verdict === 'READY' ? 'Launch Ready' : verdict === 'READY_WITH_CONDITIONS' ? 'Ready with Conditions' : 'Not Yet Ready';
 
   try {
-    await sendTriggerEmail(email, `${productName} scored ${composite.toFixed(1)}/10 — Your Audit Results`, `
+    const ok = await sendOnboardingEmail({
+      productId,
+      email,
+      subject: `${productName} scored ${composite.toFixed(1)}/10 — Your Audit Results`,
+      dedupKey: `onboarding_audit:${productId}`,
+      action: `day-1 audit results → ${email}`,
+      html: `
       <div style="text-align:center;margin:24px 0;">
         <div style="font-size:56px;font-weight:800;color:${scoreColor};">${composite.toFixed(1)}</div>
         <div style="font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Composite Score</div>
@@ -43,8 +93,9 @@ export async function sendAuditResultsEmail(
       </ol>
 
       <p style="color:#6b7280;font-size:13px;margin-top:24px;">Your first weekly digest arrives Monday. It'll include stressor reports, revenue analysis, and competitive intelligence — but only if you've entered metrics.</p>
-    `);
-    log.info('Sent audit results email', { email, productName, composite });
+    `,
+    });
+    if (ok) log.info('Sent audit results email', { email, productName, composite });
   } catch (err) {
     log.error('Failed to send audit results email', err, { email });
   }
@@ -61,7 +112,13 @@ export async function sendMetricsGuideEmail(
   const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
 
   try {
-    await sendTriggerEmail(email, `${productName} — Set up metrics to unlock intelligence`, `
+    const ok = await sendOnboardingEmail({
+      productId,
+      email,
+      subject: `${productName} — Set up metrics to unlock intelligence`,
+      dedupKey: `onboarding_metrics:${productId}`,
+      action: `day-3 metrics guide → ${email}`,
+      html: `
       <p>Foundry's intelligence layer — stressor reports, risk assessment, and weekly digests — needs data to work.</p>
 
       <h3>Two ways to add metrics:</h3>
@@ -79,8 +136,9 @@ export async function sendMetricsGuideEmail(
       </div>
 
       <p style="color:#6b7280;font-size:13px;">Once we have 7 days of data, Foundry will identify stressors, compute your MRR health ratio, and begin generating actionable intelligence in your Monday digest.</p>
-    `);
-    log.info('Sent metrics guide email', { email, productName });
+    `,
+    });
+    if (ok) log.info('Sent metrics guide email', { email, productName });
   } catch (err) {
     log.error('Failed to send metrics guide email', err, { email });
   }
@@ -88,7 +146,7 @@ export async function sendMetricsGuideEmail(
 
 /**
  * Evaluate and send onboarding sequence emails.
- * Called by the behavioral_triggers job.
+ * Called by the behavioral_triggers job (every 6h).
  */
 export async function evaluateOnboardingSequence(): Promise<void> {
   // Find founders who signed up in the last 7 days

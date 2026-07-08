@@ -190,6 +190,17 @@ authRoutes.post('/auth/webhook', async (c) => {
         [founderId, userId, email, name, stripeCustomerId]
       );
 
+      // Welcome email on provisioning (idempotent via the gateway; the
+      // welcome_sequence_tick cron is the retry safety net). Fire-and-forget.
+      if (email) {
+        void (async () => {
+          try {
+            const { sendFounderWelcome } = await import('../../services/founder/welcome-sequence.js');
+            await sendFounderWelcome({ id: founderId, email, name, created_at: new Date().toISOString() });
+          } catch { /* non-fatal; cron will retry */ }
+        })();
+      }
+
       // Create or update cohort (for Foundry's own tracking)
       const foundryProduct = await query("SELECT id FROM products WHERE name = 'Foundry' LIMIT 1", []);
       if (foundryProduct.rows.length > 0) {

@@ -118,6 +118,24 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
         }
 
         result = await getFounderByClerkId(clerkUserId);
+
+        // Welcome email on provisioning (idempotent via the gateway, so this
+        // never double-sends with the Clerk webhook path). Use the resolved
+        // row's real id for a stable dedup key. Fire-and-forget.
+        const provisioned = result.rows[0] as Record<string, unknown> | undefined;
+        if (provisioned?.id && provisioned?.email) {
+          void (async () => {
+            try {
+              const { sendFounderWelcome } = await import('../services/founder/welcome-sequence.js');
+              await sendFounderWelcome({
+                id: String(provisioned.id),
+                email: String(provisioned.email),
+                name: (provisioned.name as string | null) ?? null,
+                created_at: String(provisioned.created_at ?? new Date().toISOString()),
+              });
+            } catch { /* non-fatal; cron will retry */ }
+          })();
+        }
       } catch (e) {
         logger.error('Auto-provision founder failed', { error: String(e) });
       }

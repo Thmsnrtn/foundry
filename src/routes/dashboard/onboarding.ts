@@ -399,6 +399,23 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   await startTour(founder.id, body.product_id);
   generateDimensionHints(auditScore.id, body.product_id).catch(() => {});
 
+  // Day-1 activation: email the audit results through the gateway
+  // (idempotent per product). Fire-and-forget — the redirect must not block
+  // on email delivery.
+  (async () => {
+    try {
+      const { sendAuditResultsEmail } = await import('../../lib/onboarding-emails.js');
+      await sendAuditResultsEmail(
+        founder.email,
+        product.name as string,
+        auditScore.composite ?? 0,
+        (auditScore.verdict as string) ?? 'NOT_READY',
+        auditScore.blocking_issues?.length ?? 0,
+        body.product_id,
+      );
+    } catch { /* non-fatal */ }
+  })();
+
   // Trigger an immediate first briefing so the founder doesn't wait for
   // the next 5:30 UTC cron tick. Fire-and-forget — the redirect must not
   // block on a 10-20s LLM call. The briefing card on the dashboard will

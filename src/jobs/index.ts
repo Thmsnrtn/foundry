@@ -186,6 +186,13 @@ export async function digestGenerate(): Promise<void> {
 export async function behavioralTriggers(): Promise<void> {
   logger.info('behavioral_triggers starting', { jobName: 'behavioral_triggers' });
   await evaluateTriggers();
+  // Day-3 onboarding activation: nudge founders who haven't entered metrics.
+  try {
+    const { evaluateOnboardingSequence } = await import('../lib/onboarding-emails.js');
+    await evaluateOnboardingSequence();
+  } catch (err) {
+    logger.warn('onboarding_sequence evaluation failed', { error: String(err) });
+  }
   logger.info('behavioral_triggers complete', { jobName: 'behavioral_triggers' });
 }
 
