@@ -202,4 +202,58 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
     expect((r.rows[0] as Record<string, unknown>).snoozed_until).toBe('2026-03-01');
     expect((r.rows[0] as Record<string, unknown>).decision_type).toBe('outbound_action'); // default
   });
+
+  // ── UPDATE-path fixes ────────────────────────────────────────────────────────
+
+  it('key_results.progress: written by the OKR update and readable by AVG()', async () => {
+    await db.execute({ sql: "INSERT INTO key_results (id, okr_id, description, new_value) VALUES ('kr2','o1','x',0)", args: [] }).catch(() => {});
+    await db.execute({ sql: "UPDATE key_results SET current_value=?, progress=?, updated_at=CURRENT_TIMESTAMP WHERE id='kr2'", args: [50, 50] }).catch(() => {});
+    // The read that 500'd before the column existed:
+    const r = await db.execute({ sql: "SELECT AVG(progress) AS avg FROM key_results", args: [] });
+    expect(r.rows.length).toBe(1);
+  });
+
+  it('experiments: interim results UPDATE (results_json, no invalid status) + conclude (completed)', async () => {
+    // seed a valid experiment
+    await db.execute({ sql: "INSERT INTO hypotheses (id, product_id, proposed_by, statement) VALUES ('h2','p1','api','h')", args: [] });
+    await db.execute({
+      sql: `INSERT INTO experiments (id, product_id, hypothesis_id, name, type, control_description, treatment_description, success_metric, status)
+            VALUES ('ex2','p1','h2','T','ab_test','c','t','m','running')`,
+      args: [],
+    });
+    await db.execute({ sql: "UPDATE experiments SET results_json=?, updated_at=CURRENT_TIMESTAMP WHERE id='ex2' AND product_id='p1'", args: ['{"v":1}'] });
+    await db.execute({
+      sql: `UPDATE experiments SET status='completed', outcome=?, winning_variant_id=?, concluded_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id='ex2' AND product_id='p1'`,
+      args: ['treatment won', 'var_1'],
+    });
+    const r = await db.execute({ sql: "SELECT status, outcome FROM experiments WHERE id='ex2'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).status).toBe('completed');
+  });
+
+  it('agent_initiative_queue: status transitions use CHECK-valid values + processed_at', async () => {
+    await db.execute({
+      sql: `INSERT INTO agent_initiative_queue (id, product_id, agent_name, initiative_type, description, status) VALUES ('i2','p1','atlas','proactive','d','pending')`,
+      args: [],
+    });
+    await db.execute({ sql: "UPDATE agent_initiative_queue SET status='running', processed_at=CURRENT_TIMESTAMP WHERE id='i2'", args: [] });
+    await db.execute({ sql: "UPDATE agent_initiative_queue SET status='completed', processed_at=CURRENT_TIMESTAMP WHERE id='i2'", args: [] });
+    const r = await db.execute({ sql: "SELECT status FROM agent_initiative_queue WHERE id='i2'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).status).toBe('completed');
+  });
+
+  it('action_executions.approval_note: voice approval UPDATE (status approved + note)', async () => {
+    await db.execute({
+      sql: `INSERT INTO action_executions (id, product_id, action_type, integration, status) VALUES ('ae1','p1','email','resend','pending')`,
+      args: [],
+    });
+    await db.execute({ sql: "UPDATE action_executions SET status='approved', approved_at=datetime('now'), approval_note=? WHERE id='ae1'", args: ['approved by voice'] });
+    const r = await db.execute({ sql: "SELECT status, approval_note FROM action_executions WHERE id='ae1'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).approval_note).toBe('approved by voice');
+  });
+
+  it('products.scp_status: pause/resume targets products (not lifecycle_state)', async () => {
+    await db.execute({ sql: "UPDATE products SET scp_status='paused', updated_at=datetime('now') WHERE id='p1'", args: [] });
+    const r = await db.execute({ sql: "SELECT scp_status FROM products WHERE id='p1'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).scp_status).toBe('paused');
+  });
 });

@@ -688,9 +688,9 @@ Rules:
       if (result.rows.length === 0) return;
 
       for (const row of result.rows as Record<string, unknown>[]) {
-        // Mark as in_progress
+        // Mark as running (CHECK: pending|running|completed|failed|skipped)
         await query(
-          `UPDATE agent_initiative_queue SET status='in_progress', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+          `UPDATE agent_initiative_queue SET status='running', processed_at=CURRENT_TIMESTAMP WHERE id=?`,
           [row.id as string]
         );
         // Route into outbound executor for human approval
@@ -706,9 +706,9 @@ Rules:
           parameters: this._parseJSON<Record<string, unknown>>(row.parameters_json as string | null, {}),
           authorityLevel: 2, // All initiative queue items require approval
         }).catch(() => {});
-        // Mark as proposed
+        // Mark as completed (proposed into the outbound queue for approval)
         await query(
-          `UPDATE agent_initiative_queue SET status='proposed', updated_at=CURRENT_TIMESTAMP WHERE id=?`,
+          `UPDATE agent_initiative_queue SET status='completed', processed_at=CURRENT_TIMESTAMP WHERE id=?`,
           [row.id as string]
         );
       }

@@ -441,9 +441,10 @@ settingsRoutes.post('/settings/pause-company', requireRole('owner'), async (c) =
     [cookieProductId, founder.id]
   );
 
-  // Also pause the SCP lifecycle to stop agent runs
+  // Also pause the SCP lifecycle to stop agent runs. scp_status lives on
+  // products (the scheduler gates on it), not lifecycle_state.
   await query(
-    "UPDATE lifecycle_state SET scp_status = 'paused', updated_at = datetime('now') WHERE product_id = ?",
+    "UPDATE products SET scp_status = 'paused', updated_at = datetime('now') WHERE id = ?",
     [cookieProductId]
   );
 
@@ -470,7 +471,7 @@ settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) 
   );
 
   await query(
-    "UPDATE lifecycle_state SET scp_status = 'active', updated_at = datetime('now') WHERE product_id = ?",
+    "UPDATE products SET scp_status = 'active', updated_at = datetime('now') WHERE id = ?",
     [cookieProductId]
   );
 
@@ -503,9 +504,9 @@ settingsRoutes.post('/settings/toggle-product-status', requireRole('owner'), asy
   );
 
   await query(
-    "UPDATE lifecycle_state SET scp_status = ?, updated_at = datetime('now') WHERE product_id = ?",
+    "UPDATE products SET scp_status = ?, updated_at = datetime('now') WHERE id = ?",
     [newScpStatus, productId]
-  ).catch(() => { /* lifecycle_state row may not exist yet */ });
+  ).catch(() => { /* product row may not exist yet */ });
 
   return c.redirect(`/settings?success=company_${newStatus === 'paused' ? 'paused' : 'resumed'}`);
 });

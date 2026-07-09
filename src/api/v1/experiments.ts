@@ -18,8 +18,8 @@ experimentsApi.get('/', requireScope('agents:read'), async (c) => {
 
   try {
     const result = await query(
-      `SELECT id, title, hypothesis, status, success_metric, success_threshold,
-              current_results_json, started_at, concluded_at, created_at
+      `SELECT id, name, hypothesis, status, success_metric, success_threshold,
+              results_json, started_at, concluded_at, created_at
        FROM experiments
        WHERE product_id = ?
        ORDER BY created_at DESC
@@ -152,21 +152,14 @@ experimentsApi.put('/:experimentId/results', requireScope('agents:read'), async 
       return c.json({ error: 'Experiment not found' }, 404);
     }
 
-    const exp = check.rows[0] as Record<string, unknown>;
-    const currentValue = body.current_value as number | undefined;
-    const threshold = exp.success_threshold as number | null;
-
-    // Recalculate status based on results
-    let newStatus = exp.status as string;
-    if (currentValue !== undefined && threshold !== null && newStatus !== 'concluded') {
-      newStatus = currentValue >= threshold ? 'winning' : 'running';
-    }
-
+    // Interim results are stored in results_json; the status transition to a
+    // terminal state happens only at /conclude (the status CHECK has no
+    // "winning" value, and an experiment receiving results is still running).
     await query(
       `UPDATE experiments
-       SET current_results_json = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+       SET results_json = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND product_id = ?`,
-      [JSON.stringify(body), newStatus, experimentId, productId]
+      [JSON.stringify(body), experimentId, productId]
     );
 
     const result = await query(`SELECT * FROM experiments WHERE id = ?`, [experimentId]);
@@ -201,7 +194,7 @@ experimentsApi.post('/:experimentId/conclude', requireScope('agents:read'), asyn
 
     await query(
       `UPDATE experiments
-       SET status = 'concluded', outcome = ?, winning_variant_id = ?,
+       SET status = 'completed', outcome = ?, winning_variant_id = ?,
            concluded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND product_id = ?`,
       [outcome ?? null, winning_variant_id ?? null, experimentId, productId]

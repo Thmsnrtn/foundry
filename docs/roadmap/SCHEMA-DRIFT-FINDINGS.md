@@ -76,6 +76,33 @@ existing columns) — never by deleting a feature. Locked by
 (`schema_migrations.filename`, a table `migrate.ts` self-creates at runtime with
 that column). The audit is effectively at zero.
 
+## Fixed — UPDATE-SET drift (write/read paths)
+
+A second checker, `scripts/check-sql-columns.mjs`, verifies every
+`UPDATE <table> SET <col>` against the schema. It found 9 more (several also
+CHECK violations), all now fixed — `check-sql-columns.mjs` reports **CLEAN**.
+
+- **`products.scp_status`** (settings.ts ×3) — pause/resume wrote
+  `UPDATE lifecycle_state SET scp_status` (that column lives on `products`, and
+  the scheduler gates on it). Retargeted to `products … WHERE id`.
+- **`agent_initiative_queue`** (base.ts ×2) — `status='in_progress'`/`'proposed'`
+  violate the CHECK (`pending|running|completed|failed|skipped`), and `updated_at`
+  doesn't exist. → `running`/`completed` + `processed_at`.
+- **`experiments`** (v1) — interim-results UPDATE wrote `current_results_json` +
+  `status='winning'` (no such column; invalid status). Now writes `results_json`
+  and leaves status until conclude; conclude uses `status='completed'` and the
+  new `outcome`/`winning_variant_id`/`concluded_at` columns (migration 087). The
+  GET list selected `title`/`current_results_json` → `name`/`results_json`.
+- **`key_results.progress`** (agents-okr) — written by the progress update AND
+  read by `AVG(kr.progress)` (which 500'd the OKR page); added the column (087).
+- **`action_executions.approval_note`** (voice-reply) — added the column (087)
+  for the approving transcript.
+
+Migrations 084–087 + the two checker scripts + `schema-drift-fixes.test.ts`
+(20 cases) close the code-vs-schema drift class end to end. What remains
+unswept: multi-table `SELECT`/`JOIN` column references (too alias-ambiguous for a
+low-noise static check) — a smaller residual surface than the write paths.
+
 <details><summary>Original open list (now resolved — kept for reference)</summary>
 
 Unlike batch 1, these were **not** clean renames — the code was written against a
