@@ -154,9 +154,15 @@ decisionRoutes.get('/decisions/:id', async (c) => {
 
     ${scenarios.length > 0 ? html`
     <div class="chamber-section">
-      <div class="chamber-section-label">Scenarios</div>
+      <div class="chamber-section-label">Scenarios · Ghost fork (seeded Monte Carlo on your own history)</div>
       ${scenarioGrid(scenarios)}
-    </div>` : ''}
+    </div>` : (status === 'pending' ? html`
+    <div class="chamber-section">
+      <form method="POST" action="/decisions/${decisionId}/ghost">
+        <button type="submit" class="btn btn-secondary btn-sm">⧉ Fork reality — simulate each option's 90-day MRR path</button>
+        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem;">1,000 runs on your real growth history. Abstains if history is too thin.</span>
+      </form>
+    </div>` : '')}
 
     ${redTeam ? html`
     <div class="chamber-section" style="border:1px solid rgba(255,107,107,0.3);border-radius:8px;padding:1rem 1.25rem;background:rgba(255,107,107,0.04);">
@@ -375,6 +381,24 @@ function summarizeCase(caseData: unknown): string {
 }
 
 // ─── Resolve Decision ─────────────────────────────────────────────────────────
+
+// ─── POST /decisions/:id/ghost — fork reality (Ghost Company simulation) ─────
+decisionRoutes.post('/decisions/:id/ghost', async (c) => {
+  const founder = c.get('founder');
+  const decisionId = c.req.param('id');
+  const owned = await query(
+    `SELECT d.product_id FROM decisions d JOIN products p ON d.product_id = p.id
+     WHERE d.id = ? AND p.owner_id = ?`,
+    [decisionId, founder.id],
+  );
+  if (owned.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  const productId = (owned.rows[0] as Record<string, string>).product_id;
+  try {
+    const { runGhostFork } = await import('../../services/ghost/simulator.js');
+    await runGhostFork(decisionId, productId);
+  } catch { /* AI/history unavailable — the chamber simply shows no scenarios */ }
+  return c.redirect(`/decisions/${decisionId}`);
+});
 
 // ─── POST /decisions/:id/redteam — summon the adversarial pre-mortem ─────────
 decisionRoutes.post('/decisions/:id/redteam', async (c) => {
