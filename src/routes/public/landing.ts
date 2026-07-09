@@ -211,13 +211,14 @@ landingRoutes.get('/', async (c) => {
 });
 
 pricingRoutes.get('/pricing', async (c) => {
-  // Founding Cohort remaining slots — read live from DB so the scarcity
-  // message stays honest. Falls back gracefully if the table doesn't yet
-  // exist (e.g., fresh dev DB without all migrations).
+  // Founding-rate remaining slots — the first 30 Solo signups lock the $79/mo
+  // founding rate for life. Read live from DB so the scarcity message stays
+  // honest. Falls back gracefully if the table doesn't yet exist (e.g., fresh
+  // dev DB without all migrations).
   let foundingSlotsRemaining: number | null = null;
   try {
     const r = await query(
-      "SELECT COUNT(*) AS taken FROM founders WHERE tier = 'founding_cohort'",
+      "SELECT COUNT(*) AS taken FROM founders WHERE tier = 'solo'",
       []
     );
     const taken = Number((r.rows[0] as Record<string, unknown>)?.taken ?? 0);

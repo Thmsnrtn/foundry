@@ -108,9 +108,9 @@ export async function handleWebhook(payload: string, signature: string): Promise
   const event = stripe.webhooks.constructEvent(payload, signature, secret);
 
   // RT08-P0-03: Idempotency — skip already-processed events to prevent replay attacks
-  const existing = await query('SELECT id FROM stripe_webhook_events WHERE event_id = ?', [event.id]);
+  const existing = await query('SELECT event_id FROM stripe_webhook_events WHERE event_id = ?', [event.id]);
   if (existing.rows.length > 0) return; // Already processed
-  await query('INSERT INTO stripe_webhook_events (event_id, event_type, processed_at) VALUES (?, ?, datetime("now"))', [event.id, event.type]);
+  await query('INSERT INTO stripe_webhook_events (event_id, event_type, processed_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [event.id, event.type]);
 
   switch (event.type) {
     case 'customer.subscription.created':
@@ -198,7 +198,7 @@ export async function handleWebhook(payload: string, signature: string): Promise
       const sub = event.data.object as Stripe.Subscription;
       await query('UPDATE founders SET tier = NULL, trial_ends_at = NULL WHERE stripe_customer_id = ?', [sub.customer]);
       // EDGE-02 + RT08-P0: Pause SCP at BOTH levels to stop AI credit burn
-      // The scheduler checks products.scp_status, not scp_instances.status
+      // The scheduler checks products.scp_status, not agent_instances.status
       const cancelledFounder = await query('SELECT id FROM founders WHERE stripe_customer_id = ?', [sub.customer]);
       if (cancelledFounder.rows.length > 0) {
         const founderId = (cancelledFounder.rows[0] as Record<string, string>).id;
@@ -209,7 +209,7 @@ export async function handleWebhook(payload: string, signature: string): Promise
         );
         // Also pause individual instances
         await query(
-          `UPDATE scp_instances SET status = 'paused', updated_at = datetime('now')
+          `UPDATE agent_instances SET status = 'paused', updated_at = datetime('now')
            WHERE product_id IN (SELECT id FROM products WHERE owner_id = ?)`,
           [founderId]
         );

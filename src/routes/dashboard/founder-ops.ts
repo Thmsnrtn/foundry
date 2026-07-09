@@ -100,9 +100,9 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
       <div class="card">
         <h3>Revenue by Tier</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.75rem;">
-          ${tierCard('Founding Cohort', mrr.by_tier.founding_cohort?.count ?? 0, '$' + (mrr.by_tier.founding_cohort?.mrr ?? 0))}
+          ${tierCard('Solo', mrr.by_tier.solo?.count ?? 0, '$' + (mrr.by_tier.solo?.mrr ?? 0))}
           ${tierCard('Growth', mrr.by_tier.growth?.count ?? 0, '$' + (mrr.by_tier.growth?.mrr ?? 0))}
-          ${tierCard('Scale', mrr.by_tier.scale?.count ?? 0, '$' + (mrr.by_tier.scale?.mrr ?? 0))}
+          ${tierCard('Investor-Ready', mrr.by_tier.investor_ready?.count ?? 0, '$' + (mrr.by_tier.investor_ready?.mrr ?? 0))}
           ${tierCard('Forecast 3mo', 0, '$' + mrr.forecast_3m.toLocaleString())}
         </div>
       </div>

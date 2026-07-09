@@ -352,7 +352,7 @@ export async function processScheduledDeletions(): Promise<number> {
       'metric_snapshots', 'stressor_history', 'decisions', 'scenario_models',
       'audit_scores', 'lifecycle_conditions', 'lifecycle_state',
       'founding_story_artifacts', 'beta_intake', 'competitive_signals',
-      'competitors', 'cohorts', 'scp_instances', 'agent_instances',
+      'competitors', 'cohorts', 'agent_instances',
     ];
 
     for (const table of tables) {
