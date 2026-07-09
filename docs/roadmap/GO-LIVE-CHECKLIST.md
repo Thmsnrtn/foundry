@@ -80,9 +80,21 @@ Legend: 🟢 done in code · 🟡 code-ready, needs a live run · 🔴 operator/
 
 - **Controlled alpha (10 hand-held founders, 5.3):** everything in §1–§5 that's
   🟡 verified once on staging. This is the recommended next step.
-- **Open to strangers:** additionally finish 2.7 (eval net in CI so prompt
-  regressions can't ship silently), a real **load test** of the 73 crons under
-  the web/worker split, and the 3.4 gateway migration for money idempotency.
+- **Open to strangers:** additionally finish the 3.4 gateway migration for money
+  idempotency. Two of the three items here are now done in code:
+  - 🟢 **2.7 eval net in CI** — `tests/evals/prompt-assembly.eval.test.ts` guards
+    the agent system-prompt scaffold (cache-cost invariant 2.2 + the C-suite
+    output contract); a dedicated `evals` CI job runs `npm run test:evals`, and
+    the stranger-safety walkthrough sim is now its own `walkthrough-sim` CI gate.
+    A prompt edit that breaks caching or drops the output standard fails the build.
+  - 🟢 **Cron load/contention test** — `tests/load/cron-load.ts` (+ the
+    `cron-load` CI job and `tests/unit/job-lock-contention.test.ts`) stress the
+    distributed job lock the web/worker split relies on: N instances race each
+    job (exactly one wins), crashed-worker leases are reclaimed, and a full
+    75-job lock sweep runs in ~10ms — far under the tightest (per-minute) cadence.
+    What still needs a *live* run is the jobs' real work under real data volume
+    on staging (external calls, AI cost); the lock layer itself is verified.
+  - 🔴 **3.4 gateway migration** for Stripe/GitHub outbound idempotency (money).
 
 > Prompt-quality caveat: nobody has eyeballed a real generated briefing against
 > a real repo yet (Verification step 6 — needs live keys). Do this during the

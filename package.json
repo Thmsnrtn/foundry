@@ -16,6 +16,7 @@
     "test:evals": "vitest --run tests/evals",
     "check": "npm run typecheck && npm run test:ci",
     "sim:walkthrough": "TURSO_DATABASE_URL=file::memory: tsx tests/simulation/walkthrough.ts",
+    "load:crons": "TURSO_DATABASE_URL=file::memory: tsx tests/load/cron-load.ts",
     "mcp:context": "tsx src/mcp/cli.ts context",
     "mcp:audit": "tsx src/mcp/cli.ts audit",
     "mcp:issues": "tsx src/mcp/cli.ts issues",

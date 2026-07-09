@@ -51,6 +51,21 @@ jobs:
       # 0 5xx, 0 tenant leaks, and that writes land. Exits non-zero on any finding.
       - run: npm run sim:walkthrough
 
+  cron-load:
+    name: Cron lock load/contention (3.1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Stress-tests the distributed job lock the web/worker split depends on:
+      # N instances race each job (exactly one wins), expired leases are
+      # reclaimed, and a full 75-job sweep stays well under the cron budget.
+      - run: npm run load:crons
+
   schema-drift:
     name: Schema snapshot up to date
     runs-on: ubuntu-latest
