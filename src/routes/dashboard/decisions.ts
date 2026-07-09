@@ -88,6 +88,15 @@ decisionRoutes.get('/decisions/:id', async (c) => {
     marketCategory: null,
   });
 
+  // Dissent Law: the Red Team's pre-mortem for this decision (if run) and its
+  // earned track record, shown alongside so its voice is weighted honestly.
+  const { getReviewForDecision, parseObjections, getDissentRecord } =
+    await import('../../services/redteam/council.js');
+  const redTeam = await getReviewForDecision(decisionId);
+  const redTeamObjections = redTeam ? parseObjections(redTeam) : [];
+  const dissentRecord = await getDissentRecord(productId);
+  const gateNum = Number(decision.gate ?? 0);
+
   // Parse options
   let options: Array<{ label: string; description: string; trade_offs?: string }> = [];
   try {
@@ -148,6 +157,30 @@ decisionRoutes.get('/decisions/:id', async (c) => {
       <div class="chamber-section-label">Scenarios</div>
       ${scenarioGrid(scenarios)}
     </div>` : ''}
+
+    ${redTeam ? html`
+    <div class="chamber-section" style="border:1px solid rgba(255,107,107,0.3);border-radius:8px;padding:1rem 1.25rem;background:rgba(255,107,107,0.04);">
+      <div class="chamber-section-label" style="color:#ff6b6b;">Red Team pre-mortem — verdict: ${redTeam.verdict.replace(/_/g, ' ')}</div>
+      ${redTeam.strongest_objection ? html`<p class="chamber-why" style="font-weight:600;">${redTeam.strongest_objection}</p>` : ''}
+      ${redTeamObjections.map((o) => html`
+        <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.06);">
+          <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:${o.severity === 'fatal' ? '#ff6b6b' : o.severity === 'serious' ? '#f0a860' : 'var(--text-muted)'};">${o.lens} · ${o.severity}</div>
+          <div style="font-size:0.87rem;color:var(--text-primary);">${o.claim}</div>
+          ${o.metric_key ? html`<div style="font-size:0.78rem;color:var(--text-dim);">Falsifiable: fails if ${o.metric_key} ${o.comparator} ${o.threshold} — Foundry will watch this if you overrule.</div>` : ''}
+          ${o.mitigation ? html`<div style="font-size:0.78rem;color:var(--text-dim);">Mitigation: ${o.mitigation}</div>` : ''}
+        </div>
+      `)}
+      ${dissentRecord.total > 0 ? html`
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.6rem;">
+        Red Team record here: ${dissentRecord.vindicated} vindicated · ${dissentRecord.overruled_held} overruled-and-held · ${dissentRecord.pending} pending.
+      </div>` : ''}
+    </div>` : (status === 'pending' && gateNum >= 3 ? html`
+    <div class="chamber-section">
+      <form method="POST" action="/decisions/${decisionId}/redteam">
+        <button type="submit" class="btn btn-secondary btn-sm">⚔ Summon the Red Team (adversarial pre-mortem)</button>
+        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem;">Gate-${gateNum} decision — contest before you commit.</span>
+      </form>
+    </div>` : '')}
 
     ${status === 'pending' ? html`
     <div class="chamber-section chamber-reflect" id="reflect-section">
@@ -343,6 +376,24 @@ function summarizeCase(caseData: unknown): string {
 
 // ─── Resolve Decision ─────────────────────────────────────────────────────────
 
+// ─── POST /decisions/:id/redteam — summon the adversarial pre-mortem ─────────
+decisionRoutes.post('/decisions/:id/redteam', async (c) => {
+  const founder = c.get('founder');
+  const decisionId = c.req.param('id');
+  const owned = await query(
+    `SELECT d.product_id FROM decisions d JOIN products p ON d.product_id = p.id
+     WHERE d.id = ? AND p.owner_id = ?`,
+    [decisionId, founder.id],
+  );
+  if (owned.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  const productId = (owned.rows[0] as Record<string, string>).product_id;
+  try {
+    const { runPreMortem } = await import('../../services/redteam/council.js');
+    await runPreMortem(decisionId, productId);
+  } catch { /* AI unavailable — the chamber simply shows no review */ }
+  return c.redirect(`/decisions/${decisionId}`);
+});
+
 decisionRoutes.post('/decisions/:id/resolve', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
@@ -363,6 +414,13 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
   }
 
   await resolveDecision(decisionId, productId, body.chosen_option, 'founder');
+
+  // Dissent Law: proceeding past unresolved Red Team objections converts each
+  // falsifiable objection's inverse into a monitored premise, so the overruling
+  // is accountable and the dissent can be scored. Fire-and-forget.
+  import('../../services/redteam/council.js')
+    .then(({ recordOverruledDissent }) => recordOverruledDissent(decisionId, productId))
+    .catch(() => {});
 
   checkAndAwardMilestones(productId, founder.id).catch(() => {});
 

@@ -89,8 +89,32 @@ Full architectural detail transferred from AcreOS lives in the survey dossier
   transfer: port AcreOS's generic **ratchet factory** (`scripts/ratchet.mjs` —
   bidirectional, stale-entry-detecting, JSON-baseline count gates) as Track A2.
 
+- ✅ **The Constitution.** `docs/design/CONSTITUTION.md` — the One Concept
+  (institution-in-a-box: one closed decision loop that compounds), the eight
+  design laws (Loop, Ledger, Trust, Dissent, Attention, Honesty, Human,
+  Compounding), and the key unification: a Red Team objection is an
+  ANTI-PREMISE on the same substrate as the Memory Kernel. Every future feature
+  must name its loop stage and law.
+- ✅ **A2 — Ratchet factory.** Ported AcreOS's bidirectional, self-locking
+  count-gate (`scripts/ratchet.mjs` + `scripts/ratchets/*.json`): first three
+  invariants (double-quote-now=0, as-any=32, console-in-src=214); wired into
+  `check` + CI, plus a `column-drift` CI job for the INSERT/UPDATE checkers.
+- ✅ **Phase 2 — Red Team (B2 / Dissent Law).** The adversary paid to disagree:
+  gate-3+ decisions get an adversarial pre-mortem (three lenses — downside,
+  competitor, capacity; one atomic model call; grounded in real telemetry, no
+  fabricated context). Objections are falsifiable anti-premises; overruling one
+  records its inverse as a monitored premise (origin='red_team'); telemetry
+  falsifying it VINDICATES the review — dissent with a track record, shown in
+  the decision chamber ("Red Team record here: N vindicated…"). Files:
+  migration 089, `src/db/schema/redteam.ts`, `src/services/redteam/council.ts`,
+  `red_team_sweep` job (2h, cost-capped), chamber UI + summon route + overrule
+  hook, `tests/unit/red-team.test.ts` (full loop, mocked model). Also fixed a
+  real pre-existing test flake (nanoid `--` truncating raw SQL via executeRaw's
+  comment-stripper). 798 tests green.
+
 ### Next
-- Port the ratchet factory (A2) + wire Foundry's first ratchets (raw-SQL-in-hot-
-  paths, `any`-casts) alongside the schema-drift checkers.
-- Phase 2 — Red Team (B2): adversarial pre-mortem council on gate-3/4 decisions
-  (adapt AcreOS `autopilot/council.ts` + `agentDebates.ts`).
+- Phase 3 — Ghost Company (B3): counterfactual simulation on the decision
+  chamber (adapt AcreOS `portfolioOptimizer` Monte-Carlo technique).
+- A3 — truth-engine (claim-vs-source verification for briefings) + eval gate.
+- Phase 4 — Network Nervous System (B4) + Human Layer (B5).
+- Phase 5 — Second Self (B6, Trust Law pricing) + Overnight Operator (B7).

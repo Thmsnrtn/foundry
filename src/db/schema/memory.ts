@@ -10,6 +10,9 @@ export type PremiseStatus = 'holding' | 'falsified' | 'unverifiable' | 'revisite
 export type PremiseType = 'metric' | 'qualitative';
 export type PremiseComparator = '<' | '<=' | '>' | '>=' | '==';
 export type DecisionSource = 'strategic' | 'decision';
+/** Who asserted the belief: the founder directly, or the inverse of an
+ *  overruled Red Team objection (so falsification credits the right ledger). */
+export type PremiseOrigin = 'founder' | 'red_team';
 
 /** A full decision_premises row as read from the DB. */
 export interface DecisionPremise {
@@ -26,6 +29,8 @@ export interface DecisionPremise {
   last_checked_at: string | null;
   falsified_at: string | null;
   evidence: string | null;
+  origin: PremiseOrigin;
+  review_id: string | null;
   created_at: string;
 }
 
@@ -42,4 +47,6 @@ export interface DecisionPremiseInsert {
   comparator?: PremiseComparator | null;
   threshold?: number | null;
   status?: PremiseStatus;
+  origin?: PremiseOrigin;
+  review_id?: string | null;
 }

@@ -3,7 +3,6 @@
 // =============================================================================
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
 import { computeWeeklyOutcome } from '../../src/services/intelligence/weekly-outcome.js';
@@ -60,9 +59,16 @@ beforeAll(async () => {
   await setupSchema();
 });
 
+// NOTE: ids get interpolated into raw SQL below, and executeRaw strips
+// `--`-style comments — a nanoid containing `--` truncates the statement
+// mid-string (a real observed flake: "unrecognized token"). Use deterministic
+// counter ids for anything that flows into executeRaw.
+let idSeq = 0;
+const nextId = (prefix: string): string => `${prefix}${++idSeq}_${Date.now().toString(36)}`;
+
 beforeEach(async () => {
-  founderId = nanoid();
-  productId = nanoid();
+  founderId = nextId('f');
+  productId = nextId('p');
   await query(
     `INSERT INTO founders (id, clerk_user_id, email, tier) VALUES (?, ?, ?, ?)`,
     [founderId, `clerk_${founderId}`, `${founderId}@test.local`, 'growth']
@@ -89,7 +95,7 @@ async function insertDecision(opts: {
     : `datetime('now', '-${opts.decidedDaysAgo} days')`;
   await executeRaw(
     `INSERT INTO decisions (id, product_id, gate, what, why_now, status, decided_by, created_at, decided_at)
-     VALUES ('${nanoid()}', '${productId}', ${opts.gate}, 'x', 'y', '${opts.status}', ${opts.decidedBy === null ? 'NULL' : `'${opts.decidedBy ?? 'founder'}'`}, ${created}, ${decided})`
+     VALUES ('${nextId('d')}', '${productId}', ${opts.gate}, 'x', 'y', '${opts.status}', ${opts.decidedBy === null ? 'NULL' : `'${opts.decidedBy ?? 'founder'}'`}, ${created}, ${decided})`
   );
 }
 
@@ -99,7 +105,7 @@ async function insertActionDraft(opts: { status: string; executedDaysAgo?: numbe
     : `datetime('now', '-${opts.executedDaysAgo} days')`;
   await executeRaw(
     `INSERT INTO action_drafts (id, product_id, action_type, title, draft_content, artifact_type, gate, auto_executable, status, executed_at)
-     VALUES ('${nanoid()}', '${productId}', 'cat', 'Title', 'Content', 'email_draft', 0, 1, '${opts.status}', ${executed})`
+     VALUES ('${nextId('a')}', '${productId}', 'cat', 'Title', 'Content', 'email_draft', 0, 1, '${opts.status}', ${executed})`
   );
 }
 

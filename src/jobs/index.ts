@@ -1925,10 +1925,38 @@ export async function memoryPremiseCheck(): Promise<void> {
   logger.info(`memory_premise_check complete — ${totalFalsified} beliefs expired`, { jobName: 'memory_premise_check' });
 }
 
+// ─── Red Team sweep (Ascent B2 / Dissent Law) ──────────────────────────────────
+// No gate-3+ decision sits uncontested: any pending high-stakes decision without
+// a pre-mortem gets one. Cost-bounded (max 5 per run; the AI cost ceiling in
+// callClaude is the hard backstop).
+export async function redTeamSweep(): Promise<void> {
+  logger.info('red_team_sweep starting', { jobName: 'red_team_sweep' });
+  const pending = await query(
+    `SELECT d.id, d.product_id FROM decisions d
+     WHERE d.status = 'pending' AND d.gate >= 3
+       AND NOT EXISTS (SELECT 1 FROM red_team_reviews r WHERE r.decision_id = d.id)
+     ORDER BY d.created_at ASC LIMIT 5`,
+    [],
+  );
+  let reviewed = 0;
+  for (const row of pending.rows) {
+    const d = row as Record<string, string>;
+    try {
+      const { runPreMortem } = await import('../services/redteam/council.js');
+      const res = await runPreMortem(d.id, d.product_id);
+      if (res) reviewed++;
+    } catch (err) {
+      logger.error(`red_team_sweep error for decision ${d.id}`, { jobName: 'red_team_sweep', error: String(err) });
+    }
+  }
+  logger.info(`red_team_sweep complete — ${reviewed} pre-mortems`, { jobName: 'red_team_sweep' });
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
   memory_premise_check: { fn: memoryPremiseCheck,   schedule: '0 7 * * *',       description: 'Re-check decision premises against live telemetry; flag expired beliefs (daily)' },
+  red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

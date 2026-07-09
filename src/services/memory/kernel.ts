@@ -31,6 +31,10 @@ const METRIC_COLUMNS: Record<string, string> = {
   new_mrr_cents: 'new_mrr_cents',
 };
 
+/** The metric vocabulary shared by every falsifiable-belief producer (founder
+ *  premises, Red Team objections). Single source of checkability truth. */
+export const CHECKABLE_METRIC_KEYS = Object.keys(METRIC_COLUMNS);
+
 export interface RecordPremiseInput {
   productId: string;
   decisionId: string;
@@ -39,6 +43,9 @@ export interface RecordPremiseInput {
   metricKey?: string;
   comparator?: PremiseComparator;
   threshold?: number;
+  /** 'red_team' when this belief is the inverse of an overruled objection. */
+  origin?: 'founder' | 'red_team';
+  reviewId?: string;
 }
 
 /** Capture a belief behind a decision. If a metric+comparator+threshold is given
@@ -57,6 +64,8 @@ export async function recordPremise(input: RecordPremiseInput): Promise<string> 
     comparator: input.comparator ?? null,
     threshold: input.threshold ?? null,
     status: 'holding',
+    origin: input.origin ?? 'founder',
+    review_id: input.reviewId ?? null,
   };
   const { sql, args } = buildInsert(DECISION_PREMISES, row as unknown as Record<string, unknown>);
   await query(sql, args);
@@ -125,6 +134,16 @@ export async function checkPremises(productId: string): Promise<PremiseCheckResu
          WHERE id = ?`,
         [`observed ${raw.metric_key} = ${current} (premise required ${raw.comparator} ${raw.threshold})`, raw.id],
       );
+      // Dissent Law / Honesty Law: a falsified red_team-origin premise means the
+      // overruled objection was RIGHT — vindicate the review (calibration point).
+      if (raw.origin === 'red_team' && raw.review_id) {
+        await query(
+          `UPDATE red_team_reviews
+           SET resolved_outcome = 'vindicated', resolved_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND resolved_outcome IS NULL`,
+          [raw.review_id],
+        );
+      }
     }
   }
   return { checked, falsified };

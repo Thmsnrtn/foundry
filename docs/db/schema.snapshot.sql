@@ -36,9 +36,13 @@
                           )),
                           CHECK (briefing_format IN ('full','summary','critical_only')),
                         'b2b_saas','b2c_saas','marketplace','developer_tools','fintech','other'
+                        ('proceed', 'proceed_with_changes', 'do_not_proceed')),
                       )),
                      CHECK (our_equivalent IN ('shipped','planned','not_planned','unknown')),
                      CHECK (status IN ('on_track','at_risk','off_track','completed','cancelled')),
+                    CHECK (decision_source IN ('strategic', 'decision')),
+                    CHECK (premise_type IN ('metric', 'qualitative')),
+                    CHECK (status IN ('holding', 'falsified', 'unverifiable', 'revisited')),
                     CHECK (status IN ('on_track','at_risk','off_track','completed')),
                    'validation_failed','data_gap','conflicting_sources','stale_data'
                  'customers','product','market','operations','team',
@@ -114,6 +118,8 @@
   )),
   --   config_keys_count, stressors_active, customer_count }
   --   current_mrr_estimate, team_size, biggest_challenge, stage }
+  --   overruled_held — founder overruled and the premises held (dissent was wrong)
+  --   vindicated  — an overruled objection's premise was falsified (dissent was right)
   -- 0 = fully autonomous
   -- 1 = notify + 24h override window
   -- 2 = require explicit approval before acting
@@ -129,6 +135,7 @@
   -- Behavioral
   -- Briefing generated for this session
   -- Business philosophy
+  -- Calibration outcome, resolved later by the Memory Kernel:
   -- Communication
   -- Communication style
   -- Comp analysis
@@ -176,6 +183,7 @@
   -- Status
   -- Structured output
   -- The compressed content
+  -- The decision this premise underpins. decision_source disambiguates which
   -- The signal that says "stop iterating" when yield drops below threshold.
   -- Trigger
   -- Types: 'churn_risk' | 'expansion_opportunity' | 'metric_target' | 'experiment_outcome' | 'risk_escalation'
@@ -186,6 +194,7 @@
   -- What the agent saw
   -- assumptions: { monthly_burn_delta_usd, mrr_growth_rate_pct, churn_rate_override, headcount_additions, ... }
   -- results: { runway_months, probability_series_a, target_hit_probability, ... }
+  -- table decision_id points at (the founder-facing queue vs the strategic log).
   -- { company_name, problem, solution, target_customer, revenue_model,
   -- { metrics_snapshot_date, integration_events_count, unread_messages_count,
   -- { traction: 0-10, team: 0-10, market: 0-10, unit_economics: 0-10, narrative: 0-10 }
@@ -607,6 +616,7 @@
   company_category    TEXT NOT NULL CHECK (company_category IN (
   company_category TEXT NOT NULL,
   company_count INTEGER NOT NULL DEFAULT 0, -- how many companies informed this
+  comparator      TEXT CHECK (comparator IN ('<', '<=', '>', '>=', '==')),
   competitive_narrative TEXT,          -- Competitive landscape story
   competitor_mentions_json TEXT, -- JSON array: [{name, context, sentiment}]
   competitor_name  TEXT NOT NULL,
@@ -643,6 +653,7 @@
   condition_name TEXT NOT NULL,
   condition_snapshot_json TEXT, -- what the condition values were at evaluation time
   conditions TEXT,
+  confidence          REAL,                       -- council's own 0..1 confidence in its verdict
   confidence REAL DEFAULT 0.0,
   confidence REAL DEFAULT 0.8,
   confidence REAL DEFAULT 1.0,
@@ -732,11 +743,13 @@
   country_code TEXT DEFAULT 'US',
   created_at             TEXT NOT NULL DEFAULT (datetime('now'))
   created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
@@ -952,6 +965,8 @@
   decision_description    TEXT NOT NULL,
   decision_description TEXT,
   decision_framing TEXT DEFAULT 'balanced',
+  decision_id         TEXT NOT NULL,             -- decisions.id (founder queue)
+  decision_id     TEXT NOT NULL,
   decision_id    TEXT NOT NULL,
   decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
   decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
@@ -961,6 +976,7 @@
   decision_id TEXT,                         -- decisions.id when applicable
   decision_ids TEXT,                   -- JSON: decision_id[] to share
   decision_rationale      TEXT,
+  decision_source TEXT NOT NULL DEFAULT 'strategic'
   decision_source TEXT NOT NULL,  -- 'action_execution' | 'strategic_decision' | 'override'
   decision_speed TEXT DEFAULT 'thoughtful', -- 'fast', 'thoughtful', 'deliberate'
   decision_title          TEXT NOT NULL,
@@ -1123,6 +1139,7 @@
   event_types_json TEXT NOT NULL,           -- JSON array of WebhookEventType
   events TEXT NOT NULL,                -- JSON: string[] of event types
   events TEXT NOT NULL, -- JSON array of event types
+  evidence        TEXT,                         -- what falsified it (the observed value)
   evidence TEXT NOT NULL,
   evidence TEXT,
   evidence TEXT,
@@ -1180,6 +1197,7 @@
   failure_count INTEGER DEFAULT 0,
   failure_pattern_id TEXT NOT NULL REFERENCES failure_patterns(id),
   failure_reason TEXT,
+  falsified_at    DATETIME,
   feature_depth_score REAL DEFAULT 50.0,
   feature_key TEXT NOT NULL,
   feature_name     TEXT NOT NULL,
@@ -1349,6 +1367,7 @@
   id                     TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
+  id                  TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
@@ -1357,6 +1376,7 @@
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
+  id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
@@ -1669,6 +1689,7 @@
   last_calibration_prompt_at TEXT,         -- prevent re-prompting too aggressively
   last_checked DATETIME
   last_checked DATETIME,
+  last_checked_at DATETIME,
   last_checked_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_contacted_at DATETIME,
   last_contacted_by TEXT,               -- Agent name
@@ -1783,6 +1804,7 @@
   metadata_json TEXT, -- type-specific metadata
   metric           TEXT NOT NULL,
   metric           TEXT NOT NULL,
+  metric_key      TEXT,                         -- for metric premises (e.g. 'churn_rate')
   metric_key TEXT,                           -- joins with metric_snapshots when present
   metric_name      TEXT NOT NULL,   -- e.g. 'activation_rate', 'churn_rate', 'nps_score'
   metric_name     TEXT,                    -- programmatic metric identifier
@@ -1894,6 +1916,7 @@
   nrr_floor_pct REAL,                        -- e.g. 110 = 110% NRR floor
   null_hypothesis TEXT,
   objection_response TEXT,
+  objections_json     TEXT NOT NULL DEFAULT '[]', -- [{lens, claim, severity, metric_key?, comparator?, threshold?, mitigation}]
   objections_json TEXT, -- JSON array of extracted objections
   objective_owner  TEXT NOT NULL DEFAULT 'founder',
   objective_text   TEXT NOT NULL,
@@ -2090,6 +2113,8 @@
   preferred_option TEXT,       -- which option they'd choose
   preferred_region TEXT NOT NULL DEFAULT 'us-east' CHECK (preferred_region IN ('us-east','us-west','eu-west','ap-southeast')),
   preferred_timezone    TEXT NOT NULL DEFAULT 'UTC',
+  premise         TEXT NOT NULL,               -- the belief, in the founder's words
+  premise_type    TEXT NOT NULL DEFAULT 'qualitative'
   preview_text TEXT,          -- Human-readable preview for CEO approval UI
   previous_config TEXT,                -- JSON: snapshot of config before change
   previous_value  REAL,
@@ -2126,11 +2151,13 @@
   product_id              TEXT NOT NULL,
   product_id             TEXT NOT NULL,
   product_id            TEXT NOT NULL UNIQUE,   -- one settings row per product
+  product_id          TEXT NOT NULL,
   product_id          TEXT NOT NULL,        -- kept private, never joined publicly
   product_id       TEXT NOT NULL,
   product_id       TEXT NOT NULL,
   product_id       TEXT NOT NULL,
   product_id       TEXT NOT NULL,
+  product_id      TEXT NOT NULL,
   product_id      TEXT NOT NULL,
   product_id     TEXT NOT NULL,
   product_id     TEXT NOT NULL,
@@ -2410,12 +2437,14 @@
   requires_response INTEGER DEFAULT 0,  -- BOOLEAN
   requires_unanimous INTEGER DEFAULT 0,
   resolution_notes TEXT,
+  resolved_at         DATETIME,
   resolved_at    TEXT,   -- NULL = still open
   resolved_at DATETIME
   resolved_at DATETIME,
   resolved_at TEXT NOT NULL DEFAULT (datetime('now')),
   resolved_at TEXT,
   resolved_at TEXT, -- null if still active
+  resolved_outcome    TEXT CHECK (resolved_outcome IN ('vindicated', 'overruled_held')),
   responded_at DATETIME,
   responded_at TEXT DEFAULT (datetime('now')),
   response TEXT NOT NULL,
@@ -2636,6 +2665,7 @@
   statement TEXT NOT NULL,
   status                  TEXT NOT NULL DEFAULT 'active'
   status           TEXT NOT NULL DEFAULT 'on_track'
+  status          TEXT NOT NULL DEFAULT 'holding'
   status          TEXT NOT NULL DEFAULT 'on_track'
   status        TEXT NOT NULL DEFAULT 'running',
   status TEXT CHECK(status IN ('running', 'success', 'partial', 'failed')),
@@ -2695,6 +2725,7 @@
   stressors_updated TEXT,              -- JSON: stressor_id[] updated from voice
   stripe_customer_id TEXT,
   stripe_event_id TEXT UNIQUE NOT NULL,
+  strongest_objection TEXT,
   structured_updates TEXT,             -- JSON: [{type, data}] extracted from transcript
   subject         TEXT NOT NULL,
   subject TEXT NOT NULL,
@@ -2759,6 +2790,7 @@
   thirty_day_plan TEXT NOT NULL,
   thread_id TEXT NOT NULL REFERENCES conversation_threads(id) ON DELETE CASCADE,
   threat_level TEXT DEFAULT 'low' CHECK(threat_level IN ('low','medium','high')),
+  threshold       REAL,
   threshold_value TEXT,
   tier TEXT NOT NULL,
   tier TEXT NOT NULL,
@@ -2802,6 +2834,7 @@
   tokens_input INTEGER DEFAULT 0,
   tokens_out INTEGER,
   tokens_output INTEGER DEFAULT 0,
+  tokens_used         INTEGER DEFAULT 0,
   tokens_used INTEGER DEFAULT 0,
   tokens_used INTEGER DEFAULT 0,
   tokens_used INTEGER DEFAULT 0,
@@ -2923,6 +2956,7 @@
   value_delivery_index REAL,
   variance_pct REAL, -- populated when actual_value is recorded
   variant TEXT NOT NULL,
+  verdict             TEXT NOT NULL CHECK (verdict IN
   verdict TEXT CHECK(verdict IN ('raise_ready', 'almost_ready', 'not_ready')),
   verdict TEXT NOT NULL CHECK(verdict IN ('strong', 'moderate', 'weak')),
   verdict TEXT,
@@ -3200,6 +3234,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT);
 , approval_note TEXT);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -3210,6 +3245,7 @@
 , month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
 , name TEXT, secret_hash TEXT, is_active INTEGER DEFAULT 1, updated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);
+, origin TEXT NOT NULL DEFAULT 'founder', review_id TEXT);
 , payload_json TEXT, attempt_count INTEGER, failed_at DATETIME);
 , power_check_passed          INTEGER NOT NULL DEFAULT 0, conflict_check_passed       INTEGER NOT NULL DEFAULT 0);
 , pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT, success_threshold REAL, outcome TEXT, winning_variant_id TEXT, concluded_at DATETIME);
@@ -3458,6 +3494,8 @@ CREATE INDEX idx_prediction_accuracy_product ON prediction_accuracy(product_id, 
 CREATE INDEX idx_predictions_pending ON agent_predictions(measure_by_date, outcome) WHERE outcome IS NULL;
 CREATE INDEX idx_predictions_product ON predictions(product_id, status);
 CREATE INDEX idx_predictions_type ON predictions(prediction_type);
+CREATE INDEX idx_premises_decision ON decision_premises(decision_id);
+CREATE INDEX idx_premises_product_status ON decision_premises(product_id, status);
 CREATE INDEX idx_priority_actions_product ON priority_actions(product_id, priority_score DESC) WHERE is_active = 1;
 CREATE INDEX idx_product_dna_product ON product_dna(product_id);
 CREATE INDEX idx_products_market_category ON products(market_category);
@@ -3472,6 +3510,8 @@ CREATE INDEX idx_push_subscriptions_founder ON push_subscriptions(founder_id, ac
 CREATE INDEX idx_pwh_product
 CREATE INDEX idx_rec_outcomes_agent ON recommendation_outcomes(product_id, agent_name, outcome);
 CREATE INDEX idx_rec_outcomes_product ON recommendation_outcomes(product_id, recommendation_date DESC);
+CREATE INDEX idx_red_team_decision ON red_team_reviews(decision_id);
+CREATE INDEX idx_red_team_product ON red_team_reviews(product_id, created_at);
 CREATE INDEX idx_ref_conversion_link
 CREATE INDEX idx_referral_code ON referral_links(code);
 CREATE INDEX idx_reg_changes_product ON regulatory_changes(product_id);
@@ -3634,6 +3674,7 @@ CREATE TABLE debate_sessions (
 CREATE TABLE decision_counterfactuals (
 CREATE TABLE decision_outcomes (
 CREATE TABLE decision_patterns (
+CREATE TABLE decision_premises (
 CREATE TABLE decision_quality_scores (
 CREATE TABLE decision_votes (
 CREATE TABLE decisions (
@@ -3740,6 +3781,7 @@ CREATE TABLE products (
 CREATE TABLE push_log (
 CREATE TABLE push_subscriptions (
 CREATE TABLE recommendation_outcomes (
+CREATE TABLE red_team_reviews (
 CREATE TABLE referral_conversions (
 CREATE TABLE referral_links (
 CREATE TABLE regulatory_changes (
