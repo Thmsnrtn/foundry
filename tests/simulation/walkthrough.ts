@@ -373,10 +373,35 @@ async function main(): Promise<void> {
       { body: { tier: 'solo' }, expectStatus: [302, 303, 200, 400, 500] });
   }
 
+  // P6. Notification jobs — every type the codebase writes must satisfy the
+  // notifications.type CHECK. These fire from background jobs (signal-drop
+  // alerts, decision follow-ups) that the route sim never touches, so a stale
+  // CHECK enum would silently 500 in production only. Assert each lands.
+  {
+    const { createNotification } = await import('../../src/services/ux/notifications.js');
+    const f = await seedFounder({ email: 'notify@a.co', tier: 'growth' });
+    const prod = await seedProduct(f.id as string, { name: 'NotifyApp' });
+    const types = ['signal_alert', 'decision_followup', 'decision_retrospective', 'milestone', 'system'];
+    let landed = 0;
+    for (const t of types) {
+      try {
+        await createNotification(f.id as string, prod, t, `title:${t}`, 'body');
+        landed++;
+      } catch (err) {
+        await assertDb('P6 notifications', false, `createNotification type='${t}' failed: ${String(err).slice(0, 80)}`);
+      }
+    }
+    await assertDb('P6 notifications', landed === types.length,
+      `only ${landed}/${types.length} notification types satisfied the CHECK`);
+  }
+
   currentProductId = null;
 
   // ── Report ──────────────────────────────────────────────────────────────────
-  const bugs = findings.filter((f) => f.status >= 500);
+  // A "bug" is any 5xx OR any failed post-condition assertion (ASSERT rows carry
+  // status 0). Both must fail the pre-deploy gate — a silent write regression is
+  // as launch-blocking as a 500.
+  const bugs = findings.filter((f) => f.status >= 500 || f.method === 'ASSERT');
   console.log('\n================ WALKTHROUGH REPORT ================');
   console.log(`Requests driven: ${requests}`);
   console.log(`Seed-level findings (schema/code mismatches): ${seedFindings.length}`);

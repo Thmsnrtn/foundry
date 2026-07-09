@@ -73,6 +73,33 @@ Post-condition assertions that PASSED (verifying real behavior, not just "no
 5xx"): product row created; decision moved to `approved`; a cross-tenant resolve
 attempt did **not** overwrite the decision; integration landed `active`.
 
+## Round 3 — background-job notifications + gate hardening
+
+A systematic **CHECK-constraint audit** (dump every enum CHECK from the migrated
+schema, cross-reference against what the code writes) traced the same drift class
+into a surface the route sim can't reach: **background jobs**.
+
+8. **🔴 Three notification types could never be delivered.** `notifications.type`
+   (003_ux_intelligence) allows a fixed enum, but the codebase writes
+   `'signal_alert'` (signal-drop alert job, every 2h), `'decision_followup'`, and
+   `'decision_retrospective'` — none in the CHECK. On any real DB every one of
+   those `createNotification()` calls fails the CHECK, so the founder never gets
+   the alert and the job errors out. Same rot as founders.tier (080) and
+   integrations (081): SQLite can't ALTER a CHECK, so enums silently drift.
+   Migration 082 rebuilds `notifications` dropping the type CHECK (app-validated).
+
+9. **🟡 The sim's own gate leaked assertion failures.** The pre-deploy exit gate
+   only failed on 5xx, so a failed post-condition `assertDb` (a silent write
+   regression) printed but exited 0. Tightened the gate to fail on any ASSERT
+   finding too. A new **P6 block** exercises `createNotification` for every type
+   the codebase writes, closing the job-flow blind spot.
+
+Audit result: the remaining runtime-hot enums (`decisions.status`,
+`daily_actions.status`, `customer_intelligence.stage`, `outbound_actions.status`)
+were cross-checked and **conform** — the three CHECK-drift bugs (founders,
+integrations, notifications) are the full set. Regressions for all three are
+locked in `tests/unit/migrations-fresh-db.test.ts`.
+
 ## Caveat
 
 This exercises the **rendered + mutation route/DB/tenant surface** — where most

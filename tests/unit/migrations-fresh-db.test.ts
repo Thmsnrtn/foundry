@@ -60,4 +60,38 @@ describe('fresh-DB migration', () => {
     const r = await db.execute({ sql: "SELECT status FROM integrations WHERE id='i1'", args: [] });
     expect((r.rows[0] as Record<string, unknown>).status).toBe('active');
   });
+
+  it('accepts every notification type the code writes (CHECK does not drift)', async () => {
+    const db = createClient({ url: 'file::memory:' });
+    const failures = await applyAll(db);
+    expect(failures).toEqual([]);
+
+    await db.execute({ sql: "INSERT INTO founders (id, clerk_user_id, email) VALUES ('f1','c1','a@b.co')", args: [] });
+    // Types written from background jobs the route sim never exercises — a stale
+    // CHECK would only 500 in production. Migration 082 drops the CHECK.
+    const types = ['signal_alert', 'decision_followup', 'decision_retrospective', 'milestone', 'system'];
+    for (const t of types) {
+      await db.execute({
+        sql: 'INSERT INTO notifications (id, founder_id, type, title, body) VALUES (?, ?, ?, ?, ?)',
+        args: [`n_${t}`, 'f1', t, `t:${t}`, 'b'],
+      });
+    }
+    const r = await db.execute({ sql: 'SELECT COUNT(*) AS n FROM notifications', args: [] });
+    expect((r.rows[0] as Record<string, unknown>).n).toBe(types.length);
+  });
+
+  it("records a paying customer's tier without hitting a stale CHECK", async () => {
+    const db = createClient({ url: 'file::memory:' });
+    const failures = await applyAll(db);
+    expect(failures).toEqual([]);
+
+    await db.execute({ sql: "INSERT INTO founders (id, clerk_user_id, email) VALUES ('f1','c1','a@b.co')", args: [] });
+    // The Stripe webhook writes these tiers; migration 080 removed the stale
+    // ('founding_cohort','growth','scale') CHECK that would reject 'solo'.
+    for (const tier of ['solo', 'growth', 'investor_ready']) {
+      await db.execute({ sql: 'UPDATE founders SET tier = ? WHERE id = ?', args: [tier, 'f1'] });
+    }
+    const r = await db.execute({ sql: "SELECT tier FROM founders WHERE id='f1'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).tier).toBe('investor_ready');
+  });
 });
