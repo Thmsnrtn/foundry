@@ -347,3 +347,49 @@ skipped:
 
 Recommended next once the gates clear: 2.7 (unblocks 2.6) after a dogfood
 product exists; 3.4 against staging; 2.4 as a dedicated incremental migration.
+
+---
+
+## Go-live hardening — CHECK-drift audit + steps 5/6/7
+
+**Status:** complete. **Tests:** 744 → 758 passing (67 files), `npm run check`
+green; `npm run sim:walkthrough` clean; `npm run load:crons` clean.
+
+Follow-through on the 15-persona walkthrough sim and the 1–7 go-live list. The
+sim kept surfacing one bug class — **stale CHECK enums the code has outgrown**
+(SQLite can't ALTER a CHECK, so they rot silently and 500 only on a real DB).
+
+### What shipped
+
+- **CHECK-drift audit (round 3).** Dumped every enum CHECK from the migrated
+  schema and cross-referenced the code's writes. Found the class had leaked into
+  a surface the route sim can't reach — **background jobs**:
+  `notifications.type` rejected `'signal_alert'`, `'decision_followup'`, and
+  `'decision_retrospective'` (all written by scheduled jobs), so every one of
+  those alerts 500'd on a real DB. Migration 082 drops the CHECK (app-validated).
+  The remaining runtime-hot enums (`decisions.status`, `daily_actions.status`,
+  `customer_intelligence.stage`, `outbound_actions.status`) were verified to
+  conform. This closes the class the round-1/2 sim opened (founders.tier 080,
+  integrations 081). Regressions locked in `migrations-fresh-db.test.ts`.
+- **Sim hardening.** The pre-deploy gate leaked assertion failures (only 5xx
+  failed the exit); tightened to fail on any post-condition ASSERT. New P6 block
+  exercises `createNotification` for every type the code writes.
+- **Step 5 — 2.7 eval net in CI.** New `prompt-assembly.eval.test.ts` guards the
+  shared agent system-prompt scaffold: the cache-cost invariant (2.2 — no
+  volatile bytes before the cache breakpoint, 60–90% input-cost swing) and the
+  C-suite output contract. Dedicated `evals` + `walkthrough-sim` CI jobs; a
+  prompt edit that breaks caching or drops the output standard now fails the build.
+- **Step 6 — cron load/contention.** `tests/load/cron-load.ts` (+ `cron-load` CI
+  job, `job-lock-contention.test.ts`) stress the distributed job lock the
+  web/worker split relies on: N instances race each job (exactly one wins),
+  crashed leases are reclaimed, a full 75-job sweep runs in ~10ms.
+- **Step 7 — 3.4 outbound money idempotency.** GitHub PRs already dedup through
+  the gateway; added Stripe-native `idempotencyKey`s to every mutating billing
+  call so a lost-response retry can no longer double-charge. Guarded by
+  `stripe-idempotency.test.ts`.
+
+### Still operator/live-only (cannot be done from code)
+
+Go-live steps 1–4 remain: staging deploy + secrets, dogfood seed, the manual
+first-run walkthrough, Turso backup drill, Sentry wiring, and the live Stripe
+test-mode checkout. All are documented in `GO-LIVE-CHECKLIST.md`.
