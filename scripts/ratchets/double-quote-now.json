@@ -1,0 +1,9 @@
+{
+  "name": "double-quote-now",
+  "description": "datetime(\"now\") uses double quotes; libSQL/Turso parses \"now\" as a column identifier → 'no such column: now'. Use CURRENT_TIMESTAMP or datetime('now').",
+  "pattern": "datetime\\(\"now\"\\)",
+  "roots": ["src"],
+  "includePath": "\\.ts$",
+  "baseline": 0,
+  "direction": "down"
+}

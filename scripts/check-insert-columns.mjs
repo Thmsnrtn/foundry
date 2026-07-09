@@ -16,6 +16,10 @@ const cols = {};
 for (const t of tbls) cols[t.toLowerCase()] = new Set(
   execSync(`sqlite3 ${DB} "PRAGMA table_info('${t}')"`).toString().trim().split('\n').map(l=>l.split('|')[1]?.toLowerCase()).filter(Boolean));
 function walk(d){let o=[];for(const e of readdirSync(d)){const p=join(d,e);const s=statSync(p);if(s.isDirectory())o=o.concat(walk(p));else if(e.endsWith('.ts'))o.push(p);}return o;}
+// Known false positives: tables self-created at runtime with a different schema
+// than any migration declares (migrate.ts creates schema_migrations(filename)
+// before applying migration files).
+const ALLOW = new Set(['schema_migrations.filename']);
 const re = /INSERT\s+INTO\s+([a-z_][a-z0-9_]*)\s*\(([^)]*)\)/gi;
 const bad = [];
 for (const file of walk('src')) {
@@ -23,7 +27,7 @@ for (const file of walk('src')) {
   while((m=re.exec(txt))!==null){
     const table=m[1].toLowerCase(); if(!cols[table])continue;
     const list=m[2].split(',').map(c=>c.trim().toLowerCase().replace(/["'`]/g,'')).filter(c=>/^[a-z_][a-z0-9_]*$/.test(c));
-    for(const c of list) if(!cols[table].has(c)) bad.push(`${file}:${txt.slice(0,m.index).split('\n').length}  ${table}.${c}`);
+    for(const c of list) if(!cols[table].has(c) && !ALLOW.has(`${table}.${c}`)) bad.push(`${file}:${txt.slice(0,m.index).split('\n').length}  ${table}.${c}`);
   }
 }
 execSync(`rm -f ${DB}`);

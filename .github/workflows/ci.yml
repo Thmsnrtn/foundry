@@ -17,9 +17,25 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run ratchet
       - run: npm run build
       - run: npm test -- --run
       - run: npm audit --audit-level=high || true
+
+  column-drift:
+    name: Schema column drift (INSERT + UPDATE-SET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: sudo apt-get update && sudo apt-get install -y sqlite3
+      - run: npm ci
+      # Verifies every INSERT column list and UPDATE-SET column against the real
+      # migrated schema — the drift class that shipped ~55 runtime 500s this cycle.
+      - run: npm run lint:columns
 
   evals:
     name: Prompt/AI eval net (2.7)

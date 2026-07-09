@@ -1,0 +1,10 @@
+{
+  "name": "console-in-src",
+  "description": "Server code must use the structured logger (src/lib/logger.ts), not console.* (loses structure, PII redaction, log budget). Migrate to logger.",
+  "pattern": "console\\.(log|warn|error|debug)",
+  "roots": ["src"],
+  "includePath": "\\.ts$",
+  "excludePath": "(\\.test\\.ts$|lib/logger\\.ts$)",
+  "baseline": 214,
+  "direction": "down"
+}
