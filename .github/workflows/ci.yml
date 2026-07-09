@@ -21,6 +21,36 @@ jobs:
       - run: npm test -- --run
       - run: npm audit --audit-level=high || true
 
+  evals:
+    name: Prompt/AI eval net (2.7)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Deterministic (LLM mocked). Fails the build the moment a prompt edit
+      # breaks the cache-cost or output-contract invariants — prompt
+      # regressions cannot ship silently.
+      - run: npm run test:evals
+
+  walkthrough-sim:
+    name: Stranger-safety walkthrough sim
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Boots the real route handlers + real migrations against an in-memory DB
+      # and drives 15+ personas through the actual UI + mutation flows, asserting
+      # 0 5xx, 0 tenant leaks, and that writes land. Exits non-zero on any finding.
+      - run: npm run sim:walkthrough
+
   schema-drift:
     name: Schema snapshot up to date
     runs-on: ubuntu-latest
