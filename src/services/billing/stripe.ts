@@ -4,6 +4,7 @@
 // =============================================================================
 
 import Stripe from 'stripe';
+import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { createNotification } from '../ux/notifications.js';
 import { withRetry } from '../resilience.js';
@@ -19,21 +20,38 @@ function getStripe(): Stripe {
   return _stripe;
 }
 
+// ─── Money idempotency (Roadmap 3.4) ──────────────────────────────────────────
+// Every mutating Stripe call is wrapped in withRetry(). Without an idempotency
+// key, a retry that fires after the ORIGINAL request already succeeded (but
+// whose response was lost to a timeout/network blip) creates a DUPLICATE
+// customer/subscription — i.e. a double-charge. Stripe dedups server-side (24h)
+// on a per-request `idempotencyKey`. We mint ONE key per logical operation and
+// reuse it across that call's retries: retries dedup, but a genuinely new
+// operation (e.g. re-subscribing after a cancel) gets a fresh key and is not
+// blocked. Read-only calls need no key.
+function idemKey(): string {
+  return `foundry_${nanoid(24)}`;
+}
+
 export async function createCustomer(email: string, name: string | null): Promise<string> {
   const stripe = getStripe();
-  const customer = await withRetry(() => stripe.customers.create({ email, name: name ?? undefined }));
+  const key = idemKey();
+  const customer = await withRetry(() =>
+    stripe.customers.create({ email, name: name ?? undefined }, { idempotencyKey: key }),
+  );
   return customer.id;
 }
 
 export async function createSubscription(customerId: string, tier: 'solo' | 'growth' | 'investor_ready'): Promise<string> {
   const stripe = getStripe();
   const priceId = getPriceId(tier);
+  const key = idemKey();
   const subscription = await withRetry(() => stripe.subscriptions.create({
     customer: customerId,
     items: [{ price: priceId }],
     payment_behavior: 'default_incomplete',
     expand: ['latest_invoice.payment_intent'],
-  }));
+  }, { idempotencyKey: key }));
   return subscription.id;
 }
 
@@ -48,6 +66,7 @@ export async function createCheckoutSession(
   trialDays: number = TRIAL_PERIOD_DAYS,
 ): Promise<string> {
   const stripe = getStripe();
+  const key = idemKey();
   const session = await withRetry(() => stripe.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
@@ -56,18 +75,24 @@ export async function createCheckoutSession(
     subscription_data: trialDays > 0 ? { trial_period_days: trialDays } : undefined,
     success_url: successUrl,
     cancel_url: cancelUrl,
-  }));
+  }, { idempotencyKey: key }));
   return session.url ?? '';
 }
 
 export async function pauseSubscription(subscriptionId: string): Promise<void> {
   const stripe = getStripe();
-  await withRetry(() => stripe.subscriptions.update(subscriptionId, { pause_collection: { behavior: 'void' } }));
+  const key = idemKey();
+  await withRetry(() => stripe.subscriptions.update(
+    subscriptionId,
+    { pause_collection: { behavior: 'void' } },
+    { idempotencyKey: key },
+  ));
 }
 
 export async function cancelSubscription(subscriptionId: string): Promise<void> {
   const stripe = getStripe();
-  await withRetry(() => stripe.subscriptions.cancel(subscriptionId));
+  const key = idemKey();
+  await withRetry(() => stripe.subscriptions.cancel(subscriptionId, undefined, { idempotencyKey: key }));
 }
 
 export async function getSoloSlotCount(): Promise<number> {

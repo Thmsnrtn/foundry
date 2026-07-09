@@ -40,8 +40,13 @@ Legend: 🟢 done in code · 🟡 code-ready, needs a live run · 🔴 operator/
 - 🟡 Confirm dunning (`past_due`) notification fires.
 - 🔴 **Decide + test the refund path** (a real alpha will ask). No automated
   refund flow exists yet — document the manual process at minimum.
-- 🟡 (Roadmap 3.4) Not every outbound side effect is idempotent through the
-  gateway yet (Stripe/GitHub). Low volume in alpha; revisit before scale.
+- 🟢 (Roadmap 3.4) Outbound money side effects are now idempotent. GitHub PR
+  creation routes through the tool gateway with a stable `dedupKey`
+  (`remediation:<id>`), and every mutating Stripe call (create customer /
+  subscription / checkout session, pause, cancel) now sends a Stripe-native
+  `idempotencyKey` that is stable across a call's retries — so a retry after a
+  lost-response success dedups server-side instead of double-charging. Guarded by
+  `tests/unit/stripe-idempotency.test.ts`.
 
 ## 3. Abuse & cost control (strangers = adversaries)
 
@@ -94,7 +99,10 @@ Legend: 🟢 done in code · 🟡 code-ready, needs a live run · 🔴 operator/
     75-job lock sweep runs in ~10ms — far under the tightest (per-minute) cadence.
     What still needs a *live* run is the jobs' real work under real data volume
     on staging (external calls, AI cost); the lock layer itself is verified.
-  - 🔴 **3.4 gateway migration** for Stripe/GitHub outbound idempotency (money).
+  - 🟢 **3.4 outbound money idempotency** — DONE in code (see §2): GitHub PRs
+    dedup through the gateway; every mutating Stripe call carries a native
+    idempotency key. What remains is the §2 *live* Stripe test-mode run to
+    confirm the end-to-end trial→active→cancel path on real infrastructure.
 
 > Prompt-quality caveat: nobody has eyeballed a real generated briefing against
 > a real repo yet (Verification step 6 — needs live keys). Do this during the
