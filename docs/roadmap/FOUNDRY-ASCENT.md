@@ -137,6 +137,30 @@ Full architectural detail transferred from AcreOS lives in the survey dossier
   observation ("you resolved 8 decisions this week — 2.3× your usual…
   the queue will keep"). Steady weeks stay silent (Attention Law). 812 green.
 
+- ✅ **Phase 5 — Network radar (B4) + Trust ledger (B6) + The Letter (B7).**
+  The loop closes end to end:
+  - **B4 radar** (`network/radar.ts` + daily `network_radar` job): places each
+    product in its peer cell (stage × MRR bracket) and warns when a vital sits
+    in the danger tail — churn above peer p75, activation/retention/NPS below
+    p25 — with the percentile evidence shown. Abstains below 5 peers.
+  - **B6 trust ledger** (`trust/ledger.ts`): autonomy PRICED, not configured —
+    per-category record of founder-approved decisions with positive measured
+    outcomes; ≥80% on ≥8 decisions earns a graduation PROPOSAL (never silently
+    applied, always reversible, evidence shown).
+  - **B7 The Letter** (`letter/composer.ts` + `/letter`): one deterministic
+    daily artifact — what I handled, the ONE thing that needs you, what I
+    learned (expired beliefs + radar), how trust moved (proposals + Red Team
+    record). No model call: free, instant, cannot hallucinate. A quiet day says
+    "Nothing needs you. That's the goal." And the **route-count ratchet**
+    (baseline 88, may only shrink) makes the Attention Law structural.
+  818 tests green.
+
+**Track B is now seeded end to end: all seven evolutions live.** Remaining arcs
+are deepening, not scaffolding: radar trend-detection (trajectory divergence,
+not just level), trust-ledger → actual gate application UI, The Letter as the
+default landing surface + voice delivery, A4 real-time, and the long AcreOS-
+parity items (SPA/mobile) if desired.
+
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
   `funnel_events` into an early-warning radar: nightly job matches each product

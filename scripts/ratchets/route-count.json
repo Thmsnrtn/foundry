@@ -1,0 +1,9 @@
+{
+  "name": "route-count",
+  "description": "Attention Law: the number of top-level route mounts may only shrink. New surfaces live behind existing doors (a section/tab of a mounted module), never as new mounts. Consolidations lower this baseline in the same commit.",
+  "pattern": "app\\.route\\(",
+  "roots": ["src"],
+  "includePath": "src/index\\.ts$",
+  "baseline": 88,
+  "direction": "down"
+}

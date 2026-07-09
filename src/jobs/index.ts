@@ -1980,12 +1980,41 @@ export async function founderPulseCheck(): Promise<void> {
   logger.info('founder_pulse_check complete', { jobName: 'founder_pulse_check' });
 }
 
+// ─── Network radar (Ascent B4 / Compounding Law) ──────────────────────────────
+// Peer early-warning: one notification when a vital sits in the danger tail of
+// the product's peer cell. The Letter carries the detail; this is just the tap
+// on the shoulder. Abstains on thin cells (radar's own rule).
+export async function networkRadarCheck(): Promise<void> {
+  logger.info('network_radar starting', { jobName: 'network_radar' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const { scanForWarnings } = await import('../services/network/radar.js');
+      const warnings = await scanForWarnings(p.id);
+      if (warnings.length > 0) {
+        const { createNotification } = await import('../services/ux/notifications.js');
+        await createNotification(
+          p.owner_id, p.id, 'system',
+          `Peer radar: ${warnings.length} vital${warnings.length > 1 ? 's' : ''} in the danger tail`,
+          warnings[0].message + (warnings.length > 1 ? ` (+${warnings.length - 1} more in The Letter)` : ''),
+          '/letter', 'Read The Letter',
+        );
+      }
+    } catch (err) {
+      logger.error(`network_radar error for ${p.id}`, { jobName: 'network_radar', error: String(err) });
+    }
+  }
+  logger.info('network_radar complete', { jobName: 'network_radar' });
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
   memory_premise_check: { fn: memoryPremiseCheck,   schedule: '0 7 * * *',       description: 'Re-check decision premises against live telemetry; flag expired beliefs (daily)' },
   red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
   founder_pulse_check:  { fn: founderPulseCheck,    schedule: '0 9 * * 5',       description: 'Founder strain check — kind, numbers-shown, only when overloaded (Friday 9:00 UTC)' },
+  network_radar:        { fn: networkRadarCheck,    schedule: '15 7 * * *',      description: 'Peer early-warning radar — warns when a vital sits in the danger tail of ≥5 peers (daily)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
