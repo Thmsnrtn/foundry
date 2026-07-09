@@ -1952,11 +1952,40 @@ export async function redTeamSweep(): Promise<void> {
   logger.info(`red_team_sweep complete — ${reviewed} pre-mortems`, { jobName: 'red_team_sweep' });
 }
 
+// ─── Founder pulse (Ascent B5 / Human Law) ────────────────────────────────────
+// Weekly check on the human running the company. Notifies ONLY on 'overloaded'
+// (two independent strain factors) — a kind observation with the numbers shown,
+// never a diagnosis, and deliberately sent Friday morning, not at night.
+export async function founderPulseCheck(): Promise<void> {
+  logger.info('founder_pulse_check starting', { jobName: 'founder_pulse_check' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const { getFounderPulse } = await import('../services/wellbeing/pulse.js');
+      const pulse = await getFounderPulse(p.id);
+      if (pulse.signal === 'overloaded') {
+        const { createNotification } = await import('../services/ux/notifications.js');
+        await createNotification(
+          p.owner_id, p.id, 'system',
+          'A note about your week',
+          pulse.message,
+          '/dashboard', 'See the week',
+        );
+      }
+    } catch (err) {
+      logger.error(`founder_pulse_check error for ${p.id}`, { jobName: 'founder_pulse_check', error: String(err) });
+    }
+  }
+  logger.info('founder_pulse_check complete', { jobName: 'founder_pulse_check' });
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
   memory_premise_check: { fn: memoryPremiseCheck,   schedule: '0 7 * * *',       description: 'Re-check decision premises against live telemetry; flag expired beliefs (daily)' },
   red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
+  founder_pulse_check:  { fn: founderPulseCheck,    schedule: '0 9 * * 5',       description: 'Founder strain check — kind, numbers-shown, only when overloaded (Friday 9:00 UTC)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

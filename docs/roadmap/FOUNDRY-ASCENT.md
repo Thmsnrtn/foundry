@@ -129,6 +129,14 @@ Full architectural detail transferred from AcreOS lives in the survey dossier
   into `npm run check` — marketing copy can no longer drift from the product.
   809 tests green.
 
+- ✅ **Phase 4b — Human Layer seed (B5 / Human Law).** The founder pulse
+  (`services/wellbeing/pulse.ts`): strain computed ONLY from existing decision
+  telemetry — load vs their own trailing 4-week average, late-night resolution
+  share (23:00–05:00), rejection rate. Two independent factors = 'overloaded';
+  the weekly job (Friday 9:00, never at night) sends one kind, numbers-shown
+  observation ("you resolved 8 decisions this week — 2.3× your usual…
+  the queue will keep"). Steady weeks stay silent (Attention Law). 812 green.
+
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
   `funnel_events` into an early-warning radar: nightly job matches each product
