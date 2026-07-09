@@ -33,7 +33,7 @@ export interface PsychologyInsight {
 export async function detectOvercorrection(founderId: string, productId: string): Promise<PsychologyInsight | null> {
   // Check for failure logs that indicate past founder experience
   const failures = await query(
-    'SELECT * FROM failure_logs WHERE product_id = ? ORDER BY created_at DESC LIMIT 10',
+    'SELECT * FROM failure_log WHERE product_id = ? ORDER BY created_at DESC LIMIT 10',
     [productId]
   );
   if (failures.rows.length < 2) return null;

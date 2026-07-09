@@ -413,6 +413,7 @@
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,                   -- e.g. 'beacon', 'scribe', 'harbor'
+  agent_name TEXT,
   agent_name TEXT,                          -- nullable: aggregate streak across all agents
   agent_name TEXT,                       -- NULL for platform-level
   agent_name TEXT,             -- NULL means cross-agent pattern
@@ -443,8 +444,10 @@
   apns_device_token TEXT,
   applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   approved_at DATETIME,
+  approved_at DATETIME,
   approved_at TEXT,
   approved_at TEXT,
+  approved_by TEXT,
   approved_by TEXT,           -- 'auto' or 'ceo'
   approved_by TEXT, -- user id
   archived BOOLEAN DEFAULT FALSE,
@@ -775,6 +778,9 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -907,6 +913,7 @@
   customer_id TEXT NOT NULL REFERENCES customers(id),
   customer_id TEXT NOT NULL,
   customer_id TEXT NOT NULL,
+  customer_id TEXT NOT NULL,
   customer_intelligence TEXT,            -- Harbor + Forge analysis
   customer_philosophy TEXT, -- free-form: "I'd rather have 100 happy customers than 1000 lukewarm ones"
   customer_signals_count INTEGER NOT NULL DEFAULT 0,
@@ -959,6 +966,7 @@
   decision_speed TEXT DEFAULT 'thoughtful', -- 'fast', 'thoughtful', 'deliberate'
   decision_title          TEXT NOT NULL,
   decision_title TEXT NOT NULL,
+  decision_title TEXT,
   decision_track_record_score INTEGER, -- Outcome valence from decision history
   decision_type  TEXT NOT NULL CHECK (decision_type IN ('outbound_action','agent_decision')),
   decision_type TEXT NOT NULL,
@@ -993,6 +1001,8 @@
   description TEXT NOT NULL,
   description TEXT NOT NULL,
   description TEXT NOT NULL,
+  description TEXT,
+  description TEXT,
   description TEXT,
   description TEXT,
   description TEXT,
@@ -1149,6 +1159,7 @@
   experience_level TEXT DEFAULT 'experienced',
   experiment_id    TEXT NOT NULL REFERENCES experiments(id),
   experiment_id TEXT NOT NULL REFERENCES experiments(id),
+  experiment_id TEXT NOT NULL,
   experiments_running TEXT,            -- JSON: Experiment[]
   expertise_areas TEXT,
   expires_at DATETIME
@@ -1359,6 +1370,9 @@
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -1822,6 +1836,7 @@
   name TEXT NOT NULL,
   name TEXT NOT NULL,
   name TEXT NOT NULL,
+  name TEXT NOT NULL,
   name TEXT NOT NULL, -- e.g. 'Base Case', 'Bear Case - Hire 2 Engineers'
   name TEXT,
   name TEXT,
@@ -1844,6 +1859,7 @@
   ninety_day_horizon TEXT NOT NULL,
   node_type TEXT NOT NULL, -- 'decision' | 'outcome' | 'context_snapshot' | 'hypothesis'
   note            TEXT,
+  note TEXT NOT NULL,
   noted_at TEXT NOT NULL DEFAULT (datetime('now'))
   notes            TEXT,
   notes TEXT
@@ -2087,6 +2103,7 @@
   priority INTEGER DEFAULT 5,    -- 1=critical, 10=low
   priority TEXT DEFAULT 'medium',
   priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high','critical')),
+  priority TEXT,
   priority_alignment REAL,
   priority_consensus BOOLEAN,
   priority_score REAL NOT NULL,     -- urgency * impact
@@ -2282,6 +2299,8 @@
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
   product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT PRIMARY KEY REFERENCES products(id),
   product_id TEXT PRIMARY KEY REFERENCES products(id),
@@ -2337,6 +2356,7 @@
   rationale TEXT NOT NULL,    -- Why the agent proposes this action
   rationale TEXT,
   rationale TEXT,
+  rationale TEXT,
   rationale TEXT,              -- why they voted this way
   re_audit_completed_at DATETIME,
   re_audit_triggered_at DATETIME,
@@ -2347,6 +2367,7 @@
   reason TEXT NOT NULL,
   reasoning TEXT NOT NULL,
   reasoning TEXT NOT NULL, -- why this mutation was made
+  reasoning TEXT,
   recipients TEXT,
   recommendation TEXT NOT NULL,
   recommendation TEXT,
@@ -2404,6 +2425,7 @@
   result_json TEXT, -- response from integration
   result_url TEXT,
   results_json TEXT NOT NULL DEFAULT '{}',
+  results_json TEXT,
   results_json TEXT,                     -- JSON: {control_mean, treatment_mean, p_value, ci_lower, ci_upper, effect_size, significant}
   retained_day_14 INTEGER DEFAULT 0,
   retained_day_30 INTEGER DEFAULT 0,
@@ -2650,6 +2672,7 @@
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'failed')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
   status TEXT NOT NULL DEFAULT 'pending',      -- CHECK dropped (app-validated)
+  status TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | dismissed
   status TEXT NOT NULL DEFAULT 'pending', -- pending | running | complete
   status TEXT NOT NULL DEFAULT 'pending_approval' CHECK(status IN (
   status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN (
@@ -2768,6 +2791,7 @@
   title TEXT NOT NULL,                 -- ≤120 chars
   title TEXT NOT NULL,              -- the one sentence action
   title TEXT,
+  title TEXT,
   title TEXT,                  -- auto-generated from first message
   to_agent TEXT NOT NULL,              -- Agent name or 'broadcast'
   to_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
@@ -2803,6 +2827,7 @@
   total_sessions INTEGER NOT NULL DEFAULT 0,
   total_steps   INTEGER NOT NULL DEFAULT 9,
   total_value_dollars REAL NOT NULL DEFAULT 0,
+  traffic_pct REAL,
   transcript TEXT,
   transcript TEXT,                     -- Raw transcript from STT
   transcript_text TEXT,
@@ -3176,6 +3201,9 @@
 );
 );
 );
+);
+);
+);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
 , deleted_at DATETIME, platform_dependency_risk REAL, incumbent_response_probability REAL, moat_erosion_rate REAL);
 , dna_completion_pct INTEGER DEFAULT 0, wisdom_layer_active BOOLEAN DEFAULT FALSE, unread_competitive_signals INTEGER DEFAULT 0, audit_age_days INTEGER DEFAULT 0, unread_milestones INTEGER DEFAULT 0, open_remediation_prs INTEGER DEFAULT 0, pending_decisions_count INTEGER DEFAULT 0);
@@ -3202,6 +3230,7 @@ CREATE INDEX idx_agent_config_history_agent ON agent_config_history(product_id, 
 CREATE INDEX idx_agent_configs_product ON agent_configs(product_id, agent_name);
 CREATE INDEX idx_agent_cost_agent ON agent_cost_log(product_id, agent_name);
 CREATE INDEX idx_agent_cost_product ON agent_cost_log(product_id, logged_at DESC);
+CREATE INDEX idx_agent_decisions_product ON agent_decisions(product_id, status);
 CREATE INDEX idx_agent_evo_product ON agent_evolution_versions(product_id, agent_name);
 CREATE INDEX idx_agent_evo_promoted ON agent_evolution_versions(promoted_at);
 CREATE INDEX idx_agent_instances_next_run ON agent_instances(next_run_at, status);
@@ -3295,6 +3324,7 @@ CREATE INDEX idx_customer_health_snap ON customer_health_snapshots(customer_id, 
 CREATE INDEX idx_customer_intel_external ON customer_intelligence(product_id, external_customer_id);
 CREATE INDEX idx_customer_intel_health ON customer_intelligence(product_id, health_score);
 CREATE INDEX idx_customer_intel_product ON customer_intelligence(product_id, stage);
+CREATE INDEX idx_customer_notes_lookup ON customer_notes(product_id, customer_id);
 CREATE INDEX idx_customers_churn ON customers(product_id, churn_risk DESC);
 CREATE INDEX idx_customers_health ON customers(product_id, health_score);
 CREATE INDEX idx_customers_product ON customers(product_id);
@@ -3329,6 +3359,7 @@ CREATE INDEX idx_exp_events ON experiment_events(experiment_id, variant);
 CREATE INDEX idx_exp_holdouts_product
 CREATE INDEX idx_exp_timeline_experiment
 CREATE INDEX idx_expansion_product ON expansion_analysis(product_id);
+CREATE INDEX idx_experiment_variants_experiment ON experiment_variants(experiment_id);
 CREATE INDEX idx_experiments_product ON experiments(product_id, status);
 CREATE INDEX idx_failure_log_category ON failure_log(product_id, category);
 CREATE INDEX idx_failure_log_product ON failure_log(product_id);
@@ -3521,6 +3552,7 @@ CREATE TABLE agent_audit_log (
 CREATE TABLE agent_config_history (
 CREATE TABLE agent_configs (
 CREATE TABLE agent_cost_log (
+CREATE TABLE agent_decisions (
 CREATE TABLE agent_evolution_versions (
 CREATE TABLE agent_initiative_queue (
 CREATE TABLE agent_instances (
@@ -3584,6 +3616,7 @@ CREATE TABLE custom_webhook_sources (
 CREATE TABLE customer_events (
 CREATE TABLE customer_health_snapshots (
 CREATE TABLE customer_intelligence (
+CREATE TABLE customer_notes (
 CREATE TABLE customers (
 CREATE TABLE daily_actions (
 CREATE TABLE daily_insights (
@@ -3612,6 +3645,7 @@ CREATE TABLE expansion_analysis (
 CREATE TABLE experiment_events (
 CREATE TABLE experiment_holdouts (
 CREATE TABLE experiment_results_timeline (
+CREATE TABLE experiment_variants (
 CREATE TABLE experiments (
 CREATE TABLE failure_log (
 CREATE TABLE failure_patterns (

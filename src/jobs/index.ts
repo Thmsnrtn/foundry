@@ -1481,7 +1481,7 @@ async function scpDebateRun(): Promise<void> {
   logger.info('scp_debate_run starting', { jobName: 'scp_debate_run' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
+    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
     const today = new Date().toISOString().slice(0, 10);
     let ran = 0;
     for (const row of rows.rows) {
@@ -1502,7 +1502,7 @@ async function scpFailurePatternScan(): Promise<void> {
   logger.info('scp_failure_pattern_scan starting', { jobName: 'scp_failure_pattern_scan' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
+    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
     let scanned = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
@@ -1523,7 +1523,7 @@ async function scpPromptEvolution(): Promise<void> {
   logger.info('scp_prompt_evolution starting', { jobName: 'scp_prompt_evolution' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
+    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
     let evolved = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
@@ -1544,7 +1544,7 @@ async function scpExecutionPlaybookEval(): Promise<void> {
   logger.info('scp_playbook_eval starting', { jobName: 'scp_playbook_eval' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_config WHERE status = 'active'`, []);
+    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
     let triggered = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);

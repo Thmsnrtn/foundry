@@ -131,7 +131,7 @@ export async function analyzeTimeVsStrategy(
 
   // Pull any lifecycle/strategy context
   const lifecycleResult = await query(
-    `SELECT risk_state, risk_state_reason FROM lifecycle_states WHERE product_id = ? ORDER BY updated_at DESC LIMIT 1`,
+    `SELECT risk_state, risk_state_reason FROM lifecycle_state WHERE product_id = ? ORDER BY updated_at DESC LIMIT 1`,
     [productId],
   );
   const ls = lifecycleResult.rows[0] as Record<string, unknown> | undefined;
