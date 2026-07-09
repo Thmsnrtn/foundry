@@ -22,9 +22,11 @@ const REQUIRED_VARS: EnvVar[] = [
   { name: 'ANTHROPIC_API_KEY', required: false, description: 'Anthropic API key — fallback if OpenRouter not set' },
   { name: 'STRIPE_SECRET_KEY', required: false, description: 'Stripe secret key — billing disabled without this' },
   { name: 'STRIPE_WEBHOOK_SECRET', required: false, description: 'Stripe webhook signing secret' },
-  { name: 'STRIPE_FOUNDING_COHORT_PRICE_ID', required: false, description: 'Stripe Price ID for Founding Cohort ($99)' },
-  { name: 'STRIPE_GROWTH_PRICE_ID', required: false, description: 'Stripe Price ID for Growth ($199)' },
-  { name: 'STRIPE_SCALE_PRICE_ID', required: false, description: 'Stripe Price ID for Scale ($399)' },
+  // Prices resolve by Stripe lookup_key (foundry_<tier>_monthly); these env vars
+  // are the fallback until every price is backfilled. See docs/stripe-shared-account.md.
+  { name: 'STRIPE_SOLO_PRICE_ID', required: false, description: 'Fallback Stripe Price ID for Solo ($79) — prefer lookup_key foundry_solo_monthly' },
+  { name: 'STRIPE_GROWTH_PRICE_ID', required: false, description: 'Fallback Stripe Price ID for Growth ($199) — prefer lookup_key foundry_growth_monthly' },
+  { name: 'STRIPE_INVESTOR_READY_PRICE_ID', required: false, description: 'Fallback Stripe Price ID for Investor-Ready/"Scale" ($399) — prefer lookup_key foundry_investor_ready_monthly' },
   { name: 'RESEND_API_KEY', required: false, description: 'Resend API key — email disabled without this' },
   { name: 'RESEND_FROM_ADDRESS', required: false, description: 'From address for emails' },
   { name: 'APP_URL', required: false, description: 'Public app URL — defaults to http://localhost:8080' },

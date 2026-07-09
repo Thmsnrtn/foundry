@@ -20,6 +20,11 @@ function getStripe(): Stripe {
   return _stripe;
 }
 
+// ─── Shared-account namespace (see docs/stripe-shared-account.md) ──────────────
+// This account is shared with AcreOS and the personal land sales. Every object we
+// create carries `app: 'foundry'`, and we only ever act on objects tagged for us.
+const APP = 'foundry' as const;
+
 // ─── Money idempotency (Roadmap 3.4) ──────────────────────────────────────────
 // Every mutating Stripe call is wrapped in withRetry(). Without an idempotency
 // key, a retry that fires after the ORIGINAL request already succeeded (but
@@ -33,24 +38,31 @@ function idemKey(): string {
   return `foundry_${nanoid(24)}`;
 }
 
-export async function createCustomer(email: string, name: string | null): Promise<string> {
+export async function createCustomer(email: string, name: string | null, founderId?: string): Promise<string> {
   const stripe = getStripe();
   const key = idemKey();
   const customer = await withRetry(() =>
-    stripe.customers.create({ email, name: name ?? undefined }, { idempotencyKey: key }),
+    stripe.customers.create({
+      email,
+      name: name ?? undefined,
+      // Namespace every customer to Foundry (+ our own id when known) so the
+      // shared account can be filtered to just our objects.
+      metadata: founderId ? { app: APP, founder_id: founderId } : { app: APP },
+    }, { idempotencyKey: key }),
   );
   return customer.id;
 }
 
 export async function createSubscription(customerId: string, tier: 'solo' | 'growth' | 'investor_ready'): Promise<string> {
   const stripe = getStripe();
-  const priceId = getPriceId(tier);
+  const priceId = await getPriceId(tier);
   const key = idemKey();
   const subscription = await withRetry(() => stripe.subscriptions.create({
     customer: customerId,
     items: [{ price: priceId }],
     payment_behavior: 'default_incomplete',
     expand: ['latest_invoice.payment_intent'],
+    metadata: { app: APP, plan_key: tier },
   }, { idempotencyKey: key }));
   return subscription.id;
 }
@@ -66,13 +78,19 @@ export async function createCheckoutSession(
   trialDays: number = TRIAL_PERIOD_DAYS,
 ): Promise<string> {
   const stripe = getStripe();
+  const priceId = await getPriceId(tier);
   const key = idemKey();
   const session = await withRetry(() => stripe.checkout.sessions.create({
     customer: customerId,
     mode: 'subscription',
-    line_items: [{ price: getPriceId(tier), quantity: 1 }],
+    line_items: [{ price: priceId, quantity: 1 }],
     // Card-upfront 14-day trial: collect payment method now, charge after trial.
-    subscription_data: trialDays > 0 ? { trial_period_days: trialDays } : undefined,
+    // Tag the resulting subscription so shared-account webhooks can claim it.
+    subscription_data: {
+      metadata: { app: APP, plan_key: tier },
+      ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
+    },
+    metadata: { app: APP, plan_key: tier },
     success_url: successUrl,
     cancel_url: cancelUrl,
   }, { idempotencyKey: key }));
@@ -116,9 +134,14 @@ export async function handleWebhook(payload: string, signature: string): Promise
     case 'customer.subscription.created':
     case 'customer.subscription.updated': {
       const sub = event.data.object as Stripe.Subscription;
+      // Shared-account guard: this endpoint receives events for AcreOS and the
+      // land sales too. If the price is tagged for another app, it isn't ours.
+      const priceObj = sub.items.data[0]?.price;
+      const priceApp = (priceObj?.metadata as Record<string, string> | undefined)?.app;
+      if (priceApp && priceApp !== APP) break;
       // Update founder tier based on price
-      const priceId = sub.items.data[0]?.price.id;
-      const tier = getTierFromPrice(priceId ?? '');
+      const priceId = priceObj?.id;
+      const tier = getTierFromPrice(priceId ?? '', priceObj);
       if (tier) {
         // Persist the trial window: sub.trial_end is set while status is
         // 'trialing' and cleared once the trial converts to 'active'. This
@@ -243,21 +266,41 @@ export async function handleWebhook(payload: string, signature: string): Promise
   }
 }
 
-function getPriceId(tier: string): string {
-  let priceId: string | undefined;
-  switch (tier) {
-    case 'solo': priceId = process.env.STRIPE_SOLO_PRICE_ID; break;
-    case 'growth': priceId = process.env.STRIPE_GROWTH_PRICE_ID; break;
-    case 'investor_ready': priceId = process.env.STRIPE_INVESTOR_READY_PRICE_ID; break;
-    default: throw new Error(`Unknown tier: ${tier}`);
+// Tier codes are kept stable (`solo` / `growth` / `investor_ready`); the
+// $399 tier's customer-facing name is "Scale" but its stable key stays
+// `investor_ready` to avoid a DB migration. lookup_key = <app>_<tier>_monthly.
+function lookupKeyFor(tier: string): string {
+  return `${APP}_${tier}_monthly`;
+}
+
+const ENV_PRICE_FALLBACK: Record<string, string | undefined> = {
+  get solo() { return process.env.STRIPE_SOLO_PRICE_ID; },
+  get growth() { return process.env.STRIPE_GROWTH_PRICE_ID; },
+  get investor_ready() { return process.env.STRIPE_INVESTOR_READY_PRICE_ID; },
+};
+
+// Resolve a tier's price by its native Stripe lookup_key, falling back to the
+// legacy STRIPE_*_PRICE_ID env var until every price is backfilled with a key.
+async function getPriceId(tier: string): Promise<string> {
+  if (!(tier in ENV_PRICE_FALLBACK)) throw new Error(`Unknown tier: ${tier}`);
+  try {
+    const list = await getStripe().prices.list({ lookup_keys: [lookupKeyFor(tier)], active: true, limit: 1 });
+    if (list.data[0]) return list.data[0].id;
+  } catch { /* fall through to env fallback */ }
+  const priceId = ENV_PRICE_FALLBACK[tier];
+  if (!priceId) {
+    throw new Error(`No price for tier '${tier}': set lookup_key '${lookupKeyFor(tier)}' in Stripe or STRIPE_${tier.toUpperCase()}_PRICE_ID`);
   }
-  if (!priceId) throw new Error(`STRIPE_${tier.toUpperCase()}_PRICE_ID is not set`);
   return priceId;
 }
 
-function getTierFromPrice(priceId: string): string | null {
-  if (priceId === process.env.STRIPE_SOLO_PRICE_ID) return 'solo';
-  if (priceId === process.env.STRIPE_GROWTH_PRICE_ID) return 'growth';
-  if (priceId === process.env.STRIPE_INVESTOR_READY_PRICE_ID) return 'investor_ready';
+// Map an incoming price back to a tier. Prefer the price's own metadata
+// (plan_key) — set by our backfill — and fall back to the env-var IDs.
+function getTierFromPrice(priceId: string, priceObj?: Stripe.Price): string | null {
+  const planKey = (priceObj?.metadata as Record<string, string> | undefined)?.plan_key;
+  if (planKey && planKey in ENV_PRICE_FALLBACK) return planKey;
+  if (priceId && priceId === process.env.STRIPE_SOLO_PRICE_ID) return 'solo';
+  if (priceId && priceId === process.env.STRIPE_GROWTH_PRICE_ID) return 'growth';
+  if (priceId && priceId === process.env.STRIPE_INVESTOR_READY_PRICE_ID) return 'investor_ready';
   return null;
 }

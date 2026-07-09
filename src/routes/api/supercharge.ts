@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import Stripe from 'stripe';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner } from '../../db/client.js';
 
@@ -123,16 +124,43 @@ superchargeApiRoutes.post('/api/products/:id/integrations/:integrationId/sync', 
   return c.json({ sync_result: result });
 });
 
-// Stripe webhook (unauthenticated — verified by Stripe signature)
+// Stripe webhook — signature-verified. Previously this endpoint accepted any
+// unsigned JSON, letting anyone inject fake Stripe events for any product. We
+// now verify the Stripe signature and, because this is a shared live account,
+// ignore events whose object is tagged for a different app.
+let _whStripe: Stripe | null = null;
+function webhookStripe(): Stripe | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  if (!_whStripe) _whStripe = new Stripe(key, { apiVersion: '2023-10-16' });
+  return _whStripe;
+}
+
 superchargeApiRoutes.post('/api/webhooks/stripe/:productId', async (c) => {
   const productId = c.req.param('productId');
-  const body = await c.req.json() as Record<string, unknown>;
-  const eventId = body.id as string;
-  const eventType = body.type as string;
-
-  if (eventId && eventType) {
-    await processStripeWebhookEvent(productId, eventId, eventType, body);
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  const signature = c.req.header('stripe-signature');
+  const stripe = webhookStripe();
+  if (!stripe || !secret || !signature) {
+    return c.json({ error: 'Webhook not configured' }, 400);
   }
+
+  const raw = await c.req.text();
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(raw, signature, secret);
+  } catch {
+    return c.json({ error: 'Invalid signature' }, 400);
+  }
+
+  // Shared-account guard: skip events whose object is owned by another app.
+  const obj = event.data?.object as { metadata?: Record<string, string> } | undefined;
+  const evApp = obj?.metadata?.app;
+  if (evApp && evApp !== 'foundry') {
+    return c.json({ received: true, skipped: 'foreign-app' });
+  }
+
+  await processStripeWebhookEvent(productId, event.id, event.type, event as unknown as Record<string, unknown>);
   return c.json({ received: true });
 });
 
