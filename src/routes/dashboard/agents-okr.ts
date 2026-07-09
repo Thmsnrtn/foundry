@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import { nanoid } from 'nanoid';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
@@ -202,9 +203,9 @@ agentsOkr.post('/okrs/:okrId/key-results/:krId/update', async (c) => {
 
   // Insert progress update record
   await query(
-    `INSERT INTO okr_progress_updates (key_result_id, current_value, note, recorded_at, recorded_by)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)`,
-    [krId, currentValue, note, founder.id]
+    `INSERT INTO okr_progress_updates (id, key_result_id, new_value, source, source_id, note)
+     VALUES (?, ?, ?, 'founder_manual', ?, ?)`,
+    [nanoid(), krId, currentValue, founder.id, note]
   );
 
   // Update the key result current value and progress

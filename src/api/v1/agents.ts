@@ -78,9 +78,9 @@ agentsApi.post('/:agentName/run', requireScope('agents:run'), async (c) => {
   try {
     const id = nanoid();
     await query(
-      `INSERT INTO agent_initiative_queue (id, product_id, agent_name, trigger_type, trigger_data_json, priority, status)
-       VALUES (?,?,?,'api_trigger',?,1,'queued')`,
-      [id, productId, agentName, JSON.stringify(body)]
+      `INSERT INTO agent_initiative_queue (id, product_id, agent_name, initiative_type, description, context, priority, status)
+       VALUES (?,?,?,'api_trigger',?,?,1,'pending')`,
+      [id, productId, agentName, `API-triggered run for ${agentName}`, JSON.stringify(body)]
     );
     return c.json({ queued: true, message: 'Agent run queued', id }, 201);
   } catch (err) {

@@ -113,15 +113,17 @@ customersApi.post('/', requireScope('customers:manage'), async (c) => {
   try {
     const id = nanoid();
     await query(
+      // Maps to the customer_intelligence schema: account_name (not name),
+      // stage is CHECK-constrained + internally managed so it keeps its default;
+      // there is no company/lifecycle_stage column, so those API fields are not
+      // persisted here.
       `INSERT INTO customer_intelligence
-         (id, product_id, external_customer_id, name, email, company, lifecycle_stage, mrr_cents, health_score)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (id, product_id, external_customer_id, account_name, email, mrr_cents, health_score)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (product_id, external_customer_id)
        DO UPDATE SET
-         name = COALESCE(excluded.name, name),
+         account_name = COALESCE(excluded.account_name, account_name),
          email = COALESCE(excluded.email, email),
-         company = COALESCE(excluded.company, company),
-         lifecycle_stage = COALESCE(excluded.lifecycle_stage, lifecycle_stage),
          mrr_cents = COALESCE(excluded.mrr_cents, mrr_cents),
          health_score = COALESCE(excluded.health_score, health_score),
          updated_at = CURRENT_TIMESTAMP`,
@@ -131,8 +133,6 @@ customersApi.post('/', requireScope('customers:manage'), async (c) => {
         external_customer_id,
         name ?? null,
         email ?? null,
-        company ?? null,
-        lifecycle_stage ?? null,
         mrr_cents ?? null,
         health_score ?? null,
       ]

@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import { nanoid } from 'nanoid';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
@@ -152,9 +153,9 @@ agentsWiki.get('/wiki/:id', async (c) => {
 
   // Record a read
   await query(
-    `INSERT INTO agent_wiki_reads (entry_id, reader_id, read_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+    `INSERT INTO agent_wiki_reads (id, entry_id, agent_name, read_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
      ON CONFLICT DO NOTHING`,
-    [entryId, founder.id]
+    [nanoid(), entryId, founder.id]
   ).catch(() => {});
 
   const content = html`

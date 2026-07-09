@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import { nanoid } from 'nanoid';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
@@ -66,7 +67,7 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
   const result = await query(
     `SELECT * FROM strategic_decisions_log
      WHERE product_id=?
-     ORDER BY created_at DESC
+     ORDER BY made_at DESC
      LIMIT 50`,
     [productId]
   );
@@ -75,8 +76,8 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
   const timelineItems = decisions.map((d) => {
     const madeBy = (d.made_by as string) ?? (d.decided_by as string) ?? 'human';
     const status = (d.status as string) ?? 'proposed';
-    const rating = d.outcome_rating !== null && d.outcome_rating !== undefined
-      ? Number(d.outcome_rating)
+    const rating = d.retrospective_score !== null && d.retrospective_score !== undefined
+      ? Number(d.retrospective_score)
       : null;
 
     return html`
@@ -92,27 +93,27 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
           <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;">
             <span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;${statusBadgeStyle(status)}">${statusLabel(status)}</span>
             <span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;${madeByBadge(madeBy)}">${madeBy}</span>
-            <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${fmtDate(d.created_at as string)}</span>
+            <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${fmtDate(d.made_at as string)}</span>
           </div>
 
-          <h3 style="margin:0 0 0.4rem;font-size:1rem;color:var(--text-primary);">${d.title ?? d.decision_title ?? '(untitled)'}</h3>
+          <h3 style="margin:0 0 0.4rem;font-size:1rem;color:var(--text-primary);">${d.decision_title ?? '(untitled)'}</h3>
 
-          ${d.rationale ? html`<p style="margin:0 0 0.5rem;font-size:0.83rem;color:var(--text-dim);line-height:1.5;">${d.rationale}</p>` : ''}
+          ${d.decision_rationale ? html`<p style="margin:0 0 0.5rem;font-size:0.83rem;color:var(--text-dim);line-height:1.5;">${d.decision_rationale}</p>` : ''}
 
-          ${d.decision_made ? html`
+          ${d.decision_description ? html`
             <div style="margin-top:0.5rem;padding:0.6rem 0.875rem;background:rgba(78,204,163,0.06);border-left:3px solid #4ecca344;border-radius:0 4px 4px 0;font-size:0.82rem;color:var(--text-dim);">
-              <strong style="color:var(--text-primary);">Decision:</strong> ${d.decision_made}
+              <strong style="color:var(--text-primary);">Decision:</strong> ${d.decision_description}
             </div>
           ` : ''}
 
-          ${d.alternatives_considered ? html`
-            <div style="margin-top:0.5rem;font-size:0.78rem;color:var(--text-muted);"><strong>Alternatives:</strong> ${d.alternatives_considered}</div>
+          ${d.alternatives_considered_json ? html`
+            <div style="margin-top:0.5rem;font-size:0.78rem;color:var(--text-muted);"><strong>Alternatives:</strong> ${d.alternatives_considered_json}</div>
           ` : ''}
 
-          ${d.outcome_description ? html`
+          ${d.actual_outcome ? html`
             <div style="margin-top:0.75rem;padding:0.6rem 0.875rem;background:rgba(255,255,255,0.04);border-radius:6px;">
               <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.3rem;">Outcome</div>
-              <div style="font-size:0.82rem;color:var(--text-dim);">${d.outcome_description}</div>
+              <div style="font-size:0.82rem;color:var(--text-dim);">${d.actual_outcome}</div>
               ${rating !== null ? html`<div style="margin-top:0.35rem;font-size:1rem;">${{ toString: () => starsHtml(rating) }}</div>` : ''}
             </div>
           ` : html`
@@ -208,9 +209,11 @@ agentsDecisions.post('/strategic-decisions', async (c) => {
   if (!title || !decisionMade) return c.redirect('/strategic-decisions');
 
   await query(
-    `INSERT INTO strategic_decisions_log (product_id, title, rationale, alternatives_considered, decision_made, made_by, status, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'approved', CURRENT_TIMESTAMP)`,
-    [ctx.productId, title, rationale, alternatives, decisionMade, founder.id]
+    `INSERT INTO strategic_decisions_log
+       (id, product_id, decision_title, decision_description, decision_rationale,
+        alternatives_considered_json, made_by, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'founder', 'active')`,
+    [nanoid(), ctx.productId, title, decisionMade, rationale, alternatives]
   );
 
   return c.redirect('/strategic-decisions');
@@ -226,11 +229,17 @@ agentsDecisions.post('/strategic-decisions/:id/outcome', async (c) => {
 
   if (!outcomeDescription) return c.redirect('/strategic-decisions');
 
+  // Map the 1–5 rating onto the table's status vocabulary (CHECK-constrained).
+  const status =
+    outcomeRating != null && outcomeRating >= 4 ? 'succeeded'
+      : outcomeRating != null && outcomeRating <= 2 ? 'failed'
+        : 'inconclusive';
+
   await query(
     `UPDATE strategic_decisions_log
-     SET outcome_description=?, outcome_rating=?, retrospective_at=CURRENT_TIMESTAMP, status='retrospective'
+     SET actual_outcome=?, retrospective_score=?, updated_at=CURRENT_TIMESTAMP, status=?
      WHERE id=?`,
-    [outcomeDescription, outcomeRating, id]
+    [outcomeDescription, outcomeRating, status, id]
   );
 
   return c.redirect('/strategic-decisions');
