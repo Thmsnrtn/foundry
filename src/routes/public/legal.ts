@@ -85,7 +85,7 @@ legalRoutes.get('/terms', (c) => {
       <h2>Billing</h2>
       <ul style="margin-bottom:1.5rem;padding-left:1.25rem;">
         <li>Subscriptions are billed monthly via Stripe.</li>
-        <li>Founding Cohort pricing ($99/mo) is locked for the lifetime of continuous subscription.</li>
+        <li>Founding-rate pricing ($79/mo) is locked for the lifetime of continuous subscription.</li>
         <li>Cancellation takes effect at the end of the current billing period.</li>
         <li>No refunds for partial months.</li>
       </ul>
