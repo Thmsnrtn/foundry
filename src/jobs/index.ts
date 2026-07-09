@@ -1895,9 +1895,40 @@ function mondayOfWeek(d: Date): string {
   return copy.toISOString().slice(0, 10);
 }
 
+// ─── Memory Kernel — premise check (Ascent B1) ─────────────────────────────────
+// Re-evaluates every recorded decision premise against live telemetry. When a
+// belief a past decision rested on is now contradicted, the founder is notified
+// so the decision doesn't quietly expire unnoticed.
+export async function memoryPremiseCheck(): Promise<void> {
+  logger.info('memory_premise_check starting', { jobName: 'memory_premise_check' });
+  const products = await getAllActiveProducts();
+  let totalFalsified = 0;
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const { checkPremises } = await import('../services/memory/kernel.js');
+      const res = await checkPremises(p.id);
+      totalFalsified += res.falsified;
+      if (res.falsified > 0) {
+        const { createNotification } = await import('../services/ux/notifications.js');
+        await createNotification(
+          p.owner_id, p.id, 'system',
+          'A past decision now rests on a false premise',
+          `${res.falsified} belief(s) behind decisions you made are now contradicted by your own metrics. Revisit them before they cost you.`,
+          '/strategic-decisions', 'Review',
+        );
+      }
+    } catch (err) {
+      logger.error(`memory_premise_check error for ${p.id}`, { jobName: 'memory_premise_check', error: String(err) });
+    }
+  }
+  logger.info(`memory_premise_check complete — ${totalFalsified} beliefs expired`, { jobName: 'memory_premise_check' });
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
+  memory_premise_check: { fn: memoryPremiseCheck,   schedule: '0 7 * * *',       description: 'Re-check decision premises against live telemetry; flag expired beliefs (daily)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

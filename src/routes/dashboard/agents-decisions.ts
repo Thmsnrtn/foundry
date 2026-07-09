@@ -73,6 +73,10 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
   );
   const decisions = result.rows as Array<Record<string, unknown>>;
 
+  // Memory Kernel (Ascent B1): decisions whose premise your own metrics now contradict.
+  const { getExpiredBeliefs } = await import('../../services/memory/kernel.js');
+  const expiredBeliefs = await getExpiredBeliefs(productId);
+
   const timelineItems = decisions.map((d) => {
     const madeBy = (d.made_by as string) ?? (d.decided_by as string) ?? 'human';
     const status = (d.status as string) ?? 'proposed';
@@ -151,6 +155,23 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
         class="btn btn-primary" style="font-size:0.82rem;">+ New Decision</button>
     </div>
 
+    ${expiredBeliefs.length > 0 ? html`
+    <div style="margin-bottom:1.5rem;padding:1rem 1.25rem;border-radius:8px;background:rgba(255,107,107,0.07);border:1px solid rgba(255,107,107,0.28);">
+      <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#ff6b6b;margin-bottom:0.5rem;">⚠ Expired beliefs — ${expiredBeliefs.length} decision${expiredBeliefs.length > 1 ? 's' : ''} rest on a premise your metrics now contradict</div>
+      ${expiredBeliefs.map((e) => html`
+        <div style="display:flex;align-items:center;gap:0.75rem;padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.85rem;color:var(--text-primary);font-weight:600;">${e.decision_title ?? 'A past decision'}</div>
+            <div style="font-size:0.8rem;color:var(--text-dim);">Believed: <em>${e.premise.premise}</em></div>
+            <div style="font-size:0.75rem;color:#ff6b6b;">${e.premise.evidence}</div>
+          </div>
+          <form method="POST" action="/strategic-decisions/premise/${e.premise.id}/revisit" style="flex-shrink:0;">
+            <button type="submit" class="btn btn-ghost" style="font-size:0.75rem;padding:0.3rem 0.75rem;">Revisited</button>
+          </form>
+        </div>
+      `)}
+    </div>` : ''}
+
     <!-- New decision form (hidden by default) -->
     <div id="new-decision-form" style="display:none;margin-bottom:1.5rem;">
       <div class="card" style="padding:1.25rem;">
@@ -175,6 +196,28 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
             <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:3px;">Alternatives Considered</label>
             <input type="text" name="alternatives_considered" placeholder="What other options were on the table?"
               style="width:100%;padding:0.5rem 0.75rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.87rem;" />
+          </div>
+          <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:0.75rem;">
+            <label style="font-size:0.75rem;color:var(--accent);display:block;margin-bottom:3px;">Key premise — the belief this rests on</label>
+            <input type="text" name="premise" placeholder="e.g. Churn stays under 5% without enterprise support"
+              style="width:100%;padding:0.5rem 0.75rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.87rem;" />
+            <div style="display:flex;gap:0.4rem;margin-top:0.4rem;align-items:center;">
+              <span style="font-size:0.72rem;color:var(--text-muted);">Auto-check (optional):</span>
+              <select name="premise_metric" style="padding:0.35rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.8rem;">
+                <option value="">— metric —</option>
+                <option value="churn_rate">churn_rate</option>
+                <option value="activation_rate">activation_rate</option>
+                <option value="day_30_retention">day_30_retention</option>
+                <option value="nps_score">nps_score</option>
+                <option value="mrr_health_ratio">mrr_health_ratio</option>
+              </select>
+              <select name="premise_comparator" style="padding:0.35rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.8rem;">
+                <option value="<">&lt;</option><option value="<=">&le;</option><option value=">">&gt;</option><option value=">=">&ge;</option>
+              </select>
+              <input type="number" step="any" name="premise_threshold" placeholder="value"
+                style="width:90px;padding:0.35rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.8rem;" />
+            </div>
+            <div style="font-size:0.68rem;color:var(--text-muted);margin-top:0.3rem;">Foundry will watch this belief and flag the decision if your metrics later contradict it.</div>
           </div>
           <div style="display:flex;gap:0.5rem;">
             <button type="submit" class="btn btn-primary" style="font-size:0.85rem;">Save Decision</button>
@@ -208,14 +251,42 @@ agentsDecisions.post('/strategic-decisions', async (c) => {
 
   if (!title || !decisionMade) return c.redirect('/strategic-decisions');
 
+  const decisionId = nanoid();
   await query(
     `INSERT INTO strategic_decisions_log
        (id, product_id, decision_title, decision_description, decision_rationale,
         alternatives_considered_json, made_by, status)
      VALUES (?, ?, ?, ?, ?, ?, 'founder', 'active')`,
-    [nanoid(), ctx.productId, title, decisionMade, rationale, alternatives]
+    [decisionId, ctx.productId, title, decisionMade, rationale, alternatives]
   );
 
+  // Memory Kernel (Ascent B1): capture the belief behind the decision so it can
+  // be held accountable to live telemetry later.
+  const premise = (body.premise as string)?.trim();
+  if (premise) {
+    const metricKey = (body.premise_metric as string)?.trim() || undefined;
+    const comparator = (body.premise_comparator as string)?.trim() as '<' | '<=' | '>' | '>=' | undefined;
+    const thresholdRaw = (body.premise_threshold as string)?.trim();
+    const threshold = thresholdRaw ? Number(thresholdRaw) : undefined;
+    try {
+      const { recordPremise } = await import('../../services/memory/kernel.js');
+      await recordPremise({
+        productId: ctx.productId, decisionId, decisionSource: 'strategic', premise,
+        metricKey, comparator, threshold: Number.isFinite(threshold) ? threshold : undefined,
+      });
+    } catch { /* premise capture is best-effort; never block the decision */ }
+  }
+
+  return c.redirect('/strategic-decisions');
+});
+
+// ─── POST /strategic-decisions/premise/:id/revisit (Memory Kernel) ────────────
+agentsDecisions.post('/strategic-decisions/premise/:id/revisit', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'strategic-decisions', 'Strategic Decisions', undefined, c);
+  if (!ctx.productId) return c.redirect('/strategic-decisions');
+  const { markRevisited } = await import('../../services/memory/kernel.js');
+  await markRevisited(c.req.param('id'), ctx.productId);
   return c.redirect('/strategic-decisions');
 });
 
