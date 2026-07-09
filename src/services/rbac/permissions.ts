@@ -117,9 +117,9 @@ export async function createApiKey(
   const keyPrefix = rawKey.slice(0, 12); // 'fnd_' + first 8 chars
 
   await query(
-    `INSERT INTO api_keys (id, product_id, name, key_hash, key_prefix, role, scopes, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [keyId, productId, label, keyHash, keyPrefix, 'viewer', JSON.stringify(scopes), userId]
+    `INSERT INTO api_keys (id, founder_id, product_id, name, key_hash, key_prefix, role, scopes, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [keyId, userId, productId, label, keyHash, keyPrefix, 'viewer', JSON.stringify(scopes), userId]
   );
 
   return { key: rawKey, keyId };

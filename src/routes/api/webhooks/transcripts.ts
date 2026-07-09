@@ -13,7 +13,7 @@ export const transcriptWebhooks = new Hono();
 
 async function getProductIdForApiKey(apiKey: string): Promise<string | null> {
   const rows = await query(
-    `SELECT product_id FROM api_keys WHERE key_hash = ? AND is_active = 1 LIMIT 1`,
+    `SELECT product_id FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL LIMIT 1`,
     [apiKey],
   );
   if (!rows.rows.length) return null;

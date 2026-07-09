@@ -95,11 +95,22 @@ experimentsApi.post('/', requireScope('agents:read'), async (c) => {
 
   try {
     const id = nanoid();
+    // experiments requires a hypothesis FK + A/B descriptions (all NOT NULL).
+    // Create the hypothesis from the supplied text, then a minimal single-change
+    // experiment. `name` (not title) and `designed_by` (not created_by) are the
+    // real columns; status must satisfy the CHECK ('designed').
+    const hypothesisId = nanoid();
+    await query(
+      `INSERT INTO hypotheses (id, product_id, proposed_by, statement) VALUES (?, ?, 'api', ?)`,
+      [hypothesisId, productId, hypothesis]
+    );
     await query(
       `INSERT INTO experiments
-         (id, product_id, title, hypothesis, success_metric, success_threshold, status, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, 'draft', ?)`,
-      [id, productId, title, hypothesis, success_metric ?? null, success_threshold ?? null, userId]
+         (id, product_id, hypothesis_id, name, hypothesis, type, control_description,
+          treatment_description, success_metric, success_threshold, status, designed_by)
+       VALUES (?, ?, ?, ?, ?, 'ab_test', 'Control (no change)', ?, ?, ?, 'designed', ?)`,
+      [id, productId, hypothesisId, title, hypothesis, hypothesis,
+       success_metric ?? 'primary_metric', success_threshold ?? null, userId]
     );
 
     // Insert variants if provided

@@ -218,7 +218,7 @@ async function deliverToWebhook(
   // Record delivery result
   await query(
     `INSERT INTO webhook_deliveries
-       (id, webhook_id, event_type, payload_json, response_status, response_body,
+       (id, webhook_id, event, payload_json, status_code, error,
         attempt_count, delivered_at, failed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [

@@ -486,7 +486,7 @@ export async function dnaCompletionNudge(): Promise<void> {
       );
 
       await query(
-        `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'dna_completion_nudge', ?, ?)`,
+        `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'dna_completion_nudge', 0, 'job', ?, ?)`,
         [nanoid(), p.id, JSON.stringify({ completion_pct: completionPct }), new Date().toISOString()]
       );
       logger.info(`dna_completion_nudge: nudged ${p.name} (${completionPct}%)`, { jobName: 'dna_completion_nudge' });
@@ -551,7 +551,7 @@ export async function remediationOutcomeCheck(): Promise<void> {
       const daysSinceCreation = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
       if (daysSinceCreation >= 14) {
         await query(
-          `INSERT INTO audit_log (id, product_id, action, details, created_at) VALUES (?, ?, 'remediation_pr_stale', ?, ?)`,
+          `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'remediation_pr_stale', 0, 'job', ?, ?)`,
           [nanoid(), pr.product_id, JSON.stringify({ pr_id: pr.id, pr_number: prNumber, days_open: daysSinceCreation }), new Date().toISOString()]
         );
       }

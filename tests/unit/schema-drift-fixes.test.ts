@@ -94,4 +94,112 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
     expect((r.rows[0] as Record<string, unknown>).account_name).toBe('Acme');
     expect((r.rows[0] as Record<string, unknown>).stage).toBe('trial'); // default applied
   });
+
+  // ── batch 2/3 ──────────────────────────────────────────────────────────────
+
+  it('webhooks (v1): product-scoped insert with founder_id + events/active', async () => {
+    await db.execute({
+      sql: `INSERT INTO webhooks (id, founder_id, product_id, url, events, secret, active, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+      args: ['wh1', 'o1', 'p1', 'https://x/hook', '["decision.created"]', 'whsec_x', 'o1'],
+    });
+    const r = await db.execute({ sql: "SELECT active FROM webhooks WHERE id='wh1'", args: [] });
+    expect(Number((r.rows[0] as Record<string, unknown>).active)).toBe(1);
+  });
+
+  it('webhook_deliveries: event/status_code/error + added payload/attempt/failed cols', async () => {
+    await db.execute({
+      sql: `INSERT INTO webhook_deliveries (id, webhook_id, event, payload_json, status_code, error, attempt_count, delivered_at, failed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: ['del1', 'wh1', 'decision.created', '{}', 200, null, 1, '2026-01-01', null],
+    });
+    const r = await db.execute({ sql: "SELECT status_code FROM webhook_deliveries WHERE id='del1'", args: [] });
+    expect(Number((r.rows[0] as Record<string, unknown>).status_code)).toBe(200);
+  });
+
+  it('api_keys (RBAC): founder_id + product_id/role/scopes/created_by', async () => {
+    await db.execute({
+      sql: `INSERT INTO api_keys (id, founder_id, product_id, name, key_hash, key_prefix, role, scopes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: ['ak1', 'o1', 'p1', 'CI key', 'hash1', 'fnd_1234', 'viewer', '["read"]', 'o1'],
+    });
+    const r = await db.execute({ sql: "SELECT product_id, revoked_at FROM api_keys WHERE id='ak1'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).product_id).toBe('p1');
+    expect((r.rows[0] as Record<string, unknown>).revoked_at).toBeNull(); // "active" = revoked_at IS NULL
+  });
+
+  it('metric_snapshots (v1): mrr_cents/new_customers/churned_customers added', async () => {
+    await db.execute({
+      sql: `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents, active_users, churn_rate, new_customers, churned_customers, expansion_mrr_cents, contraction_mrr_cents)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      args: ['ms1', 'p1', '2026-01-01', 50000, 120, 0.03, 8, 2, 1000, 500],
+    });
+    const r = await db.execute({ sql: "SELECT mrr_cents, new_customers FROM metric_snapshots WHERE id='ms1'", args: [] });
+    expect(Number((r.rows[0] as Record<string, unknown>).mrr_cents)).toBe(50000);
+  });
+
+  it('audit_log (jobs): action_type + NOT NULL gate/trigger/reasoning satisfied', async () => {
+    await db.execute({
+      sql: `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at)
+            VALUES (?, ?, 'dna_completion_nudge', 0, 'job', ?, ?)`,
+      args: ['al1', 'p1', '{"completion_pct":55}', '2026-01-01'],
+    });
+    const r = await db.execute({ sql: "SELECT action_type FROM audit_log WHERE id='al1'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).action_type).toBe('dna_completion_nudge');
+  });
+
+  it('integrations (own-Stripe): canonical product_id/credentials/status + ON CONFLICT(product_id,name)', async () => {
+    const sql = `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
+                 VALUES (?, ?, ?, 'stripe', 'stripe', 'inbound', 'active', ?, ?)
+                 ON CONFLICT (product_id, name) DO UPDATE SET credentials = excluded.credentials, status = 'active'`;
+    await db.execute({ sql, args: ['int1', 'p1', 'o1', 'enc1', '{}'] });
+    await db.execute({ sql, args: ['int2', 'p1', 'o1', 'enc2', '{}'] }); // upsert same (product_id,name)
+    const r = await db.execute({ sql: "SELECT credentials FROM integrations WHERE product_id='p1' AND name='stripe'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).credentials).toBe('enc2'); // upserted, not duplicated
+  });
+
+  it('experiments (v1): hypothesis row + full experiment (NOT NULL A/B fields, status designed)', async () => {
+    await db.execute({
+      sql: `INSERT INTO hypotheses (id, product_id, proposed_by, statement) VALUES (?, ?, 'api', ?)`,
+      args: ['h1', 'p1', 'Lower price lifts conversion'],
+    });
+    await db.execute({
+      sql: `INSERT INTO experiments
+              (id, product_id, hypothesis_id, name, hypothesis, type, control_description,
+               treatment_description, success_metric, success_threshold, status, designed_by)
+            VALUES (?, ?, ?, ?, ?, 'ab_test', 'Control (no change)', ?, ?, ?, 'designed', ?)`,
+      args: ['ex1', 'p1', 'h1', 'Price test', 'Lower price', 'Lower price', 'conversion_rate', 0.1, 'o1'],
+    });
+    const r = await db.execute({ sql: "SELECT status, name FROM experiments WHERE id='ex1'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).status).toBe('designed');
+  });
+
+  it('network tables: rebuilt to the benchmark subsystem shape', async () => {
+    await db.execute({
+      sql: `INSERT INTO network_contributions (id, metric, market_category, lifecycle_stage, mrr_bracket, value, contributed_at)
+            VALUES (?, 'churn_rate', 'saas', 'seed', '0-10k', ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET value = excluded.value`,
+      args: ['nc1_churn_rate', 0.05],
+    });
+    await db.execute({
+      sql: `INSERT INTO network_benchmarks (id, metric, market_category, lifecycle_stage, mrr_bracket, p25, p50, p75, sample_count, last_updated)
+            VALUES (?, 'churn_rate', 'all', 'seed', '0-10k', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(metric, market_category, lifecycle_stage, mrr_bracket)
+            DO UPDATE SET p50 = excluded.p50`,
+      args: ['nb1', 0.02, 0.05, 0.09, 3],
+    });
+    const r = await db.execute({ sql: "SELECT p50 FROM network_benchmarks WHERE id='nb1'", args: [] });
+    expect(Number((r.rows[0] as Record<string, unknown>).p50)).toBe(0.05);
+  });
+
+  it('decision_snooze_log: live snoozeDecision signature (reason, default decision_type, UNIQUE)', async () => {
+    const sql = `INSERT INTO decision_snooze_log (id, product_id, decision_id, snoozed_until, reason)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON CONFLICT(product_id, decision_id) DO UPDATE SET snoozed_until=excluded.snoozed_until, reason=excluded.reason`;
+    await db.execute({ sql, args: ['sn1', 'p1', 'dec1', '2026-02-01', 'busy'] });
+    await db.execute({ sql, args: ['sn2', 'p1', 'dec1', '2026-03-01', 'still busy'] }); // conflict path
+    const r = await db.execute({ sql: "SELECT snoozed_until, decision_type FROM decision_snooze_log WHERE product_id='p1' AND decision_id='dec1'", args: [] });
+    expect((r.rows[0] as Record<string, unknown>).snoozed_until).toBe('2026-03-01');
+    expect((r.rows[0] as Record<string, unknown>).decision_type).toBe('outbound_action'); // default
+  });
 });

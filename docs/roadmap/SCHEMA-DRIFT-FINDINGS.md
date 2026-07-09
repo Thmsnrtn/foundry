@@ -42,11 +42,44 @@ genuinely needs; the rest are code remaps to real columns.
 - **`agent_initiative_queue`** (v1 agents) — `trigger_type/trigger_data_json` →
   `initiative_type/context`, added NOT-NULL `description`, `status`→`pending`.
 
-## Open — INSERT-column drift (needs a canonical-implementation decision)
+## Fixed — INSERT-column drift, batch 2/3 (all remaining live subsystems)
 
-~40 sites remain. Unlike batch 1, these are **not** clean renames — the code was
-written against a different design than the table enforces, or duplicates another
-implementation. Each needs your call on which side is canonical:
+Per the "everything is live" decision, these were reconciled by making the
+schema carry what the code writes (additive migrations 085/086 + code remaps to
+existing columns) — never by deleting a feature. Locked by
+`tests/unit/schema-drift-fixes.test.ts` (15 cases against the real schema).
+
+- **metric_snapshots** (v1 metrics) — added `mrr_cents/new_customers/churned_customers`.
+- **webhooks** (v1) — product-scoped insert now sets `founder_id`; `events_json`→
+  `events`, `is_active`→`active`; added `product_id/created_by`. List query fixed too.
+- **webhook_deliveries** — `event_type`→`event`, `response_status`→`status_code`,
+  `response_body`→`error`; added `payload_json/attempt_count/failed_at`.
+- **api_keys** (RBAC issuer) — added `product_id/role/scopes/created_by` + set
+  `founder_id`; `transcripts.ts` `is_active`→`revoked_at IS NULL` (the canonical
+  active check used everywhere else).
+- **integrations** (own-Stripe sync) — rewritten to the canonical product-scoped
+  schema (`product_id/owner_id/credentials/config/status`, `provider='stripe'`)
+  that `framework.ts` reads, with `ON CONFLICT(product_id,name)`; reader remapped too.
+- **audit_log** (jobs) — `action/details`→`action_type/reasoning` + the NOT-NULL
+  `gate=0`/`trigger='job'` the table requires.
+- **experiments** (v1) — now creates the required `hypotheses` row + A/B fields;
+  `title`→`name`, `created_by`→`designed_by`, `status`→`designed`, added
+  `success_threshold`.
+- **network_contributions / network_benchmarks** — rebuilt (migration 086) to the
+  benchmark subsystem's per-metric shape (self-contained; `getBenchmarks` reads
+  `metric_snapshots`, not these).
+- **decision_snooze_log** — rebuilt so `snoozeDecision()`'s live signature works:
+  added `reason`, defaulted `decision_type`, nullable `snoozed_by`, and the
+  `UNIQUE(product_id, decision_id)` its ON CONFLICT needs.
+
+`node scripts/check-insert-columns.mjs` now reports only **1** — a false positive
+(`schema_migrations.filename`, a table `migrate.ts` self-creates at runtime with
+that column). The audit is effectively at zero.
+
+<details><summary>Original open list (now resolved — kept for reference)</summary>
+
+Unlike batch 1, these were **not** clean renames — the code was written against a
+different design than the table enforced, or duplicated another implementation:
 
 | Subsystem | Why it's not a mechanical fix |
 |---|---|
@@ -111,3 +144,5 @@ implementation is canonical, then either remap the code to real columns or add a
 migration — never guess. Run `node scripts/check-insert-columns.mjs` to track
 progress to zero, then promote it to a blocking CI guard (like the phantom-table
 test) so drift can't return.
+
+</details>

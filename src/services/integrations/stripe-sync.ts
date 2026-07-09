@@ -37,17 +37,18 @@ export async function handleStripeOAuthCallback(code: string, state: string): Pr
   const parsed = JSON.parse(Buffer.from(state, 'base64url').toString()) as { founderId: string; productId: string };
   const encryptedToken = encryptToken(response.access_token ?? '');
 
-  // Store the integration
+  // Store the integration on the canonical integrations schema (product-scoped;
+  // read by services/integrations/framework.ts via product_id + provider +
+  // status='active'). Credentials/config are the encrypted token + metadata.
   await query(
-    `INSERT INTO integrations (id, founder_id, provider, access_token_encrypted, scope, metadata, active)
-     VALUES (?, ?, 'stripe', ?, 'read_only', ?, 1)
-     ON CONFLICT (founder_id, provider) DO UPDATE SET
-       access_token_encrypted = excluded.access_token_encrypted,
-       scope = excluded.scope,
-       metadata = excluded.metadata,
-       updated_at = CURRENT_TIMESTAMP,
-       active = 1`,
-    [nanoid(), parsed.founderId, encryptedToken, JSON.stringify({
+    `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
+     VALUES (?, ?, ?, 'stripe', 'stripe', 'inbound', 'active', ?, ?)
+     ON CONFLICT (product_id, name) DO UPDATE SET
+       credentials = excluded.credentials,
+       config = excluded.config,
+       status = 'active',
+       updated_at = CURRENT_TIMESTAMP`,
+    [nanoid(), parsed.productId, parsed.founderId, encryptedToken, JSON.stringify({
       stripe_user_id: response.stripe_user_id,
       product_id: parsed.productId,
     })]
@@ -63,20 +64,20 @@ export async function handleStripeOAuthCallback(code: string, state: string): Pr
  */
 export async function syncStripeRevenue(founderId: string): Promise<void> {
   const integration = await query(
-    "SELECT * FROM integrations WHERE founder_id = ? AND provider = 'stripe' AND active = 1",
+    "SELECT * FROM integrations WHERE owner_id = ? AND provider = 'stripe' AND status = 'active'",
     [founderId]
   );
 
   if (integration.rows.length === 0) return;
 
   const row = integration.rows[0] as Record<string, string>;
-  const accessToken = getPlaintextToken(row.access_token_encrypted);
+  const accessToken = getPlaintextToken(row.credentials);
   if (!accessToken) {
     log.warn('Stripe token corrupted for founder', { founderId });
     return;
   }
 
-  const metadata = JSON.parse(row.metadata ?? '{}') as { product_id?: string; stripe_user_id?: string };
+  const metadata = JSON.parse(row.config ?? '{}') as { product_id?: string; stripe_user_id?: string };
   const productId = metadata.product_id;
   if (!productId) return;
 

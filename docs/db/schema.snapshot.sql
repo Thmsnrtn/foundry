@@ -221,7 +221,6 @@
   ON data_classifications(product_id, surface);
   ON data_quality_alerts(product_id, resolved_at, created_at);
   ON data_quality_alerts(product_id, severity)
-  ON decision_snooze_log(product_id, snoozed_until);
   ON experiment_holdouts(product_id, is_active);
   ON experiment_results_timeline(experiment_id, checkpoint_date);
   ON founder_journal_entries(product_id, is_agent_visible, created_at);
@@ -230,7 +229,7 @@
   ON funding_readiness(product_id, date(created_at));
   ON idempotency_keys(product_id, action_type, dedup_key);
   ON metric_validation_rules(product_id, metric_name);
-  ON network_contributions(product_id, date(contributed_at));
+  ON network_contributions(metric, lifecycle_stage, mrr_bracket);
   ON outcome_trees(parent_branch_id);
   ON outcome_trees(product_id, status);
   ON outcome_trees(product_id, weekly_refresh_run_id);
@@ -260,7 +259,7 @@
   UNIQUE(founder_id)
   UNIQUE(founder_id, product_id)
   UNIQUE(founder_id, product_id, step)
-  UNIQUE(metric_key, market_category, lifecycle_stage)
+  UNIQUE(metric, market_category, lifecycle_stage, mrr_bracket)
   UNIQUE(portfolio_id, product_id)
   UNIQUE(product_id)
   UNIQUE(product_id)
@@ -272,6 +271,7 @@
   UNIQUE(product_id, briefing_date)
   UNIQUE(product_id, consent_type)
   UNIQUE(product_id, decision_category)
+  UNIQUE(product_id, decision_id)
   UNIQUE(product_id, entity_type, entity_id)
   UNIQUE(product_id, external_customer_id)
   UNIQUE(product_id, founder_id)
@@ -632,7 +632,6 @@
   composite REAL,
   composite_accuracy REAL,             -- weighted aggregate
   computed_at      TEXT NOT NULL DEFAULT (datetime('now'))
-  computed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   computed_at TEXT NOT NULL DEFAULT (datetime('now'))
   computed_at TEXT NOT NULL DEFAULT (datetime('now'))
   computed_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -703,7 +702,7 @@
   context_used TEXT,
   contraction_mrr_cents INTEGER DEFAULT 0,
   contributed_at      TEXT NOT NULL DEFAULT (datetime('now'))
-  contributed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  contributed_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   contributing_factors TEXT, -- JSON
   contributing_signals_json TEXT NOT NULL,  -- JSON array of signal descriptions
   contribution_margin REAL,
@@ -742,7 +741,7 @@
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
-  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
@@ -812,7 +811,7 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP, chat_session_id TEXT, extracted_decisions TEXT, extracted_actions TEXT, summary TEXT, audio_url TEXT, status TEXT DEFAULT 'active',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP, local_currency_mrr REAL, exchange_rate REAL DEFAULT 1.0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP, local_currency_mrr REAL, exchange_rate REAL DEFAULT 1.0, mrr_cents INTEGER, new_customers INTEGER, churned_customers INTEGER,
   created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
@@ -953,7 +952,7 @@
   decision_description    TEXT NOT NULL,
   decision_description TEXT,
   decision_framing TEXT DEFAULT 'balanced',
-  decision_id    TEXT NOT NULL,   -- outbound_actions.id or other decision reference
+  decision_id    TEXT NOT NULL,
   decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
   decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
   decision_id TEXT NOT NULL REFERENCES decisions(id),
@@ -968,7 +967,7 @@
   decision_title TEXT NOT NULL,
   decision_title TEXT,
   decision_track_record_score INTEGER, -- Outcome valence from decision history
-  decision_type  TEXT NOT NULL CHECK (decision_type IN ('outbound_action','agent_decision')),
+  decision_type  TEXT NOT NULL DEFAULT 'outbound_action',
   decision_type TEXT NOT NULL,
   decisions_count INTEGER NOT NULL DEFAULT 0,
   decisions_created TEXT,
@@ -1221,7 +1220,6 @@
   founder_id   TEXT NOT NULL REFERENCES founders(id),
   founder_id  TEXT NOT NULL,
   founder_id TEXT NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
-  founder_id TEXT NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -1357,6 +1355,8 @@
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
+  id               TEXT PRIMARY KEY,
+  id               TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
@@ -1370,8 +1370,6 @@
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -1701,6 +1699,7 @@
   last_sync_status TEXT,
   last_synced_at DATETIME,
   last_triggered_at TEXT
+  last_updated     DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_updated TEXT NOT NULL DEFAULT (datetime('now'))
   last_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_used_at DATETIME,
@@ -1712,7 +1711,8 @@
   lesson TEXT NOT NULL,                -- Synthesized lesson (injected into prompts)
   lesson_type TEXT NOT NULL CHECK(lesson_type IN (
   lexical_preferences TEXT,                   -- JSON list of preferred terms/phrasings
-  lifecycle_stage TEXT NOT NULL,      -- e.g. 'seed', 'series_a'
+  lifecycle_stage  TEXT,
+  lifecycle_stage  TEXT,
   lifecycle_state     TEXT NOT NULL,
   lifecycle_state  TEXT NOT NULL,
   lifecycle_state TEXT,
@@ -1740,7 +1740,8 @@
   made_at                 TEXT NOT NULL DEFAULT (datetime('now')),
   made_by                 TEXT CHECK (made_by IN ('founder','agent_recommendation','team')),
   magnitude_accuracy REAL,             -- 0.0-1.0
-  market_category TEXT NOT NULL,      -- e.g. 'developer_tools'
+  market_category  TEXT,
+  market_category  TEXT,
   market_category TEXT,
   market_category TEXT, -- SaaS subcategory for cross-product pattern matching
   market_clarity_score INTEGER,        -- DNA completion: do you know your market?
@@ -1780,7 +1781,8 @@
   metadata_json TEXT NOT NULL DEFAULT '{}',  -- arbitrary structured context
   metadata_json TEXT,                       -- referrer URL, UTM, etc.
   metadata_json TEXT, -- type-specific metadata
-  metric_key TEXT NOT NULL,           -- e.g. 'activation_rate', 'churn_rate'
+  metric           TEXT NOT NULL,
+  metric           TEXT NOT NULL,
   metric_key TEXT,                           -- joins with metric_snapshots when present
   metric_name      TEXT NOT NULL,   -- e.g. 'activation_rate', 'churn_rate', 'nps_score'
   metric_name     TEXT,                    -- programmatic metric identifier
@@ -1789,7 +1791,6 @@
   metric_name TEXT NOT NULL,
   metric_name TEXT NOT NULL,   -- e.g., 'health_score', 'approval_rate', 'evolution_cycles_per_month'
   metric_name TEXT NOT NULL, -- 'mrr', 'runway_months', 'churn_rate', etc.
-  metrics_contributed INTEGER DEFAULT 0
   metrics_delta_json TEXT NOT NULL DEFAULT '{}', -- { mrr_change_pct, churn_change, activation_change }
   metrics_snapshot TEXT,
   metrics_updated TEXT,                -- JSON: {field: value} from voice
@@ -1814,6 +1815,8 @@
   morning_briefing INTEGER NOT NULL DEFAULT 1,
   motivation_score REAL,
   motivation_score REAL,
+  mrr_bracket      TEXT,
+  mrr_bracket      TEXT,
   mrr_bucket          TEXT NOT NULL CHECK (mrr_bucket IN ('0-1k','1k-10k','10k-50k','50k-200k','200k+')),
   mrr_cents INTEGER DEFAULT 0,
   mrr_cents INTEGER DEFAULT 0,
@@ -1979,17 +1982,16 @@
   owner_id TEXT NOT NULL,
   owner_id TEXT,
   p25              REAL,
-  p25 REAL NOT NULL,
+  p25              REAL,
   p25 REAL,
   p256dh TEXT,                         -- client public key
   p50              REAL,
-  p50 REAL NOT NULL,
+  p50              REAL,
   p50 REAL,
   p75              REAL,
-  p75 REAL NOT NULL,
+  p75              REAL,
   p75 REAL,
   p90              REAL,
-  p90 REAL NOT NULL,
   p90 REAL,
   p_value          REAL,
   page_analysis TEXT,
@@ -2139,7 +2141,6 @@
   product_id   TEXT NOT NULL,
   product_id   TEXT REFERENCES products(id),       -- NULL = org-level role
   product_id  TEXT NOT NULL DEFAULT '',
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -2364,6 +2365,7 @@
   read_at DATETIME,
   read_at DATETIME,
   ready_to_be_acquired INTEGER NOT NULL DEFAULT 0, -- boolean
+  reason         TEXT,
   reason TEXT NOT NULL,
   reasoning TEXT NOT NULL,
   reasoning TEXT NOT NULL, -- why this mutation was made
@@ -2486,7 +2488,7 @@
   runway_months REAL,
   sample_allocation REAL DEFAULT 0.5,    -- % to treatment
   sample_count     INTEGER NOT NULL,
-  sample_size INTEGER NOT NULL DEFAULT 0,
+  sample_count     INTEGER,
   sample_size INTEGER NOT NULL,
   sample_size INTEGER,
   scenario_accuracy_score REAL,
@@ -2589,7 +2591,7 @@
   snapshot_date TEXT NOT NULL,
   snapshot_date TEXT NOT NULL,        -- YYYY-MM-DD
   snapshot_date TEXT NOT NULL,   -- YYYY-MM-DD, one per product per day
-  snoozed_by     TEXT NOT NULL,   -- founder_id
+  snoozed_by     TEXT,
   snoozed_until  TEXT NOT NULL,
   social_license_risk TEXT DEFAULT 'low',
   source           TEXT NOT NULL CHECK (source IN ('changelog','product_page','job_posting','review')),
@@ -2916,6 +2918,7 @@
   validated_by TEXT,                     -- Usually 'oracle'
   validation_notes TEXT,               -- Why the change was accepted/rejected
   validation_score REAL,               -- 0-1: validation judge score
+  value            REAL,
   value REAL,
   value_delivery_index REAL,
   variance_pct REAL, -- populated when actual_value is recorded
@@ -3199,9 +3202,6 @@
 );
 );
 );
-);
-);
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
 , confidence_score REAL DEFAULT 0);
@@ -3211,8 +3211,11 @@
 , month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
 , name TEXT, secret_hash TEXT, is_active INTEGER DEFAULT 1, updated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);
+, payload_json TEXT, attempt_count INTEGER, failed_at DATETIME);
 , power_check_passed          INTEGER NOT NULL DEFAULT 0, conflict_check_passed       INTEGER NOT NULL DEFAULT 0);
-, pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT);
+, pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT, success_threshold REAL);
+, product_id TEXT, created_by TEXT);
+, product_id TEXT, role TEXT, scopes TEXT, created_by TEXT);
 , provider TEXT, sync_type TEXT, errors TEXT, duration_ms INTEGER);
 , resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT);
 , sector_profile TEXT DEFAULT 'b2b_saas', growth_stage TEXT DEFAULT 'pre_launch', growth_stage_updated_at TEXT, growth_stage_overridden INTEGER DEFAULT 0, share_token TEXT, ingest_token TEXT, deleted_at DATETIME, build_platform TEXT DEFAULT 'custom_code', company_lifecycle_state TEXT DEFAULT 'setup'
@@ -3337,6 +3340,7 @@ CREATE INDEX idx_deal_rooms_token ON deal_rooms(access_token);
 CREATE INDEX idx_debate_sessions_product ON debate_sessions(product_id, briefing_date);
 CREATE INDEX idx_decision_outcomes_agent ON decision_outcomes(product_id, agent_name);
 CREATE INDEX idx_decision_outcomes_product ON decision_outcomes(product_id);
+CREATE INDEX idx_decision_snooze_until ON decision_snooze_log(product_id, snoozed_until);
 CREATE INDEX idx_decision_votes_decision ON decision_votes(decision_id);
 CREATE INDEX idx_decision_votes_founder ON decision_votes(founder_id);
 CREATE INDEX idx_decisions_category ON decisions(category);
@@ -3422,6 +3426,7 @@ CREATE INDEX idx_milestones_founder ON milestone_events(founder_id, seen_at);
 CREATE INDEX idx_mp_metrics_date ON marketplace_metrics(product_id, snapshot_date);
 CREATE INDEX idx_mp_metrics_product ON marketplace_metrics(product_id);
 CREATE INDEX idx_mp_trust_product ON marketplace_trust_audit(product_id);
+CREATE INDEX idx_network_contrib_cell
 CREATE INDEX idx_network_profiles_founder ON network_profiles(founder_id);
 CREATE INDEX idx_network_profiles_sector ON network_profiles(sector, growth_stage);
 CREATE INDEX idx_notifications_founder ON notifications(founder_id, read_at);
@@ -3489,7 +3494,6 @@ CREATE INDEX idx_signal_events_product ON signal_events(product_id, created_at D
 CREATE INDEX idx_signal_events_unprocessed ON signal_events(product_id, processed) WHERE processed = 0;
 CREATE INDEX idx_signal_history ON signal_history(product_id, snapshot_date DESC);
 CREATE INDEX idx_slack_integrations_founder ON slack_integrations(founder_id);
-CREATE INDEX idx_snooze_log_product
 CREATE INDEX idx_story_product ON founding_story_artifacts(product_id);
 CREATE INDEX idx_story_published ON founding_story_artifacts(published);
 CREATE INDEX idx_strategic_decisions_made_at    ON strategic_decisions_log(made_at);
@@ -3538,6 +3542,7 @@ CREATE INDEX idx_wiki_reads_agent    ON agent_wiki_reads(agent_name);
 CREATE INDEX idx_wiki_reads_entry    ON agent_wiki_reads(entry_id);
 CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
 CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
+CREATE TABLE IF NOT EXISTS "decision_snooze_log" (
 CREATE TABLE IF NOT EXISTS "founders" (
 CREATE TABLE IF NOT EXISTS "integrations" (
 CREATE TABLE IF NOT EXISTS "notifications" (
@@ -3630,7 +3635,6 @@ CREATE TABLE decision_counterfactuals (
 CREATE TABLE decision_outcomes (
 CREATE TABLE decision_patterns (
 CREATE TABLE decision_quality_scores (
-CREATE TABLE decision_snooze_log (
 CREATE TABLE decision_votes (
 CREATE TABLE decisions (
 CREATE TABLE deletion_requests (
@@ -3797,7 +3801,6 @@ CREATE UNIQUE INDEX idx_integration_health_key ON integration_health(product_id,
 CREATE UNIQUE INDEX idx_integrations_product_name ON integrations(product_id, name);
 CREATE UNIQUE INDEX idx_investor_updates_month ON investor_updates(product_id, month);
 CREATE UNIQUE INDEX idx_milestones_unique ON milestone_events(founder_id, product_id, milestone_key);
-CREATE UNIQUE INDEX idx_network_contributions_product_day
 CREATE UNIQUE INDEX idx_onboarding_product ON onboarding_sessions(product_id);
 CREATE UNIQUE INDEX idx_products_ingest_token ON products(ingest_token);
 CREATE UNIQUE INDEX idx_products_share_token ON products(share_token);

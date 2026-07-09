@@ -175,7 +175,7 @@ export async function contributeToNetwork(
       `INSERT INTO network_contributions
        (id, metric, market_category, lifecycle_stage, mrr_bracket, value, contributed_at)
        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-       ON CONFLICT(id, metric) DO UPDATE SET value = excluded.value, contributed_at = CURRENT_TIMESTAMP`,
+       ON CONFLICT(id) DO UPDATE SET value = excluded.value, contributed_at = CURRENT_TIMESTAMP`,
       [`${contributionId}_${metric}`, metric, marketCategory ?? 'unknown', lifecycleStage, mrrBracket, value],
     );
   }

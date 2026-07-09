@@ -16,7 +16,7 @@ webhooksApi.get('/', requireScope('agents:read'), async (c) => {
 
   try {
     const result = await query(
-      `SELECT id, url, events_json, is_active, created_at, updated_at
+      `SELECT id, url, events, active, created_at, last_delivery_at
        FROM webhooks
        WHERE product_id = ?
        ORDER BY created_at DESC`,
@@ -54,9 +54,9 @@ webhooksApi.post('/', requireScope('agents:read'), async (c) => {
     const secret = 'whsec_' + nanoid(32);
 
     await query(
-      `INSERT INTO webhooks (id, product_id, url, events_json, secret, is_active, created_by)
-       VALUES (?, ?, ?, ?, ?, 1, ?)`,
-      [id, productId, url, JSON.stringify(events), secret, userId]
+      `INSERT INTO webhooks (id, founder_id, product_id, url, events, secret, active, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+      [id, userId, productId, url, JSON.stringify(events), secret, userId]
     );
 
     // Return the secret once (only at creation time)
