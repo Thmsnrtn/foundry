@@ -112,9 +112,44 @@ Full architectural detail transferred from AcreOS lives in the survey dossier
   real pre-existing test flake (nanoid `--` truncating raw SQL via executeRaw's
   comment-stripper). 798 tests green.
 
-### Next
-- Phase 3 — Ghost Company (B3): counterfactual simulation on the decision
-  chamber (adapt AcreOS `portfolioOptimizer` Monte-Carlo technique).
-- A3 — truth-engine (claim-vs-source verification for briefings) + eval gate.
-- Phase 4 — Network Nervous System (B4) + Human Layer (B5).
-- Phase 5 — Second Self (B6, Trust Law pricing) + Overnight Operator (B7).
+- ✅ **Phase 3 — Ghost Company (B3).** "Fork reality" in the decision chamber:
+  1,000-run seeded Monte Carlo (mulberry32 + Box-Muller, seed = decision id) of
+  each option's 90-day MRR path on the company's OWN growth history; abstains
+  below 4 snapshots (Honesty Law); the model contributes only labeled
+  conservative growth-delta priors; full assumptions persisted (Ledger Law).
+  Lands in `scenario_models` → the chamber's existing Scenarios stage renders
+  the bands, incl. a "Ghost (do nothing)" fork. `ghost/simulator.ts`, POST
+  `/decisions/:id/ghost`, 5 tests (incl. bit-for-bit determinism). 803 green.
+- ✅ **A3 — Truth engine.** Deterministic claim-vs-source verification
+  (`services/truth/engine.ts`): every significant token — all numbers, quoted
+  phrases, meaningful words — must match a NAMED source; strict on numbers,
+  forgiving on phrasing. `scripts/audit-public-claims.mjs` verifies the landing
+  page's 6 factual claims against CODE-DERIVED sources (tierPricing, TRIAL_
+  PERIOD_DAYS, the real agent-file roster, the founding-slot math) and is wired
+  into `npm run check` — marketing copy can no longer drift from the product.
+  809 tests green.
+
+### Next (specs ready to execute)
+- **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
+  `funnel_events` into an early-warning radar: nightly job matches each product
+  to its cell (stage × mrr_bracket), detects peers whose trajectory diverged
+  N days ahead, emits "2 companies at your coordinate hit a churn wall 30 days
+  ahead of you; here's what the survivor changed" briefing items. Abstain < 5
+  peers (already the peer-signal convention).
+- **Phase 4b — Human Layer (B5).** `services/wellbeing/pulse.ts`: decision load
+  vs trailing average, late-night resolution share (decided_at hour), rejection
+  streaks (service exists) → a pacing signal the briefing + notification cadence
+  respects (defer non-critical alerts when strained; celebrate milestone runs).
+  Adapt AcreOS `founderWellbeing.ts` ("you've overridden 14 decisions this
+  week — 3× average").
+- **Phase 5a — Second Self (B6 / Trust Law).** A trust ledger per decision
+  category: calibration = agreement rate between agent recommendations and
+  (founder choices × later outcome quality) from `decision_outcomes` +
+  `agent_predictions`. Display earned trust in Controls; propose (never силently
+  apply) gate reductions when calibration clears a bar; every delegation is
+  reversible + logged. The gate system already carries the plumbing.
+- **Phase 5b — Overnight Operator (B7 / Attention Law).** The Letter: one daily
+  artifact — "what I handled, the one thing that needs you, what I learned, how
+  my calibration moved" — built from briefings + gateway executions + trust
+  ledger. Add the AcreOS-style route-count ratchet so founder surfaces may only
+  consolidate. Voice delivery already exists (audio briefings).
