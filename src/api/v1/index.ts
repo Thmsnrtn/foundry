@@ -10,6 +10,7 @@ import { experimentsApi } from './experiments.js';
 import { briefingsApi } from './briefings.js';
 import { metricsApi } from './metrics.js';
 import { webhooksApi } from './webhooks.js';
+import { mcpApi } from './mcp.js';
 import type { ApiAuthEnv } from '../middleware/auth.js';
 
 export const apiV1 = new Hono<ApiAuthEnv>();
@@ -29,5 +30,6 @@ apiV1.route('/experiments', experimentsApi);
 apiV1.route('/briefings', briefingsApi);
 apiV1.route('/metrics', metricsApi);
 apiV1.route('/webhooks', webhooksApi);
+apiV1.route('/mcp', mcpApi);
 
 export default apiV1;
