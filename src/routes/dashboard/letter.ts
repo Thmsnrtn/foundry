@@ -144,3 +144,70 @@ letterRoutes.post('/autopilot/panic', async (c) => {
   await panicStop(ctx.productId, founder.id as string);
   return c.redirect('/autopilot');
 });
+
+// ─── Talk to the company (Trust Plane phase 3) ────────────────────────────────
+// Conversation IS capture: decisions and beliefs stated here land in the ledger
+// with their premises monitored. The reply cites the trust record.
+
+letterRoutes.get('/talk', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'talk', 'Talk to the company', undefined, c);
+  if (!ctx.productId) return c.redirect('/dashboard');
+  const content = html`
+    <h1 style="margin-bottom:0.25rem;">Talk to the company</h1>
+    <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.25rem;">
+      State a decision or a belief and it lands in the ledger, monitored. Ask anything — answers come from your real ledgers and carry the trust record.
+    </p>
+    <div id="talk-log" style="min-height:180px;margin-bottom:1rem;"></div>
+    <div style="display:flex;gap:0.5rem;">
+      <input id="talk-input" type="text" placeholder="State a decision or ask anything…"
+        style="flex:1;padding:0.6rem 0.85rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.9rem;" />
+      <button class="btn btn-primary" onclick="sendTalk()" style="font-size:0.85rem;">Send</button>
+    </div>
+    <script>
+      let talkThread = null;
+      function addMsg(role, text) {
+        const log = document.getElementById('talk-log');
+        const div = document.createElement('div');
+        div.style.cssText = 'padding:0.6rem 0.9rem;margin-bottom:0.5rem;border-radius:8px;font-size:0.88rem;line-height:1.5;' +
+          (role === 'you' ? 'background:rgba(78,204,163,0.08);border:1px solid rgba(78,204,163,0.2);' : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);');
+        div.textContent = (role === 'you' ? 'You: ' : 'Foundry: ') + text;
+        log.appendChild(div);
+      }
+      async function sendTalk() {
+        const input = document.getElementById('talk-input');
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = '';
+        addMsg('you', text);
+        try {
+          const res = await fetch('/talk/message', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ text, thread_id: talkThread }),
+          });
+          const data = await res.json();
+          if (data.error) { addMsg('foundry', 'Error: ' + data.error); return; }
+          talkThread = data.threadId;
+          addMsg('foundry', data.reply + (data.captured ? ' 📒' : ''));
+        } catch { addMsg('foundry', 'The company is unreachable right now.'); }
+      }
+      document.getElementById('talk-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTalk(); });
+    </script>`;
+  return c.html(dashboardLayout(ctx, content));
+});
+
+letterRoutes.post('/talk/message', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'talk', 'Talk to the company', undefined, c);
+  if (!ctx.productId) return c.json({ error: 'No product' }, 400);
+  const body = await c.req.json() as { text?: string; thread_id?: string };
+  const text = body.text?.trim();
+  if (!text || text.length > 2000) return c.json({ error: 'Say something (under 2000 chars)' }, 400);
+  try {
+    const { handleUtterance } = await import('../../services/chat/institution.js');
+    const turn = await handleUtterance(ctx.productId, founder.id as string, text, body.thread_id);
+    return c.json(turn);
+  } catch {
+    return c.json({ error: 'The company could not respond (AI unavailable)' }, 503);
+  }
+});
