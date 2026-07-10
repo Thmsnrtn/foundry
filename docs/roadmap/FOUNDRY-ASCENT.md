@@ -174,6 +174,28 @@ parity items (SPA/mobile) if desired.
   services/autopilot/policy.ts, autopilot_tick job (4h), undo route, 10
   lifecycle tests. 837 green.
 
+- ✅ **Phase 7 — the Trust Plane (MCP both directions + chat + kernel seed).**
+  1. **Remote MCP server** (`api/v1/mcp.ts` + `mcp/loop-tools.ts`): the
+     company's judgment as tools for ANY MCP client — letter, queue, resolve
+     (with accountable overruling), record-decision-with-premise, red team,
+     fork, expired beliefs, trust. API key fixes the tenant; autopilot modes
+     deliberately NOT exposed (consent stays in Controls).
+  2. **MCP client through the gateway** (`integration/mcp-client.ts`, migration
+     091): any founder-connected MCP server becomes callable, licensed only by
+     founder-issued grants (tool-scoped, call-capped, expiring, revocable) and
+     routed through the outbound gateway (kill-switch, idempotency, audit) —
+     the adapter treadmill ends.
+  3. **Institution chat** (`chat/institution.ts`, `/talk`): conversation IS
+     capture — stated decisions/beliefs land in the ledger with monitored
+     premises; replies carry the trust record; real ledgers in model context.
+  4. **Kernel boundary** (`check-kernel-boundary.mjs`, in `check`): Foundry's
+     10 kernel dirs verified domain-agnostic (0 pack imports at inception) —
+     the extraction option for a shared Foundry/AcreOS autonomy engine is held
+     open at zero cost (docs/design/KERNEL.md).
+  Phase 5 (economic graph — verified playbooks, calibration-as-signal,
+  underwriting) is spec'd above and gated on real network scale. 855 tests
+  green; 18 new across the three phases.
+
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
   `funnel_events` into an early-warning radar: nightly job matches each product

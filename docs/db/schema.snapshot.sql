@@ -549,6 +549,7 @@
   call_date TEXT NOT NULL,
   call_type TEXT NOT NULL,
   call_type TEXT NOT NULL, -- 'customer' | 'prospect' | 'internal' | 'investor'
+  calls_used   INTEGER NOT NULL DEFAULT 0,
   can_comment BOOLEAN DEFAULT FALSE,     -- can they annotate decisions?
   can_trigger_actions BOOLEAN DEFAULT FALSE,  -- only co_founder by default
   can_view_audit BOOLEAN DEFAULT TRUE,
@@ -760,6 +761,7 @@
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
@@ -902,6 +904,7 @@
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_by   TEXT NOT NULL,               -- founder id
   created_by TEXT DEFAULT 'system',
   created_by TEXT NOT NULL REFERENCES founders(id),
   credentials TEXT,
@@ -1181,6 +1184,7 @@
   experiment_id TEXT NOT NULL,
   experiments_running TEXT,            -- JSON: Experiment[]
   expertise_areas TEXT,
+  expires_at   DATETIME NOT NULL,
   expires_at DATETIME
   expires_at DATETIME NOT NULL
   expires_at DATETIME NOT NULL
@@ -1388,6 +1392,7 @@
   id             TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
+  id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
@@ -1783,6 +1788,7 @@
   match_score REAL,
   matched_signals_json TEXT NOT NULL,
   max_attempts INTEGER DEFAULT 3,
+  max_calls    INTEGER NOT NULL DEFAULT 25, -- hard cap for the grant's lifetime
   max_decisions_per_day INTEGER NOT NULL DEFAULT 20,
   max_members INTEGER DEFAULT 8,
   max_per_day INTEGER DEFAULT 50,
@@ -2175,6 +2181,7 @@
   product_id    TEXT PRIMARY KEY,
   product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
+  product_id   TEXT NOT NULL,
   product_id   TEXT REFERENCES products(id),       -- NULL = org-level role
   product_id  TEXT NOT NULL DEFAULT '',
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -2487,6 +2494,7 @@
   reviewed_by TEXT,
   reviewee_product_id TEXT NOT NULL,
   reviewer_id TEXT NOT NULL,
+  revoked_at   DATETIME,
   revoked_at   TEXT,                                -- NULL means currently active
   revoked_at DATETIME
   risk_alignment REAL,
@@ -2568,6 +2576,7 @@
   sent_count INTEGER NOT NULL DEFAULT 0,
   sentence_rhythm TEXT,                       -- e.g. 'short_punchy', 'rolling', 'staccato_then_long'
   sentiment_score REAL, -- -1 to 1
+  server_name  TEXT NOT NULL,               -- integrations.name of the MCP server
   services_revenue_percentage REAL,
   session_date TEXT NOT NULL,          -- YYYY-MM-DD
   session_id TEXT NOT NULL REFERENCES chat_sessions(id),
@@ -2854,6 +2863,7 @@
   too_short INTEGER DEFAULT 0,
   too_simple INTEGER DEFAULT 0,
   too_technical INTEGER DEFAULT 0,
+  tool_pattern TEXT NOT NULL,               -- exact tool name, or '*' for any on this server
   top_3_this_week TEXT NOT NULL DEFAULT '[]', -- JSON array of 3 actionable items
   top_keywords TEXT DEFAULT '[]',        -- JSON: string[]
   top_opportunities TEXT NOT NULL,       -- JSON: [{opportunity, agent, impact, priority}]
@@ -3022,6 +3032,7 @@
   workspace_name TEXT,
   writing_tone TEXT, -- 'formal', 'casual', 'technical', 'friendly', 'direct'
   years_to_saturation REAL,
+);
 );
 );
 );
@@ -3463,6 +3474,7 @@ CREATE INDEX idx_lifecycle_cond_product ON lifecycle_conditions(product_id);
 CREATE INDEX idx_lifecycle_risk ON lifecycle_state(risk_state);
 CREATE INDEX idx_lifecycle_rules_product ON lifecycle_rules(product_id, enabled);
 CREATE INDEX idx_ma_readiness_product ON ma_readiness_scores(product_id, assessed_at DESC);
+CREATE INDEX idx_mcp_grants_lookup ON mcp_grants(product_id, server_name, revoked_at);
 CREATE INDEX idx_memory_edges_from ON memory_edges(from_node_id);
 CREATE INDEX idx_memory_edges_to ON memory_edges(to_node_id);
 CREATE INDEX idx_memory_nodes_product ON memory_nodes(product_id, occurred_at DESC);
@@ -3755,6 +3767,7 @@ CREATE TABLE lifecycle_state (
 CREATE TABLE ma_readiness_scores (
 CREATE TABLE marketplace_metrics (
 CREATE TABLE marketplace_trust_audit (
+CREATE TABLE mcp_grants (
 CREATE TABLE memory_edges (
 CREATE TABLE memory_nodes (
 CREATE TABLE metric_snapshots (
