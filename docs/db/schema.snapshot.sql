@@ -278,6 +278,7 @@
   UNIQUE(product_id, agent_name, prediction_type, period_start)
   UNIQUE(product_id, agent_name, version)
   UNIQUE(product_id, briefing_date)
+  UNIQUE(product_id, category)
   UNIQUE(product_id, consent_type)
   UNIQUE(product_id, decision_category)
   UNIQUE(product_id, decision_id)
@@ -557,6 +558,7 @@
   cap INTEGER NOT NULL DEFAULT 3,                 -- per week
   cascades_triggered TEXT,
   cash_on_hand REAL,
+  category              TEXT NOT NULL,
   category TEXT CHECK(category IN ('urgent', 'strategic', 'product', 'marketing', 'informational')),
   category TEXT NOT NULL CHECK(category IN (
   category TEXT NOT NULL DEFAULT 'other',     -- 'churn_prevented' | 'expansion_captured' | 'cost_avoided' | 'revenue_accelerated' | 'risk_mitigated' | 'time_saved'
@@ -594,6 +596,7 @@
   churned_count INTEGER DEFAULT 0,
   churned_mrr_cents INTEGER DEFAULT 0,
   claims_substantiation_score REAL,
+  clean_cycles          INTEGER NOT NULL DEFAULT 0,
   clerk_user_id TEXT UNIQUE NOT NULL,
   click_count INTEGER NOT NULL DEFAULT 0,
   clicked_at DATETIME
@@ -1366,6 +1369,7 @@
   id                      TEXT PRIMARY KEY,
   id                     TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
+  id                    TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
@@ -1696,6 +1700,8 @@
   last_delivered_at DATETIME,
   last_delivered_at DATETIME,
   last_delivery_at DATETIME
+  last_demoted_at       DATETIME,
+  last_demotion_reason  TEXT,
   last_dispatch_at TEXT,
   last_editor  TEXT,                          -- updated on each revision
   last_error TEXT,
@@ -1707,6 +1713,7 @@
   last_message_at DATETIME,
   last_message_at TEXT DEFAULT (datetime('now')),
   last_message_at TEXT,                         -- updated when a new message is posted
+  last_promoted_at      DATETIME,
   last_received_at       TEXT,
   last_reinforced_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_rejected_at TEXT,
@@ -1825,6 +1832,7 @@
   minor_user_risk TEXT DEFAULT 'none',
   mitigation_actions_json TEXT NOT NULL, -- JSON array of what worked
   mobile_responsiveness TEXT,
+  mode                  TEXT NOT NULL DEFAULT 'shadow' CHECK (mode IN ('shadow', 'suggest', 'act')),
   model TEXT NOT NULL,
   model_used TEXT,
   model_used TEXT,
@@ -2151,6 +2159,7 @@
   product_id              TEXT NOT NULL,
   product_id             TEXT NOT NULL,
   product_id            TEXT NOT NULL UNIQUE,   -- one settings row per product
+  product_id            TEXT NOT NULL,
   product_id          TEXT NOT NULL,
   product_id          TEXT NOT NULL,        -- kept private, never joined publicly
   product_id       TEXT NOT NULL,
@@ -2569,6 +2578,7 @@
   session_id TEXT,
   session_id TEXT,
   session_id TEXT,
+  set_by                TEXT NOT NULL DEFAULT 'default',   -- founder id | 'earned' | 'undo_demotion' | 'anomaly' | 'panic'
   severity       TEXT NOT NULL DEFAULT 'warning' CHECK (severity IN ('warning','critical')),
   severity TEXT CHECK(severity IN ('watch', 'elevated', 'critical')),
   severity TEXT DEFAULT 'info',
@@ -2891,6 +2901,7 @@
   unit            TEXT,                    -- e.g. '%', '$', 'count', 'days'
   unit TEXT,                                 -- 'count' | 'usd' | 'pct' | 'days' | other
   updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
@@ -3235,6 +3246,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT);
 , approval_note TEXT);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -3253,7 +3265,7 @@
 , product_id TEXT, role TEXT, scopes TEXT, created_by TEXT);
 , progress REAL);
 , provider TEXT, sync_type TEXT, errors TEXT, duration_ms INTEGER);
-, resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT);
+, resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT, autopilot_counted INTEGER NOT NULL DEFAULT 0);
 , sector_profile TEXT DEFAULT 'b2b_saas', growth_stage TEXT DEFAULT 'pre_launch', growth_stage_updated_at TEXT, growth_stage_overridden INTEGER DEFAULT 0, share_token TEXT, ingest_token TEXT, deleted_at DATETIME, build_platform TEXT DEFAULT 'custom_code', company_lifecycle_state TEXT DEFAULT 'setup'
 , thread_id TEXT REFERENCES agent_message_threads(id), parent_message_id TEXT REFERENCES agent_messages(id));
 CREATE INDEX idx_account_roles_founder ON account_roles(founder_id);
@@ -3309,6 +3321,7 @@ CREATE INDEX idx_audit_trail_changed_by ON audit_trail(changed_by);
 CREATE INDEX idx_audit_trail_created ON audit_trail(created_at);
 CREATE INDEX idx_audit_trail_table_row ON audit_trail(table_name, row_id);
 CREATE INDEX idx_auto_exec_product ON auto_execution_log(product_id);
+CREATE INDEX idx_autopilot_product ON autopilot_policies(product_id);
 CREATE INDEX idx_bdl_briefing
 CREATE INDEX idx_bdl_founder_created
 CREATE INDEX idx_bdl_product_created
@@ -3622,6 +3635,7 @@ CREATE TABLE audit_scores (
 CREATE TABLE audit_trail (
 CREATE TABLE auto_execution_log (
 CREATE TABLE autopilot_config (
+CREATE TABLE autopilot_policies (
 CREATE TABLE benchmark_contributions (
 CREATE TABLE benchmark_percentiles (
 CREATE TABLE beta_intake (

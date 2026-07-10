@@ -161,6 +161,19 @@ not just level), trust-ledger → actual gate application UI, The Letter as the
 default landing surface + voice delivery, A4 real-time, and the long AcreOS-
 parity items (SPA/mobile) if desired.
 
+- ✅ **Phase 6 — The Autopilot (B6 realized; AcreOS convergence).** Studied
+  AcreOS's mature governed-autonomy kernel (domainAutonomy/act/experienceLog)
+  and converged Foundry onto it: per-category trust ladder (shadow → suggest →
+  act) with EARNED promotion (10 clean cycles from real outcome_valence, quality
+  hold at <60% positive), founder-consent boundary into 'act', guarded act path
+  (gate ≤1 · 12h grace · kill switch · 24h undo), anomaly circuit-breaker,
+  undo-as-trust-signal demotion, panic stop, and the /autopilot Controls door
+  (plain-language dials + evidence, behind the Letter mount — ratchet honored).
+  Second Self actions land in The Letter. Full comparison + deliberate
+  differences: docs/design/AUTOPILOT.md. Migration 090,
+  services/autopilot/policy.ts, autopilot_tick job (4h), undo route, 10
+  lifecycle tests. 837 green.
+
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
   `funnel_events` into an early-warning radar: nightly job matches each product

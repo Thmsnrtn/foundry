@@ -2008,6 +2008,35 @@ export async function networkRadarCheck(): Promise<void> {
   logger.info('network_radar complete', { jobName: 'network_radar' });
 }
 
+// ─── Autopilot tick (Ascent B6 realized / Trust Law) ──────────────────────────
+// Learn (bank real outcomes into the ladder) then act (resolve eligible gate-≤1
+// decisions in founder-granted categories). Every act is notified with its 24h
+// undo — the founder always knows, and the undo itself teaches the ladder.
+export async function autopilotTick(): Promise<void> {
+  logger.info('autopilot_tick starting', { jobName: 'autopilot_tick' });
+  const products = await getAllActiveProducts();
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const { runAutopilotTick } = await import('../services/autopilot/policy.js');
+      const result = await runAutopilotTick(p.id);
+      if (result.acted > 0) {
+        const { createNotification } = await import('../services/ux/notifications.js');
+        const first = result.decisions[0];
+        await createNotification(
+          p.owner_id, p.id, 'system',
+          `Second Self handled ${result.acted} decision${result.acted > 1 ? 's' : ''}`,
+          `"${first.what}" resolved to the team's recommendation (${first.category}). You have 24h to undo from the decision page — an undo also pulls that category back.`,
+          `/decisions/${first.id}`, 'Review / undo',
+        );
+      }
+    } catch (err) {
+      logger.error(`autopilot_tick error for ${p.id}`, { jobName: 'autopilot_tick', error: String(err) });
+    }
+  }
+  logger.info('autopilot_tick complete', { jobName: 'autopilot_tick' });
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -2015,6 +2044,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
   founder_pulse_check:  { fn: founderPulseCheck,    schedule: '0 9 * * 5',       description: 'Founder strain check — kind, numbers-shown, only when overloaded (Friday 9:00 UTC)' },
   network_radar:        { fn: networkRadarCheck,    schedule: '15 7 * * *',      description: 'Peer early-warning radar — warns when a vital sits in the danger tail of ≥5 peers (daily)' },
+  autopilot_tick:       { fn: autopilotTick,        schedule: '45 */4 * * *',    description: 'Second Self: bank real outcomes into the trust ladder, then act on eligible gate-≤1 decisions in founder-granted categories (every 4h)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

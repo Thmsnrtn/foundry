@@ -382,6 +382,24 @@ function summarizeCase(caseData: unknown): string {
 
 // ─── Resolve Decision ─────────────────────────────────────────────────────────
 
+// ─── POST /decisions/:id/undo-auto — undo a Second Self action (24h window) ──
+// An undo is the strongest trust signal there is: it restores the decision to
+// pending AND demotes that category back to 'suggest'.
+decisionRoutes.post('/decisions/:id/undo-auto', async (c) => {
+  const founder = c.get('founder');
+  const decisionId = c.req.param('id');
+  const owned = await query(
+    `SELECT d.product_id FROM decisions d JOIN products p ON d.product_id = p.id
+     WHERE d.id = ? AND p.owner_id = ?`,
+    [decisionId, founder.id],
+  );
+  if (owned.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  const { undoAutopilotAction } = await import('../../services/autopilot/policy.js');
+  const undone = await undoAutopilotAction(decisionId, (owned.rows[0] as Record<string, string>).product_id);
+  if (!undone) return c.json({ error: 'Not undoable (not an autopilot action, or past the 24h window)' }, 400);
+  return c.redirect(`/decisions/${decisionId}`);
+});
+
 // ─── POST /decisions/:id/ghost — fork reality (Ghost Company simulation) ─────
 decisionRoutes.post('/decisions/:id/ghost', async (c) => {
   const founder = c.get('founder');

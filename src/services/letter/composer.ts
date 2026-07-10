@@ -32,9 +32,9 @@ export async function composeLetter(productId: string): Promise<Letter> {
       [productId],
     ),
     query(
-      `SELECT what FROM decisions
-       WHERE product_id = ? AND gate = 0 AND decided_at >= datetime('now', '-1 day')
-         AND decided_by != 'founder' LIMIT 10`,
+      `SELECT what, decided_by FROM decisions
+       WHERE product_id = ? AND decided_at >= datetime('now', '-1 day')
+         AND decided_by IN ('system_gate_0', 'second_self') LIMIT 10`,
       [productId],
     ),
     query(
@@ -55,7 +55,9 @@ export async function composeLetter(productId: string): Promise<Letter> {
       (e) => `Executed ${e.action_type} via ${e.integration}`,
     ),
     ...(gate0.rows as unknown as Array<Record<string, string>>).map(
-      (d) => `Handled autonomously (gate 0): ${d.what}`,
+      (d) => d.decided_by === 'second_self'
+        ? `Second Self decided: ${d.what} (24h undo available)`
+        : `Handled autonomously (gate 0): ${d.what}`,
     ),
   ];
 
