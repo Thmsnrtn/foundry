@@ -2037,6 +2037,36 @@ export async function autopilotTick(): Promise<void> {
   logger.info('autopilot_tick complete', { jobName: 'autopilot_tick' });
 }
 
+// ─── Customer Success sweep (Hands Law layer 3 — the first department) ─────────
+// One save per at-risk customer, drafted from their real account state.
+// Trust-ladder governed: shadow records, suggest queues for approval, act sends.
+export async function customerSuccessSweep(): Promise<void> {
+  logger.info('customer_success_sweep starting', { jobName: 'customer_success_sweep' });
+  const products = await getAllActiveProducts();
+  let proposed = 0, sent = 0;
+  for (const row of products.rows) {
+    const p = row as Record<string, string>;
+    try {
+      const { runSuccessSweep } = await import('../services/departments/success.js');
+      const res = await runSuccessSweep(p.id);
+      proposed += res.proposed;
+      sent += res.sent;
+      if (res.proposed > 0) {
+        const { createNotification } = await import('../services/ux/notifications.js');
+        await createNotification(
+          p.owner_id, p.id, 'system',
+          'Check-in drafts waiting for your approval',
+          `${res.proposed} at-risk customer(s) have a check-in drafted from their real account state. Approve or discard in the action queue.`,
+          '/agents/actions', 'Review drafts',
+        );
+      }
+    } catch (err) {
+      logger.error(`customer_success_sweep error for ${p.id}`, { jobName: 'customer_success_sweep', error: String(err) });
+    }
+  }
+  logger.info(`customer_success_sweep complete — ${proposed} proposed, ${sent} sent`, { jobName: 'customer_success_sweep' });
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -2045,6 +2075,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   founder_pulse_check:  { fn: founderPulseCheck,    schedule: '0 9 * * 5',       description: 'Founder strain check — kind, numbers-shown, only when overloaded (Friday 9:00 UTC)' },
   network_radar:        { fn: networkRadarCheck,    schedule: '15 7 * * *',      description: 'Peer early-warning radar — warns when a vital sits in the danger tail of ≥5 peers (daily)' },
   autopilot_tick:       { fn: autopilotTick,        schedule: '45 */4 * * *',    description: 'Second Self: bank real outcomes into the trust ladder, then act on eligible gate-≤1 decisions in founder-granted categories (every 4h)' },
+  customer_success_sweep: { fn: customerSuccessSweep, schedule: '15 8 * * *',    description: 'Customer Success department: one check-in per at-risk customer, drafted from real account state; trust-ladder governed, envelope-bounded (daily)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

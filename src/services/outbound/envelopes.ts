@@ -22,6 +22,7 @@ export interface EnvelopeCheck {
  *  hits the wall the same week it starts, not on the invoice. */
 const DEFAULT_CAPS: Array<{ prefix: string; cap: number }> = [
   { prefix: 'mcp:', cap: 100 },
+  { prefix: 'dept:', cap: 10 }, // department actions start deliberately small
 ];
 const FALLBACK_CAP = 50;
 

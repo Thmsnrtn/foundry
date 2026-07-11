@@ -265,6 +265,22 @@ parity items (SPA/mobile) if desired.
   the envelope stops fresh call N+1 while dedup doesn't consume. 880 tests
   green.
 
+- ✅ **The Hands, phase H2b — Customer Success, the first department.**
+  The full loop, pointed at retention (`services/departments/success.ts` +
+  `customer_success_sweep` daily job): sense (churn_risk from real customer
+  telemetry) → decide (one save per at-risk customer, drafted DETERMINISTICALLY
+  from their real account state — the draft cannot claim anything the ledger
+  doesn't hold) → act through the existing execution engine, governed by the
+  trust ladder (shadow records what it WOULD do — the record that earns
+  'suggest'; suggest queues drafts for founder approval with a notification;
+  act sends autonomously under the founder's explicit Controls grant,
+  attributable as autopilot:customer_success) → bounded three ways with no
+  route around (trust ladder × department envelope, default 10/week ×
+  per-customer communication budget, 3/week) → reports through the Letter's
+  "what I handled" and the Actions queue. 14-day per-customer dedup. The
+  category's dial bootstraps into Controls at shadow on first sweep without
+  overriding any founder choice. 886 tests green.
+
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
   `funnel_events` into an early-warning radar: nightly job matches each product

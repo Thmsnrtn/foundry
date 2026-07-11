@@ -44,6 +44,8 @@ export interface ActionPayload {
   server_name?: string;
   tool?: string;
   tool_args?: Record<string, unknown>;
+  // Department provenance (e.g. customer-success save for a specific customer)
+  cs_customer?: string;
 }
 
 export interface ExecutionResult {
