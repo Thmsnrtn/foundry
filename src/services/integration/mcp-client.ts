@@ -19,6 +19,8 @@ import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/ga
 import { getPlaintextToken } from '../../lib/crypto.js';
 import { buildInsert } from '../../db/schema/kernel.js';
 import { log } from '../../lib/logger.js';
+import { checkReserved } from '../outbound/reserved.js';
+import { checkAndConsume } from '../outbound/envelopes.js';
 
 const MCP_TIMEOUT_MS = 10_000;
 
@@ -141,6 +143,21 @@ export async function callMcpTool(input: McpCallInput): Promise<
   const grant = await checkGrant(input.productId, input.serverName, input.tool);
   if (!grant.ok) return { ok: false, reason: grant.reason! };
 
+  // 2b. Reserved powers never delegate — at any trust level, under any grant.
+  const reserved = checkReserved(input.tool);
+  if (reserved.reserved) {
+    return { ok: false, reason: `reserved power: ${reserved.why}` };
+  }
+
+  // 2c. The weekly envelope bounds how much without asking (Hands Law).
+  const envelope = await checkAndConsume(input.productId, `mcp:${input.serverName}`);
+  if (!envelope.allowed) {
+    return {
+      ok: false,
+      reason: `weekly envelope reached for ${input.serverName} (${envelope.used}/${envelope.cap} this week) — raise it on Connections if intended`,
+    };
+  }
+
   // 3. Through the gateway: kill-switch, idempotency, audit.
   const result = await invoke({
     productId: input.productId,
@@ -156,11 +173,26 @@ export async function callMcpTool(input: McpCallInput): Promise<
     dedupKey: `mcp:${input.serverName}:${input.tool}:${input.dedupKey}`,
   });
 
-  if (!result.ok) return { ok: false, reason: `${result.phase}: ${result.reason}` };
+  // Exactly-once accounting: cached (deduped) and refused calls did no fresh
+  // work, so the envelope unit reserved in 2c is returned.
+  const refundEnvelope = () => query(
+    `UPDATE envelope_usage SET used_count = MAX(used_count - 1, 0)
+     WHERE product_id = ? AND scope = ? AND week_starting = (
+       SELECT week_starting FROM envelope_usage
+       WHERE product_id = ? AND scope = ? ORDER BY week_starting DESC LIMIT 1)`,
+    [input.productId, `mcp:${input.serverName}`, input.productId, `mcp:${input.serverName}`],
+  );
+
+  if (!result.ok) {
+    await refundEnvelope();
+    return { ok: false, reason: `${result.phase}: ${result.reason}` };
+  }
 
   // 4. Fresh (non-cached) executions consume the grant.
   if (!result.cached) {
     await query('UPDATE mcp_grants SET calls_used = calls_used + 1 WHERE id = ?', [grant.grantId]);
+  } else {
+    await refundEnvelope();
   }
   log.info('mcp tool call', {
     productId: input.productId, server: input.serverName, tool: input.tool,

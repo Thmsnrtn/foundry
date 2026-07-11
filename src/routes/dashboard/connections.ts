@@ -18,6 +18,7 @@ import { getLayoutContext } from './_shared.js';
 import { query } from '../../db/client.js';
 import { encryptToken } from '../../lib/crypto.js';
 import { issueGrant, revokeGrant } from '../../services/integration/mcp-client.js';
+import { getCap, getUsage, setCap } from '../../services/outbound/envelopes.js';
 import { getFluency, explain } from '../../services/ux/fluency.js';
 
 export const connectionRoutes = new Hono<AuthEnv>();
@@ -69,10 +70,17 @@ connectionRoutes.get('/connections', async (c) => {
     grantsByServer.get(key)!.push(g);
   }
 
-  const serverCards = (servers.rows as unknown as Array<Record<string, string>>).map((s) => {
+  const serverList = servers.rows as unknown as Array<Record<string, string>>;
+  const envelopes = await Promise.all(serverList.map(async (s) => ({
+    cap: await getCap(ctx.productId!, `mcp:${s.name}`),
+    used: await getUsage(ctx.productId!, `mcp:${s.name}`),
+  })));
+
+  const serverCards = serverList.map((s, i) => {
     let url = '';
     try { url = (JSON.parse(s.config ?? '{}') as { url?: string }).url ?? ''; } catch { /* show blank */ }
     const serverGrants = grantsByServer.get(s.name) ?? [];
+    const env = envelopes[i];
     return html`
     <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;">
@@ -116,6 +124,17 @@ connectionRoutes.get('/connections', async (c) => {
             <input type="number" name="expires_days" value="30" min="1" max="365" style="${INPUT_STYLE}" />
           </div>
           <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;">Allow</button>
+        </form>
+
+        <form method="POST" action="/connections/envelope" style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,0.05);padding-top:0.6rem;">
+          <input type="hidden" name="server_name" value="${s.name}" />
+          <span style="font-size:0.78rem;color:var(--text-muted);">
+            ${fluency === 'technical' ? 'Weekly envelope' : 'Weekly limit, no matter what'}:
+            <strong style="color:var(--text-primary);">${env.used}/${env.cap}</strong> used this week
+          </span>
+          <input type="number" name="weekly_cap" value="${env.cap}" min="0" max="100000"
+            style="width:90px;padding:0.3rem 0.5rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.8rem;" />
+          <button type="submit" class="btn btn-ghost" style="font-size:0.75rem;padding:0.25rem 0.6rem;">Set</button>
         </form>
       </div>
     </div>`;
@@ -236,6 +255,24 @@ connectionRoutes.post('/connections/grant', async (c) => {
       productId: ctx.productId, serverName, toolPattern,
       maxCalls, expiresDays, createdBy: founder.id,
     });
+  }
+  return c.redirect('/connections');
+});
+
+connectionRoutes.post('/connections/envelope', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
+  if (!ctx.productId) return c.redirect('/dashboard');
+
+  const body = await c.req.parseBody();
+  const serverName = String(body.server_name ?? '').trim().toLowerCase();
+  const cap = parseInt(String(body.weekly_cap ?? ''), 10);
+  const server = await query(
+    `SELECT id FROM integrations WHERE product_id = ? AND provider = 'mcp' AND name = ?`,
+    [ctx.productId, serverName],
+  );
+  if (server.rows.length > 0 && Number.isFinite(cap) && cap >= 0) {
+    await setCap(ctx.productId, `mcp:${serverName}`, cap);
   }
   return c.redirect('/connections');
 });

@@ -248,6 +248,23 @@ parity items (SPA/mobile) if desired.
   HANDS design (envelopes, reserved powers, departments H2–H5, operator side)
   is specced in docs/design/HANDS.md. 873 tests green.
 
+- ✅ **The Hands, phase H2 — envelopes + reserved powers.** The two governance
+  organs the departments will run inside. (1) **Envelopes** (migration 092,
+  `services/outbound/envelopes.ts`): grants bound WHAT the hands may touch;
+  envelopes bound HOW MUCH per week without asking — founder-set weekly caps
+  per scope (`mcp:<server>` first; emails/posts/PRs to follow), race-safe
+  insert-or-increment per ISO week, generous-but-finite defaults (a runaway
+  loop hits the wall the week it starts, not on the invoice). Exactly-once
+  accounting: deduped/refused calls refund their unit. Set + read on
+  /connections ("Weekly limit, no matter what: 2/100 used"). (2) **Reserved
+  powers** (`services/outbound/reserved.ts`): refunds, price changes, data
+  deletion, legal acts NEVER delegate — at any trust level, under any grant;
+  checked INSIDE `callMcpTool` (after grants, before the gateway), so there
+  is no route around; deliberately conservative name-matching. Proven: a
+  reserved tool refuses under a live wildcard grant with zero remote calls;
+  the envelope stops fresh call N+1 while dedup doesn't consume. 880 tests
+  green.
+
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
   `funnel_events` into an early-warning radar: nightly job matches each product

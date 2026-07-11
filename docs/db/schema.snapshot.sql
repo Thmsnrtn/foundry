@@ -230,6 +230,7 @@
   ON data_classifications(product_id, surface);
   ON data_quality_alerts(product_id, resolved_at, created_at);
   ON data_quality_alerts(product_id, severity)
+  ON envelope_usage(product_id, scope, week_starting);
   ON experiment_holdouts(product_id, is_active);
   ON experiment_results_timeline(experiment_id, checkpoint_date);
   ON founder_journal_entries(product_id, is_agent_visible, created_at);
@@ -288,6 +289,8 @@
   UNIQUE(product_id, founder_id, dna_field)
   UNIQUE(product_id, insight_date)
   UNIQUE(product_id, name)
+  UNIQUE(product_id, scope)
+  UNIQUE(product_id, scope, week_starting)
   UNIQUE(product_id, session_date)
   UNIQUE(product_id, snapshot_date)
   UNIQUE(product_id, snapshot_date)
@@ -765,6 +768,7 @@
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at  TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -1392,10 +1396,12 @@
   id             TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
+  id            TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
+  id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
@@ -2178,12 +2184,14 @@
   product_id     TEXT NOT NULL,
   product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
+  product_id    TEXT NOT NULL,
   product_id    TEXT PRIMARY KEY,
   product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
   product_id   TEXT REFERENCES products(id),       -- NULL = org-level role
   product_id  TEXT NOT NULL DEFAULT '',
+  product_id  TEXT NOT NULL,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -2545,7 +2553,9 @@
   scenario_name TEXT NOT NULL, -- 'current', 'series_a', 'acquisition_50m', etc.
   scenario_type TEXT NOT NULL CHECK (scenario_type IN ('runway','growth','hiring','pricing','churn')),
   scenario_type TEXT NOT NULL,
+  scope         TEXT NOT NULL,
   scope       TEXT NOT NULL,
+  scope       TEXT NOT NULL,              -- e.g. 'mcp:my-crm'
   scope TEXT NOT NULL DEFAULT 'architecture_class',
   scope_id    TEXT NOT NULL,
   score INTEGER NOT NULL,
@@ -2916,8 +2926,10 @@
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at    TEXT NOT NULL
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at  TEXT NOT NULL,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -2965,6 +2977,7 @@
   url TEXT NOT NULL,
   url TEXT,
   usage_score REAL,
+  used_count    INTEGER NOT NULL DEFAULT 0,
   user_agent TEXT,
   user_agent TEXT,
   user_prompt_preview TEXT, -- first 500 chars of user prompt
@@ -3008,6 +3021,8 @@
   week_start TEXT NOT NULL, -- ISO date of Monday
   week_starting TEXT NOT NULL,                    -- 'YYYY-MM-DD' Monday
   week_starting TEXT NOT NULL,                  -- 'YYYY-MM-DD' Monday
+  week_starting TEXT NOT NULL,            -- ISO date of the week's Monday
+  weekly_cap  INTEGER NOT NULL,
   weekly_hours_available REAL,
   weekly_hours_available REAL,
   weekly_refresh_run_id TEXT                 -- correlates branches generated in same weekly refresh
@@ -3032,6 +3047,8 @@
   workspace_name TEXT,
   writing_tone TEXT, -- 'formal', 'casual', 'technical', 'friendly', 'direct'
   years_to_saturation REAL,
+);
+);
 );
 );
 );
@@ -3411,6 +3428,7 @@ CREATE INDEX idx_decisions_product_status ON decisions(product_id, status);
 CREATE INDEX idx_decisions_status ON decisions(status);
 CREATE INDEX idx_dq_alerts_open
 CREATE INDEX idx_dq_alerts_product
+CREATE INDEX idx_envelope_usage_lookup
 CREATE INDEX idx_ethics_product ON ethical_assessment(product_id);
 CREATE INDEX idx_event_rules ON event_rules(product_id, trigger_event_type);
 CREATE INDEX idx_event_stream ON event_stream(product_id, created_at);
@@ -3706,6 +3724,8 @@ CREATE TABLE decision_votes (
 CREATE TABLE decisions (
 CREATE TABLE deletion_requests (
 CREATE TABLE dimension_hints (
+CREATE TABLE envelope_usage (
+CREATE TABLE envelopes (
 CREATE TABLE ethical_assessment (
 CREATE TABLE event_rules (
 CREATE TABLE event_stream (
