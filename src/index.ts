@@ -380,6 +380,14 @@ app.use('/network', authMiddleware);
 app.use('/network/*', authMiddleware);
 app.use('/exit', authMiddleware);
 app.use('/exit/*', authMiddleware);
+// Ascent surfaces (the Letter, Controls, Talk) + Hands Law connections
+app.use('/letter', authMiddleware);
+app.use('/autopilot', authMiddleware);
+app.use('/autopilot/*', authMiddleware);
+app.use('/talk', authMiddleware);
+app.use('/talk/*', authMiddleware);
+app.use('/connections', authMiddleware);
+app.use('/connections/*', authMiddleware);
 app.use('/api/*', apiRateLimit);
 
 // Per-user AI rate limit (30/hr) — front-stop to the AI client's
@@ -418,6 +426,9 @@ app.use('/ambient/*', csrfMiddleware);
 app.use('/network/*', csrfMiddleware);
 app.use('/exit/*', csrfMiddleware);
 app.use('/founder-ops/*', csrfMiddleware);
+app.use('/autopilot/*', csrfMiddleware);
+app.use('/talk/*', csrfMiddleware);
+app.use('/connections/*', csrfMiddleware);
 
 // Dashboard routes
 app.route('/', dashboardRoutes);

@@ -210,6 +210,10 @@ const EXPLAINERS: Record<string, { plain: string; balanced: string }> = {
     plain: 'Your key numbers next to companies at your stage — so "is 5% churn bad?" always has an answer with context.',
     balanced: 'Peer-cell metric comparisons (abstains below 5 peers).',
   },
+  connections: {
+    plain: 'Plug in the tools you already use, and decide exactly what Foundry may do with each one — like "send up to 25 emails a month." It can never do more than you allowed, everything it does is written down here, and you can take any permission back instantly.',
+    balanced: 'Connect any MCP server; grants are tool-scoped, call-capped, expiring, revocable. Every call routes the gateway (idempotent, audited, kill-switchable).',
+  },
 };
 
 export function explain(key: string, f: Fluency): string {

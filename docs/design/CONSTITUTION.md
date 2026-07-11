@@ -56,6 +56,16 @@ Every feature is a stage of this loop. The product is not twelve agents; it is
    infers a default; the dial lives in Settings; plain speech keeps the
    technical term visible (users are learning the vocabulary, not being
    protected from it). Substrate: `services/ux/fluency.ts`.
+10. **Hands Law** — the founder shapes the system's hands, never the reverse.
+   Any tool can be connected (any MCP server IS a connector); reach is never
+   license — every outbound ability is founder-granted (tool-scoped,
+   call-capped, expiring, revocable), envelope-bounded, gateway-routed
+   (idempotent, undoable, audited, kill-switchable), and attributable.
+   Reserved powers — pricing floors, large refunds, brand-defining public
+   statements, legal acts, data deletion — never delegate at any trust level.
+   New autonomy is always a new *category* on the existing ladder, never a
+   new subsystem. (Substrate: `mcp_grants`, `services/integration/mcp-client.ts`,
+   `services/outbound/gateway.ts`, `/connections`. Design: `docs/design/HANDS.md`.)
 
 ## The key unification
 

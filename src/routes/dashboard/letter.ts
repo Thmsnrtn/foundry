@@ -15,8 +15,13 @@ import {
   MODE_LABELS, PROMOTION_THRESHOLD, type AutopilotMode,
 } from '../../services/autopilot/policy.js';
 import { getFluency, gateLabel, explain } from '../../services/ux/fluency.js';
+import { connectionRoutes } from './connections.js';
 
 export const letterRoutes = new Hono<AuthEnv>();
+
+// Connections (Hands Law) rides the autopilot module — Controls and
+// Connections are one door (Attention Law: mounts may only shrink).
+letterRoutes.route('/', connectionRoutes);
 
 const section = (label: string, items: string[]) => items.length === 0 ? '' : html`
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">

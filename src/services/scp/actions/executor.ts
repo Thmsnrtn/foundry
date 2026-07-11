@@ -18,7 +18,8 @@ export type ActionType =
   | 'post_slack'
   | 'schedule_call'
   | 'update_crm'
-  | 'custom_webhook';
+  | 'custom_webhook'
+  | 'mcp_tool';
 
 export interface ActionPayload {
   action_type: ActionType;
@@ -39,6 +40,10 @@ export interface ActionPayload {
   // For custom_webhook:
   webhook_url?: string;
   webhook_payload?: Record<string, unknown>;
+  // For mcp_tool (Hands Law): any founder-connected MCP server, grant-governed.
+  server_name?: string;
+  tool?: string;
+  tool_args?: Record<string, unknown>;
 }
 
 export interface ExecutionResult {
@@ -308,6 +313,27 @@ async function executeAction(
           details: payload,
         },
       };
+
+    case 'mcp_tool': {
+      // Hands Law: any connected MCP tool — the call is licensed by a live
+      // founder-issued grant and routed through the gateway (idempotent,
+      // audited, kill-switchable). No grant, no call.
+      if (!payload.server_name || !payload.tool) {
+        return { success: false, error: 'mcp_tool requires server_name and tool' };
+      }
+      const { callMcpTool } = await import('../../integration/mcp-client.js');
+      const r = await callMcpTool({
+        productId,
+        agent: 'standing_order',
+        serverName: payload.server_name,
+        tool: payload.tool,
+        args: payload.tool_args ?? {},
+        dedupKey: `action:${executionId}`,
+      });
+      return r.ok
+        ? { success: true, integration_response: r.result }
+        : { success: false, error: r.reason };
+    }
 
     default:
       return { success: false, error: `Unknown action_type: ${(payload as ActionPayload).action_type}` };

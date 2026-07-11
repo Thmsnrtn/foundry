@@ -147,11 +147,15 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   </div>
   <script>
     const CMD_ROUTES=[
+      {label:'Today — The Letter',href:'/letter',section:'Navigate'},
       {label:'Signal Dashboard',href:'/dashboard',section:'Navigate'},
       {label:'CEO Briefing',href:'/agents/briefings/latest',section:'Navigate'},
       {label:'Decisions',href:'/decisions',section:'Navigate'},
+      {label:'Talk to the Company',href:'/talk',section:'Navigate'},
       {label:'Fleet Observatory',href:'/fleet',section:'Navigate'},
       {label:'Action Queue',href:'/agents/actions',section:'Navigate'},
+      {label:'Autopilot Controls',href:'/autopilot',section:'Autonomy'},
+      {label:'Connections',href:'/connections',section:'Autonomy'},
       {label:'Agent Debate',href:'/agents/debate',section:'Agents'},
       {label:'Agent Accuracy',href:'/agents/accuracy',section:'Agents'},
       {label:'Agent Transparency',href:'/agents/transparency',section:'Agents'},
@@ -275,45 +279,65 @@ function groupedSidebar(
 ): HtmlContent {
   const b = badges ?? { decisions_count: 0, has_overdue_audit: false, unread_signals: false, unseen_milestones: false, open_prs_count: 0, dna_completion: 0 };
 
-  // Primary items — larger visual weight, no section header
+  // Five doors (Hands Law layer 5 / Attention Law): what a founder actually
+  // DOES — read the letter, check the signal, decide, talk, act. Everything
+  // else lives in collapsed groups that open where you are. Nothing removed
+  // (Fluency Law: the product never forks) — nothing shouting.
   const primaryItems: NavItem[] = [
+    { key: 'letter', label: 'Today', href: '/letter' },
     { key: 'dashboard', label: 'Signal', href: '/dashboard' },
-    { key: 'agents-briefings', label: 'Briefing', href: '/agents/briefings/latest', badge: 'NEW', badgeType: 'dot' },
     { key: 'decisions', label: 'Decide', href: '/decisions', badge: b.decisions_count > 0 ? String(b.decisions_count) : undefined, badgeType: 'count' },
+    { key: 'talk', label: 'Talk', href: '/talk' },
     { key: 'agents-actions', label: 'Actions', href: '/agents/actions' },
   ];
 
-  const agentsItems: NavItem[] = [
-    { key: 'agents', label: 'Roster', href: '/agents' },
-    { key: 'agents-debate', label: 'Debate', href: '/agents/debate' },
-    { key: 'agents-accuracy', label: 'Accuracy', href: '/agents/accuracy' },
-    { key: 'agents-transparency', label: 'Transparency', href: '/agents/transparency' },
-    { key: 'agents-intelligence', label: 'Intelligence', href: '/agents/intelligence' },
-  ];
-
-  const forwardItems: NavItem[] = [
-    { key: 'scenarios', label: 'Scenarios', href: '/scenarios' },
-    { key: 'board', label: 'Investor Board', href: '/board' },
-    { key: 'exit', label: 'Exit', href: '/exit' },
-    { key: 'brief', label: 'Weekly Brief', href: '/brief' },
-  ];
-
-  const signalsItems: NavItem[] = [
-    { key: 'signals-multimodal', label: 'Multi-Modal', href: '/signals/multimodal' },
-    { key: 'network', label: 'Network', href: '/network' },
-    { key: 'memory', label: 'Memory', href: '/memory' },
-    { key: 'competitive', label: 'Competitive', href: `/products/${productId}/competitive` },
-  ];
-
-  const autonomyItems: NavItem[] = [
-    { key: 'playbooks-execution', label: 'Standing Orders', href: '/playbooks/execution' },
-    { key: 'ambient', label: 'Ambient', href: '/ambient' },
-    { key: 'roi', label: 'ROI', href: '/roi' },
-  ];
-
-  const systemItems: NavItem[] = [
-    { key: 'benchmarks', label: 'Benchmarks', href: '/benchmarks' },
-    { key: 'privacy', label: 'Privacy', href: '/privacy' },
+  const navGroups: Array<{ label: string; items: NavItem[] }> = [
+    {
+      label: 'AUTOPILOT',
+      items: [
+        { key: 'autopilot', label: 'Controls', href: '/autopilot' },
+        { key: 'connections', label: 'Connections', href: '/connections' },
+        { key: 'playbooks-execution', label: 'Standing Orders', href: '/playbooks/execution' },
+        { key: 'ambient', label: 'Ambient', href: '/ambient' },
+      ],
+    },
+    {
+      label: 'YOUR TEAM',
+      items: [
+        { key: 'agents-briefings', label: 'Briefing', href: '/agents/briefings/latest', badge: 'NEW', badgeType: 'dot' },
+        { key: 'agents', label: 'Roster', href: '/agents' },
+        { key: 'agents-debate', label: 'Debate', href: '/agents/debate' },
+        { key: 'agents-accuracy', label: 'Accuracy', href: '/agents/accuracy' },
+        { key: 'agents-transparency', label: 'Transparency', href: '/agents/transparency' },
+        { key: 'agents-intelligence', label: 'Intelligence', href: '/agents/intelligence' },
+      ],
+    },
+    {
+      label: 'COMPANY',
+      items: [
+        { key: 'memory', label: 'Memory', href: '/memory' },
+        { key: 'scenarios', label: 'Scenarios', href: '/scenarios' },
+        { key: 'signals-multimodal', label: 'Multi-Modal', href: '/signals/multimodal' },
+        { key: 'network', label: 'Network', href: '/network' },
+        { key: 'competitive', label: 'Competitive', href: `/products/${productId}/competitive` },
+        { key: 'benchmarks', label: 'Benchmarks', href: '/benchmarks' },
+      ],
+    },
+    {
+      label: 'INVESTOR',
+      items: [
+        { key: 'board', label: 'Investor Hub', href: '/board' },
+        { key: 'exit', label: 'Exit', href: '/exit' },
+        { key: 'brief', label: 'Weekly Brief', href: '/brief' },
+        { key: 'roi', label: 'ROI', href: '/roi' },
+      ],
+    },
+    {
+      label: 'SYSTEM',
+      items: [
+        { key: 'privacy', label: 'Privacy', href: '/privacy' },
+      ],
+    },
   ];
 
   return html`
@@ -325,22 +349,11 @@ function groupedSidebar(
 
     <ul class="sidebar-nav" style="margin-bottom:0.75rem;">${renderNavItems(primaryItems, active)}</ul>
 
-    <details open>
-      <summary style="list-style:none;cursor:pointer;">${sectionHeader('AGENTS')}</summary>
-      <ul class="sidebar-nav">${renderNavItems(agentsItems, active)}</ul>
-    </details>
-
-    ${sectionHeader('FORWARD')}
-    <ul class="sidebar-nav">${renderNavItems(forwardItems, active)}</ul>
-
-    ${sectionHeader('SIGNALS')}
-    <ul class="sidebar-nav">${renderNavItems(signalsItems, active)}</ul>
-
-    ${sectionHeader('AUTONOMY')}
-    <ul class="sidebar-nav">${renderNavItems(autonomyItems, active)}</ul>
-
-    ${sectionHeader('SYSTEM')}
-    <ul class="sidebar-nav">${renderNavItems(systemItems, active)}</ul>
+    ${navGroups.map((group) => html`
+    <details ${group.items.some((i) => i.key === active) ? 'open' : ''}>
+      <summary style="list-style:none;cursor:pointer;">${sectionHeader(group.label)}</summary>
+      <ul class="sidebar-nav">${renderNavItems(group.items, active)}</ul>
+    </details>`)}
 
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
       ${founderEmail?.toLowerCase() === 'thmsnrtn@gmail.com' ? html`<li><a href="/founder-ops" class="${active === 'founder-ops' ? 'active' : ''}" style="color:#f59e0b;">Founder Ops</a></li>` : ''}
@@ -361,16 +374,16 @@ function mobilBottomNav(active: string, decisionsCount: number): HtmlContent {
 
   const signalIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="10" cy="10" r="2.5"/><path d="M5.5 14.5a6.5 6.5 0 0 1 0-9M14.5 5.5a6.5 6.5 0 0 1 0 9"/><path d="M3 17a9.5 9.5 0 0 1 0-14M17 3a9.5 9.5 0 0 1 0 14" stroke-dasharray="2 2"/></svg>`;
   const decisionsIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="14" height="14" rx="2"/><path d="M7 10l2 2 4-4"/></svg>`;
-  const agentsIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="3"/><path d="M4 17c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="16" cy="5" r="1.5" fill="currentColor" stroke="none"/></svg>`;
-  const planIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 7h10M5 10h6M5 13h8"/></svg>`;
+  const letterIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M3 6l7 5 7-5"/></svg>`;
+  const talkIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 9.5a6.5 5.5 0 0 1-6.5 5.5c-.9 0-1.8-.15-2.6-.45L4 16l1.2-3A5.4 5.4 0 0 1 3.5 9.5 6.5 5.5 0 0 1 10 4a6.5 5.5 0 0 1 7 5.5z"/></svg>`;
   const moreIcon = `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="5" cy="10" r="1.2" fill="currentColor"/><circle cx="10" cy="10" r="1.2" fill="currentColor"/><circle cx="15" cy="10" r="1.2" fill="currentColor"/></svg>`;
 
   return html`
   <nav class="mobile-bottom-nav" role="navigation" aria-label="Main navigation">
+    ${tab('letter', '/letter', 'Today', letterIcon)}
     ${tab('dashboard', '/dashboard', 'Signal', signalIcon)}
-    ${tab('decisions', '/decisions', 'Decisions', decisionsIcon, decisionsCount)}
-    ${tab('agents', '/agents', 'Agents', agentsIcon)}
-    ${tab('plan', '/plan', 'Plan', planIcon)}
+    ${tab('decisions', '/decisions', 'Decide', decisionsIcon, decisionsCount)}
+    ${tab('talk', '/talk', 'Talk', talkIcon)}
     ${tab('settings', '/settings', 'More', moreIcon)}
   </nav>`;
 }

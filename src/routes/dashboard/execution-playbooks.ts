@@ -51,6 +51,7 @@ function actionTypeLabel(t: string): string {
     case 'create_ticket':  return 'Create Ticket';
     case 'post_slack':     return 'Post Slack';
     case 'custom_webhook': return 'Custom Webhook';
+    case 'mcp_tool':       return 'Connected Tool';
     default:               return t;
   }
 }
@@ -295,6 +296,7 @@ executionPlaybooks.get('/playbooks/execution/new', async (c) => {
               <option value="post_slack">Post Slack Message</option>
               <option value="send_email">Send Email</option>
               <option value="custom_webhook">Custom Webhook</option>
+              <option value="mcp_tool">Connected Tool (any MCP server you've connected)</option>
             </select>
           </div>
 
@@ -305,7 +307,7 @@ executionPlaybooks.get('/playbooks/execution/new', async (c) => {
               placeholder='{"integration":"linear","ticket_title":"Low NPS alert","ticket_description":"NPS dropped below threshold."}'
               style="${INPUT_STYLE}font-family:monospace;resize:vertical;"></textarea>
             <div style="font-size:0.73rem;color:var(--text-muted);margin-top:4px;">
-              For create_ticket: ticket_title, ticket_description, team_id. For post_slack: channel, text. For send_email: to_email, subject, body. For custom_webhook: webhook_url, webhook_payload.
+              For create_ticket: ticket_title, ticket_description, team_id. For post_slack: channel, text. For send_email: to_email, subject, body. For custom_webhook: webhook_url, webhook_payload. For mcp_tool: server_name, tool, tool_args — requires a live grant on <a href="/connections" style="color:var(--accent);">Connections</a>.
             </div>
           </div>
 

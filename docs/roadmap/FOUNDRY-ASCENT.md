@@ -229,6 +229,25 @@ parity items (SPA/mobile) if desired.
   "same product either way — only how Foundry speaks adapts; change it in
   Settings." 866 tests green.
 
+- ✅ **The Hands, phase H1 (Law 10 + design: `docs/design/HANDS.md`).** The
+  founder shapes the system's hands. (1) **`/connections`** — connect ANY MCP
+  server by URL (token encrypted at rest); grants are tool-scoped, call-capped,
+  expiring, instantly revocable, and only issuable for servers actually
+  connected; the page shows what Foundry MAY do and what it HAS done (gateway
+  audit trail) in one place, fluency-dialed. (2) **`mcp_tool` standing-order
+  action** — any granted tool is usable in a founder-authored rule; the call
+  rides createExecution→gateway with grant checks intact (proven end-to-end:
+  no grant → refused with reason; disconnected server → refused even with a
+  live grant). (3) **Five doors** — sidebar leads with Today (the Letter),
+  Signal, Decide, Talk, Actions; everything else in collapsible groups
+  (Autopilot / Your Team / Company / Investor / System) that auto-open where
+  you are; mobile nav matches; ⌘K gained Letter/Talk/Controls/Connections.
+  The route-count ratchet forced the constitutional mount (Connections rides
+  the autopilot module — mounts may only shrink). Also fixed: /letter,
+  /autopilot, /talk had never been registered with auth middleware. The full
+  HANDS design (envelopes, reserved powers, departments H2–H5, operator side)
+  is specced in docs/design/HANDS.md. 873 tests green.
+
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
   `funnel_events` into an early-warning radar: nightly job matches each product
