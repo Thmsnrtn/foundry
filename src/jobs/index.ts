@@ -2067,6 +2067,42 @@ export async function customerSuccessSweep(): Promise<void> {
   logger.info(`customer_success_sweep complete — ${proposed} proposed, ${sent} sent`, { jobName: 'customer_success_sweep' });
 }
 
+// ─── Marketing / Product Evolution / Outreach sweeps (Hands Law departments) ───
+// Same shape as customer_success_sweep: per-product, trust-ladder governed,
+// envelope-bounded, errors isolated per product.
+function departmentSweepJob(
+  jobName: string,
+  run: (productId: string) => Promise<{ proposed: number }>,
+): () => Promise<void> {
+  return async () => {
+    logger.info(`${jobName} starting`, { jobName });
+    const products = await getAllActiveProducts();
+    let proposed = 0;
+    for (const row of products.rows) {
+      const p = row as Record<string, string>;
+      try {
+        proposed += (await run(p.id)).proposed;
+      } catch (err) {
+        logger.error(`${jobName} error for ${p.id}`, { jobName, error: String(err) });
+      }
+    }
+    logger.info(`${jobName} complete — ${proposed} proposed`, { jobName });
+  };
+}
+
+export const marketingSweep = departmentSweepJob('marketing_sweep', async (id) => {
+  const { runMarketingSweep } = await import('../services/departments/marketing.js');
+  return runMarketingSweep(id);
+});
+export const productEvolutionSweep = departmentSweepJob('product_evolution_sweep', async (id) => {
+  const { runProductSweep } = await import('../services/departments/product.js');
+  return runProductSweep(id);
+});
+export const outreachSweep = departmentSweepJob('outreach_sweep', async (id) => {
+  const { runOutreachSweep } = await import('../services/departments/outreach.js');
+  return runOutreachSweep(id);
+});
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -2076,6 +2112,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   network_radar:        { fn: networkRadarCheck,    schedule: '15 7 * * *',      description: 'Peer early-warning radar — warns when a vital sits in the danger tail of ≥5 peers (daily)' },
   autopilot_tick:       { fn: autopilotTick,        schedule: '45 */4 * * *',    description: 'Second Self: bank real outcomes into the trust ladder, then act on eligible gate-≤1 decisions in founder-granted categories (every 4h)' },
   customer_success_sweep: { fn: customerSuccessSweep, schedule: '15 8 * * *',    description: 'Customer Success department: one check-in per at-risk customer, drafted from real account state; trust-ladder governed, envelope-bounded (daily)' },
+  marketing_sweep:      { fn: marketingSweep,       schedule: '0 9 * * 1',       description: 'Marketing department: one campaign proposal per cycle, carried by a graced signups_7d premise that falsifies honestly (Monday)' },
+  product_evolution_sweep: { fn: productEvolutionSweep, schedule: '30 9 * * 2',  description: 'Product Evolution department: one gate-3 hypothesis citing the thesis, auto-contested by the Red Team, carried by a graced metric premise (Tuesday)' },
+  outreach_sweep:       { fn: outreachSweep,        schedule: '0 10 * * 3',      description: 'Outreach department (referral engine v1): asks champions for intros; suppression-listed, never auto-sends (Wednesday)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

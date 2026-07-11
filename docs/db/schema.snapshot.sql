@@ -243,6 +243,7 @@
   ON outcome_trees(parent_branch_id);
   ON outcome_trees(product_id, status);
   ON outcome_trees(product_id, weekly_refresh_run_id);
+  ON outreach_suppressions(product_id, email);
   ON phase_beta_proposals(blocked_during_freeze_id);
   ON phase_beta_proposals(product_id, status);
   ON product_voice_fingerprints(product_id) WHERE status = 'active';
@@ -283,6 +284,7 @@
   UNIQUE(product_id, consent_type)
   UNIQUE(product_id, decision_category)
   UNIQUE(product_id, decision_id)
+  UNIQUE(product_id, email)
   UNIQUE(product_id, entity_type, entity_id)
   UNIQUE(product_id, external_customer_id)
   UNIQUE(product_id, founder_id)
@@ -769,6 +771,7 @@
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at  TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -1083,6 +1086,7 @@
   effect_entity_id TEXT,
   effect_size      REAL,
   effective_date TEXT,
+  email       TEXT NOT NULL,
   email TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   email TEXT,
@@ -1401,6 +1405,7 @@
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
+  id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
@@ -2192,6 +2197,7 @@
   product_id   TEXT REFERENCES products(id),       -- NULL = org-level role
   product_id  TEXT NOT NULL DEFAULT '',
   product_id  TEXT NOT NULL,
+  product_id  TEXT NOT NULL,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -2417,6 +2423,7 @@
   read_at DATETIME,
   ready_to_be_acquired INTEGER NOT NULL DEFAULT 0, -- boolean
   reason         TEXT,
+  reason      TEXT NOT NULL,             -- 'unsubscribed' | 'bounced' | 'founder' | ...
   reason TEXT NOT NULL,
   reasoning TEXT NOT NULL,
   reasoning TEXT NOT NULL, -- why this mutation was made
@@ -3275,6 +3282,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT);
 , approval_note TEXT);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -3285,7 +3293,7 @@
 , month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
 , name TEXT, secret_hash TEXT, is_active INTEGER DEFAULT 1, updated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);
-, origin TEXT NOT NULL DEFAULT 'founder', review_id TEXT);
+, origin TEXT NOT NULL DEFAULT 'founder', review_id TEXT, effective_at DATETIME);
 , payload_json TEXT, attempt_count INTEGER, failed_at DATETIME);
 , power_check_passed          INTEGER NOT NULL DEFAULT 0, conflict_check_passed       INTEGER NOT NULL DEFAULT 0);
 , pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT, success_threshold REAL, outcome TEXT, winning_variant_id TEXT, concluded_at DATETIME);
@@ -3518,6 +3526,7 @@ CREATE INDEX idx_outbound_webhooks_product ON outbound_webhooks(product_id, acti
 CREATE INDEX idx_outcome_trees_parent
 CREATE INDEX idx_outcome_trees_product
 CREATE INDEX idx_outcome_trees_run
+CREATE INDEX idx_outreach_suppressions
 CREATE INDEX idx_pattern_matches_product ON pattern_matches(product_id, first_detected_at DESC);
 CREATE INDEX idx_patterns_market ON decision_patterns(market_category);
 CREATE INDEX idx_patterns_risk ON decision_patterns(risk_state_at_decision);
@@ -3807,6 +3816,7 @@ CREATE TABLE outbound_actions (
 CREATE TABLE outbound_rate_limits (
 CREATE TABLE outbound_webhooks (
 CREATE TABLE outcome_trees (
+CREATE TABLE outreach_suppressions (
 CREATE TABLE pattern_matches (
 CREATE TABLE peer_reviews (
 CREATE TABLE phase_beta_proposals (

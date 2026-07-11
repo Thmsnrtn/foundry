@@ -281,6 +281,27 @@ parity items (SPA/mobile) if desired.
   category's dial bootstraps into Controls at shadow on first sweep without
   overriding any founder choice. 886 tests green.
 
+- ✅ **The Hands, phases H3–H5 — Marketing, Product Evolution, Outreach.**
+  Three more departments on the same loop and governance, each honest about
+  its limits. **Marketing** (`departments/marketing.ts`, Monday sweep): a
+  campaign IS a decision with a metric premise on `signups_7d` — and premises
+  gained **grace windows** (migration 093 `effective_at`, kernel support):
+  a bet about the future is judged after its window, then falsifies honestly —
+  marketing that kills its own bad channels via the EXISTING daily premise
+  check. Briefs ground only in the founder's real DNA; thin DNA → the brief
+  says so. Gate-2: founders commit campaigns personally. **Product Evolution**
+  (`departments/product.ts`, Tuesday sweep): no thesis (DNA positioning), no
+  invented feature ideas; hypotheses derive deterministically from crossed
+  metric lines (activation < 40%, churn > 7%, support > 20/wk), cite the
+  thesis + what-we-are-not, carry graced premises, and land at **gate 3 — so
+  the existing red_team_sweep contests every feature bet automatically**
+  (Dissent Law, zero new machinery). **Outreach** (`departments/outreach.ts`,
+  Wednesday sweep): deliberately the slowest ladder — v1 is a referral engine
+  grounded in champions the ledger actually knows, with rails no trust level
+  removes: suppression list (migration 094) beats every mode; 'act' still
+  queues for founder approval (no auto-send, on purpose); envelope + budget +
+  30-day dedup. 895 tests green.
+
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +
   `funnel_events` into an early-warning radar: nightly job matches each product

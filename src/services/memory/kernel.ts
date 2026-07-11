@@ -29,6 +29,7 @@ const METRIC_COLUMNS: Record<string, string> = {
   mrr_health_ratio: 'mrr_health_ratio',
   mrr_cents: 'mrr_cents',
   new_mrr_cents: 'new_mrr_cents',
+  signups_7d: 'signups_7d',
 };
 
 /** The metric vocabulary shared by every falsifiable-belief producer (founder
@@ -46,6 +47,9 @@ export interface RecordPremiseInput {
   /** 'red_team' when this belief is the inverse of an overruled objection. */
   origin?: 'founder' | 'red_team';
   reviewId?: string;
+  /** Bets about the future: defer checking for this many days (e.g. a campaign
+   *  premise is only judgeable after the campaign's window). */
+  graceDays?: number;
 }
 
 /** Capture a belief behind a decision. If a metric+comparator+threshold is given
@@ -66,6 +70,9 @@ export async function recordPremise(input: RecordPremiseInput): Promise<string> 
     status: 'holding',
     origin: input.origin ?? 'founder',
     review_id: input.reviewId ?? null,
+    effective_at: input.graceDays && input.graceDays > 0
+      ? new Date(Date.now() + input.graceDays * 86_400_000).toISOString()
+      : null,
   };
   const { sql, args } = buildInsert(DECISION_PREMISES, row as unknown as Record<string, unknown>);
   await query(sql, args);
@@ -93,7 +100,8 @@ export interface PremiseCheckResult {
 export async function checkPremises(productId: string): Promise<PremiseCheckResult> {
   const premises = await query(
     `SELECT * FROM ${DECISION_PREMISES}
-     WHERE product_id = ? AND status = 'holding' AND premise_type = 'metric'`,
+     WHERE product_id = ? AND status = 'holding' AND premise_type = 'metric'
+       AND (effective_at IS NULL OR effective_at <= datetime('now'))`,
     [productId],
   );
   if (premises.rows.length === 0) return { checked: 0, falsified: 0 };

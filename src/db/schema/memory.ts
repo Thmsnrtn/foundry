@@ -31,6 +31,8 @@ export interface DecisionPremise {
   evidence: string | null;
   origin: PremiseOrigin;
   review_id: string | null;
+  /** Bets about the future defer checking until their own deadline (NULL = judgeable now). */
+  effective_at: string | null;
   created_at: string;
 }
 
@@ -49,4 +51,5 @@ export interface DecisionPremiseInsert {
   status?: PremiseStatus;
   origin?: PremiseOrigin;
   review_id?: string | null;
+  effective_at?: string | null;
 }

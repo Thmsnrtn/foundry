@@ -126,18 +126,30 @@ more capable. Concretely:
 
 ## Sequencing
 
-- **H1 (this phase)**: `/connections` surface (add server → grant → audit
-  trail → revoke), `mcp_tool` standing-order action, sidebar v2 (five doors +
+- ✅ **H1**: `/connections` surface (add server → grant → audit trail →
+  revoke), `mcp_tool` standing-order action, sidebar v2 (five doors +
   collapsed groups), Law 10.
-- **H2**: envelopes as first-class (per-category weekly caps enforced at the
-  gateway), reserved-powers registry, customer-success department (triage +
-  drafted replies) on the trust ladder.
-- **H3**: marketing/content department with premise-tracked channels; the
-  taste-feedback loop (founder edits as training signal).
-- **H4**: Product Thesis document + hypothesis pipeline wired to the
-  remediation-PR machinery.
-- **H5**: outreach department (slowest ladder, hard rails); operator
-  envelopes + dogfood standing orders.
+- ✅ **H2**: envelopes (per-scope weekly caps inside the governed path),
+  reserved-powers registry, customer-success department on the trust ladder.
+- ✅ **H3**: marketing department — campaigns as decisions with GRACED
+  signups premises (kernel `effective_at`); channels die on the record via
+  the existing daily premise check. Briefs ground only in real DNA.
+- ✅ **H4**: product-evolution department — the thesis IS the DNA
+  (positioning + what-we-are-not); hypotheses derive from crossed metric
+  lines, cite the thesis, and land at gate 3 so the existing Red Team sweep
+  contests every feature bet automatically.
+- ✅ **H5 (v1)**: outreach department — referral engine grounded in real
+  champions; suppression list beats every mode; no auto-send at any trust
+  level, on purpose. Cold prospecting stays gated on a founder-connected
+  prospecting tool + an earned record here.
+
+### Still open (the arc's next turns)
+- Taste-feedback loop: founder edits to drafts as training signal.
+- Hypothesis → remediation-PR machinery (build behind a flag on approval).
+- Cold outreach v2 behind connected prospecting tools.
+- Operator envelopes + dogfood standing orders on the operator's own product.
+- Live wiring: departments publishing through real connected channels
+  (needs the staging deploy from GO-LIVE §1).
 
 ## The bar
 
