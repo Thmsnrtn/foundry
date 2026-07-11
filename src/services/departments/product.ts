@@ -157,3 +157,39 @@ export async function runProductSweep(productId: string): Promise<ProductSweepRe
   log.info('product evolution hypothesis proposed', { productId, what: hypothesis.what });
   return { sensed: true, shadowed: 0, proposed: 1, skipped: 0 };
 }
+
+const NEGATIVE_RESOLUTIONS = /do nothing|reject|defer|decline|not now/i;
+
+/** When the founder commits a thesis-cited hypothesis, the decision becomes
+ *  WORK: a ticket lands in the action queue carrying the hypothesis and its
+ *  falsifiable premise. (Pending, not auto-executed: ticket creation needs a
+ *  connected tracker, and the queue is where that connection is visible.) */
+export async function onHypothesisResolved(
+  decisionId: string, productId: string, chosenOption: string,
+): Promise<void> {
+  if (NEGATIVE_RESOLUTIONS.test(chosenOption)) return;
+  const d = (await query(
+    `SELECT what, why_now, recommendation FROM decisions
+     WHERE id = ? AND product_id = ? AND recommendation LIKE '${THESIS_MARKER}%'`,
+    [decisionId, productId],
+  )).rows[0] as Record<string, string> | undefined;
+  if (!d) return;
+
+  const premise = (await query(
+    `SELECT premise FROM decision_premises WHERE decision_id = ? LIMIT 1`, [decisionId],
+  )).rows[0] as Record<string, string> | undefined;
+
+  const { createExecution } = await import('../scp/actions/executor.js');
+  await createExecution(productId, null, {
+    action_type: 'create_ticket',
+    integration: 'linear',
+    ticket_title: d.what,
+    ticket_description: [
+      d.why_now,
+      '',
+      d.recommendation,
+      premise ? `\nThe bet on record: ${premise.premise} — it falsifies honestly if the shipped work doesn't move the metric.` : '',
+    ].join('\n'),
+  });
+  log.info('hypothesis converted to work', { productId, decisionId });
+}

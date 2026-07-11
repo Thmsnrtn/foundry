@@ -471,6 +471,11 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
     .then(({ recordOverruledDissent }) => recordOverruledDissent(decisionId, productId))
     .catch(() => {});
 
+  // Hands Law: a committed thesis-cited hypothesis becomes tracked work.
+  import('../../services/departments/product.js')
+    .then(({ onHypothesisResolved }) => onHypothesisResolved(decisionId, productId, body.chosen_option))
+    .catch(() => {});
+
   checkAndAwardMilestones(productId, founder.id).catch(() => {});
 
   if (body.resolution_reasoning) {

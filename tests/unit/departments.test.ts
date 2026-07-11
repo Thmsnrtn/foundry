@@ -116,6 +116,36 @@ describe('product evolution: hypotheses cite the thesis and face the Red Team', 
   });
 });
 
+describe('the loop closes', () => {
+  it('a committed hypothesis becomes tracked work carrying its bet', async () => {
+    const { onHypothesisResolved } = await import('../../src/services/departments/product.js');
+    const d = (await query(
+      "SELECT id FROM decisions WHERE product_id='dp_p' AND recommendation LIKE 'Serves the thesis:%'", [],
+    )).rows[0] as Record<string, string>;
+
+    await onHypothesisResolved(d.id, 'dp_p', 'Do nothing for now');
+    let tickets = await query(
+      "SELECT * FROM action_executions WHERE product_id='dp_p' AND action_type='create_ticket'", [],
+    );
+    expect(tickets.rows.length).toBe(0); // declined → no work
+
+    await onHypothesisResolved(d.id, 'dp_p', 'Proceed — rework onboarding');
+    tickets = await query(
+      "SELECT payload_json, status FROM action_executions WHERE product_id='dp_p' AND action_type='create_ticket'", [],
+    );
+    expect(tickets.rows.length).toBe(1);
+    const payload = JSON.parse((tickets.rows[0] as Record<string, string>).payload_json);
+    expect(payload.ticket_title).toContain('first-run');
+    expect(payload.ticket_description).toContain('The bet on record'); // premise travels with the work
+  });
+
+  it("the Letter tells the founder what a watching department WOULD have done", async () => {
+    const { composeLetter } = await import('../../src/services/letter/composer.js');
+    const letter = await composeLetter('dp_p', 'plain');
+    expect(letter.trust.some((t) => t.includes('marketing department is still just watching'))).toBe(true);
+  });
+});
+
 describe('outreach: the slowest ladder, the hardest rails', () => {
   beforeAll(async () => {
     await query(
