@@ -160,6 +160,8 @@ export interface FounderPreferences {
   digest_time?: string; // HH:MM in founder's timezone
   timezone?: string;
   notification_channels?: ('email' | 'dashboard')[];
+  /** How Foundry speaks: presentation only — the product never forks. */
+  fluency?: 'plain' | 'balanced' | 'technical';
 }
 
 export interface Product {

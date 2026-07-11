@@ -190,6 +190,21 @@ settingsRoutes.get('/settings', async (c) => {
     </div>
 
     <div class="card">
+      <h3>How Foundry speaks to you</h3>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">
+        Presentation only — every setting gives you the exact same product, data, and controls.
+      </p>
+      <form method="POST" action="/settings/fluency" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        ${(['plain', 'balanced', 'technical'] as const).map((f) => html`
+          <button type="submit" name="fluency" value="${f}"
+            class="btn ${((founder.preferences?.fluency ?? 'balanced') === f) ? 'btn-primary' : 'btn-ghost'}"
+            style="font-size:0.8rem;text-transform:capitalize;">
+            ${f === 'plain' ? 'Plain English' : f === 'balanced' ? 'Balanced' : 'Technical'}
+          </button>`)}
+      </form>
+    </div>
+
+    <div class="card">
       <h3>Wisdom Network</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         When enabled, Foundry contributes anonymized decision patterns from your business to
@@ -509,4 +524,13 @@ settingsRoutes.post('/settings/toggle-product-status', requireRole('owner'), asy
   ).catch(() => { /* product row may not exist yet */ });
 
   return c.redirect(`/settings?success=company_${newStatus === 'paused' ? 'paused' : 'resumed'}`);
+});
+
+// ─── Fluency (one product, many voices) ───────────────────────────────────────
+settingsRoutes.post('/settings/fluency', async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.parseBody() as Record<string, string>;
+  const { setFluency } = await import('../../services/ux/fluency.js');
+  await setFluency(founder.id, body.fluency as 'plain' | 'balanced' | 'technical');
+  return c.redirect('/settings');
 });

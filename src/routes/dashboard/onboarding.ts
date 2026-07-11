@@ -117,6 +117,12 @@ onboardingRoutes.post('/onboarding/create-product', validateBody(createProductSc
   const founder = c.get('founder');
   const body = c.get('validatedBody' as never) as z.infer<typeof createProductSchema>;
 
+  // Fluency default: the no-code path suggests plain speech. Presentation only —
+  // same product; the founder can change this in Settings anytime.
+  import('../../services/ux/fluency.js')
+    .then(({ setFluencyDefault }) => setFluencyDefault(founder.id, 'plain'))
+    .catch(() => {});
+
   // Enforce per-tier product limits (mirrors the GitHub onboarding path)
   // Solo: 1, Growth: 3, Investor-Ready: unlimited, No tier: 1
   const productLimits: Record<string, number> = {
@@ -221,6 +227,10 @@ onboardingRoutes.get('/onboarding/github/callback', async (c) => {
 // Step 3: Select repository
 onboardingRoutes.post('/onboarding/select-repo', validateBody(selectRepoSchema), async (c) => {
   const founder = c.get('founder');
+  // Fluency default: connecting a repo suggests technical fluency (Settings can change it).
+  import('../../services/ux/fluency.js')
+    .then(({ setFluencyDefault }) => setFluencyDefault(founder.id, 'technical'))
+    .catch(() => {});
   // selectRepoSchema enforces repo_owner / repo_name match /^[\w.-]+$/ so
   // the URL we construct below cannot be path-injected.
   const body = c.get('validatedBody' as never) as z.infer<typeof selectRepoSchema>;

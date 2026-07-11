@@ -14,6 +14,7 @@ import {
   getAllPolicies, setPolicy, panicStop, getShadowStats,
   MODE_LABELS, PROMOTION_THRESHOLD, type AutopilotMode,
 } from '../../services/autopilot/policy.js';
+import { getFluency, gateLabel, explain } from '../../services/ux/fluency.js';
 
 export const letterRoutes = new Hono<AuthEnv>();
 
@@ -29,10 +30,16 @@ letterRoutes.get('/letter', async (c) => {
   if (!ctx.productId) return c.redirect('/dashboard');
 
   const letter = await composeLetter(ctx.productId);
+  const fluency = getFluency(founder);
+  const needsYou = letter.needsYou
+    ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
+    : null;
+  const intro = explain('letter', fluency);
 
   const content = html`
     <h1 style="margin-bottom:0.25rem;">The Letter</h1>
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — from your team.</p>
+    ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}
 
     ${letter.quiet ? html`
       <div class="card" style="padding:1.5rem;text-align:center;">
@@ -42,7 +49,7 @@ letterRoutes.get('/letter', async (c) => {
       ${letter.needsYou ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--accent);">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:0.4rem;">The one thing that needs you</div>
-        <div style="font-size:0.95rem;color:var(--text-primary);">${letter.needsYou}</div>
+        <div style="font-size:0.95rem;color:var(--text-primary);">${needsYou}</div>
         <a href="/decisions" class="btn btn-primary" style="margin-top:0.75rem;font-size:0.82rem;display:inline-block;">Decide</a>
       </div>` : ''}
       ${section('What I handled', letter.handled)}
@@ -111,9 +118,7 @@ letterRoutes.get('/autopilot', async (c) => {
       </form>
     </div>
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">
-      Autonomy is earned, never assumed. Foundry watches first, suggests when its record supports it,
-      and acts only on low-stakes decisions in categories you explicitly grant — always undoable, always logged.
-      An undo pulls that category back automatically.
+      ${explain('controls', getFluency(founder)) || 'Autonomy is earned, never assumed. Watch → suggest → act (your explicit grant); every act undoable and logged; an undo pulls the category back.'}
     </p>
     ${policies.length === 0 ? html`
       <div class="card" style="padding:1.25rem;color:var(--text-muted);">No decision categories yet — the ladder starts with your first decision.</div>

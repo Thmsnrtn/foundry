@@ -96,6 +96,8 @@ decisionRoutes.get('/decisions/:id', async (c) => {
   const redTeamObjections = redTeam ? parseObjections(redTeam) : [];
   const dissentRecord = await getDissentRecord(productId);
   const gateNum = Number(decision.gate ?? 0);
+  const { getFluency, gateLabel } = await import('../../services/ux/fluency.js');
+  const chamberFluency = getFluency(founder);
 
   // Parse options
   let options: Array<{ label: string; description: string; trade_offs?: string }> = [];
@@ -183,8 +185,8 @@ decisionRoutes.get('/decisions/:id', async (c) => {
     </div>` : (status === 'pending' && gateNum >= 3 ? html`
     <div class="chamber-section">
       <form method="POST" action="/decisions/${decisionId}/redteam">
-        <button type="submit" class="btn btn-secondary btn-sm">⚔ Summon the Red Team (adversarial pre-mortem)</button>
-        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem;">Gate-${gateNum} decision — contest before you commit.</span>
+        <button type="submit" class="btn btn-secondary btn-sm">⚔ ${chamberFluency === 'technical' ? 'Summon the Red Team (adversarial pre-mortem)' : 'Hear the devil\'s advocate before you commit'}</button>
+        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem;">${gateLabel(gateNum, chamberFluency)} — contest before you commit.</span>
       </form>
     </div>` : '')}
 

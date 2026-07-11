@@ -50,6 +50,12 @@ Every feature is a stage of this loop. The product is not twelve agents; it is
 8. **Compounding Law** — every interaction leaves a residue (premise, lesson,
    calibration point) that improves the next decision. If it doesn't compound,
    it's a cost.
+9. **Fluency Law** — the product NEVER forks by audience. Newbies and experts
+   get the same features, data, and power; only the *voice* adapts — how much
+   technical vocabulary is used and how much hand-holding is shown. Onboarding
+   infers a default; the dial lives in Settings; plain speech keeps the
+   technical term visible (users are learning the vocabulary, not being
+   protected from it). Substrate: `services/ux/fluency.ts`.
 
 ## The key unification
 
