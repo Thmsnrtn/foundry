@@ -138,11 +138,113 @@ const EXPLAINERS: Record<string, { plain: string; balanced: string }> = {
     plain: 'When you made these decisions, you told Foundry what you believed. Your own numbers now say those beliefs are no longer true — worth a fresh look before you build on them.',
     balanced: 'Premises your telemetry has since falsified — revisit before relying on them.',
   },
+  roster: {
+    plain: 'These are the AI teammates working on your company — each with a job, like a growth lead or a finance head. They read your real numbers and report in every day.',
+    balanced: 'Your agent team: each role reads live telemetry and contributes to briefings and decisions.',
+  },
+  debate: {
+    plain: 'Before advice reaches you, your AI teammates argue it out among themselves. You can read the argument — including who disagreed and why.',
+    balanced: 'Inter-agent debate transcripts: positions, dissents, and how the recommendation formed.',
+  },
+  accuracy: {
+    plain: 'A public scorecard: every prediction your AI team made, and whether it came true. If they are often wrong about something, you will see it here first.',
+    balanced: 'Prediction calibration per agent — claims vs outcomes, so trust is earned, not assumed.',
+  },
+  transparency: {
+    plain: 'Exactly what your AI team did and why — every action, every data source, nothing hidden. If you ever wonder "why did it say that?", the answer is here.',
+    balanced: 'Full audit of agent actions, inputs, and reasoning provenance.',
+  },
+  agent_intelligence: {
+    plain: 'How your AI team is getting smarter over time — what it has learned about your business specifically.',
+    balanced: 'Agent learning state: accumulated, product-specific knowledge and how it changed.',
+  },
+  actions: {
+    plain: 'Things worth doing, drawn from your real numbers — each one says why it matters and what to do. Check one off and Foundry tracks whether it helped.',
+    balanced: 'Telemetry-derived action queue; completion feeds back into outcome tracking.',
+  },
+  scenarios: {
+    plain: 'Try out "what if" questions — what if growth slows, what if you raise prices — and see how your numbers would play out, using your real history as the starting point.',
+    balanced: 'What-if projections seeded from your live metrics.',
+  },
+  board: {
+    plain: 'Everything an investor would ask for, kept up to date automatically — so an investor meeting never costs you a weekend of slide-making.',
+    balanced: 'Auto-maintained investor materials from live ledgers.',
+  },
+  exit: {
+    plain: 'What your company might be worth to a buyer, and what would make it worth more. Updated from your real numbers — not a guess you type in.',
+    balanced: 'Valuation and exit-readiness signals derived from live metrics.',
+  },
+  weekly_brief: {
+    plain: 'The week in one page: what moved, what your AI team thinks it means, and the one or two things worth your attention next week.',
+    balanced: 'Weekly synthesis: deltas, interpretation, and next-week focus.',
+  },
+  multimodal: {
+    plain: 'Signals from beyond your dashboard — support messages, reviews, community chatter — read and summarized so patterns reach you before they become problems.',
+    balanced: 'Non-metric signal ingestion (support, reviews, community) summarized into patterns.',
+  },
+  network: {
+    plain: 'How companies like yours — same stage, same size — are doing, anonymously. Foundry uses this to warn you early when one of your numbers drifts into the danger zone.',
+    balanced: 'Anonymous peer benchmarks (stage × MRR cell) powering early-warning radar.',
+  },
+  memory: {
+    plain: 'Everything your company has learned, in one place: decisions made, beliefs recorded, which held up and which did not. This is why advice gets sharper the longer you are here.',
+    balanced: 'The institutional memory: decisions, premises, and their outcomes over time.',
+  },
+  competitive: {
+    plain: 'Who you are up against and what they are doing — tracked so a competitor move never catches you flat-footed.',
+    balanced: 'Competitor tracking and positioning deltas.',
+  },
+  standing_orders: {
+    plain: 'Rules you set once and Foundry follows forever — like "if churn passes 8%, alert me and pause the ad spend." You write the policy; it does the watching.',
+    balanced: 'Trigger→action policies executed automatically; you author, Foundry enforces.',
+  },
+  ambient: {
+    plain: 'The work Foundry does in the background while you are away — quiet monitoring, small fixes, notes for your next visit.',
+    balanced: 'Background operations log: monitoring, low-gate actions, accumulated notes.',
+  },
+  roi: {
+    plain: 'What Foundry has actually been worth to you — time saved, problems caught early, decisions improved — measured honestly, including where it has not helped.',
+    balanced: 'Measured value delivered (and not delivered) — honest accounting.',
+  },
+  benchmarks: {
+    plain: 'Your key numbers next to companies at your stage — so "is 5% churn bad?" always has an answer with context.',
+    balanced: 'Peer-cell metric comparisons (abstains below 5 peers).',
+  },
 };
 
 export function explain(key: string, f: Fluency): string {
   if (f === 'technical') return '';
   return EXPLAINERS[key]?.[f] ?? '';
+}
+
+/** Sidebar nav key → explainer, for the strip the layout renders on every page.
+ *  Pages that render their own strip in-page (dashboard, decisions, letter…)
+ *  are deliberately absent so nothing shows twice. */
+const NAV_EXPLAINER_KEYS: Record<string, string> = {
+  'agents': 'roster',
+  'agents-debate': 'debate',
+  'agents-accuracy': 'accuracy',
+  'agents-transparency': 'transparency',
+  'agents-intelligence': 'agent_intelligence',
+  'agents-actions': 'actions',
+  'scenarios': 'scenarios',
+  'board': 'board',
+  'investors': 'board',
+  'exit': 'exit',
+  'brief': 'weekly_brief',
+  'signals-multimodal': 'multimodal',
+  'network': 'network',
+  'memory': 'memory',
+  'competitive': 'competitive',
+  'playbooks-execution': 'standing_orders',
+  'ambient': 'ambient',
+  'roi': 'roi',
+  'benchmarks': 'benchmarks',
+};
+
+export function navExplain(activeNav: string, f: Fluency): string {
+  const key = NAV_EXPLAINER_KEYS[activeNav];
+  return key ? explain(key, f) : '';
 }
 
 // ── Risk states + metrics: translated, never hidden. ──────────────────────────

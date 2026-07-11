@@ -29,8 +29,8 @@ letterRoutes.get('/letter', async (c) => {
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');
 
-  const letter = await composeLetter(ctx.productId);
   const fluency = getFluency(founder);
+  const letter = await composeLetter(ctx.productId, fluency);
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
     : null;

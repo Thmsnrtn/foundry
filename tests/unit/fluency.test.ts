@@ -14,8 +14,9 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
   getFluency, setFluency, setFluencyDefault, gateLabel, rate, explain, term,
-  extractPremiseCondition, metricLabel, metricValue, riskLabel,
+  extractPremiseCondition, metricLabel, metricValue, riskLabel, navExplain,
 } from '../../src/services/ux/fluency.js';
+import { composeLetter } from '../../src/services/letter/composer.js';
 
 let app: Hono;
 let currentFounder: Record<string, unknown> = {};
@@ -103,7 +104,31 @@ describe('plain-text premise extraction (no dropdowns, ever)', () => {
   });
 });
 
+describe('the layout explainer strip', () => {
+  it('covers every expert page; silent at technical; never doubles in-page strips', () => {
+    for (const nav of ['agents', 'agents-debate', 'agents-accuracy', 'memory', 'network', 'roi', 'benchmarks']) {
+      expect(navExplain(nav, 'plain').length).toBeGreaterThan(40);
+      expect(navExplain(nav, 'balanced').length).toBeGreaterThan(20);
+      expect(navExplain(nav, 'technical')).toBe('');
+    }
+    // pages that render their own strip must be absent from the layout map:
+    for (const nav of ['dashboard', 'decisions', 'agents-briefings', 'letter', 'autopilot', 'talk']) {
+      expect(navExplain(nav, 'plain')).toBe('');
+    }
+  });
+});
+
 describe('same product, different voice', () => {
+  it('the Letter composer: identical facts, dialed phrasing', async () => {
+    const plain = await composeLetter('fl_p', 'plain');
+    const technical = await composeLetter('fl_p', 'technical');
+    // Same facts in both voices — the one thing that needs you:
+    expect(plain.needsYou).toContain('Enter enterprise');
+    expect(technical.needsYou).toContain('Enter enterprise');
+    expect(plain.needsYou).toEqual(technical.needsYou); // gate translation happens at the route
+    expect(plain.quiet).toBe(technical.quiet);
+  });
+
   it('the Letter shows identical facts and actions at both extremes', async () => {
     currentFounder = { id: 'fl_f', email: 'f@t.co', preferences: { fluency: 'plain' } };
     const plain = await (await app.request('/letter')).text();

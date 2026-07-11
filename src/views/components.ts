@@ -710,12 +710,13 @@ function onboardingGitHub(githubUrl: string): HtmlContent {
   return html`
   <div class="step-card">
     <h2><span class="step-number">1</span> Connect Your Product</h2>
-    <p>Foundry analyzes your product to run a ten-dimension audit. Connect your GitHub repo for a code-level analysis, or enter your product URL for a web-based audit.</p>
+    <p>First, Foundry gets to know your product so it can give you an honest health check (a ten-dimension audit). There are two ways in — pick whichever sounds like you:</p>
     <div style="display:flex;gap:1rem;margin-top:1.5rem;flex-wrap:wrap;">
       <a href="${githubUrl}" class="btn btn-primary">Connect GitHub →</a>
       <a href="/onboarding/no-code" class="btn btn-secondary">I don't have a repo →</a>
     </div>
-    <p style="font-size:0.8rem;color:#6b7280;margin-top:1rem;">Built with Bubble, Webflow, Shopify, or an agency? The URL-based path is for you.</p>
+    <p style="font-size:0.8rem;color:#6b7280;margin-top:1rem;">Built with Bubble, Webflow, Shopify, or an agency — or not sure what a repo is? The second button is for you: just your product's web address is enough.</p>
+    <p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">Either way you get the same product. Foundry only adjusts how it <em>speaks</em> — plainly or in technical terms — based on the path you pick, and you can change that anytime in Settings.</p>
   </div>`;
 }
 
@@ -764,7 +765,7 @@ function onboardingRunAudit(productId: string): HtmlContent {
   return html`
   <div class="step-card">
     <h2><span class="step-number">4</span> Run First Audit</h2>
-    <p>Foundry will analyze your codebase across ten dimensions. This usually takes 2-5 minutes.</p>
+    <p>Foundry reads your codebase and grades it across ten dimensions — security, reliability, growth-readiness, and more. This usually takes 2–5 minutes, and you'll see exactly what it found.</p>
     <form method="POST" action="/onboarding/run-audit">
       <input type="hidden" name="product_id" value="${productId}" />
       <button type="submit" class="btn btn-primary">Run Audit →</button>
@@ -786,7 +787,9 @@ function onboardingComplete(audit: Record<string, unknown>): HtmlContent {
       </div>
       <span class="verdict-badge ${verdict === 'READY' ? 'verdict-ready' : verdict === 'READY WITH CONDITIONS' ? 'verdict-conditions' : 'verdict-not-ready'}">${verdict}</span>
     </div>` : ''}
+    ${composite !== null ? html`<p style="font-size:0.85rem;color:#6b7280;margin-bottom:1rem;">That's your product's overall health on a 10-point scale — the dashboard breaks it into the ten dimensions behind it, with the reasoning shown for each.</p>` : ''}
     <a href="/dashboard" class="btn btn-primary">Go to Dashboard →</a>
+    <p style="font-size:0.78rem;color:#6b7280;margin-top:1rem;">One more thing: Foundry matched how it speaks — plain English or technical shorthand — to the path you chose. If it ever sounds too jargony or too basic, change the dial in Settings.</p>
   </div>`;
 }
 

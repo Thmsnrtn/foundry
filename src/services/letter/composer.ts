@@ -14,6 +14,7 @@ import { scanForWarnings } from '../network/radar.js';
 import { getTrustLedger } from '../trust/ledger.js';
 import { getDissentRecord } from '../redteam/council.js';
 import { getExpiredBeliefs, getMemoryDigest } from '../memory/kernel.js';
+import type { Fluency } from '../ux/fluency.js';
 
 export interface Letter {
   handled: string[];       // what ran without you (last 24h)
@@ -23,7 +24,9 @@ export interface Letter {
   quiet: boolean;          // true when there is genuinely nothing needing you
 }
 
-export async function composeLetter(productId: string): Promise<Letter> {
+// Fluency Law: the same Letter — identical facts, identical structure — in the
+// founder's voice. MCP/machine callers pass 'technical' for the terse form.
+export async function composeLetter(productId: string, f: Fluency = 'balanced'): Promise<Letter> {
   const [executions, gate0, pending, expired, digest, radar, ledger, dissent] = await Promise.all([
     query(
       `SELECT action_type, integration FROM action_executions
@@ -52,12 +55,18 @@ export async function composeLetter(productId: string): Promise<Letter> {
 
   const handled: string[] = [
     ...(executions.rows as unknown as Array<Record<string, string>>).map(
-      (e) => `Executed ${e.action_type} via ${e.integration}`,
+      (e) => f === 'plain'
+        ? `Ran ${e.action_type} for you through ${e.integration}`
+        : `Executed ${e.action_type} via ${e.integration}`,
     ),
     ...(gate0.rows as unknown as Array<Record<string, string>>).map(
       (d) => d.decided_by === 'second_self'
-        ? `Second Self decided: ${d.what} (24h undo available)`
-        : `Handled autonomously (gate 0): ${d.what}`,
+        ? (f === 'plain'
+          ? `Decided for you — a category you trusted it with: ${d.what} (you can undo this for 24 hours)`
+          : `Second Self decided: ${d.what} (24h undo available)`)
+        : (f === 'plain'
+          ? `Handled a routine call (gate 0): ${d.what}`
+          : `Handled autonomously (gate 0): ${d.what}`),
     ),
   ];
 
@@ -68,7 +77,9 @@ export async function composeLetter(productId: string): Promise<Letter> {
 
   const learned: string[] = [
     ...expired.slice(0, 3).map(
-      (e) => `A belief expired: "${e.premise.premise}" — ${e.premise.evidence ?? 'contradicted by telemetry'}`,
+      (e) => f === 'plain'
+        ? `Something you believed — "${e.premise.premise}" — is no longer true: ${e.premise.evidence ?? 'your own numbers now contradict it'}`
+        : `A belief expired: "${e.premise.premise}" — ${e.premise.evidence ?? 'contradicted by telemetry'}`,
     ),
     ...radar.map((w) => w.message),
   ];
@@ -76,7 +87,9 @@ export async function composeLetter(productId: string): Promise<Letter> {
 
   const trust: string[] = [...ledger.proposals];
   if (dissent.total > 0) {
-    trust.push(`Red Team record: ${dissent.vindicated} vindicated, ${dissent.overruled_held} overruled-and-held, ${dissent.pending} pending.`);
+    trust.push(f === 'plain'
+      ? `The devil's advocate's record: ${dissent.vindicated} warnings proved right, ${dissent.overruled_held} overruled and held, ${dissent.pending} still open.`
+      : `Red Team record: ${dissent.vindicated} vindicated, ${dissent.overruled_held} overruled-and-held, ${dissent.pending} pending.`);
   }
 
   const quiet = handled.length === 0 && !needsYou && learned.length === 0 && trust.length === 0;

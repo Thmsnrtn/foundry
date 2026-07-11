@@ -104,7 +104,7 @@ export async function executeLoopTool(
     switch (name) {
       case 'foundry_letter': {
         const { composeLetter } = await import('../services/letter/composer.js');
-        return json(await composeLetter(ctx.productId));
+        return json(await composeLetter(ctx.productId, 'technical')); // machine caller — terse voice
       }
       case 'foundry_decision_queue': {
         const r = await query(

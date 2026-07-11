@@ -89,7 +89,7 @@ onboardingRoutes.get('/onboarding/no-code', async (c) => {
   <div class="onboarding-steps">
     <div class="step-card">
       <h2>Add Your Product</h2>
-      <p>Tell us about your product and we'll run a web-based audit from its URL.</p>
+      <p>Just the basics — Foundry visits your product's web address and runs its first health check from there. No code, no setup.</p>
       <form method="POST" action="/onboarding/create-product">
         <div class="form-group"><label for="name">Product Name</label><input type="text" id="name" name="name" required placeholder="e.g. LabFlow" /></div>
         <div class="form-group"><label for="url">Product URL</label><input type="url" id="url" name="url" required placeholder="https://your-product.com" /></div>

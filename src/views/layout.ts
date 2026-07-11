@@ -37,6 +37,9 @@ export interface LayoutOptions {
   trialStatus?: TrialStatus | null;
   /** True when the founder has never started a trial or paid — show the CTA. */
   showStartTrial?: boolean;
+  /** Fluency Law: page explainer strip, sized by the founder's dial ('' at technical).
+   *  Computed in getLayoutContext so every page gets it without per-route wiring. */
+  navExplainer?: string | null;
 }
 
 export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
@@ -121,6 +124,9 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
       hx-trigger="load"
       hx-swap="innerHTML"
       style="min-height:0"></div>` : ''}
+    ${!chamberMode && showNav && opts.navExplainer
+      ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:0 0 1rem;max-width:720px;">${opts.navExplainer}</p>`
+      : ''}
     ${content}
   </main>
 

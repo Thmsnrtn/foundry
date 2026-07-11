@@ -214,6 +214,20 @@ parity items (SPA/mobile) if desired.
   briefings, Product DNA. Proof: two-voice tests render the same page at plain
   and technical and assert IDENTICAL facts and actions with different words
   (`tests/unit/fluency.test.ts`, 9 cases). 864 tests green.
+- ✅ **Fluency — the last mile.** (1) The Letter composer itself now speaks the
+  founder's voice (`composeLetter(productId, fluency)`): "Ran send_email for
+  you through gmail" vs "Executed send_email via gmail"; the devil's-advocate
+  record vs the Red Team record — identical facts, dialed phrasing; MCP callers
+  get 'technical' (terse machine voice). (2) Every expert page gets its
+  explainer for free: `navExplain` maps sidebar nav keys → explainers and the
+  shared layout renders the strip once (Roster, Debate, Accuracy, Transparency,
+  Intelligence, Actions, Scenarios, Investor Hub, Exit, Weekly Brief,
+  Multi-Modal, Network, Memory, Competitive, Standing Orders, Ambient, ROI,
+  Benchmarks) — pages with in-page strips are deliberately absent so nothing
+  doubles. (3) Onboarding speaks universally plain (fluency is unknown until
+  the path is chosen) and now *tells* the founder about the voice inference:
+  "same product either way — only how Foundry speaks adapts; change it in
+  Settings." 866 tests green.
 
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +

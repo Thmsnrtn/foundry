@@ -13,6 +13,7 @@ import { getUnseenMilestones } from '../../services/ux/milestones.js';
 import { getTourState } from '../../services/ux/tour.js';
 import { canAccess as canAccessFn } from '../../middleware/tier-gate.js';
 import { getTrialStatus, type TrialStatus } from '../../services/billing/trial.js';
+import { getFluency, navExplain } from '../../services/ux/fluency.js';
 import { getCookie } from 'hono/cookie';
 import type { Context } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
@@ -44,6 +45,8 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
   trialStatus: TrialStatus;
   /** True when the founder has never started a trial or paid. */
   showStartTrial: boolean;
+  /** Fluency Law: the page explainer strip ('' at technical or unmapped pages). */
+  navExplainer: string;
 }
 
 /**
@@ -100,6 +103,7 @@ export async function getLayoutContext(
       ux: emptyUx,
       trialStatus: getTrialStatus(founder.trial_ends_at, founder.tier),
       showStartTrial: !founder.tier && getTrialStatus(founder.trial_ends_at, founder.tier).state === 'none',
+      navExplainer: navExplain(activeNav, getFluency(founder)),
     };
   }
 
@@ -179,6 +183,7 @@ export async function getLayoutContext(
     ux,
     trialStatus: getTrialStatus(founder.trial_ends_at, founder.tier),
     showStartTrial: !founder.tier && getTrialStatus(founder.trial_ends_at, founder.tier).state === 'none',
+    navExplainer: navExplain(activeNav, getFluency(founder)),
   };
 }
 
