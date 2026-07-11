@@ -274,10 +274,14 @@ dashboardRoutes.get('/dashboard', async (c) => {
     }
   }
 
+  const { getFluency: dashFl, explain: dashEx } = await import('../../services/ux/fluency.js');
+  const dashIntro = dashEx('dashboard', dashFl(founder));
+
   const content = html`
     <div class="signal-home" data-product-id="${productId}">
 
       ${raw(catchUpHtml)}
+      ${dashIntro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:0 0 1rem;">${dashIntro}</p>` : ''}
 
       <div class="signal-display signal-${signal.tier}">
         <button

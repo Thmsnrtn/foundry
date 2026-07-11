@@ -33,12 +33,15 @@ decisionRoutes.get('/decisions', async (c) => {
   const ls = await query('SELECT risk_state FROM lifecycle_state WHERE product_id = ?', [productId]);
   const riskState = ((ls.rows[0] as Record<string, string>)?.risk_state as RiskStateValue) ?? 'green';
   const decisions = await getDecisionQueue(productId, riskState);
+  const { getFluency: fl, explain: ex } = await import('../../services/ux/fluency.js');
+  const listIntro = ex('decisions_list', fl(founder));
 
   const content = html`
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.25rem;">
       <h1 style="margin:0;">Decisions</h1>
       <a href="/decisions/analytics" class="btn btn-ghost btn-sm">Decision Intelligence →</a>
     </div>
+    ${listIntro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-0.75rem 0 1.25rem;">${listIntro}</p>` : ''}
     ${decisionList(decisions as unknown as DecisionData[])}
   `;
   return c.html(dashboardLayout(ctx, content));
@@ -96,8 +99,9 @@ decisionRoutes.get('/decisions/:id', async (c) => {
   const redTeamObjections = redTeam ? parseObjections(redTeam) : [];
   const dissentRecord = await getDissentRecord(productId);
   const gateNum = Number(decision.gate ?? 0);
-  const { getFluency, gateLabel } = await import('../../services/ux/fluency.js');
+  const { getFluency, gateLabel, explain: chamberExplain, term: chamberTerm } = await import('../../services/ux/fluency.js');
   const chamberFluency = getFluency(founder);
+  const chamberIntro = chamberExplain('decide', chamberFluency);
 
   // Parse options
   let options: Array<{ label: string; description: string; trade_offs?: string }> = [];
@@ -115,6 +119,7 @@ decisionRoutes.get('/decisions/:id', async (c) => {
     <a href="/decisions" class="chamber-back">← All decisions</a>
 
     <h1 class="chamber-what">${decision.what}</h1>
+    ${chamberIntro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:0 0 1rem;">${chamberIntro}</p>` : ''}
 
     ${decision.why_now ? html`
     <div class="chamber-section">
@@ -156,19 +161,19 @@ decisionRoutes.get('/decisions/:id', async (c) => {
 
     ${scenarios.length > 0 ? html`
     <div class="chamber-section">
-      <div class="chamber-section-label">Scenarios · Ghost fork (seeded Monte Carlo on your own history)</div>
+      <div class="chamber-section-label">${chamberFluency === 'technical' ? 'Scenarios · Ghost fork (seeded Monte Carlo on your own history)' : 'What might happen — simulated from your real history'}</div>
       ${scenarioGrid(scenarios)}
     </div>` : (status === 'pending' ? html`
     <div class="chamber-section">
       <form method="POST" action="/decisions/${decisionId}/ghost">
-        <button type="submit" class="btn btn-secondary btn-sm">⧉ Fork reality — simulate each option's 90-day MRR path</button>
-        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem;">1,000 runs on your real growth history. Abstains if history is too thin.</span>
+        <button type="submit" class="btn btn-secondary btn-sm">⧉ ${chamberFluency === 'technical' ? "Fork reality — simulate each option's 90-day MRR path" : 'See how each option could play out over 90 days'}</button>
+        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem;">${chamberFluency === 'technical' ? '1,000 runs on your real growth history. Abstains if history is too thin.' : 'Based only on your real revenue history — it says so if there is not enough data yet.'}</span>
       </form>
     </div>` : '')}
 
     ${redTeam ? html`
     <div class="chamber-section" style="border:1px solid rgba(255,107,107,0.3);border-radius:8px;padding:1rem 1.25rem;background:rgba(255,107,107,0.04);">
-      <div class="chamber-section-label" style="color:#ff6b6b;">Red Team pre-mortem — verdict: ${redTeam.verdict.replace(/_/g, ' ')}</div>
+      <div class="chamber-section-label" style="color:#ff6b6b;">${chamberFluency === 'technical' ? 'Red Team pre-mortem' : `The other side — ${chamberTerm('red_team', chamberFluency)}`} — verdict: ${redTeam.verdict.replace(/_/g, ' ')}</div>
       ${redTeam.strongest_objection ? html`<p class="chamber-why" style="font-weight:600;">${redTeam.strongest_objection}</p>` : ''}
       ${redTeamObjections.map((o) => html`
         <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.06);">

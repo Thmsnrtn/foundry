@@ -24,6 +24,12 @@ const RADAR_METRICS: Array<{ key: string; direction: 'high_bad' | 'low_bad'; lab
 
 const MIN_PEERS = 5;
 
+// Rate metrics (0–1 fractions) read as percentages in every human-facing voice.
+const FRACTION_METRICS = new Set(['churn_rate', 'activation_rate', 'day_30_retention']);
+function fmtMetric(key: string, v: number): string {
+  return FRACTION_METRICS.has(key) ? `${Math.round(v * 1000) / 10}%` : String(v);
+}
+
 function mrrBracket(mrrCents: number): string {
   const mrr = mrrCents / 100;
   if (mrr === 0) return '0';
@@ -89,7 +95,7 @@ export async function scanForWarnings(productId: string): Promise<RadarWarning[]
       value: Number(value),
       p25: Number(b.p25), p50: Number(b.p50), p75: Number(b.p75),
       sampleCount: Number(b.sample_count),
-      message: `Your ${m.label} (${value}) is in the ${tail} of ${b.sample_count} peers at your stage/${bracket} — peer median is ${b.p50}.`,
+      message: `Your ${m.label} (${fmtMetric(m.key, Number(value))}) is in the ${tail} of ${b.sample_count} peers at your stage/${bracket} — peer median is ${fmtMetric(m.key, Number(b.p50))}.`,
     });
   }
 

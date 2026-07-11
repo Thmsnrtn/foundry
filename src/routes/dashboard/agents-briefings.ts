@@ -65,6 +65,8 @@ agentBriefingRoutes.get('/agents/briefings/latest', async (c) => {
 agentBriefingRoutes.get('/agents/briefings', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Briefing History', undefined, c);
+  const { getFluency: brFl, explain: brEx } = await import('../../services/ux/fluency.js');
+  const briefIntro = brEx('briefings', brFl(founder));
 
   if (!ctx.productId) {
     const content = html`
@@ -104,6 +106,7 @@ agentBriefingRoutes.get('/agents/briefings', async (c) => {
       <h1 style="margin:0;">Briefing History</h1>
       <a href="/agents/briefings/latest" class="btn btn-primary" style="font-size:0.8rem;">Latest Briefing →</a>
     </div>
+    ${briefIntro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-0.75rem 0 1.25rem;">${briefIntro}</p>` : ''}
 
     <div class="card" style="padding:0;overflow:hidden;">
       <div style="padding:0.875rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;gap:1rem;align-items:center;">

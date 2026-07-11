@@ -78,7 +78,7 @@ describe('Network radar (B4)', () => {
     expect(w.length).toBe(1);
     expect(w[0].metric).toBe('churn_rate');
     expect(w[0].message).toContain('9 peers');
-    expect(w[0].message).toContain('0.04'); // peer median shown
+    expect(w[0].message).toContain('4%'); // peer median shown, humanized
   });
   it('abstains on thin cells (<5 peers)', async () => {
     expect(await scanForWarnings('p_thincell')).toEqual([]);

@@ -14,6 +14,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
   getFluency, setFluency, setFluencyDefault, gateLabel, rate, explain, term,
+  extractPremiseCondition, metricLabel, metricValue, riskLabel,
 } from '../../src/services/ux/fluency.js';
 
 let app: Hono;
@@ -34,6 +35,7 @@ beforeAll(async () => {
   );
 
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+  const { decisionRoutes } = await import('../../src/routes/dashboard/decisions.js');
   app = new Hono();
   app.use('*', async (c, next) => {
     c.set('founder' as never, currentFounder as never);
@@ -41,6 +43,7 @@ beforeAll(async () => {
     await next();
   });
   app.route('/', letterRoutes);
+  app.route('/', decisionRoutes);
 });
 
 describe('the dial', () => {
@@ -76,6 +79,30 @@ describe('the dial', () => {
   });
 });
 
+describe('plain-text premise extraction (no dropdowns, ever)', () => {
+  it('parses the common phrasings into monitored conditions', () => {
+    expect(extractPremiseCondition('churn stays under 5%'))
+      .toEqual({ metricKey: 'churn_rate', comparator: '<', threshold: 0.05 });
+    expect(extractPremiseCondition('NPS stays above 40'))
+      .toEqual({ metricKey: 'nps_score', comparator: '>=', threshold: 40 });
+    expect(extractPremiseCondition('retention at least 60%'))
+      .toEqual({ metricKey: 'day_30_retention', comparator: '>=', threshold: 0.6 });
+    expect(extractPremiseCondition('activation at most 30 percent'))
+      .toEqual({ metricKey: 'activation_rate', comparator: '<=', threshold: 0.3 });
+  });
+  it('returns null (→ qualitative premise) when it cannot parse honestly', () => {
+    expect(extractPremiseCondition('our users love the brand')).toBeNull();
+    expect(extractPremiseCondition('churn is basically fine')).toBeNull(); // no comparator/number
+  });
+  it('metric/risk translation keeps the technical truth visible', () => {
+    expect(metricLabel('churn_rate', 'plain')).toBe('customers leaving monthly');
+    expect(metricValue('churn_rate', 0.07, 'plain')).toBe('7%');
+    expect(metricValue('nps_score', 42, 'plain')).toBe('42');
+    expect(riskLabel('yellow', 'plain')).toBe('needs attention (yellow)');
+    expect(riskLabel('yellow', 'technical')).toBe('yellow');
+  });
+});
+
 describe('same product, different voice', () => {
   it('the Letter shows identical facts and actions at both extremes', async () => {
     currentFounder = { id: 'fl_f', email: 'f@t.co', preferences: { fluency: 'plain' } };
@@ -94,5 +121,24 @@ describe('same product, different voice', () => {
     expect(plain).toContain('daily letter');               // hand-holding intro
     expect(technical).toContain('Gate-3');
     expect(technical).not.toContain('daily letter');       // no hand-holding
+  });
+
+  it('the decision chamber: identical facts, translated instruments', async () => {
+    currentFounder = { id: 'fl_f', email: 'f@t.co', preferences: { fluency: 'plain' } };
+    const plain = await (await app.request('/decisions/fl_d1')).text();
+    currentFounder = { id: 'fl_f', email: 'f@t.co', preferences: { fluency: 'technical' } };
+    const technical = await (await app.request('/decisions/fl_d1')).text();
+
+    for (const doc of [plain, technical]) {
+      expect(doc).toContain('Enter enterprise');                 // the decision
+      expect(doc).toContain(`/decisions/fl_d1/redteam`);         // same instrument, both voices
+      expect(doc).toContain(`/decisions/fl_d1/ghost`);           // same instrument, both voices
+    }
+    expect(plain).toContain('Hear the devil');               // "devil's advocate" (apostrophe HTML-escaped)
+    expect(plain).toContain('Big decision (gate 3)');
+    expect(plain).toContain('See how each option could play out');
+    expect(technical).toContain('Summon the Red Team (adversarial pre-mortem)');
+    expect(technical).toContain('Gate-3');
+    expect(technical).toContain('1,000 runs on your real growth history');
   });
 });

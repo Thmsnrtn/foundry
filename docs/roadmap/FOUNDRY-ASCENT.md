@@ -195,6 +195,25 @@ parity items (SPA/mobile) if desired.
   Phase 5 (economic graph — verified playbooks, calibration-as-signal,
   underwriting) is spec'd above and gated on real network scale. 855 tests
   green; 18 new across the three phases.
+- ✅ **The Fluency Law (Constitution Law 9) + full-product sweep.** One product,
+  many voices: the app NEVER forks by audience — every founder gets the same
+  features, data, and power; only the *voice* adapts. A per-founder fluency dial
+  (`plain | balanced | technical`, stored in `founders.preferences`, adjustable
+  in Settings, inferred as a default by onboarding path but never overriding an
+  explicit choice) drives `services/ux/fluency.ts`: vocabulary translation that
+  keeps the technical term visible ("Big decision (gate 3)", "no longer true
+  (falsified)"), explainer strips that go silent at technical, humanized rates
+  (5% not 0.05 — radar warnings now say "4%" for every voice), and metric
+  translation ("customers leaving monthly (churn)"). The structured premise
+  dropdowns are GONE for everyone: founders state the belief in their own words
+  and `extractPremiseCondition` deterministically parses "churn stays under 5%"
+  into a monitored condition (unparseable → honest qualitative premise, still
+  recorded). Swept: dashboard, Strategic Decisions (plain-text premise +
+  translated expired-belief evidence), decision list + chamber (Red Team /
+  Ghost instruments translated, facts identical), The Letter, Controls, /talk,
+  briefings, Product DNA. Proof: two-voice tests render the same page at plain
+  and technical and assert IDENTICAL facts and actions with different words
+  (`tests/unit/fluency.test.ts`, 9 cases). 864 tests green.
 
 ### Next (specs ready to execute)
 - **Phase 4a — Network Nervous System (B4).** Turn `network_benchmarks` +

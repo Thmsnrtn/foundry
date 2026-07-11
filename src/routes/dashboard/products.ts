@@ -54,8 +54,12 @@ productRoutes.get('/products/:id/dna', requireTier('wisdom'), async (c) => {
   const draftedParam = c.req.query('drafted');
   const drafted = draftedParam !== undefined ? parseInt(draftedParam, 10) : null;
 
+  const { getFluency: dnaFl, explain: dnaEx } = await import('../../services/ux/fluency.js');
+  const dnaIntro = dnaEx('dna', dnaFl(founder));
+
   const content = html`
     <h1>Product DNA</h1>
+    ${dnaIntro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-0.25rem 0 1rem;">${dnaIntro}</p>` : ''}
     ${saved ? html`<div style="padding:0.75rem 1rem;background:#d1fae5;color:#065f46;border-radius:6px;margin-bottom:1rem;font-size:0.9rem;">✓ Product DNA saved successfully. ${completionPct >= 60 ? 'Wisdom Layer is active.' : `${completionPct}% complete — reach 60% to activate Wisdom Layer.`}</div>` : ''}
     ${drafted !== null ? html`<div style="padding:0.75rem 1rem;background:${drafted > 0 ? '#dbeafe' : '#fef3c7'};color:${drafted > 0 ? '#1e40af' : '#92400e'};border-radius:6px;margin-bottom:1rem;font-size:0.9rem;">${drafted > 0 ? `✓ Drafted ${drafted} field${drafted === 1 ? '' : 's'} from your repo. Review and edit below, then save.` : 'Not enough signal to draft — connect a repo with a README, or fill the fields in yourself.'}</div>` : ''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">

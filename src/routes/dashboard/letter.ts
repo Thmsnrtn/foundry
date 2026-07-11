@@ -161,7 +161,7 @@ letterRoutes.get('/talk', async (c) => {
   const content = html`
     <h1 style="margin-bottom:0.25rem;">Talk to the company</h1>
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.25rem;">
-      State a decision or a belief and it lands in the ledger, monitored. Ask anything — answers come from your real ledgers and carry the trust record.
+      ${explain('talk', getFluency(founder)) || 'State a decision or a belief and it lands in the ledger, monitored. Ask anything — answers come from your real ledgers and carry the trust record.'}
     </p>
     <div id="talk-log" style="min-height:180px;margin-bottom:1rem;"></div>
     <div style="display:flex;gap:0.5rem;">

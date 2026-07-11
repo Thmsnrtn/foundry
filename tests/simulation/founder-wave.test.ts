@@ -160,7 +160,7 @@ describe('the Overruler — dissent, overruled, vindicated', () => {
     const chamber = await hit('GET', `/decisions/${d}`);
     expect(chamber.status).toBe(200);
     const chamberHtml = await chamber.text();
-    expect(chamberHtml).toContain('Red Team pre-mortem');
+    expect(chamberHtml).toContain('verdict: do not proceed'); // fact, not label (labels vary by fluency)
     expect(chamberHtml).toContain('Churn breaches 8%');
 
     // Overrule: resolve past the dissent (gate-3 needs reasoning).
@@ -204,7 +204,7 @@ describe('the Forker — reality forked, idempotently', () => {
     expect(Number((again.rows[0] as Record<string, unknown>).n)).toBe(3);
 
     const chamber = await hit('GET', `/decisions/${d}`);
-    expect((await chamber.text())).toContain('Ghost fork');
+    expect((await chamber.text())).toContain('Ghost (do nothing)'); // the fork data itself
   });
 });
 
@@ -259,7 +259,7 @@ describe('the Radar-warned founder — the network sees it first', () => {
     expect(letter.status).toBe(200);
     const text = await letter.text();
     expect(text).toContain('11 peers');
-    expect(text).toContain('0.04');
+    expect(text).toContain('4%');
   });
 });
 
