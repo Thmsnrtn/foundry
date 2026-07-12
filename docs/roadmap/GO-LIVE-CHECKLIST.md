@@ -1,5 +1,34 @@
 # Go-Live Checklist — safe for strangers
 
+> **Status check — 2026-07-12 (remote session, no Fly token available):**
+> - 🔴 **The production app is DOWN.** `foundry-intel.fly.dev` times out on every
+>   path (no healthy machine) — consistent with the BLOCKER-FLY-TOKEN note
+>   (machine stopped on missing secrets). General egress from the test
+>   environment was fine; the app is simply not serving. **First operator
+>   action: set secrets + redeploy (runbook in docs/blockers/BLOCKER-FLY-TOKEN.md).**
+> - 🟢 **Local staging rehearsal passed** (the entire §1 that doesn't need live
+>   keys): fresh empty DB → all 130 migrations apply → every public page
+>   (/, /help, /privacy, /terms, /pricing, /auth/login) serves 200 →
+>   /internal/health returns ok JSON → every authenticated surface
+>   (/dashboard, /letter, /connections) correctly 401s → production boot with
+>   missing Clerk vars **exits 1 naming the missing vars** → worker role boots
+>   with the scheduler correctly gated to production. Degraded-config warnings
+>   fire per missing var with the concrete consequence.
+> - 🟢 **Stripe live account verified read-only** (acct_1SATMcRx25BFZ1Jm,
+>   shared with AcreOS): Foundry product `prod_ULJCAvVQCYi864` has all three
+>   tiers active with lookup keys — Solo $79 `price_1TrGcQRx25BFZ1JmKX8LLjUU`,
+>   Growth $199 `price_1TMcZoRx25BFZ1JmvZC3Ebig`, Investor-Ready $399
+>   `price_1TMcZpRx25BFZ1JmZauYkItz`. These are the values for the
+>   STRIPE_*_PRICE_ID secrets.
+> - 🔴 **Legacy $99 "Founding Cohort" price is still active**
+>   (`price_1TMcZoRx25BFZ1JmLSzy4AlJ`) — archiving it was permission-blocked
+>   from the session; it's one click in the dashboard (Products → Foundry →
+>   Founding Cohort → Archive).
+> - 🟡 **Webhook endpoint could not be listed** via the session's Stripe
+>   access — verify in the dashboard that an endpoint exists for
+>   `https://foundry-intel.fly.dev/webhooks/stripe` and that its signing
+>   secret matches the STRIPE_WEBHOOK_SECRET Fly secret.
+
 The code is in strong shape (741+ tests, deterministic CI, fresh-DB migration
 verified). What stands between "green tests" and "strangers can safely use it"
 is mostly **live verification and operator setup that can't be done from an
