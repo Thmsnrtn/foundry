@@ -36,6 +36,14 @@ voiceReplyWebhook.post('/webhooks/voice-reply', async (c) => {
   if (!body.audio_base64 || !body.mime_type) {
     return c.json({ error: 'audio_base64 and mime_type are required' }, 400);
   }
+  // Bounded input (security close-out 2026-07-13): audio flows into paid
+  // transcription — cap at ~10MB base64 (≈7.5MB audio, plenty for a reply).
+  if (body.audio_base64.length > 10_000_000) {
+    return c.json({ error: 'Audio exceeds the 10MB limit' }, 413);
+  }
+  if (!/^audio\//.test(body.mime_type) || body.mime_type.length > 64) {
+    return c.json({ error: 'mime_type must be an audio/* type' }, 400);
+  }
 
   // Validate API key
   const keyResult = await validateApiKey(body.api_key).catch(() => null);

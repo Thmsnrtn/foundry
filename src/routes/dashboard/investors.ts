@@ -102,8 +102,6 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
               </div>
               <div class="investor-actions">
                 ${inv.email ? html`<span class="investor-email">${inv.email as string}</span>` : ''}
-                <a href="${`/share/investor/${inv.access_token as string}`}" target="_blank" class="btn btn-outline btn-sm">View dashboard</a>
-                <button onclick="navigator.clipboard.writeText('${`${process.env.APP_URL ?? ''}/share/investor/${inv.access_token as string}`}')" class="btn btn-ghost btn-sm">Copy link</button>
                 <form method="POST" action="/investors/${inv.id as string}/revoke" class="inline">
                   <button type="submit" class="btn btn-ghost btn-sm">Revoke</button>
                 </form>
@@ -393,6 +391,15 @@ investorRoutes.post('/investors/add', async (c) => {
 
   const body = await c.req.parseBody() as Record<string, string>;
 
+  // Security close-out 2026-07-13: access_token is stored HASHED (SHA-256).
+  // No consumer route exists yet (the old raw-token share links 404'd and
+  // were removed); when an investor room ships it must look up by the hash
+  // of the presented token — never store or compare raw capability tokens.
+  const rawToken = nanoid(32);
+  const tokenHash = Array.from(
+    new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawToken))),
+  ).map((b) => b.toString(16).padStart(2, '0')).join('');
+
   await query(
     `INSERT INTO investors (id, product_id, name, email, firm, relationship, access_token)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -402,7 +409,7 @@ investorRoutes.post('/investors/add', async (c) => {
       body.email || null,
       body.firm || null,
       body.relationship || 'angel',
-      nanoid(32),
+      tokenHash,
     ],
   );
 

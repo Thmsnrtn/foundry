@@ -33,15 +33,22 @@ Operator decision column left blank for the operator to fill in.
 ### FleetObservatory — Real-Time Agent Activity Dashboard
 - **Documented at:** `docs/scp/fleet-agents/fleet-observatory.md`
 - **What it would do:** Show what all agents are doing across all companies in real time
-- **Current state:** Spec only. Per-product agent roster exists. No fleet-level view.
-- **Effort:** 1-2 weeks
-- **Required for control-plane positioning?** Yes — operators need fleet-level visibility
-- **Operator decision:** _______________
+- **Current state:** ✅ **BUILT** (correction 2026-07-13, see
+  docs/audits/verification-memo-2026-07-13.md): `src/services/fleet/observatory.ts`
+  + the `/fleet` route — every agent's status/last/next run/health plus pending
+  decisions across all the founder's products. Read-only, no new writes.
+- **Effort:** n/a — shipped
+- **Required for control-plane positioning?** Yes — and it exists
+- **Operator decision:** n/a — shipped
 
 ### Cross-Company Intelligence Service
 - **Documented at:** `docs/scp/cross-company-contract.md`, v4 defect registry
 - **What it would do:** Read `decision_patterns` table and generate actionable insights for users
-- **Current state:** Table exists, consent-gated writes work, but NO reader service and no UI
+- **Current state (corrected 2026-07-13):** Table exists, consent-gated writes
+  work, and PARTIAL readers exist (`services/intelligence/peer-signal.ts`,
+  `services/network/benchmarks.ts`, the B4 network radar feeding Letter/
+  briefing warnings). Still missing: the spec'd insight-generation reader
+  surfaced as a portfolio card.
 - **Effort:** 1-2 weeks (service to query patterns + UI card on portfolio view)
 - **Required for control-plane positioning?** Yes — without it, "cross-company" is just a label
 - **Operator decision:** _______________

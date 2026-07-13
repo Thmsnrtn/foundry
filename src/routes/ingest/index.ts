@@ -6,11 +6,37 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { invalidateSignalCache } from '../../services/signal.js';
 
 export const ingestRoutes = new Hono();
+
+// ─── Validation (security close-out 2026-07-13) ──────────────────────────────
+// This is a PUBLIC endpoint (token-authed). Before this schema, parseFloat
+// let Infinity through ("1e999"), rates accepted 500%, and unknown fields
+// were stored verbatim without any size bound. Rules: finite numbers only,
+// rates in [0,1], counts are non-negative integers, dollars bounded, NPS in
+// [-100,100], custom metrics capped in count and size.
+const RATE_FIELDS = new Set(['activation_rate', 'day_30_retention', 'churn_rate', 'mrr_health_ratio']);
+const COUNT_FIELDS = new Set(['signups', 'signups_7d', 'active_users', 'support_volume', 'support_volume_7d']);
+const NPS_FIELDS = new Set(['nps', 'nps_score']);
+const MAX_BODY_FIELDS = 40;
+const MAX_CUSTOM_KEYS = 20;
+
+const ingestBodySchema = z.record(z.string().max(64), z.unknown())
+  .refine((b) => Object.keys(b).length <= MAX_BODY_FIELDS, `at most ${MAX_BODY_FIELDS} fields`);
+
+function validateMetricValue(field: string, raw: unknown): number | null {
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw));
+  if (!Number.isFinite(n)) return null;
+  if (RATE_FIELDS.has(field)) return n >= 0 && n <= 1 ? n : null;
+  if (COUNT_FIELDS.has(field)) return n >= 0 && Number.isInteger(n) ? n : null;
+  if (NPS_FIELDS.has(field)) return n >= -100 && n <= 100 ? n : null;
+  // Dollar fields: bounded to ±$1B
+  return Math.abs(n) <= 1_000_000_000 ? n : null;
+}
 
 // ─── Field → Column Mapping ───────────────────────────────────────────────────
 
@@ -59,43 +85,59 @@ ingestRoutes.post('/ingest/:token', async (c) => {
   }
   const productId = (productResult.rows[0] as Record<string, string>).id;
 
-  // Parse body
-  let body: Record<string, unknown>;
+  // Parse + validate body
+  let rawBody: unknown;
   try {
-    body = await c.req.json() as Record<string, unknown>;
+    rawBody = await c.req.json();
   } catch {
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
+  const parsed = ingestBodySchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.issues.map((i) => i.message) }, 422);
+  }
+  const body = parsed.data;
 
   // Build column update pairs
   const columns: string[] = [];
   const values: unknown[] = [];
   const customMetrics: Record<string, unknown> = {};
+  const rejected: string[] = [];
 
   for (const [key, value] of Object.entries(body)) {
     if (key === 'custom' && typeof value === 'object' && value !== null) {
-      // custom metrics → stored as JSON
+      // custom metrics → stored as JSON (bounded below)
       Object.assign(customMetrics, value);
       continue;
     }
 
     const col = FIELD_MAP[key];
     if (col) {
-      // Dollar → cents conversion for MRR fields
-      const numVal = typeof value === 'number' ? value : parseFloat(String(value));
-      if (!isNaN(numVal)) {
-        columns.push(col);
-        values.push(DOLLAR_FIELDS.has(key) ? Math.round(numVal * 100) : numVal);
+      const numVal = validateMetricValue(key, value);
+      if (numVal == null) {
+        rejected.push(key); // out of range / non-finite — refuse rather than store poison
+        continue;
       }
+      columns.push(col);
+      values.push(DOLLAR_FIELDS.has(key) ? Math.round(numVal * 100) : numVal);
     } else {
       // Unknown fields go into custom_metrics
       customMetrics[key] = value;
     }
   }
 
-  if (Object.keys(customMetrics).length > 0) {
+  if (rejected.length > 0) {
+    return c.json({ error: 'Out-of-range or non-finite metric values', fields: rejected }, 422);
+  }
+
+  const customKeys = Object.keys(customMetrics);
+  if (customKeys.length > 0) {
+    const customJson = JSON.stringify(customMetrics);
+    if (customKeys.length > MAX_CUSTOM_KEYS || customJson.length > 8_192) {
+      return c.json({ error: `custom metrics bounded to ${MAX_CUSTOM_KEYS} keys / 8KB` }, 422);
+    }
     columns.push('custom_metrics');
-    values.push(JSON.stringify(customMetrics));
+    values.push(customJson);
   }
 
   if (columns.length === 0) {
