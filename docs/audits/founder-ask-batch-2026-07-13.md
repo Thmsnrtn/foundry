@@ -1,5 +1,13 @@
 # Founder Ask Batch — 2026-07-13 (one pass, phone-answerable)
 
+> **ANSWERED 2026-07-13 (picker):** #4 = **Option B** — build the minimum
+> fleet slice (cross-company insight reader; Observatory already existed) —
+> built and shipped same day. #5 = **defer all remaining** behind the
+> 3-paying-founders trigger (blanks filled in documented-but-not-built.md).
+> #6 = **referral-only for now** (recorded in HANDS.md). #1–3, #7 (deploy
+> runbook, price archive, webhook check, dogfood) = operator to-dos, pacing
+> left to Thomas; an automated health-check nudge is scheduled.
+
 Everything currently blocked on Thomas, with a recommendation per item.
 Answer inline; each is a one-worder unless you disagree. Class B unless marked.
 

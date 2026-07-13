@@ -11,6 +11,7 @@ import { getProductsByOwner, getPendingDecisions } from '../../db/client.js';
 import { requireTier } from '../../middleware/tier-gate.js';
 import { computeSignal } from '../../services/signal.js';
 import type { SignalResult } from '../../services/signal.js';
+import { getFleetInsights } from '../../services/fleet/insights.js';
 import { layout } from '../../views/layout.js';
 
 export const portfolioRoutes = new Hono<AuthEnv>();
@@ -55,9 +56,10 @@ portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
 
   // Compute Signals and pending decisions for all products in parallel
   const productRows = products.rows as Array<Record<string, unknown>>;
-  const [signals, pendingCounts] = await Promise.all([
+  const [signals, pendingCounts, fleetInsights] = await Promise.all([
     Promise.all(productRows.map((p) => computeSignal(p.id as string))),
     Promise.all(productRows.map((p) => getPendingDecisions(p.id as string).then((r) => r.rows.length))),
+    getFleetInsights(founder.id).catch(() => []),
   ]);
 
   // Build fleet items and sort: lowest Signal first (most urgent at top)
@@ -95,6 +97,27 @@ portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
         <div style="font-size:1.5rem;font-weight:700;color:${totalPending > 5 ? '#ffb347' : 'var(--text-primary)'};">${totalPending}</div>
         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);font-weight:600;">Pending Decisions</div>
       </div>
+    </div>
+
+    <!-- Cross-Company Intelligence (fleet slice, 2026-07-13): what anonymized
+         peers at the same stage chose on decisions like your open ones.
+         Abstains honestly below the 5-peer floor. -->
+    <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:1.75rem;">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">
+        What peers did — anonymized, ${fleetInsights.length > 0 ? 'from real recorded outcomes' : 'cross-company intelligence'}
+      </div>
+      ${fleetInsights.length === 0 ? html`
+        <div style="font-size:0.85rem;color:var(--text-muted);">
+          No peer signal strong enough for your open decisions yet — Foundry only speaks here when at least 5 founders'
+          recorded outcomes match a decision you're facing. It will never pad this card.
+        </div>
+      ` : fleetInsights.map((ins) => html`
+        <div style="padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:0.88rem;color:var(--text-primary);">${ins.summary}</div>
+          <a href="/decisions/${ins.decisionId}" style="font-size:0.78rem;color:var(--accent);">
+            → your open decision: ${ins.decisionWhat} (${ins.productName})
+          </a>
+        </div>`)}
     </div>
 
     <!-- Fleet Triage Table -->

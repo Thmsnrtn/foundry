@@ -12,7 +12,7 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** Spec with 20+ golden eval cases. Zero implementation on master, branches, or stashes (verified via `docs/audits/unmerged-work-inventory.md`).
 - **Effort:** 2-3 weeks (service + scheduler + UI surface)
 - **Required for control-plane positioning?** Yes — this is the core differentiation
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.
 
 ### FleetSentinel — Risk Correlation Monitor
 - **Documented at:** `docs/scp/fleet-agents/fleet-sentinel.md`
@@ -20,7 +20,7 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** Spec only. Zero implementation.
 - **Effort:** 1-2 weeks
 - **Required for control-plane positioning?** Yes
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.
 
 ### PortfolioLedger — Fleet Financial Intelligence
 - **Documented at:** `docs/scp/fleet-agents/portfolio-ledger.md`
@@ -28,7 +28,7 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** Spec only. The portfolio view shows per-product Signal scores but no financial aggregation.
 - **Effort:** 1-2 weeks
 - **Required for control-plane positioning?** Nice-to-have (portfolio view partially covers this)
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.
 
 ### FleetObservatory — Real-Time Agent Activity Dashboard
 - **Documented at:** `docs/scp/fleet-agents/fleet-observatory.md`
@@ -44,14 +44,15 @@ Operator decision column left blank for the operator to fill in.
 ### Cross-Company Intelligence Service
 - **Documented at:** `docs/scp/cross-company-contract.md`, v4 defect registry
 - **What it would do:** Read `decision_patterns` table and generate actionable insights for users
-- **Current state (corrected 2026-07-13):** Table exists, consent-gated writes
-  work, and PARTIAL readers exist (`services/intelligence/peer-signal.ts`,
-  `services/network/benchmarks.ts`, the B4 network radar feeding Letter/
-  briefing warnings). Still missing: the spec'd insight-generation reader
-  surfaced as a portfolio card.
-- **Effort:** 1-2 weeks (service to query patterns + UI card on portfolio view)
-- **Required for control-plane positioning?** Yes — without it, "cross-company" is just a label
-- **Operator decision:** _______________
+- **Current state:** ✅ **BUILT** (2026-07-13, the Option-B fleet slice):
+  `src/services/fleet/insights.ts` reads decision_patterns for every pending
+  decision across the founder's fleet and surfaces "what peers at your stage
+  chose and how it went" as a card on /portfolio (Fleet Triage). Abstains
+  below the 5-peer floor rather than pad. Together with FleetObservatory this
+  completes the minimum control-plane slice.
+- **Effort:** n/a — shipped
+- **Required for control-plane positioning?** Yes — and it exists
+- **Operator decision (2026-07-13):** Build now (Option B fleet slice) — done.
 
 ### Five-Stage Company Lifecycle Board
 - **Documented at:** v3 orientation doc, v5 persona journeys
@@ -59,7 +60,7 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** Lifecycle states exist per product. No board/visualization.
 - **Effort:** 3-5 days
 - **Required for control-plane positioning?** Nice-to-have
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.
 
 ### SCP Instance Manager UI
 - **Documented at:** v3 orientation, v5 journeys
@@ -67,7 +68,7 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** Pause/resume exists in settings (v5 addition). No dedicated management UI. No retire/migrate.
 - **Effort:** 1-2 weeks
 - **Required for control-plane positioning?** Nice-to-have (settings pause/resume covers basics)
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.
 
 ### Multi-Organization Architecture
 - **Documented at:** v4 lens 33 (auth expert), v5 simulations
@@ -75,7 +76,7 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** Single-founder-per-account. No `organizations` table. Team members are flat per-founder.
 - **Effort:** 1-2 months (schema redesign, auth rework, billing rework)
 - **Required for control-plane positioning?** Only if targeting enterprise/team use cases
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.
 
 ### Validated Lifecycle State Transitions
 - **Documented at:** v4 lens 131 (lifecycle state machine edge cases)
@@ -83,7 +84,7 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** Any state can be set. No validation.
 - **Effort:** 2-3 days
 - **Required for control-plane positioning?** No — edge case safety
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.
 
 ### Fleet-Level Cost Ceiling (Persistent)
 - **Documented at:** v4 defect registry, v5 friction entries
@@ -91,7 +92,7 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** In-memory Map, per-instance, resets on every deploy
 - **Effort:** 2-3 days (write to DB instead of Map)
 - **Required for control-plane positioning?** No — but important for cost control
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.
 
 ### Golden Eval Test Suites (CI-Wired)
 - **Documented at:** Fleet meta-agent specs (20+ cases each)
@@ -99,4 +100,4 @@ Operator decision column left blank for the operator to fill in.
 - **Current state:** Eval cases documented in JSON within markdown specs. Not wired into vitest or CI.
 - **Effort:** 1-2 weeks
 - **Required for control-plane positioning?** No — quality assurance tooling
-- **Operator decision:** _______________
+- **Operator decision (2026-07-13):** Defer — revisit at 3 paying founders.

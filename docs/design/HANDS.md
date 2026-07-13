@@ -143,10 +143,17 @@ more capable. Concretely:
   level, on purpose. Cold prospecting stays gated on a founder-connected
   prospecting tool + an earned record here.
 
+### Operator rulings (2026-07-13, founder picker)
+- **Outreach ceiling: referral-only for now.** Cold prospecting stays out
+  until design partners exist; revisit is a founder decision, not a trigger.
+- **Fleet slice (Option B): built** — cross-company insight reader
+  (`services/fleet/insights.ts` → /portfolio card) + FleetObservatory.
+  All other fleet specs defer to the 3-paying-founders trigger.
+
 ### Still open (the arc's next turns)
 - Taste-feedback loop: founder edits to drafts as training signal.
 - Hypothesis → remediation-PR machinery (build behind a flag on approval).
-- Cold outreach v2 behind connected prospecting tools.
+- Cold outreach v2 — blocked on an explicit founder ruling change (see above).
 - Operator envelopes + dogfood standing orders on the operator's own product.
 - Live wiring: departments publishing through real connected channels
   (needs the staging deploy from GO-LIVE §1).
