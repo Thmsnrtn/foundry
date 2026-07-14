@@ -100,6 +100,9 @@ async function mcpToolHandler(req: GatewayRequest): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MCP_TIMEOUT_MS);
   try {
+    // SSRF guard at CALL time (defeats DNS rebinding after add-time approval).
+    const { assertUrlSafe } = await import('../outbound/ssrf.js');
+    await assertUrlSafe(p.server_url, { allowLoopback: true });
     const res = await fetch(p.server_url, {
       method: 'POST',
       headers: {

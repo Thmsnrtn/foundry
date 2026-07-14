@@ -72,5 +72,13 @@ export async function getOperatorSystemLines(): Promise<string[]> {
     lines.push(`${execFails} execution(s) failed outright in the last 24h — usually a disconnected integration or an expired grant.`);
   }
 
+  // Self-audit: is the autopilot drifting toward over-deference? (Prime
+  // Objective is minimum founder-minutes — this is the meta-check on it.)
+  try {
+    const { deferenceLine } = await import('../autopilot/self-audit.js');
+    const line = await deferenceLine();
+    if (line) lines.push(line);
+  } catch { /* self-audit is advisory — never breaks the letter */ }
+
   return lines;
 }

@@ -450,6 +450,15 @@ async function executeWebhook(payload: ActionPayload): Promise<ExecutionResult> 
     return { success: false, error: 'webhook_url is required for custom_webhook' };
   }
 
+  // SSRF guard: a standing order must not be usable to reach cloud metadata
+  // or internal services (adapted from AcreOS's validateUrl).
+  try {
+    const { assertUrlSafe } = await import('../../outbound/ssrf.js');
+    await assertUrlSafe(payload.webhook_url);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'blocked URL' };
+  }
+
   try {
     const resp = await fetch(payload.webhook_url, {
       method: 'POST',

@@ -162,15 +162,22 @@ letterRoutes.get('/autopilot', async (c) => {
   const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');
 
-  const [policies, shadow] = await Promise.all([
+  const { getAllCalibrations } = await import('../../services/autopilot/calibration.js');
+  const [policies, shadow, calibrations] = await Promise.all([
     getAllPolicies(ctx.productId),
     getShadowStats(ctx.productId),
+    getAllCalibrations(ctx.productId),
   ]);
   const shadowByCat = new Map(shadow.map((s) => [s.category, s]));
+  const calByCat = new Map(calibrations.map((c) => [c.category, c]));
 
   const rows = policies.map((p) => {
     const s = shadowByCat.get(p.category);
+    const cal = calByCat.get(p.category);
     const agreement = s?.agreementRate != null ? `${Math.round(s.agreementRate * 100)}% agreement (${s.agreed}/${s.sampled})` : 'not enough shadow data yet';
+    const calLine = cal && cal.score != null
+      ? `Calibration: ${Math.round(cal.score * 100)}% of its acts/beliefs held — ${cal.verdict === 'overconfident' ? 'overconfident, promotion held' : 'well-calibrated'}`
+      : null;
     return html`
       <div class="card" style="padding:1rem 1.25rem;margin-bottom:0.75rem;">
         <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
@@ -179,6 +186,7 @@ letterRoutes.get('/autopilot', async (c) => {
             <div style="font-size:0.8rem;color:var(--accent);">${MODE_LABELS[p.mode as AutopilotMode]}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;">
               Shadow record: ${agreement} · ${p.clean_cycles}/${PROMOTION_THRESHOLD} clean cycles banked
+              ${calLine ? html`<br/><span style="color:${cal!.verdict === 'overconfident' ? '#ffb347' : 'var(--text-muted)'};">${calLine}</span>` : ''}
               ${p.last_demotion_reason ? html`<br/>Last pulled back: ${p.last_demotion_reason}` : ''}
             </div>
           </div>

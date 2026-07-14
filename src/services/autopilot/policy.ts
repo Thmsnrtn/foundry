@@ -181,6 +181,14 @@ export async function recordCleanCycle(productId: string, category: string): Pro
       log.info('autopilot promotion HELD on quality', { productId, category });
       return;
     }
+    // Calibration hold: an overconfident category (acts that fail verification,
+    // beliefs that falsify) does not earn more autonomy, however high its
+    // agreement rate. Truthfulness of confidence gates promotion.
+    const { calibrationHold } = await import('./calibration.js');
+    if (await calibrationHold(productId, category)) {
+      log.info('autopilot promotion HELD on calibration', { productId, category });
+      return;
+    }
     await query(
       `UPDATE autopilot_policies
        SET mode = 'suggest', set_by = 'earned', clean_cycles = 0, last_promoted_at = CURRENT_TIMESTAMP

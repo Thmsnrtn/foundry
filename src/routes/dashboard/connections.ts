@@ -25,12 +25,14 @@ export const connectionRoutes = new Hono<AuthEnv>();
 
 const SERVER_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 
-function urlAllowed(u: string): boolean {
+// Add-time screen (fast, no DNS). The authoritative guard runs at CALL time
+// in the MCP handler (assertUrlSafe, with rebinding defense) — this just
+// rejects obviously-bad URLs before they're stored.
+async function urlAllowed(u: string): Promise<boolean> {
   try {
-    const parsed = new URL(u);
-    if (parsed.protocol === 'https:') return true;
-    // http only for local development servers
-    return parsed.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(parsed.hostname);
+    const { assertUrlSafe } = await import('../../services/outbound/ssrf.js');
+    await assertUrlSafe(u, { allowLoopback: true });
+    return true;
   } catch { return false; }
 }
 
@@ -210,7 +212,7 @@ connectionRoutes.post('/connections/add', async (c) => {
   const name = String(body.name ?? '').trim().toLowerCase();
   const url = String(body.url ?? '').trim();
   const token = String(body.token ?? '').trim();
-  if (!SERVER_NAME_RE.test(name) || !urlAllowed(url)) return c.redirect('/connections');
+  if (!SERVER_NAME_RE.test(name) || !(await urlAllowed(url))) return c.redirect('/connections');
 
   const existing = await query(
     `SELECT id FROM integrations WHERE product_id = ? AND provider = 'mcp' AND name = ?`,
