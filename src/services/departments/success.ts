@@ -141,6 +141,19 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
 
     if (policy.mode === 'act') {
       await approveAndExecute(execId, 'autopilot:customer_success');
+      // Verified action (Jarvis axis 1): declare what success means BEFORE
+      // the consequences arrive. The independent sweep checks in 7 days;
+      // failure logs a defect AND demotes this category one rung.
+      const { declareCriteria } = await import('../outbound/action-verifier.js');
+      await declareCriteria(execId, [
+        { kind: 'provider_accepted' },
+        { kind: 'no_error_recorded' },
+        {
+          kind: 'customer_health_not_worse',
+          customer_id: customerId,
+          baseline_health: c.health_score != null ? Number(c.health_score) : null,
+        },
+      ], 7 * 24);
       result.sent++;
     } else {
       result.proposed++; // 'suggest' — waits in the founder's approval queue

@@ -185,3 +185,36 @@ All four net-new pieces landed, gated, tested (8-case suite):
 data), calendar/inbox perception (first founder-connected MCP feed),
 durable task runner (first multi-step department action), action verifier
 (first act-tier cross-product effector).
+
+---
+
+## EVOLUTION — 2026-07-14 (axes 1, 2, and the near half of 4 shipped)
+
+- **Axis 1 — Verified ACTION** (`services/outbound/action-verifier.ts`,
+  mig 097, `action_verify_sweep` every 6h): act-tier executions declare
+  deterministic success criteria BEFORE acting (provider accepted, no error,
+  customer health not worse than baseline−tolerance); an independent sweep
+  re-reads the ledgers after the window. Pass → verified on the record.
+  Fail → audit defect + **the acting autopilot category demotes one rung**
+  (existing recordAnomaly machinery). An act with no checkable criteria is
+  itself a defect. Missing data abstains — never fails. The customer-success
+  department's act path declares automatically. This is the mechanism that
+  makes granting higher tiers safe; the operator instance is the trust
+  laboratory where records accrue before customers grant anything.
+- **Axis 2 — The operator letter** (`services/letter/operator-pack.ts`):
+  the operator of Foundry-the-business gets the SAME fleet letter plus a
+  "Your machine" section — AI spend >3× the 7-day average, the letter
+  verifier's own drop count, failed act verifications, failed executions.
+  Rides the same artifact (no-fork rule); customers never see it; a
+  healthy machine contributes silence.
+- **Axis 4 (near half) — Conversational presence:** "what needs me?" in
+  /talk answers from the composed-then-VERIFIED fleet ranking —
+  deterministic, instant, zero AI cost. The model is for judgment;
+  priorities come from the ledger.
+- **Guardrails made structural:** tests assert the verifier has no runtime
+  import of the composer, and that the ±5 attention clamp exists in source.
+  Drift toward coupling or unbounded taste now fails CI.
+
+Still deferred on their original triggers: world-graph, calendar/inbox
+perception, durable missions, network attention priors (needs ≥2 real
+customers' consent-gated data).

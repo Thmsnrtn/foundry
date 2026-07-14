@@ -2150,6 +2150,18 @@ export async function fleetLetterNotify(): Promise<void> {
   logger.info(`fleet_letter_notify complete — ${delivered} delivered`, { jobName: 'fleet_letter_notify' });
 }
 
+// ─── Action verification sweep (Jarvis axis 1 — verified action) ──────────────
+export async function actionVerifySweep(): Promise<void> {
+  logger.info('action_verify_sweep starting', { jobName: 'action_verify_sweep' });
+  try {
+    const { verifyDueActions } = await import('../services/outbound/action-verifier.js');
+    const res = await verifyDueActions();
+    logger.info(`action_verify_sweep complete — ${res.checked} checked, ${res.passed} passed, ${res.failed} failed`, { jobName: 'action_verify_sweep' });
+  } catch (err) {
+    logger.error('action_verify_sweep error', { jobName: 'action_verify_sweep', error: String(err) });
+  }
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -2163,6 +2175,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   product_evolution_sweep: { fn: productEvolutionSweep, schedule: '30 9 * * 2',  description: 'Product Evolution department: one gate-3 hypothesis citing the thesis, auto-contested by the Red Team, carried by a graced metric premise (Tuesday)' },
   outreach_sweep:       { fn: outreachSweep,        schedule: '0 10 * * 3',      description: 'Outreach department (referral engine v1): asks champions for intros; suppression-listed, never auto-sends (Wednesday)' },
   fleet_letter_notify:  { fn: fleetLetterNotify,    schedule: '30 7 * * *',      description: 'One verified letter per founder across their fleet; delivered via the interruption policy — quietest sufficient channel, strain-aware (daily)' },
+  action_verify_sweep:  { fn: actionVerifySweep,    schedule: '20 */6 * * *',    description: 'Independent verification of act-tier executions against their pre-declared success criteria; failures log defects and demote the acting category (every 6h)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

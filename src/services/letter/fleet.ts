@@ -41,6 +41,9 @@ export interface FleetLetter {
   products: FleetProductLetter[];
   /** Ranked across the whole fleet — [0] is THE one thing. */
   needsYou: FleetNeedsYou[];
+  /** Operator pack (Foundry's own operator only): the machine's health lines,
+   *  riding the same letter — never a separate surface (no-fork rule). */
+  system: string[];
   quiet: boolean;
 }
 
@@ -131,12 +134,25 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_NEEDS_YOU);
 
-  const quiet = needsYou.length === 0 && letters.every((l) => l.letter.quiet);
+  // Operator pack: system-health lines join the operator's letter only.
+  let system: string[] = [];
+  try {
+    const email = String(((await query('SELECT email FROM founders WHERE id = ?', [founderId]))
+      .rows[0] as Record<string, unknown> | undefined)?.email ?? '');
+    const { isFounder } = await import('../founder/intelligence.js');
+    if (isFounder(email)) {
+      const { getOperatorSystemLines } = await import('./operator-pack.js');
+      system = await getOperatorSystemLines();
+    }
+  } catch { /* the pack must never break the letter */ }
+
+  const quiet = needsYou.length === 0 && letters.every((l) => l.letter.quiet) && system.length === 0;
   return {
     founderId,
     composedAt: new Date().toISOString(),
     products: letters,
     needsYou,
+    system,
     quiet,
   };
 }

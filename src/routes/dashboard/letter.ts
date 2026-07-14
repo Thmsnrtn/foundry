@@ -75,6 +75,12 @@ letterRoutes.get('/letter', async (c) => {
           </div>`)}
         </div>` : ''}
 
+        ${fleet.system.length > 0 ? html`
+        <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;border:1px solid rgba(255,179,71,0.35);">
+          <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.4rem;">Your machine</div>
+          ${fleet.system.map((s) => html`<div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">${s}</div>`)}
+        </div>` : ''}
+
         ${fleet.products.map((p) => (p.letter.quiet ? '' : html`
         <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;">
           <div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.5rem;">

@@ -76,6 +76,27 @@ export async function handleUtterance(
     [nanoid(), tid, text],
   );
 
+  // Jarvis fast path: "what needs me?" is answered from the VERIFIED fleet
+  // ranking — deterministic, instant, zero AI cost, and every line already
+  // passed the independent verifier. The model is for judgment; priorities
+  // come from the ledger.
+  if (/\b(what needs me|what should i do|what'?s next|priorit(y|ies)|top of my list)\b/i.test(text)) {
+    const { composeFleetLetter } = await import('../letter/fleet.js');
+    const { verifyFleetLetter } = await import('../letter/verifier.js');
+    const { letter } = await verifyFleetLetter(await composeFleetLetter(founderId));
+    const reply = letter.needsYou.length === 0
+      ? 'Nothing needs you right now — across everything. Verified against the ledgers just now.'
+      : `Across your ${letter.products.length > 1 ? `${letter.products.length} companies` : 'company'}, ranked:\n` +
+        letter.needsYou.slice(0, 3).map((n, i) =>
+          `${i + 1}. ${n.what} (${n.productName}, gate ${n.gate}) → /decisions/${n.decisionId}`).join('\n') +
+        '\nEach line verified against the ledger seconds ago.';
+    await query(
+      `INSERT INTO conversation_messages (id, thread_id, role, content) VALUES (?, ?, 'assistant', ?)`,
+      [nanoid(), tid, reply],
+    );
+    return { threadId: tid, reply, captured: null };
+  }
+
   // The institution's working context — all real, all cheap.
   const [digest, expired, shadow, pending, history] = await Promise.all([
     getMemoryDigest(productId),

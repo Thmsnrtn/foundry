@@ -115,6 +115,49 @@ describe('the interruption policy — quietest sufficient channel', () => {
   });
 });
 
+describe('constitutional guardrails hold structurally', () => {
+  it('the verifier stays independent: no runtime import of the composer', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/services/letter/verifier.ts', 'utf8');
+    // type-only imports are fine (zero runtime coupling); runtime imports are not
+    expect(src).not.toMatch(/import\s+(?!type\b)[^;]*from\s+'\.\/fleet/);
+    expect(src).not.toMatch(/from\s+'\.\/composer/);
+  });
+
+  it('learned taste stays bounded: the ±5 attention clamp exists', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/services/letter/fleet.ts', 'utf8');
+    expect(src).toContain('Math.max(-5, Math.min(5');
+  });
+});
+
+describe('the operator pack — same letter, plus the machine (no fork)', () => {
+  it('the operator sees system-health lines; other founders never do', async () => {
+    await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('jl_op','clk_op','thmsnrtn@gmail.com')", []);
+    await query("INSERT INTO products (id, name, owner_id, status) VALUES ('jl_pop','Foundry','jl_op','active')", []);
+    // The verifier tests above logged real letter:verifier defects — the
+    // operator's letter should surface them.
+    const opLetter = await composeFleetLetter('jl_op');
+    expect(opLetter.system.length).toBeGreaterThan(0);
+    expect(opLetter.system.join(' ')).toContain('letter verifier dropped');
+
+    const customerLetter = await composeFleetLetter('jl_f');
+    expect(customerLetter.system).toEqual([]); // the pack never leaks to customers
+  });
+});
+
+describe('conversational presence — "what needs me?" answers from the verified ranking', () => {
+  it('the fast path replies deterministically (no AI), citing real decisions', async () => {
+    const { handleUtterance } = await import('../../src/services/chat/institution.js');
+    // No AI key in tests: if this hit the model it would throw — the fast
+    // path proves itself by answering at all.
+    const turn = await handleUtterance('jl_p1', 'jl_f', 'What needs me today?');
+    expect(turn.reply).toContain('ranked');
+    expect(turn.reply).toContain('Sign the enterprise deal');
+    expect(turn.captured).toBeNull();
+  });
+});
+
 describe('operator attention memory — explicit, admission-controlled, ranking-visible', () => {
   it('reactions are stored only for real owned items, and shift the ranking', async () => {
     // Rejected: a reference the founder does not own stores nothing.
