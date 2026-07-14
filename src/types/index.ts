@@ -162,6 +162,9 @@ export interface FounderPreferences {
   notification_channels?: ('email' | 'dashboard')[];
   /** How Foundry speaks: presentation only — the product never forks. */
   fluency?: 'plain' | 'balanced' | 'technical';
+  /** Interruption ceiling: the loudest channel Foundry may ever use.
+   *  The policy can only quiet below this, never exceed it. */
+  max_channel?: 'log' | 'letter' | 'notification' | 'push';
 }
 
 export interface Product {

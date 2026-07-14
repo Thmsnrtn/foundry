@@ -2103,6 +2103,53 @@ export const outreachSweep = departmentSweepJob('outreach_sweep', async (id) => 
   return runOutreachSweep(id);
 });
 
+// ─── Fleet Letter (Jarvis slice 1) ──────────────────────────────────────────
+// One artifact per founder across their whole fleet: compose → independently
+// VERIFY → deliver through the interruption policy (quietest sufficient
+// channel; strain quiets non-critical noise; the founder's ceiling wins).
+export async function fleetLetterNotify(): Promise<void> {
+  logger.info('fleet_letter_notify starting', { jobName: 'fleet_letter_notify' });
+  const founders = await query(
+    `SELECT DISTINCT p.owner_id, f.preferences
+       FROM products p JOIN founders f ON f.id = p.owner_id
+      WHERE p.status != 'archived'`, [],
+  );
+  let delivered = 0;
+  for (const row of founders.rows as unknown as Array<Record<string, string>>) {
+    const founderId = row.owner_id;
+    try {
+      const { composeFleetLetter } = await import('../services/letter/fleet.js');
+      const { verifyFleetLetter } = await import('../services/letter/verifier.js');
+      const { deliver } = await import('../services/ux/interruption.js');
+
+      let prefs: Record<string, unknown> | null = null;
+      try { prefs = row.preferences ? JSON.parse(row.preferences) : null; } catch { /* unset */ }
+      const fluency = (prefs?.fluency as 'plain' | 'balanced' | 'technical') ?? 'balanced';
+
+      const { letter } = await verifyFleetLetter(await composeFleetLetter(founderId, fluency));
+      if (letter.quiet) continue; // silence is the success state (Attention Law)
+
+      const top = letter.needsYou[0];
+      const anchorProduct = top?.productId ?? letter.products[0]?.productId;
+      if (!anchorProduct) continue;
+
+      const result = await deliver(founderId, anchorProduct, {
+        importance: top ? (top.gate >= 3 ? 'action_needed' : 'attention') : 'info',
+        title: top ? `Your letter: ${top.what} needs you` : 'Your letter is ready',
+        body: top
+          ? `Top of ${letter.needsYou.length} across ${letter.products.length} companies: ${top.what} (${top.productName}).`
+          : `What ran across your ${letter.products.length} companies while you were away.`,
+        actionUrl: '/letter',
+        actionLabel: 'Read the letter',
+      }, prefs as never);
+      if (result.delivered) delivered++;
+    } catch (err) {
+      logger.error(`fleet_letter_notify error for ${founderId}`, { jobName: 'fleet_letter_notify', error: String(err) });
+    }
+  }
+  logger.info(`fleet_letter_notify complete — ${delivered} delivered`, { jobName: 'fleet_letter_notify' });
+}
+
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -2115,6 +2162,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   marketing_sweep:      { fn: marketingSweep,       schedule: '0 9 * * 1',       description: 'Marketing department: one campaign proposal per cycle, carried by a graced signups_7d premise that falsifies honestly (Monday)' },
   product_evolution_sweep: { fn: productEvolutionSweep, schedule: '30 9 * * 2',  description: 'Product Evolution department: one gate-3 hypothesis citing the thesis, auto-contested by the Red Team, carried by a graced metric premise (Tuesday)' },
   outreach_sweep:       { fn: outreachSweep,        schedule: '0 10 * * 3',      description: 'Outreach department (referral engine v1): asks champions for intros; suppression-listed, never auto-sends (Wednesday)' },
+  fleet_letter_notify:  { fn: fleetLetterNotify,    schedule: '30 7 * * *',      description: 'One verified letter per founder across their fleet; delivered via the interruption policy — quietest sufficient channel, strain-aware (daily)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

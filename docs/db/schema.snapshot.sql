@@ -240,6 +240,7 @@
   ON idempotency_keys(product_id, action_type, dedup_key);
   ON metric_validation_rules(product_id, metric_name);
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);
+  ON operator_attention(founder_id, product_id, created_at);
   ON outcome_trees(parent_branch_id);
   ON outcome_trees(product_id, status);
   ON outcome_trees(product_id, weekly_refresh_run_id);
@@ -770,6 +771,7 @@
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at  TEXT NOT NULL,
@@ -1252,6 +1254,7 @@
   founder_id       TEXT NOT NULL,
   founder_id   TEXT NOT NULL REFERENCES founders(id),
   founder_id  TEXT NOT NULL,
+  founder_id  TEXT NOT NULL,
   founder_id TEXT NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -1405,6 +1408,7 @@
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
+  id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
@@ -1674,6 +1678,8 @@
   is_seasonal INTEGER DEFAULT 0,
   is_significant   INTEGER NOT NULL DEFAULT 0,  -- 1 when p_value < pre-specified alpha
   item_key TEXT NOT NULL,
+  item_kind   TEXT NOT NULL,             -- 'needs_you' | future kinds
+  item_ref    TEXT NOT NULL,             -- e.g. decision id
   items_json TEXT NOT NULL,       -- JSON: [{id, text, category, impact, done}]
   jargon_level TEXT DEFAULT 'moderate',
   job_name TEXT PRIMARY KEY,
@@ -2198,6 +2204,7 @@
   product_id  TEXT NOT NULL DEFAULT '',
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
+  product_id  TEXT NOT NULL,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -2418,6 +2425,7 @@
   rationale TEXT,              -- why they voted this way
   re_audit_completed_at DATETIME,
   re_audit_triggered_at DATETIME,
+  reaction    TEXT NOT NULL CHECK(reaction IN ('opened', 'acted', 'dismissed')),
   read_at    TEXT NOT NULL DEFAULT (datetime('now'))
   read_at DATETIME,
   read_at DATETIME,
@@ -3283,6 +3291,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT);
 , approval_note TEXT);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -3519,6 +3528,7 @@ CREATE INDEX idx_network_profiles_sector ON network_profiles(sector, growth_stag
 CREATE INDEX idx_notifications_founder ON notifications(founder_id, read_at);
 CREATE INDEX idx_okr_updates_kr ON okr_progress_updates(key_result_id);
 CREATE INDEX idx_okrs_product ON company_okrs(product_id, period);
+CREATE INDEX idx_operator_attention
 CREATE INDEX idx_outbound_actions_pending ON outbound_actions(product_id, status) WHERE status = 'pending_approval';
 CREATE INDEX idx_outbound_actions_product ON outbound_actions(product_id, status, created_at DESC);
 CREATE INDEX idx_outbound_rate_limits ON outbound_rate_limits(product_id, agent_name);
@@ -3812,6 +3822,7 @@ CREATE TABLE onboarding_audit_progress (
 CREATE TABLE onboarding_checklist (
 CREATE TABLE onboarding_sessions (
 CREATE TABLE onboarding_tour (
+CREATE TABLE operator_attention (
 CREATE TABLE outbound_actions (
 CREATE TABLE outbound_rate_limits (
 CREATE TABLE outbound_webhooks (

@@ -157,3 +157,31 @@ verifier on *actions* (trigger: first act-tier cross-product effector).
 **Build order:** fleet composer → verifier → interruption policy →
 attention memory → wire to morning job + `/talk` + MCP. Working checkpoint
 after each; gates green before each merge.
+
+---
+
+## SHIPPED — 2026-07-13 (same session as the go)
+
+All four net-new pieces landed, gated, tested (8-case suite):
+- `services/letter/fleet.ts` — one letter across the fleet; needs-you ranked
+  gate × risk × deadline × attention memory, provenance-carrying.
+- `services/letter/verifier.ts` — the independent pass: fresh re-reads per
+  item; drops resolved/tampered/cross-tenant/gate-mismatched items and
+  refuses stale compositions whole; every drop logged to audit_log
+  ('letter:verifier'), so "why didn't you show me X?" is queryable.
+- `services/ux/interruption.ts` — log < letter < notification < push;
+  strain quiets non-critical (with an action-needed floor at the letter);
+  critical cuts through strain; the founder's explicit `max_channel`
+  ceiling beats everything.
+- `operator_attention` (mig 096) + `recordAttention` — explicit reactions
+  only, ownership-checked on write, ranking adjustment bounded ±5.
+- Wiring: `/letter` renders the verified fleet letter for multi-product
+  founders (single-product keeps the classic letter); Decide/Later capture
+  reactions; daily `fleet_letter_notify` job (07:30) composes → verifies →
+  delivers through the policy. MCP `foundry_letter` unchanged (per-product,
+  technical voice) — fleet MCP tool is a deferred follow-up.
+
+**Deferred triggers now armed:** operator world-graph (2 weeks of attention
+data), calendar/inbox perception (first founder-connected MCP feed),
+durable task runner (first multi-step department action), action verifier
+(first act-tier cross-product effector).

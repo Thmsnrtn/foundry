@@ -35,6 +35,64 @@ letterRoutes.get('/letter', async (c) => {
   if (!ctx.productId) return c.redirect('/dashboard');
 
   const fluency = getFluency(founder);
+
+  // Jarvis slice 1: a portfolio operator gets ONE letter across the fleet —
+  // composed, then independently VERIFIED before it renders. Single-product
+  // founders keep the classic letter (same facts, no fleet chrome).
+  if (ctx.allProducts.length > 1) {
+    const { composeFleetLetter } = await import('../../services/letter/fleet.js');
+    const { verifyFleetLetter } = await import('../../services/letter/verifier.js');
+    const { letter: fleet } = await verifyFleetLetter(await composeFleetLetter(founder.id, fluency));
+    const intro2 = explain('letter', fluency);
+
+    const content = html`
+      <h1 style="margin-bottom:0.25rem;">The Letter</h1>
+      <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — one letter, your whole fleet. Every line verified against the ledgers before you see it.</p>
+      ${intro2 ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro2}</p>` : ''}
+
+      ${fleet.quiet ? html`
+        <div class="card" style="padding:1.5rem;text-align:center;">
+          <div style="font-size:1rem;color:var(--text-primary);">Quiet day across all ${fleet.products.length} companies. Nothing needs you.</div>
+          <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.4rem;">That's the goal. Go build — or rest.</div>
+        </div>` : html`
+        ${fleet.needsYou.length > 0 ? html`
+        <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--accent);">
+          <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:0.4rem;">What needs you — ranked across the fleet</div>
+          ${fleet.needsYou.map((n, i) => html`
+          <div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0;${i > 0 ? 'border-top:1px solid rgba(255,255,255,0.05);' : ''}flex-wrap:wrap;">
+            <span style="font-size:0.72rem;color:var(--text-muted);min-width:1.2rem;">${i + 1}.</span>
+            <div style="flex:1;min-width:200px;">
+              <div style="font-size:0.92rem;color:var(--text-primary);">${n.what}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);">${n.productName} · ${gateLabel(n.gate, fluency)}${n.deadline ? html` · due ${n.deadline}` : ''}</div>
+            </div>
+            <a href="/decisions/${n.decisionId}" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;"
+              onclick="fetch('/letter/attention/${n.decisionId}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product_id:'${n.productId}',reaction:'acted'})})">Decide</a>
+            <form method="POST" action="/letter/attention/${n.decisionId}" style="margin:0;">
+              <input type="hidden" name="product_id" value="${n.productId}" />
+              <input type="hidden" name="reaction" value="dismissed" />
+              <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;" title="Not now — teaches the ranking">Later</button>
+            </form>
+          </div>`)}
+        </div>` : ''}
+
+        ${fleet.products.map((p) => (p.letter.quiet ? '' : html`
+        <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;">
+          <div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.5rem;">
+            <span style="font-weight:600;color:var(--text-primary);">${p.productName}</span>
+            <span style="font-size:0.72rem;color:var(--text-muted);">${p.riskState}</span>
+          </div>
+          ${[...p.letter.handled.map((l) => ({ tag: 'handled', l })),
+             ...p.letter.learned.map((l) => ({ tag: 'learned', l })),
+             ...p.letter.trust.map((l) => ({ tag: 'trust', l }))].map((row) => html`
+            <div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+              <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-right:0.5rem;">${row.tag}</span>${row.l}
+            </div>`)}
+        </div>`))}
+      `}
+    `;
+    return c.html(dashboardLayout(ctx, content));
+  }
+
   const letter = await composeLetter(ctx.productId, fluency);
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
@@ -63,6 +121,30 @@ letterRoutes.get('/letter', async (c) => {
     `}
   `;
   return c.html(dashboardLayout(ctx, content));
+});
+
+// Attention memory capture — the founder's explicit reaction to a surfaced
+// item (Jarvis slice 1). Accepts form posts (Later button) and JSON beacons
+// (Decide click). Admission control lives in recordAttention.
+letterRoutes.post('/letter/attention/:decisionId', async (c) => {
+  const founder = c.get('founder');
+  const decisionId = c.req.param('decisionId');
+  let productId = '', reaction = '';
+  const ct = c.req.header('content-type') ?? '';
+  if (ct.includes('application/json')) {
+    const body = await c.req.json().catch(() => ({})) as Record<string, string>;
+    productId = String(body.product_id ?? '');
+    reaction = String(body.reaction ?? '');
+  } else {
+    const body = await c.req.parseBody();
+    productId = String(body.product_id ?? '');
+    reaction = String(body.reaction ?? '');
+  }
+  if (['opened', 'acted', 'dismissed'].includes(reaction) && productId) {
+    const { recordAttention } = await import('../../services/letter/fleet.js');
+    await recordAttention(founder.id as string, productId, decisionId, reaction as 'opened' | 'acted' | 'dismissed');
+  }
+  return ct.includes('application/json') ? c.json({ ok: true }) : c.redirect('/letter');
 });
 
 // ─── Controls (Ascent B6 / Trust Law) — the autopilot's cockpit ───────────────
