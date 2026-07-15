@@ -7,7 +7,61 @@ its advanced primitives to Foundry, with **triggers** so we port by need, not
 by envy (finish-line self-check #4: no fleet-scale machinery for a zero-
 customer product).
 
-## Ported this session
+## Second sweep (AcreOS @ 0aeb7d5, 2026-07-14) — the Horizon/Jarvis/Pax waves
+
+AcreOS split its autopilot into **two named brains on a strict data boundary**
+(`docs/company/three-level-boundary.md`, `pax-jarvis.md`): **Solene** =
+platform chief-of-staff (sees tenants as aggregates only) and **Pax** =
+per-customer copilot. Governing formula: **autonomy = min(customer setting,
+platform cap, earned trust)**. This is the architecture Foundry was missing a
+name for (operator-pack = Solene; departments = Pax).
+
+### Ported 2026-07-14 (the Protective Wrapper — see PROTECTIVE-WRAPPER.md)
+- ✅ **Platform cap** (`autopilot/platform-cap.ts`) — the operator ceiling;
+  autonomy = min(setting, cap, trust). Money caps at shadow, outreach at
+  suggest. Departments route through `getEffectiveMode`.
+- ✅ **Consent ledger** (mig 098, `autopilot/consent.ts`) — recorded, versioned
+  acknowledgment when granting `act`; the liability audit's enforceability fix,
+  scoped to the highest-risk moment. No autonomous act without live consent
+  (belt beyond the policy row).
+- ✅ **Per-action attribution** — autonomous executions write a disclosed-agent
+  trail ("acted on the founder's behalf under consent X, disclosure Y").
+- ✅ **Enforced Level-1/2 data boundary** — operator pack is structurally
+  aggregate-only (COUNT/SUM), guarded by a source + behavioral test that no
+  customer PII reaches an operator line.
+
+### Next wave (highest-value, each shipped+tested in AcreOS)
+- **Outcome ledger** (`outcomeLedger.ts`): decisions carry a PREDICTION scored
+  against reality at 30/90 days — machine-checkable predictions grade
+  themselves; judgment calls raise one phone-answerable card. Foundry's
+  action-verifier checks immediately; this closes the long-horizon "was it the
+  right call?" loop. **Trigger:** dogfood generates ~30 resolved decisions.
+- **Promotion as a founder decision** (`shadowAgreement.ts`): reaching the
+  clean-cycle threshold raises a promotion CARD backed by shadow-agreement
+  evidence rather than auto-promoting — "no agent expands its own authority."
+  Foundry currently auto-promotes shadow→suggest. **Trigger:** next autopilot
+  hardening pass (pairs with the consent ledger — same explicit-grant theme).
+- **EV loop** (`tokenEconomyScorer.ts`): per-dispatch expected-value scoring +
+  cognition ROI in real recovered dollars + a graduated pre-cap throttle.
+  Turns the envelope from a cap into an optimization signal. **Trigger:**
+  real AI-spend + recovered-revenue data exists (dogfood).
+- **Letter reply → witnessed confirm → precedent** (`letterReply.ts`): the
+  founder replies to the Letter in plain language; parsed to ruling/directive/
+  question, shown back as a one-tap confirm, nothing stored until confirmed.
+  Makes the Letter bidirectional. **Trigger:** conversational-presence axis
+  (JARVIS.md) — pairs with the /talk fast path already shipped.
+- **Interruption budget-gate + Class-C-is-a-defect** (`founderInterruptArbiter.ts`):
+  a weekly founder-decision budget as a hard gate, and treating a Class-C
+  interrupt's arrival as a defect signal that earned autonomy should have
+  handled. Strengthens Foundry's existing interruption policy. **Trigger:**
+  when interrupt volume is real enough to tune.
+- **Read-only dispatch lane + doctrine-as-memory** (`connectionsSweep.ts`):
+  structurally read-only self-inspection (toolset-strip + executor
+  fail-closed) + the governance corpus as first-class memory with a weekly
+  "what contradicts doctrine / what did I forget" sweep. **Trigger:** the
+  embedding-memory infra decision (already infra-gated below).
+
+## Ported first session (2026-07-13)
 - ✅ **SSRF guard** (`services/outbound/ssrf.ts`, from
   `server/middleware/fileUploadSecurity.ts`) — launch-critical. Foundry made
   outbound HTTP to founder-supplied URLs (MCP servers, custom_webhook) with

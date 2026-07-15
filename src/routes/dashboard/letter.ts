@@ -163,6 +163,8 @@ letterRoutes.get('/autopilot', async (c) => {
   if (!ctx.productId) return c.redirect('/dashboard');
 
   const { getAllCalibrations } = await import('../../services/autopilot/calibration.js');
+  const { platformCap, isCappedBelow } = await import('../../services/autopilot/platform-cap.js');
+  const { DISCLOSURE_TEXT } = await import('../../services/autopilot/consent.js');
   const [policies, shadow, calibrations] = await Promise.all([
     getAllPolicies(ctx.productId),
     getShadowStats(ctx.productId),
@@ -191,14 +193,25 @@ letterRoutes.get('/autopilot', async (c) => {
             </div>
           </div>
           <div style="display:flex;gap:0.4rem;flex-shrink:0;">
-            ${p.mode !== 'act' ? html`
-            <form method="POST" action="/autopilot/policy">
-              <input type="hidden" name="category" value="${p.category}" />
-              <input type="hidden" name="mode" value="${p.mode === 'shadow' ? 'suggest' : 'act'}" />
-              <button type="submit" class="btn btn-secondary" style="font-size:0.78rem;padding:0.3rem 0.75rem;">
-                Grant ${p.mode === 'shadow' ? 'suggest' : 'act'}
-              </button>
-            </form>` : ''}
+            ${(() => {
+              const nextMode = p.mode === 'shadow' ? 'suggest' : 'act';
+              const cap = platformCap(p.category);
+              // The platform ceiling can't be exceeded — show it instead of an
+              // ungrantable button (autonomy = min(setting, cap, trust)).
+              if (isCappedBelow(nextMode as never, p.category)) {
+                return html`<span style="font-size:0.72rem;color:#ffb347;align-self:center;" title="Operator-set ceiling for this capability">Platform cap: ${cap}</span>`;
+              }
+              const grantingAct = nextMode === 'act';
+              return p.mode !== 'act' ? html`
+              <form method="POST" action="/autopilot/policy"
+                ${grantingAct ? html`onsubmit="return confirm(${JSON.stringify(DISCLOSURE_TEXT + '\n\nGrant this?')})"` : ''}>
+                <input type="hidden" name="category" value="${p.category}" />
+                <input type="hidden" name="mode" value="${nextMode}" />
+                <button type="submit" class="btn btn-secondary" style="font-size:0.78rem;padding:0.3rem 0.75rem;">
+                  Grant ${nextMode}
+                </button>
+              </form>` : '';
+            })()}
             ${p.mode !== 'shadow' ? html`
             <form method="POST" action="/autopilot/policy">
               <input type="hidden" name="category" value="${p.category}" />

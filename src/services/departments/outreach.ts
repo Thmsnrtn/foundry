@@ -17,7 +17,7 @@
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
-import { getPolicy } from '../autopilot/policy.js';
+import { getEffectiveMode } from '../autopilot/policy.js';
 import { createExecution } from '../scp/actions/executor.js';
 import { checkAndConsume, weekStarting } from '../outbound/envelopes.js';
 import { checkAndIncrement } from '../outbound/budget.js';
@@ -83,7 +83,7 @@ async function recentlyAsked(productId: string, customerId: string): Promise<boo
 
 export async function runOutreachSweep(productId: string): Promise<OutreachSweepResult> {
   await ensurePolicyVisible(productId, CATEGORY);
-  const policy = await getPolicy(productId, CATEGORY);
+  const mode = await getEffectiveMode(productId, CATEGORY); // platform-capped
 
   const productRow = (await query('SELECT name FROM products WHERE id = ?', [productId]))
     .rows[0] as Record<string, string> | undefined;
@@ -105,7 +105,7 @@ export async function runOutreachSweep(productId: string): Promise<OutreachSweep
     if (await isSuppressed(productId, email)) { result.suppressed++; continue; }
     if (await recentlyAsked(productId, customerId)) { result.skipped++; continue; }
 
-    if (policy.mode === 'shadow') {
+    if (mode === 'shadow') {
       await recordShadowWork(
         productId, CATEGORY,
         `shadow: would draft a referral ask for champion ${String(c.name ?? email)}`,
@@ -135,7 +135,7 @@ export async function runOutreachSweep(productId: string): Promise<OutreachSweep
   }
 
   if (result.champions > 0) {
-    log.info('outreach sweep', { productId, ...result, mode: policy.mode });
+    log.info('outreach sweep', { productId, ...result, mode: mode });
   }
   return result;
 }

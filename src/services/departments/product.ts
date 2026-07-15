@@ -23,7 +23,7 @@
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { getProductDNA } from '../wisdom/dna.js';
-import { getPolicy } from '../autopilot/policy.js';
+import { getEffectiveMode } from '../autopilot/policy.js';
 import { recordPremise } from '../memory/kernel.js';
 import { checkAndConsume } from '../outbound/envelopes.js';
 import { ensurePolicyVisible, recordShadowWork } from './shared.js';
@@ -92,7 +92,7 @@ export function deriveHypothesis(snap: Record<string, unknown>): Hypothesis | nu
 
 export async function runProductSweep(productId: string): Promise<ProductSweepResult> {
   await ensurePolicyVisible(productId, CATEGORY);
-  const policy = await getPolicy(productId, CATEGORY);
+  const mode = await getEffectiveMode(productId, CATEGORY); // platform-capped
 
   // Hypotheses must cite a thesis. No positioning, no invented feature ideas.
   const dna = await getProductDNA(productId);
@@ -119,7 +119,7 @@ export async function runProductSweep(productId: string): Promise<ProductSweepRe
     return { sensed: true, shadowed: 0, proposed: 0, skipped: 1, reason: 'a hypothesis is already in front of you' };
   }
 
-  if (policy.mode === 'shadow') {
+  if (mode === 'shadow') {
     await recordShadowWork(
       productId, CATEGORY,
       `shadow: would propose "${hypothesis.what}" — premise: ${hypothesis.premise}`,

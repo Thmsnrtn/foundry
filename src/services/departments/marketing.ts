@@ -22,7 +22,7 @@
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { getProductDNA } from '../wisdom/dna.js';
-import { getPolicy } from '../autopilot/policy.js';
+import { getEffectiveMode } from '../autopilot/policy.js';
 import { recordPremise } from '../memory/kernel.js';
 import { checkAndConsume } from '../outbound/envelopes.js';
 import { ensurePolicyVisible, recordShadowWork } from './shared.js';
@@ -68,7 +68,7 @@ export function draftContentBrief(dna: {
 
 export async function runMarketingSweep(productId: string): Promise<MarketingSweepResult> {
   await ensurePolicyVisible(productId, CATEGORY);
-  const policy = await getPolicy(productId, CATEGORY);
+  const mode = await getEffectiveMode(productId, CATEGORY); // platform-capped
 
   // Sense: no funnel telemetry → nothing honest to propose (Honesty Law).
   const snap = (await query(
@@ -97,7 +97,7 @@ export async function runMarketingSweep(productId: string): Promise<MarketingSwe
   // The testable bet: publishing lifts weekly signups by ≥20% (floor 5).
   const target = Math.max(Math.ceil(signups * 1.2), 5);
 
-  if (policy.mode === 'shadow') {
+  if (mode === 'shadow') {
     await recordShadowWork(
       productId, CATEGORY,
       `shadow: would propose "${draft.title}" — signups_7d at ${signups}, premise target >= ${target}`,

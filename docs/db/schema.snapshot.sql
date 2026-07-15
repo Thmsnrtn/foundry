@@ -214,6 +214,7 @@
   ON agent_messages(thread_id);
   ON agent_wiki_entries(product_id, section, title);
   ON agent_wiki_entries(product_id, section, updated_at);
+  ON autonomy_consents(product_id, capability, revoked_at);
   ON benchmark_contributions(lifecycle_state, company_category, contributed_at);
   ON benchmark_percentiles(lifecycle_state, company_category, metric_name);
   ON benchmark_percentiles(lifecycle_state, company_category, metric_name, computed_at);
@@ -304,6 +305,7 @@
   WHERE apns_device_token IS NOT NULL;
   WHERE decision_acted_at IS NULL;
   WHERE resolved_at IS NULL;
+  accepted_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
   accepted_at DATETIME,
   accepted_at TEXT,
   access_expires_at DATETIME,            -- null = no expiry
@@ -563,6 +565,7 @@
   can_view_financials BOOLEAN DEFAULT TRUE,
   can_vote_decisions BOOLEAN DEFAULT TRUE,
   cap INTEGER NOT NULL DEFAULT 3,                 -- per week
+  capability          TEXT NOT NULL,          -- autopilot category
   cascades_triggered TEXT,
   cash_on_hand REAL,
   category              TEXT NOT NULL,
@@ -1061,6 +1064,7 @@
   dimension_scores TEXT,
   direction_correct BOOLEAN,           -- did we predict the direction right?
   directness_level TEXT DEFAULT 'moderate',
+  disclosure_version  TEXT NOT NULL,          -- which disclosure text they accepted
   discovered_at TEXT DEFAULT (datetime('now'))
   disintermediation_risk REAL,
   dismissed_at TEXT,
@@ -1251,6 +1255,7 @@
   founder_b_id TEXT NOT NULL,
   founder_count INTEGER DEFAULT 0,
   founder_hypothesis TEXT,
+  founder_id          TEXT NOT NULL,
   founder_id       TEXT NOT NULL,
   founder_id   TEXT NOT NULL REFERENCES founders(id),
   founder_id  TEXT NOT NULL,
@@ -1304,6 +1309,7 @@
   founder_rationale TEXT,
   founder_retention_pct REAL,
   from_agent TEXT NOT NULL,
+  from_mode           TEXT NOT NULL,
   from_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
   full_briefing TEXT NOT NULL,         -- Complete briefing markdown
   full_synthesis TEXT NOT NULL,          -- Complete synthesis markdown
@@ -1385,6 +1391,7 @@
   id                     TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
+  id                  TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
@@ -2184,6 +2191,7 @@
   product_id            TEXT NOT NULL UNIQUE,   -- one settings row per product
   product_id            TEXT NOT NULL,
   product_id          TEXT NOT NULL,
+  product_id          TEXT NOT NULL,
   product_id          TEXT NOT NULL,        -- kept private, never joined publicly
   product_id       TEXT NOT NULL,
   product_id       TEXT NOT NULL,
@@ -2517,6 +2525,7 @@
   reviewed_by TEXT,
   reviewee_product_id TEXT NOT NULL,
   reviewer_id TEXT NOT NULL,
+  revoked_at          DATETIME                -- set when the capability drops below 'act'
   revoked_at   DATETIME,
   revoked_at   TEXT,                                -- NULL means currently active
   revoked_at DATETIME
@@ -2872,6 +2881,7 @@
   title TEXT,
   title TEXT,                  -- auto-generated from first message
   to_agent TEXT NOT NULL,              -- Agent name or 'broadcast'
+  to_mode             TEXT NOT NULL,
   to_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
   token TEXT UNIQUE NOT NULL,
   tokens_in INTEGER,
@@ -3292,6 +3302,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -3366,6 +3377,7 @@ CREATE INDEX idx_audit_trail_changed_by ON audit_trail(changed_by);
 CREATE INDEX idx_audit_trail_created ON audit_trail(created_at);
 CREATE INDEX idx_audit_trail_table_row ON audit_trail(table_name, row_id);
 CREATE INDEX idx_auto_exec_product ON auto_execution_log(product_id);
+CREATE INDEX idx_autonomy_consents
 CREATE INDEX idx_autopilot_product ON autopilot_policies(product_id);
 CREATE INDEX idx_bdl_briefing
 CREATE INDEX idx_bdl_founder_created
@@ -3683,6 +3695,7 @@ CREATE TABLE audit_log (
 CREATE TABLE audit_scores (
 CREATE TABLE audit_trail (
 CREATE TABLE auto_execution_log (
+CREATE TABLE autonomy_consents (
 CREATE TABLE autopilot_config (
 CREATE TABLE autopilot_policies (
 CREATE TABLE benchmark_contributions (

@@ -20,7 +20,7 @@
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { getAtRiskCustomers } from '../customers/intelligence.js';
-import { getPolicy } from '../autopilot/policy.js';
+import { getEffectiveMode } from '../autopilot/policy.js';
 import { createExecution, approveAndExecute } from '../scp/actions/executor.js';
 import { checkAndConsume, weekStarting } from '../outbound/envelopes.js';
 import { checkAndIncrement } from '../outbound/budget.js';
@@ -87,7 +87,7 @@ async function recentlyContacted(productId: string, customerId: string): Promise
 
 export async function runSuccessSweep(productId: string): Promise<SuccessSweepResult> {
   await ensurePolicyVisible(productId);
-  const policy = await getPolicy(productId, CATEGORY);
+  const mode = await getEffectiveMode(productId, CATEGORY); // platform-capped
 
   const productRow = (await query('SELECT name FROM products WHERE id = ?', [productId]))
     .rows[0] as Record<string, string> | undefined;
@@ -103,7 +103,7 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
     const customerId = String(c.id);
     if (await recentlyContacted(productId, customerId)) { result.skipped++; continue; }
 
-    if (policy.mode === 'shadow') {
+    if (mode === 'shadow') {
       // Watching only: record what it WOULD have done — this is the record
       // that later earns 'suggest'.
       await insertAuditLog({
@@ -139,7 +139,13 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
       cs_customer: customerId,
     });
 
-    if (policy.mode === 'act') {
+    // Consent gate (Protective Wrapper): no autonomous act without a live,
+    // recorded consent — even if the policy row says 'act'. Absent consent
+    // downgrades safely to a proposal.
+    const { activeConsent } = await import('../autopilot/consent.js');
+    const consent = mode === 'act' ? await activeConsent(productId, CATEGORY) : null;
+
+    if (mode === 'act' && consent) {
       await approveAndExecute(execId, 'autopilot:customer_success');
       // Verified action (Jarvis axis 1): declare what success means BEFORE
       // the consequences arrive. The independent sweep checks in 7 days;
@@ -154,14 +160,27 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
           baseline_health: c.health_score != null ? Number(c.health_score) : null,
         },
       ], 7 * 24);
+      // Per-action attribution (primitive 3): the disclosed-agent paper trail —
+      // what was done, under whose authority, under which consent/disclosure.
+      await insertAuditLog({
+        id: nanoid(),
+        product_id: productId,
+        action_type: 'attribution:customer_success',
+        gate: 0,
+        trigger: `autopilot acted under effective mode 'act'`,
+        reasoning: `Foundry sent a check-in on the founder's behalf under consent ${consent.id} (disclosure ${consent.disclosure_version})`,
+        input_context: JSON.stringify({ execution_id: execId, consent_id: consent.id, customer_id: customerId }),
+        output: undefined,
+        outcome: 'allowed',
+      });
       result.sent++;
     } else {
-      result.proposed++; // 'suggest' — waits in the founder's approval queue
+      result.proposed++; // 'suggest', or 'act' without consent — waits for the founder
     }
   }
 
   if (result.atRisk > 0) {
-    log.info('customer success sweep', { productId, ...result, mode: policy.mode });
+    log.info('customer success sweep', { productId, ...result, mode: mode });
   }
   return result;
 }

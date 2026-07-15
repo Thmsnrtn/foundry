@@ -83,9 +83,20 @@ export async function getPolicy(productId: string, category: string): Promise<Au
   return (r.rows[0] as unknown as AutopilotPolicy) ?? { category, mode: 'shadow', set_by: 'default' };
 }
 
+/** The EFFECTIVE autonomy a department may exercise: the founder's configured
+ *  mode clamped by the platform cap (Protective Wrapper). Departments MUST use
+ *  this, never the raw policy mode — the cap is the operator-controlled ceiling
+ *  the clean-hands posture depends on. */
+export async function getEffectiveMode(productId: string, category: string): Promise<AutopilotMode> {
+  const policy = await getPolicy(productId, category);
+  const { effectiveMode } = await import('./platform-cap.js');
+  return effectiveMode(policy.mode, category);
+}
+
 export async function setPolicy(
   productId: string, category: string, mode: AutopilotMode, setBy: string,
 ): Promise<void> {
+  const prior = await getPolicy(productId, category);
   const { sql, args } = buildInsert('autopilot_policies', {
     id: nanoid(), product_id: productId, category, mode, set_by: setBy,
   });
@@ -93,6 +104,19 @@ export async function setPolicy(
     sql + ` ON CONFLICT(product_id, category) DO UPDATE SET mode = excluded.mode, set_by = excluded.set_by, updated_at = CURRENT_TIMESTAMP`,
     args,
   );
+
+  // Consent ledger (Protective Wrapper): raising to 'act' records the founder's
+  // acknowledgment; dropping below 'act' revokes it. Best-effort — the policy
+  // write is authoritative; the act path independently requires live consent.
+  try {
+    const { recordConsent, revokeConsent } = await import('./consent.js');
+    if (mode === 'act' && prior.mode !== 'act') {
+      await recordConsent({ founderId: setBy, productId, capability: category, fromMode: prior.mode, toMode: 'act' });
+    } else if (mode !== 'act' && prior.mode === 'act') {
+      await revokeConsent(productId, category);
+    }
+  } catch { /* consent ledger is additive; never block a policy change */ }
+
   log.info('autopilot policy set', { productId, category, mode, setBy });
 }
 
