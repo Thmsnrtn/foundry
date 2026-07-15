@@ -20,6 +20,22 @@ import { log } from '../../lib/logger.js';
 const STRIPE_TIMEOUT_MS = 10_000;
 const STRIPE_API = 'https://api.stripe.com/v1';
 
+// CLEAN-HANDS DEFAULT (liability audit 2026-07-14): Foundry does not move money
+// unless a deliberate, attorney-gated decision turns it on. These handlers move
+// a product's customers' money (refunds, subscription changes) and have NO live
+// callers — pure latent liability. They refuse unless FOUNDRY_ENABLE_MONEY_TOOLS
+// is explicitly 'true'. See docs/design/LIABILITY-AUDIT.md.
+function moneyToolsEnabled(): boolean {
+  return process.env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true';
+}
+
+class MoneyToolsDisabledError extends Error {
+  constructor(tool: string) {
+    super(`${tool} refused: Foundry does not move money by default (FOUNDRY_ENABLE_MONEY_TOOLS is off). This is the clean-hands posture — see docs/design/LIABILITY-AUDIT.md.`);
+    this.name = 'MoneyToolsDisabledError';
+  }
+}
+
 interface UpdateSubscriptionParams {
   subscription_id: string;
   /** Form-encoded shape Stripe API expects: e.g. { 'items[0][price]': 'price_X' } */
@@ -38,6 +54,7 @@ interface CreateRefundParams {
 async function updateSubscriptionHandler(
   req: GatewayRequest
 ): Promise<{ id: string; status: string }> {
+  if (!moneyToolsEnabled()) throw new MoneyToolsDisabledError('stripe_update_subscription');
   const params = req.params as unknown as UpdateSubscriptionParams;
   const apiKey = process.env.STRIPE_SECRET_KEY;
   if (!apiKey) {
@@ -78,6 +95,7 @@ async function updateSubscriptionHandler(
 async function createRefundHandler(
   req: GatewayRequest
 ): Promise<{ id: string; status: string; amount: number }> {
+  if (!moneyToolsEnabled()) throw new MoneyToolsDisabledError('stripe_create_refund');
   const params = req.params as unknown as CreateRefundParams;
   const apiKey = process.env.STRIPE_SECRET_KEY;
   if (!apiKey) {
