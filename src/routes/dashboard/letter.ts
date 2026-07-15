@@ -14,7 +14,14 @@ import {
   getAllPolicies, setPolicy, panicStop, getShadowStats,
   MODE_LABELS, PROMOTION_THRESHOLD, type AutopilotMode,
 } from '../../services/autopilot/policy.js';
-import { getFluency, gateLabel, explain } from '../../services/ux/fluency.js';
+import { getFluency, gateLabel, explain, adviceFooter } from '../../services/ux/fluency.js';
+import { html as _html } from 'hono/html';
+
+/** The point-of-use advice disclaimer strip (LIABILITY-AUDIT.md). */
+const adviceStrip = (f: Parameters<typeof adviceFooter>[0]) => _html`
+  <p style="margin-top:1.5rem;padding-top:0.75rem;border-top:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:var(--text-muted);">
+    ${adviceFooter(f)}
+  </p>`;
 import { connectionRoutes } from './connections.js';
 
 export const letterRoutes = new Hono<AuthEnv>();
@@ -95,6 +102,7 @@ letterRoutes.get('/letter', async (c) => {
             </div>`)}
         </div>`))}
       `}
+      ${adviceStrip(fluency)}
     `;
     return c.html(dashboardLayout(ctx, content));
   }
@@ -125,6 +133,7 @@ letterRoutes.get('/letter', async (c) => {
       ${section('What I learned', letter.learned)}
       ${section('How trust moved', letter.trust)}
     `}
+    ${adviceStrip(fluency)}
   `;
   return c.html(dashboardLayout(ctx, content));
 });
@@ -311,7 +320,8 @@ letterRoutes.get('/talk', async (c) => {
         } catch { addMsg('foundry', 'The company is unreachable right now.'); }
       }
       document.getElementById('talk-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTalk(); });
-    </script>`;
+    </script>
+    ${adviceStrip(getFluency(founder))}`;
   return c.html(dashboardLayout(ctx, content));
 });
 

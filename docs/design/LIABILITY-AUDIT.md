@@ -132,9 +132,25 @@ These are engineering-drafted starting points, not vetted legal text:
 ## What shipped with this audit (code)
 - Money handlers disabled by default (`FOUNDRY_ENABLE_MONEY_TOOLS`, off) —
   latent money-movement neutered until a deliberate, papered decision.
+- **Autonomy consent ledger** (mig 098) — granting `act` records a versioned
+  disclosure acceptance; no autonomous act without live consent; per-action
+  attribution trail. (Protective Wrapper.)
+- **Platform cap** — money capabilities cap at shadow structurally; the
+  operator ceiling no customer setting can exceed. (Protective Wrapper.)
+- **In-product advice disclaimers** (2026-07-14) — `adviceFooter(fluency)`
+  surfaced at the point of use (decision chamber, the Letter both branches,
+  /talk). A disclaimer seen when the founder acts is far more enforceable than
+  one buried in the Terms; it never forks silent (even technical fluency gets
+  the terse legal line).
+- **Sender-of-record guard** (2026-07-14, `services/outbound/sender-of-record.ts`)
+  — `assertSenderOfRecord` structurally refuses a Foundry-domain From to a
+  third party; the live third-party send path (when built) MUST call it, so
+  Foundry never becomes sender-of-record on a founder's list. Foundry-domain
+  From stays legal only for mail to the founder themselves (transactional).
 
 ## What needs Thomas + counsel (not code)
 - Adopt the clean-hands posture as product policy.
 - Attorney review + publish: strengthened ToS, DPA, sub-processor list.
-- Then (code, fast): clickwrap acceptance record, in-product advice footers,
-  sender-of-record rule when third-party sends go live, ProofReceipts.
+- Then (code, fast): clickwrap terms acceptance record at signup, ProofReceipt
+  hash-chains (the tamper-evident evidence layer), and wiring the
+  sender-of-record guard at the live third-party send boundary when it exists.

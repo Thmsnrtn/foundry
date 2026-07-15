@@ -329,6 +329,10 @@ decisionRoutes.get('/decisions/:id', async (c) => {
       };
     })();
     </script>
+    ${await (async () => {
+      const { adviceFooter } = await import('../../services/ux/fluency.js');
+      return html`<p style="margin-top:1.25rem;font-size:0.72rem;color:var(--text-muted);text-align:center;">${adviceFooter(chamberFluency)}</p>`;
+    })()}
   `;
 
   return c.html(chamberLayout(ctx, content));

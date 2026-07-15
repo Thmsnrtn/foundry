@@ -288,7 +288,10 @@ async function executeAction(
       return executeWebhook(payload);
 
     case 'send_email':
-      // Email provider TBD — store draft and mark completed
+      // Draft-only today (no live third-party send path exists). When live
+      // sending is wired, the send boundary MUST call assertSenderOfRecord
+      // (services/outbound/sender-of-record.ts): a third-party recipient
+      // requires the founder's own connected sender, never a Foundry domain.
       return {
         success: true,
         integration_response: {

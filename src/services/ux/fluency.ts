@@ -221,6 +221,17 @@ export function explain(key: string, f: Fluency): string {
   return EXPLAINERS[key]?.[f] ?? '';
 }
 
+// Advice disclaimer, surfaced AT THE POINT OF USE (LIABILITY-AUDIT.md): a
+// disclaimer the founder saw when they acted is far more enforceable than one
+// buried in the Terms. Shown wherever Foundry recommends or decides — the
+// decision chamber, the Letter, /talk. Voice-aware but NEVER silent: even the
+// technical founder gets a terse version (the legal line does not fork away).
+export function adviceFooter(f: Fluency): string {
+  return f === 'technical'
+    ? 'Informational software output — not financial, legal, or tax advice. You decide.'
+    : 'Foundry is software, not an adviser — every recommendation is grounded in your own data, but the decision and its consequences are yours. Not financial, legal, or tax advice.';
+}
+
 /** Sidebar nav key → explainer, for the strip the layout renders on every page.
  *  Pages that render their own strip in-page (dashboard, decisions, letter…)
  *  are deliberately absent so nothing shows twice. */
