@@ -20,6 +20,7 @@
     "kernel:boundary": "node scripts/check-kernel-boundary.mjs",
     "truth:audit": "node scripts/audit-public-claims.mjs",
     "sim:walkthrough": "TURSO_DATABASE_URL=file::memory: tsx tests/simulation/walkthrough.ts",
+    "sim:golden": "TURSO_DATABASE_URL=file::memory: tsx tests/simulation/golden-output.ts",
     "load:crons": "TURSO_DATABASE_URL=file::memory: tsx tests/load/cron-load.ts",
     "mcp:context": "tsx src/mcp/cli.ts context",
     "mcp:audit": "tsx src/mcp/cli.ts audit",

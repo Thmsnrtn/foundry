@@ -60,12 +60,16 @@ export function deriveHypothesis(snap: Record<string, unknown>): Hypothesis | nu
   const churn = snap.churn_rate != null ? Number(snap.churn_rate) : null;
   const support = snap.support_volume_7d != null ? Number(snap.support_volume_7d) : null;
 
+  // Rates read as percentages in the human-facing premise text; the stored
+  // threshold stays the raw fraction the kernel monitors (fluency consistency).
+  const pct = (v: number) => `${Math.round(v * 1000) / 10}%`;
+
   if (activation != null && activation < 0.4) {
     const target = Math.round(activation * 1.15 * 100) / 100;
     return {
       what: 'Rework the first-run experience — new users are not reaching value',
       whyNow: `Activation is at ${Math.round(activation * 100)}% — most signups never experience the product working.`,
-      premise: `Reworking onboarding lifts activation to at least ${target}`,
+      premise: `Reworking onboarding lifts activation to at least ${pct(target)}`,
       metricKey: 'activation_rate', comparator: '>=', threshold: target,
     };
   }
@@ -74,7 +78,7 @@ export function deriveHypothesis(snap: Record<string, unknown>): Hypothesis | nu
     return {
       what: 'Find and fix the top churn driver — customers are leaving faster than you can replace them',
       whyNow: `Churn is at ${Math.round(churn * 1000) / 10}% monthly — growth is refilling a leaking bucket.`,
-      premise: `Fixing the top churn driver brings churn down to at most ${target}`,
+      premise: `Fixing the top churn driver brings churn down to at most ${pct(target)}`,
       metricKey: 'churn_rate', comparator: '<=', threshold: target,
     };
   }

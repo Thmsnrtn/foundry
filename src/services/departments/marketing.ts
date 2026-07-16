@@ -49,20 +49,40 @@ export function draftContentBrief(dna: {
   primary_objection?: string | null;
   growth_hypothesis?: string | null;
 } | null): { title: string; brief: string; grounded: boolean } {
-  const parts: string[] = [];
-  if (dna?.icp_description) parts.push(`Audience: ${dna.icp_description}`);
-  if (dna?.icp_pain) parts.push(`Lead with the pain: ${dna.icp_pain}`);
-  if (dna?.positioning_statement) parts.push(`Angle: ${dna.positioning_statement}`);
-  if (dna?.primary_objection) parts.push(`Answer the objection head-on: ${dna.primary_objection}`);
-  if (dna?.growth_hypothesis) parts.push(`Growth thesis to test: ${dna.growth_hypothesis}`);
-  const grounded = parts.length >= 2;
+  // A brief a writer can act on — directive prose synthesized from real DNA,
+  // never a form echo. Assembled only from fields that exist (no fabrication).
+  const sentences: string[] = [];
+  const fields = [dna?.icp_description, dna?.icp_pain, dna?.positioning_statement].filter(Boolean).length;
+  const grounded = fields >= 2;
+
   if (!grounded) {
-    parts.push('Your Product DNA is thin — fill in audience, pain, and positioning to get a brief that sounds like YOUR company instead of a template.');
+    return {
+      title: 'Weekly content push',
+      brief: 'Your Product DNA is thin — fill in your audience, their pain, and your positioning, and Foundry will write a brief that sounds like YOUR company instead of a template.',
+      grounded: false,
+    };
   }
+
+  if (dna?.icp_description && dna?.icp_pain) {
+    sentences.push(`Write for ${dna.icp_description}. Open on the pain they actually feel — ${dna.icp_pain} — in their own words, not yours.`);
+  } else if (dna?.icp_description) {
+    sentences.push(`Write for ${dna.icp_description}.`);
+  }
+  if (dna?.positioning_statement) {
+    sentences.push(`Land one idea: ${dna.positioning_statement}. Everything in the piece should earn that line.`);
+  }
+  if (dna?.primary_objection) {
+    sentences.push(`Meet the objection head-on rather than dodging it — name that "${dna.primary_objection}" and show why this is different.`);
+  }
+  if (dna?.growth_hypothesis) {
+    sentences.push(`Distribution bet worth testing this cycle: ${dna.growth_hypothesis}.`);
+  }
+  sentences.push('One channel, consistent cadence, for the full window — so the signups lift (or the lack of it) is a clean read.');
+
   return {
     title: 'Weekly content push',
-    brief: parts.join('\n'),
-    grounded,
+    brief: sentences.join('\n\n'),
+    grounded: true,
   };
 }
 

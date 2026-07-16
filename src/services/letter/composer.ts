@@ -83,7 +83,11 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
     ),
     ...radar.map((w) => w.message),
   ];
-  if (digest.holding > 0) learned.push(`${digest.holding} of your recorded beliefs still hold.`);
+  if (digest.holding > 0) {
+    learned.push(digest.holding === 1
+      ? `1 recorded belief still holds.`
+      : `${digest.holding} of your recorded beliefs still hold.`);
+  }
 
   const trust: string[] = [...ledger.proposals];
   if (dissent.total > 0) {
