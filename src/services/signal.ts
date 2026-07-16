@@ -32,6 +32,10 @@ export interface SignalResult {
   prose: string;
   components: SignalComponents;
   riskState: 'green' | 'yellow' | 'red';
+  /** False for a brand-new product with no metrics yet: the score is a default,
+   *  not a measurement. First-run surfaces must say "not enough data yet"
+   *  rather than present a falsely-confident number (Honesty Law). */
+  hasData: boolean;
 }
 
 // ─── Prose Cache ──────────────────────────────────────────────────────────────
@@ -68,6 +72,10 @@ export async function computeSignal(productId: string): Promise<SignalResult> {
   const metrics = (metricsResult.rows[0] ?? {}) as Record<string, unknown>;
   const decisions = decisionsResult.rows as Array<Record<string, string>>;
   const lifecycle = (lifecycleResult.rows[0] ?? {}) as Record<string, unknown>;
+
+  // A product with no metric snapshot yet has no measured Signal — the score
+  // below is a default, and first-run surfaces must not present it as truth.
+  const hasData = metricsResult.rows.length > 0;
 
   const riskState = (lifecycle.risk_state as 'green' | 'yellow' | 'red') ?? 'green';
   const currentPrompt = (lifecycle.current_prompt as string) ?? 'prompt_1';
@@ -137,6 +145,7 @@ export async function computeSignal(productId: string): Promise<SignalResult> {
     prose,
     components: { riskStatePenalty, stressorPenalty, mrrPenalty, backlogPenalty, lifecycleBonus },
     riskState,
+    hasData,
   };
 }
 

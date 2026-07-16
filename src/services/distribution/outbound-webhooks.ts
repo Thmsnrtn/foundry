@@ -14,10 +14,19 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
+import { createHmac } from 'node:crypto';
 import { query } from '../../db/client.js';
 import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/gateway.js';
 import { withRetry } from '../resilience.js';
 import { log } from '../../lib/logger.js';
+
+/** HMAC-SHA256 over the exact JSON body, so a receiver can verify the webhook
+ *  genuinely came from Foundry and wasn't forged or tampered with. Format:
+ *  `sha256=<hex>` (the GitHub/Stripe convention). Previously this header was
+ *  sent EMPTY — a signature that proved nothing (fixed 2026-07-14). */
+export function signWebhookBody(secret: string, body: string): string {
+  return `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,6 +100,7 @@ async function postWebhookHandler(req: GatewayRequest): Promise<{ status: number
   const { config, payload } = params;
 
   const body = formatPayload(config.target, payload);
+  const serialized = JSON.stringify(body);
 
   const response = await withRetry(
     () =>
@@ -98,9 +108,11 @@ async function postWebhookHandler(req: GatewayRequest): Promise<{ status: number
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(config.secret ? { 'X-Foundry-Signature': '' /* TODO: HMAC */ } : {}),
+          // Signed with the founder's webhook secret so the receiver can verify
+          // authenticity (was an empty header — proved nothing).
+          ...(config.secret ? { 'X-Foundry-Signature': signWebhookBody(config.secret, serialized) } : {}),
         },
-        body: JSON.stringify(body),
+        body: serialized,
       }),
     { timeoutMs: WEBHOOK_TIMEOUT_MS, maxRetries: 2 }
   );

@@ -283,17 +283,20 @@ dashboardRoutes.get('/dashboard', async (c) => {
       ${raw(catchUpHtml)}
       ${dashIntro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:0 0 1rem;">${dashIntro}</p>` : ''}
 
-      <div class="signal-display signal-${signal.tier}">
+      <div class="signal-display signal-${signal.hasData ? signal.tier : 'mid'}">
+        ${signal.hasData ? html`
         <button
           class="signal-number"
           onclick="document.getElementById('anatomy-dialog').showModal()"
           title="Tap to see score breakdown"
           aria-haspopup="dialog"
-        >${signal.score}</button>
+        >${signal.score}</button>` : html`
+        <div class="signal-number" style="font-size:1.4rem;opacity:0.7;">—</div>`}
         <div class="signal-label-row">
-          <span class="signal-label">Signal</span>
-          ${delta !== null ? raw(`<span class="signal-delta ${deltaCls}">${deltaStr}</span>`) : ''}
+          <span class="signal-label">${signal.hasData ? 'Signal' : 'No data yet'}</span>
+          ${signal.hasData && delta !== null ? raw(`<span class="signal-delta ${deltaCls}">${deltaStr}</span>`) : ''}
         </div>
+        ${!signal.hasData ? html`<p style="font-size:0.8rem;color:var(--text-muted);margin:0.4rem auto 0;max-width:320px;line-height:1.5;">Your Signal appears once Foundry can see your numbers. <a href="/connections" style="color:var(--accent);">Connect a tool</a> to start.</p>` : ''}
         ${history.length >= 2 ? html`
         <div class="signal-sparkline-wrap">
           ${sparklineSVG(history)}

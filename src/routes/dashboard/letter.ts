@@ -118,7 +118,17 @@ letterRoutes.get('/letter', async (c) => {
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — from your team.</p>
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}
 
-    ${letter.quiet ? html`
+    ${letter.firstRun ? html`
+      <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
+        <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
+        <div style="font-size:0.88rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.55;">
+          This letter is where your AI team reports in each morning. It's empty because there's no data yet — that's expected on day one. Two things bring it to life:
+        </div>
+        <div style="margin-top:0.85rem;display:flex;flex-direction:column;gap:0.5rem;">
+          <a href="/connections" class="btn btn-primary" style="font-size:0.85rem;align-self:flex-start;">Connect your tools → so Foundry can see your real numbers</a>
+          <a href="/decisions" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">Log your first decision → and the belief behind it, so Foundry can watch it</a>
+        </div>
+      </div>` : letter.quiet ? html`
       <div class="card" style="padding:1.5rem;text-align:center;">
         <div style="font-size:1rem;color:var(--text-primary);">Quiet day. Nothing needs you.</div>
         <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.4rem;">That's the goal. Go build — or rest.</div>

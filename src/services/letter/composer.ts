@@ -22,6 +22,10 @@ export interface Letter {
   learned: string[];       // expired beliefs, vindications, radar warnings
   trust: string[];         // graduation proposals + dissent record
   quiet: boolean;          // true when there is genuinely nothing needing you
+  /** True for a brand-new product with no history yet: an empty Letter here
+   *  means "just getting started," not "quiet day, go rest." The surfaces
+   *  render an orienting welcome instead of the established-user quiet state. */
+  firstRun: boolean;
 }
 
 // Fluency Law: the same Letter — identical facts, identical structure — in the
@@ -119,5 +123,22 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
   }
 
   const quiet = handled.length === 0 && !needsYou && learned.length === 0 && trust.length === 0;
-  return { handled, needsYou, learned, trust, quiet };
+  // First-run: a genuinely empty Letter on a product that has never had metrics
+  // or a decision is a NEW founder, not an established one on a quiet day.
+  const firstRun = quiet && digest.holding === 0 && digest.falsified === 0
+    && !(await hasAnyHistory(productId));
+  return { handled, needsYou, learned, trust, quiet, firstRun };
+}
+
+/** Has this product ever produced a metric snapshot or a decision? Distinguishes
+ *  "brand new" from "established but quiet today." */
+async function hasAnyHistory(productId: string): Promise<boolean> {
+  const r = await query(
+    `SELECT
+       (SELECT COUNT(*) FROM metric_snapshots WHERE product_id = ?) AS m,
+       (SELECT COUNT(*) FROM decisions WHERE product_id = ?) AS d`,
+    [productId, productId],
+  );
+  const row = r.rows[0] as Record<string, unknown>;
+  return Number(row.m) > 0 || Number(row.d) > 0;
 }

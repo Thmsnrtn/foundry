@@ -281,7 +281,10 @@ describe('the Trusted founder — autonomy is earned on the record', () => {
 
 describe('the Quiet founder — the product lets go', () => {
   it('gets a letter that says nothing needs them', async () => {
-    const f = await founderWith('Quiet');
+    // An ESTABLISHED founder on a calm day (has history, nothing pending) —
+    // distinct from a brand-new founder, who correctly sees the first-run
+    // welcome instead of the "nothing needs you" rest state.
+    const f = await founderWith('Quiet', { snapshots: [10000, 10000, 10000, 10000] });
     actAs(f);
     const text = await (await hit('GET', '/letter')).text();
     expect(text).toContain('Nothing needs you');
