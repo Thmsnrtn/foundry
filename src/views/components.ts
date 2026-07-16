@@ -336,7 +336,17 @@ export interface DecisionData {
 
 export function decisionList(decisions: DecisionData[]): HtmlContent {
   if (decisions.length === 0) {
-    return emptyState('No pending decisions.', { label: 'Back to Dashboard', href: '/dashboard' });
+    // Oriented empty state: invite the founder's first decision rather than a
+    // bare "nothing here." Once data flows, the agents frame decisions here too.
+    return html`
+    <div class="empty-state" style="text-align:left;max-width:560px;">
+      <p style="font-weight:600;color:var(--text-primary);">Nothing needs deciding right now.</p>
+      <p style="font-size:0.88rem;color:var(--text-muted);line-height:1.55;">
+        This is where choices land — the ones your AI team frames from your data, and the ones you log yourself.
+        Recording a decision with the belief behind it lets Foundry quietly watch whether that belief stays true.
+      </p>
+      <a href="/talk" class="btn btn-primary" style="margin-top:0.5rem;">Talk it through → say a decision or ask anything</a>
+    </div>`;
   }
   return html`
   <div class="card">
