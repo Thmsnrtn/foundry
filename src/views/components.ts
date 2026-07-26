@@ -304,11 +304,11 @@ function formatCents(cents: number): string {
 }
 
 function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch {
-    return iso;
-  }
+  // new Date(bad) never throws — it yields an Invalid Date whose
+  // toLocaleDateString renders the literal string "Invalid Date". Guard it.
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 /**
@@ -766,7 +766,7 @@ function onboardingCompetitors(productId: string): HtmlContent {
         <input type="text" name="competitors[2].name" placeholder="Company name" />
       </div>
       <button type="submit" class="btn btn-primary">Continue</button>
-      <a href="/onboarding/run-audit?product_id=${productId}" class="btn btn-secondary" style="margin-left:0.5rem;">Skip</a>
+      <a href="/onboarding/audit?product_id=${productId}" class="btn btn-secondary" style="margin-left:0.5rem;">Skip</a>
     </form>
   </div>`;
 }

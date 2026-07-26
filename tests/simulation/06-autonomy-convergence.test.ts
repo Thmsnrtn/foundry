@@ -30,7 +30,7 @@ async function resolvedDecision(productId: string, category: string, valence: 'p
   await query(
     `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, outcome_valence, autopilot_counted)
      VALUES (?, ?, ?, 1, 'sim', 'sim', 'executed', ?, ?, 0)`,
-    [id, productId, category, decidedBy, valence],
+    [id, productId, category, decidedBy, valence === 'positive' ? 1 : -1],
   );
   return id;
 }

@@ -322,9 +322,10 @@ export async function listBoardPackets(
 
 // ─── markPacketReviewed ───────────────────────────────────────────────────────
 
-export async function markPacketReviewed(packetId: string): Promise<void> {
+export async function markPacketReviewed(packetId: string, ownerId: string): Promise<void> {
   await query(
-    `UPDATE board_packets SET status='reviewed' WHERE id=?`,
-    [packetId]
+    `UPDATE board_packets SET status='reviewed'
+     WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
+    [packetId, ownerId]
   );
 }

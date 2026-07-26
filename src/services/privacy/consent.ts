@@ -252,12 +252,13 @@ export async function exportProductData(
         [productId]
       ),
       query(
-        `SELECT id, product_id, title, description, status, category, created_at
+        `SELECT id, product_id, what, why_now, status, category, gate, created_at
          FROM decisions WHERE product_id = ? ORDER BY created_at DESC`,
         [productId]
       ),
       query(
-        `SELECT id, product_id, segment, acquisition_channel, mrr_cents, status, created_at
+        `SELECT id, product_id, name, email, plan, mrr_cents, signed_up_at, last_active_at,
+                health_score, churn_risk, created_at
          FROM customers WHERE product_id = ? ORDER BY created_at DESC`,
         [productId]
       ).catch(() => ({ rows: [] })),

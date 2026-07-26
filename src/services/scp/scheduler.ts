@@ -91,7 +91,7 @@ export async function getDueAgents(productId: string): Promise<AgentName[]> {
   const result = await query(
     `SELECT agent_name FROM agent_instances
      WHERE product_id=? AND status='active'
-       AND (next_run_at IS NULL OR next_run_at <= CURRENT_TIMESTAMP)`,
+       AND (next_run_at IS NULL OR datetime(next_run_at) <= datetime('now'))`,
     [productId]
   );
 

@@ -152,11 +152,13 @@ export async function approveAndCreateExperiment(
     guardrailMetrics?: string[];
     plannedDurationDays?: number;
   },
+  scopeProductId: string,
 ): Promise<string> {
-  // Get hypothesis to confirm it exists and get product_id
+  // The hypothesis must belong to the product the caller already verified
+  // ownership of — a foreign hypothesis id is indistinguishable from missing.
   const hypResult = await query(
-    'SELECT product_id FROM hypotheses WHERE id = ?',
-    [hypothesisId],
+    'SELECT product_id FROM hypotheses WHERE id = ? AND product_id = ?',
+    [hypothesisId, scopeProductId],
   );
   if (hypResult.rows.length === 0) {
     throw new Error(`Hypothesis ${hypothesisId} not found`);
@@ -202,20 +204,20 @@ export async function approveAndCreateExperiment(
 /**
  * Start an approved experiment.
  */
-export async function startExperiment(experimentId: string): Promise<void> {
+export async function startExperiment(experimentId: string, scopeProductId: string): Promise<void> {
   await query(
     `UPDATE experiments SET
        status = 'running',
        started_at = CURRENT_TIMESTAMP,
        updated_at = CURRENT_TIMESTAMP
-     WHERE id = ? AND status = 'designed'`,
-    [experimentId],
+     WHERE id = ? AND product_id = ? AND status = 'designed'`,
+    [experimentId, scopeProductId],
   );
 
   // Mark hypothesis as active
   const expResult = await query(
-    'SELECT hypothesis_id FROM experiments WHERE id = ?',
-    [experimentId],
+    'SELECT hypothesis_id FROM experiments WHERE id = ? AND product_id = ?',
+    [experimentId, scopeProductId],
   );
   if (expResult.rows.length > 0) {
     const hypothesisId = (expResult.rows[0] as Record<string, unknown>).hypothesis_id as string;
@@ -276,6 +278,7 @@ export async function updateResults(
 export async function stopEarlyExperiment(
   experimentId: string,
   reason: string,
+  scopeProductId: string,
   winner?: string,
 ): Promise<void> {
   await query(
@@ -285,8 +288,8 @@ export async function stopEarlyExperiment(
        winner = ?,
        actual_end_at = CURRENT_TIMESTAMP,
        updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [reason, winner ?? null, experimentId],
+     WHERE id = ? AND product_id = ?`,
+    [reason, winner ?? null, experimentId, scopeProductId],
   );
 }
 

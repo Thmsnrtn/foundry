@@ -252,11 +252,13 @@ export async function getActivePredictions(productId: string): Promise<Predictio
  */
 export async function recordPredictionOutcome(
   predictionId: string,
-  outcome: 'correct' | 'incorrect' | 'partially_correct'
+  outcome: 'correct' | 'incorrect' | 'partially_correct',
+  ownerId: string
 ): Promise<void> {
   const accuracy = outcome === 'correct' ? 1.0 : outcome === 'partially_correct' ? 0.5 : 0.0;
   await query(
-    `UPDATE predictions SET status = 'resolved', outcome = ?, outcome_recorded_at = datetime('now'), accuracy_score = ? WHERE id = ?`,
-    [outcome, accuracy, predictionId]
+    `UPDATE predictions SET status = 'resolved', outcome = ?, outcome_recorded_at = datetime('now'), accuracy_score = ?
+     WHERE id = ? AND product_id IN (SELECT id FROM products WHERE owner_id = ?)`,
+    [outcome, accuracy, predictionId, ownerId]
   );
 }

@@ -153,7 +153,8 @@ mobileRoutes.get('/api/decisions', async (c) => {
 
 mobileRoutes.post('/api/decisions', async (c) => {
   const founder = c.get('founder');
-  const body = await c.req.json<{ product_id: string; what: string; why_now?: string; category?: string; gate?: number }>();
+  const body = await c.req.json<{ product_id: string; what: string; why_now?: string; category?: string; gate?: number }>().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
   if (!body.product_id || !body.what) return c.json({ error: 'product_id and what required' }, 400);
 
   const productCheck = await query(
@@ -253,7 +254,8 @@ mobileRoutes.get('/api/voice/briefing', async (c) => {
 
 mobileRoutes.post('/api/voice/transcript', async (c) => {
   const founder = c.get('founder');
-  const body = await c.req.json<{ product_id: string; transcript: string; session_id?: string }>();
+  const body = await c.req.json<{ product_id: string; transcript: string; session_id?: string }>().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
   if (!body.product_id || !body.transcript) return c.json({ error: 'product_id and transcript required' }, 400);
 
   const productCheck = await query(
@@ -292,7 +294,8 @@ mobileRoutes.post('/api/push/register', async (c) => {
     apns_bundle_id: string;
     platform: string;
     product_id?: string;
-  }>();
+  }>().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
 
   if (!body.apns_device_token) return c.json({ error: 'apns_device_token required' }, 400);
 
@@ -324,7 +327,8 @@ mobileRoutes.post('/api/push/preferences', async (c) => {
     new_stressor?: boolean;
     morning_briefing?: boolean;
     alignment_drop?: boolean;
-  }>();
+  }>().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
   if (!body.product_id) return c.json({ error: 'product_id required' }, 400);
 
   await query(

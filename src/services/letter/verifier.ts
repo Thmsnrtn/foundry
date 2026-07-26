@@ -89,9 +89,16 @@ export async function verifyFleetLetter(letter: FleetLetter): Promise<Verificati
 
 async function logDefects(founderId: string, reasons: string[]): Promise<void> {
   try {
+    // audit_log.product_id has a FK to products — anchor fleet-level defects
+    // to one of the founder's real products (any one; the trigger field
+    // carries the fleet/founder identity for querying).
+    const anchor = (await query(
+      'SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founderId],
+    )).rows[0] as Record<string, string> | undefined;
+    if (!anchor) return; // no products → nothing the letter could have claimed
     await insertAuditLog({
       id: nanoid(),
-      product_id: 'fleet',
+      product_id: String(anchor.id),
       action_type: 'letter:verifier',
       gate: 0,
       trigger: `fleet_letter/${founderId}`,

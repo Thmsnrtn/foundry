@@ -123,14 +123,25 @@ async function incrementIfRoom(row: BudgetRow): Promise<BudgetCheck> {
       sent_count: row.sent_count,
     };
   }
-  await query(
+  // Guarded increment: the cap must hold under concurrency, so the WHERE
+  // clause re-checks it atomically — a raced call that finds no room left
+  // is refused, exactly like the pre-check path above.
+  const r = await query(
     `UPDATE communication_budgets
         SET sent_count = sent_count + 1,
             last_sent_at = datetime('now'),
             updated_at = datetime('now')
-      WHERE id = ?`,
+      WHERE id = ? AND sent_count < cap`,
     [row.id]
   );
+  if ((r.rowsAffected ?? 0) === 0) {
+    return {
+      allowed: false,
+      remaining: 0,
+      cap: row.cap,
+      sent_count: row.cap,
+    };
+  }
   const next = row.sent_count + 1;
   return {
     allowed: true,

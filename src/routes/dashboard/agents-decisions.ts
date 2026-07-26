@@ -51,7 +51,7 @@ function madeByBadge(madeBy: string): string {
 
 // ─── GET /strategic-decisions ─────────────────────────────────────────────────
 
-agentsDecisions.get('/strategic-decisions', async (c) => {
+agentsDecisions.get('/agents/decisions', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'strategic-decisions', 'Strategic Decisions', undefined, c);
 
@@ -127,7 +127,7 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
             <!-- Record outcome form -->
             <details style="margin-top:0.75rem;">
               <summary style="cursor:pointer;font-size:0.75rem;color:var(--accent);font-weight:600;">Record outcome</summary>
-              <form method="POST" action="/strategic-decisions/${d.id}/outcome" style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.5rem;">
+              <form method="POST" action="/agents/decisions/${d.id}/outcome" style="margin-top:0.5rem;display:flex;flex-direction:column;gap:0.5rem;">
                 <textarea name="outcome_description" placeholder="What happened? What was the impact?" rows="2" required
                   style="padding:0.5rem 0.75rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.82rem;resize:vertical;"></textarea>
                 <div style="display:flex;align-items:center;gap:0.75rem;">
@@ -174,7 +174,7 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
                 ? `Your ${metricLabel(e.premise.metric_key, fluency)} is now past ${metricValue(e.premise.metric_key, e.premise.threshold, fluency)}`
                 : e.premise.evidence}</div>
           </div>
-          <form method="POST" action="/strategic-decisions/premise/${e.premise.id}/revisit" style="flex-shrink:0;">
+          <form method="POST" action="/agents/decisions/premise/${e.premise.id}/revisit" style="flex-shrink:0;">
             <button type="submit" class="btn btn-ghost" style="font-size:0.75rem;padding:0.3rem 0.75rem;">Revisited</button>
           </form>
         </div>
@@ -185,7 +185,7 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
     <div id="new-decision-form" style="display:none;margin-bottom:1.5rem;">
       <div class="card" style="padding:1.25rem;">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.875rem;">Record a New Decision</div>
-        <form method="POST" action="/strategic-decisions" style="display:flex;flex-direction:column;gap:0.75rem;">
+        <form method="POST" action="/agents/decisions" style="display:flex;flex-direction:column;gap:0.75rem;">
           <div>
             <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:3px;">Title *</label>
             <input type="text" name="title" required placeholder="What decision was made?"
@@ -233,10 +233,10 @@ agentsDecisions.get('/strategic-decisions', async (c) => {
 
 // ─── POST /strategic-decisions ────────────────────────────────────────────────
 
-agentsDecisions.post('/strategic-decisions', async (c) => {
+agentsDecisions.post('/agents/decisions', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'strategic-decisions', 'Strategic Decisions', undefined, c);
-  if (!ctx.productId) return c.redirect('/strategic-decisions');
+  if (!ctx.productId) return c.redirect('/agents/decisions');
 
   const body = await c.req.parseBody();
   const title = (body.title as string)?.trim();
@@ -244,7 +244,7 @@ agentsDecisions.post('/strategic-decisions', async (c) => {
   const alternatives = (body.alternatives_considered as string)?.trim() ?? null;
   const decisionMade = (body.decision_made as string)?.trim();
 
-  if (!title || !decisionMade) return c.redirect('/strategic-decisions');
+  if (!title || !decisionMade) return c.redirect('/agents/decisions');
 
   const decisionId = nanoid();
   await query(
@@ -284,28 +284,29 @@ agentsDecisions.post('/strategic-decisions', async (c) => {
     } catch { /* premise capture is best-effort; never block the decision */ }
   }
 
-  return c.redirect('/strategic-decisions');
+  return c.redirect('/agents/decisions');
 });
 
 // ─── POST /strategic-decisions/premise/:id/revisit (Memory Kernel) ────────────
-agentsDecisions.post('/strategic-decisions/premise/:id/revisit', async (c) => {
+agentsDecisions.post('/agents/decisions/premise/:id/revisit', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'strategic-decisions', 'Strategic Decisions', undefined, c);
-  if (!ctx.productId) return c.redirect('/strategic-decisions');
+  if (!ctx.productId) return c.redirect('/agents/decisions');
   const { markRevisited } = await import('../../services/memory/kernel.js');
   await markRevisited(c.req.param('id'), ctx.productId);
-  return c.redirect('/strategic-decisions');
+  return c.redirect('/agents/decisions');
 });
 
 // ─── POST /strategic-decisions/:id/outcome ────────────────────────────────────
 
-agentsDecisions.post('/strategic-decisions/:id/outcome', async (c) => {
+agentsDecisions.post('/agents/decisions/:id/outcome', async (c) => {
+  const founder = c.get('founder');
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const outcomeDescription = (body.outcome_description as string)?.trim();
   const outcomeRating = body.outcome_rating ? parseInt(body.outcome_rating as string, 10) : null;
 
-  if (!outcomeDescription) return c.redirect('/strategic-decisions');
+  if (!outcomeDescription) return c.redirect('/agents/decisions');
 
   // Map the 1–5 rating onto the table's status vocabulary (CHECK-constrained).
   const status =
@@ -316,9 +317,9 @@ agentsDecisions.post('/strategic-decisions/:id/outcome', async (c) => {
   await query(
     `UPDATE strategic_decisions_log
      SET actual_outcome=?, retrospective_score=?, updated_at=CURRENT_TIMESTAMP, status=?
-     WHERE id=?`,
-    [outcomeDescription, outcomeRating, status, id]
+     WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
+    [outcomeDescription, outcomeRating, status, id, founder.id]
   );
 
-  return c.redirect('/strategic-decisions');
+  return c.redirect('/agents/decisions');
 });

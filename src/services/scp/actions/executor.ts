@@ -106,15 +106,20 @@ export async function createExecution(
  */
 export async function approveAndExecute(
   executionId: string,
-  approverId: string
+  approverId: string,
+  opts: { ownerId?: string } = {}
 ): Promise<ExecutionResult> {
   const now = new Date().toISOString();
 
-  // Fetch the execution record
-  const execResult = await query(
-    `SELECT * FROM action_executions WHERE id = ?`,
-    [executionId]
-  );
+  // Fetch the execution record. When an ownerId is supplied (any human-driven
+  // path), the row must belong to a product that founder owns.
+  const execResult = opts.ownerId
+    ? await query(
+        `SELECT * FROM action_executions
+         WHERE id = ? AND product_id IN (SELECT id FROM products WHERE owner_id = ?)`,
+        [executionId, opts.ownerId]
+      )
+    : await query(`SELECT * FROM action_executions WHERE id = ?`, [executionId]);
   if (execResult.rows.length === 0) {
     return { success: false, error: 'Execution not found' };
   }
@@ -127,17 +132,22 @@ export async function approveAndExecute(
     return { success: false, error: 'Invalid payload JSON' };
   }
 
-  // Mark approved
-  await query(
+  // Atomically claim the row: only a 'pending' execution can be approved.
+  // A double-click, a concurrent autopilot sweep, or a replay of a completed
+  // execution loses this claim and does NOT execute a second time.
+  const claim = await query(
     `UPDATE action_executions
      SET status='approved', approved_by=?, approved_at=?
-     WHERE id=?`,
+     WHERE id=? AND status='pending'`,
     [approverId, now, executionId]
   );
+  if ((claim.rowsAffected ?? 0) === 0) {
+    return { success: false, error: `Execution is not pending (status=${row.status})` };
+  }
 
   // Mark executing
   await query(
-    `UPDATE action_executions SET status='executing' WHERE id=?`,
+    `UPDATE action_executions SET status='executing' WHERE id=? AND status='approved'`,
     [executionId]
   );
 
@@ -168,10 +178,15 @@ export async function approveAndExecute(
 /**
  * Cancel a pending execution.
  */
-export async function cancelExecution(executionId: string): Promise<void> {
+export async function cancelExecution(executionId: string, ownerId?: string): Promise<void> {
+  // Only not-yet-run executions can be cancelled, and (when ownerId is given)
+  // only by the founder who owns the product — a completed or foreign row is
+  // left untouched.
   await query(
-    `UPDATE action_executions SET status='cancelled' WHERE id=?`,
-    [executionId]
+    `UPDATE action_executions SET status='cancelled'
+     WHERE id=? AND status IN ('pending','approved')
+       ${ownerId ? `AND product_id IN (SELECT id FROM products WHERE owner_id=?)` : ''}`,
+    ownerId ? [executionId, ownerId] : [executionId]
   );
 }
 

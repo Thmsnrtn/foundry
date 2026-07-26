@@ -92,7 +92,7 @@ agentExperimentRoutes.post('/products/:id/agents/experiments/:hypId/approve', as
       treatmentDescription,
       successMetric,
       plannedDurationDays: plannedDays,
-    });
+    }, productId);
   } catch (err) {
     console.error('[EXPERIMENTS] Approve failed:', err);
   }
@@ -117,7 +117,7 @@ agentExperimentRoutes.post('/products/:id/agents/experiments/:expId/start', asyn
   }
 
   try {
-    await startExperiment(expId);
+    await startExperiment(expId, productId);
   } catch (err) {
     console.error('[EXPERIMENTS] Start failed:', err);
   }
@@ -139,7 +139,7 @@ agentExperimentRoutes.post('/products/:id/agents/experiments/:expId/stop', async
   const reason = (body.reason as string) || 'Stopped by CEO';
 
   try {
-    await stopEarlyExperiment(expId, reason);
+    await stopEarlyExperiment(expId, reason, productId);
   } catch (err) {
     console.error('[EXPERIMENTS] Stop failed:', err);
   }

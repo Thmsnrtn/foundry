@@ -82,7 +82,7 @@ describe('grants are the license', () => {
       args: { amount: 300 }, dedupKey: 'inv:3',
     });
     expect(third.ok).toBe(false);
-    expect((third as { reason: string }).reason).toContain('cap reached');
+    expect((third as { reason: string }).reason).toContain('calls remaining');
   });
 
   it('wildcard grants cover any tool on the server; revocation is instant', async () => {

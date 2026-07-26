@@ -98,10 +98,14 @@ export interface PremiseCheckResult {
  *  metric_snapshot. A premise that no longer holds flips to 'falsified' with the
  *  observed value recorded as evidence — that's an "expired belief." */
 export async function checkPremises(productId: string): Promise<PremiseCheckResult> {
+  // 'unverifiable' premises are re-checked too: one sparse snapshot must not
+  // permanently exempt a belief from falsification — the moment the metric
+  // reappears, the premise goes back under monitoring. datetime() normalizes
+  // the ISO 'T' format against SQLite's space format for the comparison.
   const premises = await query(
     `SELECT * FROM ${DECISION_PREMISES}
-     WHERE product_id = ? AND status = 'holding' AND premise_type = 'metric'
-       AND (effective_at IS NULL OR effective_at <= datetime('now'))`,
+     WHERE product_id = ? AND status IN ('holding', 'unverifiable') AND premise_type = 'metric'
+       AND (effective_at IS NULL OR datetime(effective_at) <= datetime('now'))`,
     [productId],
   );
   if (premises.rows.length === 0) return { checked: 0, falsified: 0 };
@@ -129,8 +133,10 @@ export async function checkPremises(productId: string): Promise<PremiseCheckResu
     checked++;
     const stillHolds = compare(current, raw.comparator, raw.threshold);
     if (stillHolds) {
+      // A previously-unverifiable premise that now evaluates returns to
+      // 'holding' — it is back under live monitoring.
       await query(
-        `UPDATE ${DECISION_PREMISES} SET last_checked_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        `UPDATE ${DECISION_PREMISES} SET status = 'holding', last_checked_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [raw.id],
       );
     } else {

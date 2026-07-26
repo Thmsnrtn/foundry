@@ -12,7 +12,7 @@
 import { checkKillSwitch } from './kill-switch.js';
 import { checkAllowed } from './classification.js';
 import { checkAndIncrement } from './budget.js';
-import { checkAndReserve, storeResult } from './idempotency.js';
+import { checkAndReserve, storeResult, releaseReservation } from './idempotency.js';
 import { recordGatewayInvocation, newInvocationId } from './audit.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ export type RefusalPhase =
   | 'kill_switch'
   | 'classification'
   | 'budget'
+  | 'in_flight'
   | 'no_handler'
   | 'execution';
 
@@ -115,11 +116,75 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     }
   }
 
-  // 3. Communication budget (only when a customer key is provided)
+  // 3. Idempotency reservation (only when dedupKey provided). Checked BEFORE
+  // the budget so a deduped retry — which does no work — never burns a unit
+  // of the customer's weekly communication budget.
+  let freshReservation = false;
+  if (req.dedupKey) {
+    const ttl = req.idempotencyTtlSeconds ?? DEFAULT_IDEM_TTL_SECONDS;
+    const reserved = await checkAndReserve(
+      req.productId,
+      req.tool,
+      req.dedupKey,
+      ttl,
+      req.agent && req.agent !== 'system' ? req.agent : null
+    );
+    if (!reserved.fresh) {
+      // A stored result is a genuine cached success. A reservation with NO
+      // stored result means the prior attempt is still running (or died) —
+      // reporting that as success would tell the caller work happened that
+      // never did. Fail honestly; the failed-attempt path below releases its
+      // reservation, so a real retry gets through.
+      if (reserved.cached !== null) {
+        await recordGatewayInvocation({
+          invocation_id: invocationId,
+          product_id: req.productId,
+          agent: req.agent,
+          tool: req.tool,
+          action: req.action,
+          outcome: 'cached',
+          reason: `idempotency hit on ${req.dedupKey}`,
+          result_summary: 'cached result returned',
+        });
+        return {
+          ok: true,
+          invocation_id: invocationId,
+          cached: true,
+          result: reserved.cached,
+        };
+      }
+      await recordGatewayInvocation({
+        invocation_id: invocationId,
+        product_id: req.productId,
+        agent: req.agent,
+        tool: req.tool,
+        action: req.action,
+        outcome: 'refused',
+        reason: `idempotency: reservation in flight for ${req.dedupKey}`,
+      });
+      return {
+        ok: false,
+        invocation_id: invocationId,
+        phase: 'in_flight',
+        reason: `a call with dedup key ${req.dedupKey} is already in flight`,
+      };
+    }
+    freshReservation = true;
+  }
+
+  // On any failure after a fresh reservation, release it so a retry can work.
+  const releaseIfReserved = async () => {
+    if (freshReservation && req.dedupKey) {
+      await releaseReservation(req.productId, req.tool, req.dedupKey).catch(() => {});
+    }
+  };
+
+  // 4. Communication budget (only when a customer key is provided)
   if (req.customerExternalId) {
     const week = currentWeekStart();
     const budget = await checkAndIncrement(req.productId, req.customerExternalId, week);
     if (!budget.allowed) {
+      await releaseIfReserved();
       await recordGatewayInvocation({
         invocation_id: invocationId,
         product_id: req.productId,
@@ -138,39 +203,10 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     }
   }
 
-  // 4. Idempotency reservation (only when dedupKey provided)
-  if (req.dedupKey) {
-    const ttl = req.idempotencyTtlSeconds ?? DEFAULT_IDEM_TTL_SECONDS;
-    const reserved = await checkAndReserve(
-      req.productId,
-      req.tool,
-      req.dedupKey,
-      ttl,
-      req.agent && req.agent !== 'system' ? req.agent : null
-    );
-    if (!reserved.fresh) {
-      await recordGatewayInvocation({
-        invocation_id: invocationId,
-        product_id: req.productId,
-        agent: req.agent,
-        tool: req.tool,
-        action: req.action,
-        outcome: 'cached',
-        reason: `idempotency hit on ${req.dedupKey}`,
-        result_summary: reserved.cached ? 'cached result returned' : 'reservation in flight',
-      });
-      return {
-        ok: true,
-        invocation_id: invocationId,
-        cached: true,
-        result: reserved.cached,
-      };
-    }
-  }
-
   // 5. Dispatch to registered handler
   const handler = handlers.get(req.tool);
   if (!handler) {
+    await releaseIfReserved();
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,
@@ -193,6 +229,9 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     result = await handler(req);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
+    // Release the reservation: a failed attempt must not convert every
+    // subsequent retry into a fake cached success for the TTL window.
+    await releaseIfReserved();
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,

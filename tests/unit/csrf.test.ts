@@ -102,7 +102,7 @@ describe('CSRF middleware integration', () => {
     expect(token).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it('rejects POST without CSRF token with 403', async () => {
+  it('rejects a cross-site form POST (foreign Origin) with 403', async () => {
     const { Hono } = await import('hono');
     const { csrfMiddleware } = await import('../../src/middleware/csrf.js');
 
@@ -110,14 +110,80 @@ describe('CSRF middleware integration', () => {
     app.use('*', csrfMiddleware);
     app.post('/submit', (c) => c.text('ok'));
 
-    const res = await app.request('/submit', {
+    const res = await app.request('http://localhost/submit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Origin': 'https://evil.example',
+      },
       body: 'name=test',
     });
     expect(res.status).toBe(403);
     const body = await res.json();
     expect(body.error).toBe('CSRF token mismatch');
+  });
+
+  it('rejects a cross-site POST whose only signal is a foreign Referer', async () => {
+    const { Hono } = await import('hono');
+    const { csrfMiddleware } = await import('../../src/middleware/csrf.js');
+
+    const app = new Hono();
+    app.use('*', csrfMiddleware);
+    app.post('/submit', (c) => c.text('ok'));
+
+    const res = await app.request('http://localhost/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Referer': 'https://evil.example/attack-page',
+      },
+      body: 'name=test',
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows a same-origin form POST with no token (the server-rendered forms)', async () => {
+    const { Hono } = await import('hono');
+    const { csrfMiddleware } = await import('../../src/middleware/csrf.js');
+
+    const app = new Hono();
+    app.use('*', csrfMiddleware);
+    app.post('/submit', (c) => c.text('ok'));
+
+    const res = await app.request('http://localhost/submit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Origin': 'http://localhost',
+      },
+      body: 'name=test',
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('allows a POST whose Origin matches APP_URL (TLS-terminating proxy case)', async () => {
+    const { Hono } = await import('hono');
+    const { csrfMiddleware } = await import('../../src/middleware/csrf.js');
+
+    const prev = process.env.APP_URL;
+    process.env.APP_URL = 'https://app.foundry.example';
+    try {
+      const app = new Hono();
+      app.use('*', csrfMiddleware);
+      app.post('/submit', (c) => c.text('ok'));
+
+      const res = await app.request('http://internal-host/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Origin': 'https://app.foundry.example',
+        },
+        body: 'name=test',
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      process.env.APP_URL = prev;
+    }
   });
 
   it('allows POST with matching CSRF token in header', async () => {
@@ -167,7 +233,7 @@ describe('CSRF middleware integration', () => {
     expect(res.status).toBe(200);
   });
 
-  it('requires CSRF for cookie-authenticated JSON requests', async () => {
+  it('rejects cross-origin JSON fetch() from a foreign page', async () => {
     const { Hono } = await import('hono');
     const { csrfMiddleware } = await import('../../src/middleware/csrf.js');
 
@@ -175,13 +241,31 @@ describe('CSRF middleware integration', () => {
     app.use('*', csrfMiddleware);
     app.post('/api/data', (c) => c.json({ success: true }));
 
-    // Cookie-auth JSON requests WITHOUT CSRF header should be rejected
+    // A browser fetch() from another origin always carries that Origin.
+    const res = await app.request('http://localhost/api/data', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': 'https://evil.example' },
+      body: JSON.stringify({ test: true }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows a non-browser client with no Origin and no token (not a CSRF vector)', async () => {
+    const { Hono } = await import('hono');
+    const { csrfMiddleware } = await import('../../src/middleware/csrf.js');
+
+    const app = new Hono();
+    app.use('*', csrfMiddleware);
+    app.post('/api/data', (c) => c.json({ success: true }));
+
+    // curl-style: no Origin, no Referer, no token. Cross-site pages cannot
+    // produce this shape — browsers always attach Origin to POSTs.
     const res = await app.request('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ test: true }),
     });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it('rejects POST with mismatched token', async () => {

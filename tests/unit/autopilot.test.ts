@@ -21,7 +21,7 @@ import {
 let seq = 0;
 async function seedDecision(pid: string, opts: {
   category?: string; gate?: number; status?: string; decidedBy?: string;
-  recommendation?: string; chosen?: string; valence?: string; hoursOld?: number;
+  recommendation?: string; chosen?: string; valence?: number; hoursOld?: number;
 }): Promise<string> {
   const id = `ap_d${++seq}`;
   await query(
@@ -71,7 +71,7 @@ describe('earned promotion — clean cycles from real outcomes', () => {
     for (let i = 0; i < PROMOTION_THRESHOLD; i++) {
       await seedDecision('ap_main', {
         status: 'approved', decidedBy: 'founder',
-        recommendation: 'r', chosen: 'r', valence: 'positive',
+        recommendation: 'r', chosen: 'r', valence: 1,
       });
     }
     const fb = await processOutcomeFeedback('ap_main');
@@ -86,7 +86,7 @@ describe('earned promotion — clean cycles from real outcomes', () => {
     for (let i = 0; i < PROMOTION_THRESHOLD; i++) {
       await seedDecision('ap_hold', {
         category: 'product', status: 'approved', decidedBy: 'founder',
-        recommendation: 'r', chosen: 'r', valence: i < 3 ? 'positive' : 'negative',
+        recommendation: 'r', chosen: 'r', valence: i < 3 ? 1 : -1,
       });
     }
     await processOutcomeFeedback('ap_hold');
@@ -139,7 +139,7 @@ describe('the act path — consent, guardrails, undo', () => {
     await setPolicy('ap_main', 'marketing', 'act', 'founder_1');
     await seedDecision('ap_main', {
       status: 'approved', decidedBy: 'second_self',
-      recommendation: 'r', chosen: 'r', valence: 'negative',
+      recommendation: 'r', chosen: 'r', valence: -1,
     });
     const fb = await processOutcomeFeedback('ap_main');
     expect(fb.anomalies).toBe(1);

@@ -51,7 +51,8 @@ Be concise and professional. Investors want signal, not noise.`;
   const response = await callOpus(
     'You are writing a monthly investor update for a SaaS founder. Professional, data-driven, concise.',
     prompt,
-    2048
+    2048,
+    productId
   );
 
   const period = new Date().toISOString().slice(0, 7);
@@ -92,7 +93,8 @@ Return JSON: {"slides": ["slide 1 content", "slide 2 content", ...]}`;
   const response = await callOpus(
     'You are writing board meeting slides for a SaaS startup. Be strategic and data-focused.',
     prompt,
-    4096
+    4096,
+    productId
   );
 
   const result = parseJSONResponse<{ slides: string[] }>(response.content);
@@ -149,7 +151,8 @@ Return JSON:
   const response = await callOpus(
     'You are a fundraising readiness advisor. Score against real investor expectations.',
     prompt,
-    2048
+    2048,
+    productId
   );
 
   const result = parseJSONResponse<{

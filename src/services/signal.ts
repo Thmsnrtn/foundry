@@ -60,6 +60,11 @@ const PROMPT_INDEX: Record<string, number> = {
 
 // ─── Core Computation ─────────────────────────────────────────────────────────
 
+/** Parse a DB timestamp that may be SQLite space-format (UTC) or ISO. */
+function parseDbDate(s: string): number {
+  return Date.parse(/[zZ+]|T.*[+-]\d\d/.test(s) ? s : s.replace(' ', 'T') + 'Z');
+}
+
 export async function computeSignal(productId: string): Promise<SignalResult> {
   const [stressorResult, metricsResult, decisionsResult, lifecycleResult] = await Promise.all([
     getActiveStressors(productId),
@@ -93,16 +98,20 @@ export async function computeSignal(productId: string): Promise<SignalResult> {
   const healthRatio = metrics.mrr_health_ratio as number | null;
   let mrrPenalty = 5; // default: unknown data
   if (healthRatio !== null && healthRatio !== undefined) {
+    // Monotone in the ratio: crossing 1.0 (net churn) must never score BETTER
+    // than sitting just below it. 0.7→1.0 ramps 0→5; 1.0→1.5 ramps 5→25.
     if (healthRatio > 1.5) mrrPenalty = 25;
-    else if (healthRatio > 1.0) mrrPenalty = Math.round((healthRatio - 1.0) * 50);
+    else if (healthRatio > 1.0) mrrPenalty = Math.round(5 + (healthRatio - 1.0) * 40);
     else if (healthRatio > 0.7) mrrPenalty = Math.round((healthRatio - 0.7) * 16);
     else mrrPenalty = 0;
   }
 
   // ── Decision backlog penalty ──
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // created_at may be SQLite space-format or ISO — parse rather than compare
+  // strings (a lexical compare across the two formats skews by up to a day).
+  const sevenDaysAgoMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const overdueDecisions = decisions.filter(
-    (d) => d.created_at && d.created_at < sevenDaysAgo
+    (d) => d.created_at && parseDbDate(d.created_at) < sevenDaysAgoMs
   ).length;
   const backlogPenalty = Math.min(overdueDecisions * 3, 15);
 
@@ -174,14 +183,14 @@ async function getOrGenerateProse(
     return cached.prose;
   }
 
-  const prose = await generateProse(score, ctx);
+  const prose = await generateProse(score, ctx, productId);
 
   proseCache.set(productId, { prose, score, expires: now + CACHE_TTL_MS });
 
   return prose;
 }
 
-async function generateProse(score: number, ctx: ProseContext): Promise<string> {
+async function generateProse(score: number, ctx: ProseContext, productId?: string): Promise<string> {
   const { riskState, currentPrompt, stressors, metrics, decisions, critical, elevated, watch } = ctx;
 
   // Use loose != null so BOTH null and undefined are treated as "no data".
@@ -202,8 +211,10 @@ async function generateProse(score: number, ctx: ProseContext): Promise<string> 
     ? 'none'
     : `${critical} critical, ${elevated} elevated, ${watch} watch-level`;
 
+  // getPendingDecisions orders by category rank first, so the last row is NOT
+  // the oldest — take the true minimum created_at across all pending rows.
   const oldestDecision = decisions.length > 0
-    ? Math.round((Date.now() - new Date(decisions[decisions.length - 1].created_at).getTime()) / (1000 * 60 * 60 * 24))
+    ? Math.round((Date.now() - Math.min(...decisions.map((d) => parseDbDate(d.created_at)))) / (1000 * 60 * 60 * 24))
     : 0;
 
   const systemPrompt = `You are the intelligence layer for Foundry, a business analytics platform for SaaS founders. You write honest, direct briefings. No hedging. No "you might want to" language. No soft qualifiers. State what the data means. Your tone is clear and confident — like a CFO who has seen a thousand companies.`;
@@ -220,7 +231,7 @@ Pending Decisions: ${decisions.length}${decisions.length > 0 ? `, oldest is ${ol
 3 sentences only. No formatting. No line breaks between sentences.`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 256);
+    const response = await callSonnet(systemPrompt, userPrompt, 256, productId);
     const text = response.content.trim();
     // Ensure we have something sensible
     if (text.length < 20) return buildFallbackProse(score, ctx);

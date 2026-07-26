@@ -62,7 +62,9 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
               <span class="verdict-badge verdict-${readinessRow.verdict as string}">${(readinessRow.verdict as string).replace('_', ' ')}</span>
             </div>
           </div>
-          <a href="/investors/funding-readiness" class="btn btn-outline btn-sm">View full report</a>
+          <form method="POST" action="/investors/compute-readiness" style="display:inline;">
+            <button type="submit" class="btn btn-outline btn-sm">Recompute</button>
+          </form>
         </div>
         <p class="funding-narrative">${readinessRow.narrative as string}</p>
         ${keyGaps.length > 0 ? html`
@@ -84,8 +86,34 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
     <div class="section">
       <div class="section-header">
         <h2>Investors</h2>
-        <a href="/investors/add" class="btn btn-primary btn-sm">Add investor</a>
       </div>
+      <details style="margin-bottom:1rem;">
+        <summary class="btn btn-primary btn-sm" style="cursor:pointer;display:inline-block;list-style:none;">Add investor</summary>
+        <form method="POST" action="/investors/add" class="card" style="margin-top:0.75rem;padding:1rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:flex-end;">
+          <div class="form-group" style="margin:0;">
+            <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">Name</label>
+            <input type="text" name="name" required class="input" placeholder="Jane Doe" />
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">Email</label>
+            <input type="email" name="email" class="input" placeholder="jane@fund.com" />
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">Firm</label>
+            <input type="text" name="firm" class="input" placeholder="Fund name" />
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;">Relationship</label>
+            <select name="relationship" class="input">
+              <option value="angel">Angel</option>
+              <option value="vc">VC</option>
+              <option value="advisor">Advisor</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm">Add</button>
+        </form>
+      </details>
 
       ${investorRows.length === 0 ? html`
         <div class="empty-state">
@@ -327,9 +355,7 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
           <button type="submit" class="btn btn-primary">Finalize Packet</button>
         </form>
       ` : html`
-        <form method="POST" action="/investors/packets/${quarter}/share">
-          <button type="submit" class="btn btn-primary">Share with Investors</button>
-        </form>
+        <span class="badge" style="font-size:0.78rem;color:var(--text-dim);">Finalized — copy the sections above into your investor update</span>
       `}
       <form method="POST" action="/investors/generate-packet">
         <input type="hidden" name="quarter" value="${quarter}" />

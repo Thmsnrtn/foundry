@@ -382,6 +382,7 @@ app.use('/exit', authMiddleware);
 app.use('/exit/*', authMiddleware);
 // Ascent surfaces (the Letter, Controls, Talk) + Hands Law connections
 app.use('/letter', authMiddleware);
+app.use('/letter/*', authMiddleware);
 app.use('/autopilot', authMiddleware);
 app.use('/autopilot/*', authMiddleware);
 app.use('/talk', authMiddleware);
@@ -427,8 +428,24 @@ app.use('/network/*', csrfMiddleware);
 app.use('/exit/*', csrfMiddleware);
 app.use('/founder-ops/*', csrfMiddleware);
 app.use('/autopilot/*', csrfMiddleware);
+app.use('/letter/*', csrfMiddleware);
 app.use('/talk/*', csrfMiddleware);
 app.use('/connections/*', csrfMiddleware);
+// Origin-verified CSRF is cheap and token-free, so every remaining
+// cookie-authenticated state-changing surface gets it too. Bearer-auth
+// API calls and Origin-less webhook/CLI callers pass through untouched.
+app.use('/api/*', csrfMiddleware);
+app.use('/integrations/*', csrfMiddleware);
+app.use('/plan/*', csrfMiddleware);
+app.use('/roi/*', csrfMiddleware);
+app.use('/brief/*', csrfMiddleware);
+app.use('/beta/*', csrfMiddleware);
+app.use('/koldly/*', csrfMiddleware);
+app.use('/founder/*', csrfMiddleware);
+app.use('/signals/multimodal/*', csrfMiddleware);
+app.use('/digest/*', csrfMiddleware);
+app.use('/benchmarks/*', csrfMiddleware);
+app.use('/audit-log/*', csrfMiddleware);
 
 // Dashboard routes
 app.route('/', dashboardRoutes);
@@ -454,8 +471,10 @@ app.route('/', timelineRoutes);
 app.route('/', integrationsRoutes);
 app.route('/', teamRoutes);
 app.route('/', investorRoutes);
+// executionPlaybooks must register before playbookRoutes: /playbooks/:type
+// would otherwise capture /playbooks/execution and 404 it.
+app.route('/', executionPlaybooks);
 app.route('/', playbookRoutes);
-app.route('/', agentRoutes);
 app.route('/', agentWisdomRoutes);
 app.route('/', agentBriefingRoutes);
 app.route('/', agentEvolveRoutes);
@@ -468,37 +487,44 @@ app.route('/', agentCustomerRoutes);
 app.route('/', agentMessageRoutes);
 app.route('/', agentStrategyRoutes);
 app.route('/', agentExperimentRoutes);
-// SCP v4: New dashboard pages
-app.route('/agents/inbox', agentsInbox);
+// SCP v4-v7 dashboard pages. These modules define their FULL public paths
+// internally (e.g. agents-accuracy registers GET /agents/accuracy), so they
+// mount at '/' — a path prefix here would double the path and 404 every
+// sidebar link to them. The three exceptions (inbox/okr/decisions) were
+// normalized to the same full-path convention.
+app.route('/', agentsInbox);
 // wiki removed — replaced by company memory graph (/memory)
-app.route('/agents/okr', agentsOkr);
-app.route('/agents/decisions', agentsDecisions);
-app.route('/benchmarks', benchmarks);
-app.route('/audit-log', auditLog);
+app.route('/', agentsOkr);
+app.route('/', agentsDecisions);
+app.route('/', benchmarks);
+app.route('/', auditLog);
 // SCP v5: Gap-closing features
-app.route('/agents/actions', agentsActions);
-app.route('/agents/accuracy', agentsAccuracy);
-app.route('/agents/transparency', agentsTransparency);
-app.route('/scenarios', scenarios);
-app.route('/privacy', privacySettings);
+app.route('/', agentsActions);
+app.route('/', agentsAccuracy);
+app.route('/', agentsTransparency);
+app.route('/', scenarios);
+app.route('/', privacySettings);
 app.route('/board', boardPacket);
-app.route('/brief', weeklyBrief);
+app.route('/', weeklyBrief);
 // SCP v6: Full evolved platform
-app.route('/agents/debate', agentsDebate);
-app.route('/agents/intelligence', agentIntelligence);
-app.route('/playbooks/execution', executionPlaybooks);
-app.route('/memory', memoryGraph);
-app.route('/signals/multimodal', multimodalSignals);
-app.route('/ambient', ambientRoutes);
-app.route('/network', networkIntelligence);
-app.route('/exit', exitRoutes);
+app.route('/', agentsDebate);
+app.route('/', agentIntelligence);
+app.route('/', memoryGraph);
+app.route('/', multimodalSignals);
+app.route('/', ambientRoutes);
+app.route('/', networkIntelligence);
+app.route('/', exitRoutes);
 app.route('/', transcriptWebhooks);
 app.route('/', voiceReplyWebhook);
 // SCP v7: ROI, founder intelligence, integration health, priority API (HTMX)
-app.route('/roi', roiDashboard);
-app.route('/founder', founderIntelligence);
-app.route('/integrations/health', integrationHealth);
+app.route('/', roiDashboard);
+app.route('/', founderIntelligence);
+app.route('/', integrationHealth);
 app.route('/', priorityApi);
+// Agent roster + detail pages (/agents, /agents/:name, …). Mounted at
+// /agents and LAST among the /agents/* modules so its /:name pattern can
+// never shadow the specific pages (inbox, okr, actions, accuracy, …).
+app.route('/agents', agentRoutes);
 // REST API v1 (API key auth — no session needed)
 app.route('/api/v1', apiV1);
 

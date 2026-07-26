@@ -46,7 +46,7 @@ function todayStr(): string {
 
 agentBriefingRoutes.get('/agents/briefings/latest', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'agents', 'Briefings', undefined, c);
+  const ctx = await getLayoutContext(founder, 'agents-briefings', 'Briefings', undefined, c);
 
   if (!ctx.productId) return c.redirect('/agents');
 
@@ -64,7 +64,7 @@ agentBriefingRoutes.get('/agents/briefings/latest', async (c) => {
 
 agentBriefingRoutes.get('/agents/briefings', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'agents', 'Briefing History', undefined, c);
+  const ctx = await getLayoutContext(founder, 'agents-briefings', 'Briefing History', undefined, c);
   const { getFluency: brFl, explain: brEx } = await import('../../services/ux/fluency.js');
   const briefIntro = brEx('briefings', brFl(founder));
 
@@ -134,7 +134,7 @@ agentBriefingRoutes.get('/agents/briefings/:date', async (c) => {
     return c.redirect('/agents/briefings');
   }
 
-  const ctx = await getLayoutContext(founder, 'agents', `Briefing — ${dateParam}`, undefined, c);
+  const ctx = await getLayoutContext(founder, 'agents-briefings', `Briefing — ${dateParam}`, undefined, c);
 
   if (!ctx.productId) {
     const content = html`

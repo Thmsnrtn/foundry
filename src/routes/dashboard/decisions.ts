@@ -49,9 +49,12 @@ decisionRoutes.get('/decisions', async (c) => {
 
 // ─── Decision Chamber (focused detail view) ───────────────────────────────────
 
-decisionRoutes.get('/decisions/:id', async (c) => {
+decisionRoutes.get('/decisions/:id', async (c, next) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
+  // /decisions/analytics is a real page registered after this pattern —
+  // let it through instead of treating 'analytics' as a decision id.
+  if (decisionId === 'analytics') return next();
   const ctx = await getLayoutContext(founder, 'decisions', 'Decision', undefined, c);
 
   const result = await query(
@@ -60,7 +63,7 @@ decisionRoutes.get('/decisions/:id', async (c) => {
      WHERE d.id = ? AND p.owner_id = ?`,
     [decisionId, founder.id]
   );
-  if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  if (result.rows.length === 0) return c.notFound();
 
   const decision = result.rows[0] as Record<string, unknown>;
   const productId = decision.product_id as string;
@@ -450,7 +453,8 @@ decisionRoutes.post('/decisions/:id/redteam', async (c) => {
 decisionRoutes.post('/decisions/:id/resolve', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
-  const body = await c.req.json() as { chosen_option: string; resolution_reasoning?: string };
+  const body = await c.req.json().catch(() => null) as { chosen_option: string; resolution_reasoning?: string } | null;
+  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
   const result = await query(
     `SELECT d.product_id, d.gate FROM decisions d
      JOIN products p ON d.product_id = p.id
@@ -497,7 +501,8 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
 decisionRoutes.post('/decisions/:id/outcome', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
-  const body = await c.req.json() as { outcome: string; valence?: number };
+  const body = await c.req.json().catch(() => null) as { outcome: string; valence?: number } | null;
+  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
   const result = await query(
     `SELECT d.product_id FROM decisions d
      JOIN products p ON d.product_id = p.id
@@ -516,7 +521,8 @@ decisionRoutes.post('/decisions/:id/outcome', async (c) => {
 decisionRoutes.post('/api/decisions/:id/reflect', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
-  const body = await c.req.json() as { uncertainty: string };
+  const body = await c.req.json().catch(() => null) as { uncertainty: string } | null;
+  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
 
   if (!body.uncertainty?.trim()) {
     return c.json({ error: 'uncertainty is required' }, 400);

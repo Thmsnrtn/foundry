@@ -11,7 +11,7 @@ import { nanoid } from 'nanoid';
 /** Safe query wrapper — returns empty result if table doesn't exist */
 async function safeQuery(sql: string, args: unknown[] = []): Promise<{ rows: unknown[] }> {
   try {
-    return await safeQuery(sql, args);
+    return await query(sql, args);
   } catch (err) {
     const msg = (err as Error)?.message ?? '';
     if (msg.includes('no such table') || msg.includes('no such column')) {

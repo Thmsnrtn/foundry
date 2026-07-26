@@ -270,8 +270,14 @@ platformApiRoutes.get('/api/voice/digest/:productId', async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const spoken = await generateSpokenDigest(founder.id, productId);
-  return c.json({ spoken_digest: spoken });
+  try {
+    const spoken = await generateSpokenDigest(founder.id, productId);
+    return c.json({ spoken_digest: spoken });
+  } catch (err) {
+    // The digest is an AI call — a provider outage must degrade to a clean
+    // 503, not an unhandled 500.
+    return c.json({ error: 'Digest generation unavailable right now — try again shortly.', detail: String((err as Error)?.message ?? err).slice(0, 200) }, 503);
+  }
 });
 
 platformApiRoutes.post('/api/voice/session/start', async (c) => {

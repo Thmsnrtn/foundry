@@ -102,10 +102,13 @@ export async function runMarketingSweep(productId: string): Promise<MarketingSwe
   }
 
   // One campaign proposal per cooldown window — proposing is cheap, founder
-  // attention is not (Attention Law).
+  // attention is not (Attention Law). The cooldown counts only THIS
+  // department's proposals: a founder logging their own marketing decision
+  // must not silence the department for a month.
   const recent = await query(
     `SELECT id FROM decisions WHERE product_id = ? AND category = ?
-       AND created_at >= datetime('now', '-${CAMPAIGN_COOLDOWN_DAYS} days') LIMIT 1`,
+       AND what LIKE '%: commit to one channel for %'
+       AND datetime(created_at) >= datetime('now', '-${CAMPAIGN_COOLDOWN_DAYS} days') LIMIT 1`,
     [productId, CATEGORY],
   );
   if (recent.rows.length > 0) {

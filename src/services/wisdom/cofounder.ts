@@ -84,7 +84,8 @@ Score 100 = perfect agreement, 0 = complete disagreement. Be specific about wher
   const response = await callOpus(
     'You are a co-founder alignment analyst. Identify systematic disagreement patterns, not just surface differences.',
     prompt,
-    2048
+    2048,
+    productId
   );
 
   const result = parseJSONResponse<AlignmentScore>(response.content);
@@ -128,7 +129,8 @@ If you detect a systematic pattern (build-vs-sell, depth-vs-breadth, speed-vs-qu
   const response = await callOpus(
     'You are a co-founder dynamics analyst.',
     prompt,
-    256
+    256,
+    productId
   );
 
   const axis = response.content.trim().toLowerCase();

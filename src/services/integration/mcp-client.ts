@@ -46,17 +46,15 @@ export async function checkGrant(productId: string, serverName: string, tool: st
   const r = await query(
     `SELECT id, tool_pattern, max_calls, calls_used FROM mcp_grants
      WHERE product_id = ? AND server_name = ? AND revoked_at IS NULL
-       AND expires_at > datetime('now')
+       AND datetime(expires_at) > datetime('now')
+       AND calls_used < max_calls
        AND (tool_pattern = ? OR tool_pattern = '*')
      ORDER BY CASE WHEN tool_pattern = ? THEN 0 ELSE 1 END
      LIMIT 1`,
     [productId, serverName, tool, tool],
   );
   const grant = r.rows[0] as Record<string, unknown> | undefined;
-  if (!grant) return { ok: false, reason: `no live grant for ${serverName}/${tool} — the founder issues grants in Controls` };
-  if (Number(grant.calls_used) >= Number(grant.max_calls)) {
-    return { ok: false, reason: `grant call cap reached (${grant.max_calls}) for ${serverName}/${tool}` };
-  }
+  if (!grant) return { ok: false, reason: `no live grant with calls remaining for ${serverName}/${tool} — the founder issues grants in Controls` };
   return { ok: true, grantId: String(grant.id) };
 }
 
@@ -178,13 +176,16 @@ export async function callMcpTool(input: McpCallInput): Promise<
 
   // Exactly-once accounting: cached (deduped) and refused calls did no fresh
   // work, so the envelope unit reserved in 2c is returned.
-  const refundEnvelope = () => query(
-    `UPDATE envelope_usage SET used_count = MAX(used_count - 1, 0)
-     WHERE product_id = ? AND scope = ? AND week_starting = (
-       SELECT week_starting FROM envelope_usage
-       WHERE product_id = ? AND scope = ? ORDER BY week_starting DESC LIMIT 1)`,
-    [input.productId, `mcp:${input.serverName}`, input.productId, `mcp:${input.serverName}`],
-  );
+  const refundEnvelope = async () => {
+    // Refund the SAME week the unit was consumed from — at a week boundary
+    // the latest row may already belong to the new week.
+    const { weekStarting } = await import('../outbound/envelopes.js');
+    await query(
+      `UPDATE envelope_usage SET used_count = MAX(used_count - 1, 0)
+       WHERE product_id = ? AND scope = ? AND week_starting = ?`,
+      [input.productId, `mcp:${input.serverName}`, weekStarting()],
+    );
+  };
 
   if (!result.ok) {
     await refundEnvelope();
@@ -193,7 +194,7 @@ export async function callMcpTool(input: McpCallInput): Promise<
 
   // 4. Fresh (non-cached) executions consume the grant.
   if (!result.cached) {
-    await query('UPDATE mcp_grants SET calls_used = calls_used + 1 WHERE id = ?', [grant.grantId]);
+    await query('UPDATE mcp_grants SET calls_used = calls_used + 1 WHERE id = ? AND calls_used < max_calls', [grant.grantId]);
   } else {
     await refundEnvelope();
   }

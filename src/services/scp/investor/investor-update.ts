@@ -204,16 +204,21 @@ Write the update in this exact markdown format:
 // ─── getInvestorUpdate ────────────────────────────────────────────────────────
 
 export async function getInvestorUpdate(
-  updateId: string
+  updateId: string,
+  ownerId: string
 ): Promise<{
   draft_text: string;
   month: string;
   key_metrics: Record<string, unknown>;
   status: string;
 } | null> {
+  // Investor updates hold financial narrative — scope every read to the
+  // founder who owns the product the update belongs to.
   const result = await query(
-    'SELECT * FROM investor_updates WHERE id=?',
-    [updateId]
+    `SELECT iu.* FROM investor_updates iu
+     JOIN products p ON p.id = iu.product_id
+     WHERE iu.id=? AND p.owner_id=?`,
+    [updateId, ownerId]
   );
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as Record<string, unknown>;
@@ -247,9 +252,10 @@ export async function listInvestorUpdates(
 
 // ─── markUpdateSent ───────────────────────────────────────────────────────────
 
-export async function markUpdateSent(updateId: string): Promise<void> {
+export async function markUpdateSent(updateId: string, ownerId: string): Promise<void> {
   await query(
-    `UPDATE investor_updates SET status='sent', sent_at=datetime('now') WHERE id=?`,
-    [updateId]
+    `UPDATE investor_updates SET status='sent', sent_at=datetime('now')
+     WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
+    [updateId, ownerId]
   );
 }

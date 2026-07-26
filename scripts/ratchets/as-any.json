@@ -5,6 +5,6 @@
   "roots": ["src"],
   "includePath": "\\.ts$",
   "excludePath": "\\.test\\.ts$",
-  "baseline": 32,
+  "baseline": 30,
   "direction": "down"
 }

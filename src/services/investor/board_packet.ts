@@ -251,20 +251,20 @@ Each section should be 3-5 sentences. Professional but not corporate.`;
     aiOperationsNarrative,
   ] = await Promise.all([
     generateNarrativeSection(systemPrompt, context, 'executive_summary',
-      'Write a 3-4 sentence executive summary of the quarter. Lead with the most important truth.'),
+      'Write a 3-4 sentence executive summary of the quarter. Lead with the most important truth.', productId),
     generateNarrativeSection(systemPrompt, context, 'signal_narrative',
-      'Write 3 sentences describing the Signal trajectory this quarter and what drove the change.'),
+      'Write 3 sentences describing the Signal trajectory this quarter and what drove the change.', productId),
     generateNarrativeSection(systemPrompt, context, 'mrr_narrative',
-      'Write 3-4 sentences about revenue: trajectory, health ratio, notable changes, and what it means.'),
+      'Write 3-4 sentences about revenue: trajectory, health ratio, notable changes, and what it means.', productId),
     generateNarrativeSection(systemPrompt, context, 'cohort_narrative',
-      'Write 3 sentences about cohort performance: activation, retention trends, and implications.'),
+      'Write 3 sentences about cohort performance: activation, retention trends, and implications.', productId),
     generateNarrativeSection(systemPrompt, context, 'competitive_narrative',
-      'Write 2-3 sentences about the competitive landscape this quarter. Only include if there were notable signals.'),
+      'Write 2-3 sentences about the competitive landscape this quarter. Only include if there were notable signals.', productId),
     generateNarrativeSection(systemPrompt, context, 'next_quarter_focus',
-      'Write 3 clear sentences about the top 2-3 priorities for the coming quarter based on current Signal and stressors.'),
+      'Write 3 clear sentences about the top 2-3 priorities for the coming quarter based on current Signal and stressors.', productId),
     scpSection
       ? generateNarrativeSection(systemPrompt, context, 'ai_operations',
-          'Write 3-4 sentences about AI operations performance this quarter: agent health, ROI on AI investment, evolution cycles, and what it means for operational leverage going forward.')
+          'Write 3-4 sentences about AI operations performance this quarter: agent health, ROI on AI investment, evolution cycles, and what it means for operational leverage going forward.', productId)
       : Promise.resolve(''),
   ]);
 
@@ -455,7 +455,7 @@ Write exactly 3 sentences: what the score means, what's strongest, what's most c
 
   let narrative = '';
   try {
-    const r = await callOpus(systemPrompt, userPrompt, 256);
+    const r = await callOpus(systemPrompt, userPrompt, 256, productId);
     narrative = r.content.trim();
   } catch {
     narrative = `Funding readiness score of ${score} reflects ${verdict === 'raise_ready' ? 'strong fundamentals' : verdict === 'almost_ready' ? 'solid progress with key gaps to address' : 'significant gaps that should be resolved before fundraising'}.`;
@@ -485,9 +485,10 @@ async function generateNarrativeSection(
   context: string,
   _section: string,
   instruction: string,
+  productId?: string,
 ): Promise<string> {
   try {
-    const r = await callOpus(systemPrompt, `Business data:\n${context}\n\nInstruction: ${instruction}`, 512);
+    const r = await callOpus(systemPrompt, `Business data:\n${context}\n\nInstruction: ${instruction}`, 512, productId);
     return r.content.trim();
   } catch {
     return '';

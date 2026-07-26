@@ -86,6 +86,25 @@ export async function storeResult(
 }
 
 /**
+ * Release a reservation whose work FAILED, so a retry with the same dedup key
+ * can attempt the work again. Only removes rows that never stored a result —
+ * a completed reservation (result_json set) is never released, preserving
+ * at-most-once for successes.
+ */
+export async function releaseReservation(
+  productId: string,
+  actionType: string,
+  dedupKey: string
+): Promise<void> {
+  await query(
+    `DELETE FROM idempotency_keys
+      WHERE product_id = ? AND action_type = ? AND dedup_key = ?
+        AND result_json IS NULL`,
+    [productId, actionType, dedupKey]
+  );
+}
+
+/**
  * Delete expired rows. Called by the daily cron.
  */
 export async function cleanupExpired(): Promise<number> {

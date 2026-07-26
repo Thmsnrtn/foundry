@@ -39,7 +39,7 @@ function priorityLabel(priority: string | null): string {
 
 // ─── GET /inbox ────────────────────────────────────────────────────────────────
 
-agentsInbox.get('/inbox', async (c) => {
+agentsInbox.get('/agents/inbox', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'inbox', 'Agents Inbox', undefined, c);
 
@@ -58,7 +58,8 @@ agentsInbox.get('/inbox', async (c) => {
     query(
       `SELECT am.*, sender.display_name as from_display
        FROM agent_messages am
-       LEFT JOIN agents sender ON sender.id = am.agent_id
+       LEFT JOIN agent_instances sender
+         ON sender.product_id = am.product_id AND sender.agent_name = am.from_agent
        WHERE am.product_id=? AND am.read_at IS NULL
        ORDER BY am.created_at DESC LIMIT 50`,
       [productId]
@@ -71,7 +72,7 @@ agentsInbox.get('/inbox', async (c) => {
     ),
     query(
       `SELECT * FROM outbound_actions
-       WHERE product_id=? AND status='pending'
+       WHERE product_id=? AND status='pending_approval'
        ORDER BY created_at DESC LIMIT 20`,
       [productId]
     ),
@@ -89,14 +90,14 @@ agentsInbox.get('/inbox', async (c) => {
     <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;gap:1rem;align-items:flex-start;">
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem;flex-wrap:wrap;">
-          <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">${m.from_display ?? m.agent_id ?? 'Agent'}</span>
+          <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">${m.from_display ?? m.from_agent ?? 'Agent'}</span>
           <span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;${priorityBadge(m.priority as string)}">${priorityLabel(m.priority as string)}</span>
           <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${timeAgo(m.created_at as string)}</span>
         </div>
         <div style="font-size:0.87rem;font-weight:600;color:var(--text-primary);margin-bottom:0.25rem;">${m.subject ?? m.title ?? '(no subject)'}</div>
         <div style="font-size:0.82rem;color:var(--text-dim);line-height:1.5;">${m.body ?? m.content ?? ''}</div>
       </div>
-      <form method="POST" action="/inbox/messages/${m.id}/read" style="flex-shrink:0;">
+      <form method="POST" action="/agents/inbox/messages/${m.id}/read" style="flex-shrink:0;">
         <button type="submit" style="font-size:0.72rem;padding:4px 10px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:transparent;color:var(--text-muted);cursor:pointer;">Mark read</button>
       </form>
     </div>
@@ -112,10 +113,10 @@ agentsInbox.get('/inbox', async (c) => {
       <div style="font-size:0.9rem;font-weight:600;color:var(--text-primary);margin-bottom:0.35rem;">${d.title ?? d.decision_title ?? '(untitled)'}</div>
       <div style="font-size:0.83rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.875rem;">${d.description ?? d.rationale ?? ''}</div>
       <div style="display:flex;gap:0.5rem;">
-        <form method="POST" action="/inbox/decisions/${d.id}/approve" style="display:inline;">
+        <form method="POST" action="/agents/inbox/decisions/${d.id}/approve" style="display:inline;">
           <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:0.35rem 0.9rem;">Approve</button>
         </form>
-        <form method="POST" action="/inbox/decisions/${d.id}/dismiss" style="display:inline;">
+        <form method="POST" action="/agents/inbox/decisions/${d.id}/dismiss" style="display:inline;">
           <button type="submit" class="btn btn-ghost" style="font-size:0.8rem;padding:0.35rem 0.9rem;color:#ff6b6b;border-color:#ff6b6b44;">Dismiss</button>
         </form>
       </div>
@@ -125,17 +126,16 @@ agentsInbox.get('/inbox', async (c) => {
   const actionItems = actions.map((a) => html`
     <div style="padding:1.25rem;border-bottom:1px solid rgba(255,255,255,0.05);">
       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;flex-wrap:wrap;">
-        <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">${a.agent_name ?? a.agent_id ?? 'Agent'}</span>
-        <span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;${priorityBadge(a.priority as string)}">${priorityLabel(a.priority as string)}</span>
+        <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">${a.agent_name ?? 'Agent'}</span>
         <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${timeAgo(a.created_at as string)}</span>
       </div>
-      <div style="font-size:0.9rem;font-weight:600;color:var(--text-primary);margin-bottom:0.35rem;">${a.title ?? a.action_type ?? '(untitled)'}</div>
-      <div style="font-size:0.83rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.875rem;">${a.description ?? a.payload ?? ''}</div>
+      <div style="font-size:0.9rem;font-weight:600;color:var(--text-primary);margin-bottom:0.35rem;">${a.preview_text ?? a.action_type ?? '(untitled)'}</div>
+      <div style="font-size:0.83rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.875rem;">${a.rationale ?? ''}</div>
       <div style="display:flex;gap:0.5rem;">
-        <form method="POST" action="/inbox/decisions/${a.id}/approve" style="display:inline;">
+        <form method="POST" action="/agents/actions/${a.id}/approve" style="display:inline;">
           <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:0.35rem 0.9rem;">Approve</button>
         </form>
-        <form method="POST" action="/inbox/decisions/${a.id}/dismiss" style="display:inline;">
+        <form method="POST" action="/agents/actions/${a.id}/cancel" style="display:inline;">
           <button type="submit" class="btn btn-ghost" style="font-size:0.8rem;padding:0.35rem 0.9rem;color:#ff6b6b;border-color:#ff6b6b44;">Dismiss</button>
         </form>
       </div>
@@ -154,9 +154,9 @@ agentsInbox.get('/inbox', async (c) => {
     <div class="card" style="padding:0;overflow:hidden;">
       <!-- Tabs -->
       <div style="display:flex;border-bottom:1px solid rgba(255,255,255,0.08);padding:0 0.25rem;">
-        <a href="/inbox?tab=messages" style="${tabStyle('messages')}">Messages${messages.length > 0 ? html` <span style="font-size:0.7rem;background:#ff6b6b;color:white;padding:1px 6px;border-radius:99px;margin-left:4px;">${messages.length}</span>` : ''}</a>
-        <a href="/inbox?tab=decisions" style="${tabStyle('decisions')}">Decisions${decisions.length > 0 ? html` <span style="font-size:0.7rem;background:#ffb347;color:#1a1a2e;padding:1px 6px;border-radius:99px;margin-left:4px;">${decisions.length}</span>` : ''}</a>
-        <a href="/inbox?tab=actions" style="${tabStyle('actions')}">Actions${actions.length > 0 ? html` <span style="font-size:0.7rem;background:#4ecca3;color:#1a1a2e;padding:1px 6px;border-radius:99px;margin-left:4px;">${actions.length}</span>` : ''}</a>
+        <a href="/agents/inbox?tab=messages" style="${tabStyle('messages')}">Messages${messages.length > 0 ? html` <span style="font-size:0.7rem;background:#ff6b6b;color:white;padding:1px 6px;border-radius:99px;margin-left:4px;">${messages.length}</span>` : ''}</a>
+        <a href="/agents/inbox?tab=decisions" style="${tabStyle('decisions')}">Decisions${decisions.length > 0 ? html` <span style="font-size:0.7rem;background:#ffb347;color:#1a1a2e;padding:1px 6px;border-radius:99px;margin-left:4px;">${decisions.length}</span>` : ''}</a>
+        <a href="/agents/inbox?tab=actions" style="${tabStyle('actions')}">Actions${actions.length > 0 ? html` <span style="font-size:0.7rem;background:#4ecca3;color:#1a1a2e;padding:1px 6px;border-radius:99px;margin-left:4px;">${actions.length}</span>` : ''}</a>
       </div>
 
       <!-- Messages Tab -->
@@ -187,34 +187,41 @@ agentsInbox.get('/inbox', async (c) => {
 
 // ─── POST /inbox/decisions/:id/approve ────────────────────────────────────────
 
-agentsInbox.post('/inbox/decisions/:id/approve', async (c) => {
+agentsInbox.post('/agents/inbox/decisions/:id/approve', async (c) => {
   const founder = c.get('founder');
   const id = c.req.param('id');
   await query(
-    `UPDATE agent_decisions SET status='approved', approved_at=CURRENT_TIMESTAMP, approved_by=? WHERE id=?`,
-    [founder.id, id]
+    `UPDATE agent_decisions SET status='approved', approved_at=CURRENT_TIMESTAMP, approved_by=?
+     WHERE id=? AND status='pending'
+       AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
+    [founder.id, id, founder.id]
   );
-  return c.redirect('/inbox?tab=decisions');
+  return c.redirect('/agents/inbox?tab=decisions');
 });
 
 // ─── POST /inbox/decisions/:id/dismiss ────────────────────────────────────────
 
-agentsInbox.post('/inbox/decisions/:id/dismiss', async (c) => {
+agentsInbox.post('/agents/inbox/decisions/:id/dismiss', async (c) => {
+  const founder = c.get('founder');
   const id = c.req.param('id');
   await query(
-    `UPDATE agent_decisions SET status='dismissed' WHERE id=?`,
-    [id]
+    `UPDATE agent_decisions SET status='dismissed'
+     WHERE id=? AND status='pending'
+       AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
+    [id, founder.id]
   );
-  return c.redirect('/inbox?tab=decisions');
+  return c.redirect('/agents/inbox?tab=decisions');
 });
 
 // ─── POST /inbox/messages/:id/read ────────────────────────────────────────────
 
-agentsInbox.post('/inbox/messages/:id/read', async (c) => {
+agentsInbox.post('/agents/inbox/messages/:id/read', async (c) => {
+  const founder = c.get('founder');
   const id = c.req.param('id');
   await query(
-    `UPDATE agent_messages SET read_at=CURRENT_TIMESTAMP WHERE id=?`,
-    [id]
+    `UPDATE agent_messages SET read_at=CURRENT_TIMESTAMP
+     WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
+    [id, founder.id]
   );
-  return c.redirect('/inbox?tab=messages');
+  return c.redirect('/agents/inbox?tab=messages');
 });

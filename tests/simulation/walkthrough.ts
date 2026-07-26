@@ -214,7 +214,7 @@ async function main(): Promise<void> {
 
   // ── Public pages (logged out) ──────────────────────────────────────────────
   currentFounder = null;
-  for (const path of ['/', '/pricing', '/help', '/manifesto', '/privacy', '/terms']) {
+  for (const path of ['/', '/pricing', '/help', '/manifesto', '/privacy-policy', '/terms']) {
     await hit('logged-out visitor', 'GET', path, { expectStatus: [200] });
   }
 

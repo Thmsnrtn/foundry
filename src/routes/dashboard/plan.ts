@@ -129,16 +129,22 @@ planRoutes.get('/plan', async (c) => {
     <script>
     window.togglePlanItem = async function(itemId, done) {
       try {
-        await fetch('/plan/item/' + itemId, {
+        const res = await fetch('/plan/item/' + itemId, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ done }),
         });
+        if (!res.ok) throw new Error('save failed: ' + res.status);
         const el = document.getElementById('plan-item-' + itemId);
         if (done === true || done === 'true') el.classList.add('plan-item-done');
         else el.classList.remove('plan-item-done');
-      } catch {}
+      } catch {
+        // Save failed — put the checkbox back so the UI never lies about
+        // persisted state.
+        const cb = document.querySelector('#plan-item-' + itemId + ' input[type="checkbox"]');
+        if (cb) cb.checked = !(done === true || done === 'true');
+      }
     };
     </script>
   `;

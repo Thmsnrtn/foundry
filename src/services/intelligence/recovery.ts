@@ -37,7 +37,7 @@ Competitive signals: ${input.competitiveSignals}
 Active decisions: ${input.activeDecisions}
 Stressor trajectory: ${input.stressorTrajectory}`;
 
-  const response = await callOpus(systemPrompt, userPrompt, 4096);
+  const response = await callOpus(systemPrompt, userPrompt, 4096, input.productId);
   const protocol = parseJSONResponse<RecoveryProtocol>(response.content);
 
   // Create pinned decision

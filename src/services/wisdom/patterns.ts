@@ -88,7 +88,7 @@ Rules:
     const userPrompt = `Category: ${category}\nDecisions:\n${JSON.stringify(decisionSummaries, null, 2)}`;
 
     try {
-      const response = await callOpus(systemPrompt, userPrompt, 4096);
+      const response = await callOpus(systemPrompt, userPrompt, 4096, productId);
       const synthesized = parseJSONResponse<SynthesizedPattern[]>(response.content);
 
       for (const pattern of synthesized) {

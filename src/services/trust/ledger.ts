@@ -35,7 +35,7 @@ export async function getTrustLedger(productId: string): Promise<TrustLedger> {
   const rows = await query(
     `SELECT category,
             COUNT(*) AS decided,
-            SUM(CASE WHEN outcome_valence = 'positive' THEN 1 ELSE 0 END) AS positive,
+            SUM(CASE WHEN outcome_valence = 1 THEN 1 ELSE 0 END) AS positive,
             MIN(gate) AS min_gate
      FROM decisions
      WHERE product_id = ?

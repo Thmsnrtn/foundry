@@ -199,7 +199,7 @@ landingRoutes.get('/', async (c) => {
     <div class="page-footer" style="text-align:center;padding:1.5rem;color:var(--text-muted);font-size:0.8rem;">
       Foundry — Autonomous AI operations for solo SaaS founders
       <div style="margin-top:0.5rem;display:flex;gap:1.5rem;justify-content:center;flex-wrap:wrap;">
-        <a href="/privacy" style="color:var(--text-dim);font-size:0.75rem;">Privacy</a>
+        <a href="/privacy-policy" style="color:var(--text-dim);font-size:0.75rem;">Privacy</a>
         <a href="/terms" style="color:var(--text-dim);font-size:0.75rem;">Terms</a>
         <a href="/pricing" style="color:var(--text-dim);font-size:0.75rem;">Pricing</a>
         <a href="/manifesto" style="color:var(--text-dim);font-size:0.75rem;">Manifesto</a>
@@ -484,7 +484,9 @@ helpRoutes.get('/help', (c) => {
 
 export const legalRoutes = new Hono();
 
-legalRoutes.get('/privacy', (c) => {
+// The public policy lives at /privacy-policy; /privacy is the authenticated
+// privacy-and-data dashboard (consent toggles, export, deletion).
+legalRoutes.get('/privacy-policy', (c) => {
   return c.html(publicLayout('Privacy Policy — Foundry', html`
     <div style="max-width:720px;margin:0 auto;padding:2rem 1rem;">
       <h1>Privacy Policy</h1>

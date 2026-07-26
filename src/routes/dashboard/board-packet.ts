@@ -484,9 +484,10 @@ boardPacket.get('/packet/:id', async (c) => {
 // ─── POST /board/packet/:id/reviewed ──────────────────────────────────────────
 
 boardPacket.post('/packet/:id/reviewed', async (c) => {
+  const founder = c.get('founder');
   const id = c.req.param('id');
   try {
-    await markPacketReviewed(id);
+    await markPacketReviewed(id, founder.id);
   } catch {
     // Non-fatal
   }
@@ -513,7 +514,7 @@ boardPacket.get('/update/:id', async (c) => {
   const id = c.req.param('id');
   const ctx = await getLayoutContext(founder, 'investors', 'Investor Update', undefined, c);
 
-  const data = await getInvestorUpdate(id).catch(() => null);
+  const data = await getInvestorUpdate(id, founder.id as string).catch(() => null);
 
   if (!data) {
     const content = html`
@@ -552,9 +553,10 @@ boardPacket.get('/update/:id', async (c) => {
 // ─── POST /board/update/:id/sent ──────────────────────────────────────────────
 
 boardPacket.post('/update/:id/sent', async (c) => {
+  const founder = c.get('founder');
   const id = c.req.param('id');
   try {
-    await markUpdateSent(id);
+    await markUpdateSent(id, founder.id);
   } catch {
     // Non-fatal
   }

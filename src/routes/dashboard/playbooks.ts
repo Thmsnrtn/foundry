@@ -159,12 +159,7 @@ playbookRoutes.get('/playbooks/:type', async (c) => {
         <button type="submit" class="btn btn-outline">Regenerate</button>
       </form>
       <form method="POST" action="/playbooks/${type}/export">
-        <select name="destination">
-          <option value="markdown">Download Markdown</option>
-          <option value="notion">Export to Notion</option>
-          <option value="linear">Export to Linear</option>
-        </select>
-        <button type="submit" class="btn btn-primary">Export</button>
+        <button type="submit" class="btn btn-primary">Download Markdown</button>
       </form>
     </div>
   `;
@@ -173,6 +168,39 @@ playbookRoutes.get('/playbooks/:type', async (c) => {
 });
 
 // ─── POST /playbooks/:type/generate ──────────────────────────────────────────
+
+// Markdown export of a generated playbook — the one export destination that
+// needs no external service.
+playbookRoutes.post('/playbooks/:type/export', async (c) => {
+  const type = c.req.param('type') as PlaybookType;
+  const ctx = await buildSharedContext(c);
+  if (!ctx.product) return c.redirect('/products');
+  const meta = PLAYBOOK_LABELS[type];
+  if (!meta) return c.notFound();
+
+  const playbooks = await getPlaybooks(ctx.product.id);
+  const playbook = playbooks.find((p) => p.type === type);
+  if (!playbook) return c.redirect(`/playbooks?generate=${type}`);
+
+  const md = [
+    `# ${playbook.title}`,
+    '',
+    `_v${playbook.version} — generated ${playbook.generated_at}_`,
+    '',
+    playbook.executive_summary ? `## Overview\n\n${playbook.executive_summary}\n` : '',
+    playbook.core_principles ? `## Core Principles\n\n${playbook.core_principles}\n` : '',
+    playbook.playbook_body ? `## Playbook\n\n${playbook.playbook_body}\n` : '',
+    playbook.anti_patterns ? `## Anti-Patterns\n\n${playbook.anti_patterns}\n` : '',
+  ].filter(Boolean).join('\n');
+
+  return new Response(md, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${type}-playbook-v${playbook.version}.md"`,
+    },
+  });
+});
 
 playbookRoutes.post('/playbooks/:type/generate', async (c) => {
   const founder = c.get('founder');

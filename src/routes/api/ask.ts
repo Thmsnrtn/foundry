@@ -424,10 +424,15 @@ async function executeAction(
     case 'create_decision': {
       if (!classified.entities.decision_what) return null;
       const id = nanoid();
+      // The category comes from an LLM classification — validate against the
+      // decisions.category CHECK before inserting, or the INSERT throws.
+      const VALID_CATEGORIES = ['urgent', 'strategic', 'product', 'marketing', 'informational'];
+      const rawCategory = classified.entities.decision_category ?? 'strategic';
+      const category = VALID_CATEGORIES.includes(rawCategory) ? rawCategory : 'strategic';
       await query(
         `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status)
          VALUES (?, ?, ?, 2, ?, 'Captured via Ask Foundry conversation.', 'pending')`,
-        [id, productId, classified.entities.decision_category ?? 'strategic', classified.entities.decision_what],
+        [id, productId, category, classified.entities.decision_what],
       );
       return { type: 'create_decision', description: `Created decision: "${classified.entities.decision_what}"`, entity_id: id };
     }

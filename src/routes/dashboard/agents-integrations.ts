@@ -549,10 +549,13 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/reject', async (c)
   return c.redirect('/agents/integrations/actions');
 });
 
-// ─── POST /agents/integrations/stripe/webhook ────────────────────────────────
-// No auth required — uses Stripe signature verification
+// ─── POST /webhooks/integrations/stripe ──────────────────────────────────────
+// No session auth — Stripe calls this directly and authenticates via its
+// signature against the per-product webhook secret. Deliberately registered
+// under /webhooks/* (rate-limited, unauthenticated); under /agents/* the
+// auth+CSRF middleware would make it unreachable for Stripe.
 
-agentIntegrationRoutes.post('/agents/integrations/stripe/webhook', async (c) => {
+agentIntegrationRoutes.post('/webhooks/integrations/stripe', async (c) => {
   const rawBody = await c.req.text();
   const signature = c.req.header('stripe-signature') ?? '';
 

@@ -100,17 +100,25 @@ export async function listExecutionPlaybooks(productId: string): Promise<Executi
 /**
  * Toggle a playbook active or inactive.
  */
-export async function togglePlaybook(playbookId: string, active: boolean): Promise<void> {
+export async function togglePlaybook(playbookId: string, active: boolean, ownerId: string): Promise<void> {
   await query(
-    `UPDATE execution_playbooks SET is_active=? WHERE id=?`,
-    [active ? 1 : 0, playbookId]
+    `UPDATE execution_playbooks SET is_active=?
+     WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
+    [active ? 1 : 0, playbookId, ownerId]
   );
 }
 
 /**
- * Delete a playbook and its trigger log entries.
+ * Delete a playbook and its trigger log entries. Scoped to the owning founder
+ * — a foreign id deletes nothing.
  */
-export async function deletePlaybook(playbookId: string): Promise<void> {
+export async function deletePlaybook(playbookId: string, ownerId: string): Promise<void> {
+  const owned = await query(
+    `SELECT id FROM execution_playbooks
+     WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
+    [playbookId, ownerId]
+  );
+  if (owned.rows.length === 0) return;
   await query(`DELETE FROM playbook_trigger_log WHERE playbook_id=?`, [playbookId]);
   await query(`DELETE FROM execution_playbooks WHERE id=?`, [playbookId]);
 }

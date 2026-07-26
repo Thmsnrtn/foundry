@@ -95,6 +95,33 @@ authRoutes.get('/auth/login', (c) => {
 </html>`);
 });
 
+// Sign out: clear the app-domain session + CSRF cookies and end the Clerk
+// client session in the browser before returning to the landing page.
+authRoutes.get('/auth/logout', (c) => {
+  const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
+  c.header('Set-Cookie', '__session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax', { append: true });
+  c.header('Set-Cookie', 'foundry_csrf=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax', { append: true });
+  return c.html(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Signing out — Foundry</title></head>
+<body style="background:#0f172a;color:#94a3b8;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;margin:0;">
+  <p>Signing out…</p>
+  <script>
+    const pk = "${publishableKey}";
+    (async () => {
+      try {
+        const m = await import("https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm");
+        const clerk = new m.Clerk(pk);
+        await clerk.load();
+        await clerk.signOut();
+      } catch (e) { /* cookie already cleared server-side */ }
+      window.location.href = "/";
+    })();
+  </script>
+</body>
+</html>`);
+});
+
 // Clerk webhook: user.created event → create founder record
 // Verified via Svix signature (Clerk uses Svix for webhook delivery)
 authRoutes.post('/auth/webhook', async (c) => {

@@ -176,10 +176,17 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
       {label:'Settings',href:'/settings',section:'System'},
       {label:'Audit Log',href:'/audit-log',section:'System'},
       {label:'Playbooks',href:'/playbooks',section:'System'},
-      {label:'Revenue',href:'/products/current/revenue',section:'Product'},
-      {label:'Competitive Intel',href:'/products/current/competitive',section:'Product'},
-      {label:'Product DNA',href:'/products/current/dna',section:'Product'},
+      {label:'Sign out',href:'/auth/logout',section:'System'},
     ];
+    // Product-scoped commands only exist when a product is selected.
+    var CMD_PID = '${productId ?? ''}';
+    if (CMD_PID) {
+      CMD_ROUTES.push(
+        {label:'Revenue',href:'/products/'+CMD_PID+'/revenue',section:'Product'},
+        {label:'Competitive Intel',href:'/products/'+CMD_PID+'/competitive',section:'Product'},
+        {label:'Product DNA',href:'/products/'+CMD_PID+'/dna',section:'Product'}
+      );
+    }
     let cmdIdx=0;
     function openCmdPalette(){document.getElementById('cmd-overlay').style.display='block';var p=document.getElementById('cmd-palette');p.style.display='block';document.getElementById('cmd-input').focus();renderCmdResults(CMD_ROUTES);}
     function closeCmdPalette(){document.getElementById('cmd-overlay').style.display='none';document.getElementById('cmd-palette').style.display='none';document.getElementById('cmd-input').value='';cmdIdx=0;}
@@ -304,7 +311,7 @@ function groupedSidebar(
     {
       label: 'YOUR TEAM',
       items: [
-        { key: 'agents-briefings', label: 'Briefing', href: '/agents/briefings/latest', badge: 'NEW', badgeType: 'dot' },
+        { key: 'agents-briefings', label: 'Briefing', href: '/agents/briefings/latest' },
         { key: 'agents', label: 'Roster', href: '/agents' },
         { key: 'agents-debate', label: 'Debate', href: '/agents/debate' },
         { key: 'agents-accuracy', label: 'Accuracy', href: '/agents/accuracy' },
@@ -358,6 +365,7 @@ function groupedSidebar(
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
       ${founderEmail?.toLowerCase() === 'thmsnrtn@gmail.com' ? html`<li><a href="/founder-ops" class="${active === 'founder-ops' ? 'active' : ''}" style="color:#f59e0b;">Founder Ops</a></li>` : ''}
       <li><a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a></li>
+      <li><a href="/auth/logout" style="color:var(--text-muted);">Sign out</a></li>
     </ul>
   </nav>`;
 }

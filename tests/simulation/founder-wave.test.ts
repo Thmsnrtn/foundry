@@ -270,7 +270,7 @@ describe('the Trusted founder — autonomy is earned on the record', () => {
       await query(
         `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence)
          VALUES (?, ?, 'marketing', 1, 'x', 'y', 'approved', 'founder', datetime('now','-10 days'), ?)`,
-        [`wf_d${++seq}`, f.pid, i < 9 ? 'positive' : 'negative']);
+        [`wf_d${++seq}`, f.pid, i < 9 ? 1 : -1]);
     }
     actAs(f);
     const text = await (await hit('GET', '/letter')).text();
@@ -312,14 +312,14 @@ describe('the background wave — a dozen steady founders exercise every surface
       const f = await founderWith(`Steady${i}`, { snapshots: [8000 + i * 500, 8400 + i * 500, 8900 + i * 500, 9500 + i * 500] });
       actAs(f);
       // Record a strategic decision WITH a belief through the real form.
-      const create = await hit('POST', '/strategic-decisions', {
+      const create = await hit('POST', '/agents/decisions', {
         title: `Bet ${i}`, decision_made: 'Chose the narrow ICP',
         rationale: 'Focus', premise: 'Churn stays under 6%',
         premise_metric: 'churn_rate', premise_comparator: '<', premise_threshold: '0.06',
       });
       expect([302, 303]).toContain(create.status);
 
-      for (const path of ['/strategic-decisions', '/letter']) {
+      for (const path of ['/agents/decisions', '/letter']) {
         const res = await hit('GET', path);
         expect(res.status, `${path} for Steady${i}`).toBe(200);
       }

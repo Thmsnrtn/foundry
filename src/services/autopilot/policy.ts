@@ -168,13 +168,21 @@ export async function processOutcomeFeedback(productId: string): Promise<{ clean
   );
   let cleanCycles = 0;
   let anomalies = 0;
-  for (const r of rows.rows as unknown as Array<Record<string, string>>) {
-    await query('UPDATE decisions SET autopilot_counted = 1 WHERE id = ?', [r.id]);
-    const category = r.category ?? 'uncategorized';
-    if (r.outcome_valence === 'positive') {
+  for (const r of rows.rows as unknown as Array<Record<string, string | number>>) {
+    // Atomic claim: only the tick that flips the flag banks this outcome, so
+    // two overlapping sweeps can never double-count the same decision.
+    const claim = await query(
+      'UPDATE decisions SET autopilot_counted = 1 WHERE id = ? AND autopilot_counted = 0',
+      [r.id],
+    );
+    if ((claim.rowsAffected ?? 0) === 0) continue;
+    const category = (r.category as string) ?? 'uncategorized';
+    // outcome_valence is an INTEGER column: 1 positive, -1 negative, 0 mixed.
+    const valence = Number(r.outcome_valence);
+    if (valence === 1) {
       cleanCycles++;
       await recordCleanCycle(productId, category);
-    } else if (r.outcome_valence === 'negative' && r.decided_by === 'second_self') {
+    } else if (valence === -1 && r.decided_by === 'second_self') {
       anomalies++;
       await recordAnomaly(productId, category, `negative outcome on autopilot decision ${r.id}`);
     }
@@ -235,6 +243,15 @@ export async function recordAnomaly(productId: string, category: string, reason:
      WHERE product_id = ? AND category = ?`,
     [reason, productId, category],
   );
+  // Consent ledger invariant: a capability that drops below 'act' must carry
+  // revoked consent — the ledger must never claim authorization that the
+  // policy no longer grants.
+  if (policy.mode === 'act') {
+    try {
+      const { revokeConsent } = await import('./consent.js');
+      await revokeConsent(productId, category);
+    } catch { /* additive ledger; the demotion itself is authoritative */ }
+  }
   log.info('autopilot demoted (anomaly)', { productId, category, from: policy.mode, to: demoted, reason });
 }
 
@@ -243,7 +260,7 @@ export async function recordAnomaly(productId: string, category: string, reason:
 async function qualityHold(productId: string, category: string): Promise<boolean> {
   const r = await query(
     `SELECT COUNT(*) AS n,
-            SUM(CASE WHEN outcome_valence = 'positive' THEN 1 ELSE 0 END) AS pos
+            SUM(CASE WHEN outcome_valence = 1 THEN 1 ELSE 0 END) AS pos
      FROM decisions
      WHERE product_id = ? AND category = ? AND outcome_valence IS NOT NULL`,
     [productId, category],
@@ -257,6 +274,19 @@ async function qualityHold(productId: string, category: string): Promise<boolean
 /** The big red button (AcreOS panic-stop): every category to shadow, counters
  *  kept (trust isn't erased, autonomy is just withdrawn), reason stamped. */
 export async function panicStop(productId: string, founderId: string): Promise<number> {
+  // Revoke consent for every 'act' category BEFORE the demotion, so the
+  // ledger never shows live authorization for a capability panic withdrew.
+  const acting = await query(
+    "SELECT category FROM autopilot_policies WHERE product_id = ? AND mode = 'act'",
+    [productId],
+  );
+  try {
+    const { revokeConsent } = await import('./consent.js');
+    for (const row of acting.rows as unknown as Array<{ category: string }>) {
+      await revokeConsent(productId, row.category);
+    }
+  } catch { /* additive ledger; the stop itself is authoritative */ }
+
   const r = await query(
     `UPDATE autopilot_policies
      SET mode = 'shadow', set_by = 'panic', last_demoted_at = CURRENT_TIMESTAMP,
@@ -303,7 +333,21 @@ export async function runAutopilotTick(productId: string): Promise<AutoActResult
     "SELECT category FROM autopilot_policies WHERE product_id = ? AND mode = 'act'",
     [productId],
   );
-  const categories = (actCategories.rows as unknown as Array<{ category: string }>).map((r) => r.category);
+  // A configured 'act' is necessary but not sufficient: the platform cap must
+  // allow act for the category (Protective Wrapper), and a live recorded
+  // consent must exist (Consent Ledger). Either missing → the category is
+  // treated as suggest and skipped here.
+  const { effectiveMode } = await import('./platform-cap.js');
+  const { hasActConsent } = await import('./consent.js');
+  const categories: string[] = [];
+  for (const r of actCategories.rows as unknown as Array<{ category: string }>) {
+    if (effectiveMode('act', r.category) !== 'act') continue;
+    if (!(await hasActConsent(productId, r.category))) {
+      log.info('autopilot act skipped — no live consent', { productId, category: r.category });
+      continue;
+    }
+    categories.push(r.category);
+  }
   if (categories.length === 0) return { acted: 0, decisions: [] };
 
   const placeholders = categories.map(() => '?').join(',');
@@ -333,7 +377,7 @@ export async function undoAutopilotAction(decisionId: string, productId: string)
   const r = await query(
     `SELECT category FROM decisions
      WHERE id = ? AND product_id = ? AND decided_by = 'second_self'
-       AND decided_at >= datetime('now', '-1 day')`,
+       AND datetime(decided_at) >= datetime('now', '-1 day')`,
     [decisionId, productId],
   );
   const row = r.rows[0] as Record<string, string> | undefined;
@@ -345,7 +389,15 @@ export async function undoAutopilotAction(decisionId: string, productId: string)
      WHERE id = ? AND product_id = ?`,
     [decisionId, productId],
   );
-  await setPolicy(productId, row.category, 'suggest', 'undo_demotion');
-  log.info('autopilot action undone — category demoted to suggest', { productId, decisionId, category: row.category });
+  // An undo is a NEGATIVE trust signal: it may only lower autonomy. If an
+  // anomaly or panic already dropped the category to shadow, it stays there —
+  // never promote on an undo.
+  const current = await getPolicy(productId, row.category);
+  if (current.mode === 'act') {
+    await setPolicy(productId, row.category, 'suggest', 'undo_demotion');
+    log.info('autopilot action undone — category demoted to suggest', { productId, decisionId, category: row.category });
+  } else {
+    log.info('autopilot action undone — category already at or below suggest', { productId, decisionId, category: row.category, mode: current.mode });
+  }
   return true;
 }

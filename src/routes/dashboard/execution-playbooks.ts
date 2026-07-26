@@ -405,18 +405,20 @@ executionPlaybooks.post('/playbooks/execution', async (c) => {
 // ─── POST /playbooks/execution/:id/toggle ────────────────────────────────────
 
 executionPlaybooks.post('/playbooks/execution/:id/toggle', async (c) => {
+  const founder = c.get('founder');
   const id = c.req.param('id');
   const body = await c.req.parseBody();
   const active = (body.active as string) === '1';
-  await togglePlaybook(id, active);
+  await togglePlaybook(id, active, founder.id);
   return c.redirect('/playbooks/execution');
 });
 
 // ─── POST /playbooks/execution/:id/delete ────────────────────────────────────
 
 executionPlaybooks.post('/playbooks/execution/:id/delete', async (c) => {
+  const founder = c.get('founder');
   const id = c.req.param('id');
-  await deletePlaybook(id);
+  await deletePlaybook(id, founder.id);
   return c.redirect('/playbooks/execution');
 });
 

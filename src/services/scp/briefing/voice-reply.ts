@@ -196,26 +196,17 @@ async function routeNote(
   label = 'note',
 ): Promise<string> {
   const id = nanoid();
+  // A note lands in the decisions ledger as informational (a valid category
+  // under the decisions CHECK) at gate 0 — visible in the inbox, never urgent.
   try {
-    // Use company_memory if available, otherwise fall back to decisions table
     await query(
-      `INSERT INTO company_memory (id, product_id, category, content, source, created_at)
-       VALUES (?, ?, 'founder_note', ?, 'voice_reply', datetime('now'))`,
-      [id, productId, `[${label}] Context: ${context}\n\n${transcript}`],
+      `INSERT INTO decisions (id, product_id, what, why_now, category, gate, status)
+       VALUES (?, ?, ?, ?, 'informational', 0, 'pending')`,
+      [id, productId, `[Voice ${label}] ${transcript.slice(0, 200)}`, `Context: ${context}`],
     );
-    return `company_memory:${id}`;
+    return `decisions:${id}`;
   } catch {
-    // company_memory table may not exist — try decisions as fallback
-    try {
-      await query(
-        `INSERT INTO decisions (id, product_id, what, why_now, category, gate, status)
-         VALUES (?, ?, ?, ?, 'operational', 0, 'pending')`,
-        [id, productId, `[Voice ${label}] ${transcript.slice(0, 200)}`, `Context: ${context}`],
-      );
-      return `decisions:${id}`;
-    } catch {
-      return `unrouted:${id}`;
-    }
+    return `unrouted:${id}`;
   }
 }
 

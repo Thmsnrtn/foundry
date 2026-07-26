@@ -238,9 +238,19 @@ superchargeApiRoutes.post('/api/products/:id/predictions/generate', async (c) =>
 });
 
 superchargeApiRoutes.post('/api/predictions/:id/outcome', async (c) => {
+  const founder = c.get('founder');
   const predictionId = c.req.param('id');
-  const body = await c.req.json() as Record<string, unknown>;
-  await recordPredictionOutcome(predictionId, body.outcome as any);
+  let body: Record<string, unknown>;
+  try {
+    body = await c.req.json() as Record<string, unknown>;
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const outcome = body.outcome as string;
+  if (!['correct', 'incorrect', 'partially_correct'].includes(outcome)) {
+    return c.json({ error: 'outcome must be correct | incorrect | partially_correct' }, 400);
+  }
+  await recordPredictionOutcome(predictionId, outcome as 'correct' | 'incorrect' | 'partially_correct', founder.id);
   return c.json({ status: 'recorded' });
 });
 

@@ -247,15 +247,16 @@ agentsActions.get('/agents/actions', async (c) => {
 agentsActions.post('/agents/actions/:id/approve', async (c) => {
   const founder = c.get('founder');
   const id = c.req.param('id');
-  await approveAndExecute(id, founder.id);
+  await approveAndExecute(id, founder.id, { ownerId: founder.id });
   return c.redirect('/agents/actions?tab=history');
 });
 
 // ─── POST /agents/actions/:id/cancel ──────────────────────────────────────────
 
 agentsActions.post('/agents/actions/:id/cancel', async (c) => {
+  const founder = c.get('founder');
   const id = c.req.param('id');
-  await cancelExecution(id);
+  await cancelExecution(id, founder.id);
   return c.redirect('/agents/actions?tab=pending');
 });
 

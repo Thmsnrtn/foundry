@@ -51,13 +51,13 @@ beforeAll(async () => {
     await query(
       `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence)
        VALUES (?, 'p_trust', 'marketing', 1, 'x', 'y', 'approved', 'founder', datetime('now','-3 days'), ?)`,
-      [id(), i < 9 ? 'positive' : 'negative'],
+      [id(), i < 9 ? 1 : -1],
     );
   }
   for (let i = 0; i < 3; i++) {
     await query(
       `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence)
-       VALUES (?, 'p_trust', 'product', 2, 'x', 'y', 'approved', 'founder', datetime('now','-3 days'), 'positive')`,
+       VALUES (?, 'p_trust', 'product', 2, 'x', 'y', 'approved', 'founder', datetime('now','-3 days'), 1)`,
       [id()],
     );
   }

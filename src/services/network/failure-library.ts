@@ -601,10 +601,12 @@ export async function getActivePatternMatches(productId: string): Promise<Patter
 export async function resolvePattern(
   matchId: string,
   outcome: 'avoided' | 'occurred',
+  ownerId: string,
 ): Promise<void> {
   await query(
-    `UPDATE pattern_matches SET resolved_at = datetime('now'), outcome = ? WHERE id = ?`,
-    [outcome, matchId],
+    `UPDATE pattern_matches SET resolved_at = datetime('now'), outcome = ?
+     WHERE id = ? AND product_id IN (SELECT id FROM products WHERE owner_id = ?)`,
+    [outcome, matchId, ownerId],
   );
 }
 

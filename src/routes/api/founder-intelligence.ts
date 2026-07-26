@@ -67,8 +67,13 @@ founderIntelRoutes.get('/api/founder/intelligence/forecast', async (c) => {
 // ─── Briefing & Digest ──────────────────────────────────────────────────────
 
 founderIntelRoutes.get('/api/founder/intelligence/morning-briefing', async (c) => {
-  const briefing = await generateMorningBriefing();
-  return c.json({ briefing });
+  try {
+    const briefing = await generateMorningBriefing();
+    return c.json({ briefing });
+  } catch (err) {
+    // AI-composed; degrade to a clean 503 on provider failure, never a 500.
+    return c.json({ error: 'Briefing generation unavailable right now — try again shortly.', detail: String((err as Error)?.message ?? err).slice(0, 200) }, 503);
+  }
 });
 
 founderIntelRoutes.post('/api/founder/intelligence/digest/generate', async (c) => {

@@ -446,12 +446,13 @@ networkIntelligence.get('/network/cohort', async (c) => {
 // ─── POST /network/patterns/:matchId/resolve ──────────────────────────────────
 
 networkIntelligence.post('/network/patterns/:matchId/resolve', async (c) => {
+  const founder = c.get('founder');
   const matchId = c.req.param('matchId');
   const body = await c.req.parseBody();
   const outcome = body['outcome'] as string;
 
   if (outcome === 'avoided' || outcome === 'occurred') {
-    await resolvePattern(matchId, outcome);
+    await resolvePattern(matchId, outcome, founder.id);
   }
 
   return c.redirect('/network');

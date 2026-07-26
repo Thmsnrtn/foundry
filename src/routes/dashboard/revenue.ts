@@ -120,12 +120,12 @@ revenueRoutes.get('/products/:id/revenue', async (c) => {
       <h3>Integrate via API</h3>
       <p style="font-size:0.87rem;color:#6b7280;margin-bottom:0.75rem;">Automate metric ingestion by POSTing to your product's metrics endpoint daily.</p>
       <code style="display:block;padding:0.75rem;background:#1a1a2e;color:#e8eaf0;border-radius:6px;font-size:0.8rem;overflow-x:auto;">
-curl -X POST ${process.env.APP_URL ?? 'https://foundry.dev'}/v1/products/${productId}/metrics \\
+curl -X POST ${process.env.APP_URL ?? 'https://foundry.dev'}/api/v1/products/${productId}/metrics \\
   -H "Authorization: Bearer fnd_YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"new_mrr_cents": 9900, "churned_mrr_cents": 0, "signups_7d": 12, "active_users": 320}'
       </code>
-      <p style="font-size:0.8rem;color:#9ca3af;margin-top:0.5rem;">Create an API key in <a href="/settings/api-keys" style="color:#2563eb;">Settings</a>.</p>
+      <p style="font-size:0.8rem;color:#9ca3af;margin-top:0.5rem;">Create an API key via <code>POST /api/v1/settings/api-keys</code> (authenticated) — a Settings UI for keys is coming.</p>
     </div>
   `;
 

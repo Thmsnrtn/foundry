@@ -223,8 +223,8 @@ integrationsRoutes.get('/integrations/:type/connect', async (c) => {
       </form>
     ` : html`
       <div class="oauth-connect">
-        <p>This integration uses OAuth. You'll be redirected to ${meta.name} to authorize access.</p>
-        <a href="/integrations/${type}/oauth-start" class="btn btn-primary">Continue to ${meta.name}</a>
+        <p>OAuth connection for ${meta.name} isn't available yet. If ${meta.name} offers an API key, use a key-based integration — or connect any MCP-compatible service from the <a href="/connections" style="color:var(--accent);">Connections</a> page.</p>
+        <a href="/integrations" class="btn btn-ghost">Back to integrations</a>
       </div>
     `}
   `;

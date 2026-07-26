@@ -339,7 +339,8 @@ letterRoutes.post('/talk/message', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'talk', 'Talk to the company', undefined, c);
   if (!ctx.productId) return c.json({ error: 'No product' }, 400);
-  const body = await c.req.json() as { text?: string; thread_id?: string };
+  const body = await c.req.json().catch(() => null) as { text?: string; thread_id?: string } | null;
+  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
   const text = body.text?.trim();
   if (!text || text.length > 2000) return c.json({ error: 'Say something (under 2000 chars)' }, 400);
   try {

@@ -35,12 +35,12 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
     query(
       `SELECT action_type, integration FROM action_executions
        WHERE product_id = ? AND status = 'completed'
-         AND executed_at >= datetime('now', '-1 day') LIMIT 10`,
+         AND datetime(executed_at) >= datetime('now', '-1 day') LIMIT 10`,
       [productId],
     ),
     query(
       `SELECT what, decided_by FROM decisions
-       WHERE product_id = ? AND decided_at >= datetime('now', '-1 day')
+       WHERE product_id = ? AND datetime(decided_at) >= datetime('now', '-1 day')
          AND decided_by IN ('system_gate_0', 'second_self') LIMIT 10`,
       [productId],
     ),
