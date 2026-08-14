@@ -6,4 +6,8 @@ For every meaningful slice: verify the live baseline; state the governing requir
 
 ## Codex Cloud and GitHub
 
-In hosted Codex Cloud, complete and commit repository work locally, leave the working tree clean, and report the commit SHA, checks, proposed PR title and description, evidence maturity, and proof debt. GitHub publication is handled by the Codex product UI: do not request or use GitHub credentials, run `gh auth login`, or treat missing GitHub authentication, remotes, tools, or network access in the task sandbox as an implementation blocker.
+- Never request or require `GH_TOKEN`, `GITHUB_TOKEN`, personal access tokens, SSH keys, repository credentials, or `gh auth login`.
+- Do not authenticate to GitHub, push branches, or create or update pull requests from inside the task sandbox.
+- Missing authenticated `gh`, `make_pr`, a Git remote, or direct GitHub network access is not an implementation blocker.
+- Complete repository work by editing, testing, and committing locally; leave the working tree clean and report the commit SHA, checks, proposed PR title and body, evidence maturity, and proof debt.
+- GitHub publishing happens afterward through the Codex product UI.
