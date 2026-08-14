@@ -17,7 +17,7 @@ import { CronJob } from 'cron';
 import { logger } from './services/logger.js';
 
 // Middleware
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, sessionAuthForApiRoutes } from './middleware/auth.js';
 import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateLimit, auditRateLimit } from './middleware/rate-limit.js';
 import { internalMiddleware } from './middleware/internal.js';
 
@@ -349,7 +349,10 @@ app.use('/playbooks/*', authMiddleware);
 app.use('/agents', authMiddleware);
 app.use('/agents/*', authMiddleware);
 app.use('/products/*/agents/*', authMiddleware);
-app.use('/api/*', authMiddleware);
+// Cookie/session APIs use Clerk. Machine-facing REST API v1 owns its bearer
+// API-key authentication in apiV1 and must not have that credential consumed
+// as a Clerk token first.
+app.use('/api/*', sessionAuthForApiRoutes);
 app.use('/benchmarks', authMiddleware);
 app.use('/benchmarks/*', authMiddleware);
 app.use('/audit-log', authMiddleware);
