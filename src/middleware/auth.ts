@@ -177,3 +177,18 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     return c.json({ error: 'Invalid or expired session' }, 401);
   }
 });
+
+/**
+ * Browser/session API boundary.
+ *
+ * REST API v1 owns its machine authentication inside `apiV1`. Letting the
+ * blanket Clerk middleware consume its bearer token first makes valid API keys
+ * unusable and also hides the intentionally public v1 health endpoint.
+ */
+export const sessionAuthForApiRoutes = createMiddleware<AuthEnv>(async (c, next) => {
+  const path = c.req.path;
+  if (path === '/api/v1' || path.startsWith('/api/v1/')) {
+    return next();
+  }
+  return authMiddleware(c, next);
+});
