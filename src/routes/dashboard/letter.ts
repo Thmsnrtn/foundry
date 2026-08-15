@@ -36,6 +36,32 @@ const section = (label: string, items: string[]) => items.length === 0 ? '' : ht
     ${items.map((i) => html`<div style="font-size:0.9rem;color:var(--text-primary);padding:0.35rem 0;border-top:1px solid rgba(255,255,255,0.05);">${i}</div>`)}
   </div>`;
 
+const responsibilitySection = (
+  label: string,
+  items: Array<{ responsibilityId: string; title: string; state: string; evidenceRef: string | null }>,
+  productId: string,
+  disposition: 'active' | 'deliberately_not_done',
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">${label}</div>
+    ${items.map((item) => html`
+      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${item.title} — ${item.state}</div>
+        ${item.evidenceRef ? html`
+          <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/disposition"
+            style="display:flex;gap:0.4rem;margin-top:0.45rem;align-items:center;flex-wrap:wrap;">
+            <input type="hidden" name="product_id" value="${productId}" />
+            <input type="hidden" name="evidence_ref" value="${item.evidenceRef}" />
+            <input type="hidden" name="disposition" value="${disposition}" />
+            <input name="reason" required maxlength="500" placeholder="Why?"
+              style="flex:1;min-width:180px;" />
+            <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">
+              ${disposition === 'active' ? 'Reopen' : 'Do not pursue'}
+            </button>
+          </form>` : html`<div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">No grounded evidence is available for an owner disposition.</div>`}
+      </div>`)}
+  </div>`;
+
 letterRoutes.get('/letter', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
@@ -88,7 +114,7 @@ letterRoutes.get('/letter', async (c) => {
           ${fleet.system.map((s) => html`<div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">${s}</div>`)}
         </div>` : ''}
 
-        ${fleet.products.map((p) => (p.letter.quiet ? '' : html`
+        ${fleet.products.map((p) => (p.letter.quiet && Object.values(p.responsibilities).every((items) => items.length === 0) ? '' : html`
         <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;">
           <div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.5rem;">
             <span style="font-weight:600;color:var(--text-primary);">${p.productName}</span>
@@ -100,6 +126,10 @@ letterRoutes.get('/letter', async (c) => {
             <div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">
               <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-right:0.5rem;">${row.tag}</span>${row.l}
             </div>`)}
+          ${Object.entries(p.responsibilities).flatMap(([classification, items]) => items.map((item) => html`
+            <div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+              <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-right:0.5rem;">${classification.replaceAll('_', ' ')}</span>${item.title}
+            </div>`))}
         </div>`))}
       `}
       ${adviceStrip(fluency)}
@@ -108,6 +138,13 @@ letterRoutes.get('/letter', async (c) => {
   }
 
   const letter = await composeLetter(ctx.productId, fluency);
+  const { getSevenDayResponsibilitySummary } = await import('../../services/institution/absence-summary.js');
+  const responsibilitySummary = await getSevenDayResponsibilitySummary(ctx.productId);
+  const { getPendingResponsibilityCandidates } = await import('../../services/institution/responsibility-candidate.js');
+  const responsibilityCandidates = await getPendingResponsibilityCandidates(ctx.productId);
+  const { getMaterialShadowingExceptions } = await import('../../services/institution/responsibility-shadowing.js');
+  const shadowingExceptions = await getMaterialShadowingExceptions(ctx.productId);
+  const hasResponsibilitySummary = Object.values(responsibilitySummary).some((items) => items.length > 0);
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
     : null;
@@ -128,7 +165,7 @@ letterRoutes.get('/letter', async (c) => {
           <a href="/connections" class="btn btn-primary" style="font-size:0.85rem;align-self:flex-start;">Connect your tools → so Foundry can see your real numbers</a>
           <a href="/decisions" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">Log your first decision → and the belief behind it, so Foundry can watch it</a>
         </div>
-      </div>` : letter.quiet ? html`
+      </div>` : letter.quiet && !hasResponsibilitySummary ? html`
       <div class="card" style="padding:1.5rem;text-align:center;">
         <div style="font-size:1rem;color:var(--text-primary);">Quiet day. Nothing needs you.</div>
         <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.4rem;">That's the goal. Go build — or rest.</div>
@@ -139,13 +176,94 @@ letterRoutes.get('/letter', async (c) => {
         <div style="font-size:0.95rem;color:var(--text-primary);">${needsYou}</div>
         <a href="/decisions" class="btn btn-primary" style="margin-top:0.75rem;font-size:0.82rem;display:inline-block;">Decide</a>
       </div>` : ''}
-      ${section('What I handled', letter.handled)}
+      ${section('Actions handled', letter.handled)}
       ${section('What I learned', letter.learned)}
+      ${section('What I handled', responsibilitySummary.HANDLED.map((i) => `${i.title} — outcome recorded`))}
+      ${section('What changed', responsibilitySummary.CHANGED.map((i) => `${i.title} — ${i.state}`))}
+      ${section('What differed while I watched', shadowingExceptions.map((item) =>
+        `${item.title} — expected ${item.expectedEventType}; ${item.classification === 'unresolved'
+          ? `the outcome remains unresolved (${item.observedSummary})`
+          : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
+      ${responsibilityCandidates.length ? html`
+      <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Possible responsibilities requiring your judgment</div>
+        ${responsibilityCandidates.map((candidate)=>html`
+          <form method="POST" action="/letter/responsibility-candidates/${candidate.id}/promote"
+            style="padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+            <div style="font-size:0.9rem;color:var(--text-primary);">${candidate.proposedResponsibility}</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);">${candidate.epistemicStatus} evidence · confirming recognizes the responsibility but grants no authority</div>
+            <button type="submit" class="btn btn-ghost" style="margin-top:0.35rem;font-size:0.72rem;padding:0.25rem 0.5rem;">Recognize responsibility</button>
+          </form>
+          <form method="POST" action="/letter/responsibility-candidates/${candidate.id}/reject">
+            <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Not a responsibility</button>
+          </form>`)}
+      </div>`:''}
+      ${responsibilitySection('Responsibility that needs you', responsibilitySummary.NEEDS_YOU, ctx.productId, 'deliberately_not_done')}
+      ${responsibilitySection('Deliberately not done', responsibilitySummary.DELIBERATELY_NOT_DONE, ctx.productId, 'active')}
+      ${responsibilitySection('Still open', responsibilitySummary.STILL_OPEN, ctx.productId, 'deliberately_not_done')}
       ${section('How trust moved', letter.trust)}
     `}
     ${adviceStrip(fluency)}
   `;
   return c.html(dashboardLayout(ctx, content));
+});
+
+letterRoutes.post('/letter/responsibility-candidates/:candidateId/promote',async(c)=>{
+  const founder=c.get('founder');
+  // Product is resolved server-side from candidate + authenticated owner. No
+  // hidden field or caller actor can establish the grounding identity.
+  const { query }=await import('../../db/client.js');
+  const result=await query(`SELECT c.product_id FROM responsibility_candidates c JOIN products p ON p.id=c.product_id
+    WHERE c.id=? AND p.owner_id=?`,[c.req.param('candidateId'),founder.id]);
+  if (!result.rows.length) return c.text('Candidate decision refused',403);
+  const productId=String((result.rows[0] as Record<string,unknown>).product_id);
+  const { promoteResponsibilityCandidate }=await import('../../services/institution/responsibility-candidate.js');
+  try {
+    await promoteResponsibilityCandidate({productId,candidateId:c.req.param('candidateId'),mechanism:'authenticated_owner',ownerId:founder.id as string});
+  } catch { return c.text('Candidate decision refused',403); }
+  return c.redirect('/letter');
+});
+
+letterRoutes.post('/letter/responsibility-candidates/:candidateId/reject',async(c)=>{
+  const founder=c.get('founder');
+  const { query }=await import('../../db/client.js');
+  const result=await query(`SELECT c.product_id FROM responsibility_candidates c JOIN products p ON p.id=c.product_id
+    WHERE c.id=? AND p.owner_id=?`,[c.req.param('candidateId'),founder.id]);
+  if (!result.rows.length) return c.text('Candidate decision refused',403);
+  const { decideResponsibilityCandidate }=await import('../../services/institution/responsibility-candidate.js');
+  try {
+    await decideResponsibilityCandidate({productId:String((result.rows[0] as Record<string,unknown>).product_id),
+      candidateId:c.req.param('candidateId'),decision:'rejected',ownerId:founder.id as string,
+      reason:'Authenticated owner does not recognize this as a responsibility'});
+  } catch { return c.text('Candidate decision refused',403); }
+  return c.redirect('/letter');
+});
+
+// The authenticated session is the authority source. Product and responsibility
+// fields locate the object only; the disposition trigger independently verifies
+// that the session founder owns that product and that the evidence is tenant-bound.
+letterRoutes.post('/letter/responsibilities/:responsibilityId/disposition', async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.parseBody();
+  const disposition = String(body.disposition ?? '');
+  if (disposition !== 'active' && disposition !== 'deliberately_not_done') {
+    return c.text('Invalid disposition', 400);
+  }
+  const reason = String(body.reason ?? '').trim();
+  const productId = String(body.product_id ?? '');
+  const evidenceRef = String(body.evidence_ref ?? '');
+  if (!reason || !productId || !evidenceRef) return c.text('Reason and grounded evidence are required', 400);
+  const { setResponsibilityDisposition } = await import('../../services/institution/responsibility.js');
+  try {
+    await setResponsibilityDisposition({
+      productId, responsibilityId: c.req.param('responsibilityId'), ownerId: founder.id as string,
+      disposition, reason, evidenceRef,
+    });
+  } catch {
+    // Do not reveal whether a cross-tenant responsibility or evidence identifier exists.
+    return c.text('Disposition refused', 403);
+  }
+  return c.redirect('/letter');
 });
 
 // Attention memory capture — the founder's explicit reaction to a surfaced

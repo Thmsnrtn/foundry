@@ -115,8 +115,12 @@ async function postCommentHandler(req: GatewayRequest): Promise<{ id: number; ur
 }
 
 // Side-effects: register handlers at module load.
-registerToolHandler('github_create_pr', createPRHandler);
-registerToolHandler('github_post_comment', postCommentHandler);
+const GITHUB_POLICY = {
+  actor: 'development_control', surface: 'github_outbound', dataClass: 'general',
+  requireDedupKey: true, requireCustomerExternalId: false,
+} as const;
+registerToolHandler('github_create_pr', createPRHandler, GITHUB_POLICY);
+registerToolHandler('github_post_comment', postCommentHandler, GITHUB_POLICY);
 
 export { createPRHandler, postCommentHandler };
 
@@ -124,7 +128,6 @@ export { createPRHandler, postCommentHandler };
 
 export async function gatewayCreatePR(opts: {
   productId: string;
-  agent: string;
   repo: string;
   title: string;
   head: string;
@@ -135,7 +138,6 @@ export async function gatewayCreatePR(opts: {
 }): Promise<ReturnType<typeof invoke>> {
   return invoke({
     productId: opts.productId,
-    agent: opts.agent,
     tool: 'github_create_pr',
     action: `create PR on ${opts.repo}: ${opts.title}`,
     params: {
@@ -154,7 +156,6 @@ export async function gatewayCreatePR(opts: {
 
 export async function gatewayPostComment(opts: {
   productId: string;
-  agent: string;
   repo: string;
   issueNumber: number;
   body: string;
@@ -163,7 +164,6 @@ export async function gatewayPostComment(opts: {
 }): Promise<ReturnType<typeof invoke>> {
   return invoke({
     productId: opts.productId,
-    agent: opts.agent,
     tool: 'github_post_comment',
     action: `post comment on ${opts.repo}#${opts.issueNumber}`,
     params: {

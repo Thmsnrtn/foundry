@@ -8,6 +8,7 @@
 // Fails CI on any unverifiable claim. The engine is the floor, not the ceiling.
 // =============================================================================
 import { readFileSync, readdirSync } from 'fs';
+import { globSync } from 'glob';
 
 // The claims currently made on public surfaces (landing.ts / legal.ts).
 const CLAIMS = [
@@ -51,6 +52,24 @@ function tokenize(claim) {
   return [...new Set(tokens)];
 }
 let failures = 0;
+
+// Founder-facing claims are subject to the same honesty law as marketing.
+// These phrases assert broad operation from an empty queue or one green state.
+const forbiddenOperationalClaims = [
+  'Foundry is operating autonomously',
+  'All intelligence systems are operating normally',
+  'All intelligence systems are running normally',
+];
+for (const file of globSync('src/**/*.{ts,tsx}', { nodir: true })) {
+  const content = readFileSync(file, 'utf8');
+  for (const claim of forbiddenOperationalClaims) {
+    if (content.includes(claim)) {
+      failures++;
+      console.error(`✗ UNBOUNDED OPERATIONAL CLAIM: ${file} contains "${claim}"`);
+    }
+  }
+}
+
 for (const claim of CLAIMS) {
   const unmatched = tokenize(claim).filter((t) => {
     const numeric = /^\d[\d.]*$/.test(t);

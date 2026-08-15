@@ -173,7 +173,7 @@ export async function digestGenerate(): Promise<void> {
         else if (riskState === 'yellow' && new Date().getDay() === 4) digestType = 'yellow_pulse';
 
         const digest = await generateDigest(p.id, riskState, digestType);
-        await sendDigestEmail(f.email as string, p.name, digest);
+        await sendDigestEmail(p.id, f.email as string, p.name, digest);
       }
     } catch (err) {
       logger.error(`digest_generate error for founder ${f.id}:`, { jobName: 'digest_generate', error: String(err) });
@@ -341,7 +341,7 @@ export async function yellowPulse(): Promise<void> {
     const p = row as Record<string, unknown>;
     try {
       const digest = await generateDigest(p.id as string, 'yellow', 'yellow_pulse');
-      await sendDigestEmail(p.email as string, p.name as string, digest);
+      await sendDigestEmail(p.id as string, p.email as string, p.name as string, digest);
     } catch (err) {
       logger.error(`yellow_pulse error for ${p.id}:`, { jobName: 'yellow_pulse', error: String(err) });
     }
@@ -362,7 +362,7 @@ export async function redDaily(): Promise<void> {
     const p = row as Record<string, unknown>;
     try {
       const digest = await generateDigest(p.id as string, 'red', 'red_daily');
-      await sendDigestEmail(p.email as string, p.name as string, digest);
+      await sendDigestEmail(p.id as string, p.email as string, p.name as string, digest);
     } catch (err) {
       logger.error(`red_daily error for ${p.id}:`, { jobName: 'red_daily', error: String(err) });
     }
@@ -477,6 +477,7 @@ export async function dnaCompletionNudge(): Promise<void> {
       const completionPct = dna?.completion_pct ?? 0;
 
       await sendDigestEmail(
+        p.id as string,
         p.email as string,
         p.name as string,
         {

@@ -16,6 +16,7 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { composeLetter, type Letter } from './composer.js';
 import type { Fluency } from '../ux/fluency.js';
+import { getSevenDayResponsibilitySummary, type AbsenceClassification, type AbsenceItem } from '../institution/absence-summary.js';
 
 export interface FleetNeedsYou {
   decisionId: string;
@@ -33,6 +34,7 @@ export interface FleetProductLetter {
   productName: string;
   riskState: string;
   letter: Letter;
+  responsibilities: Record<AbsenceClassification, AbsenceItem[]>;
 }
 
 export interface FleetLetter {
@@ -96,6 +98,7 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
       productName: p.name,
       riskState: p.risk_state,
       letter: await composeLetter(p.id, f),
+      responsibilities: await getSevenDayResponsibilitySummary(p.id),
     })),
   );
 
@@ -146,7 +149,9 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
     }
   } catch { /* the pack must never break the letter */ }
 
-  const quiet = needsYou.length === 0 && letters.every((l) => l.letter.quiet) && system.length === 0;
+  const quiet = needsYou.length === 0 && letters.every((l) =>
+    l.letter.quiet && Object.values(l.responsibilities).every((items) => items.length === 0)
+  ) && system.length === 0;
   return {
     founderId,
     composedAt: new Date().toISOString(),

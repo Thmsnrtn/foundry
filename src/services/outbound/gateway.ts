@@ -4,9 +4,8 @@
 // checks (kill-switch, classification, budget, idempotency) before delegating
 // to a registered tool handler. Records every invocation to audit_log.
 //
-// Existing integrations are NOT migrated to call this in this commit; they
-// continue to use src/services/outbound/executor.ts directly. Adapter
-// migration order is documented in src/services/outbound/README.md.
+// Registered capability policy, rather than request data, supplies safety
+// classification and execution identity.
 // =============================================================================
 
 import { checkKillSwitch } from './kill-switch.js';
@@ -19,17 +18,16 @@ import { recordGatewayInvocation, newInvocationId } from './audit.js';
 
 export interface GatewayRequest {
   productId: string;
-  agent: string;                              // agent name or 'system'
   tool: string;                               // 'send_email'|'create_pr'|...
   action: string;                             // human-readable description
   params: Record<string, unknown>;
   /** Required for at-most-once dedup. Without it, idempotency is skipped. */
   dedupKey?: string;
-  /** Required to consume communication budget. Without it, budget is skipped. */
+  /** Customer fact used by policies that require communication budgeting. */
   customerExternalId?: string;
-  /** Required for classification check. Without it, classification is skipped. */
+  /** Legacy assertion checked against, but never overrides, server policy. */
   surface?: string;
-  /** 'general'|'customer'|'pii_strict'|... — required when surface is set. */
+  /** Legacy assertion checked against, but never overrides, server policy. */
   dataClass?: string;
   /** Optional override; default 7 days. */
   idempotencyTtlSeconds?: number;
@@ -37,6 +35,7 @@ export interface GatewayRequest {
 
 export type RefusalPhase =
   | 'kill_switch'
+  | 'policy'
   | 'classification'
   | 'budget'
   | 'in_flight'
@@ -59,18 +58,32 @@ export type GatewayResult =
 
 export type ToolHandler = (req: GatewayRequest) => Promise<unknown>;
 
+/** Trusted, server-owned controls for a capability. Callers may supply facts
+ * such as a dedup key or customer id, but may not choose the safety policy. */
+export interface ToolPolicy {
+  /** Server-owned execution identity. Request data can never override it. */
+  actor: string;
+  surface: string;
+  dataClass: string;
+  requireDedupKey: boolean;
+  requireCustomerExternalId: boolean;
+}
+
 const DEFAULT_IDEM_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 // ─── Tool Handler Registry ────────────────────────────────────────────────────
 
 const handlers = new Map<string, ToolHandler>();
+const policies = new Map<string, ToolPolicy>();
 
-export function registerToolHandler(tool: string, handler: ToolHandler): void {
+export function registerToolHandler(tool: string, handler: ToolHandler, policy: ToolPolicy): void {
   handlers.set(tool, handler);
+  policies.set(tool, policy);
 }
 
 export function clearToolHandlers(): void {
   handlers.clear();
+  policies.clear();
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -78,13 +91,18 @@ export function clearToolHandlers(): void {
 export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   const invocationId = newInvocationId();
 
+  const policy = policies.get(req.tool);
+  if (!policy) {
+    return refusePolicy(invocationId, req, `no trusted policy registered for tool '${req.tool}'`);
+  }
+
   // 1. Kill-switch
-  const ks = await checkKillSwitch(req.productId, req.tool, req.agent);
+  const ks = await checkKillSwitch(req.productId, req.tool, policy.actor);
   if (ks.blocked) {
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,
-      agent: req.agent,
+      agent: policy.actor,
       tool: req.tool,
       action: req.action,
       outcome: 'refused',
@@ -93,15 +111,29 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     return { ok: false, invocation_id: invocationId, phase: 'kill_switch', reason: ks.reason };
   }
 
-  // 2. Classification (only when caller declares a surface)
-  if (req.surface) {
-    const dataClass = req.dataClass ?? 'general';
-    const cls = await checkAllowed(req.productId, req.surface, dataClass);
+  // 2. Server-owned tool policy. A caller cannot skip or downgrade controls by
+  // omitting classification/budget facts or by declaring a safer surface.
+  if (req.surface && req.surface !== policy.surface) {
+    return refusePolicy(invocationId, req, `surface is fixed to '${policy.surface}'`);
+  }
+  if (req.dataClass && req.dataClass !== policy.dataClass) {
+    return refusePolicy(invocationId, req, `data class is fixed to '${policy.dataClass}'`);
+  }
+  if (policy.requireDedupKey && !req.dedupKey) {
+    return refusePolicy(invocationId, req, 'dedup key is required');
+  }
+  if (policy.requireCustomerExternalId && !req.customerExternalId) {
+    return refusePolicy(invocationId, req, 'customer external id is required');
+  }
+
+  // 3. Classification is mandatory and derived from the registered policy.
+  {
+    const cls = await checkAllowed(req.productId, policy.surface, policy.dataClass);
     if (!cls.allowed) {
       await recordGatewayInvocation({
         invocation_id: invocationId,
         product_id: req.productId,
-        agent: req.agent,
+        agent: policy.actor,
         tool: req.tool,
         action: req.action,
         outcome: 'refused',
@@ -116,7 +148,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     }
   }
 
-  // 3. Idempotency reservation (only when dedupKey provided). Checked BEFORE
+  // 4. Idempotency reservation (only when dedupKey provided). Checked BEFORE
   // the budget so a deduped retry — which does no work — never burns a unit
   // of the customer's weekly communication budget.
   let freshReservation = false;
@@ -127,7 +159,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
       req.tool,
       req.dedupKey,
       ttl,
-      req.agent && req.agent !== 'system' ? req.agent : null
+      policy.actor !== 'system' ? policy.actor : null
     );
     if (!reserved.fresh) {
       // A stored result is a genuine cached success. A reservation with NO
@@ -139,7 +171,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
         await recordGatewayInvocation({
           invocation_id: invocationId,
           product_id: req.productId,
-          agent: req.agent,
+          agent: policy.actor,
           tool: req.tool,
           action: req.action,
           outcome: 'cached',
@@ -156,7 +188,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
       await recordGatewayInvocation({
         invocation_id: invocationId,
         product_id: req.productId,
-        agent: req.agent,
+        agent: policy.actor,
         tool: req.tool,
         action: req.action,
         outcome: 'refused',
@@ -179,7 +211,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     }
   };
 
-  // 4. Communication budget (only when a customer key is provided)
+  // 5. Communication budget (only when a customer key is provided)
   if (req.customerExternalId) {
     const week = currentWeekStart();
     const budget = await checkAndIncrement(req.productId, req.customerExternalId, week);
@@ -188,7 +220,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
       await recordGatewayInvocation({
         invocation_id: invocationId,
         product_id: req.productId,
-        agent: req.agent,
+        agent: policy.actor,
         tool: req.tool,
         action: req.action,
         outcome: 'refused',
@@ -203,14 +235,14 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     }
   }
 
-  // 5. Dispatch to registered handler
+  // 6. Dispatch to registered handler
   const handler = handlers.get(req.tool);
   if (!handler) {
     await releaseIfReserved();
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,
-      agent: req.agent,
+      agent: policy.actor,
       tool: req.tool,
       action: req.action,
       outcome: 'failed',
@@ -235,7 +267,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,
-      agent: req.agent,
+      agent: policy.actor,
       tool: req.tool,
       action: req.action,
       outcome: 'failed',
@@ -249,20 +281,33 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     };
   }
 
-  // 6. Cache result + audit
+  // 7. Cache result + audit
   if (req.dedupKey) {
     await storeResult(req.productId, req.tool, req.dedupKey, result);
   }
   await recordGatewayInvocation({
     invocation_id: invocationId,
     product_id: req.productId,
-    agent: req.agent,
+    agent: policy.actor,
     tool: req.tool,
     action: req.action,
     outcome: 'allowed',
     reason: 'pre-flight passed; handler succeeded',
   });
   return { ok: true, invocation_id: invocationId, cached: false, result };
+}
+
+async function refusePolicy(
+  invocationId: string,
+  req: GatewayRequest,
+  reason: string,
+): Promise<GatewayResult> {
+  const actor = policies.get(req.tool)?.actor ?? 'gateway';
+  await recordGatewayInvocation({
+    invocation_id: invocationId, product_id: req.productId, agent: actor,
+    tool: req.tool, action: req.action, outcome: 'refused', reason: `policy: ${reason}`,
+  });
+  return { ok: false, invocation_id: invocationId, phase: 'policy', reason };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

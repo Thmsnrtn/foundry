@@ -347,13 +347,13 @@ export async function planDailyAction(productId: string, founderId: string, tier
     );
 
     // Dispatch webhook
-    dispatchWebhook(founderId, 'decision.created', {
+    await dispatchWebhook(productId, founderId, 'decision.created', {
       type: 'daily_action',
       action_type: candidate.action.action_type,
       title: candidate.action.title,
       summary: candidate.action.summary,
       requires_approval: candidate.action.requires_approval,
-    }).catch(() => {});
+    }).catch((err) => log.error('Daily action webhook receipt failed', err, { founderId, productId }));
 
     const action: DailyAction = {
       id: actionId,

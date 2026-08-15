@@ -623,7 +623,6 @@ program
     const start = Date.now();
     const result = await invoke({
       productId,
-      agent: 'chaos_drill',
       tool: 'send_email',
       action: 'chaos drill: synthetic email that should be refused',
       params: {

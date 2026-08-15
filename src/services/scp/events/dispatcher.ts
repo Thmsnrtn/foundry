@@ -53,6 +53,15 @@ export async function emitSignalEvent(
     ],
   );
 
+  // Admit only evidence kinds with a stable responsibility contract. Failure
+  // leaves the signal canonical and retryable; it never erases company truth.
+  try {
+    const { discoverResponsibilityFromSignal } = await import('../../institution/discovery.js');
+    await discoverResponsibilityFromSignal(productId, id);
+  } catch (err) {
+    logger.error(`responsibility discovery failed for signal ${id}: ${err instanceof Error ? err.message : String(err)}`, { productId });
+  }
+
   logger.info(
     `Signal emitted: ${event.event_type} (${event.severity}) for product ${productId} — id=${id}`,
     { productId },

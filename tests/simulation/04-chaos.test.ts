@@ -40,18 +40,20 @@ describe('AI client handles missing API key gracefully', () => {
     expect(aiClientSource).toMatch(/OPENROUTER_API_KEY.*required|required.*OPENROUTER_API_KEY|ANTHROPIC_API_KEY/);
   });
 
-  it('cost ceiling check runs before API call (prevents billing on misconfigured product)', () => {
+  it('atomic spend authorization runs after credential validation and before provider dispatch', () => {
     const callClaudeFn = aiClientSource.match(
       /export\s+async\s+function\s+callClaude[\s\S]*?(?=export\s+async\s+function|$)/
     );
     expect(callClaudeFn).toBeTruthy();
     const body = callClaudeFn![0];
-    // Cost ceiling is checked before getClient() / client.messages.create
-    const ceilingCheckIdx = body.indexOf('isCostCeilingReached');
+    const ceilingCheckIdx = body.indexOf('authorizeSpend');
     const getClientIdx = body.indexOf('getApiKey()');
+    const fetchIdx = body.indexOf('fetch(');
     expect(ceilingCheckIdx).toBeGreaterThan(-1);
     expect(getClientIdx).toBeGreaterThan(-1);
-    expect(ceilingCheckIdx).toBeLessThan(getClientIdx);
+    expect(fetchIdx).toBeGreaterThan(-1);
+    expect(getClientIdx).toBeLessThan(ceilingCheckIdx);
+    expect(ceilingCheckIdx).toBeLessThan(fetchIdx);
   });
 
   it('AI client has retry logic with exponential backoff', () => {

@@ -41,6 +41,8 @@ describe('the brand-new founder', () => {
 
 describe('the established product on a calm day is NOT first-run', () => {
   it('has history, so a quiet Letter reads as "quiet", not "welcome"', async () => {
+    expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(process.env.OPENROUTER_API_KEY).toBeUndefined();
     const letter = await composeLetter('fr_est', 'plain');
     expect(letter.firstRun).toBe(false);  // established — the rest state is honest here
     const signal = await computeSignal('fr_est');

@@ -159,76 +159,9 @@ Return ONLY valid JSON in this exact format:
   };
 }
 
-// ─── TTS ──────────────────────────────────────────────────────────────────────
-
-async function callElevenLabsTTS(text: string, apiKey: string): Promise<string | null> {
-  const voiceId = 'EXAVITQu4vr4xnSDxMaL'; // Rachel
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': apiKey,
-    },
-    body: JSON.stringify({
-      text,
-      model_id: 'eleven_monolingual_v1',
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
-    }),
-  });
-
-  if (!response.ok) return null;
-
-  const arrayBuffer = await response.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString('base64');
-  // Return a data URL for immediate playback
-  return `data:audio/mpeg;base64,${base64}`;
-}
-
-async function callOpenAITTS(text: string, apiKey: string): Promise<string | null> {
-  const response = await fetch('https://api.openai.com/v1/audio/speech', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'tts-1',
-      input: text,
-      voice: 'nova',
-    }),
-  });
-
-  if (!response.ok) return null;
-
-  const arrayBuffer = await response.arrayBuffer();
-  const base64 = Buffer.from(arrayBuffer).toString('base64');
-  return `data:audio/mpeg;base64,${base64}`;
-}
-
-async function generateAudioUrl(script: string): Promise<string | null> {
-  const elevenKey = process.env.ELEVENLABS_API_KEY;
-  const openaiKey = process.env.OPENROUTER_API_KEY ?? process.env.OPENAI_API_KEY;
-
-  if (elevenKey) {
-    try {
-      return await callElevenLabsTTS(script, elevenKey);
-    } catch {
-      return null;
-    }
-  }
-
-  if (openaiKey) {
-    try {
-      return await callOpenAITTS(script, openaiKey);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-}
+// Audio synthesis is intentionally not performed here. Provider spend and
+// ambiguous effects require governed admission and reconciliation before this
+// optional presentation enhancement can be reintroduced.
 
 // ─── Get or Generate ──────────────────────────────────────────────────────────
 
@@ -262,8 +195,8 @@ export async function getOrGenerateAudioScript(
   // Generate script
   const script = await generateAudioBriefScript(productId, dateStr);
 
-  // Generate audio if TTS configured
-  const audio_url = await generateAudioUrl(script.full_script);
+  // Script remains useful without incurring an ungoverned external effect.
+  const audio_url: string | null = null;
 
   // Persist
   try {

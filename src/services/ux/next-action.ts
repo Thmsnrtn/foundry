@@ -215,8 +215,8 @@ function positiveState(): NextAction {
   return {
     priority: 99,
     type: 'clear',
-    headline: 'Foundry is operating autonomously.',
-    subtext: 'No action needed today. All intelligence systems are running normally.',
+    headline: 'No exception found in today’s checked signals.',
+    subtext: 'Nothing currently meets the interruption threshold. Unobserved or stale areas may still exist.',
     action_label: '',
     action_url: '',
     urgency: 'positive',

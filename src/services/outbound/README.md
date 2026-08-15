@@ -36,9 +36,10 @@ gateway dispatch to the registered tool handler.
 | Order | Check | Source of truth | When it fires |
 |------:|-------|-----------------|---------------|
 | 1 | **kill-switch** | `products.status`, `products.disabled_tools`, `agent_instances.status` | Always |
-| 2 | **classification** | `data_classifications` (per product+surface) | Only when `surface` is provided in the request |
-| 3 | **budget** | `communication_budgets` (per product+customer+week) | Only when `customerExternalId` is provided |
-| 4 | **idempotency** | `idempotency_keys` (per product+tool+dedupKey) | Only when `dedupKey` is provided |
+| 2 | **tool policy** | trusted server-side handler registration | Always; required facts fail closed |
+| 3 | **classification** | registered surface/data class + `data_classifications` | Always |
+| 4 | **idempotency** | `idempotency_keys` (per product+tool+dedupKey) | Required when registered policy says so |
+| 5 | **budget** | `communication_budgets` (per product+customer+week) | Required when registered policy says so |
 
 ### Cost of each check
 
@@ -64,12 +65,14 @@ import { invoke, registerToolHandler } from './gateway.js';
 // Once at startup, register handlers for every tool you support.
 registerToolHandler('send_email', async (req) => {
   return await sendViaResend(req.params);
+}, {
+  actor: 'email_delivery', surface: 'email_outbound', dataClass: 'customer',
+  requireDedupKey: true, requireCustomerExternalId: true,
 });
 
 // At the call site:
 const result = await invoke({
   productId: 'prd_abc',
-  agent: 'beacon',
   tool: 'send_email',
   action: 'send onboarding email',
   params: { to, subject, html },
@@ -87,13 +90,17 @@ if (!result.ok) {
 // result.result is the handler's return value (or the cached payload).
 ```
 
-Required: `productId`, `agent`, `tool`, `action`, `params`.
+Required: `productId`, `tool`, `action`, `params`.
 Optional but expected for customer-reaching surfaces: `dedupKey`,
 `customerExternalId`, `surface`, `dataClass`.
 
-A request without `surface` skips classification entirely. A request
-without `customerExternalId` skips budget. A request without `dedupKey`
-will execute every call — even duplicates.
+Classification is derived from the registered handler policy even when the
+caller omits `surface` and `dataClass`; conflicting caller assertions are
+refused. Policies for consequential tools require customer and deduplication
+facts where applicable, so omission fails closed before dispatch.
+The execution actor is also fixed by that policy. Caller data is provenance,
+not authority, and cannot select the actor used by kill switches, reservations,
+or audit.
 
 ---
 
@@ -135,12 +142,12 @@ needs its own test pass and rollback path.
 2. Write the handler:
    ```ts
    const handler: ToolHandler = async (req) => {
-     // req.productId, req.agent, req.tool, req.params
+     // req.productId, req.tool, req.params
      // return whatever you want cached; this becomes result.result
      return await externalCall(req.params);
    };
    ```
-3. Register at boot: `registerToolHandler('your_tool', handler);`
+3. Register at boot with a stable server-owned actor and safety policy.
 4. Decide which kinds of callers must supply `dedupKey`, `customerExternalId`,
    `surface`. Document in the handler module.
 5. If the tool reaches a customer, add a row to the team's runbook on how

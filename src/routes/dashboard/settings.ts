@@ -7,7 +7,7 @@ import { html } from 'hono/html';
 import { getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
-import { createCheckoutSession } from '../../services/billing/stripe.js';
+import { createBillingPortalSession, createCheckoutSession } from '../../services/billing/stripe.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { settingsPage } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
@@ -406,14 +406,9 @@ settingsRoutes.post('/settings/manage-subscription', requireRole('owner'), async
   if (!stripeKey) return c.redirect('/settings?error=billing_unavailable');
 
   try {
-    const Stripe = (await import('stripe')).default;
-    const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16' });
     const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
-    const session = await stripe.billingPortal.sessions.create({
-      customer: founder.stripe_customer_id,
-      return_url: `${appUrl}/settings`,
-    });
-    return c.redirect(session.url);
+    const portalUrl = await createBillingPortalSession(founder.stripe_customer_id, `${appUrl}/settings`);
+    return c.redirect(portalUrl);
   } catch (err) {
     console.error('[BILLING] Portal session failed:', err);
     return c.redirect('/settings?error=billing_error');
