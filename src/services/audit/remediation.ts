@@ -264,7 +264,6 @@ export async function openRemediationPR(
     const { gatewayCreatePR } = await import('../integration/github-gateway.js');
     const gatewayResult = await gatewayCreatePR({
       productId: remProductId,
-      agent: 'system',
       repo: `${owner}/${repo}`,
       title: `[Foundry] Fix ${blockingIssue.id}: ${fixSummary}`,
       body: prBody,

@@ -9,6 +9,7 @@ import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
 import { log } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
 import { query } from '../../db/client.js';
+import { finishReservation, reserveSpend, type SpendReservation } from './spend-ledger.js';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
@@ -87,23 +88,6 @@ async function readScopeSpend(scope: Scope, scopeId: string): Promise<number> {
   }
 }
 
-/** Atomically add spend to a scope's daily row and update the cache optimistically. */
-async function incrementScopeSpend(scope: Scope, scopeId: string, costCents: number): Promise<void> {
-  const date = utcDate();
-  const now = new Date().toISOString();
-  await query(
-    `INSERT INTO ai_daily_spend (scope, scope_id, date, spent_cents, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(scope, scope_id, date)
-     DO UPDATE SET spent_cents = spent_cents + excluded.spent_cents, updated_at = excluded.updated_at`,
-    [scope, scopeId, date, costCents, now],
-  );
-  const key = cacheKey(scope, scopeId, date);
-  const cached = spendCache.get(key);
-  // Optimistic bump; keep readAt so the entry still expires and re-syncs from DB.
-  spendCache.set(key, { cents: (cached?.cents ?? 0) + costCents, readAt: cached?.readAt ?? 0 });
-}
-
 // ─── Model-Specific Pricing (per 1M tokens, in USD) ─────────────────────────
 // OpenRouter pricing. Configurable via environment variables.
 const COST_PER_1M: Record<string, { input: number; output: number }> = {
@@ -131,26 +115,30 @@ export function computeCostCents(model: AIModel | string, inputTokens: number, o
   return inputCostCents + outputCostCents;
 }
 
-async function recordSpend(
+async function authorizeSpend(
   productId: string | undefined,
   model: AIModel | string,
-  inputTokens: number,
-  outputTokens: number,
-): Promise<void> {
-  const costCents = computeCostCents(model, inputTokens, outputTokens);
-  if (costCents <= 0) return;
-  try {
-    // Global scope is always tracked, even for product-less system calls.
-    await incrementScopeSpend('global', GLOBAL_SCOPE_ID, costCents);
-    if (productId) {
-      await incrementScopeSpend('product', productId, costCents);
-      const founderId = await resolveFounderId(productId);
-      if (founderId) await incrementScopeSpend('founder', founderId, costCents);
-    }
-  } catch (err) {
-    // Never fail a completed AI call because spend accounting hiccupped.
-    log.warn('ai_spend.record_failed', { productId, error: (err as Error).message });
+  prompt: string,
+  maxOutputTokens: number,
+): Promise<SpendReservation> {
+  const founderId = productId ? await resolveFounderId(productId) : null;
+  if (productId && !founderId) {
+    throw new Error(`AI spend authorization failed: owner unavailable for product ${productId}`);
   }
+  // A token cannot encode less than one UTF-8 byte. Byte length plus a small
+  // message-framing allowance is therefore a conservative input-token bound;
+  // maxOutputTokens is the provider-enforced output bound.
+  const maxInputTokens = new TextEncoder().encode(prompt).length + 64;
+  const amountCents = Math.max(computeCostCents(model, maxInputTokens, maxOutputTokens), 0.000001);
+  return reserveSpend({
+    productId, founderId: founderId ?? undefined, model, amountCents,
+    caps: { global: GLOBAL_COST_CEILING_CENTS, product: DAILY_COST_CEILING_CENTS, founder: FOUNDER_COST_CEILING_CENTS },
+  });
+}
+
+async function settleSpend(reservation: SpendReservation, actualCents: number): Promise<void> {
+  await finishReservation(reservation, { kind: 'settled', actualCents });
+  spendCache.clear();
 }
 
 /** Today's persisted product-level spend in cents. */
@@ -253,12 +241,11 @@ function buildSystemMessageContent(
  * Make an LLM call via OpenRouter with cost ceiling, timeout, and retry.
  */
 export async function callClaude(config: AICallConfig & { productId?: string }): Promise<AIResponse> {
-  if (await isCostCeilingReached(config.productId)) {
-    throw new Error(`AI daily cost ceiling reached (product ${config.productId ?? 'n/a'})`);
-  }
-
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
+  const reservation = await authorizeSpend(
+    config.productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
+  );
   const startedAt = Date.now();
   let lastError: Error | null = null;
 
@@ -299,12 +286,13 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
       const data = (await response.json()) as OpenRouterResponse;
       const textContent = data.choices?.[0]?.message?.content ?? '';
 
-      await recordSpend(
-        config.productId,
-        config.model,
-        data.usage?.prompt_tokens ?? 0,
-        data.usage?.completion_tokens ?? 0,
-      );
+      await settleSpend(reservation, computeCostCents(
+        config.model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0,
+      )).catch((error) => {
+        // The provider already responded: never retry an external effect merely
+        // because local settlement failed. The reservation remains protective.
+        log.error('ai_spend.settlement_failed', error as Error, { reservationId: reservation.id });
+      });
 
       log.info('ai_call.complete', {
         model: config.model,
@@ -330,6 +318,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
 
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) {
+        await finishReservation(reservation, { kind: 'released' });
         log.error('ai_call.failed_non_retryable', lastError, {
           model: config.model,
           productId: config.productId,
@@ -359,6 +348,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
     productId: config.productId,
     attempts: MAX_RETRIES + 1,
   });
+  await finishReservation(reservation, { kind: 'ambiguous' });
   reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts: MAX_RETRIES + 1 } });
   throw lastError ?? new Error('AI call failed after retries');
 }
@@ -410,13 +400,12 @@ export async function callClaudeMultiTurn(
   useOpus: boolean = false,
   productId?: string,
 ): Promise<AIResponse> {
-  if (await isCostCeilingReached(productId)) {
-    throw new Error(`AI daily cost ceiling reached for product ${productId ?? 'n/a'}`);
-  }
-
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const model = useOpus ? MODELS.OPUS : MODELS.SONNET;
+  const reservation = await authorizeSpend(
+    productId, model, [systemPrompt, ...messages.map((m) => `${m.role}:${m.content}`)].join('\n'), maxTokens,
+  );
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -456,7 +445,11 @@ export async function callClaudeMultiTurn(
       const data = (await response.json()) as OpenRouterResponse;
       const textContent = data.choices?.[0]?.message?.content ?? '';
 
-      await recordSpend(productId, model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0);
+      await settleSpend(reservation, computeCostCents(
+        model, data.usage?.prompt_tokens ?? 0, data.usage?.completion_tokens ?? 0,
+      )).catch((error) => {
+        log.error('ai_spend.settlement_failed', error as Error, { reservationId: reservation.id });
+      });
 
       return {
         content: textContent,
@@ -471,7 +464,10 @@ export async function callClaudeMultiTurn(
       clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
-      if (status && status < 500 && status !== 429) throw lastError;
+      if (status && status < 500 && status !== 429) {
+        await finishReservation(reservation, { kind: 'released' });
+        throw lastError;
+      }
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
         await new Promise((r) => setTimeout(r, delay));
@@ -479,6 +475,7 @@ export async function callClaudeMultiTurn(
     }
   }
 
+  await finishReservation(reservation, { kind: 'ambiguous' });
   throw lastError ?? new Error('AI multi-turn call failed after retries');
 }
 

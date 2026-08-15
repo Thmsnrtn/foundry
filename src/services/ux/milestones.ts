@@ -34,7 +34,7 @@ const MILESTONE_DEFINITIONS: Record<string, MilestoneDefinition> = {
   },
   first_green: {
     title: 'GREEN State Achieved',
-    description: 'All intelligence systems are operating normally. No immediate risks detected.',
+    description: 'The recorded risk state reached green. No checked signal currently indicates an immediate risk.',
     check: async (productId: string) => {
       const r = await query('SELECT risk_state FROM lifecycle_state WHERE product_id = ?', [productId]);
       return (r.rows[0] as Record<string, unknown>)?.risk_state === 'green';

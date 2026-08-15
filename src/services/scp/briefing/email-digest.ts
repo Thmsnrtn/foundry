@@ -8,6 +8,8 @@ import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { getLatestCompressedBrief } from './compressed.js';
+import { invoke } from '../../outbound/gateway.js';
+import '../../integration/resend.js';
 
 // ─── Init table ───────────────────────────────────────────────────────────────
 
@@ -300,66 +302,6 @@ Return ONLY valid JSON in this exact format:
   };
 }
 
-// ─── Send Email ───────────────────────────────────────────────────────────────
-
-async function sendViaResend(
-  to: string,
-  subject: string,
-  html: string,
-  text: string,
-  apiKey: string,
-): Promise<void> {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      from: 'Foundry <briefings@foundry.app>',
-      to,
-      subject,
-      html,
-      text,
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Resend API error ${res.status}: ${body}`);
-  }
-}
-
-async function sendViaSendGrid(
-  to: string,
-  subject: string,
-  html: string,
-  text: string,
-  apiKey: string,
-): Promise<void> {
-  const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      personalizations: [{ to: [{ email: to }] }],
-      from: { email: 'briefings@foundry.app', name: 'Foundry' },
-      subject,
-      content: [
-        { type: 'text/plain', value: text },
-        { type: 'text/html', value: html },
-      ],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`SendGrid API error ${res.status}: ${body}`);
-  }
-}
-
 /**
  * Generates (if needed) and sends the weekly email digest to the given address.
  * Uses Resend if RESEND_API_KEY is set, SendGrid if SENDGRID_API_KEY is set.
@@ -367,22 +309,15 @@ async function sendViaSendGrid(
 export async function sendEmailDigest(productId: string, toEmail: string): Promise<void> {
   await ensureTable();
 
-  const resendKey = process.env.RESEND_API_KEY;
-  const sendgridKey = process.env.SENDGRID_API_KEY;
-
-  if (!resendKey && !sendgridKey) {
-    throw new Error(
-      'No email provider configured. Set RESEND_API_KEY or SENDGRID_API_KEY in your environment.',
-    );
-  }
-
   const digest = await generateWeeklyEmailDigest(productId);
-
-  if (resendKey) {
-    await sendViaResend(toEmail, digest.subject, digest.html_body, digest.text_body, resendKey);
-  } else if (sendgridKey) {
-    await sendViaSendGrid(toEmail, digest.subject, digest.html_body, digest.text_body, sendgridKey);
-  }
+  const delivery = await invoke({
+    productId, tool: 'send_email',
+    action: `weekly intelligence digest: ${digest.week_label}`,
+    params: { to: [toEmail], subject: digest.subject, html: digest.html_body, text: digest.text_body },
+    dedupKey: `weekly-email-digest:${productId}:${digest.week_label}`,
+    customerExternalId: toEmail,
+  });
+  if (!delivery.ok) throw new Error(`weekly digest refused at ${delivery.phase}: ${delivery.reason}`);
 
   // Persist
   const id = nanoid();

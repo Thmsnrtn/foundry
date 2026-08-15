@@ -1,0 +1,91 @@
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { executeRaw, query } from '../../src/db/client.js';
+
+const { integration, urlGuard } = vi.hoisted(() => ({ integration: vi.fn(), urlGuard: vi.fn() }));
+vi.mock('../../src/services/integration/fabric.js', () => ({ getIntegration: integration }));
+vi.mock('../../src/services/outbound/ssrf.js', () => ({ assertUrlSafe: urlGuard }));
+
+import { approveAndExecute, createExecution, type ActionPayload } from '../../src/services/scp/actions/executor.js';
+
+beforeAll(async () => {
+  await executeRaw(`CREATE TABLE IF NOT EXISTS action_executions (
+    id TEXT PRIMARY KEY, product_id TEXT NOT NULL, outbound_action_id TEXT,
+    action_type TEXT NOT NULL, integration TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending', approved_by TEXT, approved_at TEXT, executed_at TEXT,
+    result_json TEXT, error_message TEXT, effect_certainty TEXT,
+    provider_acknowledged_at DATETIME, reconcile_after DATETIME, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  )`);
+});
+
+beforeEach(async () => {
+  await query('DELETE FROM action_executions');
+  vi.restoreAllMocks();
+  integration.mockReset();
+  urlGuard.mockReset().mockResolvedValue(new URL('https://hooks.example.test/x'));
+});
+
+async function run(payload: ActionPayload) {
+  const id = await createExecution('p1', null, payload);
+  const result = await approveAndExecute(id, 'founder-1');
+  const row = (await query('SELECT * FROM action_executions WHERE id=?', [id])).rows[0] as Record<string, unknown>;
+  return { id, result, row };
+}
+
+const linearPayload: ActionPayload = {
+  action_type: 'create_ticket', integration: 'linear', ticket_title: 'Fix integrity', team_id: 'team-1',
+};
+const webhookPayload: ActionPayload = {
+  action_type: 'custom_webhook', integration: 'custom', webhook_url: 'https://hooks.example.test/x', webhook_payload: { event: 'approved' },
+};
+
+describe('approved action runtime effect certainty', () => {
+  it('persists Linear provider acknowledgment without claiming outcome', async () => {
+    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: { issueCreate: { success: true, issue: { id: 'i1', identifier: 'F-1' } } } }), { status: 200 }));
+    const { result, row } = await run(linearPayload);
+    expect(result.effect_certainty).toBe('provider_acknowledged');
+    expect(row.effect_certainty).toBe('provider_acknowledged');
+    expect(row.provider_acknowledged_at).toBeTruthy();
+  });
+
+  it('persists adversarial HTTP-200 Linear rejection', async () => {
+    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ errors: [{ message: 'forbidden' }] }), { status: 200 }));
+    const { row } = await run(linearPayload);
+    expect(row.effect_certainty).toBe('provider_rejected');
+  });
+
+  it('preserves Linear transport ambiguity and never retries the claimed execution', async () => {
+    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('timeout after write'));
+    const { id, row } = await run(linearPayload);
+    expect(row.effect_certainty).toBe('ambiguous');
+    expect(row.reconcile_after).toBeTruthy();
+    await expect(approveAndExecute(id, 'founder-1')).resolves.toMatchObject({ success: false });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('persists custom-webhook acknowledgment and rejection distinctly', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response('{"accepted":true}', { status: 202 }))
+      .mockResolvedValueOnce(new Response('denied', { status: 403 }));
+    expect((await run(webhookPayload)).row.effect_certainty).toBe('provider_acknowledged');
+    expect((await run(webhookPayload)).row.effect_certainty).toBe('provider_rejected');
+  });
+
+  it('blocks unsafe custom-webhook targets before attempting transport', async () => {
+    urlGuard.mockRejectedValue(new Error('private address blocked'));
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+    const { row } = await run(webhookPayload);
+    expect(row.effect_certainty).toBe('not_attempted');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves custom-webhook transport ambiguity with reconciliation due', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('socket closed'));
+    const { row } = await run(webhookPayload);
+    expect(row.effect_certainty).toBe('ambiguous');
+    expect(row.reconcile_after).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});

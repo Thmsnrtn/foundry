@@ -7,6 +7,8 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { requireScope } from '../middleware/auth.js';
 import type { ApiAuthEnv } from '../middleware/auth.js';
+import { assertUrlSafe } from '../../services/outbound/ssrf.js';
+import { encrypt } from '../../services/encryption.js';
 
 export const webhooksApi = new Hono<ApiAuthEnv>();
 
@@ -30,7 +32,7 @@ webhooksApi.get('/', requireScope('agents:read'), async (c) => {
 });
 
 // POST / — create webhook
-webhooksApi.post('/', requireScope('agents:read'), async (c) => {
+webhooksApi.post('/', requireScope('agents:write'), async (c) => {
   const productId = c.get('productId');
   const userId = c.get('userId');
 
@@ -50,13 +52,14 @@ webhooksApi.post('/', requireScope('agents:read'), async (c) => {
   }
 
   try {
+    await assertUrlSafe(url);
     const id = nanoid();
     const secret = 'whsec_' + nanoid(32);
 
     await query(
       `INSERT INTO webhooks (id, founder_id, product_id, url, events, secret, active, created_by)
        VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
-      [id, userId, productId, url, JSON.stringify(events), secret, userId]
+      [id, userId, productId, url, JSON.stringify(events), encrypt(secret), userId]
     );
 
     // Return the secret once (only at creation time)
@@ -75,7 +78,7 @@ webhooksApi.post('/', requireScope('agents:read'), async (c) => {
 });
 
 // DELETE /:webhookId — delete webhook
-webhooksApi.delete('/:webhookId', requireScope('agents:read'), async (c) => {
+webhooksApi.delete('/:webhookId', requireScope('agents:write'), async (c) => {
   const productId = c.get('productId');
   const webhookId = c.req.param('webhookId');
 
@@ -113,10 +116,11 @@ webhooksApi.get('/:webhookId/deliveries', requireScope('agents:read'), async (c)
     }
 
     const result = await query(
-      `SELECT id, event_type, status_code, success, request_body, response_body, attempted_at
+      `SELECT id, event AS event_type, status_code, effect_certainty,
+              provider_acknowledged_at, reconcile_after, delivered_at, error
        FROM webhook_deliveries
        WHERE webhook_id = ?
-       ORDER BY attempted_at DESC
+       ORDER BY delivered_at DESC
        LIMIT ?`,
       [webhookId, limit]
     );

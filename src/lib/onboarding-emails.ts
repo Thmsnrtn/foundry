@@ -31,7 +31,6 @@ async function sendOnboardingEmail(opts: {
 }): Promise<boolean> {
   const result = await invoke({
     productId: opts.productId,
-    agent: 'system',
     tool: 'send_email',
     action: opts.action,
     params: { to: [opts.email], subject: opts.subject, html: opts.html, from: FROM },

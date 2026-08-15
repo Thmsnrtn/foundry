@@ -22,6 +22,12 @@ import { disableTool } from '../../src/services/outbound/kill-switch.js';
 let founderId: string;
 let productId: string;
 
+const TEST_POLICY = {
+  actor: 'test_gateway',
+  surface: 'email_outbound', dataClass: 'customer',
+  requireDedupKey: false, requireCustomerExternalId: false,
+} as const;
+
 async function setupSchema(): Promise<void> {
   await executeRaw(`
     CREATE TABLE IF NOT EXISTS founders (
@@ -109,7 +115,6 @@ beforeEach(async () => {
 function baseReq(overrides: Partial<Parameters<typeof invoke>[0]> = {}) {
   return {
     productId,
-    agent: 'beacon',
     tool: 'send_email',
     action: 'send onboarding email',
     params: { to: 'cust@example.com', subject: 'hi' },
@@ -122,7 +127,7 @@ function baseReq(overrides: Partial<Parameters<typeof invoke>[0]> = {}) {
 describe('invoke: happy path', () => {
   it('runs all checks, dispatches handler, writes audit, caches result', async () => {
     const handler = vi.fn(async () => ({ id: 'em_1', accepted: true }));
-    registerToolHandler('send_email', handler);
+    registerToolHandler('send_email', handler, TEST_POLICY);
 
     const r = await invoke(
       baseReq({
@@ -174,7 +179,7 @@ describe('invoke: kill-switch', () => {
   it('refuses when product is paused', async () => {
     await query(`UPDATE products SET status = 'paused' WHERE id = ?`, [productId]);
     const handler = vi.fn();
-    registerToolHandler('send_email', handler);
+    registerToolHandler('send_email', handler, TEST_POLICY);
 
     const r = await invoke(baseReq());
     expect(r.ok).toBe(false);
@@ -184,7 +189,7 @@ describe('invoke: kill-switch', () => {
 
   it('refuses when tool is in disabled_tools', async () => {
     await disableTool(productId, 'send_email');
-    registerToolHandler('send_email', vi.fn());
+    registerToolHandler('send_email', vi.fn(), TEST_POLICY);
 
     const r = await invoke(baseReq());
     expect(r.ok).toBe(false);
@@ -194,9 +199,9 @@ describe('invoke: kill-switch', () => {
   it('refuses when agent is paused', async () => {
     await query(
       `INSERT INTO agent_instances (id, product_id, agent_name, status) VALUES (?, ?, ?, ?)`,
-      [nanoid(), productId, 'beacon', 'paused']
+      [nanoid(), productId, 'test_gateway', 'paused']
     );
-    registerToolHandler('send_email', vi.fn());
+    registerToolHandler('send_email', vi.fn(), TEST_POLICY);
 
     const r = await invoke(baseReq());
     expect(r.ok).toBe(false);
@@ -207,36 +212,39 @@ describe('invoke: kill-switch', () => {
 // ─── Classification refusal ───────────────────────────────────────────────────
 
 describe('invoke: classification', () => {
-  it('refuses when dataClass is not allowed for surface', async () => {
-    registerToolHandler('send_email', vi.fn());
-    const r = await invoke(
-      baseReq({
-        surface: 'public_landing',
-        dataClass: 'pii_strict', // default policy rejects
-      })
-    );
+  it('refuses when the server-owned classification is not allowed', async () => {
+    await upsertPolicy(productId, 'email_outbound', { allowed_classes: ['general'] });
+    registerToolHandler('send_email', vi.fn(), TEST_POLICY);
+    const r = await invoke(baseReq());
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.phase).toBe('classification');
   });
 
-  it('passes classification when policy admits the dataClass', async () => {
-    await upsertPolicy(productId, 'cs_thread', {
+  it('passes classification when policy admits the registered dataClass', async () => {
+    await upsertPolicy(productId, 'email_outbound', {
       allowed_classes: ['general', 'customer', 'pii_strict'],
     });
-    registerToolHandler('send_email', vi.fn(async () => 'ok'));
-    const r = await invoke(
-      baseReq({
-        surface: 'cs_thread',
-        dataClass: 'pii_strict',
-      })
-    );
+    registerToolHandler('send_email', vi.fn(async () => 'ok'), TEST_POLICY);
+    const r = await invoke(baseReq());
     expect(r.ok).toBe(true);
   });
 
-  it('skips classification entirely when surface is omitted', async () => {
-    registerToolHandler('send_email', vi.fn(async () => 'ok'));
-    const r = await invoke(baseReq()); // no surface
+  it('still applies classification when caller fields are omitted', async () => {
+    registerToolHandler('send_email', vi.fn(async () => 'ok'), TEST_POLICY);
+    const r = await invoke(baseReq());
     expect(r.ok).toBe(true);
+  });
+
+  it('refuses a caller attempt to downgrade the registered surface and data class', async () => {
+    const handler = vi.fn(async () => 'unsafe');
+    registerToolHandler('send_email', handler, TEST_POLICY);
+    const surface = await invoke(baseReq({ surface: 'public_landing' }));
+    const dataClass = await invoke(baseReq({ dataClass: 'general' }));
+    expect(surface.ok).toBe(false);
+    expect(dataClass.ok).toBe(false);
+    if (!surface.ok) expect(surface.phase).toBe('policy');
+    if (!dataClass.ok) expect(dataClass.phase).toBe('policy');
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 
@@ -245,7 +253,7 @@ describe('invoke: classification', () => {
 describe('invoke: budget', () => {
   it('refuses after the cap (3) is reached for the same customer-week', async () => {
     const handler = vi.fn(async () => 'ok');
-    registerToolHandler('send_email', handler);
+    registerToolHandler('send_email', handler, TEST_POLICY);
 
     for (let i = 0; i < 3; i++) {
       const r = await invoke(baseReq({ customerExternalId: 'cust@example.com' }));
@@ -259,7 +267,7 @@ describe('invoke: budget', () => {
 
   it('skips budget entirely when customerExternalId is omitted', async () => {
     const handler = vi.fn(async () => 'ok');
-    registerToolHandler('send_email', handler);
+    registerToolHandler('send_email', handler, TEST_POLICY);
     for (let i = 0; i < 5; i++) {
       const r = await invoke(baseReq()); // no customer key
       expect(r.ok).toBe(true);
@@ -273,7 +281,7 @@ describe('invoke: budget', () => {
 describe('invoke: idempotency', () => {
   it('returns cached result on second call with same dedupKey, handler not re-invoked', async () => {
     const handler = vi.fn(async () => ({ id: 'em_xyz' }));
-    registerToolHandler('send_email', handler);
+    registerToolHandler('send_email', handler, TEST_POLICY);
 
     const first = await invoke(baseReq({ dedupKey: 'k1' }));
     expect(first.ok).toBe(true);
@@ -287,26 +295,40 @@ describe('invoke: idempotency', () => {
     expect(handler).toHaveBeenCalledOnce();
   });
 
-  it('returns prior cached result even when called from a different agent', async () => {
-    registerToolHandler('send_email', vi.fn(async () => ({ stored: true })));
-    await invoke(baseReq({ agent: 'beacon', dedupKey: 'shared' }));
-
-    const racer = vi.fn(async () => ({ stored: 'should-not-call' }));
-    registerToolHandler('send_email', racer);
-    const r = await invoke(baseReq({ agent: 'harbor', dedupKey: 'shared' }));
+  it('does not allow request data to override the server-owned execution actor', async () => {
+    registerToolHandler('send_email', vi.fn(async () => ({ stored: true })), TEST_POLICY);
+    const malicious = { ...baseReq({ dedupKey: 'shared' }), agent: 'caller_selected' };
+    const r = await invoke(malicious);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.cached).toBe(true);
-    expect(racer).not.toHaveBeenCalled();
+    const audit = await query(`SELECT trigger FROM audit_log WHERE product_id = ?`, [productId]);
+    expect((audit.rows[0] as Record<string, string>).trigger).toContain('test_gateway');
+    expect((audit.rows[0] as Record<string, string>).trigger).not.toContain('caller_selected');
   });
 });
 
 // ─── No handler ───────────────────────────────────────────────────────────────
 
 describe('invoke: no handler', () => {
-  it('refuses with phase=no_handler when tool is unregistered', async () => {
+  it('fails closed when a tool has no trusted registration or policy', async () => {
     const r = await invoke(baseReq({ tool: 'create_pr' }));
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.phase).toBe('no_handler');
+    if (!r.ok) expect(r.phase).toBe('policy');
+  });
+});
+
+describe('invoke: required policy inputs', () => {
+  const strict = { ...TEST_POLICY, requireDedupKey: true, requireCustomerExternalId: true };
+
+  it('refuses missing dedup and customer facts before dispatch', async () => {
+    const handler = vi.fn(async () => 'unsafe');
+    registerToolHandler('send_email', handler, strict);
+    const missingBoth = await invoke(baseReq());
+    const missingCustomer = await invoke(baseReq({ dedupKey: 'decision-1' }));
+    expect(missingBoth.ok).toBe(false);
+    expect(missingCustomer.ok).toBe(false);
+    if (!missingBoth.ok) expect(missingBoth.phase).toBe('policy');
+    if (!missingCustomer.ok) expect(missingCustomer.phase).toBe('policy');
+    expect(handler).not.toHaveBeenCalled();
   });
 });
 
@@ -316,7 +338,7 @@ describe('invoke: execution failure', () => {
   it('captures handler errors and audits as failed', async () => {
     registerToolHandler('send_email', async () => {
       throw new Error('upstream 500');
-    });
+    }, TEST_POLICY);
     const r = await invoke(baseReq());
     expect(r.ok).toBe(false);
     if (!r.ok) {
@@ -338,7 +360,7 @@ describe('invoke: short-circuit order', () => {
   it('kill-switch fires before classification, budget, or handler', async () => {
     await query(`UPDATE products SET status = 'paused' WHERE id = ?`, [productId]);
     const handler = vi.fn();
-    registerToolHandler('send_email', handler);
+    registerToolHandler('send_email', handler, TEST_POLICY);
     await invoke(
       baseReq({
         surface: 'public_landing',
@@ -355,7 +377,7 @@ describe('invoke: short-circuit order', () => {
 
   it('classification fires before budget or handler', async () => {
     const handler = vi.fn();
-    registerToolHandler('send_email', handler);
+    registerToolHandler('send_email', handler, TEST_POLICY);
     await invoke(
       baseReq({
         surface: 'public_landing',

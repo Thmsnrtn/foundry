@@ -17,6 +17,7 @@ const calls = {
   subUpdate: [] as unknown[][],
   subCancel: [] as unknown[][],
   checkoutCreate: [] as unknown[][],
+  portalCreate: [] as unknown[][],
 };
 // When set, customers.create rejects on its first invocation for this email
 // (simulating a lost-response network blip) and succeeds on the retry.
@@ -41,6 +42,7 @@ vi.mock('stripe', () => ({
       cancel: (...a: unknown[]) => { calls.subCancel.push(a); return Promise.resolve({ id: 'sub_1' }); },
     };
     checkout = { sessions: { create: (...a: unknown[]) => { calls.checkoutCreate.push(a); return Promise.resolve({ url: 'https://pay' }); } } };
+    billingPortal = { sessions: { create: (...a: unknown[]) => { calls.portalCreate.push(a); return Promise.resolve({ url: 'https://portal' }); } } };
   },
 }));
 
@@ -65,12 +67,14 @@ describe('Stripe money idempotency', () => {
     await billing.createCustomer('a@b.co', 'A');
     await billing.createSubscription('cus_1', 'solo');
     await billing.createCheckoutSession('cus_1', 'growth', 's', 'c');
+    await billing.createBillingPortalSession('cus_1', 'https://foundry.test/settings');
     await billing.pauseSubscription('sub_1');
     await billing.cancelSubscription('sub_1');
 
     expect(key(calls.customerCreate[0])).toBeTruthy();
     expect(key(calls.subCreate[0])).toBeTruthy();
     expect(key(calls.checkoutCreate[0])).toBeTruthy();
+    expect(key(calls.portalCreate[0])).toBeTruthy();
     expect(key(calls.subUpdate[0])).toBeTruthy();
     expect(key(calls.subCancel[0])).toBeTruthy();
   });

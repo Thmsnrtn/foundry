@@ -146,7 +146,6 @@ export async function sendWelcomeStage(
 
   const result = await invoke({
     productId,
-    agent: 'system',
     tool: 'send_email',
     action: `welcome ${stage} → ${founder.email}`,
     params: {

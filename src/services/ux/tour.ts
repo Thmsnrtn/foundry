@@ -198,7 +198,7 @@ export function buildTourStepData(
   const pendingDecisions = productState.pending_decisions as number ?? 0;
   data.decision_text = pendingDecisions > 0
     ? `You have ${pendingDecisions} pending decision${pendingDecisions > 1 ? 's' : ''}.`
-    : 'Your decision queue is empty — Foundry is operating autonomously.';
+    : 'Your decision queue is empty — no decision currently meets the queue threshold.';
 
   return data;
 }

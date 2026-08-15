@@ -13,6 +13,7 @@ const SRC = resolve(__dirname, '../../src');
 let schedulerSource: string;
 let clientSource: string;
 let aiClientSource: string;
+let spendLedgerSource: string;
 let provisonerSource: string;
 let onboardingSource: string;
 let tierGateSource: string;
@@ -21,6 +22,7 @@ beforeAll(() => {
   schedulerSource = readFileSync(resolve(SRC, 'services/scp/scheduler.ts'), 'utf-8');
   clientSource = readFileSync(resolve(SRC, 'db/client.ts'), 'utf-8');
   aiClientSource = readFileSync(resolve(SRC, 'services/ai/client.ts'), 'utf-8');
+  spendLedgerSource = readFileSync(resolve(SRC, 'services/ai/spend-ledger.ts'), 'utf-8');
   provisonerSource = readFileSync(resolve(SRC, 'services/scp/provisioner.ts'), 'utf-8');
   onboardingSource = readFileSync(resolve(SRC, 'routes/dashboard/onboarding.ts'), 'utf-8');
   tierGateSource = readFileSync(resolve(SRC, 'middleware/tier-gate.ts'), 'utf-8');
@@ -124,7 +126,7 @@ describe('AI cost ceiling is persisted and multi-scoped', () => {
   it('spend is persisted to the ai_daily_spend table (survives deploys)', () => {
     // Must write through to the DB, not just an in-process Map.
     expect(aiClientSource).toMatch(/ai_daily_spend/);
-    expect(aiClientSource).toMatch(/INSERT INTO ai_daily_spend/);
+    expect(spendLedgerSource).toMatch(/INSERT INTO ai_spend_reservations/);
   });
 
   it('keeps an in-process read-through cache to avoid a DB hit per AI call', () => {
@@ -159,14 +161,13 @@ describe('AI cost ceiling is persisted and multi-scoped', () => {
     expect(aiClientSource).toMatch(/2500/);
   });
 
-  it('callClaude checks cost ceiling before making API call', () => {
-    // isCostCeilingReached should be checked early in callClaude
+  it('callClaude atomically authorizes spend before making API call', () => {
     const callClaudeFn = aiClientSource.match(
       /export\s+async\s+function\s+callClaude[\s\S]*?(?=export\s+async\s+function|$)/
     );
     expect(callClaudeFn).toBeTruthy();
     const body = callClaudeFn![0];
-    const ceilingCheckPos = body.indexOf('isCostCeilingReached');
+    const ceilingCheckPos = body.indexOf('authorizeSpend');
     const apiCallPos = body.indexOf('fetch(');
     expect(ceilingCheckPos).toBeGreaterThan(-1);
     expect(apiCallPos).toBeGreaterThan(-1);

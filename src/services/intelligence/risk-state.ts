@@ -128,7 +128,7 @@ export async function transitionRiskState(
   const ownerId = ownerRow?.owner_id;
   if (ownerId) {
     const { dispatchWebhook } = await import('../../lib/webhooks.js');
-    dispatchWebhook(ownerId, 'risk_state.changed', {
+    dispatchWebhook(productId, ownerId, 'risk_state.changed', {
       product_id: productId, from_state: fromState, to_state: toState, reason, triggering_signals: triggeringSignals,
     }).catch(() => {});
 

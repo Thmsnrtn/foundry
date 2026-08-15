@@ -80,7 +80,6 @@ export async function runSloChecksAndAlert(): Promise<SloCheck[]> {
     const list = breaches.map((b) => `• ${b.name}: ${b.detail}`).join('<br/>');
     await invoke({
       productId: foundryProductId,
-      agent: 'system',
       tool: 'send_email',
       action: `SLO breach alert (${breaches.length})`,
       params: {

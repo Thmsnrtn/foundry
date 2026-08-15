@@ -2,6 +2,10 @@
 
 Optimize the maximum **defensible company value** per unit of money, computation, time, attention, and risk, subject to safety, quality, owner policy, legal duties, and contractual constraints.
 
+The tier covenant is: **a plan changes how much Foundry can carry, not whether
+Foundry attempts to carry responsibilities intelligently.** Safety, epistemic
+honesty, and authority controls do not become paid upgrades.
+
 ## Cognition routing
 
 Use the cheapest path demonstrated sufficient for the consequence and quality floor:
@@ -24,3 +28,6 @@ Routing measures both **overspend regret** (a cheaper path would have sufficed) 
 - Quality and safety floors apply before optimization, on every subscription tier.
 - Cost controls for material AI or external spend must be enforced atomically with reservation/authorization, not merely observed after spend.
 - Value claims preserve causal humility: **observed, experimental, inferred, estimated, protective,** or **unverified**. Protective value is not booked as realized ROI; correlation is not causation.
+- Evaluate recurring machinery across money, tokens, compute, latency,
+  engineering and operational complexity, founder attention, security,
+  authority and reliability risk, and marginal company value.

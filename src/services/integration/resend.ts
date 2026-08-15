@@ -27,6 +27,7 @@ interface SendEmailParams {
   to: string[];
   subject: string;
   html: string;
+  text?: string;
   from?: string;
 }
 
@@ -159,7 +160,6 @@ export async function executeEmailSend(
 
   const req: GatewayRequest = {
     productId,
-    agent: agentName,
     tool: 'send_email',
     action: `send "${parameters.subject ?? ''}" to ${primaryRecipient ?? 'unknown'}`,
     params: { ...parameters, to: toList },
@@ -247,8 +247,9 @@ export async function executeEmailSend(
 export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSuccess | { logged: true }> {
   const params = req.params as unknown as SendEmailParams;
   const apiKey = process.env.RESEND_API_KEY;
+  const sendgridKey = process.env.SENDGRID_API_KEY;
 
-  if (!apiKey) {
+  if (!apiKey && !sendgridKey) {
     log.info('resend.send_email.logged_only', {
       productId: req.productId,
       to: params.to,
@@ -256,6 +257,26 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
       htmlLength: (params.html ?? '').length,
     });
     return { logged: true };
+  }
+
+  // SendGrid is the server-owned fallback mechanism for the same semantic
+  // send_email capability. Callers do not select the provider.
+  if (!apiKey && sendgridKey) {
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${sendgridKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        personalizations: [{ to: params.to.map((email) => ({ email })) }],
+        from: { email: 'briefings@foundry.app', name: 'Foundry' },
+        subject: params.subject,
+        content: [
+          ...(params.text ? [{ type: 'text/plain', value: params.text }] : []),
+          { type: 'text/html', value: params.html },
+        ],
+      }),
+    });
+    if (!response.ok) throw new Error(`SendGrid API error ${response.status}: ${(await response.text()).slice(0, 300)}`);
+    return { message_id: response.headers.get('x-message-id') ?? req.dedupKey!, raw: { provider: 'sendgrid' } };
   }
 
   let lastError: unknown;
@@ -267,12 +288,14 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
           headers: {
             Authorization: `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
+            'Idempotency-Key': req.dedupKey!,
           },
           body: JSON.stringify({
             from: params.from ?? 'Foundry <noreply@foundry.app>',
             to: params.to,
             subject: params.subject,
             html: params.html,
+            ...(params.text ? { text: params.text } : {}),
           }),
         }),
       { timeoutMs: RESEND_TIMEOUT_MS, maxRetries: 2 },
@@ -314,7 +337,11 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
 
 // Side-effect at module load: register the handler. The gateway's
 // registry is process-global; importing this module wires the tool.
-registerToolHandler('send_email', sendEmailHandler);
+export const SEND_EMAIL_POLICY = {
+  actor: 'email_delivery', surface: 'email_outbound', dataClass: 'customer',
+  requireDedupKey: true, requireCustomerExternalId: true,
+} as const;
+registerToolHandler('send_email', sendEmailHandler, SEND_EMAIL_POLICY);
 
 // ─── Email Metrics ────────────────────────────────────────────────────────────
 

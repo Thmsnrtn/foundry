@@ -23,6 +23,12 @@ interface SlackPostMessageResponse {
   error?: string;
 }
 
+export type SlackDeliveryReceipt =
+  | { certainty: 'provider_acknowledged'; providerMessageTs: string | null }
+  | { certainty: 'provider_rejected'; reason: string }
+  | { certainty: 'ambiguous'; reason: string }
+  | { certainty: 'not_attempted'; reason: string };
+
 interface SlackChannelInfoResponse {
   ok: boolean;
   channel?: {
@@ -100,17 +106,19 @@ export async function sendSlackNotification(
     text: string;
     blocks?: unknown[];
   }
-): Promise<boolean> {
+): Promise<SlackDeliveryReceipt> {
   const integration = await getIntegration(productId, 'slack');
-  if (!integration || integration.status !== 'active') return false;
+  if (!integration || integration.status !== 'active') {
+    return { certainty: 'not_attempted', reason: 'Slack integration is not active' };
+  }
 
   const botToken = integration.config_json.bot_token as string | undefined;
   const defaultChannel = integration.config_json.channel_id as string | undefined;
 
-  if (!botToken) return false;
+  if (!botToken) return { certainty: 'not_attempted', reason: 'Slack bot token is missing' };
 
   const channel = opts.channel ?? defaultChannel;
-  if (!channel) return false;
+  if (!channel) return { certainty: 'not_attempted', reason: 'Slack channel is missing' };
 
   const body: Record<string, unknown> = {
     channel,
@@ -120,66 +128,38 @@ export async function sendSlackNotification(
     body.blocks = opts.blocks;
   }
 
-  const result = await slackPost<SlackPostMessageResponse>('chat.postMessage', botToken, body);
-  return result?.ok === true;
+  try {
+    const resp = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) return { certainty: 'provider_rejected', reason: `Slack HTTP ${resp.status}` };
+    const result = await resp.json() as SlackPostMessageResponse;
+    if (!result.ok) return { certainty: 'provider_rejected', reason: result.error ?? 'Slack rejected message' };
+    return { certainty: 'provider_acknowledged', providerMessageTs: result.ts ?? null };
+  } catch (err) {
+    return { certainty: 'ambiguous', reason: err instanceof Error ? err.message : String(err) };
+  }
 }
 
-/**
- * Send a formatted daily agent briefing as a rich Slack Block Kit message.
- */
+/** Format a daily briefing, but keep transport and receipt semantics in the
+ * single Slack sender above. */
 export async function sendAgentBriefing(
   productId: string,
-  briefingData: {
-    date: string;
-    health_score: number;
-    headline: string;
-    key_points: string[];
-  }
-): Promise<boolean> {
-  const integration = await getIntegration(productId, 'slack');
-  if (!integration || integration.status !== 'active') return false;
-
-  const botToken = integration.config_json.bot_token as string | undefined;
-  const defaultChannel = integration.config_json.channel_id as string | undefined;
-
-  if (!botToken || !defaultChannel) return false;
-
-  const keyPointsText = briefingData.key_points
-    .map(p => `• ${p}`)
-    .join('\n');
-
+  briefingData: { date: string; health_score: number; headline: string; key_points: string[] },
+): Promise<SlackDeliveryReceipt> {
   const blocks: unknown[] = [
-    {
-      type: 'header',
-      text: {
-        type: 'plain_text',
-        text: `Foundry Daily Briefing — ${briefingData.date}`,
-      },
-    },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `*Company Health Score: ${briefingData.health_score}/100*\n${briefingData.headline}`,
-      },
-    },
+    { type: 'header', text: { type: 'plain_text', text: `Foundry Daily Briefing — ${briefingData.date}` } },
+    { type: 'section', text: { type: 'mrkdwn', text: `*Company Health Score: ${briefingData.health_score}/100*\n${briefingData.headline}` } },
     { type: 'divider' },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: keyPointsText,
-      },
-    },
+    { type: 'section', text: { type: 'mrkdwn', text: briefingData.key_points.map((p) => `• ${p}`).join('\n') } },
   ];
-
-  const result = await slackPost<SlackPostMessageResponse>('chat.postMessage', botToken, {
-    channel: defaultChannel,
+  return sendSlackNotification(productId, {
     text: `Foundry Daily Briefing — ${briefingData.date}: Health Score ${briefingData.health_score}/100`,
     blocks,
   });
-
-  return result?.ok === true;
 }
 
 /**
@@ -235,20 +215,6 @@ async function slackGet<T>(endpoint: string, botToken: string): Promise<T | null
       Authorization: `Bearer ${botToken}`,
       'Content-Type': 'application/json',
     },
-    signal: AbortSignal.timeout(10000),
-  });
-  if (!resp.ok) return null;
-  return resp.json() as Promise<T>;
-}
-
-async function slackPost<T>(endpoint: string, botToken: string, body: Record<string, unknown>): Promise<T | null> {
-  const resp = await fetch(`https://slack.com/api/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${botToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
     signal: AbortSignal.timeout(10000),
   });
   if (!resp.ok) return null;

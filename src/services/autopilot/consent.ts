@@ -26,15 +26,28 @@ export const DISCLOSURE_TEXT =
 export async function recordConsent(opts: {
   founderId: string; productId: string; capability: string;
   fromMode: string; toMode: string;
+  responsibilityId?: string; allowedScope?: string[]; consequenceBoundary?: 'low'|'medium'|'high'; expiresAt?: Date;
 }): Promise<string> {
   const id = nanoid();
   await query(
     `INSERT INTO autonomy_consents
-       (id, founder_id, product_id, capability, from_mode, to_mode, disclosure_version)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [id, opts.founderId, opts.productId, opts.capability, opts.fromMode, opts.toMode, DISCLOSURE_VERSION],
+       (id, founder_id, product_id, capability, from_mode, to_mode, disclosure_version,
+        responsibility_id,allowed_scope_json,consequence_boundary,expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, opts.founderId, opts.productId, opts.capability, opts.fromMode, opts.toMode, DISCLOSURE_VERSION,
+      opts.responsibilityId??null,opts.allowedScope?JSON.stringify(opts.allowedScope):null,
+      opts.consequenceBoundary??null,opts.expiresAt?.toISOString()??null],
   );
   return id;
+}
+
+export async function activeResponsibilityAuthority(productId:string,responsibilityId:string,capability:string,scope:string):Promise<{id:string}|null> {
+  const result=await query(`SELECT id FROM autonomy_consents WHERE product_id=? AND responsibility_id=? AND capability=?
+    AND to_mode='act' AND revoked_at IS NULL AND datetime(expires_at)>datetime('now')
+    AND EXISTS (SELECT 1 FROM json_each(allowed_scope_json) WHERE value=?)
+    ORDER BY accepted_at DESC LIMIT 1`,[productId,responsibilityId,capability,scope]);
+  const row=result.rows[0] as Record<string,unknown>|undefined;
+  return row?{id:String(row.id)}:null;
 }
 
 /** The live consent licensing 'act' for a capability, if any (unrevoked). */

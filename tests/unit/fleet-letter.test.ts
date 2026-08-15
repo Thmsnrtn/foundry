@@ -47,6 +47,22 @@ describe('the fleet composer ranks, with provenance', () => {
 });
 
 describe('the independent verifier — nothing unverified ships', () => {
+  it('reconstructs product-scoped responsibility truth instead of trusting the composer', async () => {
+    await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state)
+      VALUES ('jl_r1','jl_p1','Restore customer response','customer_support','visible'),
+             ('jl_rx','jl_px','Foreign responsibility','customer_support','visible')`, []);
+    const fl = await composeFleetLetter('jl_f');
+    const calm = fl.products.find((p) => p.productId === 'jl_p1')!;
+    expect(calm.responsibilities.STILL_OPEN.map((item) => item.title)).toContain('Restore customer response');
+    calm.responsibilities.STILL_OPEN[0].title = 'Tampered responsibility';
+    const verified = await verifyFleetLetter(fl);
+    const fresh = verified.letter.products.find((p) => p.productId === 'jl_p1')!;
+    expect(fresh.responsibilities.STILL_OPEN.map((item) => item.title)).toEqual(['Restore customer response']);
+    expect(verified.letter.products.flatMap((p) => p.responsibilities.STILL_OPEN).map((item) => item.title))
+      .not.toContain('Foreign responsibility');
+    await query("DELETE FROM institutional_responsibilities WHERE id IN ('jl_r1','jl_rx')", []);
+  });
+
   it('drops a decision resolved between compose and deliver, and logs the defect', async () => {
     const fl = await composeFleetLetter('jl_f');
     await query("UPDATE decisions SET status='executed' WHERE id='jl_d2'", []); // world moved

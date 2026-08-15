@@ -19,7 +19,7 @@ import { query, executeRaw } from '../../src/db/client.js';
 // handler at module load — that's what we're testing. The handler is
 // also exported so tests can re-register on a warm module cache when
 // gateway.test.ts has cleared the registry earlier in the same worker.
-import { executeEmailSend, sendEmailHandler } from '../../src/services/integration/resend.js';
+import { executeEmailSend, sendEmailHandler, SEND_EMAIL_POLICY } from '../../src/services/integration/resend.js';
 import { disableTool } from '../../src/services/outbound/kill-switch.js';
 import { registerToolHandler } from '../../src/services/outbound/gateway.js';
 
@@ -150,7 +150,7 @@ beforeEach(async () => {
   // cache, the module-load registration in resend.ts has been wiped by
   // the time we run. Re-register the exported handler so this suite is
   // order-independent.
-  registerToolHandler('send_email', sendEmailHandler);
+  registerToolHandler('send_email', sendEmailHandler, SEND_EMAIL_POLICY);
 });
 
 afterEach(() => {
@@ -222,6 +222,7 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
     expect(r.success).toBe(true);
     expect(r.message_id).toBe('em_xyz');
     expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(fetchSpy.mock.calls[0][1]?.headers).toMatchObject({ 'Idempotency-Key': actionId });
 
     // Cached result in idempotency_keys
     const idem = await query(
@@ -307,3 +308,20 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
   });
 });
 
+describe('send_email provider routing', () => {
+  it('uses the server-owned SendGrid fallback without caller provider selection', async () => {
+    delete process.env.RESEND_API_KEY;
+    vi.stubEnv('SENDGRID_API_KEY', 'sg_test');
+    const fetchSpy = vi.fn(async () => new Response('', {
+      status: 202, headers: { 'x-message-id': 'sg_1' },
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const result = await sendEmailHandler({
+      productId: 'p1', agent: 'system', tool: 'send_email', action: 'digest',
+      params: { to: ['founder@example.com'], subject: 'Weekly', html: '<p>Hi</p>', text: 'Hi' },
+      dedupKey: 'weekly:p1:2026-08-14', customerExternalId: 'founder@example.com',
+    });
+    expect(result).toMatchObject({ message_id: 'sg_1' });
+    expect(String(fetchSpy.mock.calls[0][0])).toContain('sendgrid.com');
+  });
+});

@@ -97,6 +97,18 @@ export async function createCheckoutSession(
   return session.url ?? '';
 }
 
+/** Create an owner-requested Stripe portal session through the billing
+ * authenticator that owns the shared-account credential and namespace. */
+export async function createBillingPortalSession(customerId: string, returnUrl: string): Promise<string> {
+  const stripe = getStripe();
+  const key = idemKey();
+  const session = await withRetry(() => stripe.billingPortal.sessions.create({
+    customer: customerId,
+    return_url: returnUrl,
+  }, { idempotencyKey: key }));
+  return session.url;
+}
+
 export async function pauseSubscription(subscriptionId: string): Promise<void> {
   const stripe = getStripe();
   const key = idemKey();

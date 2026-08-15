@@ -136,8 +136,12 @@ async function createRefundHandler(
 }
 
 // Side-effect at module load — register both handlers.
-registerToolHandler('stripe_update_subscription', updateSubscriptionHandler);
-registerToolHandler('stripe_create_refund', createRefundHandler);
+const STRIPE_POLICY = {
+  actor: 'billing_control', surface: 'billing', dataClass: 'customer',
+  requireDedupKey: true, requireCustomerExternalId: true,
+} as const;
+registerToolHandler('stripe_update_subscription', updateSubscriptionHandler, STRIPE_POLICY);
+registerToolHandler('stripe_create_refund', createRefundHandler, STRIPE_POLICY);
 
 // ─── Exposed for tests + external re-registration ────────────────────────────
 export { updateSubscriptionHandler, createRefundHandler };
@@ -146,7 +150,6 @@ export { updateSubscriptionHandler, createRefundHandler };
 
 export async function gatewayUpdateSubscription(opts: {
   productId: string;
-  agent: string;
   subscriptionId: string;
   body: Record<string, string>;
   dedupKey: string;          // required for refund/subscription paths
@@ -154,7 +157,6 @@ export async function gatewayUpdateSubscription(opts: {
 }): Promise<ReturnType<typeof invoke>> {
   return invoke({
     productId: opts.productId,
-    agent: opts.agent,
     tool: 'stripe_update_subscription',
     action: `update Stripe subscription ${opts.subscriptionId}`,
     params: { subscription_id: opts.subscriptionId, body: opts.body },
@@ -167,7 +169,6 @@ export async function gatewayUpdateSubscription(opts: {
 
 export async function gatewayCreateRefund(opts: {
   productId: string;
-  agent: string;
   chargeId: string;
   amount?: number;
   reason?: CreateRefundParams['reason'];
@@ -176,7 +177,6 @@ export async function gatewayCreateRefund(opts: {
 }): Promise<ReturnType<typeof invoke>> {
   return invoke({
     productId: opts.productId,
-    agent: opts.agent,
     tool: 'stripe_create_refund',
     action: `Stripe refund on charge ${opts.chargeId}`,
     params: { charge_id: opts.chargeId, amount: opts.amount, reason: opts.reason },

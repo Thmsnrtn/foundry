@@ -21,3 +21,16 @@ Natural-language policy is input, not executable authority. It compiles into det
 ## Attention and responsibility
 
 Founder interruption must have an institutional reason, consequence, deadline, evidence, and a clear response. Batch low-consequence attention. Human and physical tasks use the same responsibility, commitment, receipt, outcome, and learning semantics as machine work. Every surface should reveal current responsibility-transfer state without implying that visibility or competence equals operational authority.
+
+## Owner-absence test
+
+The institution should support a seven-day owner absence without making activity
+look like outcome. On return, the smallest trustworthy summary distinguishes:
+
+```text
+HANDLED | CHANGED | NEEDS YOU | DELIBERATELY NOT DONE | STILL OPEN
+```
+
+Every item retains evidence, effect certainty, responsibility, and any deadline.
+This is a proof target for reduced founder dependency, not a claim that current
+surfaces or operations already satisfy it.

@@ -79,7 +79,6 @@ export async function dispatchEvent(
     const dedupKey = `webhook:${cfg.id}:${payload.event_type}:${Date.now()}`;
     const result = await invoke({
       productId,
-      agent: 'system',
       tool: 'post_webhook',
       action: `${payload.event_type} → ${cfg.target}`,
       params: { config: cfg, payload },
@@ -133,7 +132,10 @@ async function postWebhookHandler(req: GatewayRequest): Promise<{ status: number
 }
 
 // Side-effect at module load: register the gateway handler.
-registerToolHandler('post_webhook', postWebhookHandler);
+registerToolHandler('post_webhook', postWebhookHandler, {
+  actor: 'webhook_delivery', surface: 'integration_webhook', dataClass: 'general',
+  requireDedupKey: true, requireCustomerExternalId: false,
+});
 
 // ─── Per-target payload formatters ───────────────────────────────────────────
 

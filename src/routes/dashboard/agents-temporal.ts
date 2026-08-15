@@ -60,7 +60,7 @@ function sparklineSVG(entries: SignalTimelineEntry[], width: number = 400, heigh
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="overflow:visible;"><polyline points="${pts}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/></svg>`;
 }
 
-function inflectionTypeBadge(type: string): string {
+export function inflectionTypeBadge(type: string) {
   const styles: Record<string, string> = {
     signal_spike: 'background:#4ecca322;color:#4ecca3;',
     signal_drop: 'background:#ff6b6b22;color:#ff6b6b;',
@@ -69,7 +69,7 @@ function inflectionTypeBadge(type: string): string {
   };
   const style = styles[type] ?? '';
   const label = type.replace(/_/g, ' ');
-  return `<span style="font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:99px;${style}">${label}</span>`;
+  return html`<span style="font-size:0.65rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:99px;${style}">${label}</span>`;
 }
 
 // ─── GET /agents/temporal ─────────────────────────────────────────────────────
@@ -210,7 +210,7 @@ agentTemporalRoutes.get('/agents/temporal', requireTier('temporal'), async (c) =
       <div style="padding:0.85rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;gap:0.75rem;align-items:flex-start;">
         <div style="flex-shrink:0;font-size:0.72rem;color:var(--text-muted);min-width:80px;padding-top:2px;">${pt.date}</div>
         <div style="flex:1;">
-          <div style="margin-bottom:0.3rem;">${raw(inflectionTypeBadge(pt.type))}</div>
+          <div style="margin-bottom:0.3rem;">${inflectionTypeBadge(pt.type)}</div>
           <div style="font-size:0.82rem;color:var(--text-dim);">${pt.description}</div>
           <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem;">${pt.signal_before} → ${pt.signal_after}</div>
         </div>

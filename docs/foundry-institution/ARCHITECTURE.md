@@ -49,3 +49,25 @@ Consequential mutations enter one governed execution boundary. That boundary obt
 There is one canonical truth for each concept. Replacement follows shadow → compare → cutover → delete; dual-write is temporary, measured, and owned. Foundry operates itself using the same semantics as any company, while constitutional controls and consequential evaluations remain externally authorized and independently measured.
 
 Post-V7 work is **Continuous Institutional Science**: operate, measure, benchmark, recalibrate, simplify, delete, and revise theory from evidence.
+
+## Unfamiliar-company adoption
+
+Foundry reconstructs rather than presumes company purpose, responsibilities,
+people and systems, capabilities, dependencies, processes, evidence, risks,
+economics, commitments, authority, ControlPaths, and open loops. Ontology is
+admitted only when it changes a useful decision, control, execution, or proof.
+AcreOS is the golden unfamiliar-company proving target; AcreOS-specific facts
+belong in company data or configuration and never in kernel branches.
+
+## Development and recursive operation
+
+Software development is an institutional capability with the flow:
+
+```text
+problem/evidence → requirement → plan → implementation → tests → challenge
+→ deployment/cutover → runtime observation → learning
+```
+
+It must serve arbitrary software companies, AcreOS, and Foundry itself through
+the same semantics. Foundry may operate and improve Foundry, but constitutional
+authority and consequential evaluation remain owner-controlled and independent.

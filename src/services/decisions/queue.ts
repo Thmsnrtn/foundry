@@ -80,7 +80,7 @@ export async function resolveDecision(
   const ownerId = (ownerResult.rows[0] as Record<string, string>)?.owner_id;
   if (ownerId) {
     const { dispatchWebhook } = await import('../../lib/webhooks.js');
-    dispatchWebhook(ownerId, 'decision.resolved', {
+    dispatchWebhook(productId, ownerId, 'decision.resolved', {
       decision_id: decisionId, product_id: productId, chosen_option: chosenOption, decided_by: decidedBy,
     }).catch(() => {});
 

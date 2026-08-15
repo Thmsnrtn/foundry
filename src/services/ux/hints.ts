@@ -98,7 +98,7 @@ export async function getPageHints(
         id: 'decisions_empty',
         type: 'empty_state',
         headline: 'Your decision queue is empty.',
-        body: 'Foundry is operating autonomously. Decisions surface here when the intelligence layer detects something that requires your specific judgment — not data you could find yourself, but calls only you can make.',
+        body: 'No decision currently meets the queue threshold. This does not prove that no decision or unknown exists; new evidence may surface one.',
         dismissible: false,
       });
     }

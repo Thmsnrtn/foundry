@@ -106,7 +106,8 @@ export async function evaluateTriggers(): Promise<void> {
 
       const shouldFire = await trigger.check(founder.id, productId);
       if (shouldFire) {
-        await sendTriggerEmail(founder.email, trigger.subject, trigger.body);
+        if (!productId) continue; // no company authority context: fail closed
+        await sendTriggerEmail(productId, founder.email, trigger.name, trigger.subject, trigger.body);
         await insertAuditLog({
           id: nanoid(), product_id: productId || 'system',
           action_type: `trigger_${trigger.name}`, gate: 0,

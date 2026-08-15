@@ -122,7 +122,10 @@ async function mcpToolHandler(req: GatewayRequest): Promise<unknown> {
     clearTimeout(timer);
   }
 }
-registerToolHandler('mcp_tool', mcpToolHandler);
+registerToolHandler('mcp_tool', mcpToolHandler, {
+  actor: 'mcp_control', surface: 'mcp_outbound', dataClass: 'customer',
+  requireDedupKey: true, requireCustomerExternalId: false,
+});
 
 /** Call a tool on a founder-connected MCP server, fully governed. */
 export async function callMcpTool(input: McpCallInput): Promise<
@@ -162,7 +165,6 @@ export async function callMcpTool(input: McpCallInput): Promise<
   // 3. Through the gateway: kill-switch, idempotency, audit.
   const result = await invoke({
     productId: input.productId,
-    agent: input.agent,
     tool: 'mcp_tool',
     action: `MCP ${input.serverName}/${input.tool}`,
     params: {
@@ -199,8 +201,7 @@ export async function callMcpTool(input: McpCallInput): Promise<
     await refundEnvelope();
   }
   log.info('mcp tool call', {
-    productId: input.productId, server: input.serverName, tool: input.tool,
-    agent: input.agent, cached: result.cached,
+    productId: input.productId, server: input.serverName, tool: input.tool, cached: result.cached,
   });
   return { ok: true, result: result.result, cached: result.cached };
 }

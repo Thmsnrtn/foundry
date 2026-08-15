@@ -164,9 +164,9 @@ export async function syncStripeRevenue(founderId: string): Promise<void> {
     const ownerResult = await query('SELECT owner_id FROM products WHERE id = ?', [productId]);
     const ownerId = (ownerResult.rows[0] as Record<string, string>)?.owner_id;
     if (ownerId) {
-      dispatchWebhook(ownerId, 'metric.recorded', {
+      await dispatchWebhook(productId, ownerId, 'metric.recorded', {
         product_id: productId, source: 'stripe', new_mrr_cents: newMrr, churned_mrr_cents: churnedMrr, active_subscriptions: allActiveSubscriptions.length,
-      }).catch(() => {});
+      }).catch((err) => log.error('Metric webhook receipt failed', err, { founderId, productId }));
     }
 
     log.info('Stripe revenue synced', { founderId, productId, currentMrr, newMrr, churnedMrr });

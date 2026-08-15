@@ -18,6 +18,7 @@
 import { nanoid } from 'nanoid';
 import { query, insertAuditLog } from '../../db/client.js';
 import type { FleetLetter, FleetNeedsYou } from './fleet.js';
+import { getSevenDayResponsibilitySummary } from '../institution/absence-summary.js';
 
 const STALENESS_MS = 5 * 60_000;
 
@@ -76,11 +77,19 @@ export async function verifyFleetLetter(letter: FleetLetter): Promise<Verificati
     reasons.push(`product ${p.productId} belongs to another tenant — removed`);
     return false;
   });
+  // Responsibility classifications are independently reconstructed from the
+  // canonical product-scoped ledgers. Composer-provided classifications are
+  // never delivered on trust.
+  for (const product of products) {
+    product.responsibilities = await getSevenDayResponsibilitySummary(product.productId);
+  }
 
   if (reasons.length > 0) await logDefects(letter.founderId, reasons);
 
   return {
-    letter: { ...letter, needsYou: verified, products, quiet: verified.length === 0 && products.every((p) => p.letter.quiet) },
+    letter: { ...letter, needsYou: verified, products, quiet: verified.length === 0 && products.every((p) =>
+      p.letter.quiet && Object.values(p.responsibilities).every((items) => items.length === 0)
+    ) },
     checked: letter.needsYou.length,
     dropped: letter.needsYou.length - verified.length,
     reasons,

@@ -53,6 +53,8 @@ export interface ExecutionResult {
   success: boolean;
   integration_response?: unknown;
   error?: string;
+  effect_certainty?: 'provider_acknowledged' | 'provider_rejected' | 'ambiguous' | 'not_attempted';
+  reconcile_after?: string | null;
 }
 
 // ─── Linear GraphQL response types ───────────────────────────────────────────
@@ -159,16 +161,18 @@ export async function approveAndExecute(
   if (result.success) {
     await query(
       `UPDATE action_executions
-       SET status='completed', executed_at=?, result_json=?
+       SET status='completed', executed_at=?, result_json=?, effect_certainty=?, provider_acknowledged_at=?
        WHERE id=?`,
-      [executedAt, JSON.stringify(result.integration_response ?? null), executionId]
+      [executedAt, JSON.stringify(result.integration_response ?? null), result.effect_certainty ?? null,
+       result.effect_certainty === 'provider_acknowledged' ? executedAt : null, executionId]
     );
   } else {
     await query(
       `UPDATE action_executions
-       SET status='failed', executed_at=?, error_message=?
+       SET status='failed', executed_at=?, error_message=?, effect_certainty=?, reconcile_after=?
        WHERE id=?`,
-      [executedAt, result.error ?? 'Unknown error', executionId]
+      [executedAt, result.error ?? 'Unknown error', result.effect_certainty ?? null,
+       result.reconcile_after ?? null, executionId]
     );
   }
 
@@ -365,22 +369,31 @@ async function executeAction(
 
 async function executeSlack(productId: string, payload: ActionPayload): Promise<ExecutionResult> {
   const text = payload.text ?? '';
-  const ok = await sendSlackNotification(productId, {
+  const receipt = await sendSlackNotification(productId, {
     channel: payload.channel,
     text,
     blocks: payload.blocks,
   });
 
-  if (ok) {
+  if (receipt.certainty === 'provider_acknowledged') {
     return {
       success: true,
       integration_response: {
         note: `Message sent to ${payload.channel ?? 'default channel'}`,
         text,
+        provider_message_ts: receipt.providerMessageTs,
       },
+      effect_certainty: receipt.certainty,
     };
   }
-  return { success: false, error: 'Slack notification failed — check integration config' };
+  return {
+    success: false,
+    error: 'reason' in receipt ? receipt.reason : 'Slack notification failed',
+    effect_certainty: receipt.certainty,
+    reconcile_after: receipt.certainty === 'ambiguous'
+      ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      : null,
+  };
 }
 
 async function executeLinearTicket(productId: string, payload: ActionPayload): Promise<ExecutionResult> {
@@ -432,18 +445,18 @@ async function executeLinearTicket(productId: string, payload: ActionPayload): P
     });
 
     if (!resp.ok) {
-      return { success: false, error: `Linear API returned HTTP ${resp.status}` };
+      return { success: false, error: `Linear API returned HTTP ${resp.status}`, effect_certainty: 'provider_rejected' };
     }
 
     const json = await resp.json() as LinearCreateIssueResponse;
 
     if (json.errors && json.errors.length > 0) {
-      return { success: false, error: json.errors.map((e) => e.message).join('; ') };
+      return { success: false, error: json.errors.map((e) => e.message).join('; '), effect_certainty: 'provider_rejected' };
     }
 
     const issueCreate = json.data?.issueCreate;
     if (!issueCreate?.success) {
-      return { success: false, error: 'Linear issueCreate returned success=false' };
+      return { success: false, error: 'Linear issueCreate returned success=false', effect_certainty: 'provider_rejected' };
     }
 
     return {
@@ -454,11 +467,14 @@ async function executeLinearTicket(productId: string, payload: ActionPayload): P
         identifier: issueCreate.issue?.identifier,
         url: issueCreate.issue?.url,
       },
+      effect_certainty: 'provider_acknowledged',
     };
   } catch (err) {
     return {
       success: false,
       error: err instanceof Error ? err.message : String(err),
+      effect_certainty: 'ambiguous',
+      reconcile_after: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     };
   }
 }
@@ -474,7 +490,11 @@ async function executeWebhook(payload: ActionPayload): Promise<ExecutionResult> 
     const { assertUrlSafe } = await import('../../outbound/ssrf.js');
     await assertUrlSafe(payload.webhook_url);
   } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'blocked URL' };
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'blocked URL',
+      effect_certainty: 'not_attempted',
+    };
   }
 
   try {
@@ -494,14 +514,21 @@ async function executeWebhook(payload: ActionPayload): Promise<ExecutionResult> 
         success: false,
         error: `Webhook returned HTTP ${resp.status}`,
         integration_response: responseBody,
+        effect_certainty: 'provider_rejected',
       };
     }
 
-    return { success: true, integration_response: responseBody };
+    return {
+      success: true,
+      integration_response: responseBody,
+      effect_certainty: 'provider_acknowledged',
+    };
   } catch (err) {
     return {
       success: false,
       error: err instanceof Error ? err.message : String(err),
+      effect_certainty: 'ambiguous',
+      reconcile_after: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     };
   }
 }
