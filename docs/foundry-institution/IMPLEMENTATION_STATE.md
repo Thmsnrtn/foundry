@@ -792,35 +792,42 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 # CONTINUATION — self-contained resume record
 
-*Rewritten 2026-08-16 at the close of the fourth autonomous session. Supersedes all earlier continuation records.*
+*Rewritten 2026-08-16 at the close of the fifth autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. One accumulated branch; never merged to master (owner instruction).
-- **Migrations:** through **129**. Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **152 files / 1,228 tests**.
+- **Migrations:** through **130**. Schema snapshot regenerated and committed.
+- **Full `npm run check`:** green — **155 files / 1,248 tests**. The chain now includes `guards:nullsafe`.
 - **Working tree:** clean.
-- **Environment notes:** `sqlite3` is not preinstalled; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). The `as-any` ratchet matches the bare substring, so prose containing "has anyone" trips it — reword the prose, never the gate. `console-in-src` is also a substring ratchet: use `log` from `src/lib/logger.js`, not `console.*`.
+- **Environment notes:** `sqlite3` is not preinstalled; `scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first, and `console.*` trips the second (use `log` from `src/lib/logger.js`). Reword or fix the code; never the gate.
 
 ## What this session did
 
-1. **Shadowing against independently observed reality (migrations 127–128).** The last rung with no honest supply now has one.
-2. **Company-scoped facts and reachable judgment inputs (migration 129).** The owner's company-scope decision, and the judgment's missing inputs.
+1. **Systematic NULL-semantics audit of every guard (migration 130)** + `scripts/check-guard-null-safety.mjs`, mutation-tested both ways.
+2. **Explicit model-free founder fact affordance** — the founder-initiated half of the existing elicitation path, no new store.
+3. **Shadowing → Assisting made production-reachable** — the two missing writers, a founder-facing bounded grant, and revocation.
 
-## Where the ladder actually stands in production-facing code
-
-Every step below is wired to a production-facing service and proven **locally** (E2). None of it has been exercised by a real founder or a real outside system.
+## The ladder, as it actually stands in production-facing code
 
 ```
-outside tool → POST /ingest/:token → external observation ─┐
-founder reports an obligation → discovery → Visible        │
-  → founder answers what Foundry cannot observe → Understood
-    → founder states a bounded expectation → Shadowing ────┘
+outside tool → POST /ingest/:token → external observation ──────────┐
+founder reports an obligation → discovery → Visible                 │
+  → founder answers (or volunteers) what Foundry cannot observe → Understood
+    → founder states a bounded expectation → Shadowing ─────────────┘
       → external reading → matched / deviated / unresolved
+        → founder grants exact bounded authority → Assisting admission
+          → ✗ no production planner (see below)
 ```
-Alongside it: two understood responsibilities → their costs → company capacity → a deterministic judgment that authorises nothing.
+Alongside: two understood responsibilities → their costs → company capacity → a deterministic judgment that authorises nothing.
 
-**Assisting remains unreachable in production** (it needs a proven Shadowing comparison plus a real consent), and Operating stays frozen by migration 115.
+Everything above is **E2 — local runtime**. Nothing here has been exercised by a real founder or a real outside system.
+
+## The one honest gap, and why it is not mine to close
+
+`planAssistedSupportEmail` has **no production caller**, deliberately. Planning a support reply requires knowing *whom* to write to and *about what*. The only independent observation channel in production is metric movement, which can say support volume fell but cannot identify a waiting customer or their question. Wiring a planner to that would be fabricated linkage.
+
+**The missing piece is an inbound customer-message source** — a real support/email/webhook intake — not more institutional machinery. Until one exists, Assisting is reachable through admission and no further, and no end-to-end execution claim may be made.
 
 ## Evidence frontier (do not inflate)
 
@@ -829,54 +836,38 @@ Alongside it: two understood responsibilities → their costs → company capaci
 | Bounded sparse reconstruction | E3 | exercised fixture dimensions only |
 | Responsibility recognition | E3 | exercised dimensions + an unfamiliar-company corpus |
 | Responsibility understanding | E3 | four exercised capability shapes |
-| Shadowing | E3 | **prior synthetic dimensions only — not extended by this session** |
-| Assisting (support reply) | E3 | exercised synthetic dimensions only |
+| Shadowing | E3 | **prior synthetic dimensions only** |
+| Assisting (support reply) | E3 | **prior synthetic dimensions only — not extended this session** |
 | Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus |
-| Development (recognition → outcome) | E3 | five synthetic companies, one change class, single-file |
-| Production reachability | E3 | four synthetic non-software companies, four admitted signal shapes |
-| Shadowing against external observation | E2 | local runtime; refusals proven |
-| Company-scoped evidence + judgment inputs | E2 | local runtime through production-facing services |
-| Founder evidence bridge, intake, generic obligations | E2 | local runtime |
+| Development (recognition → outcome) | E3 | five synthetic companies, one change class |
+| Production reachability | E3 | four synthetic non-software companies |
+| Everything wired this session | E2 | local runtime through production-facing services |
 | Assisting → Operating | frozen | migration 115; unchanged |
-| Anything with real founders, real outside systems, pilots, production | unproven | E4/E5/E6 |
+| Real founders, real outside systems, pilots, production | unproven | E4/E5/E6 |
 
 ## Open proof debt
 
-- **Nothing here has met reality.** No real founder has reported an obligation, answered a question, or stated an expectation; no real outside tool has posted to `/ingest/:token` for a company that is shadowing. Every claim above is local or synthetic.
-- **Ask confirmation (owner section 7) is NOT done.** See the design note below — this is the first thing to pick up.
-- Assisting prerequisites: a proven Shadowing comparison now exists in principle, but nothing drives Assisting entry in production.
+- **Nothing has met reality.** No real founder, no real outside tool, no real inbound message.
+- **Assisting execution** blocked on an inbound customer-message source (above).
 - Judgment observation still cannot report `contradicted` — needs an observer that can see a deadline pass.
 - Development paths (`development-observation.ts`, `development-shadowing.ts`) remain on the reachability gate's DARK list.
 - Executive cognition (Tranche 4): no marginal-value comparison. The cognition gate forces one before adoption.
 - Economics (Tranche 12): near-vacuous while the institution is model-free.
 - Duplicate founder reports still create duplicate responsibilities.
 - Re-asking after deferral is deliberately absent rather than given an invented interval.
-
-## Design note — Ask confirmation, for whoever picks it up
-
-The owner's pattern is: conversation → bounded candidate assertion → founder sees exactly what Foundry proposes to remember → explicit authenticated confirmation → canonical evidence.
-
-**Do not add a new noun for this.** The smallest complete design reuses what exists: an open `founder_evidence_requests` row already carries a stable subject, predicate, and scope, and the existing `POST /letter/evidence/:requestId/answer` route already performs authenticated confirmation with replay-safety (answered is terminal), server-side scope resolution, and refusal of authority-shaped payloads. A candidate is therefore **ephemeral**: shown in chat as "should I remember *this exact sentence* as the answer to *this exact question*?", and confirmed through the existing route. Rejection writes nothing.
-
-The genuinely hard part, and the reason this was not built rather than half-built: **deciding when a chat message is a bounded assertion at all.** Deterministic detection is not achievable for prose. Two honest options:
-
-1. An explicit affordance — the founder marks a sentence as something to remember. Fully deterministic, no model, smallest possible. Recommended first.
-2. A model proposes the candidate. Architecturally permitted (`src/services/chat/**` is outside the kernel the cognition gate covers), but it must go through the marginal-value discipline, and the confirmation must still display the concrete bounded assertion — never a paraphrase of it.
-
-Ambiguity must remain conversation. If no open request matches, propose nothing.
+- The NULL-safety gate does not analyse nullable **columns** compared with `NOT IN`/`<>` — that needs schema nullability analysis, and one of the two real defects was that shape. Trigger tests are the backstop; the script says so itself.
 
 ## Next highest-value unblocked work
 
-1. **Ask confirmation**, per the design note — option 1 first.
-2. **Assisting prerequisites** through real production-facing evidence, without manufacturing E4.
-3. **Feed the external intake from a real integration** rather than only `/ingest/:token`; this is what moves reachability off synthetic ground.
-4. **Non-software generalization sweep** across the shapes the owner named (physical delivery, appointments, trade/craft, commerce, recurring admin, sparse early-stage), preserving abstention.
-5. **Simplification sweep over `src/services/**`** — the reachability gate covers the institution only, and has found two orphans outside its scope by accident.
+1. **Pilot-readiness infrastructure (owner Part V)** — owner-visible authority and revocation now exist; what remains is auditability, clear unresolved states, an intervention path, receipt/outcome reconciliation surfaces, and an emergency stop. Build as readiness, never as pilot evidence.
+2. **An inbound message intake** would unblock Assisting execution end to end. Treat it as an ordinary governed intake, and do not let provider acknowledgement stand in for business outcome.
+3. **Recursive Foundry operation through ordinary authority** — the identity work is done; the grant path now exists.
+4. **Non-software generalization sweep** across the shapes the owner named, preserving abstention.
+5. **Simplification sweep over `src/services/**`** — the reachability gate covers the institution only.
 
 ## Working rules that mattered most
 
-- **Audit the writers, not just the modules.** The worst defects in three consecutive sessions were things built, reachable, benchmarked, and never called.
-- **Mutation-test a guard by trying to slip past it.** This session that found a SQL NULL trap in a brand-new guard *and* the same trap in migration 124, where a judgment observation with no evidence at all was being accepted. `X NOT IN (...)` and `json_type(...) <> 'array'` are NULL when the key is absent, and a RAISE guarded by an OR chain of false and NULL never fires. **Coalesce every absence.**
-- Independence is provenance, not plumbing. A different function is not a different source.
-- Absence is unresolved. Never round it toward success or failure.
-- When a slice cannot be finished honestly in the space available, write the design down and stop — do not half-build it.
+- **Audit the writers, not just the modules.** Four sessions running, the biggest finding was something built, reachable, benchmarked, and never called. This session it was `recordConsent` — full responsibility-bound authority support with zero callers.
+- **A guard is not a guard until you have tried to slip past it.** The NULL audit found two live fail-open defects, one of which let an institutional judgment exist with no evidence at all.
+- **Verify the gap before building for it.** The Shadowing → Assisting gap looked architectural and was not; it was two missing function calls.
+- **When the honest path stops, stop and say why.** The support planner is unwired because the evidence to drive it does not exist, not because the code is missing.
