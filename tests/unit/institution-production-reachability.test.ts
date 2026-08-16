@@ -47,6 +47,7 @@ const DARK: Record<string, string> = {
   'development-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
   'institutional-judgment-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
   'production-reachability-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  'support-pilot-readiness.ts': 'prospective readiness contract — scored by its own gate, never by production',
   'reconstruction-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
   'responsibility-assisting-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
   'responsibility-recognition-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
