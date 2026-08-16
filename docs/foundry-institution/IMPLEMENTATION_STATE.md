@@ -906,14 +906,26 @@ What the frontier actually needs is now in place: the cost side is attributable 
 
 # CONTINUATION — self-contained resume record
 
-*Rewritten 2026-08-16 at the close of the seventh autonomous session. Supersedes all earlier continuation records.*
+*Rewritten 2026-08-16 at the close of the eighth autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
-- **Migrations:** through **133**. No new migration this session — every slice was built on schema that already existed, which is the correct outcome when the gap is proof rather than structure.
-- **Full `npm run check`:** green — **161 files / 1,310 tests** (three consecutive clean runs).
+- **Migrations:** through **134** (institutional cost attribution). Schema snapshot regenerated and committed.
+- **Full `npm run check`:** green — **165 files / 1,337 tests**.
 - **Working tree:** clean.
+- **`sqlite3` IS available in this environment** (`/usr/bin/sqlite3`), so `bash scripts/schema-snapshot.sh` runs directly. Earlier records said otherwise.
+
+## What the eighth session did
+
+1. **Investigated the recorded test nondeterminism seriously and did not resolve it.** Six hypotheses eliminated by measurement; the evidence debt is retained rather than closed on a coincidence. Two real but unrelated defects found and fixed along the way.
+2. **Foundry became an ordinary customer of its own institution** — canonical identity resolved once at the outer boundary, then a real deterministic fact about its own repository recorded through the ordinary intake. `development-observation.ts` left the DARK list as a result.
+3. **Froze `recursive-institution-v1`** — thirteen dimensions, nine exercised against real services, and an honest NOT-green result because no consequential recursive effect has ever been carried.
+4. **Made economic truth executable** (migration 134) — cost attributed to responsibility and capability instead of agent personas, with measured, counted and unmeasured kept rigorously apart.
+5. **Ran the deletion sweep and found that the obvious deletion was a production outage.** Five proven-dead shims removed; the reachability gate's blind spot documented.
+6. **Audited judgment calibration and correctly built nothing** — no production path writes judgment-outcome evidence, so there is no longitudinal supply to calibrate against.
+
+**The recurring shape, second session running: the disciplined answer was frequently to build nothing.** Three of this session's audits ended in a deferral with a stated reason — the quality/cost comparator (one candidate method exists), judgment calibration (no real outcomes), and founder attention (no consumer). Each is recorded with the trigger that would make it buildable.
 - **One unreproduced flake — investigated seriously, still open.** See the investigation record below. It is not diagnosed; do not treat the suite as fully deterministic.
 
 ## Investigation: the `customer-message-intake` nondeterminism (NOT RESOLVED)
@@ -997,7 +1009,9 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 | Reconstruction / recognition / understanding / Shadowing / judgment / development | E3 | prior exercised synthetic dimensions only |
 | Assisting (support reply) | E3 | **prior synthetic dimensions only — unchanged for three sessions** |
 | Production reachability | E3 | four synthetic non-software companies |
-| Everything wired in sessions 4–6 | E2 | local runtime through production-facing services |
+| Everything wired in sessions 4–8 | E2 | local runtime through production-facing services |
+| Recursive Foundry operation | E2 | one responsibility, observation only; `recursive-institution-v1` reports NOT ordinary — three dimensions unexercised |
+| Institutional economics | E2 | attribution is structural; only model spend and recorded provider spend are measured, seven components named unmeasured |
 | Assisting → Operating | frozen | migration 115; unchanged |
 | Real founders, providers, pilots, production | unproven | E4/E5/E6 |
 
@@ -1077,12 +1091,15 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 
 ### Still open
 
-1. Bounded recursive Foundry operation through ordinary authority.
-2. Judgment calibration — confidence versus accuracy is unmeasured.
-3. Economics and quality-cost — near-vacuous while the institution is model-free.
-4. Architecture simplification and deletion; the DARK list is the starting point.
-5. The two development paths that remain dark, blocked on an independent observer that does not exist for a customer's company.
-6. The unreproduced `customer-message-intake` flake.
+*Reconciled again at the close of the eighth session.*
+
+1. **Recursive operation past observation.** Foundry observes its own repository; it has never carried a consequential recursive effect. `effect_governance`, `revocation` and `cost_observability` are unexercised on that path, and `recursive-institution-v1` correctly reports NOT ordinary because of it. The next honest step needs an owner-reported obligation for the Foundry company, because recognition begins with the owner naming the responsibility — Foundry auto-recognising its own responsibilities would be the bypass the whole contract forbids.
+2. **Judgment calibration — blocked on reality, not on effort.** Nothing in production writes `judgment_expected_supported` / `judgment_expected_contradicted`, so evaluation can only ever report `not_yet_observable`. Left as E2 proof debt deliberately: manufacturing longitudinal examples to improve a calibration metric would corrupt the one number that is supposed to be honest.
+3. **Quality/cost comparator.** Deferred with a stated trigger — buildable when a second candidate method exists. The cost side, the quality gate, and the deterministic baseline are all now in place.
+4. **Architecture deletion — 34 candidates remain**, each needing per-module proof. The reachability gate resolves literal imports only and is blind to dynamically-loaded modules in both directions; that blind spot is now documented and is the thing to fix before the next sweep.
+5. **`development-shadowing.ts` remains dark** — observations are supplied now, but no production path opens a development expectation for them to resolve.
+6. **The unreproduced `customer-message-intake` flake**, with six hypotheses eliminated.
+7. **Founder attention** stays unbuilt until a real consumer needs it.
 
 ## Working rules that mattered most
 
@@ -1094,3 +1111,8 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **Freeze the contract before the thing it judges exists.** Thresholds written after the first model are thresholds the first model passes.
 - **A gate you have not mutated is a gate you are guessing about.** Every detector and classifier added this session was broken deliberately first, in both directions, before being trusted.
 - **Fix the fixture, never the feature.** The seven-day view failed against a hand-built stub that had drifted two migrations behind production. The stub was wrong; the query was right.
+- **Check the observation against reality BEFORE building on it.** The recursive slice began by measuring the live schema against the committed snapshot — 698 objects each side, exact match — because an observer that reports drift where there is none is not a recursive proof, it is a fabricated fact about the company.
+- **A tool's blind spot is more dangerous than its silence.** The orphan report confidently named 160KB of live, dynamically-loaded code as dead. Any analysis that resolves only static imports will do this, and the failure mode is a production outage rather than a test failure.
+- **Latent is not the same as observed — say which one you fixed.** The foreign-key PRAGMA race was real in principle and unreproducible in practice. Recording it as "found and fixed, but not the cause" keeps the open flake open, which is where it belongs.
+- **When guards keep refusing your fixture, stop hand-building rows.** Four consecutive triggers refused a hand-made economics fixture. Building it through the real services was less work and proved more.
+- **Deferral with a stated trigger is a decision; deferral without one is drift.** Three things were deliberately not built this session, each recorded with the condition that would make it buildable.
