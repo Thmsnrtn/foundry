@@ -82,6 +82,8 @@
 
 
 
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -163,6 +165,7 @@
       )
       AND (c.valid_until IS NULL OR datetime(c.valid_until)>datetime('now'))
       AND (claim.valid_until IS NULL OR datetime(claim.valid_until)>datetime('now'))
+      AND COALESCE(r.capability,'') <> COALESCE(NEW.capability,''));
       AND NEW.observation_ref='signal_event:' || e.id
       AND a.allowed_change_class=NEW.change_class
       AND a.capability='development' AND a.to_mode='act'
@@ -457,6 +460,8 @@
     SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r
+    SELECT 1 FROM institutional_responsibilities r
+    SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r JOIN products p ON p.id=r.product_id
     SELECT 1 FROM institutional_responsibilities r JOIN products p ON p.id=r.product_id
     SELECT 1 FROM institutional_responsibilities r WHERE r.id=NEW.responsibility_id
@@ -537,6 +542,8 @@
     WHERE p.id=NEW.product_id AND p.owner_id=json_extract(NEW.payload_json,'$.founder_id'));
     WHERE p.id=NEW.product_id AND p.owner_id=json_extract(NEW.payload_json,'$.founder_id'));
     WHERE q.id=json_extract(NEW.payload_json,'$.request_id')
+    WHERE r.id = NEW.responsibility_id
+    WHERE r.id = NEW.responsibility_id AND r.product_id = NEW.product_id);
     WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id
     WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id
     WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id AND p.owner_id=NEW.owner_id
@@ -652,6 +659,7 @@
   -- 0 = fully autonomous
   -- 1 = notify + 24h override window
   -- 2 = require explicit approval before acting
+  -- A capability claim must match the responsibility it is booked against, so
   -- A closed, deliberately small change vocabulary. Broadening it is a
   -- A generic strategic decision row carries none of the responsibility and
   -- A grant is still exact: this owner, this company, this responsibility, this
@@ -697,6 +705,7 @@
   -- Dimension scores
   -- Each agent writes its key finding as it completes (JSON object, agent_name -> finding)
   -- Every absence is coalesced before comparison. `X NOT IN (...)` is NULL when
+  -- Every predicate coalesces its NULL. A guard whose condition evaluates to
   -- Every question names the responsibility it unblocks, at either scope.
   -- Evidence must follow the prediction it tests. An observation recorded
   -- Evolution signals
@@ -715,7 +724,9 @@
   -- Meta
   -- Meta
   -- Meta
+  -- NULL never fires, which is how absent values have repeatedly slipped past
   -- Narrative
+  -- Negative and missing amounts. An absent amount is not zero spend; it is an
   -- No echo. An external observer cannot know what it is being compared
   -- No high-consequence development authority exists at this evidence level.
   -- Only a real institutional judgment of this product may be dispositioned.
@@ -807,6 +818,7 @@
   -- governing contract lives in the institution documents and services, and
   -- grant can invent.
   -- grant that somehow held a ring path could still never be planned against.
+  -- guards in this schema.
   -- indistinguishable from a real one.
   -- irrespective of later reality.
   -- it, and ambiguity is refused rather than believed.
@@ -848,6 +860,8 @@
   -- the message is being attributed to. Attribution is structural.
   -- the one with the field left out entirely.
   -- the ratchets/audits are what make any of it binding.
+  -- the two attribution axes can never disagree about the same row.
+  -- unrecorded event, and it must not be able to enter the ledger as a credit.
   -- versus what the whole company has. They are the two inputs deterministic
   -- was observed rather than on a label a caller chose.
   -- well-meaning integration.
@@ -888,6 +902,8 @@
   ON competitor_feature_tracking(product_id, competitor_name);
   ON competitor_feature_tracking(product_id, competitor_name, feature_name);
   ON competitor_pricing_snapshots(product_id, competitor_name, snapshot_date);
+  ON cost_events(product_id, capability, created_at);
+  ON cost_events(product_id, responsibility_id, created_at);
   ON custom_webhook_sources(product_id, is_active);
   ON data_classifications(product_id, surface);
   ON data_quality_alerts(product_id, resolved_at, created_at);
@@ -931,6 +947,8 @@
   ON taste_journals(product_id, agent_name, rating, rated_at DESC);
   ON taste_journals(rated_in_session_id);
   ON team_health_metrics(product_id, week_starting DESC);
+  OR COALESCE(OLD.amount_usd,-1) <> COALESCE(NEW.amount_usd,-1)
+  OR COALESCE(OLD.capability,'') <> COALESCE(NEW.capability,'')
   PRIMARY KEY (founder_id, product_id, item_key)
   PRIMARY KEY (product_id, prompt, condition_name)
   PRIMARY KEY (scope, scope_id, date)
@@ -971,6 +989,10 @@
   SELECT RAISE(ABORT,'candidate_promotion:not_promotable') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'candidate_promotion:owner_invalid') WHERE
   SELECT RAISE(ABORT,'candidate_promotion:result_required') WHERE
+  SELECT RAISE(ABORT,'cost_event:amount_invalid')
+  SELECT RAISE(ABORT,'cost_event:attribution_immutable');
+  SELECT RAISE(ABORT,'cost_event:capability_mismatch')
+  SELECT RAISE(ABORT,'cost_event:responsibility_foreign')
   SELECT RAISE(ABORT,'customer_message:channel_foreign') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'customer_message:institutional_claim') WHERE
   SELECT RAISE(ABORT,'customer_message:payload_invalid') WHERE
@@ -1127,12 +1149,15 @@
   UPDATE responsibility_candidates SET status='superseded',updated_at=NEW.created_at
   WHERE (NEW.scope='responsibility' AND NEW.predicate NOT IN (
   WHERE (SELECT r.state FROM institutional_responsibilities r WHERE r.id=NEW.responsibility_id)='assisting'
+  WHERE COALESCE(NEW.amount_usd, -1) < 0;
   WHERE NEW.body IS NULL OR trim(NEW.body)='' OR length(NEW.body)>8192;
   WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
   WHERE NEW.event_type <> 'external_metric:'
   WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
   WHERE NEW.intake_key IS NULL OR length(NEW.intake_key)<24;
   WHERE NEW.label IS NULL OR trim(NEW.label)='';
+  WHERE NEW.responsibility_id IS NOT NULL AND NEW.capability IS NOT NULL AND EXISTS (
+  WHERE NEW.responsibility_id IS NOT NULL AND NOT EXISTS (
   WHERE NEW.revoked_at IS NOT NULL;
   WHERE NEW.scope NOT IN ('responsibility','company');
   WHERE NEW.status<>'open' OR NEW.answer_signal_id IS NOT NULL OR NEW.resolved_at IS NOT NULL;
@@ -4321,7 +4346,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4345,6 +4369,7 @@
 , resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT, autopilot_counted INTEGER NOT NULL DEFAULT 0);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), allowed_scope_json TEXT, consequence_boundary TEXT, expires_at TEXT, repository_ref TEXT, allowed_path_prefixes_json TEXT, allowed_change_class TEXT, required_verification_json TEXT);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), authority_consent_id TEXT REFERENCES autonomy_consents(id), authority_scope TEXT, effect_id TEXT, effect_certainty TEXT, provider_receipt_json TEXT, reconcile_after TEXT, outcome_status TEXT, outcome_evidence_ref TEXT, learned_claim_id TEXT REFERENCES reconstruction_claims(id), inbound_message_id TEXT REFERENCES inbound_customer_messages(id), reply_proposal_id TEXT REFERENCES signal_events(id));
+, responsibility_id TEXT REFERENCES institutional_responsibilities(id), capability TEXT);
 , scope TEXT NOT NULL DEFAULT 'responsibility');
 , sector_profile TEXT DEFAULT 'b2b_saas', growth_stage TEXT DEFAULT 'pre_launch', growth_stage_updated_at TEXT, growth_stage_overridden INTEGER DEFAULT 0, share_token TEXT, ingest_token TEXT, deleted_at DATETIME, build_platform TEXT DEFAULT 'custom_code', company_lifecycle_state TEXT DEFAULT 'setup'
 , superseded_by_candidate_id TEXT REFERENCES responsibility_candidates(id));
@@ -4360,6 +4385,7 @@ BEFORE DELETE ON system_identities
 BEFORE INSERT ON ai_spend_reservations
 BEFORE INSERT ON autonomy_consents
 BEFORE INSERT ON autonomy_consents WHEN NEW.responsibility_id IS NOT NULL
+BEFORE INSERT ON cost_events
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON founder_evidence_requests
@@ -4393,10 +4419,13 @@ BEFORE INSERT ON support_channels
 BEFORE INSERT ON system_identities
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
 BEFORE UPDATE OF revoked_at ON autonomy_consents
+BEFORE UPDATE ON cost_events
 BEFORE UPDATE ON development_change_plans
 BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4545,7 +4574,9 @@ CREATE INDEX idx_consents_product ON privacy_consents(product_id);
 CREATE INDEX idx_conv_messages_thread ON conversation_messages(thread_id, created_at ASC);
 CREATE INDEX idx_conv_threads_founder ON conversation_threads(founder_id, created_at DESC);
 CREATE INDEX idx_conv_threads_product ON conversation_threads(product_id, last_message_at DESC);
+CREATE INDEX idx_cost_events_capability
 CREATE INDEX idx_cost_events_product ON cost_events(product_id, agent_name, created_at DESC);
+CREATE INDEX idx_cost_events_responsibility
 CREATE INDEX idx_counterfactuals_node ON decision_counterfactuals(memory_node_id);
 CREATE INDEX idx_cpi_sector ON cross_product_insights(sector);
 CREATE INDEX idx_cpi_stage ON cross_product_insights(growth_stage);
@@ -5062,6 +5093,8 @@ CREATE TRIGGER ai_spend_reservation_finish
 CREATE TRIGGER ai_spend_reservation_guard
 CREATE TRIGGER assisted_action_plan_guard
 CREATE TRIGGER assisted_reply_plan_binding_guard
+CREATE TRIGGER cost_event_attribution_guard
+CREATE TRIGGER cost_event_attribution_immutable
 CREATE TRIGGER customer_message_observation_guard
 CREATE TRIGGER development_authority_guard
 CREATE TRIGGER development_change_disposition_guard
@@ -5193,5 +5226,8 @@ END;
 END;
 END;
 END;
+END;
+END;
+WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN OLD.status IN ('reserved','ambiguous') AND NEW.status IN ('settled','released','expired')

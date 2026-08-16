@@ -181,10 +181,17 @@ export async function logCost(params: {
   amountUsd: number;
   details?: Record<string, unknown>;
   sessionId?: string;
+  /** Institutional attribution (migration 134). A persona is not a unit of
+   * company work; a responsibility is. Optional because pre-institutional
+   * callers exist, and booking their spend against an invented responsibility
+   * would be worse than leaving it unattributed. */
+  responsibilityId?: string;
+  capability?: string;
 }): Promise<void> {
   await query(
-    `INSERT INTO cost_events (id, product_id, agent_name, cost_type, amount_usd, details_json, session_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO cost_events (id, product_id, agent_name, cost_type, amount_usd, details_json, session_id,
+       responsibility_id, capability)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       nanoid(),
       params.productId,
@@ -193,6 +200,8 @@ export async function logCost(params: {
       params.amountUsd,
       params.details ? JSON.stringify(params.details) : null,
       params.sessionId ?? null,
+      params.responsibilityId ?? null,
+      params.capability ?? null,
     ],
   );
 }
