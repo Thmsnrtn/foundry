@@ -2328,10 +2328,51 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           );
         }
       }
-      if (raised > 0 || observed > 0) {
-        logger.info(`institutional_judgment_tick: raised=${raised} observed=${observed}`, {
-          jobName: 'institutional_judgment_tick',
-        });
+      // Two links the reachability gate found dark: nothing in production ever
+      // *earned* Understanding from accumulated facts, and nothing ever
+      // *resolved* an open shadow expectation. Both are deterministic reads of
+      // state that already exists — neither invents evidence, and both refuse
+      // themselves when the evidence is insufficient.
+      let understood = 0; let compared = 0;
+      const { earnResponsibilityUnderstanding } = await import(
+        '../services/institution/responsibility-understanding.js'
+      );
+      const { resolveExternalMetricShadowing } = await import(
+        '../services/institution/external-shadowing.js'
+      );
+      for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
+        const productId = String(row.id);
+        const visible = await query(
+          `SELECT id FROM institutional_responsibilities
+            WHERE product_id=? AND state='visible' AND disposition='active'`, [productId]);
+        for (const r of visible.rows as unknown as Array<Record<string, unknown>>) {
+          // Throws when the facts are not yet sufficient. That is the normal
+          // case and is not an error.
+          try { await earnResponsibilityUnderstanding(productId, String(r.id)); understood++; } catch { /* not yet */ }
+        }
+        const open = await query(
+          `SELECT x.id FROM responsibility_shadow_expectations x
+             JOIN institutional_responsibilities r ON r.id=x.responsibility_id
+            WHERE x.product_id=? AND r.state='shadowing'
+              AND x.expected_event_type LIKE 'external_metric:%'`, [productId]);
+        for (const x of open.rows as unknown as Array<Record<string, unknown>>) {
+          try {
+            const resolved = await resolveExternalMetricShadowing(productId, String(x.id));
+            if (resolved.classification !== 'unresolved') compared++;
+          } catch (err) {
+            logger.error(
+              `shadow resolution failed for ${String(x.id)}: ${err instanceof Error ? err.message : String(err)}`,
+              { jobName: 'institutional_judgment_tick', productId },
+            );
+          }
+        }
+      }
+
+      if (raised > 0 || observed > 0 || understood > 0 || compared > 0) {
+        logger.info(
+          `institutional_judgment_tick: raised=${raised} observed=${observed} understood=${understood} compared=${compared}`,
+          { jobName: 'institutional_judgment_tick' },
+        );
       }
     },
     schedule: '20 */6 * * *', // Every 6 hours

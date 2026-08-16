@@ -832,6 +832,16 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Structural reachability gate for the support chain
+
+- **Why:** the chain's production callers were asserted inside the vertical test. That proves it worked once; it does not stop a link going dark later — which is the failure mode this program has found in five consecutive sessions.
+- **Build:** the reachability gate now checks sixteen named links — company evidence intake, discovery, founder evidence, understanding advancement, expectation/Shadowing entry, independent observation, shadow comparison, authority grant, revocation, admission, message intake, channel association, reply proposal, planning, the assisted plan writer, and governed execution. Only `src/` is scanned, so a test-only or benchmark-only caller cannot satisfy a link.
+- **Invocation, not mention.** The first version matched the symbol anywhere in the file, and a mutation that removed the planner *call* left the gate green because the import line still named it. It now strips import/export lines and requires the symbol in call position. Re-mutated: removing the call fails the gate; restoring it passes.
+- **It found two genuinely dark links immediately.** Nothing in production ever *earned* Understanding from accumulated facts, and nothing ever *resolved* an open shadow expectation. Facts were arriving and expectations were being made, and neither was ever acted on. Both are now driven by the existing scheduled institutional pass — deterministic reads of state that already exists, each refusing itself when the evidence is insufficient, neither inventing anything.
+- **Evidence maturity:** E2 — local, mutation-verified. This raises no subsystem's maturity; it makes a repeatedly-learned lesson mechanical.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the sixth autonomous session. Supersedes all earlier continuation records.*
@@ -840,7 +850,7 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
 - **Migrations:** through **133**. Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **158 files / 1,278 tests**.
+- **Full `npm run check`:** green — **158 files / 1,279 tests**.
 - **Working tree:** clean.
 - **Environment notes:** `sqlite3` is not preinstalled (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first; use `log` from `src/lib/logger.js`, never `console.*`. Fix the code, never the gate.
 
@@ -908,7 +918,6 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 
 - **Nothing has met reality.** No real founder, outside tool, or provider.
 - **Autonomous reply generation** is unbuilt and unclaimed; the founder-authored path is the baseline.
-- **Structural reachability gate for the support chain is still not built** — production callers are asserted inside the vertical tests, which is weaker than a permanent gate.
 - **Pilot readiness (grant/revoke/re-grant UX legibility, emergency stop audit, readiness contract) is not started.**
 - **A model-drafted proposal must first have a frozen contract** (§10), then beat the human baseline.
 - **Outcome (§12) remains untouched and must stay so:** provider acknowledgement, delivery, customer silence, and elapsed time are all *not* resolution. If a provider can emit an explicit case-status event, audit whether its contract genuinely establishes the outcome before believing it. Preserve `unresolved`.

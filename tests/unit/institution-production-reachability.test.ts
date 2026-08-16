@@ -141,6 +141,57 @@ describe('institutional reachability', () => {
       'responsibility it is never told about.').not.toEqual([]);
   });
 
+  it('every link in the support chain has a real production caller', () => {
+    // The chain's callers were previously asserted inside the vertical test.
+    // That proves the chain worked once; it does not stop a link going dark
+    // later. This is the permanent version.
+    //
+    // Only `src/` is scanned, so a test-only or benchmark-only caller cannot
+    // satisfy a link — which is exactly the failure mode this program keeps
+    // finding. Each entry names the module that DEFINES the symbol, so a module
+    // referring to itself never counts as its own caller.
+    const CHAIN: Array<[string, string, string]> = [
+      ['company evidence intake', 'emitSignalEvent', 'services/scp/events/dispatcher.ts'],
+      ['responsibility discovery', 'discoverResponsibilityFromSignal', 'services/institution/discovery.ts'],
+      ['founder evidence', 'recordFounderEvidenceAnswer', 'services/institution/founder-evidence.ts'],
+      ['understanding advancement', 'earnResponsibilityUnderstanding', 'services/institution/responsibility-understanding.ts'],
+      ['expectation + shadowing entry', 'beginExternalMetricShadowing', 'services/institution/external-shadowing.ts'],
+      ['independent observation', 'recordExternalMetricObservations', 'services/institution/external-observation.ts'],
+      ['shadow comparison', 'resolveExternalMetricShadowing', 'services/institution/external-shadowing.ts'],
+      ['authority grant', 'grantAssistingAuthority', 'services/institution/assisting-admission.ts'],
+      ['authority revocation', 'revokeAssistingAuthority', 'services/institution/assisting-admission.ts'],
+      ['assisting admission', 'enterResponsibilityAssisting', 'services/institution/responsibility-assisting.ts'],
+      ['customer message intake', 'ingestCustomerMessage', 'services/institution/customer-message-intake.ts'],
+      ['responsibility/channel association', 'registerSupportChannel', 'services/institution/customer-message-intake.ts'],
+      ['founder reply proposal', 'proposeSupportReply', 'services/institution/support-reply.ts'],
+      ['action planning', 'planProposedReply', 'services/institution/support-reply.ts'],
+      ['assisted plan writer', 'planAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
+      ['governed execution', 'executeAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
+    ];
+    const files = tsFiles(resolve(ROOT, 'src'));
+    const dark: string[] = [];
+    for (const [link, symbol, definedIn] of CHAIN) {
+      // Invocation, not mention. Import lines are stripped first, and the
+      // symbol must appear in call position — otherwise renaming a call while
+      // leaving the import behind would keep the gate green on a dead link,
+      // which is exactly the brittleness this program keeps paying for.
+      const callers = files
+        .filter((f) => !f.endsWith(definedIn))
+        .filter((f) => {
+          const source = readFileSync(f, 'utf8')
+            .split('\n')
+            .filter((line) => !/^\s*(import|export)\s/.test(line) && !/^\s*[\w,{} ]+\}?\s*from\s/.test(line))
+            .join('\n');
+          return new RegExp(`\\b${symbol}\\s*\\(`).test(source);
+        });
+      if (!callers.length) dark.push(`${link} — nothing in src/ calls ${symbol}()`);
+    }
+    expect(dark,
+      'A link in the support chain exists but nothing production-facing reaches it. ' +
+      'A service in src/ is not enough; a test-only caller is not enough:\n' + dark.join('\n'),
+    ).toEqual([]);
+  });
+
   it('the reasons are load-bearing, not decoration', () => {
     // A reason that says "later" is exactly the speculative architecture the
     // constitution forbids. Every entry must name a real blocker or a real
