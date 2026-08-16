@@ -746,6 +746,21 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Systematic NULL-semantics audit of every guard (migration 130)
+
+- **The pattern, stated exactly:** a `SELECT RAISE(ABORT,…) WHERE <predicate>` fires only when the predicate is TRUE. A missing JSON key or a NULL column makes it NULL, and a NULL predicate does not fire — so the guard accepts precisely the input it was written to refuse. `x NOT IN (…)`, `x <> y`, `json_type(x,'$.k')<>'array'` and `json_array_length(x,'$.k')=0` are all NULL when the key is absent. Migrations 127 and 128 each fixed one instance; this audit covered every effective trigger in the repository (DROP-aware, so superseded definitions were not analysed).
+- **Most guards were already safe, and were left alone.** `WHERE NOT EXISTS (…)` is inherently fail-closed: a NULL inside matches no row, `NOT EXISTS` becomes TRUE, and the refusal fires. `WHERE EXISTS (SELECT … WHERE bad OR NOT EXISTS(…))` is safe for the same reason. Several top-level predicates are protected by an explicit `IS NULL OR …` first term, or by an earlier statement in the same trigger body that refuses the absence before the vulnerable line is reached. Rewriting these would have been churn.
+- **Two were genuinely defeated.**
+  - **Migration 116 — institutional judgment provenance.** `evidence_refs_json` was added by ALTER and is nullable, so `json_valid(NULL)=0 OR json_array_length(NULL)=0` evaluated to NULL and the refusal never fired. A judgment with real responsibilities, real tenancy, and **no evidence at all** was accepted — and everything downstream treats `responsibility_refs_json IS NOT NULL` as the mark of an institutional judgment, so the owner disposition guard would have accepted a direction on it and the founder's Letter would have surfaced it. *Evidence over narrative* was enforceable everywhere except where judgments are created. The original defect was masked in testing because the adjacent tenant check fired first on fabricated responsibility ids; it only appears with **valid** ids.
+  - **Migration 123 — canonical system identity.** SQLite permits NULL in a TEXT `PRIMARY KEY`. That defeated two checks at once: `NULL NOT IN ('foundry')` is NULL, and `s.identity_key=NEW.identity_key` matched nothing. The resulting row is not junk — `product_id` is UNIQUE, so a NULL-keyed row against the canonical product would occupy that slot forever and make the real identity **permanently unclaimable**. A denial of identity through the guard meant to protect it.
+- **Repairs** are fail-closed with explicit `IS NULL` terms and `coalesce`, each with a regression test using the exact absent shape, each paired with a legitimate insert proving the door did not close on everything (a grounded judgment still inserts; the cross-tenant refusal beside it still fires; the real identity claim still works and is still exclusive).
+- **Prevention gate:** `scripts/check-guard-null-safety.mjs`, wired into `npm run check`. It parses effective triggers, and in **top-level** RAISE predicates only, requires every `json_extract`/`json_type`/`json_array_length` read of a specific `'$.path'` used with a NULL-propagating operator to be wrapped in `coalesce` — unless an earlier statement in the same trigger already refuses that path's absence. Subquery-guarded predicates and whole-document reads are deliberately not flagged; a noisy gate teaches people to ignore it.
+- **The gate is mutation-tested both ways:** a deliberately vulnerable trigger (`json_extract(...) NOT IN (...)`) fails it, and a legitimate trigger exercising all three safe forms — ordering-protected, `IS NOT NULL`, and `NOT EXISTS` — passes cleanly.
+- **Stated limitation:** the gate does not analyse nullable *columns* compared with `NOT IN`/`<>`, which needs schema nullability analysis it does not do — and one of the two real defects was exactly that shape. Trigger tests remain the backstop there, and the script says so in its own header rather than implying coverage it lacks.
+- **Evidence maturity:** E2 — local runtime evidence, mutation-verified. No maturity claim changes; this repairs a boundary that other claims silently depended on.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the fourth autonomous session. Supersedes all earlier continuation records.*

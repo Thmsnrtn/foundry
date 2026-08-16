@@ -66,6 +66,7 @@
 
 
 
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -197,6 +198,7 @@
       NEW.actor_ref!='institution:deterministic_candidate_grounder' OR NOT EXISTS (
       ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
       OR NOT EXISTS (
+      SELECT 1 FROM institutional_responsibilities r
       SELECT 1 FROM institutional_responsibilities r JOIN autonomy_consents a ON a.id=NEW.authority_consent_id
       SELECT 1 FROM json_each('["src/db/migrations/","docs/foundry-institution/","scripts/",'
       SELECT 1 FROM products p WHERE p.id=NEW.product_id AND ('founder:' || p.owner_id)=NEW.actor_ref
@@ -209,6 +211,7 @@
       WHERE c.id=e.value AND c.product_id=NEW.product_id
       WHERE d.id=NEW.judgment_id AND alt.value=NEW.selected_alternative)))
       WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id AND r.state='assisting'
+      WHERE r.id=refs.value AND r.product_id=NEW.product_id));
       WHERE rc.id=c.value AND rc.product_id=NEW.product_id
       WHERE substr(NEW.target_path,1,length(r.value))=r.value
       WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id AND r.state='shadowing' AND r.authority_ref IS NULL
@@ -311,6 +314,7 @@
     NEW.decision!='superseded' AND NEW.superseded_by_candidate_id IS NOT NULL;
     NEW.disposition IS NOT 'change'
     NEW.epistemic_status='inferred' AND NEW.confidence IS NULL;
+    NEW.evidence_refs_json IS NULL
     NEW.expires_at IS NULL OR datetime(NEW.expires_at)<=datetime('now');
     NEW.grounding_mechanism!='authenticated_owner' OR NOT EXISTS (
     NEW.grounding_mechanism='authenticated_owner' AND NOT EXISTS (
@@ -335,7 +339,9 @@
     OR NEW.predicate<>OLD.predicate OR NEW.asked_at<>OLD.asked_at OR NEW.scope<>OLD.scope;
     OR NEW.repository_ref<>OLD.repository_ref OR NEW.target_path<>OLD.target_path
     OR NOT EXISTS (
+    OR coalesce(json_array_length(NEW.evidence_refs_json),0)=0;
     OR coalesce(json_array_length(NEW.payload_json,'$.evidence_claim_ids'),0)=0;
+    OR coalesce(json_array_length(NEW.responsibility_refs_json),0)<2
     OR coalesce(json_type(NEW.payload_json,'$.evidence_claim_ids'),'absent')<>'array'
     OR coalesce(json_type(NEW.payload_json,'$.observed_value'),'absent') NOT IN ('integer','real')
     OR coalesce(json_type(NEW.payload_json,'$.previous_value'),'absent') NOT IN ('integer','real');
@@ -367,7 +373,8 @@
     OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL
     OR json_valid(NEW.disposition_evidence_json)=0
-    OR json_valid(NEW.evidence_refs_json)=0 OR json_array_length(NEW.evidence_refs_json)=0;
+    OR json_valid(NEW.evidence_refs_json)=0
+    OR json_valid(NEW.responsibility_refs_json)=0
     OR trim(coalesce(json_extract(NEW.payload_json,'$.check'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
@@ -442,7 +449,7 @@
     WHERE NEW.observation_ref='signal_event:' || e.id
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
-    WHERE NOT EXISTS (SELECT 1 FROM institutional_responsibilities r WHERE r.id=refs.value AND r.product_id=NEW.product_id)
+    WHERE NOT EXISTS (
     WHERE a.id=NEW.authority_consent_id
     WHERE d.id=NEW.judgment_id AND d.product_id=NEW.product_id
     WHERE d.id=json_extract(NEW.payload_json,'$.judgment_id')
@@ -487,7 +494,6 @@
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
-    json_valid(NEW.responsibility_refs_json)=0 OR json_array_length(NEW.responsibility_refs_json)<2
     outcome_ref = NEW.outcome_ref,
     spent_cents = spent_cents + COALESCE(NEW.actual_cents, 0),
     spent_cents = spent_cents + COALESCE(NEW.actual_cents, 0),
@@ -557,7 +563,6 @@
   );
   );
   );
-  );
   --
   --
   --   config_keys_count, stressors_active, customer_count }
@@ -587,7 +592,6 @@
   -- Business philosophy
   -- Calibration outcome, resolved later by the Memory Kernel:
   -- Closed vocabularies, one per scope. A responsibility-scoped predicate may
-  -- Closed vocabulary. A new system identity cannot be invented at runtime;
   -- Closed vocabulary: the metric columns the public intake actually accepts,
   -- Communication
   -- Communication style
@@ -655,7 +659,6 @@
   -- Status
   -- Structured output
   -- The assertion answers an OPEN question of this company. It cannot answer a
-  -- The bound row must be a real product. Identity attaches to an ordinary
   -- The check is deny-dominant and bidirectional: a prefix inside the ring is
   -- The compressed content
   -- The constitutional ring. Ordinary development authority may not reach the
@@ -664,7 +667,6 @@
   -- The grounding must be this product's own current claims. A disposition
   -- The observer may not see, cite, or echo the expectation it will be
   -- The signal that says "stop iterating" when yield drops below threshold.
-  -- The slot is claimed once. A second claimant is refused with a domain
   -- The target must fall inside a granted prefix.
   -- Trigger
   -- Types: 'churn_risk' | 'expansion_opportunity' | 'metric_target' | 'experiment_outcome' | 'risk_escalation'
@@ -690,9 +692,7 @@
   -- code, migrations, documents, or enforcement scripts that define what
   -- company-scoped because that is what they are — what one piece of work costs
   -- company-wide predicates the owner named (cash constraint, operating
-  -- company/product row; there is no separate privileged entity kind.
   -- compared against. Verification that can read the expectation is
-  -- constitutional ring that ordinary development authority cannot reach.
   -- evidence provenance this contract governs.
   -- field before its consumer exists is how orphans are made.
   -- for "it was independently checked".
@@ -701,7 +701,6 @@
   -- grant can invent.
   -- grant that somehow held a ring path could still never be planned against.
   -- indistinguishable from a real one.
-  -- it requires editing this migration, and migrations are inside the
   -- it, and ambiguity is refused rather than believed.
   -- judgment time; the owner cannot introduce an unrepresented direction here.
   -- justified by another tenant's evidence is not a justification.
@@ -709,7 +708,6 @@
   -- not be asked company-wide and a company-wide one may not be pinned to a
   -- policy) are deliberately absent until something consumes them; adding a
   -- question that was never asked, another tenant's question, or one already
-  -- reason rather than a primary-key error, so the invariant reads as intent.
   -- reference is exactly this consent, and a consent that is currently valid,
   -- refused, and so is a broad prefix that would contain part of the ring.
   -- repository is not a bound scope.
@@ -988,8 +986,9 @@
   UPDATE responsibility_candidates SET status='rejected',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='superseded',updated_at=NEW.created_at
   WHERE (NEW.scope='responsibility' AND NEW.predicate NOT IN (
+  WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
   WHERE NEW.event_type <> 'external_metric:'
-  WHERE NEW.identity_key NOT IN ('foundry');
+  WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
   WHERE NEW.scope NOT IN ('responsibility','company');
   WHERE NEW.status<>'open' OR NEW.answer_signal_id IS NOT NULL OR NEW.resolved_at IS NOT NULL;
   WHERE NEW.status='answered' AND NOT EXISTS (
@@ -1006,7 +1005,6 @@
   WHERE id=NEW.responsibility_id AND product_id=NEW.product_id;
   WHERE json_extract(NEW.payload_json,'$.obligation_kind') NOT IN (
   WHERE resolved_at IS NULL;
-  WHERE trim(NEW.established_reason)='';
   accepted_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
   accepted_at DATETIME,
   accepted_at TEXT,
