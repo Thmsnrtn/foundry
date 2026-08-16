@@ -271,9 +271,16 @@ describe('development as an ordinary shadowed responsibility', () => {
       const path = join(dir, entry);
       return statSync(path).isDirectory() ? walk(path) : path.endsWith('.ts') ? [path] : [];
     });
+    // Bounded: it catches a file that both inserts signal events and names the
+    // development verification source. Reading those observations is expected
+    // and unrestricted; only minting them is confined.
     const writers = walk(resolve(process.cwd(), 'src'))
       .filter((path) => !path.endsWith('development-observation.ts'))
-      .filter((path) => /development_verification/.test(readFileSync(path, 'utf8')));
+      .filter((path) => {
+        const source = readFileSync(path, 'utf8');
+        return /INSERT\s+(OR\s+\w+\s+)?INTO\s+signal_events/i.test(source)
+          && /development_verification/.test(source);
+      });
     expect(writers).toEqual([]);
   });
 
