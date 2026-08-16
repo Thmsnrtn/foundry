@@ -889,7 +889,28 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 - **Migrations:** through **133**. No new migration this session — every slice was built on schema that already existed, which is the correct outcome when the gap is proof rather than structure.
 - **Full `npm run check`:** green — **161 files / 1,310 tests** (three consecutive clean runs).
 - **Working tree:** clean.
-- **One unreproduced flake, recorded honestly:** during one full run, two assertions in `tests/unit/customer-message-intake.test.ts` failed on a message count. It did not reproduce in three subsequent full runs, nor in repeated single-threaded runs of that file alongside its neighbours. That file is untouched by this session's changes. It is a real intermittent and it is not diagnosed — do not treat the suite as fully deterministic until it is.
+- **One unreproduced flake — investigated seriously, still open.** See the investigation record below. It is not diagnosed; do not treat the suite as fully deterministic.
+
+## Investigation: the `customer-message-intake` nondeterminism (NOT RESOLVED)
+
+Two assertions in `tests/unit/customer-message-intake.test.ts` failed once on a message count, during a full run. It has not reproduced since. What was actually tested, so the next attempt does not repeat this ground:
+
+**Ruled out by measurement, not by argument:**
+
+| Hypothesis | How it was eliminated |
+|---|---|
+| Suites share one in-process `file::memory:` DB | **Directly probed.** One file creates a table, another looks for it — invisible. Each test file gets its own module registry and its own database. The vitest config comment asserting otherwise was stale and has been corrected. |
+| Cross-file contamination of this table | Only one other suite touches `inbound_customer_messages`, under a different product id, and files are isolated anyway. |
+| `query()`'s 10s timeout firing under load | At `DB_QUERY_TIMEOUT_MS=1` the file still passes 11/11 — local sqlite resolves before the timer can fire. This class of failure is not reachable here. |
+| CPU contention / slow machine | 25 consecutive runs of the file with all four cores saturated: 25/25 green. |
+| Detached background signal processing racing the test | `emitSignalEvent` only fires `processSignalEvent` fire-and-forget for `high`/`critical` severity. This path emits `medium`, so nothing is detached. |
+| File-execution concurrency | Ran the full suite twice with `fileParallelism: true`: 1313/1313 both times. |
+
+**Reproduction attempts:** nine full-suite runs and twenty-five isolated runs under saturation. Zero reproductions.
+
+**Found along the way, and fixed — but explicitly NOT the cause.** `getDb()` applied `PRAGMA foreign_keys = ON` as an unawaited promise and swallowed failure, while its own comment noted that without it every `REFERENCES` clause is decorative. Every entry point now awaits readiness and a failed PRAGMA is surfaced. **Reverting the fix does not fail the new tests** — the PRAGMA reliably wins the race on this driver — so this was a latent defect, not the flake. Claiming otherwise would close the item on a coincidence.
+
+**Status: evidence debt retained.** The remaining untested hypotheses are container-level (memory pressure, worker reuse across 161 files). Per the owner's bounded-investigation instruction, the roadmap continues rather than guessing further.
 - **Environment notes:** `sqlite3` is not preinstalled (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first; use `log` from `src/lib/logger.js`, never `console.*`. Fix the code, never the gate.
 
 ## What this session did

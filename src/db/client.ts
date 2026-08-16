@@ -6,6 +6,7 @@
 import { createClient, type Client, type InStatement, type InValue, type InArgs, type ResultSet } from '@libsql/client';
 
 let _client: Client | null = null;
+let _ready: Promise<void> | null = null;
 
 const QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS ?? '10000', 10);
 
@@ -20,14 +21,29 @@ export function getDb(): Client {
       authToken: authToken || undefined,
     });
 
-    // Enable foreign key enforcement — without this, all REFERENCES clauses are decorative
-    _client.execute('PRAGMA foreign_keys = ON').catch(() => {
-      // Some Turso configurations may not support this; log but don't fail
-      console.warn('[DB] Could not enable foreign_keys PRAGMA');
-    });
+    // Enable foreign key enforcement — without this, all REFERENCES clauses are
+    // decorative. This used to be fire-and-forget, which made enforcement a
+    // race: the first statements after client creation could run before the
+    // PRAGMA landed, so whether a REFERENCES clause was live depended on
+    // scheduling. Every entry point now awaits `ready()` first, so the window
+    // is closed by construction rather than by luck.
+    _ready = _client.execute('PRAGMA foreign_keys = ON').then(
+      () => undefined,
+      (err: unknown) => {
+        // Some Turso configurations may not support this. It must be visible:
+        // running without foreign keys is a real loss of integrity, not a
+        // detail to swallow.
+        console.warn(`[DB] Could not enable foreign_keys PRAGMA: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    );
   }
   return _client;
 }
+
+// Readiness is deliberately NOT exported. Every entry point below awaits it, so
+// no caller can forget to — and the tenancy gate scans exported client
+// functions for tenant scoping, which a connection-lifecycle helper would fail
+// for the wrong reason.
 
 /**
  * Execute a query and return the result set.
@@ -36,6 +52,7 @@ export function getDb(): Client {
  */
 export async function query(sql: string, args: unknown[] = []): Promise<ResultSet> {
   const db = getDb();
+  await _ready;
   return Promise.race([
     db.execute({ sql, args: args as InArgs }),
     new Promise<never>((_, reject) =>
@@ -49,6 +66,7 @@ export async function query(sql: string, args: unknown[] = []): Promise<ResultSe
  */
 export async function batch(statements: Array<{ sql: string; args?: unknown[] }>): Promise<ResultSet[]> {
   const db = getDb();
+  await _ready;
   return db.batch(
     statements.map((s) => ({
       sql: s.sql,
@@ -65,6 +83,7 @@ export async function batch(statements: Array<{ sql: string; args?: unknown[] }>
  */
 export async function executeRaw(sql: string): Promise<void> {
   const db = getDb();
+  await _ready;
   // Split on semicolons that are followed by a newline (statement boundaries),
   // not semicolons inside parenthesized expressions.
   const statements = sql
