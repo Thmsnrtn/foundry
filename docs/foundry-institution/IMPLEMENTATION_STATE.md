@@ -804,6 +804,21 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## The first production-facing support execution chain (migration 132)
+
+- **Audit before adding a noun.** `action_drafts` (022) is the pre-institution drafting store — no responsibility, no consent, no effect identity, no tenant guard, free-text status and owner. `outbound_actions` (021, extended by 114) **is** the canonical action-plan primitive and is what `planAssistedSupportEmail` already writes. So the proposal needed **no table at all**: a founder-authored reply is one more authenticated thing the founder said, and that has a canonical, tenant-guarded, provenance-bearing event log. **Proposal = `signal_events` row; plan = `outbound_actions` row.** Two nouns, two meanings, no third store, no dual write.
+- **The evidence boundary, held explicitly:** a proposed reply is a canonical *event* — the founder wrote it — and is **not company evidence**. **No reconstruction claim is derived from it**, asserted by test. What a founder proposes to tell a customer is not a fact about the company; treating it as one would let drafting quietly rewrite company truth.
+- **The founder authors text and nothing else.** Recipient, responsibility, capability, consent, scope, consequence and effect identity are all resolved server-side from the message and the channel that owns it. The recipient is the message's own sender — **there is no parameter for it, so there is nothing to redirect**. A proposal payload naming any of nine authority-shaped fields is refused whole.
+- **Plan binding is durable and exclusive:** the plan carries `inbound_message_id` and `reply_proposal_id`, guarded so the responsibility on the plan must be the one that owns the message's channel, and the proposal must have been authored for that same message. A partial unique index enforces **one plan per inbound message** — otherwise two replies could sit queued for one customer question with nothing to reveal it. Replay converges; effect identity is a stable hash of (product, message, proposal).
+- **The revocation race is proven:** plan exists → owner revokes → execution attempted → **no send**, no execution row, and no new plan can be made while the grant is gone.
+- **Outcome stays honest:** the send crosses the ordinary governed gateway and is recorded there, and `outcome_status` remains `unresolved`. Provider acceptance is not resolution and silence is not success.
+- **Real finding, recorded rather than worked around:** migration 112 admits a responsibility-bound consent only while the responsibility is **Shadowing**. Once admitted to Assisting, a **withdrawn permission cannot be re-granted** — the founder would have to return the responsibility to Shadowing first. Whether withdrawal should be reversible in place is an owner-level question about what a grant means; loosening a constitutional guard to make a test pass would have been the wrong way to answer it. A test pins the current behaviour.
+- **Challenge (10 tests):** distinct non-collapsing states (`message_only` → `proposed` → `planned` → `sent`); proposal duplicate convergence; nine smuggling payloads refused; foreign message, foreign author, empty and oversized content refused; full plan binding with server-resolved recipient; another responsibility refused the plan; the governed send with unresolved outcome; the revocation race; the re-grant finding; and production callers asserted for every link — intake, channel registration, proposal, planner, `planAssistedSupportEmail`, admission, and execution.
+- **What this does NOT prove:** autonomous reply generation. The founder wrote the reply. **That is now the deterministic human baseline** any future model-generated proposal must beat on a frozen contract before it earns a place.
+- **Evidence maturity:** **E2 — local runtime** for the newly exercised chain. Not E4. Bounded support Assisting's prior **E3 is unchanged**.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the sixth autonomous session. Supersedes all earlier continuation records.*
@@ -811,8 +826,8 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
-- **Migrations:** through **131**. Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **156 files / 1,259 tests**.
+- **Migrations:** through **132**. Schema snapshot regenerated and committed.
+- **Full `npm run check`:** green — **157 files / 1,269 tests**.
 - **Working tree:** clean.
 - **Environment notes:** `sqlite3` is not preinstalled (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first; use `log` from `src/lib/logger.js`, never `console.*`. Fix the code, never the gate.
 

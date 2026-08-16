@@ -893,3 +893,74 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/revoke'
   if (!revoked) return c.text('Refused', 403);
   return c.redirect('/letter');
 });
+
+// The founder writes the reply. Foundry carries it — nothing more. Recipient,
+// responsibility, capability, consent and scope are all resolved server-side
+// from the message and the channel that owns it, so the form has one field.
+letterRoutes.post('/letter/messages/:messageId/reply', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const { proposeSupportReply } = await import('../../services/institution/support-reply.js');
+  const proposed = await proposeSupportReply({
+    productId: ctx.productId, founderId: founder.id as string,
+    messageId: c.req.param('messageId'), body: String(body.reply ?? ''),
+  });
+  if ('refused' in proposed) return c.text('Reply refused', 403);
+  return c.redirect('/letter');
+});
+
+// Planning binds the reply to exact current authority. It sends nothing — the
+// send is a separate, separately revalidated step.
+letterRoutes.post('/letter/replies/:proposalId/plan', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const { planProposedReply } = await import('../../services/institution/support-reply.js');
+  const planned = await planProposedReply({
+    productId: ctx.productId, founderId: founder.id as string, proposalId: c.req.param('proposalId'),
+  });
+  if ('refused' in planned) return c.text('Not ready to send', 403);
+  return c.redirect('/letter');
+});
+
+// The only consequential step. Authority is revalidated immediately before
+// dispatch, so a permission withdrawn since planning stops the send here.
+letterRoutes.post('/letter/replies/:actionId/send', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const { query } = await import('../../db/client.js');
+  // Server-side ownership check; the action id alone proves nothing.
+  const owned = await query(
+    `SELECT 1 FROM outbound_actions a JOIN products p ON p.id=a.product_id
+      WHERE a.id=? AND a.product_id=? AND p.owner_id=?`,
+    [c.req.param('actionId'), ctx.productId, founder.id],
+  );
+  if (!owned.rows.length) return c.text('Refused', 403);
+  const { executeAssistedSupportEmail } = await import(
+    '../../services/institution/responsibility-assisted-email.js'
+  );
+  await executeAssistedSupportEmail(c.req.param('actionId'));
+  return c.redirect('/letter');
+});
+
+// The founder tells Foundry which way customers reach them about a
+// responsibility, and receives the key that channel authenticates with. The
+// binding is what lets a message be attributed without guessing from its text.
+letterRoutes.post('/letter/responsibilities/:responsibilityId/channel', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const { registerSupportChannel } = await import(
+    '../../services/institution/customer-message-intake.js'
+  );
+  const channel = await registerSupportChannel({
+    productId: ctx.productId, responsibilityId: c.req.param('responsibilityId'),
+    founderId: founder.id as string, label: String(body.label ?? ''),
+  });
+  if (!channel) return c.text('Refused', 403);
+  return c.redirect('/letter');
+});
