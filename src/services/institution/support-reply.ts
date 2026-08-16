@@ -156,18 +156,33 @@ export async function planProposedReply(input: {
   )).rows[0] as Record<string, unknown> | undefined;
   if (!consent) return { refused: 'no_authority' };
 
-  const existing = await query(
-    'SELECT id FROM outbound_actions WHERE product_id=? AND inbound_message_id=?',
+  // A live plan for this message already exists — converge on it rather than
+  // queueing a second reply to one customer question.
+  const live = await query(
+    `SELECT id,authority_consent_id FROM outbound_actions
+      WHERE product_id=? AND inbound_message_id=? AND status<>'cancelled'`,
     [input.productId, proposal.messageId],
   );
-  if (existing.rows.length) {
-    return { actionId: String((existing.rows[0] as Record<string, unknown>).id), duplicate: true };
+  if (live.rows.length) {
+    const row = live.rows[0] as Record<string, unknown>;
+    // If it is bound to the authority that is current, it IS the plan.
+    if (String(row.authority_consent_id) === String(consent.id)) {
+      return { actionId: String(row.id), duplicate: true };
+    }
+    // Otherwise it is stranded on a grant that no longer authorises anything.
+    // It is cancelled and stays cancelled: its binding, and its effect
+    // identity, do not migrate to the new grant. A new grant requires new
+    // planning before anything can be sent.
+    await query("UPDATE outbound_actions SET status='cancelled' WHERE id=?", [String(row.id)]);
   }
 
   // Stable effect identity: one reply to one customer message, however many
   // times planning is attempted.
+  // Effect identity includes the consent, so a reply planned under a new grant
+  // is a new effect. A stranded plan's identity is never reused.
   const effectId = 'eff_' + createHash('sha256')
-    .update([input.productId, proposal.messageId, proposal.id].join('\n')).digest('hex').slice(0, 32);
+    .update([input.productId, proposal.messageId, proposal.id, String(consent.id)].join('\n'))
+    .digest('hex').slice(0, 32);
 
   const actionId = await planAssistedSupportEmail({
     productId: input.productId,
@@ -196,7 +211,7 @@ export async function getSupportReplyState(
 ): Promise<{ state: SupportReplyState; actionId: string | null; outcome: string | null }> {
   const action = (await query(
     `SELECT id,status,outcome_status FROM outbound_actions
-      WHERE product_id=? AND inbound_message_id=?`, [productId, messageId],
+      WHERE product_id=? AND inbound_message_id=? AND status<>'cancelled'`, [productId, messageId],
   )).rows[0] as Record<string, unknown> | undefined;
   if (action) {
     const status = String(action.status);

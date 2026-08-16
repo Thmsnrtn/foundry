@@ -79,6 +79,9 @@
 
 
 
+
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -173,6 +176,7 @@
       AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
       AND a.to_mode='act'
       AND c.classification IN ('matched','deviated')
+      AND c.classification IN ('matched','deviated')
       AND c.evidence_refs_json=NEW.grounding_evidence_json
       AND c.product_id=NEW.product_id AND c.epistemic_status IN ('known','inferred')
       AND c.product_id=NEW.product_id AND c.revoked_at IS NULL);
@@ -198,13 +202,15 @@
       AND json_valid(a.allowed_scope_json)=1
       AND m.product_id=NEW.product_id);
       AND m.responsibility_id=NEW.responsibility_id);
-      AND p.owner_id=NEW.founder_id AND r.state='shadowing'
+      AND p.owner_id=NEW.founder_id
       AND q.predicate=json_extract(NEW.payload_json,'$.predicate')
       AND q.product_id=NEW.product_id
       AND q.status='open');
       AND r.authority_ref='autonomy_consent:' || a.id
       AND r.capability='customer_support' AND r.disposition='active');
+      AND r.disposition='active'
       AND r.product_id=NEW.product_id AND r.state='understood' AND r.authority_ref IS NULL
+      AND r.state IN ('shadowing','assisting')
       AND r.state='assisting' AND r.capability='development'
       AND r.state='shadowing'
       AND replacement.id!=old.id AND replacement.status='pending'
@@ -311,12 +317,14 @@
     );
     );
     );
+    );
     ;
     ;
     ;
     AND (
     AND (NEW.conflict_identity IS NULL OR NEW.conflict_identity<>OLD.conflict_identity);
     AND (NEW.verification_status IS NOT 'passed' OR NEW.diff_verified IS NOT 1
+    AND NOT EXISTS (
     CHECK (status IN ('in_progress','completed','skipped')),
     FROM autonomy_consents a
     FROM responsibility_shadow_comparisons c
@@ -326,9 +334,10 @@
     JOIN reconstruction_claims claim
     JOIN responsibility_candidates replacement ON replacement.id=NEW.superseded_by_candidate_id
     JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
+    JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
     NEW.allowed_change_class IS NULL
     NEW.allowed_path_prefixes_json IS NULL OR json_valid(NEW.allowed_path_prefixes_json)=0
-    NEW.allowed_scope_json IS NULL OR json_valid(NEW.allowed_scope_json)=0 OR json_array_length(NEW.allowed_scope_json)=0;
+    NEW.allowed_scope_json IS NULL OR json_valid(NEW.allowed_scope_json)=0
     NEW.consequence_boundary IS NULL OR NEW.consequence_boundary NOT IN ('low','medium','high');
     NEW.consequence_boundary<>'low';
     NEW.decision!='superseded' AND NEW.superseded_by_candidate_id IS NOT NULL;
@@ -361,6 +370,7 @@
     OR NEW.predicate<>OLD.predicate OR NEW.asked_at<>OLD.asked_at OR NEW.scope<>OLD.scope;
     OR NEW.repository_ref<>OLD.repository_ref OR NEW.target_path<>OLD.target_path
     OR NOT EXISTS (
+    OR coalesce(json_array_length(NEW.allowed_scope_json),0)=0;
     OR coalesce(json_array_length(NEW.evidence_refs_json),0)=0;
     OR coalesce(json_array_length(NEW.payload_json,'$.evidence_claim_ids'),0)=0;
     OR coalesce(json_array_length(NEW.responsibility_refs_json),0)<2
@@ -472,6 +482,7 @@
     SELECT 1 FROM responsibility_candidates c WHERE c.id=NEW.candidate_id AND c.status='pending'
     SELECT 1 FROM responsibility_candidates old
     SELECT 1 FROM responsibility_shadow_comparisons c
+    SELECT 1 FROM responsibility_shadow_comparisons c
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x JOIN institutional_responsibilities r ON r.id=x.responsibility_id
@@ -539,6 +550,7 @@
     WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
     WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
     WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
+    WHERE x.responsibility_id=NEW.responsibility_id AND x.product_id=NEW.product_id
     authority_ref = NEW.authority_ref,
     disposition_at=NEW.created_at, updated_at=NEW.created_at
     disposition_reason=NEW.reason, disposition_evidence_ref=NEW.evidence_ref,
@@ -632,6 +644,7 @@
   );
   --
   --
+  --
   --   config_keys_count, stressors_active, customer_count }
   --   current_mrr_estimate, team_size, biggest_challenge, stage }
   --   overruled_held — founder overruled and the premises held (dissent was wrong)
@@ -641,7 +654,9 @@
   -- 2 = require explicit approval before acting
   -- A closed, deliberately small change vocabulary. Broadening it is a
   -- A generic strategic decision row carries none of the responsibility and
+  -- A grant is still exact: this owner, this company, this responsibility, this
   -- A guessable key is not authentication.
+  -- A new grant is a new authority identity. Reviving a revoked one is not a
   -- A proposal answers one real message of this company. There is no way to
   -- A selected alternative must be one Foundry actually represented at
   -- A verified outcome requires BOTH independent verification and proof that
@@ -715,6 +730,7 @@
   -- Preferences
   -- Progress may be recorded; what was authorized may not be rewritten.
   -- Promotions advance exactly one rung; demotion may move to any lower rung.
+  -- Re-grant only: the evidence that justified assistance must still exist. A
   -- Re-resolve every source at decision time. Positive claim evidence must
   -- Relative, non-escaping prefixes only. A prefix that can climb out of the
   -- Reporting an obligation is not granting permission to discharge it. As with
@@ -722,6 +738,7 @@
   -- Retrospective fields — populated ~90 days after the decision
   -- Revenue
   -- Role-based view permissions
+  -- Scoped to `assisting` deliberately. A FIRST grant is made from Shadowing
   -- Sections (all JSON or Markdown)
   -- Session-derived identity is verified against the real product owner. A
   -- Shared
@@ -764,12 +781,17 @@
   -- assumptions: { monthly_burn_delta_usd, mrr_growth_rate_pct, churn_rate_override, headcount_additions, ... }
   -- author a reply to a message that does not exist or belongs elsewhere.
   -- be the one that owns the channel the message arrived on. A proposal for one
+  -- before any comparison need exist — the assisting-entry guard is what
   -- before — or in the same instant as — the expectation cannot be news about
   -- caller-supplied owner string cannot establish its own authority.
   -- capability, a scope, an expiry, or a mode change is refused outright rather
+  -- capability. Being in Assisting is not a qualification that outlives the
   -- capacity judgment reads, and they are the only ones added here. The other
   -- carrying responsibility, capability, scope, consent, consequence, recipient
+  -- change, and would break development authority, which is granted the same way.
   -- check of this shape accepts exactly the payload it was written to refuse:
+  -- check to first grants would tighten a proven path that was not asked to
+  -- checks — every one of them is made again on every new grant.
   -- claim another's customer.
   -- code, migrations, documents, or enforcement scripts that define what
   -- company-scoped because that is what they are — what one piece of work costs
@@ -786,6 +808,7 @@
   -- grant can invent.
   -- grant that somehow held a ring path could still never be planned against.
   -- indistinguishable from a real one.
+  -- irrespective of later reality.
   -- it, and ambiguity is refused rather than believed.
   -- judgment time; the owner cannot introduce an unrepresented direction here.
   -- justified by another tenant's evidence is not a justification.
@@ -797,10 +820,13 @@
   -- or maturity is refused whole — every one of those is resolved server-side
   -- policy) are deliberately absent until something consumes them; adding a
   -- question that was never asked, another tenant's question, or one already
+  -- re-grant; it is erasing that the founder ever said stop.
   -- reference is exactly this consent, and a consent that is currently valid,
   -- refused, and so is a broad prefix that would contain part of the ring.
   -- repository is not a bound scope.
+  -- requires real comparison evidence there, and it still does. Applying this
   -- resolved — which is what makes a replayed answer inert.
+  -- responsibility that reached Assisting is not permanently qualified
   -- responsibility-bound, and low consequence.
   -- results: { runway_months, probability_series_a, target_hit_probability, ... }
   -- ring, so the boundary cannot be moved by ordinary development authority.
@@ -1025,7 +1051,10 @@
   SELECT RAISE(ABORT,'responsibility_authority:consequence_required') WHERE
   SELECT RAISE(ABORT,'responsibility_authority:expiry_required') WHERE
   SELECT RAISE(ABORT,'responsibility_authority:invalid_binding') WHERE NEW.to_mode!='act' OR NOT EXISTS (
+  SELECT RAISE(ABORT,'responsibility_authority:revocation_permanent')
+  SELECT RAISE(ABORT,'responsibility_authority:revoked_at_birth')
   SELECT RAISE(ABORT,'responsibility_authority:scope_required') WHERE
+  SELECT RAISE(ABORT,'responsibility_authority:shadow_evidence_missing')
   SELECT RAISE(ABORT,'responsibility_candidate:confidence_required') WHERE
   SELECT RAISE(ABORT,'responsibility_candidate:evidence_invalid') WHERE EXISTS (
   SELECT RAISE(ABORT,'responsibility_candidate:evidence_required') WHERE
@@ -1097,18 +1126,21 @@
   UPDATE responsibility_candidates SET status='rejected',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='superseded',updated_at=NEW.created_at
   WHERE (NEW.scope='responsibility' AND NEW.predicate NOT IN (
+  WHERE (SELECT r.state FROM institutional_responsibilities r WHERE r.id=NEW.responsibility_id)='assisting'
   WHERE NEW.body IS NULL OR trim(NEW.body)='' OR length(NEW.body)>8192;
   WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
   WHERE NEW.event_type <> 'external_metric:'
   WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
   WHERE NEW.intake_key IS NULL OR length(NEW.intake_key)<24;
   WHERE NEW.label IS NULL OR trim(NEW.label)='';
+  WHERE NEW.revoked_at IS NOT NULL;
   WHERE NEW.scope NOT IN ('responsibility','company');
   WHERE NEW.status<>'open' OR NEW.answer_signal_id IS NOT NULL OR NEW.resolved_at IS NOT NULL;
   WHERE NEW.status='answered' AND NOT EXISTS (
   WHERE NEW.status='deferred' AND NEW.answer_signal_id IS NOT NULL;
   WHERE NEW.subject IS NOT NULL AND length(NEW.subject)>512;
   WHERE OLD.conflict_identity IS NOT NULL
+  WHERE OLD.revoked_at IS NOT NULL AND NEW.revoked_at IS NULL;
   WHERE apns_device_token IS NOT NULL;
   WHERE apns_device_token IS NOT NULL;
   WHERE coalesce(json_extract(NEW.payload_json,'$.direction'),'absent') NOT IN ('rose','fell','held');
@@ -1118,7 +1150,7 @@
   WHERE discovery_evidence_ref IS NOT NULL;
   WHERE id = NEW.responsibility_id AND state = NEW.from_state;
   WHERE id=NEW.responsibility_id AND product_id=NEW.product_id;
-  WHERE inbound_message_id IS NOT NULL;
+  WHERE inbound_message_id IS NOT NULL AND status<>'cancelled';
   WHERE json_extract(NEW.payload_json,'$.obligation_kind') NOT IN (
   WHERE resolved_at IS NULL;
   accepted_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -4360,10 +4392,12 @@ BEFORE INSERT ON strategic_decisions_log WHEN NEW.responsibility_refs_json IS NO
 BEFORE INSERT ON support_channels
 BEFORE INSERT ON system_identities
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
+BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE ON development_change_plans
 BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5054,6 +5088,7 @@ CREATE TRIGGER judgment_conflict_identity_immutable
 CREATE TRIGGER reconstruction_claim_guard
 CREATE TRIGGER responsibility_assisting_entry_guard
 CREATE TRIGGER responsibility_authority_guard
+CREATE TRIGGER responsibility_authority_revocation_is_permanent
 CREATE TRIGGER responsibility_candidate_guard BEFORE INSERT ON responsibility_candidates BEGIN
 CREATE TRIGGER responsibility_candidate_lifecycle_apply
 CREATE TRIGGER responsibility_candidate_lifecycle_guard
@@ -5108,6 +5143,7 @@ CREATE UNIQUE INDEX idx_role_permissions_unique ON role_permissions(role, permis
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
 END;
 END;
 END;

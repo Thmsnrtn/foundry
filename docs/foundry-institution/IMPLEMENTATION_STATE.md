@@ -819,6 +819,19 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Revocable, re-grantable authority (migration 133)
+
+- **Owner decision implemented:** a responsibility's maturity and its currently active execution authority are distinct. A responsibility already in Assisting may receive a **new** grant after a prior one was revoked, without being demoted to Shadowing. `responsibility maturity != authority`; `Assisting != active permission`; `revocation != loss of competence`.
+- **Why it mattered:** migration 112 admitted a responsibility-bound consent only while `shadowing`, so withdrawal was irreversible in place. For a pilot, *"you can always turn it off"* is only honest if *"you can turn it back on"* is true too. **Migration 112 is not rewritten** — 133 is a forward change to current effective semantics, and the historical record stays intact.
+- **Old authority stays dead, enforced not promised.** A new grant is a new consent identity; `revoked_at_birth` refuses a consent created already revoked, and `revocation_permanent` refuses un-revoking one. Plans stay bound to the consent that authorised them, so a plan stranded by revocation can never execute — proven by the exact sequence the owner named: **grant A → plan A → revoke A → grant B → execute plan A ⇒ no send.** The effect identity now includes the consent, so a reply planned under a new grant is a **new effect**; a stranded plan's identity never migrates.
+- **A real defect found while implementing this:** last session's *one plan per inbound message* unique index counted cancelled plans, so a plan stranded by revocation permanently blocked that message from ever being answered — the founder could restore permission and still never reply. The index is now over **live** plans only; a superseded plan is cancelled and steps aside.
+- **Re-grant revalidates current reality** rather than treating Assisting as a permanent qualification: owner, company, responsibility, capability, state, disposition, fresh scope, consequence and expiry are all checked again, plus — **for re-grants only** — that the shadow evidence which justified assistance still exists. That scoping is deliberate: a *first* grant is made from Shadowing before any comparison need exist, and applying the check there would have tightened a proven path nobody asked to change and broken development authority, which is granted the same way.
+- **Re-grant promotes nothing.** A responsibility already Assisting is not re-admitted; the grant restores permission and updates which authority is current, while the transitions ledger keeps the whole history. Operating stays frozen regardless of how many grants have been issued.
+- **Challenge (9 tests):** grant from Shadowing admits and executes nothing; revocation blocks execution immediately without touching maturity; re-grant succeeds with a distinct identity while the responsibility stays Assisting; old grant dead and old plan unexecutable; un-revoking refused; new planning required, with a new effect identity and the stranded plan cancelled; the new plan executes; a second revocation blocks again; an expired grant is replaceable; a grant born revoked, a wrong capability, a stranger, and a responsibility nobody watched are all refused; and no number of grants unfreezes Operating.
+- **Evidence maturity:** E2 — local runtime. No maturity claim changes.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the sixth autonomous session. Supersedes all earlier continuation records.*
@@ -826,8 +839,8 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
-- **Migrations:** through **132**. Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **157 files / 1,269 tests**.
+- **Migrations:** through **133**. Schema snapshot regenerated and committed.
+- **Full `npm run check`:** green — **158 files / 1,278 tests**.
 - **Working tree:** clean.
 - **Environment notes:** `sqlite3` is not preinstalled (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first; use `log` from `src/lib/logger.js`, never `console.*`. Fix the code, never the gate.
 
@@ -895,7 +908,8 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 
 - **Nothing has met reality.** No real founder, outside tool, or provider.
 - **Autonomous reply generation** is unbuilt and unclaimed; the founder-authored path is the baseline.
-- **Withdrawal is currently irreversible in place** (owner decision above).
+- **Structural reachability gate for the support chain is still not built** — production callers are asserted inside the vertical tests, which is weaker than a permanent gate.
+- **Pilot readiness (grant/revoke/re-grant UX legibility, emergency stop audit, readiness contract) is not started.**
 - **A model-drafted proposal must first have a frozen contract** (§10), then beat the human baseline.
 - **Outcome (§12) remains untouched and must stay so:** provider acknowledgement, delivery, customer silence, and elapsed time are all *not* resolution. If a provider can emit an explicit case-status event, audit whether its contract genuinely establishes the outcome before believing it. Preserve `unresolved`.
 - Judgment observation still cannot report `contradicted`.
@@ -907,8 +921,7 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 
 ## Next highest-value unblocked work
 
-1. **Owner decision needed — is withdrawal reversible?** Migration 112 admits a responsibility-bound consent only while Shadowing, so a permission withdrawn after Assisting cannot be re-granted without returning the responsibility to Shadowing. This matters directly for pilot grant/revoke. Do not loosen the guard without deciding what a grant means.
-2. **Extend the reachability gate into a structural chain gate**, mutation-testing a disconnected link. The chain's production callers are currently asserted inside `support-execution-chain.test.ts`; that belongs in the gate.
+1. **Extend the reachability gate into a structural chain gate**, mutation-testing a disconnected link. The chain's production callers are currently asserted inside `support-execution-chain.test.ts`; that belongs in the gate.
 3. **Pilot readiness** on existing surfaces — never a pilot dashboard, never simulated E4.
 4. **Freeze the support-drafting contract** (§10) before any model: grounding in the message and in canonical facts, unsupported commitments, invented policies, prompt-injection resistance, tenant isolation, correction burden, cost, latency; catastrophic = fabricated refund/credit, secret disclosure, cross-tenant context, authority escalation from customer content.
 5. Recursive Foundry operation through ordinary authority; unfamiliar-company breadth; deletion sweep.

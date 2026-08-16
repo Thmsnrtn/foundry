@@ -266,21 +266,19 @@ describe('the first production-facing support execution chain', () => {
       .toEqual({ refused: 'no_authority' });
   });
 
-  it('cannot restore a withdrawn permission without watching again — a real finding', async () => {
-    // Migration 112 admits a responsibility-bound consent only while the
-    // responsibility is Shadowing. Once it has been admitted to Assisting, a
-    // withdrawn permission therefore cannot be re-granted: the founder would
-    // have to return the responsibility to Shadowing first.
-    //
-    // Recording this rather than working around it. Whether withdrawal should
-    // be reversible in place is an owner-level question about what a grant
-    // means, not something to settle by loosening a constitutional guard.
-    // The database refuses the grant outright rather than returning empty.
-    await expect(grantAssistingAuthority({
+  it('lets the founder restore a withdrawn permission without demoting anything', async () => {
+    // Owner decision, implemented in migration 133: maturity and active
+    // authority are different things. "You can always turn it off" is only
+    // honest if "you can turn it back on" is true too. The full lifecycle —
+    // including that the old grant and its plan stay dead — is proven in
+    // tests/unit/authority-lifecycle.test.ts.
+    const regranted = await grantAssistingAuthority({
       productId: PRODUCT, responsibilityId, founderId: OWNER, durationDays: 30,
-    })).rejects.toThrow(/invalid_binding/);
+    });
+    expect(regranted).not.toBeNull();
+    expect(regranted!.responsibility).toMatchObject({ state: 'assisting' });
     expect(await countOf(
-      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=? AND revoked_at IS NULL', [PRODUCT])).toBe(0);
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=? AND revoked_at IS NULL', [PRODUCT])).toBe(1);
   });
 
   it('has production callers for every link in the chain', async () => {

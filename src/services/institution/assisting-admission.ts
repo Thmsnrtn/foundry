@@ -134,8 +134,19 @@ export async function grantAssistingAuthority(input: {
 
   // Admission is a separate, database-verified step. A grant is permission to
   // be admitted, not the admission itself, and it sends nothing either way.
+  //
+  // A responsibility already in Assisting is not re-admitted: a re-grant
+  // restores permission, it does not promote anything. Maturity and authority
+  // are different things and move independently.
   let admitted = false;
-  if (String(owned.state) === 'shadowing') {
+  if (String(owned.state) === 'assisting') {
+    // Already admitted. A re-grant restores permission and promotes nothing —
+    // but the responsibility must now point at the authority that is actually
+    // current, or plans made under the new grant would be refused as unbound.
+    // The transition ledger keeps the whole history; this names the present.
+    await query('UPDATE institutional_responsibilities SET authority_ref=? WHERE id=? AND product_id=?',
+      [`autonomy_consent:${consentId}`, input.responsibilityId, input.productId]);
+  } else if (String(owned.state) === 'shadowing') {
     try {
       await enterResponsibilityAssisting({
         productId: input.productId, responsibilityId: input.responsibilityId,
