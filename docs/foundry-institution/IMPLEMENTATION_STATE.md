@@ -842,26 +842,65 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## The scheduled institutional pass has no epistemic privilege
+
+- **Why:** the scheduled job now earns Understanding and resolves Shadowing expectations in production. A background job that can advance the ladder is exactly where a privileged bypass would hide — nobody is watching it, and "the system did it" is the easiest provenance to fake.
+- **Audited, not assumed.** Four tests in `tests/unit/scheduled-pass-privilege.test.ts`: (1) **structural** — the job body writes to no institutional table directly; every advance goes through the same services a founder's request goes through; (2) **behavioural** — four engineered refusals (missing critical facts, stale facts presented as current, conflicting evidence, foreign-product evidence) plus one grounded control that *does* advance, so the test cannot pass by refusing everything; (3) **provenance** — every transition it writes cites a real claim belonging to that product, with an `institution:` actor that is distinguishable from a founder, never anonymous; (4) **idempotency** — a second pass over the same reality advances nothing further.
+- **Finding: no gap, and therefore no new abstraction.** Every protection the owner named was already structural — the guards live in migrations and services that the job calls as an ordinary client. It cannot enter Assisting, create authority, infer success from provider acknowledgement, or treat silence as evidence, because it has no path that a founder does not also take. Adding a "scheduled job policy" layer would have created the very privilege boundary the audit was checking for.
+- **Evidence maturity:** E2 — local runtime, behaviourally exercised.
+
+## `support-drafting-v1` — frozen before any model writes customer text
+
+- **Why now:** the human baseline exists and is production-facing (the founder reads the real message and writes the reply; Foundry carries it under bounded authority). Freezing the contract *before* a model exists is the only way the thresholds cannot be tuned to fit whatever the first model happens to do.
+- **What it measures:** grounding in the message and in canonical facts, unsupported claim and commitment rates, recipient/scope/consequence correctness, uncertainty honesty, escalation, prompt-injection resistance, correction burden, latency, cost. **Eloquence is deliberately absent** — scoring prose quality rewards confident writing over accurate writing, which is precisely what makes a fabricated policy sound trustworthy. A test asserts no style dimension can be added.
+- **Absolutes are absolute.** Zero unsupported claims, zero unsupported commitments, zero catastrophic failures. One fabricated commitment is not offset by ninety-nine accurate replies, because the customer who received it does not know they were the exception.
+- **Eleven catastrophic failures** override aggregate quality entirely, including the four side-effect ones: a drafter proposes text and may not create consent, execute an effect, write canonical evidence, or have its authority widened by customer content.
+- **The detector is mutation-tested in both directions** — each catastrophic shape has a candidate reply that must be caught *and* an honest reply that must not be. A benchmark whose detector cannot fire is a benchmark that cannot refuse anything.
+- **Coverage integrity:** a dimension no case exercised is reported `_unexercised` and fails the gate. An unmeasured dimension is not a passing one.
+- **Ten-case held-out corpus**, each a distinct way a support reply goes wrong: simple factual, missing information, refund not authorised, false policy asserted by the customer, prompt injection, secret request, ambiguous identity, emotional low-consequence, commitment beyond authority, cross-tenant probe.
+- **Evidence maturity:** **E1 — prospective and static.** No model was implemented to make the benchmark non-empty. It becomes E3 only when candidate generation is executable against the corpus, and it is not a founder-value proof at any level.
+
+## `support-pilot-readiness-v1` — an explicit versioned gate, not an evidence level
+
+- **Twenty-five dimensions** across the owner's five areas: founder control through the existing Today/Company/Activity/Control surfaces, revocation as emergency stop, re-grant legibility, complete auditability, and the data-minimisation boundary. Eleven tests exercise every one against the real services — none is asserted from reading code.
+- **Revocation is the emergency stop; no second kill-switch was built.** The audit exercised the hardest window the architecture supports — authority valid at plan time, revoked *after* the execution claim and *before* dispatch, using the existing lifecycle hook — and no irreversible dispatch occurred. Building a parallel kill-switch without a demonstrated gap would have added a second thing to get right and a second thing to fail.
+- **Auditability needed no new ledger.** The full chain reconstructs from canonical records already written — seven links, message through outcome.
+- **Coverage integrity is proven, not asserted:** dropping a single observation makes the gate report that dimension *unexercised* rather than silently passing it, and an empty observation set is maximally not-ready. A dimension not actually exercised never receives a synthetic perfect score.
+- **Green means one thing only:** `READY TO ATTEMPT A BOUNDED PILOT — this is not E4, and no pilot has occurred.` Six items of outstanding external proof are named in the module itself, including that no real founder has used it, no real customer message has arrived, and no business outcome has ever been independently established.
+
+## Seven-day absence readiness — HANDLED is never inferred from a dispatch
+
+- **Why:** the five-way view existed but could not see the institutional truth the last three sessions made reachable. "This needs you" was true for four completely different situations, and a founder returning after a week could not tell them apart without investigating each one.
+- **`needsYouBecause` now distinguishes:** `watching` (still Shadowing, no permission asked for), `permission_withdrawn` (the founder turned it off), `permission_expired` (the grant lapsed), `outcome_unresolved` (Foundry did something and nobody knows whether it worked).
+- **HANDLED is refused while any executed effect has an unresolved outcome.** This is the receipt/outcome separation at the surface the founder actually reads: provider acceptance is not the customer's problem being solved, and a week of silence is not success. Such work is surfaced as needing the founder — never as something Foundry finished.
+- **Withdrawn vs expired is decided by the most recent grant, not by any grant ever revoked.** A responsibility that was revoked, deliberately re-granted, and then allowed to lapse reports *expired*. Reporting "you turned this off" would ask the founder to re-examine a decision they had already reversed. Mutation-tested: collapsing the two, and using "any revoked grant" instead of the latest, both fail.
+- **The founder copy is in the founder's language and is contract-tested.** Every classification the service can produce must have a plain-language line in The Letter, and that copy must contain no institutional vocabulary. Both directions fail under mutation — deleting a line, or letting the word "authority" into it.
+- **Evidence maturity:** E2 — local runtime, mutation-verified.
+
+---
+
 # CONTINUATION — self-contained resume record
 
-*Rewritten 2026-08-16 at the close of the sixth autonomous session. Supersedes all earlier continuation records.*
+*Rewritten 2026-08-16 at the close of the seventh autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
-- **Migrations:** through **133**. Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **158 files / 1,279 tests**.
+- **Migrations:** through **133**. No new migration this session — every slice was built on schema that already existed, which is the correct outcome when the gap is proof rather than structure.
+- **Full `npm run check`:** green — **161 files / 1,310 tests** (three consecutive clean runs).
 - **Working tree:** clean.
+- **One unreproduced flake, recorded honestly:** during one full run, two assertions in `tests/unit/customer-message-intake.test.ts` failed on a message count. It did not reproduce in three subsequent full runs, nor in repeated single-threaded runs of that file alongside its neighbours. That file is untouched by this session's changes. It is a real intermittent and it is not diagnosed — do not treat the suite as fully deterministic until it is.
 - **Environment notes:** `sqlite3` is not preinstalled (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first; use `log` from `src/lib/logger.js`, never `console.*`. Fix the code, never the gate.
 
 ## What this session did
 
-1. **Revocable, re-grantable responsibility-bound authority (migration 133)** — the owner decision, with old grants and their plans staying permanently dead.
-2. **Structural reachability gate for the support chain** — sixteen links, invocation-based, mutation-verified. It found two dark links on its first run and both are now driven.
-3. **Inbound customer communication as canonical external evidence (migration 131).**
-4. **The first production-facing support execution chain (migration 132)** — founder-authored reply proposal → bounded plan → authority revalidation → governed send → receipt, with the outcome left unresolved.
+1. **Audited the scheduled institutional pass for epistemic privilege** — structural, behavioural, provenance, idempotency. **No gap found, and therefore no new abstraction added.** The protections were already structural; a "scheduled job policy" layer would have created the privilege boundary the audit was checking for.
+2. **Froze `support-drafting-v1` (E1)** before any model writes customer text — eleven catastrophic failures, a mutation-tested detector, a ten-case held-out corpus, coverage integrity, and no eloquence scoring. **No model was implemented to make it non-empty.**
+3. **Built `support-pilot-readiness-v1`** — twenty-five dimensions exercised against real services, coverage integrity proven by dropping an observation, and a green meaning that says only *ready to attempt*.
+4. **Confirmed ordinary revocation is the emergency stop** by exercising the post-claim/pre-dispatch window. No second kill-switch was built, because no gap was demonstrated.
+5. **Made the seven-day absence view consume the reachable institutional truth** — four distinct reasons a thing needs the founder, and HANDLED refused while any executed effect has an unresolved outcome.
 
-**Inbound customer communication as canonical external evidence (migration 131)** — the intake the previous session identified as the missing piece, built provider-neutral, and proven **alone** as the owner's section 5 requires: no reply, no plan, no send.
+**The recurring shape of this session: three of the five slices were audits that correctly ended in building nothing.** The instruction was to strengthen genuine gaps only, and the honest finding was that the structure already held.
 
 ## Part 7 audit — completed, and it determines the next slice
 
@@ -919,9 +958,9 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 ## Open proof debt
 
 - **Nothing has met reality.** No real founder, outside tool, or provider.
-- **Autonomous reply generation** is unbuilt and unclaimed; the founder-authored path is the baseline.
-- **Pilot readiness (grant/revoke/re-grant UX legibility, emergency stop audit, readiness contract) is not started.**
-- **A model-drafted proposal must first have a frozen contract** (§10), then beat the human baseline.
+- **Autonomous reply generation** is unbuilt and unclaimed; the founder-authored path is the baseline. Its contract is now frozen at E1 and nothing has ever been scored against it.
+- **Pilot readiness is green, and that is a smaller claim than it sounds.** `support-pilot-readiness-v1` says *ready to attempt a bounded pilot*. No pilot has occurred; the six named items of outstanding external proof are all still outstanding.
+- **One unreproduced test flake** in `customer-message-intake.test.ts` (see Exact state). Undiagnosed.
 - **Outcome (§12) remains untouched and must stay so:** provider acknowledgement, delivery, customer silence, and elapsed time are all *not* resolution. If a provider can emit an explicit case-status event, audit whether its contract genuinely establishes the outcome before believing it. Preserve `unresolved`.
 - Judgment observation still cannot report `contradicted`.
 - Development paths remain on the reachability gate's DARK list.
@@ -932,10 +971,14 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 
 ## Next highest-value unblocked work
 
-1. **Extend the reachability gate into a structural chain gate**, mutation-testing a disconnected link. The chain's production callers are currently asserted inside `support-execution-chain.test.ts`; that belongs in the gate.
-3. **Pilot readiness** on existing surfaces — never a pilot dashboard, never simulated E4.
-4. **Freeze the support-drafting contract** (§10) before any model: grounding in the message and in canonical facts, unsupported commitments, invented policies, prompt-injection resistance, tenant isolation, correction burden, cost, latency; catastrophic = fabricated refund/credit, secret disclosure, cross-tenant context, authority escalation from customer content.
-5. Recursive Foundry operation through ordinary authority; unfamiliar-company breadth; deletion sweep.
+**Support is done being polished.** The envelope is narrow, proven locally, frozen where it should be frozen, and the remaining gaps are all external proof that cannot be manufactured here. Continuing to refine it would be motion, not progress.
+
+1. **Bounded recursive Foundry operation** — Foundry holding a responsibility for its own company through ordinary authority, with no special path and no self-granted permission.
+2. **Judgment calibration** — whether its confidence tracks its accuracy, which nothing currently measures.
+3. **Economics and quality-cost** — near-vacuous while the institution is model-free, and it stops being vacuous the moment a drafter exists.
+4. **Architecture simplification and deletion.** Seven sessions of accumulation deserve a sweep; the reachability gate's DARK list is the place to start.
+5. **Founder attention** — only once a real consumer exists. Measuring it now would be measuring nobody.
+6. **Master-audit reconciliation** into proven / implemented-but-unproven / partially implemented / superseded / owner deferred / external-only / still open.
 
 ## Working rules that mattered most
 
@@ -943,3 +986,7 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 - **Attribution must be structural, not semantic.** The temptation this session was to infer which responsibility a customer message belongs to from its text. Binding the channel to the responsibility makes it a fact instead of a guess.
 - **Identity comes from the credential, not the payload.** If the authentication channel can establish the source, the body must not be able to claim it.
 - **When the honest path stops, stop and say why.** There is still no reply generator; inventing one to turn the pipeline green would have been the worst available outcome.
+- **An audit that finds nothing is a result, not a failure to deliver.** Three slices this session ended in building nothing, because the structure already held. The instinct to add *something* so the work looks substantial is how privileged bypasses and second kill-switches get built.
+- **Freeze the contract before the thing it judges exists.** Thresholds written after the first model are thresholds the first model passes.
+- **A gate you have not mutated is a gate you are guessing about.** Every detector and classifier added this session was broken deliberately first, in both directions, before being trusted.
+- **Fix the fixture, never the feature.** The seven-day view failed against a hand-built stub that had drifted two migrations behind production. The stub was wrong; the query was right.

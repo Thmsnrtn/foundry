@@ -36,9 +36,22 @@ const section = (label: string, items: string[]) => items.length === 0 ? '' : ht
     ${items.map((i) => html`<div style="font-size:0.9rem;color:var(--text-primary);padding:0.35rem 0;border-top:1px solid rgba(255,255,255,0.05);">${i}</div>`)}
   </div>`;
 
+// Why a thing needs the founder, in one line of their language. Coming back
+// after a week, "this needs you" is not enough: "I'm still watching",
+// "you turned my permission off", "it ran out", and "I did something and nobody
+// knows if it worked" are four different situations with four different next
+// actions, and only one of them is waiting on Foundry.
+const NEEDS_YOU_REASON: Record<string, string> = {
+  watching: "I'm still watching this — I haven't asked to help yet.",
+  permission_withdrawn: "You turned off my permission here. I won't do anything until you turn it back on.",
+  permission_expired: "My permission here ran out. I won't do anything until you renew it.",
+  outcome_unresolved: "I did something here and nobody knows yet whether it actually worked.",
+};
+
 const responsibilitySection = (
   label: string,
-  items: Array<{ responsibilityId: string; title: string; state: string; evidenceRef: string | null }>,
+  items: Array<{ responsibilityId: string; title: string; state: string; evidenceRef: string | null;
+    needsYouBecause?: string }>,
   productId: string,
   disposition: 'active' | 'deliberately_not_done',
 ) => items.length === 0 ? '' : html`
@@ -47,6 +60,8 @@ const responsibilitySection = (
     ${items.map((item) => html`
       <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title} — ${item.state}</div>
+        ${item.needsYouBecause && NEEDS_YOU_REASON[item.needsYouBecause] ? html`
+          <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${NEEDS_YOU_REASON[item.needsYouBecause]}</div>` : ''}
         ${item.evidenceRef ? html`
           <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/disposition"
             style="display:flex;gap:0.4rem;margin-top:0.45rem;align-items:center;flex-wrap:wrap;">
