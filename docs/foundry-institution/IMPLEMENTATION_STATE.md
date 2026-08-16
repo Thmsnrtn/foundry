@@ -856,8 +856,10 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ## What this session did
 
-1. **Inbound customer communication as canonical external evidence (migration 131).**
-2. **The first production-facing support execution chain (migration 132)** — founder-authored reply proposal → bounded plan → authority revalidation → governed send → receipt, with the outcome left unresolved.
+1. **Revocable, re-grantable responsibility-bound authority (migration 133)** — the owner decision, with old grants and their plans staying permanently dead.
+2. **Structural reachability gate for the support chain** — sixteen links, invocation-based, mutation-verified. It found two dark links on its first run and both are now driven.
+3. **Inbound customer communication as canonical external evidence (migration 131).**
+4. **The first production-facing support execution chain (migration 132)** — founder-authored reply proposal → bounded plan → authority revalidation → governed send → receipt, with the outcome left unresolved.
 
 **Inbound customer communication as canonical external evidence (migration 131)** — the intake the previous session identified as the missing piece, built provider-neutral, and proven **alone** as the owner's section 5 requires: no reply, no plan, no send.
 
