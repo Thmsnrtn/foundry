@@ -62,6 +62,39 @@ const responsibilitySection = (
       </div>`)}
   </div>`;
 
+// Direction is not permission. The owner tells Foundry which way to go; the
+// separate, exact, responsibility-bound grant is what would let Foundry act.
+// The copy says so on every judgment rather than relying on the founder to know.
+const judgmentSection = (
+  items: Array<import('../../services/institution/institutional-judgment-disposition.js').MaterialJudgment>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Judgments that need your direction</div>
+    ${items.map((j) => html`
+      <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${j.title}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${j.description}</div>
+        ${j.uncertainties.length ? html`
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Still uncertain: ${j.uncertainties.join('; ')}</div>` : ''}
+        ${j.evaluationState === 'contradicted' || j.evaluationState === 'conflicting' ? html`
+          <div style="font-size:0.72rem;color:#ffb347;margin-top:0.3rem;">What happened since ${j.evaluationState === 'contradicted' ? 'contradicts this' : 'conflicts with this'}.</div>` : ''}
+        ${j.disposition ? html`
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Your current direction: ${j.disposition.replaceAll('_', ' ')}${j.selectedAlternative ? html` — ${j.selectedAlternative}` : ''}. You can change it below.</div>` : ''}
+        <form method="POST" action="/letter/judgments/${j.id}/disposition"
+          style="display:flex;gap:0.4rem;margin-top:0.45rem;align-items:center;flex-wrap:wrap;">
+          <select name="direction" style="font-size:0.78rem;">
+            <option value="accepted">Go this way</option>
+            ${j.alternatives.map((alt, i) => html`<option value="alternative:${i}">Instead: ${alt}</option>`)}
+            <option value="deferred">Not yet — decide later</option>
+            <option value="rejected">Do not go this way</option>
+          </select>
+          <input name="reason" required maxlength="500" placeholder="Why?" style="flex:1;min-width:180px;" />
+          <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Set direction</button>
+        </form>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">Setting a direction does not let Foundry carry this out — that still needs a separate permission from you.</div>
+      </div>`)}
+  </div>`;
+
 letterRoutes.get('/letter', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
@@ -146,7 +179,10 @@ letterRoutes.get('/letter', async (c) => {
   const shadowingExceptions = await getMaterialShadowingExceptions(ctx.productId);
   const { getFounderAssistingActivity } = await import('../../services/institution/responsibility-assisted-email.js');
   const assistingActivity = await getFounderAssistingActivity(ctx.productId);
-  const hasResponsibilitySummary = Object.values(responsibilitySummary).some((items) => items.length > 0);
+  const { getMaterialJudgments } = await import('../../services/institution/institutional-judgment-disposition.js');
+  const materialJudgments = await getMaterialJudgments(ctx.productId);
+  const hasResponsibilitySummary = Object.values(responsibilitySummary).some((items) => items.length > 0)
+    || materialJudgments.length > 0;
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
     : null;
@@ -187,6 +223,7 @@ letterRoutes.get('/letter', async (c) => {
           ? `the outcome remains unresolved (${item.observedSummary})`
           : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
+      ${judgmentSection(materialJudgments)}
       ${responsibilityCandidates.length ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Possible responsibilities requiring your judgment</div>
@@ -266,6 +303,56 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/disposition', asyn
     // Do not reveal whether a cross-tenant responsibility or evidence identifier exists.
     return c.text('Disposition refused', 403);
   }
+  return c.redirect('/letter');
+});
+
+// Owner direction on an institutional judgment. The authenticated session is
+// the only actor source; the product is resolved server-side from the judgment
+// plus real ownership, and a chosen alternative is located by position in the
+// canonical judgment row rather than accepted as caller-supplied text. This
+// records direction only — it creates no consent, action, or authority.
+letterRoutes.post('/letter/judgments/:judgmentId/disposition', async (c) => {
+  const founder = c.get('founder');
+  const judgmentId = c.req.param('judgmentId');
+  const body = await c.req.parseBody();
+  const reason = String(body.reason ?? '').trim();
+  const direction = String(body.direction ?? '');
+  if (!reason) return c.text('A reason is required', 400);
+
+  const { query } = await import('../../db/client.js');
+  const owned = await query(
+    `SELECT j.product_id FROM strategic_decisions_log j JOIN products p ON p.id=j.product_id
+     WHERE j.id=? AND p.owner_id=? AND j.responsibility_refs_json IS NOT NULL`,
+    [judgmentId, founder.id],
+  );
+  // Do not reveal whether another tenant's judgment exists.
+  if (!owned.rows.length) return c.text('Direction refused', 403);
+  const productId = String((owned.rows[0] as Record<string, unknown>).product_id);
+
+  const {
+    recordJudgmentDisposition, resolveRepresentedAlternative,
+  } = await import('../../services/institution/institutional-judgment-disposition.js');
+
+  let disposition: 'accepted' | 'rejected' | 'deferred' | 'alternative_selected';
+  let selectedAlternative: string | undefined;
+  if (direction.startsWith('alternative:')) {
+    const resolved = await resolveRepresentedAlternative(
+      productId, judgmentId, Number(direction.slice('alternative:'.length)),
+    );
+    if (resolved === null) return c.text('Direction refused', 403);
+    disposition = 'alternative_selected';
+    selectedAlternative = resolved;
+  } else if (direction === 'accepted' || direction === 'rejected' || direction === 'deferred') {
+    disposition = direction;
+  } else {
+    return c.text('Invalid direction', 400);
+  }
+
+  try {
+    await recordJudgmentDisposition({
+      productId, judgmentId, ownerId: founder.id as string, disposition, reason, selectedAlternative,
+    });
+  } catch { return c.text('Direction refused', 403); }
   return c.redirect('/letter');
 });
 
