@@ -748,28 +748,35 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 # CONTINUATION — self-contained resume record
 
-*Rewritten 2026-08-16 at the close of the third autonomous session. Supersedes all earlier continuation records.*
+*Rewritten 2026-08-16 at the close of the fourth autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. One accumulated branch; never merged to master (owner instruction).
-- **Migrations:** through **126**. Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **150 files / 1,204 tests**, plus typecheck, ratchets, kernel boundary, public-claims audit, consequential-effects audit.
+- **Migrations:** through **129**. Schema snapshot regenerated and committed.
+- **Full `npm run check`:** green — **152 files / 1,228 tests**.
 - **Working tree:** clean.
-- **Environment note:** `sqlite3` is not preinstalled; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). Regenerate and commit the snapshot after every migration. Do not allowlist snapshot drift.
-- **Note on the `as-any` ratchet:** its pattern is the bare substring `as any`, so prose containing "has anyone" trips it. Reword the prose; do not touch the gate.
+- **Environment notes:** `sqlite3` is not preinstalled; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). The `as-any` ratchet matches the bare substring, so prose containing "has anyone" trips it — reword the prose, never the gate. `console-in-src` is also a substring ratchet: use `log` from `src/lib/logger.js`, not `console.*`.
 
-## What this session did, in order
+## What this session did
 
-1. **Progressive founder evidence bridge (migration 125)** — the owner's decision, implemented. A founder answer enters as an ordinary `signal_events` row and the existing reconstruction machinery derives one bounded claim. The only new noun is the *question*, and it is an attention record rather than a knowledge record. Deterministic selection from the institution's own understanding requirements; no model. 15 tests.
-2. **Production reachability proof program (`production-reachability-v1`)** — thresholds fixed before tuning; eleven metrics kept separate; seven catastrophic failures; corpus-level coverage integrity proven by an empty observation that scores a vacuous 1 everywhere and is still refused.
-3. **Evidence intake and generic obligation ontology (migration 126)** — closed the worst orphan in the system and generalised discovery without industry enums.
+1. **Shadowing against independently observed reality (migrations 127–128).** The last rung with no honest supply now has one.
+2. **Company-scoped facts and reachable judgment inputs (migration 129).** The owner's company-scope decision, and the judgment's missing inputs.
 
-## The correction that matters most
+## Where the ladder actually stands in production-facing code
 
-The previous record said discovery was "driven in production". **It was not.** `emitSignalEvent` — the only function that records a company signal *and* runs responsibility discovery — had no caller anywhere in `src/`. Nothing in production produced company evidence at all. The institution was dark from the very first rung, not merely above Visible.
+Every step below is wired to a production-facing service and proven **locally** (E2). None of it has been exercised by a real founder or a real outside system.
 
-Both halves are now fixed and both are proven only locally: a founder can report an obligation (intake), and can answer the facts Foundry cannot observe (understanding). A blacksmith's forge goes report → Visible → Understood through real production services.
+```
+outside tool → POST /ingest/:token → external observation ─┐
+founder reports an obligation → discovery → Visible        │
+  → founder answers what Foundry cannot observe → Understood
+    → founder states a bounded expectation → Shadowing ────┘
+      → external reading → matched / deviated / unresolved
+```
+Alongside it: two understood responsibilities → their costs → company capacity → a deterministic judgment that authorises nothing.
+
+**Assisting remains unreachable in production** (it needs a proven Shadowing comparison plus a real consent), and Operating stays frozen by migration 115.
 
 ## Evidence frontier (do not inflate)
 
@@ -778,49 +785,54 @@ Both halves are now fixed and both are proven only locally: a founder can report
 | Bounded sparse reconstruction | E3 | exercised fixture dimensions only |
 | Responsibility recognition | E3 | exercised dimensions + an unfamiliar-company corpus |
 | Responsibility understanding | E3 | four exercised capability shapes |
-| Shadowing | E3 | four exercised responsibility shapes |
+| Shadowing | E3 | **prior synthetic dimensions only — not extended by this session** |
 | Assisting (support reply) | E3 | exercised synthetic dimensions only |
 | Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus |
 | Development (recognition → outcome) | E3 | five synthetic companies, one change class, single-file |
-| **Production reachability** | **E3** | **four synthetic non-software companies, four admitted signal shapes, one responsibility each, one skip, one conflict** |
-| Founder evidence bridge | E2 | local end-to-end through production services |
-| Evidence intake + generic obligations | E2 | local end-to-end through production services |
-| Canonical system identity | E2 | local invariant and adversarial evidence |
-| Judgment production + grounded observation | E2 | local wiring and guard evidence |
+| Production reachability | E3 | four synthetic non-software companies, four admitted signal shapes |
+| Shadowing against external observation | E2 | local runtime; refusals proven |
+| Company-scoped evidence + judgment inputs | E2 | local runtime through production-facing services |
+| Founder evidence bridge, intake, generic obligations | E2 | local runtime |
 | Assisting → Operating | frozen | migration 115; unchanged |
-| Everything with real founders, pilots, production | unproven | requires E4/E5/E6 |
+| Anything with real founders, real outside systems, pilots, production | unproven | E4/E5/E6 |
 
 ## Open proof debt
 
-- **No real founder has ever answered a question or reported an obligation.** Every reachability claim is synthetic and authored by the author of the code. No attention reduction is claimed or measured.
-- **Integrations still feed nothing.** Founder report is the honest bridge, not the permanent answer; integration evidence remains preferred for anything a system can actually observe, and no integration calls `emitSignalEvent`.
-- Shadowing is still not reachable in production: it needs an independent observer of the same reality, and that supply does not exist. Still on the reachability gate's DARK list with `development-observation.ts` and `development-shadowing.ts`.
-- Judgment observation cannot report `contradicted` — needs an observer that can see a deadline pass.
-- Judgment inputs (capacity/demand claims) still have no production writer; the tick is wired and will find nothing until they do. **Note:** the founder-evidence pattern is now the obvious honest route for these, but that is a design decision, not an obvious extension — capacity is a company-wide fact, not a per-responsibility one, and the current elicitation is deliberately scoped to responsibilities.
-- Executive cognition (Tranche 4): no marginal-value comparison run. The cognition gate forces one before adoption.
+- **Nothing here has met reality.** No real founder has reported an obligation, answered a question, or stated an expectation; no real outside tool has posted to `/ingest/:token` for a company that is shadowing. Every claim above is local or synthetic.
+- **Ask confirmation (owner section 7) is NOT done.** See the design note below — this is the first thing to pick up.
+- Assisting prerequisites: a proven Shadowing comparison now exists in principle, but nothing drives Assisting entry in production.
+- Judgment observation still cannot report `contradicted` — needs an observer that can see a deadline pass.
+- Development paths (`development-observation.ts`, `development-shadowing.ts`) remain on the reachability gate's DARK list.
+- Executive cognition (Tranche 4): no marginal-value comparison. The cognition gate forces one before adoption.
 - Economics (Tranche 12): near-vacuous while the institution is model-free.
-- Re-asking after deferral is deliberately absent rather than given an invented interval. If evidence appears that founders want reminders, that is where to add it.
-- Duplicate founder reports create duplicate responsibilities (each report is its own discovery evidence). Not yet a problem; would become one under real use.
+- Duplicate founder reports still create duplicate responsibilities.
+- Re-asking after deferral is deliberately absent rather than given an invented interval.
 
-## Owner deferrals and decisions
+## Design note — Ask confirmation, for whoever picks it up
 
-- **AcreOS: DEFERRED BY OWNER.** Not accessed, inspected, ingested, benchmarked, or special-cased anywhere.
-- Canonical Foundry identity: resolved and implemented (migration 123).
-- Progressive founder evidence elicitation: resolved and implemented (migrations 125–126).
-- **No open owner decision blocks work.**
+The owner's pattern is: conversation → bounded candidate assertion → founder sees exactly what Foundry proposes to remember → explicit authenticated confirmation → canonical evidence.
+
+**Do not add a new noun for this.** The smallest complete design reuses what exists: an open `founder_evidence_requests` row already carries a stable subject, predicate, and scope, and the existing `POST /letter/evidence/:requestId/answer` route already performs authenticated confirmation with replay-safety (answered is terminal), server-side scope resolution, and refusal of authority-shaped payloads. A candidate is therefore **ephemeral**: shown in chat as "should I remember *this exact sentence* as the answer to *this exact question*?", and confirmed through the existing route. Rejection writes nothing.
+
+The genuinely hard part, and the reason this was not built rather than half-built: **deciding when a chat message is a bounded assertion at all.** Deterministic detection is not achievable for prose. Two honest options:
+
+1. An explicit affordance — the founder marks a sentence as something to remember. Fully deterministic, no model, smallest possible. Recommended first.
+2. A model proposes the candidate. Architecturally permitted (`src/services/chat/**` is outside the kernel the cognition gate covers), but it must go through the marginal-value discipline, and the confirmation must still display the concrete bounded assertion — never a paraphrase of it.
+
+Ambiguity must remain conversation. If no open request matches, propose nothing.
 
 ## Next highest-value unblocked work
 
-1. **Make Shadowing reachable** without manufacturing evidence — the next rung, and the last one with no honest supply. An independent observer for a founder-reported obligation is the hard part; do not fake it.
-2. **Voluntary company truth in Ask** — the owner's section 7 is only half done. Reporting an obligation is structured and safe; promoting a *conversational* statement into canonical evidence still needs an explicit-confirmation design. Ambiguous chat must stay conversation.
-3. **Feed the intake from an integration** — the same `emitSignalEvent` path, from a system that genuinely observes. This is what moves reachability off synthetic ground.
-4. **Judgment input supply** — see the note above; needs a scope decision first.
-5. **Simplification sweep over `src/services/**`** — the reachability gate covers the institution only, and it has already found two orphans outside its own scope by accident.
+1. **Ask confirmation**, per the design note — option 1 first.
+2. **Assisting prerequisites** through real production-facing evidence, without manufacturing E4.
+3. **Feed the external intake from a real integration** rather than only `/ingest/:token`; this is what moves reachability off synthetic ground.
+4. **Non-software generalization sweep** across the shapes the owner named (physical delivery, appointments, trade/craft, commerce, recurring admin, sparse early-stage), preserving abstention.
+5. **Simplification sweep over `src/services/**`** — the reachability gate covers the institution only, and has found two orphans outside its scope by accident.
 
 ## Working rules that mattered most
 
-- **Audit the writers, not just the modules.** Two sessions running, the biggest defect was something built, reachable, benchmarked, and never called. Ask "what calls this in production?" before believing a subsystem works.
-- Mutation-test a gate before believing it; three of this session's and last session's gates were wrong on first write.
-- A red gate is evidence. The reachability gate failed twice this session in the direction it was designed to fail — once to make me pay down DARK, once to make me declare a new benchmark — and both were correct.
-- Evidence must strictly follow the prediction it tests; same-second evidence is ambiguous and is refused.
-- When a subsystem cannot honestly be driven, record it and leave it undriven. Inventing the evidence is the one unrecoverable mistake.
+- **Audit the writers, not just the modules.** The worst defects in three consecutive sessions were things built, reachable, benchmarked, and never called.
+- **Mutation-test a guard by trying to slip past it.** This session that found a SQL NULL trap in a brand-new guard *and* the same trap in migration 124, where a judgment observation with no evidence at all was being accepted. `X NOT IN (...)` and `json_type(...) <> 'array'` are NULL when the key is absent, and a RAISE guarded by an OR chain of false and NULL never fires. **Coalesce every absence.**
+- Independence is provenance, not plumbing. A different function is not a different source.
+- Absence is unresolved. Never round it toward success or failure.
+- When a slice cannot be finished honestly in the space available, write the design down and stop — do not half-build it.
