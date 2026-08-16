@@ -980,6 +980,64 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 5. **Founder attention** — only once a real consumer exists. Measuring it now would be measuring nobody.
 6. **Master-audit reconciliation** into proven / implemented-but-unproven / partially implemented / superseded / owner deferred / external-only / still open.
 
+## Master-audit reconciliation
+
+*Reconciled at the close of the seventh session, against the repository rather than against memory. Where a line says "verified", it was checked in this pass.*
+
+### Proven — E3, or structurally enforced and mutation-verified
+
+| What | How it is proven |
+|---|---|
+| Reconstruction, recognition, understanding, Shadowing, Assisting, judgment, development | Executable benchmark gates, each with a running test. **Scope: the synthetic dimensions those corpora actually exercise — nothing wider.** |
+| Production reachability | `production-reachability-v1` across four synthetic non-software companies |
+| Unfamiliar-company generalization | Independently generated corpus against the frozen recognition gate |
+| **169 institutional invariants** | Database triggers, not application code. A bug in a service cannot bypass them. Verified by count across migrations. |
+| The scheduled pass has no epistemic privilege | Four-part audit: structural, behavioural (four refusals + one advancing control), provenance, idempotency |
+| Support-chain reachability | Sixteen named links, invocation-based, mutation-verified against a removed call |
+| Institutional cognition is deterministic | Gate test; no model reachable from the kernel |
+| NULL-semantics of every guard | Systematic audit (migration 130) plus a standing gate |
+| Coverage integrity in both new gates | Dropping an observation reports *unexercised* rather than passing |
+
+### Implemented but unproven — E2, real code path, local runtime only
+
+Everything built in sessions four through seven: the founder evidence bridge, company-scoped facts, external metric observation, Shadowing resolution, the Assisting admission and its revocable authority, inbound customer message intake, the founder-authored reply proposal, bounded planning, execution-time revalidation, governed send, receipt, and the seven-day absence view. **None of it has been touched by a real founder, a real outside system, or a real provider.** A production-facing code path is not production evidence, and this table is the difference.
+
+### Partially implemented
+
+- **Judgment observation cannot report `contradicted`** — only matched, deviated, unresolved.
+- **Duplicate founder reports still create duplicate responsibilities.**
+- **The NULL-safety gate does not analyse nullable columns**, only guard predicates; trigger tests are the backstop.
+- **Reachability is per module, not per behaviour.** A module counts as reachable when production imports it at all — including read-only. Several institution modules are reachable that way while their write paths stay undriven.
+
+### Superseded
+
+- The vertical support-chain test's caller assertions — replaced by the standing reachability gate, which cannot go stale.
+- Earlier continuation records — this one supersedes all of them.
+- Capability-level autonomy consent as a route to Assisting — superseded by responsibility-bound authority (migration 112) and kept structurally distinguishable so the legacy form cannot satisfy the new one.
+
+### Owner deferred
+
+- **Real AcreOS work.** Not inspected, accessed, ingested, modified, integrated, benchmarked against, simulated, special-cased, or used to derive architecture. Unchanged this session.
+- **Merging to master.** The branch has never been merged and will not be without explicit instruction.
+- **Assisting → Operating.** Frozen by migration 115. Pilot readiness being green is explicitly *not* a reason to design or enable it.
+
+### External-only — cannot be established in this repository at any effort
+
+- Whether a real founder understands and trusts the grant/revoke/re-grant surface.
+- Whether a real customer's problem was actually solved (business outcome). Provider acknowledgement, delivery, silence, and elapsed time are all *not* resolution; `unresolved` is preserved deliberately.
+- Whether founder attention actually decreases.
+- Whether the support envelope survives contact with real message volume and variety.
+- Model quality against `support-drafting-v1` — the contract is frozen, and no model has ever been scored against it.
+
+### Still open
+
+1. Bounded recursive Foundry operation through ordinary authority.
+2. Judgment calibration — confidence versus accuracy is unmeasured.
+3. Economics and quality-cost — near-vacuous while the institution is model-free.
+4. Architecture simplification and deletion; the DARK list is the starting point.
+5. The two development paths that remain dark, blocked on an independent observer that does not exist for a customer's company.
+6. The unreproduced `customer-message-intake` flake.
+
 ## Working rules that mattered most
 
 - **Audit the writers, not just the modules.** Five sessions running, the biggest finding was something built and never called.
