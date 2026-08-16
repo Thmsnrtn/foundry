@@ -663,72 +663,88 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Institutional cognition gate — deterministic by decision, not by accident
+
+- **Reality found during the reachability audit:** the institutional kernel makes **no model calls at all**. Every judgment, disposition, verification, and authority decision in it is deterministic. That is why the frozen development benchmark can set a model-cost ceiling of zero and mean it.
+- **Why gate it:** that property is currently true by accident of how the code grew. The roadmap's executive-cognition work is a legitimate decision to change it, but it is a decision with a price — latency, spend, non-determinism, and a new way for evidence to be fabricated rather than observed. The gate does not forbid cognition; it forbids cognition arriving unnoticed, unmeasured, and unaccounted. Its failure message says what to do instead of allowlisting: run the marginal-value comparison against the deterministic baseline that already exists, record it, and change the gate in the same commit as the evidence.
+- **Scope:** `src/services/institution/**` and `src/services/outbound/**`. The effect boundary is included deliberately — a model call inside the thing that authorises consequential effects would be a very expensive mistake.
+- **A defect in my own gate, found by mutation-testing it:** the first version matched only `from '…services/ai/…'`. From inside the institution the AI client is `'../ai/client.js'`, and the institution reaches almost everything through `await import(...)` — so the gate passed while a model call sat one dynamic import away. Rewritten to extract every module specifier (static, dynamic, and `require`) and match those, plus raw-text patterns for a model reached by HTTP. Re-verified against three separate probes: a static import, a dynamic import, and a direct `fetch` to a model endpoint. All three now fail the gate.
+- **Evidence maturity:** E2 — a local, mutation-verified gate. It makes "every cognition step must pay rent" mechanical; it raises no subsystem's maturity.
+
+---
+
 # CONTINUATION — self-contained resume record
 
-*Written 2026-08-16 at the close of this session. Everything needed to resume without reconstructing history.*
+*Rewritten 2026-08-16 at the close of the second autonomous session. Supersedes the previous continuation record. Everything needed to resume without reconstructing history.*
 
 ## Exact state
 
-- **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Started from `9b3128b` (merge of PR #5).
-- **HEAD at handoff:** the final commit on that branch — `git log --oneline -10` shows the nine slices below.
-- **Migrations:** through **122**. Fresh migrations apply cleanly.
-- **Full `npm run check`:** green — **143 files / 1,149 tests**, plus typecheck, ratchets, kernel boundary, public-claims audit, and consequential-effects audit.
+- **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. One accumulated branch; never merged to master (owner instruction).
+- **Migrations:** through **124**. Fresh migrations apply cleanly. Schema snapshot regenerated and committed.
+- **Full `npm run check`:** green — **147 files / 1,176 tests**, plus typecheck, ratchets, kernel boundary, public-claims audit, and consequential-effects audit.
 - **Working tree:** clean.
-- **Environment note:** `sqlite3` is not preinstalled here; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). **Regenerate and commit the snapshot after every migration** — the first defect found this session was exactly this drift.
+- **Environment note:** `sqlite3` is not preinstalled; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). **Regenerate and commit the snapshot after every migration.**
 
 ## What this session did, in order
 
-1. Repaired stale schema snapshot (a real red baseline gate).
-2. Authenticated owner disposition on institutional judgments (migration 118).
-3. Development Shadowing on an evidenced repository responsibility (migration 119).
-4. Frozen `development-v1` benchmark + responsibility-bound development authority and the constitutional ring (migration 120).
-5. First bounded development Assisting vertical (migration 121).
-6. Knowing when not to code — development disposition (migration 122).
-7. Executable development benchmark corpus, mutation-tested.
-8. Bounded recursive Foundry operation.
-9. Founder legibility of development authority.
+1. **Canonical system identity (migration 123)** — resolved the owner's decision. `system_identities`: a closed-vocabulary key bound immutably to one product row. Identity is not authority; the table has no authority-bearing column. Name and creation-order resolution removed from all three runtime paths. Mutation-verified (reintroducing the name fallback fails 7 of 9 tests).
+2. **Institutional judgment pays rent (migration 124)** — judgment, its evaluation, and the owner disposition loop had **no production writer**. Added conflict identity (unique per product, so a standing conflict is never re-raised), a grounded observation source (evidence must be strictly later than the judgment; echoing the judgment is refused; cross-tenant refused), and the `institutional_judgment_tick` cron. Fixed a real defect found on the way: `getReconstructionClaims` ordered by `(created_at, id)` with nanoid ids, so same-second claims resolved in random order and a correction could lose to what it corrected.
+3. **Institutional reachability gate** — makes "no orphan abstractions" mechanical. Deleted the one undeclared orphan it found (`attention-baseline.ts`).
+4. **Unfamiliar-company generalization** — five non-software companies through the unchanged frozen recognition gate; mutation-verified; production discovery's four-signal vocabulary pinned and its abstention boundary stated.
+5. **Institutional cognition gate** — the kernel and the effect boundary make no model calls, now by decision rather than accident. Mutation-verified against three probes after the first version proved too narrow.
+
+## The single most important fact about current state
+
+**The institution is largely dark in production.** Driven today: signal → responsibility discovery; owner promotion of candidates through the Letter; the judgment production/observation pass; the governed outbound effect boundary. **Not driven:** Understanding, Shadowing, Assisting, and every development path.
+
+**Root blocker, stated precisely:** reconstruction claims have no production writer that observes a *customer's* company. Understanding needs eight provenance-bearing claims about a responsibility; capacity/demand judgment needs claims about real resources. For a customer those facts come from the founder or from an integration, and neither supply exists. **This is a missing evidence supply, not a defect to code away** — deriving them from what Foundry can already see would be inventing evidence, which the evidence ladder forbids. The judgment tick is genuinely wired and will raise a judgment the moment real claims exist; today it will find none.
+
+Do not "fix" this by fabricating a derivation. The honest routes are a founder-facing capture of what a responsibility is, or an integration that observes it — and the first is a product decision worth raising with the owner.
 
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope of the claim |
 |---|---|---|
 | Bounded sparse reconstruction | E3 | exercised fixture dimensions only |
-| Responsibility recognition | E3 | exercised dimensions only |
+| Responsibility recognition | E3 | exercised dimensions; now also passing a structurally different unfamiliar-company corpus |
 | Responsibility understanding | E3 | four exercised capability shapes |
 | Shadowing | E3 | four exercised responsibility shapes — **not** development verification |
 | Assisting (support reply) | E3 | exercised synthetic dimensions only |
-| Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus |
-| **Development (recognition → disposition → authority → change → verification → outcome)** | **E3** | **five synthetic companies, one change class (`generated_artifact`), single-file changes, one repository; constitutional isolation has one case** |
-| Judgment → later-reality evaluation | E2 | local |
-| Owner judgment disposition | E2 | local |
-| Recursive Foundry operation | E2 | one low-consequence development responsibility |
-| Founder legibility of development | E2 | local wiring and copy boundary |
+| Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus; a scheduler is not evidence |
+| Development (recognition → outcome) | E3 | five synthetic companies, one change class, single-file, one repository |
+| Canonical system identity | E2 | local invariant and adversarial evidence |
+| Judgment production + grounded observation | E2 | local wiring and guard evidence |
+| Reachability and cognition gates | E2 | local, mutation-verified |
+| Unfamiliar-company generalization | E2 | second corpus, same frozen gate — strengthens, does not raise |
 | Assisting → Operating | frozen | migration 115; unchanged |
-| Operating, founder-value reduction, unfamiliar-company adoption, pilots, production | unproven | requires E4/E5/E6 real-world evidence |
+| Everything in production, pilots, founder value | unproven | requires E4/E5/E6 |
 
 ## Open proof debt
 
-- Development: source-code change classes, multi-file changes, refactor and rollback as *selectable* dispositions, real repository operation, concurrent multi-plan.
-- Executive cognition (Tranche 4): no marginal-value comparison has been run. A deterministic/no-model baseline is in place everywhere; every model-assisted alternative must still beat it on decision quality, error reduction, latency, cost, and founder attention before adoption.
-- Founder attention: infrastructure exists; no empirical reduction is claimed or measured.
-- Economics: AI spend controls are E2; cost-per-institutional-work attribution (Tranche 12) is unstarted.
-- Everything E4/E5/E6 — pilots, production, broad institutional evidence.
+- **Production evidence supply** (above) — the blocker for every rung above Visible.
+- Judgment observation cannot report `contradicted`. That needs an observer that can see a deadline pass; deliberately not faked.
+- Development: source-code change classes, multi-file changes, real repository operation, concurrent multi-plan. **Do not expand development capability without evidence of a real need** (owner instruction).
+- Executive cognition (Tranche 4): no marginal-value comparison has been run. The cognition gate now forces one before adoption.
+- Economics (Tranche 12): cost attribution is near-vacuous while the institution is model-free; it becomes real the moment cognition is adopted, and should be built with it, not before.
+- Founder attention: no empirical reduction is claimed or measured. The instrumentation was deleted as an orphan and should return **with** its consumer.
 
-## Owner deferrals and decisions waiting
+## Owner deferrals and decisions
 
-- **AcreOS: DEFERRED BY OWNER.** Not accessed, inspected, ingested, benchmarked, or special-cased anywhere in this work. Preserved as a genuine unfamiliar-company generalization test.
-- **~~Owner decision needed — implicit Foundry identity.~~ RESOLVED by owner and implemented (migration 123).** Foundry is a first-class internally owned institutional company/product with a stable canonical identity; the display name is presentation only. Name- and creation-order resolution is gone from every runtime path. The associated proof debt is closed — see "Canonical system identity for Foundry's own company" above.
+- **AcreOS: DEFERRED BY OWNER.** Not accessed, inspected, ingested, benchmarked, or special-cased anywhere. Preserved as the genuine unfamiliar-company generalization test; this session's corpus is a partial substitute, not a replacement.
+- **Canonical Foundry identity: RESOLVED and implemented** (migration 123). No open owner decision remains from the previous session.
+- **Worth raising with the owner:** whether founders should be asked, in the Letter, what a responsibility is actually for. That is the smallest honest unblock for the production evidence supply, and it is a product decision about founder attention rather than an engineering one.
 
 ## Next highest-value unblocked work
 
-1. **Broaden the development corpus** to a second change class (`test` or `documentation`) and multi-file changes, re-running the unchanged `development-v1` gate. Do not touch the gate.
-2. **Executive-cognition marginal value (Tranche 4)** — measurement first: compare no cognition, deterministic cognition, and cheap/large models on the existing judgment corpus. Adopt nothing that does not beat the deterministic baseline. Create no permanent named personas.
-3. **Cost truth (Tranche 12)** — make spend attributable to institutional work.
-4. **Simplification sweep** — the mandate's deletion discipline has not had a dedicated pass this session; look for obsolete named-agent paths and duplicate abstractions with cutover proof.
+1. **Decide the evidence supply** (owner input useful): founder capture vs. integration-observed claims. Everything above Visible waits on this.
+2. **Responsibility carrying / exception ownership** — the `exception_owned` state exists with no path into it; check whether that is another orphan behaviour.
+3. **Executive-cognition marginal value** — measurement first, against the deterministic baseline; the cognition gate now requires the comparison before adoption.
+4. **Further simplification sweep** — the reachability gate covers the institution only; the same audit over `src/services/**` would likely find more.
 
-## Working rules that mattered most this session
+## Working rules that mattered most
 
-- A red gate is evidence. Three real defects were found by refusing to weaken one: the stale snapshot; content validated *after* mutation instead of before; and an independence guard that retroactively invalidated a frozen benchmark (the guard was re-keyed, the benchmark untouched).
-- Evidence must strictly follow the prediction it tests. Both the Shadowing window and change verification use exclusive lower bounds; where timestamp resolution is ambiguous the result stays unresolved rather than falsely confirmed.
-- A passing corpus that cannot fail is not evidence — mutation-test benchmarks before believing them.
-- Never let one subsystem's E3 bootstrap an adjacent one.
+- A red gate is evidence. Every defect found this session came from refusing to weaken one.
+- Mutation-test a gate before believing it. **Two of this session's five gates were wrong on first write** — the cognition gate matched only static imports of a path form the institution never uses, and the reachability gate's first DARK list over-claimed. Both were caught by trying to make them fail.
+- Evidence must strictly follow the prediction it tests; same-second evidence is refused as ambiguous rather than believed.
+- Never let one subsystem's E3 bootstrap an adjacent one, and never let a scheduler be mistaken for evidence.
+- When a subsystem cannot honestly be driven, say so in IMPLEMENTATION_STATE and leave it undriven. Inventing the evidence is the one unrecoverable mistake.
