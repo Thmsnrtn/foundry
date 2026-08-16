@@ -636,6 +636,21 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Institutional reachability gate, and an honest record of what is dark
+
+- **Why:** the orphan found in the previous slice was found *by hand*. "No orphan abstractions" and "every subsystem must pay rent" were being enforced by memory, which means they were not being enforced. A constitutional law with no mechanism is a preference.
+- **Build:** `tests/unit/institution-production-reachability.test.ts` builds an import graph — static and dynamic imports alike, since the institution is reached almost entirely through `await import(...)` — from the real production entry points (`src/index.ts`, `src/jobs/index.ts`, `src/cli/index.ts`) and requires every module under `src/services/institution/**` to be reachable or explicitly declared dark with a reason. Enforced **exactly in both directions**, like the architectural ratchets: a newly orphaned module fails, and a module that has since been wired fails until it is removed from the list. A second test refuses reasons containing "later", "future", "eventually", "someday" — that is speculative architecture, and the answer to it is deletion, not a note.
+- **What the gate proves, and what it does not:** reachability is per **module**, not per **behaviour**. A module counts as reachable when production imports it at all, including when a founder surface imports it only to *read*. Several institution modules are reachable in exactly that way while their write paths remain undriven. The gate therefore cannot tell you the ladder is being climbed in production. Stated in the file itself so a green result is never read as more than it is.
+- **Deletion (completion):** `src/services/institution/attention-baseline.ts` and its test are **deleted**. It was the only undeclared orphan — derived founder-attention instrumentation with no consumer anywhere. A measurement nobody reads is not a measurement, and keeping it "for the attention frontier" is precisely the speculative architecture the constitution forbids. It is fifty lines of SQL and should be reintroduced *with* its consumer when founder attention is actually worked.
+- **Honest record of what is dark in production** (the real state of the institution, not a claim about it):
+  - Driven in production today: signal → responsibility **discovery**; owner promotion of candidates through the Letter; the **judgment** production and observation pass wired in the previous slice; the governed outbound effect boundary.
+  - **Not driven in production:** Understanding, Shadowing, Assisting, and every development path. They are reachable and proven at E3 over synthetic corpora, and they are never *entered* by a production caller.
+  - **Root blocker, stated precisely:** reconstruction claims have no production writer that observes a customer's company. Understanding needs eight provenance-bearing claims about a responsibility; capacity/demand judgment needs claims about a company's real resources. For a customer, those facts come from the founder or from an integration, and neither supply exists. **This is not a defect to code away.** Deriving them from what Foundry can already see would mean inventing evidence, which the evidence ladder forbids outright. The judgment tick is genuinely wired and will raise a judgment the moment real claims exist; today it will find none.
+  - Consequence for claims: no production evidence is claimed for any rung above Visible. E3 remains a statement about exercised synthetic dimensions only.
+- **Evidence maturity:** E2 — the gate itself is proven locally and is self-locking. It makes a constitutional law mechanical; it does not raise any subsystem's maturity.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Written 2026-08-16 at the close of this session. Everything needed to resume without reconstructing history.*
