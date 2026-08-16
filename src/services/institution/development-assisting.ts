@@ -178,16 +178,52 @@ export async function executeDevelopmentChange(input: {
 }
 
 /**
+ * Whether the repository's ACTUAL change set is exactly what was planned.
+ *
+ * Everything else in this file verifies the intended file. That is necessary
+ * and not sufficient: it cannot see a second file that also changed. A
+ * generator that rewrites a lockfile, a formatter that reflows a neighbour, a
+ * command with a side effect nobody documented — each produces a correct target
+ * file and an unauthorised repository, and every check downstream would pass.
+ *
+ * Deliberately pure. The kernel does not run `git`, spawn processes, or read
+ * the working tree; the caller observes what changed and hands the list in.
+ * That keeps the institution free of process execution and makes the rule
+ * itself trivially testable.
+ *
+ * Unexpected mutation is failure even when the target file is perfect and every
+ * test passes.
+ */
+export function verifyDiffScope(input: {
+  observedChangedPaths: string[]; plannedPaths: string[];
+}): { withinScope: boolean; unexpected: string[] } {
+  const planned = new Set(input.plannedPaths.map((p) => p.replace(/^\.\//, '')));
+  const unexpected = input.observedChangedPaths
+    .map((p) => p.replace(/^\.\//, ''))
+    .filter((p) => p.length > 0 && !planned.has(p))
+    .sort();
+  return { withinScope: unexpected.length === 0, unexpected };
+}
+
+/**
  * Verify the change independently.
  *
- * Two separate things must both hold: the bytes on disk are re-read and
- * compared against what was authorized (never inferred from a successful
- * write), and the required checks must appear among independently recorded
- * development observations. A check nobody ran is `unresolved`, not a pass.
+ * Three separate things must hold: the bytes on disk are re-read and compared
+ * against what was authorized (never inferred from a successful write), the
+ * repository's actual change set must contain nothing beyond the planned path
+ * when the caller supplies one, and the required checks must appear among
+ * independently recorded development observations. A check nobody ran is
+ * `unresolved`, not a pass.
  */
 export async function verifyDevelopmentChange(input: {
   productId: string; planId: string; repositoryRoot: string; expectedContent: string;
-}): Promise<{ diffVerified: boolean; verificationStatus: 'passed' | 'failed' | 'unresolved'; evidence: string[] }> {
+  /** What actually changed in the working tree, observed by the caller. When
+   * omitted, diff scope is simply not established — it is never assumed clean. */
+  observedChangedPaths?: string[];
+}): Promise<{
+  diffVerified: boolean; verificationStatus: 'passed' | 'failed' | 'unresolved';
+  evidence: string[]; unexpectedPaths: string[];
+}> {
   const row = (await query(
     'SELECT * FROM development_change_plans WHERE id=? AND product_id=?', [input.planId, input.productId],
   )).rows[0] as Record<string, unknown> | undefined;
@@ -195,9 +231,20 @@ export async function verifyDevelopmentChange(input: {
 
   const responsibilityId = String(row.responsibility_id);
   const onDisk = readRepositoryFile(input.repositoryRoot, String(row.target_path));
-  const diffVerified = onDisk !== null && repositoryChangeId({
+  const bytesMatch = onDisk !== null && repositoryChangeId({
     productId: input.productId, responsibilityId, path: String(row.target_path), content: onDisk,
   }) === String(row.change_id) && onDisk === input.expectedContent;
+
+  // A correct target file in an incorrectly-changed repository is not a
+  // verified change. When the caller observed the working tree, anything it
+  // saw beyond the planned path fails the diff outright.
+  const scope = input.observedChangedPaths === undefined
+    ? { withinScope: true, unexpected: [] as string[] }
+    : verifyDiffScope({
+      observedChangedPaths: input.observedChangedPaths,
+      plannedPaths: [String(row.target_path)],
+    });
+  const diffVerified = bytesMatch && scope.withinScope;
 
   // The verification that must hold is the one bound to the consent that
   // authorized this change, not whatever a current grant happens to say.
@@ -228,15 +275,19 @@ export async function verifyDevelopmentChange(input: {
     evidence.push(String(observation.id));
   }
 
-  const verificationStatus = required.some((check) => results.get(check) === 'failed') ? 'failed'
-    : required.every((check) => results.get(check) === 'passed') ? 'passed'
-      : 'unresolved';
+  // An out-of-scope mutation is a failed verification, not merely an
+  // unverified diff — passing checks must never be able to certify a
+  // repository that changed in ways nobody authorized.
+  const verificationStatus = !scope.withinScope ? 'failed'
+    : required.some((check) => results.get(check) === 'failed') ? 'failed'
+      : required.every((check) => results.get(check) === 'passed') ? 'passed'
+        : 'unresolved';
 
   await query(
     'UPDATE development_change_plans SET diff_verified=?,verification_status=?,verification_evidence_json=? WHERE id=? AND product_id=?',
     [diffVerified ? 1 : 0, verificationStatus, JSON.stringify(evidence), input.planId, input.productId],
   );
-  return { diffVerified, verificationStatus, evidence };
+  return { diffVerified, verificationStatus, evidence, unexpectedPaths: scope.unexpected };
 }
 
 /**
