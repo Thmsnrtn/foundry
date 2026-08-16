@@ -833,6 +833,9 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ## What this session did
 
+1. **Inbound customer communication as canonical external evidence (migration 131).**
+2. **The first production-facing support execution chain (migration 132)** — founder-authored reply proposal → bounded plan → authority revalidation → governed send → receipt, with the outcome left unresolved.
+
 **Inbound customer communication as canonical external evidence (migration 131)** — the intake the previous session identified as the missing piece, built provider-neutral, and proven **alone** as the owner's section 5 requires: no reply, no plan, no send.
 
 ## Part 7 audit — completed, and it determines the next slice
@@ -862,12 +865,18 @@ founder reports an obligation → discovery → Visible                 │
     → founder states a bounded expectation → Shadowing ─────────────┘
       → external reading → matched / deviated / unresolved
         → founder grants exact bounded authority → Assisting admission
-          → ✗ no reply proposal → ✗ no planner caller → ✗ no send
+          → customer message on the responsibility's channel
+            → founder authors a reply → bounded plan → revalidation
+              → governed send_email → receipt → outcome UNRESOLVED
 
 provider adapter → POST /ingest/customer-message/:channelKey
-  → canonical message evidence, attributed by channel binding    ← NEW, and
-    currently a leaf: nothing consumes messages yet.
+  → canonical message evidence, attributed by channel binding
 ```
+
+**The chain is complete and closed.** What remains unproven is autonomous reply
+generation: the founder writes the reply, and that is now the deterministic
+human baseline (§10) any model-generated proposal must beat on a frozen
+contract.
 
 All of it is **E2 — local runtime**. Nothing has been exercised by a real founder, a real outside system, or a real provider.
 
@@ -885,8 +894,9 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 ## Open proof debt
 
 - **Nothing has met reality.** No real founder, outside tool, or provider.
-- **Reply proposal → plan → execution** is the open chain (above).
-- **Message consumers:** inbound messages are currently a leaf. Until a proposal path exists, nothing reads them.
+- **Autonomous reply generation** is unbuilt and unclaimed; the founder-authored path is the baseline.
+- **Withdrawal is currently irreversible in place** (owner decision above).
+- **A model-drafted proposal must first have a frozen contract** (§10), then beat the human baseline.
 - **Outcome (§12) remains untouched and must stay so:** provider acknowledgement, delivery, customer silence, and elapsed time are all *not* resolution. If a provider can emit an explicit case-status event, audit whether its contract genuinely establishes the outcome before believing it. Preserve `unresolved`.
 - Judgment observation still cannot report `contradicted`.
 - Development paths remain on the reachability gate's DARK list.
@@ -897,10 +907,10 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 
 ## Next highest-value unblocked work
 
-1. **Founder-authored reply proposal** bound to an inbound message (§7 conclusion above).
-2. **Wire the planner** with real inputs, then execution revalidation and the race invariant (§9–10).
-3. **Extend the reachability gate** across intake → association → authority → admission → proposal → planner → execution, mutation-testing one disconnected link (§13).
-4. **Pilot readiness** on existing surfaces — never a pilot dashboard, never simulated E4 (§14–15).
+1. **Owner decision needed — is withdrawal reversible?** Migration 112 admits a responsibility-bound consent only while Shadowing, so a permission withdrawn after Assisting cannot be re-granted without returning the responsibility to Shadowing. This matters directly for pilot grant/revoke. Do not loosen the guard without deciding what a grant means.
+2. **Extend the reachability gate into a structural chain gate**, mutation-testing a disconnected link. The chain's production callers are currently asserted inside `support-execution-chain.test.ts`; that belongs in the gate.
+3. **Pilot readiness** on existing surfaces — never a pilot dashboard, never simulated E4.
+4. **Freeze the support-drafting contract** (§10) before any model: grounding in the message and in canonical facts, unsupported commitments, invented policies, prompt-injection resistance, tenant isolation, correction burden, cost, latency; catastrophic = fabricated refund/credit, secret disclosure, cross-tenant context, authority escalation from customer content.
 5. Recursive Foundry operation through ordinary authority; unfamiliar-company breadth; deletion sweep.
 
 ## Working rules that mattered most
