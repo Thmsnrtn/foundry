@@ -651,6 +651,18 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Unfamiliar-company generalization — an independently generated corpus against the frozen gate
+
+- **Gap:** every existing corpus was written alongside the code it scores, and every company in it is SaaS-shaped (deployments, dispatch, fulfillment, billing, support). AcreOS is deferred by the owner precisely so a genuinely unfamiliar company survives as a real test — which left nothing checking whether recognition keys on institutional *structure* or on its own fixtures' vocabulary.
+- **Build:** a corpus authored from a deliberately different generative principle — a veterinary practice, a bread supplier, a freight brokerage, a community college, and a translation agency, none of them software businesses, with no token in common with the existing fixtures — run through the **unchanged** `2026-08-v1` recognition gate. It covers the same four epistemic shapes (known, conflicting, unknown, stale) in each company's own language, plus a neighbouring company that must never appear in any result.
+- **Result:** the frozen gate passes unchanged. The epistemic machinery, provenance, tenancy, and authority separation are not domain-keyed.
+- **Mutation-tested:** disabling read-time staleness in `getReconstructionClaims` makes the expired translation-agency rule promote, and the gate fails. The corpus can fail, so its passing is evidence.
+- **Boundary found and stated rather than glossed:** production discovery (`discoverResponsibilityFromSignal`) admits exactly **four** SaaS-shaped signal kinds — `payment_failed`, `churn_detected`, `support_spike`, `activation_failure`. Every signal in the unfamiliar corpus is real company evidence in the company's own language, and **all of it is abstained on**. That is correct behaviour — evidence stays evidence, and unknown is a legitimate state — but it must not be mistaken for "Foundry recognises responsibilities in any company". A test asserts the admitted vocabulary is exactly those four, so it cannot widen silently. The same unfamiliar company *is* recognised the moment its evidence takes an admitted shape (a failed client card payment at the veterinary practice), which proves the abstention is about the evidence contract and not about the domain.
+- **What this does not prove:** the corpus is not independent in the strongest sense — the same author wrote the code. Only a company Foundry has never seen, supplied by someone else, closes that. **AcreOS remains DEFERRED BY OWNER**; this is a partial substitute, not a replacement, and no new evidence level is claimed from it.
+- **Evidence maturity:** recognition stays at its earned E3. Generalization evidence is E2 — a second, structurally different corpus passing the same frozen gate strengthens confidence in the existing claim; it does not raise it.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Written 2026-08-16 at the close of this session. Everything needed to resume without reconstructing history.*
