@@ -718,76 +718,79 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 # CONTINUATION — self-contained resume record
 
-*Rewritten 2026-08-16 at the close of the second autonomous session. Supersedes the previous continuation record. Everything needed to resume without reconstructing history.*
+*Rewritten 2026-08-16 at the close of the third autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. One accumulated branch; never merged to master (owner instruction).
-- **Migrations:** through **124**. Fresh migrations apply cleanly. Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **147 files / 1,176 tests**, plus typecheck, ratchets, kernel boundary, public-claims audit, and consequential-effects audit.
+- **Migrations:** through **126**. Schema snapshot regenerated and committed.
+- **Full `npm run check`:** green — **150 files / 1,204 tests**, plus typecheck, ratchets, kernel boundary, public-claims audit, consequential-effects audit.
 - **Working tree:** clean.
-- **Environment note:** `sqlite3` is not preinstalled; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). **Regenerate and commit the snapshot after every migration.**
+- **Environment note:** `sqlite3` is not preinstalled; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). Regenerate and commit the snapshot after every migration. Do not allowlist snapshot drift.
+- **Note on the `as-any` ratchet:** its pattern is the bare substring `as any`, so prose containing "has anyone" trips it. Reword the prose; do not touch the gate.
 
 ## What this session did, in order
 
-1. **Canonical system identity (migration 123)** — resolved the owner's decision. `system_identities`: a closed-vocabulary key bound immutably to one product row. Identity is not authority; the table has no authority-bearing column. Name and creation-order resolution removed from all three runtime paths. Mutation-verified (reintroducing the name fallback fails 7 of 9 tests).
-2. **Institutional judgment pays rent (migration 124)** — judgment, its evaluation, and the owner disposition loop had **no production writer**. Added conflict identity (unique per product, so a standing conflict is never re-raised), a grounded observation source (evidence must be strictly later than the judgment; echoing the judgment is refused; cross-tenant refused), and the `institutional_judgment_tick` cron. Fixed a real defect found on the way: `getReconstructionClaims` ordered by `(created_at, id)` with nanoid ids, so same-second claims resolved in random order and a correction could lose to what it corrected.
-3. **Institutional reachability gate** — makes "no orphan abstractions" mechanical. Deleted the one undeclared orphan it found (`attention-baseline.ts`).
-4. **Unfamiliar-company generalization** — five non-software companies through the unchanged frozen recognition gate; mutation-verified; production discovery's four-signal vocabulary pinned and its abstention boundary stated.
-5. **Institutional cognition gate** — the kernel and the effect boundary make no model calls, now by decision rather than accident. Mutation-verified against three probes after the first version proved too narrow.
+1. **Progressive founder evidence bridge (migration 125)** — the owner's decision, implemented. A founder answer enters as an ordinary `signal_events` row and the existing reconstruction machinery derives one bounded claim. The only new noun is the *question*, and it is an attention record rather than a knowledge record. Deterministic selection from the institution's own understanding requirements; no model. 15 tests.
+2. **Production reachability proof program (`production-reachability-v1`)** — thresholds fixed before tuning; eleven metrics kept separate; seven catastrophic failures; corpus-level coverage integrity proven by an empty observation that scores a vacuous 1 everywhere and is still refused.
+3. **Evidence intake and generic obligation ontology (migration 126)** — closed the worst orphan in the system and generalised discovery without industry enums.
 
-## The single most important fact about current state
+## The correction that matters most
 
-**The institution is largely dark in production.** Driven today: signal → responsibility discovery; owner promotion of candidates through the Letter; the judgment production/observation pass; the governed outbound effect boundary. **Not driven:** Understanding, Shadowing, Assisting, and every development path.
+The previous record said discovery was "driven in production". **It was not.** `emitSignalEvent` — the only function that records a company signal *and* runs responsibility discovery — had no caller anywhere in `src/`. Nothing in production produced company evidence at all. The institution was dark from the very first rung, not merely above Visible.
 
-**Root blocker, stated precisely:** reconstruction claims have no production writer that observes a *customer's* company. Understanding needs eight provenance-bearing claims about a responsibility; capacity/demand judgment needs claims about real resources. For a customer those facts come from the founder or from an integration, and neither supply exists. **This is a missing evidence supply, not a defect to code away** — deriving them from what Foundry can already see would be inventing evidence, which the evidence ladder forbids. The judgment tick is genuinely wired and will raise a judgment the moment real claims exist; today it will find none.
-
-Do not "fix" this by fabricating a derivation. The honest routes are a founder-facing capture of what a responsibility is, or an integration that observes it — and the first is a product decision worth raising with the owner.
+Both halves are now fixed and both are proven only locally: a founder can report an obligation (intake), and can answer the facts Foundry cannot observe (understanding). A blacksmith's forge goes report → Visible → Understood through real production services.
 
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope of the claim |
 |---|---|---|
 | Bounded sparse reconstruction | E3 | exercised fixture dimensions only |
-| Responsibility recognition | E3 | exercised dimensions; now also passing a structurally different unfamiliar-company corpus |
+| Responsibility recognition | E3 | exercised dimensions + an unfamiliar-company corpus |
 | Responsibility understanding | E3 | four exercised capability shapes |
-| Shadowing | E3 | four exercised responsibility shapes — **not** development verification |
+| Shadowing | E3 | four exercised responsibility shapes |
 | Assisting (support reply) | E3 | exercised synthetic dimensions only |
-| Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus; a scheduler is not evidence |
-| Development (recognition → outcome) | E3 | five synthetic companies, one change class, single-file, one repository |
+| Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus |
+| Development (recognition → outcome) | E3 | five synthetic companies, one change class, single-file |
+| **Production reachability** | **E3** | **four synthetic non-software companies, four admitted signal shapes, one responsibility each, one skip, one conflict** |
+| Founder evidence bridge | E2 | local end-to-end through production services |
+| Evidence intake + generic obligations | E2 | local end-to-end through production services |
 | Canonical system identity | E2 | local invariant and adversarial evidence |
 | Judgment production + grounded observation | E2 | local wiring and guard evidence |
-| Reachability and cognition gates | E2 | local, mutation-verified |
-| Unfamiliar-company generalization | E2 | second corpus, same frozen gate — strengthens, does not raise |
 | Assisting → Operating | frozen | migration 115; unchanged |
-| Everything in production, pilots, founder value | unproven | requires E4/E5/E6 |
+| Everything with real founders, pilots, production | unproven | requires E4/E5/E6 |
 
 ## Open proof debt
 
-- **Production evidence supply** (above) — the blocker for every rung above Visible.
-- Judgment observation cannot report `contradicted`. That needs an observer that can see a deadline pass; deliberately not faked.
-- Development: source-code change classes, multi-file changes, real repository operation, concurrent multi-plan. **Do not expand development capability without evidence of a real need** (owner instruction).
-- Executive cognition (Tranche 4): no marginal-value comparison has been run. The cognition gate now forces one before adoption.
-- Economics (Tranche 12): cost attribution is near-vacuous while the institution is model-free; it becomes real the moment cognition is adopted, and should be built with it, not before.
-- Founder attention: no empirical reduction is claimed or measured. The instrumentation was deleted as an orphan and should return **with** its consumer.
+- **No real founder has ever answered a question or reported an obligation.** Every reachability claim is synthetic and authored by the author of the code. No attention reduction is claimed or measured.
+- **Integrations still feed nothing.** Founder report is the honest bridge, not the permanent answer; integration evidence remains preferred for anything a system can actually observe, and no integration calls `emitSignalEvent`.
+- Shadowing is still not reachable in production: it needs an independent observer of the same reality, and that supply does not exist. Still on the reachability gate's DARK list with `development-observation.ts` and `development-shadowing.ts`.
+- Judgment observation cannot report `contradicted` — needs an observer that can see a deadline pass.
+- Judgment inputs (capacity/demand claims) still have no production writer; the tick is wired and will find nothing until they do. **Note:** the founder-evidence pattern is now the obvious honest route for these, but that is a design decision, not an obvious extension — capacity is a company-wide fact, not a per-responsibility one, and the current elicitation is deliberately scoped to responsibilities.
+- Executive cognition (Tranche 4): no marginal-value comparison run. The cognition gate forces one before adoption.
+- Economics (Tranche 12): near-vacuous while the institution is model-free.
+- Re-asking after deferral is deliberately absent rather than given an invented interval. If evidence appears that founders want reminders, that is where to add it.
+- Duplicate founder reports create duplicate responsibilities (each report is its own discovery evidence). Not yet a problem; would become one under real use.
 
 ## Owner deferrals and decisions
 
-- **AcreOS: DEFERRED BY OWNER.** Not accessed, inspected, ingested, benchmarked, or special-cased anywhere. Preserved as the genuine unfamiliar-company generalization test; this session's corpus is a partial substitute, not a replacement.
-- **Canonical Foundry identity: RESOLVED and implemented** (migration 123). No open owner decision remains from the previous session.
-- **Worth raising with the owner:** whether founders should be asked, in the Letter, what a responsibility is actually for. That is the smallest honest unblock for the production evidence supply, and it is a product decision about founder attention rather than an engineering one.
+- **AcreOS: DEFERRED BY OWNER.** Not accessed, inspected, ingested, benchmarked, or special-cased anywhere.
+- Canonical Foundry identity: resolved and implemented (migration 123).
+- Progressive founder evidence elicitation: resolved and implemented (migrations 125–126).
+- **No open owner decision blocks work.**
 
 ## Next highest-value unblocked work
 
-1. **Decide the evidence supply** (owner input useful): founder capture vs. integration-observed claims. Everything above Visible waits on this.
-2. **Responsibility carrying / exception ownership** — the `exception_owned` state exists with no path into it; check whether that is another orphan behaviour.
-3. **Executive-cognition marginal value** — measurement first, against the deterministic baseline; the cognition gate now requires the comparison before adoption.
-4. **Further simplification sweep** — the reachability gate covers the institution only; the same audit over `src/services/**` would likely find more.
+1. **Make Shadowing reachable** without manufacturing evidence — the next rung, and the last one with no honest supply. An independent observer for a founder-reported obligation is the hard part; do not fake it.
+2. **Voluntary company truth in Ask** — the owner's section 7 is only half done. Reporting an obligation is structured and safe; promoting a *conversational* statement into canonical evidence still needs an explicit-confirmation design. Ambiguous chat must stay conversation.
+3. **Feed the intake from an integration** — the same `emitSignalEvent` path, from a system that genuinely observes. This is what moves reachability off synthetic ground.
+4. **Judgment input supply** — see the note above; needs a scope decision first.
+5. **Simplification sweep over `src/services/**`** — the reachability gate covers the institution only, and it has already found two orphans outside its own scope by accident.
 
 ## Working rules that mattered most
 
-- A red gate is evidence. Every defect found this session came from refusing to weaken one.
-- Mutation-test a gate before believing it. **Two of this session's five gates were wrong on first write** — the cognition gate matched only static imports of a path form the institution never uses, and the reachability gate's first DARK list over-claimed. Both were caught by trying to make them fail.
-- Evidence must strictly follow the prediction it tests; same-second evidence is refused as ambiguous rather than believed.
-- Never let one subsystem's E3 bootstrap an adjacent one, and never let a scheduler be mistaken for evidence.
-- When a subsystem cannot honestly be driven, say so in IMPLEMENTATION_STATE and leave it undriven. Inventing the evidence is the one unrecoverable mistake.
+- **Audit the writers, not just the modules.** Two sessions running, the biggest defect was something built, reachable, benchmarked, and never called. Ask "what calls this in production?" before believing a subsystem works.
+- Mutation-test a gate before believing it; three of this session's and last session's gates were wrong on first write.
+- A red gate is evidence. The reachability gate failed twice this session in the direction it was designed to fail — once to make me pay down DARK, once to make me declare a new benchmark — and both were correct.
+- Evidence must strictly follow the prediction it tests; same-second evidence is ambiguous and is refused.
+- When a subsystem cannot honestly be driven, record it and leave it undriven. Inventing the evidence is the one unrecoverable mistake.
