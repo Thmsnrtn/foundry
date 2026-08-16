@@ -67,10 +67,12 @@ export async function runSloChecksAndAlert(): Promise<SloCheck[]> {
 
   try {
     const { invoke } = await import('./outbound/gateway.js');
-    // Route through Foundry's own product so the gateway kill-switch has a scope.
-    const { query } = await import('../db/client.js');
-    const r = await query("SELECT id FROM products WHERE name = 'Foundry' ORDER BY created_at ASC LIMIT 1", []);
-    const foundryProductId = r.rows.length ? String((r.rows[0] as Record<string, unknown>).id) : null;
+    // Route through Foundry's own product so the gateway kill-switch has a
+    // scope. Resolved by canonical system identity (migration 123), never by
+    // display name: an operator alert must not be scoped to whichever row
+    // happens to be called "Foundry".
+    const { resolveFoundryProductId } = await import('./system-identity.js');
+    const foundryProductId = await resolveFoundryProductId();
     if (!foundryProductId) {
       logger.warn('slo.no_foundry_product', { breaches: breaches.map((b) => b.name) });
       return breaches;

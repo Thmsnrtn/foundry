@@ -191,7 +191,13 @@ describe('recursive institution: Foundry is an ordinary company', () => {
       const source = readFileSync(path, 'utf8');
       return /name\s*=\s*['"]Foundry['"]/.test(source)
         || /product_id\s*=\s*['"]foundry/i.test(source)
-        || /FOUNDRY_PRODUCT|isFoundryProduct|isFoundryCompany|isFoundryTenant/i.test(source);
+        || /FOUNDRY_PRODUCT|isFoundryProduct|isFoundryCompany|isFoundryTenant/i.test(source)
+        // Migration 123 gave Foundry a canonical identity so the *platform*
+        // paths stop guessing at a display name. The kernel must still not be
+        // able to ask the question at all: resolving canonical identity inside
+        // the institution would reintroduce exactly the special case this
+        // invariant exists to forbid.
+        || /system_identities|resolveFoundryProductId|resolveSystemIdentity|FOUNDRY_IDENTITY_KEY/.test(source);
     });
     expect(selfAware).toEqual([]);
   });

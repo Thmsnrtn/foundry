@@ -43,6 +43,9 @@
 
 
 
+
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -311,6 +314,7 @@
     SELECT 1 FROM json_each(NEW.grounding_evidence_json) ref WHERE NOT EXISTS (
     SELECT 1 FROM json_each(NEW.responsibility_refs_json) refs
     SELECT 1 FROM products p WHERE p.id=NEW.product_id AND p.owner_id=NEW.owner_id);
+    SELECT 1 FROM products p WHERE p.id=NEW.product_id);
     SELECT 1 FROM reconstruction_claims c JOIN institutional_responsibilities r ON r.id=NEW.responsibility_id
     SELECT 1 FROM reconstruction_claims c WHERE NEW.expectation_evidence_ref='reconstruction_claim:' || c.id
     SELECT 1 FROM reconstruction_claims c WHERE c.id=NEW.learned_claim_id AND c.product_id=NEW.product_id
@@ -328,6 +332,7 @@
     SELECT 1 FROM signal_events e WHERE NEW.observation_ref='signal_event:' || e.id AND e.product_id=NEW.product_id
     SELECT 1 FROM signal_events e WHERE NEW.observation_source_evidence_ref='signal_event:' || e.id
     SELECT 1 FROM strategic_decisions_log d
+    SELECT 1 FROM system_identities s WHERE s.identity_key=NEW.identity_key);
     UNION ALL
     UNION ALL
     VALUES('global', '__global__', NEW.date, 0, NEW.reserved_cents, NEW.updated_at)
@@ -464,6 +469,7 @@
   -- Briefing generated for this session
   -- Business philosophy
   -- Calibration outcome, resolved later by the Memory Kernel:
+  -- Closed vocabulary. A new system identity cannot be invented at runtime;
   -- Communication
   -- Communication style
   -- Comp analysis
@@ -520,6 +526,7 @@
   -- State
   -- Status
   -- Structured output
+  -- The bound row must be a real product. Identity attaches to an ordinary
   -- The check is deny-dominant and bidirectional: a prefix inside the ring is
   -- The compressed content
   -- The constitutional ring. Ordinary development authority may not reach the
@@ -527,6 +534,7 @@
   -- The grounding must be this product's own current claims. A disposition
   -- The observer may not see, cite, or echo the expectation it will be
   -- The signal that says "stop iterating" when yield drops below threshold.
+  -- The slot is claimed once. A second claimant is refused with a domain
   -- The target must fall inside a granted prefix.
   -- Trigger
   -- Types: 'churn_risk' | 'expansion_opportunity' | 'metric_target' | 'experiment_outcome' | 'risk_escalation'
@@ -540,7 +548,9 @@
   -- assumptions: { monthly_burn_delta_usd, mrr_growth_rate_pct, churn_rate_override, headcount_additions, ... }
   -- caller-supplied owner string cannot establish its own authority.
   -- code, migrations, documents, or enforcement scripts that define what
+  -- company/product row; there is no separate privileged entity kind.
   -- compared against. Verification that can read the expectation is
+  -- constitutional ring that ordinary development authority cannot reach.
   -- evidence provenance this contract governs.
   -- for "it was independently checked".
   -- from the fact that a write returned without throwing.
@@ -548,8 +558,10 @@
   -- grant can invent.
   -- grant that somehow held a ring path could still never be planned against.
   -- indistinguishable from a real one.
+  -- it requires editing this migration, and migrations are inside the
   -- judgment time; the owner cannot introduce an unrepresented direction here.
   -- justified by another tenant's evidence is not a justification.
+  -- reason rather than a primary-key error, so the invariant reads as intent.
   -- reference is exactly this consent, and a consent that is currently valid,
   -- refused, and so is a broad prefix that would contain part of the ring.
   -- repository is not a bound scope.
@@ -725,6 +737,12 @@
   SELECT RAISE(ABORT,'shadowing:observation_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'shadowing:observation_source_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'shadowing:responsibility_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'system_identity:already_claimed') WHERE EXISTS (
+  SELECT RAISE(ABORT,'system_identity:immutable');
+  SELECT RAISE(ABORT,'system_identity:immutable');
+  SELECT RAISE(ABORT,'system_identity:product_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'system_identity:reason_required')
+  SELECT RAISE(ABORT,'system_identity:unknown_identity')
   UNIQUE (product_id, acquisition_period, acquisition_channel)
   UNIQUE (product_id, snapshot_date)
   UNIQUE(cohort_group_id, founder_id)
@@ -775,6 +793,7 @@
   UPDATE responsibility_candidates SET status='promoted',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='rejected',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='superseded',updated_at=NEW.created_at
+  WHERE NEW.identity_key NOT IN ('foundry');
   WHERE apns_device_token IS NOT NULL;
   WHERE apns_device_token IS NOT NULL;
   WHERE decision_acted_at IS NULL;
@@ -782,6 +801,7 @@
   WHERE id = NEW.responsibility_id AND state = NEW.from_state;
   WHERE id=NEW.responsibility_id AND product_id=NEW.product_id;
   WHERE resolved_at IS NULL;
+  WHERE trim(NEW.established_reason)='';
   accepted_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
   accepted_at DATETIME,
   accepted_at TEXT,
@@ -1646,6 +1666,8 @@
   error_message TEXT,
   error_message TEXT,
   error_message TEXT,
+  established_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  established_reason TEXT NOT NULL,
   estimated_cost_range TEXT,
   estimated_cost_usd REAL,
   estimated_duration_days INTEGER,
@@ -2168,6 +2190,7 @@
   id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  identity_key       TEXT PRIMARY KEY,
   immigration_status TEXT,
   impact TEXT,
   impact_level TEXT DEFAULT 'medium',
@@ -2753,6 +2776,7 @@
   product_id          TEXT NOT NULL,
   product_id          TEXT NOT NULL,
   product_id          TEXT NOT NULL,        -- kept private, never joined publicly
+  product_id         TEXT NOT NULL UNIQUE REFERENCES products(id),
   product_id       TEXT NOT NULL,
   product_id       TEXT NOT NULL,
   product_id       TEXT NOT NULL,
@@ -3917,6 +3941,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -3950,6 +3975,7 @@ AFTER INSERT ON responsibility_dispositions
 AFTER INSERT ON responsibility_transitions
 AFTER UPDATE OF status ON ai_spend_reservations
 BEFORE DELETE ON institutional_judgment_dispositions
+BEFORE DELETE ON system_identities
 BEFORE INSERT ON ai_spend_reservations
 BEFORE INSERT ON autonomy_consents
 BEFORE INSERT ON autonomy_consents WHEN NEW.responsibility_id IS NOT NULL
@@ -3971,8 +3997,13 @@ BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='assisting'
 BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='operating'
 BEFORE INSERT ON signal_events WHEN NEW.source='development_verification'
 BEFORE INSERT ON strategic_decisions_log WHEN NEW.responsibility_refs_json IS NOT NULL
+BEFORE INSERT ON system_identities
 BEFORE UPDATE ON development_change_plans
 BEFORE UPDATE ON institutional_judgment_dispositions
+BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4592,6 +4623,7 @@ CREATE TABLE stressor_history (
 CREATE TABLE stripe_events (
 CREATE TABLE stripe_webhook_events (
 CREATE TABLE switching_cost_analysis (
+CREATE TABLE system_identities (
 CREATE TABLE taste_journals (
 CREATE TABLE team_health_metrics (
 CREATE TABLE team_invitations (
@@ -4642,6 +4674,9 @@ CREATE TRIGGER responsibility_shadow_comparison_guard
 CREATE TRIGGER responsibility_shadow_expectation_guard
 CREATE TRIGGER responsibility_transition_apply
 CREATE TRIGGER responsibility_transition_guard
+CREATE TRIGGER system_identity_guard
+CREATE TRIGGER system_identity_immutable_delete
+CREATE TRIGGER system_identity_immutable_update
 CREATE UNIQUE INDEX idx_assisted_effect_identity ON outbound_actions(product_id,effect_id) WHERE effect_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_benchmark_percentiles_unique
 CREATE UNIQUE INDEX idx_benchmarks_metric_cohort ON intelligence_benchmarks(metric_name, cohort);
@@ -4673,6 +4708,9 @@ CREATE UNIQUE INDEX idx_role_permissions_unique ON role_permissions(role, permis
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
+END;
+END;
 END;
 END;
 END;

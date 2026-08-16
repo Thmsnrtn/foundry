@@ -403,6 +403,16 @@ export async function seedDatabase(): Promise<void> {
     },
   ]);
 
+  // Bind the canonical system identity (migration 123). On a fresh database
+  // the migration's historical backfill finds nothing, so the seed is where
+  // the Foundry company's identity is established. It is bound to the row's
+  // id, not its name: renaming it later does not detach the identity, and a
+  // customer product called "Foundry" never acquires it.
+  {
+    const { establishSystemIdentity, FOUNDRY_IDENTITY_KEY } = await import('../services/system-identity.js');
+    await establishSystemIdentity(FOUNDRY_IDENTITY_KEY, foundryId, 'seeded as the Foundry company');
+  }
+
   // Foundry Phase 2 baseline (from handoff doc Section 23)
   await query(
     `INSERT INTO audit_scores (id, product_id, run_type, d1_score, d2_score, d3_score, d4_score, d5_score, d6_score, d7_score, d8_score, d9_score, d10_score, composite, verdict, created_at)

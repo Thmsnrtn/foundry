@@ -11,6 +11,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { invoke } from '../outbound/gateway.js';
+import { resolveFoundryProductId } from '../system-identity.js';
 
 export type WelcomeStage = 'day_0' | 'day_3' | 'day_7';
 
@@ -89,25 +90,13 @@ function templateDay7(name: string | null): { subject: string; html: string } {
 // ─── Foundry dogfood product resolution ─────────────────────────────────────
 // The day_0 welcome fires before the founder has created any product, so it
 // can't be scoped to their own product for the gateway's kill-switch check.
-// We route it through Foundry's own ('Foundry') product instead — dogfooding.
-
-let _foundryProductId: string | null = null;
-
-async function getFoundryProductId(): Promise<string | null> {
-  if (_foundryProductId) return _foundryProductId;
-  try {
-    const r = await query(
-      "SELECT id FROM products WHERE name = 'Foundry' ORDER BY created_at ASC LIMIT 1",
-      []
-    );
-    _foundryProductId = r.rows.length
-      ? String((r.rows[0] as Record<string, unknown>).id)
-      : null;
-  } catch {
-    _foundryProductId = null;
-  }
-  return _foundryProductId;
-}
+// We route it through Foundry's own product instead — dogfooding.
+//
+// That product is resolved by canonical system identity (migration 123), never
+// by display name or creation order: a customer may name their product
+// "Foundry" without becoming the platform's institution, and renaming the real
+// one does not detach its identity. When the identity has not been established
+// the answer is unknown and the send is declined, not guessed.
 
 /**
  * Immediate day_0 welcome, sent on founder provisioning (Clerk webhook or the
@@ -118,10 +107,10 @@ async function getFoundryProductId(): Promise<string | null> {
 export async function sendFounderWelcome(
   founder: FounderRow
 ): Promise<{ ok: boolean; reason?: string }> {
-  const foundryProductId = await getFoundryProductId();
+  const foundryProductId = await resolveFoundryProductId();
   if (!foundryProductId) {
-    // Dogfood product not seeded yet — the welcome_sequence_tick cron will
-    // retry within 12h once it's available.
+    // Canonical identity not established yet — the welcome_sequence_tick cron
+    // will retry within 12h once it is.
     return { ok: false, reason: 'foundry_product_not_seeded' };
   }
   return sendWelcomeStage(founder, foundryProductId, 'day_0');

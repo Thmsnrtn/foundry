@@ -236,10 +236,12 @@ authRoutes.post('/auth/webhook', async (c) => {
         } catch { /* non-fatal */ }
       })();
 
-      // Create or update cohort (for Foundry's own tracking)
-      const foundryProduct = await query("SELECT id FROM products WHERE name = 'Foundry' LIMIT 1", []);
-      if (foundryProduct.rows.length > 0) {
-        const fpId = (foundryProduct.rows[0] as Record<string, string>).id;
+      // Create or update cohort (for Foundry's own tracking). Scoped by
+      // canonical system identity (migration 123) so signup cohorts can never
+      // be written into a customer product that happens to be named "Foundry".
+      const { resolveFoundryProductId } = await import('../../services/system-identity.js');
+      const fpId = await resolveFoundryProductId();
+      if (fpId) {
         await query(
           `INSERT INTO cohorts (id, product_id, acquisition_period, acquisition_channel, founder_count)
            VALUES (?, ?, ?, 'organic', 1)
