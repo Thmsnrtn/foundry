@@ -168,6 +168,39 @@ const tellMeSection = (
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">You'll see exactly what I'd write down before anything is saved. Telling me something does not let me act on it.</div>
   </div>`;
 
+// Foundry asks for permission on something it has actually watched. The copy
+// states the exact effect it would be allowed to have, the things it still
+// could not do, and that the founder can withdraw it — no autonomy vocabulary,
+// no generic "let it run" switch.
+const permissionSection = (
+  items: Array<import('../../services/institution/assisting-admission.js').AssistingCandidate>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Things I could start helping with</div>
+    ${items.map((item) => html`
+      <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I've been watching this and have ${item.comparisons === 1 ? 'one check' : `${item.comparisons} checks`} to show for it.</div>
+        <div style="font-size:0.78rem;color:var(--text-primary);margin-top:0.35rem;">If you allow it, I may ${item.may}.</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I still may not ${item.mayNot}.</div>
+        ${item.granted ? html`
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.35rem;">You've allowed this until ${new Date(item.grantExpiresAt as string).toDateString()}.</div>
+          <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/permission/revoke" style="margin-top:0.35rem;">
+            <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Stop allowing this</button>
+          </form>` : html`
+          <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/permission/grant"
+            style="display:flex;gap:0.4rem;margin-top:0.45rem;align-items:center;flex-wrap:wrap;">
+            <select name="days" style="font-size:0.78rem;">
+              <option value="30">for the next month</option>
+              <option value="7">for the next week</option>
+              <option value="90">for the next three months</option>
+            </select>
+            <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Allow it</button>
+          </form>`}
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">Allowing this does not send anything on its own. You can stop it at any time.</div>
+      </div>`)}
+  </div>`;
+
 letterRoutes.get('/letter', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
@@ -258,6 +291,8 @@ letterRoutes.get('/letter', async (c) => {
   const development = await getFounderDevelopmentActivity(ctx.productId);
   const { selectFounderEvidenceQuestion } = await import('../../services/institution/founder-evidence.js');
   const evidenceQuestion = await selectFounderEvidenceQuestion(ctx.productId);
+  const { getAssistingCandidates } = await import('../../services/institution/assisting-admission.js');
+  const assistingCandidates = await getAssistingCandidates(ctx.productId);
   const { listFounderFactOpportunities } = await import('../../services/institution/founder-evidence.js');
   const factOpportunities = await listFounderFactOpportunities(ctx.productId);
   const { REPORTABLE_OBLIGATIONS, OBLIGATION_LABELS } = await import('../../services/founder/company-report.js');
@@ -308,6 +343,7 @@ letterRoutes.get('/letter', async (c) => {
           : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${evidenceQuestionSection(evidenceQuestion)}
+      ${permissionSection(assistingCandidates)}
       ${reportObligationSection(obligationOptions)}
       ${tellMeSection(factOpportunities)}
       ${judgmentSection(materialJudgments)}
@@ -816,5 +852,44 @@ letterRoutes.post('/letter/facts/confirm', async (c) => {
     amount: rawAmount === '' ? undefined : Number(rawAmount),
   });
   if (!recorded) return c.text('I could not use that', 403);
+  return c.redirect('/letter');
+});
+
+// The founder grants exact, bounded, revocable authority for one
+// responsibility. The capability, scope, consequence boundary and expiry are
+// all resolved server-side from the responsibility itself — nothing about the
+// permission is caller-supplied except how long it lasts.
+//
+// Granting does not send anything. It makes admission possible; the database
+// still requires real shadow evidence before the responsibility moves.
+letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/grant', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const days = Number(String(body.days ?? '30'));
+
+  const { grantAssistingAuthority } = await import('../../services/institution/assisting-admission.js');
+  const granted = await grantAssistingAuthority({
+    productId: ctx.productId, responsibilityId: c.req.param('responsibilityId'),
+    founderId: founder.id as string, durationDays: Number.isFinite(days) ? days : 30,
+  });
+  // Do not reveal whether another tenant's responsibility exists.
+  if (!granted) return c.text('Refused', 403);
+  return c.redirect('/letter');
+});
+
+// Withdrawal is immediate and needs no reason. Authority is re-read at
+// execution time, so a revoked grant stops authorising the next action.
+letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/revoke', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const { revokeAssistingAuthority } = await import('../../services/institution/assisting-admission.js');
+  const revoked = await revokeAssistingAuthority({
+    productId: ctx.productId, responsibilityId: c.req.param('responsibilityId'),
+    founderId: founder.id as string,
+  });
+  if (!revoked) return c.text('Refused', 403);
   return c.redirect('/letter');
 });

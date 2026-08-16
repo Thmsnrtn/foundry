@@ -774,6 +774,22 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Shadowing → Assisting made production-reachable
+
+- **The audit found no missing architecture. It found two missing writers**, verified rather than assumed:
+  - `recordConsent` (`src/services/autopilot/consent.ts`) already supported responsibility-bound authority with exact scope, consequence boundary, and expiry — and had **no caller anywhere in `src/`**. The authority writer existed; nothing could reach it.
+  - `enterResponsibilityAssisting` had exactly one caller, inside the development path, which is itself not driven in production.
+- **Founder-facing grant, deliberately narrow:** one product, one responsibility, one capability, one explicit scope string (`send_email:support_reply`), `consequence_boundary='low'`, and an expiry the founder chooses between a week and three months. Nothing about the permission is caller-supplied except its duration — the capability and scope are resolved server-side from the responsibility. There is **no generic "autopilot" permission** and no way to widen one.
+- **Foundry asks only about something it has actually watched.** A responsibility appears in the permission surface only when it is in Shadowing *and* at least one real comparison exists. Being understood is not enough; being told about something is not evidence of anything.
+- **The copy is an effect, not a mode:** "If you allow it, I may write and send one reply to a customer who is waiting on this. I still may not contact anyone else, promise anything, change your systems, or spend money. Allowing this does not send anything on its own. You can stop it at any time." A test asserts no autonomy vocabulary reaches the founder.
+- **The separations hold, and are tested:** consent ≠ Assisting (admission is a separate database-verified step, and a grant with no shadow evidence behind it simply sits unused), Assisting ≠ execution (after admission there are zero outbound actions and zero executions), plan ≠ execution (still a separate call). Revocation is immediate, needs no reason, and does **not** rewind the responsibility's state — what Foundry learned while assisting stays true; what it may do does not.
+- **The vertical runs through real services** with nothing seeded past the first founder report and the first outside reading: report → Visible → founder evidence → Understood → bounded expectation → external `/ingest`-shaped observation → Shadowing → matched comparison → founder grant → Assisting admission.
+- **Where it honestly stops, and why:** `planAssistedSupportEmail` still has **no production caller**, and this was left that way deliberately. Planning a support reply requires knowing *whom* to write to and *about what*, and the only independent observation channel in production is metric movement — which can say support volume fell but cannot identify a waiting customer or their question. Wiring a planner to that would be exactly the fabricated linkage the owner ruled out. **The missing piece is an inbound customer-message source, not more institutional machinery.**
+- **Consequently, no claim of end-to-end Assisting execution is made.** The ladder is production-reachable **through admission**. Execution remains reachable only from a real inbound support source that does not exist yet.
+- **Evidence maturity:** E2 — local runtime evidence through production-facing services. Assisting's prior E3 over exercised synthetic dimensions is unchanged and is **not** extended by this.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the fourth autonomous session. Supersedes all earlier continuation records.*
