@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { recordReconstructionClaim } from './reconstruction.js';
+import { getReconstructionClaims, recordReconstructionClaim } from './reconstruction.js';
+import { findCapacityConflict, readCapacityView } from './institutional-judgment.js';
 export type JudgmentEvaluationState='not_yet_observable'|'insufficient_evidence'|'partially_observed'|'supported'|'contradicted'|'mixed'|'conflicting';
 
 export async function evaluateInstitutionalJudgment(productId:string,judgmentId:string):Promise<JudgmentEvaluationState>{
@@ -21,4 +23,69 @@ export async function evaluateInstitutionalJudgment(productId:string,judgmentId:
   (id,judgment_id,product_id,state,evidence_refs_json,economic_result_json,learned_claim_id) VALUES (?,?,?,?,?,?,?)`,
   [nanoid(),judgmentId,productId,state,JSON.stringify(refs.map(r=>`signal_event:${r.id}`)),JSON.stringify(economics.length?{status:'observed',values:economics}:{status:'unknown',value:null}),learned??null]);
  return state;
+}
+
+/** Later-reality observation pass.
+ *
+ * Foundry raised a judgment saying a resource was over-subscribed and that the
+ * owner would have to allocate or change capacity. This asks the only question
+ * it can answer honestly: has the company since said something that settles it?
+ *
+ * Three disciplines make the answer trustworthy rather than convenient:
+ *
+ *   • Only claims recorded STRICTLY AFTER the judgment count. Evidence must
+ *     follow the prediction it tests; migration 124 refuses an observation that
+ *     cites anything older, and same-second evidence is refused as ambiguous
+ *     rather than believed.
+ *   • The observer recomputes with the SAME reading the producer used, so a
+ *     disagreement is always about the company and never about the code.
+ *   • It never reports `contradicted`. A conflict that still stands has not
+ *     falsified anything — the owner may simply not have acted yet — so the
+ *     honest report is `partially_observed`. Contradiction needs an observer
+ *     that can see a deadline pass, which does not exist yet and is recorded
+ *     as proof debt rather than faked here.
+ */
+export async function runJudgmentObservationPass(
+  productId:string,
+):Promise<Array<{judgmentId:string;observed:JudgmentEvaluationState}>> {
+  const judgments=await query(
+    `SELECT id,made_at,responsibility_refs_json FROM strategic_decisions_log
+      WHERE product_id=? AND conflict_identity IS NOT NULL ORDER BY made_at,id`,[productId]);
+  const out:Array<{judgmentId:string;observed:JudgmentEvaluationState}>=[];
+  for (const row of judgments.rows as unknown as Array<Record<string,unknown>>) {
+    const judgmentId=String(row.id);
+    let responsibilityIds:string[]=[];
+    try { responsibilityIds=JSON.parse(String(row.responsibility_refs_json)) as string[]; } catch { continue; }
+    if (!Array.isArray(responsibilityIds)||responsibilityIds.length<2) continue;
+
+    const newer=await query(
+      `SELECT id FROM reconstruction_claims WHERE product_id=?
+         AND predicate IN ('resource_capacity','resource_demand')
+         AND datetime(created_at)>datetime(?) ORDER BY created_at,id`,[productId,String(row.made_at)]);
+    const evidenceClaimIds=(newer.rows as unknown as Array<Record<string,unknown>>).map(r=>String(r.id));
+    if (!evidenceClaimIds.length) continue; // not yet observable — say nothing
+
+    const view=readCapacityView(await getReconstructionClaims(productId),productId,responsibilityIds);
+    const resolved=findCapacityConflict(view)===null;
+    const eventType=resolved?'judgment_expected_supported':'judgment_partially_observed';
+    const observationId='jobs_'+createHash('sha256')
+      .update([judgmentId,eventType,...evidenceClaimIds].join('\n')).digest('hex').slice(0,32);
+
+    // The same evidence re-read on a later tick is the same observation, not a
+    // new one. Only genuinely new evidence appends to the judgment's history.
+    const seen=await query('SELECT id FROM signal_events WHERE id=?',[observationId]);
+    if (seen.rows.length) continue;
+
+    await query(
+      `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+       VALUES (?,?,'institutional_judgment_observation',?,?,?,?)`,[
+      observationId,productId,eventType,resolved?'low':'medium',
+      JSON.stringify({judgment_id:judgmentId,evidence_claim_ids:evidenceClaimIds,resolved}),
+      resolved
+        ?'The resource conflict this judgment was about no longer stands'
+        :'The resource conflict this judgment was about still stands',
+    ]);
+    out.push({judgmentId,observed:await evaluateInstitutionalJudgment(productId,judgmentId)});
+  }
+  return out;
 }

@@ -62,6 +62,27 @@ describe('provenance-bearing reconstruction claims', () => {
       VALUES ('recursive','rc_product','company','purpose','"x"','known','[{"kind":"reconstruction_claim","id":"anything"}]','copy','2026-01-01')`,[])).rejects.toThrow();
   });
 
+  it('orders same-second claims by insertion, so a correction cannot lose to what it corrects', async () => {
+    // Found while wiring institutional judgment to a scheduled pass: claims
+    // were ordered by `created_at, id`, and claim ids are nanoids. Two claims
+    // about the same subject recorded in the same second therefore resolved in
+    // random order, so a later correction could silently lose to the value it
+    // was correcting — and every consumer that takes "the last claim wins"
+    // would read a superseded fact.
+    for (const amount of [1, 2, 3, 4, 5]) {
+      await recordReconstructionClaim({
+        productId: 'rc_product', subject: 'product:rc_product', predicate: 'ordering_probe',
+        value: { amount }, epistemicStatus: 'known',
+        evidenceRefs: [{ kind: 'signal_event', id: 'rc_signal_a' }],
+        derivationMethod: 'observed', observedAt: new Date('2026-01-01'),
+      });
+    }
+    const probes = (await getReconstructionClaims('rc_product'))
+      .filter((c) => c.predicate === 'ordering_probe')
+      .map((c) => (c.value as { amount: number }).amount);
+    expect(probes).toEqual([1, 2, 3, 4, 5]);
+  });
+
   it('builds a sparse unfamiliar-company projection without copying or completing missing truth', async () => {
     const reconstruction=await reconstructCompany('rc_product',new Date('2026-01-01'));
     expect(reconstruction.identity).toMatchObject({productId:'rc_product',name:'Unfamiliar Co',evidenceRef:{kind:'product',id:'rc_product'}});

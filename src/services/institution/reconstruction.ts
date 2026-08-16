@@ -31,7 +31,11 @@ export async function recordReconstructionClaim(input: {
 
 /** Read-time expiry prevents an old positive claim from silently remaining current. */
 export async function getReconstructionClaims(productId: string, now: Date = new Date()): Promise<ReconstructionClaim[]> {
-  const result = await query(`SELECT * FROM reconstruction_claims WHERE product_id=? ORDER BY created_at,id`, [productId]);
+  // Ties are broken by insertion order, not by id. Claim id is a nanoid, so
+  // ordering by it made "which claim is current" random whenever two claims
+  // about the same subject were recorded in the same second — a later
+  // correction could silently lose to the value it was correcting.
+  const result = await query(`SELECT * FROM reconstruction_claims WHERE product_id=? ORDER BY created_at,rowid`, [productId]);
   return (result.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
     id:String(row.id), productId:String(row.product_id), subject:String(row.subject), predicate:String(row.predicate),
     value:row.value_json == null ? null : JSON.parse(String(row.value_json)),

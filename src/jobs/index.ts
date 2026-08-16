@@ -2296,6 +2296,47 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '0 5 * * *', // Daily at 5 UTC
     description: 'Drop rows past the per-table retention horizon',
   },
+  // Institutional judgment: the production writer. Deterministic judgment, its
+  // later-reality evaluation, and the owner disposition loop all existed with
+  // no caller outside the test suite, so the founder-facing "needs your
+  // direction" section could only ever be empty. This pass raises at most one
+  // judgment per standing conflict (migration 124 makes that identity unique)
+  // and observes conflicts that later evidence has settled. It grants nothing
+  // and executes nothing: every judgment still requires the owner's separate
+  // authority, and direction is still not permission.
+  institutional_judgment_tick: {
+    fn: async () => {
+      const products = await query("SELECT id FROM products WHERE status = 'active'", []);
+      const { runInstitutionalJudgmentPass } = await import(
+        '../services/institution/institutional-judgment.js'
+      );
+      const { runJudgmentObservationPass } = await import(
+        '../services/institution/institutional-judgment-evaluation.js'
+      );
+      let raised = 0; let observed = 0;
+      for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
+        const productId = String(row.id);
+        // One product's institutional state must never stop another's pass.
+        try {
+          const pass = await runInstitutionalJudgmentPass(productId);
+          if (pass.raised) raised++;
+          observed += (await runJudgmentObservationPass(productId)).length;
+        } catch (err) {
+          logger.error(
+            `institutional_judgment_tick failed for ${productId}: ${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'institutional_judgment_tick', productId },
+          );
+        }
+      }
+      if (raised > 0 || observed > 0) {
+        logger.info(`institutional_judgment_tick: raised=${raised} observed=${observed}`, {
+          jobName: 'institutional_judgment_tick',
+        });
+      }
+    },
+    schedule: '20 */6 * * *', // Every 6 hours
+    description: 'Raise deterministic institutional judgments from real institutional state and observe conflicts later evidence has settled',
+  },
   // Wave 2 / Council 16: Foundry's own customer onboarding sequence
   welcome_sequence_tick: {
     fn: async () => {
