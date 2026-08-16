@@ -385,8 +385,8 @@ export async function getEmailMetrics(
     if (eventType === 'email.clicked') clicked += count;
   }
 
-  // If no delivery events, assume delivered = sent (no webhook tracking)
-  if (delivered === 0 && sent > 0) delivered = sent;
+  // Provider acceptance is not delivery. With no independently ingested
+  // delivery event the business outcome remains unknown, never inferred.
 
   const open_rate = delivered > 0 ? Math.round((opened / delivered) * 100) / 100 : 0;
   const click_rate = delivered > 0 ? Math.round((clicked / delivered) * 100) / 100 : 0;
