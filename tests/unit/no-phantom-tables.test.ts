@@ -27,7 +27,10 @@ const ALLOWLIST = new Set([
 
 function schemaTables(): Set<string> {
   const snap = readFileSync(resolve(ROOT, 'docs/db/schema.snapshot.sql'), 'utf8');
-  const tables = new Set<string>(['sqlite_sequence']);
+  // SQLite's own catalog tables. They always exist, they are not Foundry
+  // tables, and no migration creates them — so the snapshot cannot describe
+  // them and their absence from it is not drift.
+  const tables = new Set<string>(['sqlite_sequence', 'sqlite_master']);
   const re = /CREATE\s+(?:TABLE|VIEW)\s+(?:IF NOT EXISTS\s+)?["'`]?([a-zA-Z0-9_]+)["'`]?/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(snap)) !== null) tables.add(m[1].toLowerCase());

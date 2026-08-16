@@ -2368,9 +2368,36 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         }
       }
 
-      if (raised > 0 || observed > 0 || understood > 0 || compared > 0) {
+      // Foundry observes one true fact about its own repository, as an ordinary
+      // company. The canonical identity is resolved inside that module — the
+      // outer boundary — and everything past it is the same intake any other
+      // company's evidence uses. This is the supply that development Shadowing
+      // never had: an independent check of a reality Foundry does not get to
+      // narrate. It records an observation and nothing else; no repair, no
+      // command, no permission.
+      let selfObserved = false;
+      try {
+        const { observeFoundryRepositoryReality } = await import(
+          '../services/foundry/self-observation.js'
+        );
+        const outcome = await observeFoundryRepositoryReality();
+        selfObserved = outcome.observed;
+        if (outcome.observed && outcome.result === 'failed') {
+          logger.warn(
+            `schema snapshot has drifted from the migrations that produce it: ${outcome.observation.eventType}`,
+            { jobName: 'institutional_judgment_tick' },
+          );
+        }
+      } catch (err) {
+        logger.error(
+          `foundry self-observation failed: ${err instanceof Error ? err.message : String(err)}`,
+          { jobName: 'institutional_judgment_tick' },
+        );
+      }
+
+      if (raised > 0 || observed > 0 || understood > 0 || compared > 0 || selfObserved) {
         logger.info(
-          `institutional_judgment_tick: raised=${raised} observed=${observed} understood=${understood} compared=${compared}`,
+          `institutional_judgment_tick: raised=${raised} observed=${observed} understood=${understood} compared=${compared} self_observed=${selfObserved}`,
           { jobName: 'institutional_judgment_tick' },
         );
       }

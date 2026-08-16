@@ -55,13 +55,20 @@ const DARK: Record<string, string> = {
   'responsibility-shadowing-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
   'responsibility-understanding-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
 
-  // Understanding left this list when migration 125 gave the founder a way to
-  // supply the facts no connected system observes. Shadowing has not: it needs
-  // an independent observer of the same reality, and for a customer's company
-  // that supply does not exist yet. Wiring a driver now would mean inventing
-  // the evidence, which is the one thing the evidence ladder forbids.
-  'development-observation.ts': 'blocked — development responsibilities are not discovered in production',
-  'development-shadowing.ts': 'blocked — development responsibilities are not discovered in production',
+  // `development-observation.ts` left this list when Foundry began observing
+  // its own repository. That was always the honest blocker: development
+  // Shadowing needs an independent view of the same reality, and for a
+  // CUSTOMER's company Foundry has none — it would be checking an expectation
+  // against its own say-so. For the Foundry company the supply genuinely
+  // exists, so the scheduled pass now records a real deterministic check
+  // through the ordinary intake.
+  //
+  // `development-shadowing.ts` stays dark, and the distinction is the point:
+  // observations are now supplied, but nothing in production yet *opens* a
+  // development expectation for them to resolve. Wiring a driver that invents
+  // expectations to consume the observations would be manufacturing the
+  // prediction to fit the evidence.
+  'development-shadowing.ts': 'blocked — no production path opens a development expectation, only observations are supplied',
 };
 
 function tsFiles(dir: string): string[] {
