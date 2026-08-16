@@ -790,6 +790,20 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Inbound customer communication as canonical external evidence (migration 131)
+
+- **Audit before adding anything.** What already existed and why none of it fits: `conversation_threads`/`conversation_messages` are the *founder* talking to Foundry; `customers`/`customer_events` are an intelligence projection with no tenant guards, no external identity contract, and no provenance — a directory, not an evidence path; `/webhooks/stripe`, `/webhooks/transcripts/*` and `/webhooks/voice-reply` are all vendor-specific and carry no support communication; and `POST /ingest/:token` is the **right authentication and tenancy primitive with the wrong store** — its body schema is metric-shaped and unknown keys fall into `custom_metrics`, so putting messages there would poison a numeric store to avoid writing a table.
+- **Decision: reuse the auth pattern, keep the semantic store clean.** A sibling route `POST /ingest/customer-message/:channelKey` shares the token-authenticated tenant-bound pattern and nothing else. **No vendor name appears in the schema or the service.** An adapter for a helpdesk, a mailbox, or a form is an ordinary caller.
+- **The hard part was attribution, and it is structural rather than semantic.** Rather than infer which responsibility a message belongs to from its prose, the founder registers a channel **against** a responsibility; a message is attributed because it arrived on that responsibility's own channel. The registration is recorded as an ordinary founder assertion with provenance (a `signal_event` plus a `support_channel` claim), so the association is accountable rather than an unexplained configuration row. **No text classification was added.**
+- **Identity comes from the credential, not the payload.** The intake key establishes both tenant and channel, so there is no channel field in the body for a caller to forge. The database refuses a key shorter than 24 bytes — a guessable key is not authentication.
+- **Timestamps are kept apart.** `source_observed_at` (the sender's clock) is stored separately from `received_at` (ours). A delayed delivery is late, not recent; conflating them would make evidence ordering a lie.
+- **Independence preserved from `/ingest`:** an external sender may not tell Foundry what its message means. Payloads carrying `expectation_id`, `judgment_id`, `expected_event_type`, `state`, `consent`, `capability`, `authority`, `scope`, or `to_mode` are refused outright.
+- **Deliberately absent:** attachments, read state, agent assignment, priority, SLA, tags. None has a consumer. No speculative omnichannel platform.
+- **Challenge (11 tests):** channel binding with provenance and a stranger refused; a real message attributed structurally with source and receipt clocks distinct; **no responsibility, consent, action, or maturity created**; redelivery converging three times onto one message and one evidence row; the same external id in two companies kept apart and mutually invisible; unknown, forged, and revoked keys refused **identically** so the caller learns nothing; missing routing identity, empty and oversized content, and an unparseable timestamp each refused; script-like content stored verbatim as text (the surface escapes it) and changing no state; nine institutional-claim payloads refused; a cross-tenant channel and a misattributed responsibility refused by the database; and a production-caller assertion.
+- **Evidence maturity:** E2 — local runtime through the production-facing route. **No real provider has posted a message.** This is intake only: no reply, no plan, no send, and the support responsibility is still at Visible in this vertical.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the fifth autonomous session. Supersedes all earlier continuation records.*

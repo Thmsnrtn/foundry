@@ -67,6 +67,14 @@
 
 
 
+
+
+
+
+
+
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -163,6 +171,8 @@
       AND c.classification IN ('matched','deviated')
       AND c.evidence_refs_json=NEW.grounding_evidence_json
       AND c.product_id=NEW.product_id AND c.epistemic_status IN ('known','inferred')
+      AND c.product_id=NEW.product_id AND c.revoked_at IS NULL);
+      AND c.responsibility_id=NEW.responsibility_id AND c.revoked_at IS NULL);
       AND c.status='pending' AND c.epistemic_status!='unresolved'
       AND claim.epistemic_status IN ('known','inferred')
       AND d.product_id=NEW.product_id AND d.responsibility_refs_json IS NOT NULL);
@@ -172,6 +182,7 @@
       AND e.product_id=NEW.product_id
       AND e.product_id=NEW.product_id AND e.source='development_verification'
       AND e.product_id=NEW.product_id AND e.source='external_metric_ingest');
+      AND e.source='customer_message_ingest');
       AND e.source='founder_assertion'
       AND json_array_length(a.allowed_scope_json)>0
       AND json_array_length(c.evidence_refs_json)>0
@@ -184,6 +195,7 @@
       AND q.product_id=NEW.product_id
       AND q.status='open');
       AND r.authority_ref='autonomy_consent:' || a.id
+      AND r.capability='customer_support' AND r.disposition='active');
       AND r.product_id=NEW.product_id AND r.state='understood' AND r.authority_ref IS NULL
       AND r.state='assisting' AND r.capability='development'
       AND r.state='shadowing'
@@ -316,6 +328,7 @@
     NEW.epistemic_status='inferred' AND NEW.confidence IS NULL;
     NEW.evidence_refs_json IS NULL
     NEW.expires_at IS NULL OR datetime(NEW.expires_at)<=datetime('now');
+    NEW.external_message_id IS NULL OR trim(NEW.external_message_id)=''
     NEW.grounding_mechanism!='authenticated_owner' OR NOT EXISTS (
     NEW.grounding_mechanism='authenticated_owner' AND NOT EXISTS (
     NEW.grounding_mechanism='deterministic' AND (
@@ -335,6 +348,7 @@
     OR NEW.authority_consent_id<>OLD.authority_consent_id OR NEW.change_id<>OLD.change_id
     OR NEW.authority_scope!='send_email:support_reply' OR NEW.effect_id IS NULL OR NEW.authority_consent_id IS NULL
     OR NEW.change_class<>OLD.change_class OR NEW.content_digest<>OLD.content_digest;
+    OR NEW.contact_email IS NULL OR instr(NEW.contact_email,'@')=0;
     OR NEW.disposition_evidence_json IS NULL
     OR NEW.predicate<>OLD.predicate OR NEW.asked_at<>OLD.asked_at OR NEW.scope<>OLD.scope;
     OR NEW.repository_ref<>OLD.repository_ref OR NEW.target_path<>OLD.target_path
@@ -351,12 +365,16 @@
     OR json_extract(NEW.payload_json,'$.alternatives_considered') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.authority') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.authority') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.authority') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.capability') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.capability') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.capability') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.claim_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.conflict_identity') IS NOT NULL;
+    OR json_extract(NEW.payload_json,'$.consent') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.consent_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.consent_id') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.expected_event_type') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.expected_event_type') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.expected_event_type') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.expires_at') IS NOT NULL
@@ -364,18 +382,24 @@
     OR json_extract(NEW.payload_json,'$.grant') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.grant') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.judgment_id') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.judgment_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.responsibility_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.responsibility_id') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.scope') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.scope') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.scope') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.state') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.state') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.state') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL;
     OR json_valid(NEW.disposition_evidence_json)=0
     OR json_valid(NEW.evidence_refs_json)=0
     OR json_valid(NEW.responsibility_refs_json)=0
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.channel_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.check'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.external_message_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.judgment_id'),''))=''
@@ -395,6 +419,7 @@
     SELECT 1 FROM autonomy_consents a, json_each(a.allowed_path_prefixes_json) p
     SELECT 1 FROM founder_evidence_requests q
     SELECT 1 FROM institutional_responsibilities
+    SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r JOIN products p ON p.id=r.product_id
@@ -429,11 +454,14 @@
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
+    SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e JOIN institutional_responsibilities r ON r.id=NEW.responsibility_id
     SELECT 1 FROM signal_events e WHERE NEW.observation_ref='signal_event:' || e.id AND e.product_id=NEW.product_id
     SELECT 1 FROM signal_events e WHERE NEW.observation_source_evidence_ref='signal_event:' || e.id
     SELECT 1 FROM strategic_decisions_log d
     SELECT 1 FROM strategic_decisions_log d
+    SELECT 1 FROM support_channels c
+    SELECT 1 FROM support_channels c
     SELECT 1 FROM system_identities s WHERE s.identity_key=NEW.identity_key);
     UNION ALL
     UNION ALL
@@ -451,9 +479,12 @@
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
     WHERE a.id=NEW.authority_consent_id
+    WHERE c.id=NEW.channel_id AND c.product_id=NEW.product_id
+    WHERE c.id=json_extract(NEW.payload_json,'$.channel_id')
     WHERE d.id=NEW.judgment_id AND d.product_id=NEW.product_id
     WHERE d.id=json_extract(NEW.payload_json,'$.judgment_id')
     WHERE e.id=NEW.answer_signal_id AND e.product_id=NEW.product_id
+    WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id
     WHERE id = NEW.responsibility_id AND state = NEW.from_state
     WHERE id=NEW.candidate_id AND NEW.decision='reconsidered';
     WHERE id=NEW.candidate_id AND NEW.decision='rejected';
@@ -464,6 +495,7 @@
     WHERE p.id=NEW.product_id AND p.owner_id=json_extract(NEW.payload_json,'$.founder_id'));
     WHERE p.id=NEW.product_id AND p.owner_id=json_extract(NEW.payload_json,'$.founder_id'));
     WHERE q.id=json_extract(NEW.payload_json,'$.request_id')
+    WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id
     WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id
     WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id AND p.owner_id=NEW.owner_id
     WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id AND r.capability=NEW.capability
@@ -487,8 +519,10 @@
     json_extract(NEW.payload_json,'$.consent') IS NOT NULL
     json_extract(NEW.payload_json,'$.expectation_id') IS NOT NULL
     json_extract(NEW.payload_json,'$.expectation_id') IS NOT NULL
+    json_extract(NEW.payload_json,'$.expectation_id') IS NOT NULL
     json_extract(NEW.payload_json,'$.expected_outcome') IS NOT NULL
     json_valid(NEW.evidence_refs_json)=0 OR json_type(NEW.evidence_refs_json)!='array' OR json_array_length(NEW.evidence_refs_json)=0;
+    json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
@@ -574,6 +608,7 @@
   -- 2 = require explicit approval before acting
   -- A closed, deliberately small change vocabulary. Broadening it is a
   -- A generic strategic decision row carries none of the responsibility and
+  -- A guessable key is not authentication.
   -- A selected alternative must be one Foundry actually represented at
   -- A verified outcome requires BOTH independent verification and proof that
   -- APNs (iOS)
@@ -585,6 +620,7 @@
   -- Actual outcomes (filled in after outcome_measured_at)
   -- Agent configuration (versioned via agent_evolution_versions)
   -- Agent notes (append-only log)
+  -- An external sender may not tell Foundry what its message means. Which
   -- And deny dominates: the constitutional ring is refused here too, so a
   -- Authority without required verification would let "I changed it" stand in
   -- Behavioral
@@ -659,14 +695,18 @@
   -- Status
   -- Structured output
   -- The assertion answers an OPEN question of this company. It cannot answer a
+  -- The channel must be this company's, live, and bound to the responsibility
+  -- The channel must belong to the company the intake authenticated as. The
   -- The check is deny-dominant and bidirectional: a prefix inside the ring is
   -- The compressed content
   -- The constitutional ring. Ordinary development authority may not reach the
   -- The decision this premise underpins. decision_source disambiguates which
   -- The event type is derived from the reading, so a comparison matches on what
+  -- The evidence row must be this company's own customer-message observation.
   -- The grounding must be this product's own current claims. A disposition
   -- The observer may not see, cite, or echo the expectation it will be
   -- The signal that says "stop iterating" when yield drops below threshold.
+  -- The source's own clock, kept apart from ours. A delayed delivery is late,
   -- The target must fall inside a granted prefix.
   -- Trigger
   -- Types: 'churn_risk' | 'expansion_opportunity' | 'metric_target' | 'experiment_outcome' | 'risk_escalation'
@@ -693,7 +733,9 @@
   -- company-scoped because that is what they are — what one piece of work costs
   -- company-wide predicates the owner named (cash constraint, operating
   -- compared against. Verification that can read the expectation is
+  -- conclusions — never claims a message can carry.
   -- evidence provenance this contract governs.
+  -- expectation it proves, which judgment it settles, which responsibility it
   -- field before its consumer exists is how orphans are made.
   -- for "it was independently checked".
   -- from the fact that a write returned without throwing.
@@ -705,7 +747,9 @@
   -- judgment time; the owner cannot introduce an unrepresented direction here.
   -- justified by another tenant's evidence is not a justification.
   -- means editing a migration, which is inside the constitutional ring — so a
+  -- neither can reach the other.
   -- not be asked company-wide and a company-wide one may not be pinned to a
+  -- not recent, and conflating the two would make evidence ordering a lie.
   -- policy) are deliberately absent until something consumes them; adding a
   -- question that was never asked, another tenant's question, or one already
   -- reference is exactly this consent, and a consent that is currently valid,
@@ -715,6 +759,8 @@
   -- responsibility-bound, and low consequence.
   -- results: { runway_months, probability_series_a, target_hit_probability, ... }
   -- ring, so the boundary cannot be moved by ordinary development authority.
+  -- same external id under a different tenant is a different message, and
+  -- satisfies, and what maturity or authority should follow are institutional
   -- schedule, owner constraint, organisation dependency, company risk, company
   -- sector-specific enum cannot be added at runtime by anyone, including a
   -- self-confirming, not independent, and a fabricated pass would be
@@ -728,6 +774,7 @@
   -- than stored and ignored — the shape of the attempt is the problem, and a
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
   -- the field quietly dropped.
+  -- the message is being attributed to. Attribution is structural.
   -- the one with the field left out entirely.
   -- the ratchets/audits are what make any of it binding.
   -- versus what the whole company has. They are the two inputs deterministic
@@ -784,6 +831,7 @@
   ON freeze_periods(product_id, started_at DESC);
   ON funding_readiness(product_id, date(created_at));
   ON idempotency_keys(product_id, action_type, dedup_key);
+  ON inbound_customer_messages(product_id,channel_id,external_message_id);
   ON institutional_responsibilities(product_id, discovery_evidence_ref)
   ON institutional_responsibilities(product_id, state, updated_at);
   ON metric_validation_rules(product_id, metric_name);
@@ -849,6 +897,9 @@
   SELECT RAISE(ABORT,'candidate_promotion:not_promotable') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'candidate_promotion:owner_invalid') WHERE
   SELECT RAISE(ABORT,'candidate_promotion:result_required') WHERE
+  SELECT RAISE(ABORT,'customer_message:channel_foreign') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'customer_message:institutional_claim') WHERE
+  SELECT RAISE(ABORT,'customer_message:payload_invalid') WHERE
   SELECT RAISE(ABORT,'development_authority:change_class_invalid') WHERE
   SELECT RAISE(ABORT,'development_authority:consequence_too_broad') WHERE
   SELECT RAISE(ABORT,'development_authority:constitutional_scope') WHERE EXISTS (
@@ -889,6 +940,11 @@
   SELECT RAISE(ABORT,'founder_report:founder_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'founder_report:obligation_kind_invalid')
   SELECT RAISE(ABORT,'founder_report:payload_invalid') WHERE
+  SELECT RAISE(ABORT,'inbound_message:channel_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'inbound_message:content_required')
+  SELECT RAISE(ABORT,'inbound_message:evidence_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'inbound_message:identity_required') WHERE
+  SELECT RAISE(ABORT,'inbound_message:subject_too_long')
   SELECT RAISE(ABORT,'institutional_judgment:provenance_required') WHERE
   SELECT RAISE(ABORT,'institutional_judgment:tenant_invalid') WHERE EXISTS (
   SELECT RAISE(ABORT,'judgment_disposition:alternative_invalid') WHERE
@@ -929,6 +985,9 @@
   SELECT RAISE(ABORT,'shadowing:observation_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'shadowing:observation_source_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'shadowing:responsibility_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'support_channel:key_too_weak')
+  SELECT RAISE(ABORT,'support_channel:label_required')
+  SELECT RAISE(ABORT,'support_channel:responsibility_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'system_identity:already_claimed') WHERE EXISTS (
   SELECT RAISE(ABORT,'system_identity:immutable');
   SELECT RAISE(ABORT,'system_identity:immutable');
@@ -986,13 +1045,17 @@
   UPDATE responsibility_candidates SET status='rejected',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='superseded',updated_at=NEW.created_at
   WHERE (NEW.scope='responsibility' AND NEW.predicate NOT IN (
+  WHERE NEW.body IS NULL OR trim(NEW.body)='' OR length(NEW.body)>8192;
   WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
   WHERE NEW.event_type <> 'external_metric:'
   WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
+  WHERE NEW.intake_key IS NULL OR length(NEW.intake_key)<24;
+  WHERE NEW.label IS NULL OR trim(NEW.label)='';
   WHERE NEW.scope NOT IN ('responsibility','company');
   WHERE NEW.status<>'open' OR NEW.answer_signal_id IS NOT NULL OR NEW.resolved_at IS NOT NULL;
   WHERE NEW.status='answered' AND NOT EXISTS (
   WHERE NEW.status='deferred' AND NEW.answer_signal_id IS NOT NULL;
+  WHERE NEW.subject IS NOT NULL AND length(NEW.subject)>512;
   WHERE OLD.conflict_identity IS NOT NULL
   WHERE apns_device_token IS NOT NULL;
   WHERE apns_device_token IS NOT NULL;
@@ -1239,6 +1302,7 @@
   blocking_issues TEXT, -- JSON: array of BLOCK objects
   board_seat INTEGER DEFAULT 0,
   board_seats INTEGER NOT NULL DEFAULT 1,
+  body                TEXT NOT NULL,
   body TEXT NOT NULL,
   body TEXT NOT NULL,
   body TEXT NOT NULL,
@@ -1305,6 +1369,7 @@
   changed_by_type TEXT NOT NULL CHECK(changed_by_type IN ('founder', 'system', 'job', 'api_key')),
   channel TEXT DEFAULT 'web',
   channel TEXT NOT NULL,
+  channel_id          TEXT NOT NULL REFERENCES support_channels(id),
   channel_id TEXT,
   channel_name TEXT,
   checkpoint_date  TEXT NOT NULL,     -- ISO date of this statistical snapshot
@@ -1417,6 +1482,7 @@
   consensus_points_json TEXT NOT NULL DEFAULT '[]',  -- things multiple agents agree on
   consent_adequacy_score REAL,
   consent_type TEXT NOT NULL CHECK (consent_type IN (
+  contact_email       TEXT NOT NULL,
   content          TEXT NOT NULL,
   content      TEXT NOT NULL,
   content TEXT NOT NULL DEFAULT '',
@@ -1453,6 +1519,7 @@
   control_mean     REAL,
   control_n        INTEGER,           -- observations in control group at checkpoint
   convergence_key TEXT NOT NULL,
+  conversation_ref    TEXT,
   converted_to_paid INTEGER DEFAULT 0,
   coo_response TEXT,
   cooldown_hours INTEGER DEFAULT 72,    -- Don't re-trigger for same customer within N hours
@@ -1478,6 +1545,7 @@
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
   created_at       TEXT NOT NULL DEFAULT (datetime('now'))
@@ -1916,6 +1984,7 @@
   evidence_ref TEXT,
   evidence_refs_json TEXT NOT NULL DEFAULT '[]',
   evidence_refs_json TEXT NOT NULL,
+  evidence_signal_id  TEXT NOT NULL REFERENCES signal_events(id)
   evolution_candidates TEXT,        -- JSON: EvolutionCandidate[]
   evolution_policy TEXT,               -- JSON: evolution configuration
   evolutions_promoted_count INTEGER NOT NULL DEFAULT 0,
@@ -1962,6 +2031,7 @@
   exported_at DATETIME
   external_customer_id TEXT NOT NULL,  -- Stripe customer ID or email
   external_id TEXT,
+  external_message_id TEXT NOT NULL,
   extracted_context_json TEXT NOT NULL DEFAULT '{}',
   failure_count INTEGER DEFAULT 0,
   failure_count INTEGER DEFAULT 0,
@@ -2153,6 +2223,8 @@
   id                  TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
+  id                  TEXT PRIMARY KEY,
+  id                TEXT PRIMARY KEY,
   id                TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
@@ -2413,6 +2485,7 @@
   inputs TEXT NOT NULL,
   insight_date TEXT NOT NULL, -- YYYY-MM-DD
   insight_type TEXT NOT NULL,
+  intake_key        TEXT NOT NULL UNIQUE,
   integration TEXT NOT NULL,
   integration TEXT NOT NULL, -- which integration handles execution
   integration_complexity_score REAL NOT NULL, -- API quality, data portability, tech debt
@@ -2486,6 +2559,7 @@
   known_competitors TEXT,
   known_features TEXT DEFAULT '[]',      -- JSON: string[]
   known_weaknesses TEXT,
+  label             TEXT NOT NULL,
   label TEXT NOT NULL,
   label TEXT NOT NULL,                       -- e.g. "Acquisition: 200 trial signups/mo"
   last_active_at DATETIME,
@@ -2980,10 +3054,12 @@
   product_id            TEXT NOT NULL,
   product_id            TEXT NOT NULL,
   product_id           TEXT NOT NULL,
+  product_id          TEXT NOT NULL REFERENCES products(id),
   product_id          TEXT NOT NULL,
   product_id          TEXT NOT NULL,
   product_id          TEXT NOT NULL,        -- kept private, never joined publicly
   product_id         TEXT NOT NULL UNIQUE REFERENCES products(id),
+  product_id        TEXT NOT NULL REFERENCES products(id),
   product_id        TEXT NOT NULL REFERENCES products(id),
   product_id       TEXT NOT NULL,
   product_id       TEXT NOT NULL,
@@ -3250,6 +3326,7 @@
   reasoning TEXT NOT NULL,
   reasoning TEXT NOT NULL, -- why this mutation was made
   reasoning TEXT,
+  received_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   recipients TEXT,
   recommendation TEXT NOT NULL,
   recommendation TEXT,
@@ -3308,6 +3385,8 @@
   response_deadline DATETIME,
   response_id TEXT,                     -- ID of response message
   responsibility_id     TEXT NOT NULL REFERENCES institutional_responsibilities(id),
+  responsibility_id   TEXT NOT NULL REFERENCES institutional_responsibilities(id),
+  responsibility_id TEXT NOT NULL REFERENCES institutional_responsibilities(id),
   responsibility_id TEXT NOT NULL REFERENCES institutional_responsibilities(id),
   responsibility_id TEXT NOT NULL REFERENCES institutional_responsibilities(id),
   responsibility_id TEXT NOT NULL REFERENCES institutional_responsibilities(id),
@@ -3343,6 +3422,7 @@
   reviewee_product_id TEXT NOT NULL,
   reviewer_id TEXT NOT NULL,
   revoked_at          DATETIME                -- set when the capability drops below 'act'
+  revoked_at        TEXT
   revoked_at   DATETIME,
   revoked_at   TEXT,                                -- NULL means currently active
   revoked_at DATETIME
@@ -3513,6 +3593,7 @@
   source_id TEXT,                             -- decision id, evolution version id, etc.
   source_id TEXT,                   -- ID of the underlying record
   source_id TEXT, -- FK to strategic_decisions.id, briefings.id, etc.
+  source_observed_at  TEXT NOT NULL,
   source_patterns INTEGER DEFAULT 0,    -- how many judgment patterns
   source_session_id TEXT,                     -- links to agent_sessions
   source_type TEXT NOT NULL,                  -- 'decision' | 'evolution' | 'cron_addition' | 'integration' | 'agent_provision'
@@ -3603,6 +3684,7 @@
   stripe_event_id TEXT UNIQUE NOT NULL,
   strongest_objection TEXT,
   structured_updates TEXT,             -- JSON: [{type, data}] extracted from transcript
+  subject             TEXT,
   subject         TEXT NOT NULL,
   subject TEXT NOT NULL,
   subject TEXT NOT NULL,
@@ -4153,6 +4235,8 @@
 );
 );
 );
+);
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4194,6 +4278,7 @@ BEFORE INSERT ON autonomy_consents WHEN NEW.responsibility_id IS NOT NULL
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON founder_evidence_requests
+BEFORE INSERT ON inbound_customer_messages
 BEFORE INSERT ON institutional_judgment_dispositions
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
 BEFORE INSERT ON reconstruction_claims
@@ -4209,6 +4294,7 @@ BEFORE INSERT ON responsibility_transitions
 BEFORE INSERT ON responsibility_transitions
 BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='assisting'
 BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='operating'
+BEFORE INSERT ON signal_events WHEN NEW.source='customer_message_ingest'
 BEFORE INSERT ON signal_events WHEN NEW.source='development_verification'
 BEFORE INSERT ON signal_events WHEN NEW.source='external_metric_ingest'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_assertion'
@@ -4216,12 +4302,16 @@ BEFORE INSERT ON signal_events WHEN NEW.source='founder_report'
 BEFORE INSERT ON signal_events WHEN NEW.source='institutional_judgment_observation'
 BEFORE INSERT ON strategic_decisions_log WHEN NEW.conflict_identity IS NOT NULL
 BEFORE INSERT ON strategic_decisions_log WHEN NEW.responsibility_refs_json IS NOT NULL
+BEFORE INSERT ON support_channels
 BEFORE INSERT ON system_identities
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
 BEFORE UPDATE ON development_change_plans
 BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4570,6 +4660,7 @@ CREATE INDEX idx_stressor_product ON stressor_history(product_id);
 CREATE INDEX idx_stressor_product_active ON stressor_history(product_id, status);
 CREATE INDEX idx_stressor_status ON stressor_history(status);
 CREATE INDEX idx_stripe_events_product ON stripe_events(product_id, processed);
+CREATE INDEX idx_support_channels_product ON support_channels(product_id,responsibility_id);
 CREATE INDEX idx_switching_product ON switching_cost_analysis(product_id);
 CREATE INDEX idx_sync_log_integration ON integration_sync_log(integration_id, started_at DESC);
 CREATE INDEX idx_sync_log_product ON integration_sync_log(product_id, started_at DESC);
@@ -4755,6 +4846,7 @@ CREATE TABLE graph_relationships (
 CREATE TABLE hypotheses (
 CREATE TABLE idea_validations (
 CREATE TABLE idempotency_keys (
+CREATE TABLE inbound_customer_messages (
 CREATE TABLE institutional_judgment_dispositions (
 CREATE TABLE institutional_judgment_evaluations (
 CREATE TABLE institutional_responsibilities (
@@ -4853,6 +4945,7 @@ CREATE TABLE strategic_syntheses (
 CREATE TABLE stressor_history (
 CREATE TABLE stripe_events (
 CREATE TABLE stripe_webhook_events (
+CREATE TABLE support_channels (
 CREATE TABLE switching_cost_analysis (
 CREATE TABLE system_identities (
 CREATE TABLE taste_journals (
@@ -4877,6 +4970,7 @@ CREATE TRIGGER ai_spend_reservation_apply
 CREATE TRIGGER ai_spend_reservation_finish
 CREATE TRIGGER ai_spend_reservation_guard
 CREATE TRIGGER assisted_action_plan_guard
+CREATE TRIGGER customer_message_observation_guard
 CREATE TRIGGER development_authority_guard
 CREATE TRIGGER development_change_disposition_guard
 CREATE TRIGGER development_change_plan_guard
@@ -4889,6 +4983,7 @@ CREATE TRIGGER founder_assertion_guard
 CREATE TRIGGER founder_evidence_request_guard
 CREATE TRIGGER founder_evidence_request_resolution_guard
 CREATE TRIGGER founder_report_guard
+CREATE TRIGGER inbound_customer_message_guard
 CREATE TRIGGER institutional_judgment_disposition_append_only_delete
 CREATE TRIGGER institutional_judgment_disposition_append_only_update
 CREATE TRIGGER institutional_judgment_disposition_guard
@@ -4914,6 +5009,7 @@ CREATE TRIGGER responsibility_shadow_comparison_guard
 CREATE TRIGGER responsibility_shadow_expectation_guard
 CREATE TRIGGER responsibility_transition_apply
 CREATE TRIGGER responsibility_transition_guard
+CREATE TRIGGER support_channel_guard
 CREATE TRIGGER system_identity_guard
 CREATE TRIGGER system_identity_immutable_delete
 CREATE TRIGGER system_identity_immutable_update
@@ -4934,6 +5030,7 @@ CREATE UNIQUE INDEX idx_founder_evidence_request_identity
 CREATE UNIQUE INDEX idx_founder_prefs_key ON founder_preferences(product_id, preference_type, preference_key);
 CREATE UNIQUE INDEX idx_funding_readiness_product_day
 CREATE UNIQUE INDEX idx_idem_unique
+CREATE UNIQUE INDEX idx_inbound_message_identity
 CREATE UNIQUE INDEX idx_integration_health_key ON integration_health(product_id, integration_source);
 CREATE UNIQUE INDEX idx_integrations_product_name ON integrations(product_id, name);
 CREATE UNIQUE INDEX idx_investor_updates_month ON investor_updates(product_id, month);
@@ -4951,6 +5048,9 @@ CREATE UNIQUE INDEX idx_role_permissions_unique ON role_permissions(role, permis
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
+END;
+END;
 END;
 END;
 END;

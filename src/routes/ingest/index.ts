@@ -203,3 +203,56 @@ ingestRoutes.post('/ingest/:token', async (c) => {
     return c.json({ error: 'Failed to store metrics' }, 500);
   }
 });
+
+// ─── POST /ingest/customer-message/:channelKey ────────────────────────────────
+// Provider-neutral inbound customer communication. A sibling of the metric
+// intake above, sharing its authentication pattern and nothing else: messages
+// do not belong in a numeric store, and a body schema built for metrics would
+// swallow them into `custom_metrics`.
+//
+// The key establishes both tenant and channel, so nothing about identity is
+// taken from the body — there is no channel field to forge. An adapter for any
+// helpdesk, mailbox, or form is an ordinary caller.
+ingestRoutes.post('/ingest/customer-message/:channelKey', async (c) => {
+  const channelKey = c.req.param('channelKey');
+  if (!channelKey || !/^[\w-]{24,128}$/.test(channelKey)) {
+    return c.json({ error: 'Invalid channel key' }, 400);
+  }
+  let raw: unknown;
+  try {
+    raw = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
+  const parsed = z.object({
+    external_message_id: z.string().min(1).max(200),
+    contact_email: z.string().min(3).max(320),
+    body: z.string().min(1).max(8192),
+    subject: z.string().max(512).optional(),
+    conversation_ref: z.string().max(200).optional(),
+    source_observed_at: z.string().max(64).optional(),
+  }).safeParse(raw);
+  if (!parsed.success) {
+    return c.json({ error: 'Validation failed', details: parsed.error.issues.map((i) => i.message) }, 422);
+  }
+
+  const { ingestCustomerMessage } = await import(
+    '../../services/institution/customer-message-intake.js'
+  );
+  const result = await ingestCustomerMessage({
+    intakeKey: channelKey,
+    externalMessageId: parsed.data.external_message_id,
+    contactEmail: parsed.data.contact_email,
+    body: parsed.data.body,
+    subject: parsed.data.subject,
+    conversationRef: parsed.data.conversation_ref,
+    sourceObservedAt: parsed.data.source_observed_at,
+  });
+  if ('refused' in result) {
+    // An unknown or revoked key is answered exactly like a wrong one: the
+    // caller learns nothing about which channels exist.
+    const status = result.refused === 'unknown_channel' ? 401 : 422;
+    return c.json({ error: result.refused }, status);
+  }
+  return c.json({ status: result.duplicate ? 'already_received' : 'accepted', message_id: result.message.id });
+});
