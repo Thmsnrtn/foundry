@@ -732,6 +732,20 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Company-scoped facts, and the inputs judgment was missing (migration 129)
+
+- **Owner decision:** genuinely company-wide facts belong at company scope. Total capacity is a property of the company, not of each responsibility competing for it — copying it into each would let the same fact disagree with itself. Scope follows the **meaning** of the evidence, never implementation convenience.
+- **Why this was small:** `founder_evidence_requests` already existed. It gained one column and one partial unique index. A company-scoped question **still names the responsibility it unblocks** — that is not redundancy, it is the concrete institutional reason for asking. A company-wide question with no blocked work behind it is the questionnaire the owner ruled out.
+- **The ordering is what keeps it from becoming a questionnaire.** What one piece of work costs (`resource_demand`, responsibility-scoped) is asked only once a company carries **more than one** understood responsibility — a company with one has no capacity conflict to detect. What the company *has* (`resource_capacity`, company-scoped) is asked only once **two of those costs compete for the same resource**: the exact moment the question stops being curiosity and becomes the one fact standing between Foundry and a real judgment.
+- **Bounded structured answers:** resource questions collect a resource in the founder's own words plus a number, not prose. Prose is still kept as the evidence. A structured question answered as text is **refused** — a claim that reads well and cannot be used is worse than not having asked.
+- **Scope is enforced per predicate, both ways.** `resource_demand` may not be asked company-wide and `resource_capacity` may not be pinned to a single responsibility. One question per company fact however many responsibilities need it, enforced by a partial unique index. Scope is immutable once asked, alongside the rest of the question.
+- **Deliberately not added:** the other company-wide predicates the owner named — cash constraint, operating schedule, owner constraint, organisation dependency, company risk, company policy. Nothing consumes them yet, and adding a field before its consumer exists is how orphans are made.
+- **Judgment inputs are now reachable.** `runInstitutionalJudgmentPass` computes a real judgment for a pottery studio where **nothing was seeded**: two obligations reported by the founder, understood through elicitation, their costs and the company's capacity all supplied as authenticated founder answers. The judgment's evidence refs are those claims, and `authority_required` stays true.
+- **Challenge (9 tests):** no cost question for a single-responsibility company; cost then capacity in the right order with the right scopes; the company fact recorded once against `product:<id>` while costs stay against their responsibilities; the judgment computing from real evidence and granting nothing; a third competing responsibility not re-opening the company question, with the database refusing a duplicate; wrong-scope and invalid-scope questions refused; a structured question answered as prose refused; a company fact staying inside its own tenant; and the founder's claim surviving disagreeing evidence.
+- **Evidence maturity:** E2 — local runtime evidence through production-facing services. No real founder has supplied a capacity figure, and no independent system has yet contradicted one.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the third autonomous session. Supersedes all earlier continuation records.*

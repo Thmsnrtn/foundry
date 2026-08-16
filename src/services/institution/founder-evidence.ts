@@ -30,7 +30,7 @@
 import { createHash } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { recordReconstructionClaim } from './reconstruction.js';
+import { getReconstructionClaims, recordReconstructionClaim } from './reconstruction.js';
 import {
   projectResponsibilityUnderstanding, requiredUnderstandingFacts, type UnderstandingFact,
 } from './responsibility-understanding.js';
@@ -56,11 +56,25 @@ const QUESTIONS: Record<UnderstandingFact, (title: string) => string> = {
   financial_consequence: (t) => `What does it cost the company when "${t}" is not handled?`,
 };
 
+/** Where a fact belongs. Scope follows the meaning of the evidence: what one
+ * piece of work costs is about that work; what the company has in total is
+ * about the company, and duplicating it per responsibility would let the same
+ * fact disagree with itself. */
+export type EvidenceScope = 'responsibility' | 'company';
+
+/** Facts Foundry may ask about: the institution's understanding requirements,
+ * plus the two inputs deterministic capacity judgment reads. */
+export type AskableFact = UnderstandingFact | 'resource_demand' | 'resource_capacity';
+
 export interface FounderEvidenceQuestion {
   requestId: string;
   responsibilityId: string;
   responsibilityTitle: string;
-  fact: UnderstandingFact;
+  fact: AskableFact;
+  scope: EvidenceScope;
+  /** `resource_amount` questions collect a bounded structure rather than prose:
+   * a resource in the founder's own words and a number. */
+  answerShape: 'text' | 'resource_amount';
   /** Why Foundry is asking, in one line the founder can evaluate. */
   because: string;
   question: string;
@@ -98,14 +112,14 @@ export async function selectFounderEvidenceQuestion(
       WHERE product_id=? AND state='visible' AND disposition='active' ORDER BY created_at,id`,
     [productId],
   );
-  if (!responsibilities.rows.length) return null;
-
   const resolved = await query(
-    'SELECT responsibility_id,predicate,status FROM founder_evidence_requests WHERE product_id=?', [productId],
+    'SELECT responsibility_id,predicate,status,scope FROM founder_evidence_requests WHERE product_id=?', [productId],
   );
+  // A company fact is settled for the whole company, not for the responsibility
+  // that happened to surface it.
   const settled = new Set((resolved.rows as unknown as Array<Record<string, unknown>>)
     .filter((r) => r.status === 'deferred' || r.status === 'answered')
-    .map((r) => `${String(r.responsibility_id)}\n${String(r.predicate)}`));
+    .map((r) => `${r.scope === 'company' ? 'company' : String(r.responsibility_id)}\n${String(r.predicate)}`));
 
   const blocked: Array<{ id: string; title: string; askable: UnderstandingFact[] }> = [];
   for (const row of responsibilities.rows as unknown as Array<Record<string, unknown>>) {
@@ -121,26 +135,103 @@ export async function selectFounderEvidenceQuestion(
     });
     if (askable.length) blocked.push({ id, title: String(row.title), askable });
   }
-  if (!blocked.length) return null;
-
   // Closest to understood first. `responsibilities` is already in creation
   // order, and a stable sort keeps that as the tie-break.
   blocked.sort((a, b) => a.askable.length - b.askable.length);
-  const target = blocked[0];
-  const fact = target.askable[0];
-  const id = requestId(productId, target.id, fact);
+  if (blocked.length) {
+    const target = blocked[0];
+    return openQuestion(productId, target.id, target.title, target.askable[0], 'responsibility');
+  }
+
+  // Nothing is blocking a responsibility from being understood. The next
+  // material thing Foundry can be blocked on is a judgment it cannot compute.
+  return selectJudgmentInputQuestion(productId, settled);
+}
+
+/**
+ * The inputs deterministic capacity judgment needs, asked only when a judgment
+ * is genuinely blocked for want of them.
+ *
+ * The order is what makes this not a questionnaire. What one piece of work
+ * costs is asked only once a company carries more than one understood
+ * responsibility — a company with one has no capacity conflict to detect. What
+ * the company *has* is asked only once two of those costs compete for the same
+ * resource, which is the exact moment the question stops being curiosity and
+ * starts being the one fact standing between Foundry and a real judgment.
+ */
+async function selectJudgmentInputQuestion(
+  productId: string, settled: Set<string>,
+): Promise<FounderEvidenceQuestion | null> {
+  const understood = (await query(
+    `SELECT id,title FROM institutional_responsibilities
+      WHERE product_id=? AND state IN ('understood','shadowing') AND disposition='active'
+      ORDER BY created_at,id`, [productId],
+  )).rows as unknown as Array<Record<string, unknown>>;
+  if (understood.length < 2) return null; // no conflict is possible
+
+  const claims = await getReconstructionClaims(productId);
+  const demands = new Map<string, string>(); // responsibilityId → resource
+  let hasCapacity = false;
+  for (const claim of claims) {
+    if (claim.predicate === 'resource_capacity' && claim.subject === `product:${productId}`
+      && !['unknown', 'stale'].includes(claim.epistemicStatus)) hasCapacity = true;
+    if (claim.predicate === 'resource_demand' && !['unknown', 'stale'].includes(claim.epistemicStatus)) {
+      const value = claim.value as { resource?: unknown };
+      const owner = claim.subject.startsWith('responsibility:') ? claim.subject.slice('responsibility:'.length) : null;
+      if (owner && typeof value?.resource === 'string') demands.set(owner, value.resource);
+    }
+  }
+
+  // What does this piece of work cost? Asked per responsibility, in order.
+  for (const row of understood) {
+    const id = String(row.id);
+    if (demands.has(id) || settled.has(`${id}\nresource_demand`)) continue;
+    return openQuestion(productId, id, String(row.title), 'resource_demand', 'responsibility');
+  }
+
+  // Two costs now compete for the same resource, and Foundry cannot say whether
+  // the company can afford both.
+  if (hasCapacity) return null;
+  const contested = [...demands.values()].find((resource) =>
+    [...demands.values()].filter((other) => other === resource).length > 1);
+  if (!contested) return null;
+  const blockedBy = [...demands.entries()].find(([, resource]) => resource === contested)!;
+  const title = String(understood.find((r) => String(r.id) === blockedBy[0])?.title ?? '');
+  if (settled.has(`company\nresource_capacity`)) return null;
+  return openQuestion(productId, blockedBy[0], title, 'resource_capacity', 'company', contested);
+}
+
+async function openQuestion(
+  productId: string, responsibilityId: string, responsibilityTitle: string,
+  fact: AskableFact, scope: EvidenceScope, resource?: string,
+): Promise<FounderEvidenceQuestion> {
+  // A company fact has one question however many responsibilities need it, so
+  // its identity does not include the responsibility that happened to surface it.
+  const id = scope === 'company'
+    ? requestId(productId, 'company', fact)
+    : requestId(productId, responsibilityId, fact);
 
   const existing = await query('SELECT id FROM founder_evidence_requests WHERE id=?', [id]);
   if (!existing.rows.length) {
     await query(
-      'INSERT INTO founder_evidence_requests (id,product_id,responsibility_id,predicate) VALUES (?,?,?,?)',
-      [id, productId, target.id, fact],
+      'INSERT INTO founder_evidence_requests (id,product_id,responsibility_id,predicate,scope) VALUES (?,?,?,?,?)',
+      [id, productId, responsibilityId, fact, scope],
     );
   }
+  const because = scope === 'company'
+    ? `More than one thing this company carries needs the same ${resource ?? 'resource'}, and I can't tell how much of it you actually have`
+    : fact === 'resource_demand'
+      ? `You carry more than one thing at once, and I can't tell what "${responsibilityTitle}" costs to keep up`
+      : `I can see "${responsibilityTitle}" is something this company carries, but I can't tell from anything I have access to`;
   return {
-    requestId: id, responsibilityId: target.id, responsibilityTitle: target.title, fact,
-    because: `I can see "${target.title}" is something this company carries, but I can't tell from anything I have access to`,
-    question: QUESTIONS[fact](target.title),
+    requestId: id, responsibilityId, responsibilityTitle, fact, scope,
+    answerShape: fact === 'resource_demand' || fact === 'resource_capacity' ? 'resource_amount' : 'text',
+    because,
+    question: fact === 'resource_capacity'
+      ? `How much ${resource ?? 'of that'} does the company have in a week, in total?`
+      : fact === 'resource_demand'
+        ? `Roughly what does "${responsibilityTitle}" take to keep up — of what, and how much per week?`
+        : QUESTIONS[fact](responsibilityTitle),
   };
 }
 
@@ -148,9 +239,9 @@ export async function selectFounderEvidenceQuestion(
  * authenticated founder. Nothing about the question is caller-supplied. */
 export async function getOpenFounderEvidenceRequest(
   requestId: string, founderId: string,
-): Promise<{ productId: string; responsibilityId: string; fact: UnderstandingFact } | null> {
+): Promise<{ productId: string; responsibilityId: string; fact: AskableFact; scope: EvidenceScope } | null> {
   const row = (await query(
-    `SELECT q.product_id,q.responsibility_id,q.predicate FROM founder_evidence_requests q
+    `SELECT q.product_id,q.responsibility_id,q.predicate,q.scope FROM founder_evidence_requests q
        JOIN products p ON p.id=q.product_id
       WHERE q.id=? AND p.owner_id=? AND q.status='open'`,
     [requestId, founderId],
@@ -158,7 +249,7 @@ export async function getOpenFounderEvidenceRequest(
   if (!row) return null;
   return {
     productId: String(row.product_id), responsibilityId: String(row.responsibility_id),
-    fact: String(row.predicate) as UnderstandingFact,
+    fact: String(row.predicate) as AskableFact, scope: String(row.scope) as EvidenceScope,
   };
 }
 
@@ -172,11 +263,22 @@ export async function getOpenFounderEvidenceRequest(
  */
 export async function recordFounderEvidenceAnswer(input: {
   requestId: string; founderId: string; statement: string; now?: Date;
+  /** Bounded structure for `resource_amount` questions. Prose is kept as the
+   * evidence either way; this is what makes the answer usable as an input
+   * rather than only as a description. */
+  resource?: string; amount?: number;
 }): Promise<{ signalId: string; claimId: string } | null> {
   const statement = input.statement.trim();
   if (!statement) return null;
   const request = await getOpenFounderEvidenceRequest(input.requestId, input.founderId);
   if (!request) return null;
+
+  // A structured question needs its structure. Recording a resource question as
+  // prose would leave a claim that reads well and cannot be used, which is
+  // worse than not having asked.
+  const structured = request.fact === 'resource_demand' || request.fact === 'resource_capacity';
+  const resource = input.resource?.trim();
+  if (structured && (!resource || !Number.isFinite(input.amount) || (input.amount as number) < 0)) return null;
 
   const signalId = nanoid();
   await query(
@@ -194,11 +296,16 @@ export async function recordFounderEvidenceAnswer(input: {
     [signalId, input.requestId],
   );
 
+  // Scope follows the meaning of the evidence. A company-wide fact is recorded
+  // once, about the company, and referenced by every responsibility and
+  // judgment that needs it — never copied into each of them, where the same
+  // fact could then disagree with itself.
   const claimId = await recordReconstructionClaim({
     productId: request.productId,
-    subject: `responsibility:${request.responsibilityId}`,
+    subject: request.scope === 'company'
+      ? `product:${request.productId}` : `responsibility:${request.responsibilityId}`,
     predicate: request.fact,
-    value: { statement },
+    value: structured ? { resource, amount: input.amount, statement } : { statement },
     epistemicStatus: 'known',
     evidenceRefs: [{ kind: 'signal_event', id: signalId }],
     derivationMethod: 'authenticated founder assertion',

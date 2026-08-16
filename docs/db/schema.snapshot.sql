@@ -65,6 +65,7 @@
 
 
 
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -217,6 +218,7 @@
       length(replace(substr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', 1,
       length(substr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', 1,
       length(substr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', 1,
+     OR (NEW.scope='company' AND NEW.predicate NOT IN ('resource_capacity'));
      WHERE NEW.authority_ref='autonomy_consent:' || a.id AND a.product_id=r.product_id
      WHERE NEW.evidence_ref='reconstruction_claim:' || c.id AND c.product_id=r.product_id
      WHERE NEW.evidence_ref='shadow_comparison:' || c.id AND r.id=NEW.responsibility_id
@@ -231,7 +233,7 @@
     'audit_completed', 'remediation_merged',
     'behavioral',        -- Observed pattern about how to behave
     'benchmark_contribution',  -- anonymous metrics shared to pool
-    'capability_requirements','risks','failure_modes','stakeholder_obligations','financial_consequence');
+    'capability_requirements','risks','failure_modes','stakeholder_obligations','financial_consequence',
     'churn_response',          -- What we do when churn spikes
     'co_founder', 'advisor', 'investor_observer'
     'cohort_anomaly', 'competitive_signal'
@@ -266,6 +268,7 @@
     'purpose','desired_outcome','success_conditions','failure_conditions','operating_constraints',
     'recovery_protocol'        -- What we do in RED state
     'recurring_work','customer_commitment','exception','revenue_collection',
+    'resource_demand'))
     'retention','messaging','feature','operations','other'
     'risk_state_change', 'lifecycle_gate',
     'signal_spike', 'signal_drop',
@@ -329,7 +332,7 @@
     OR NEW.authority_scope!='send_email:support_reply' OR NEW.effect_id IS NULL OR NEW.authority_consent_id IS NULL
     OR NEW.change_class<>OLD.change_class OR NEW.content_digest<>OLD.content_digest;
     OR NEW.disposition_evidence_json IS NULL
-    OR NEW.predicate<>OLD.predicate OR NEW.asked_at<>OLD.asked_at;
+    OR NEW.predicate<>OLD.predicate OR NEW.asked_at<>OLD.asked_at OR NEW.scope<>OLD.scope;
     OR NEW.repository_ref<>OLD.repository_ref OR NEW.target_path<>OLD.target_path
     OR NOT EXISTS (
     OR coalesce(json_array_length(NEW.payload_json,'$.evidence_claim_ids'),0)=0;
@@ -556,6 +559,7 @@
   );
   );
   --
+  --
   --   config_keys_count, stressors_active, customer_count }
   --   current_mrr_estimate, team_size, biggest_challenge, stage }
   --   overruled_held — founder overruled and the premises held (dissent was wrong)
@@ -565,8 +569,6 @@
   -- 2 = require explicit approval before acting
   -- A closed, deliberately small change vocabulary. Broadening it is a
   -- A generic strategic decision row carries none of the responsibility and
-  -- A question is always about this company's own responsibility.
-  -- A question is born unanswered. A request cannot be created already resolved,
   -- A selected alternative must be one Foundry actually represented at
   -- A verified outcome requires BOTH independent verification and proof that
   -- APNs (iOS)
@@ -578,15 +580,13 @@
   -- Actual outcomes (filled in after outcome_measured_at)
   -- Agent configuration (versioned via agent_evolution_versions)
   -- Agent notes (append-only log)
-  -- An answered request must point at a real founder assertion for this
   -- And deny dominates: the constitutional ring is refused here too, so a
-  -- Answered is terminal. A replayed or resubmitted answer changes nothing;
   -- Authority without required verification would let "I changed it" stand in
   -- Behavioral
   -- Briefing generated for this session
   -- Business philosophy
   -- Calibration outcome, resolved later by the Memory Kernel:
-  -- Closed vocabulary, mirroring the institutional understanding requirements.
+  -- Closed vocabularies, one per scope. A responsibility-scoped predicate may
   -- Closed vocabulary. A new system identity cannot be invented at runtime;
   -- Closed vocabulary: the metric columns the public intake actually accepts,
   -- Communication
@@ -607,13 +607,13 @@
   -- Dimension scores
   -- Each agent writes its key finding as it completes (JSON object, agent_name -> finding)
   -- Every absence is coalesced before comparison. `X NOT IN (...)` is NULL when
+  -- Every question names the responsibility it unblocks, at either scope.
   -- Evidence must follow the prediction it tests. An observation recorded
   -- Evolution signals
   -- Export state
   -- For CEO briefing assembly
   -- Founder assertion is not authority. An answer that carries a consent, a
   -- Foundry is allowed to do — institutional guards live in migrations, the
-  -- Foundry may only ask about a fact the institution actually requires; it may
   -- Generic operational semantics only. Each of these is a shape of obligation
   -- Health composite (0-100)
   -- Identity is verified against real ownership. A caller-supplied founder
@@ -650,7 +650,6 @@
   -- Sections (all JSON or Markdown)
   -- Session-derived identity is verified against the real product owner. A
   -- Shared
-  -- Silence is not an answer. Deferral must not carry evidence with it.
   -- Stakeholder breakdown (JSON array of {name, type, shares, options, pct_ownership})
   -- State
   -- Status
@@ -674,9 +673,9 @@
   -- Web Push
   -- What the agent decided
   -- What the agent saw
-  -- What was asked never changes. Rewriting the question after the fact would
   -- Widening the ring requires a new migration, which is itself inside the
   -- X is missing, and a NULL condition does not fire RAISE — so an unguarded
+  -- `resource_demand` is responsibility-scoped and `resource_capacity` is
   -- a founder assertion, the whole report is refused rather than stored with
   -- against, so an observation that names one is not external.
   -- and the only three movements arithmetic on two numbers can support.
@@ -686,13 +685,16 @@
   -- before — or in the same instant as — the expectation cannot be news about
   -- caller-supplied owner string cannot establish its own authority.
   -- capability, a scope, an expiry, or a mode change is refused outright rather
+  -- capacity judgment reads, and they are the only ones added here. The other
   -- check of this shape accepts exactly the payload it was written to refuse:
   -- code, migrations, documents, or enforcement scripts that define what
-  -- company, about this exact question.
+  -- company-scoped because that is what they are — what one piece of work costs
+  -- company-wide predicates the owner named (cash constraint, operating
   -- company/product row; there is no separate privileged entity kind.
   -- compared against. Verification that can read the expectation is
   -- constitutional ring that ordinary development authority cannot reach.
   -- evidence provenance this contract governs.
+  -- field before its consumer exists is how orphans are made.
   -- for "it was independently checked".
   -- from the fact that a write returned without throwing.
   -- governing contract lives in the institution documents and services, and
@@ -703,11 +705,9 @@
   -- it, and ambiguity is refused rather than believed.
   -- judgment time; the owner cannot introduce an unrepresented direction here.
   -- justified by another tenant's evidence is not a justification.
-  -- let one answer be reused as the answer to a different question.
   -- means editing a migration, which is inside the constitutional ring — so a
-  -- migration, which is inside the constitutional ring.
-  -- not invent a field to be curious about. Widening this list means editing a
-  -- observation, and the original answer survives as history.
+  -- not be asked company-wide and a company-wide one may not be pinned to a
+  -- policy) are deliberately absent until something consumes them; adding a
   -- question that was never asked, another tenant's question, or one already
   -- reason rather than a primary-key error, so the invariant reads as intent.
   -- reference is exactly this consent, and a consent that is currently valid,
@@ -717,11 +717,12 @@
   -- responsibility-bound, and low consequence.
   -- results: { runway_months, probability_series_a, target_hit_probability, ... }
   -- ring, so the boundary cannot be moved by ordinary development authority.
+  -- schedule, owner constraint, organisation dependency, company risk, company
   -- sector-specific enum cannot be added at runtime by anyone, including a
   -- self-confirming, not independent, and a fabricated pass would be
   -- separate owner-governed decision with its own evidence, not something a
   -- silently dropped field is a silently granted one waiting to happen.
-  -- so an answer can never exist without the founder having given one.
+  -- single responsibility: the scope must follow the meaning of the fact.
   -- still be current, non-conflicting, and canonically grounded.
   -- string cannot establish who is speaking for the company.
   -- string cannot establish who is speaking for the company.
@@ -729,9 +730,9 @@
   -- than stored and ignored — the shape of the attempt is the problem, and a
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
   -- the field quietly dropped.
-  -- the founder changing their mind appends a new claim through a new
   -- the one with the field left out entirely.
   -- the ratchets/audits are what make any of it binding.
+  -- versus what the whole company has. They are the two inputs deterministic
   -- was observed rather than on a label a caller chose.
   -- well-meaning integration.
   -- { company_name, problem, solution, target_customer, revenue_model,
@@ -778,6 +779,7 @@
   ON envelope_usage(product_id, scope, week_starting);
   ON experiment_holdouts(product_id, is_active);
   ON experiment_results_timeline(experiment_id, checkpoint_date);
+  ON founder_evidence_requests(product_id,predicate) WHERE scope='company';
   ON founder_evidence_requests(product_id,responsibility_id,predicate);
   ON founder_journal_entries(product_id, is_agent_visible, created_at);
   ON freeze_periods(product_id, ended_at);
@@ -882,8 +884,9 @@
   SELECT RAISE(ABORT,'founder_evidence:born_unanswered')
   SELECT RAISE(ABORT,'founder_evidence:deferral_carries_evidence')
   SELECT RAISE(ABORT,'founder_evidence:immutable_question') WHERE
-  SELECT RAISE(ABORT,'founder_evidence:predicate_invalid') WHERE NEW.predicate NOT IN (
+  SELECT RAISE(ABORT,'founder_evidence:predicate_invalid')
   SELECT RAISE(ABORT,'founder_evidence:responsibility_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'founder_evidence:scope_invalid')
   SELECT RAISE(ABORT,'founder_report:authority_smuggled') WHERE
   SELECT RAISE(ABORT,'founder_report:founder_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'founder_report:obligation_kind_invalid')
@@ -984,8 +987,10 @@
   UPDATE responsibility_candidates SET status='promoted',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='rejected',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='superseded',updated_at=NEW.created_at
+  WHERE (NEW.scope='responsibility' AND NEW.predicate NOT IN (
   WHERE NEW.event_type <> 'external_metric:'
   WHERE NEW.identity_key NOT IN ('foundry');
+  WHERE NEW.scope NOT IN ('responsibility','company');
   WHERE NEW.status<>'open' OR NEW.answer_signal_id IS NOT NULL OR NEW.resolved_at IS NOT NULL;
   WHERE NEW.status='answered' AND NOT EXISTS (
   WHERE NEW.status='deferred' AND NEW.answer_signal_id IS NOT NULL;
@@ -4150,7 +4155,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4174,6 +4178,7 @@
 , resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT, autopilot_counted INTEGER NOT NULL DEFAULT 0);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), allowed_scope_json TEXT, consequence_boundary TEXT, expires_at TEXT, repository_ref TEXT, allowed_path_prefixes_json TEXT, allowed_change_class TEXT, required_verification_json TEXT);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), authority_consent_id TEXT REFERENCES autonomy_consents(id), authority_scope TEXT, effect_id TEXT, effect_certainty TEXT, provider_receipt_json TEXT, reconcile_after TEXT, outcome_status TEXT, outcome_evidence_ref TEXT, learned_claim_id TEXT REFERENCES reconstruction_claims(id));
+, scope TEXT NOT NULL DEFAULT 'responsibility');
 , sector_profile TEXT DEFAULT 'b2b_saas', growth_stage TEXT DEFAULT 'pre_launch', growth_stage_updated_at TEXT, growth_stage_overridden INTEGER DEFAULT 0, share_token TEXT, ingest_token TEXT, deleted_at DATETIME, build_platform TEXT DEFAULT 'custom_code', company_lifecycle_state TEXT DEFAULT 'setup'
 , superseded_by_candidate_id TEXT REFERENCES responsibility_candidates(id));
 , thread_id TEXT REFERENCES agent_message_threads(id), parent_message_id TEXT REFERENCES agent_messages(id));
@@ -4926,6 +4931,7 @@ CREATE UNIQUE INDEX idx_data_class_product_surface
 CREATE UNIQUE INDEX idx_development_change_identity ON development_change_plans(product_id,change_id);
 CREATE UNIQUE INDEX idx_dimension_hints_unique ON dimension_hints(audit_score_id, dimension);
 CREATE UNIQUE INDEX idx_evolved_prompts_active ON evolved_prompts(product_id, agent_name) WHERE is_active = 1;
+CREATE UNIQUE INDEX idx_founder_company_fact
 CREATE UNIQUE INDEX idx_founder_evidence_request_identity
 CREATE UNIQUE INDEX idx_founder_prefs_key ON founder_preferences(product_id, preference_type, preference_key);
 CREATE UNIQUE INDEX idx_funding_readiness_product_day

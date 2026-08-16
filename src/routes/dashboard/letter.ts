@@ -108,6 +108,11 @@ const evidenceQuestionSection = (
     <div style="font-size:0.95rem;color:var(--text-primary);margin-top:0.5rem;">${q.question}</div>
     <form method="POST" action="/letter/evidence/${q.requestId}/answer"
       style="display:flex;gap:0.4rem;margin-top:0.5rem;align-items:center;flex-wrap:wrap;">
+      ${q.answerShape === 'resource_amount' ? html`
+        <input name="resource" required maxlength="60" placeholder="Of what? (e.g. days of my time)"
+          style="flex:1;min-width:180px;" />
+        <input name="amount" required type="number" min="0" step="any" placeholder="How much per week?"
+          style="width:150px;" />` : ''}
       <input name="statement" required maxlength="1000" placeholder="In your own words"
         style="flex:1;min-width:220px;" />
       <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Tell me</button>
@@ -638,8 +643,12 @@ letterRoutes.post('/letter/evidence/:requestId/answer', async (c) => {
   if (statement.length > 1000) return c.text('That is longer than I can take in one answer', 400);
 
   const { recordFounderEvidenceAnswer } = await import('../../services/institution/founder-evidence.js');
+  const resource = String(body.resource ?? '').trim() || undefined;
+  const rawAmount = String(body.amount ?? '').trim();
+  const amount = rawAmount === '' ? undefined : Number(rawAmount);
   const recorded = await recordFounderEvidenceAnswer({
     requestId: c.req.param('requestId'), founderId: founder.id as string, statement,
+    resource, amount,
   });
   // Do not reveal whether another tenant's question, or a resolved one, exists.
   if (!recorded) return c.text('Answer refused', 403);
