@@ -879,6 +879,31 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Architecture deletion sweep — and why the obvious deletion would have been a production outage
+
+- **The naive answer was wrong, and it was wrong about the largest thing.** A reachability walk from the three production entry points reported 75 of 447 modules unreachable, headed by ~160KB of named agents (`crucible`, `beacon`, `shield`, `forge`, `harbor`, `oracle`, `atlas`, `prism`, `scribe`, `compass`, `sentinel`). That is precisely the "named-agent architecture superseded by institutional responsibility" the roadmap named as a deletion candidate, and deleting it would have broken production: the agents are loaded dynamically by name in three places — the signal dispatcher, the SCP instance, and the agents dashboard route — via `` import(`../agents/${agentName}.js`) ``.
+- **Therefore the standing reachability gate has a blind spot in both directions.** It resolves literal relative imports only. A dynamically-loaded family reads as dark when it is live (the false positive above), and — more dangerously — a dynamically-loaded module that genuinely goes dead cannot be detected by it at all, because nothing static ever pointed at it.
+- **Teaching the analysis about template-literal imports** cut the orphan set from 75 to 60, of which 21 are exercised by tests and 39 had no consumer at all. That list still contains false positives from non-import references — `src/test/setup.ts` is named by `vitest.config.ts`, and `*.test.ts` files under `src/` are tests — which is the third distinct way a module can be alive without an import edge.
+- **Deleted, with the cutover proven per module:** five pure re-export shims with no consumer in `src/`, `tests/`, `scripts/`, `docs/`, or config — `routes/public/case-studies.ts`, `routes/public/pricing.ts`, `services/story/publisher.ts`, `services/digest/narrative.ts`, `services/lifecycle/conditions.ts`. Each forwarded to a module that remains independently reachable, and the one stale documentation reference was corrected in the same commit.
+- **Not deleted, deliberately.** The remaining 34 candidates need per-module proof of the kind above, and a sweep that deletes from a list rather than from evidence is how a dynamically-loaded subsystem gets removed. That work is real and remains open; it is not blocked, only unfinished.
+
+## Economic truth — measured, counted, and unmeasured kept apart (migration 134)
+
+- **The unit was wrong.** `cost_events` attributed spend to `agent_name`. A persona is not a unit of company work — two can serve one responsibility, one can serve several, and every institutional path records nothing attributable because the kernel is model-free. Cost now attaches to responsibility and capability.
+- **Extended the existing ledger rather than adding one.** A parallel economics store means two answers to one question and a permanent reconciliation problem.
+- **The rule the reader enforces: measured-and-zero is not the same fact as not-measured.** Seven real components nobody observes — founder time, rework, retries, infrastructure, provider price, failure cost, risk — are named rather than folded into a total that would look complete while understating exactly the costs that decide whether automating something was worth doing.
+- **Founder-authored work is counted, not priced.** "Three founder-authored replies" is true; a dollar value for them would be invented.
+- **Zero model spend on institutional paths is a measurement, not an absence** — the cognition gate structurally forbids the kernel from reaching a model, so it is enforced rather than merely unobserved. That is the baseline any future support drafter has to beat.
+- **Guards, all NULL-coalesced:** no cross-tenant attribution, no capability that disagrees with its responsibility, no missing amount entering as a credit, and attribution immutable once written — re-attribution would let an expensive responsibility be made cheap retroactively.
+
+## Part XI — quality/cost frontier infrastructure: deliberately NOT built
+
+The roadmap asks for comparative infrastructure across candidate methods (no cognition, deterministic logic, cache, incremental recompute, smaller model, larger model). Today exactly one of those exists: deterministic logic. A comparator with a single candidate has no consumer, and the constitution forbids speculative architecture — the reachability gate would correctly report it as an orphan the day it was written.
+
+What the frontier actually needs is now in place: the cost side is attributable per responsibility and capability, the quality side is frozen in `support-drafting-v1`, and the deterministic baseline is established as a measurement. The comparator becomes buildable — and non-speculative — the moment a second method exists. **This is a deferral with a stated trigger, not an omission.**
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the seventh autonomous session. Supersedes all earlier continuation records.*

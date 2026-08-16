@@ -160,7 +160,7 @@ For a single-instance Fly.io deployment, the multi-instance issue does not apply
 ## Finding 06 — No abuse detection on public endpoints
 
 **Severity: P2**
-**Files:** `src/routes/public/landing.ts`, `src/routes/public/pricing.ts`, `src/routes/public/case-studies.ts`
+**Files:** `src/routes/public/landing.ts` (pricing and case-study routes are exported from it)
 
 Public routes have a `publicRateLimit` of 60 requests/minute per IP. There is no:
 - Scraping detection (no check for aggressive crawling patterns)
