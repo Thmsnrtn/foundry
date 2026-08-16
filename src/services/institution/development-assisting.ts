@@ -19,9 +19,8 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { recordReconstructionClaim } from './reconstruction.js';
 import { enterResponsibilityAssisting } from './responsibility-assisting.js';
-import {
-  getCurrentDevelopmentAuthority, isPathWithinAuthority, type DevelopmentChangeClass,
-} from './development-authority.js';
+import { getCurrentDevelopmentAuthority, isPathWithinAuthority } from './development-authority.js';
+import { decideDevelopmentDisposition } from './development-disposition.js';
 import {
   applyRepositoryChange, contentDigest, readRepositoryFile, repositoryChangeId,
   rollbackRepositoryChange, type RepositoryChangeReceipt,
@@ -30,6 +29,8 @@ import type { Responsibility } from './responsibility.js';
 
 export interface DevelopmentChangePlan {
   id: string; changeId: string; targetPath: string; contentDigest: string;
+  /** The content the institution selected, present when the plan was just made. */
+  intendedContent?: string;
   status: 'planned' | 'claimed' | 'applied' | 'already_applied' | 'refused' | 'rolled_back';
   refusedReason: string | null;
 }
@@ -42,41 +43,52 @@ export async function enterDevelopmentAssisting(input: {
 }
 
 /**
- * Record a bounded change Foundry proposes to make. This writes nothing to the
- * repository. Replaying the same proposal converges on the one existing plan
- * rather than creating a second.
+ * Plan the change Foundry has concluded should be made.
+ *
+ * What to change is *derived* from the disposition, not supplied by the
+ * caller: the institution selects the change from its own grounded evidence,
+ * and any disposition other than `change` — investigate, configure, delete,
+ * defer, do nothing — stops here rather than becoming a plan anyway.
+ *
+ * This writes nothing to the repository. Replaying the same proposal
+ * converges on the one existing plan rather than creating a second.
  */
 export async function planDevelopmentChange(input: {
   productId: string; responsibilityId: string; repository: string;
-  path: string; content: string; changeClass: DevelopmentChangeClass;
 }): Promise<DevelopmentChangePlan> {
+  const decision = await decideDevelopmentDisposition(input.productId, input.responsibilityId);
+  if (decision.disposition !== 'change' || !decision.change) {
+    throw new Error(`development plan refused: disposition is ${decision.disposition}`);
+  }
+  const { path, content, changeClass } = decision.change;
+
   const authority = await getCurrentDevelopmentAuthority(input.productId, input.responsibilityId);
   if (!authority) throw new Error('development plan refused: no current authority');
   if (authority.repository !== input.repository) throw new Error('development plan refused: repository not authorized');
-  if (authority.changeClass !== input.changeClass) throw new Error('development plan refused: change class not authorized');
-  if (!isPathWithinAuthority(input.path, authority)) throw new Error('development plan refused: path not authorized');
+  if (authority.changeClass !== changeClass) throw new Error('development plan refused: change class not authorized');
+  if (!isPathWithinAuthority(path, authority)) throw new Error('development plan refused: path not authorized');
 
   const changeId = repositoryChangeId({
-    productId: input.productId, responsibilityId: input.responsibilityId,
-    path: input.path, content: input.content,
+    productId: input.productId, responsibilityId: input.responsibilityId, path, content,
   });
-  const digest = contentDigest(input.content);
+  const digest = contentDigest(content);
 
   const id = nanoid();
   try {
     await query(
       `INSERT INTO development_change_plans
-       (id,product_id,responsibility_id,authority_consent_id,change_id,repository_ref,target_path,change_class,content_digest)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
+       (id,product_id,responsibility_id,authority_consent_id,change_id,repository_ref,target_path,change_class,
+        content_digest,disposition,disposition_evidence_json)
+       VALUES (?,?,?,?,?,?,?,?,?,'change',?)`,
       [id, input.productId, input.responsibilityId, authority.consentId, changeId,
-        input.repository, input.path, input.changeClass, digest],
+        input.repository, path, changeClass, digest, JSON.stringify(decision.evidence)],
     );
   } catch (error) {
     const existing = await getDevelopmentChangePlanByChangeId(input.productId, changeId);
     if (!existing) throw error;
     return existing;
   }
-  return { id, changeId, targetPath: input.path, contentDigest: digest, status: 'planned', refusedReason: null };
+  return { id, changeId, targetPath: path, contentDigest: digest, intendedContent: content, status: 'planned', refusedReason: null };
 }
 
 async function projectPlan(row: Record<string, unknown>): Promise<DevelopmentChangePlan> {

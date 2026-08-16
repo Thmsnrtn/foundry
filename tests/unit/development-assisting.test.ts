@@ -23,7 +23,9 @@ import {
 const CHECK = 'schema-snapshot-freshness';
 const REPO = 'Thmsnrtn/foundry';
 const TARGET = 'docs/db/schema.snapshot.sql';
-const NEW_CONTENT = '-- regenerated through migration 121\n';
+/** Distinct intended content per product, so no two fixtures share a change. */
+const contentFor = (productId: string) => `-- regenerated for ${productId}\n`;
+const NEW_CONTENT = contentFor('as_main');
 
 const UNDERSTANDING: Array<[string, unknown]> = [
   ['purpose', 'Keep the committed schema snapshot in sync with the migrations'],
@@ -80,6 +82,19 @@ async function seedAssisting(productId: string, prefix: string, ownerId: string)
     'SELECT id FROM responsibility_shadow_comparisons WHERE expectation_id=?', [expectationId],
   )).rows[0] as Record<string, unknown>).id);
 
+  // The institution's own grounded evidence for what should change. The plan
+  // is derived from this, not handed in by the caller.
+  for (const [predicate, value] of [
+    ['development_need', { check: CHECK, summary: 'snapshot drifted from migrations' }],
+    ['development_intended_content', { path: TARGET, content: contentFor(productId), changeClass: 'generated_artifact' }],
+  ] as Array<[string, unknown]>) {
+    await recordReconstructionClaim({
+      productId, subject: `responsibility:${responsibilityId}`, predicate, value, epistemicStatus: 'known',
+      evidenceRefs: [{ kind: 'signal_event', id: `${prefix}_sig` }],
+      derivationMethod: 'deterministic development disposition input', observedAt: new Date(),
+    });
+  }
+
   const consentId = await grantDevelopmentAuthority({
     productId, responsibilityId, ownerId, repository: REPO, allowedPathPrefixes: ['docs/db/'],
     changeClass: 'generated_artifact', requiredVerification: [CHECK], expiresAt: new Date(Date.now() + 3_600_000),
@@ -101,7 +116,8 @@ beforeAll(async () => {
     ('as_owner','as_clerk','as@example.com'),('as_other','as_other_clerk','other@example.com')`, []);
   await query(`INSERT INTO products (id,name,owner_id) VALUES
     ('as_main','Main Co','as_owner'),('as_revoke','Revoke Co','as_owner'),
-    ('as_scope','Scope Co','as_owner'),('as_foreign','Foreign Co','as_other')`, []);
+    ('as_scope','Scope Co','as_owner'),('as_replay','Replay Co','as_owner'),
+    ('as_sub','Substitution Co','as_owner'),('as_foreign','Foreign Co','as_other')`, []);
   root = freshRepo();
 });
 
@@ -111,11 +127,10 @@ describe('first bounded development Assisting vertical', () => {
     expect((await query("SELECT state FROM institutional_responsibilities WHERE id='as_resp'", [])).rows[0])
       .toMatchObject({ state: 'assisting' });
 
-    const plan = await planDevelopmentChange({
-      productId: 'as_main', responsibilityId, repository: REPO,
-      path: TARGET, content: NEW_CONTENT, changeClass: 'generated_artifact',
-    });
+    const plan = await planDevelopmentChange({ productId: 'as_main', responsibilityId, repository: REPO });
     expect(plan.status).toBe('planned');
+    // Foundry selected both the target and the content from its own evidence.
+    expect(plan).toMatchObject({ targetPath: TARGET, intendedContent: NEW_CONTENT });
     // A plan is not an execution.
     expect(readFileSync(join(root, TARGET), 'utf8')).toBe('-- stale\n');
 
@@ -163,37 +178,29 @@ describe('first bounded development Assisting vertical', () => {
 
   it('produces one mutation under replay and concurrent execution', async () => {
     const repo = freshRepo();
-    const first = await planDevelopmentChange({
-      productId: 'as_main', responsibilityId: 'as_resp', repository: REPO,
-      path: TARGET, content: '-- replayed\n', changeClass: 'generated_artifact',
-    });
-    const replayed = await planDevelopmentChange({
-      productId: 'as_main', responsibilityId: 'as_resp', repository: REPO,
-      path: TARGET, content: '-- replayed\n', changeClass: 'generated_artifact',
-    });
+    const { responsibilityId } = await seedAssisting('as_replay', 'rpl', 'as_owner');
+    const first = await planDevelopmentChange({ productId: 'as_replay', responsibilityId, repository: REPO });
+    const replayed = await planDevelopmentChange({ productId: 'as_replay', responsibilityId, repository: REPO });
     expect(replayed.id).toBe(first.id);
-    expect((await query("SELECT COUNT(*) n FROM development_change_plans WHERE product_id='as_main' AND change_id=?",
+    expect((await query("SELECT COUNT(*) n FROM development_change_plans WHERE product_id='as_replay' AND change_id=?",
       [first.changeId])).rows[0]).toMatchObject({ n: 1 });
 
     const results = await Promise.all([1, 2, 3, 4].map(() => executeDevelopmentChange({
-      productId: 'as_main', planId: first.id, repositoryRoot: repo, content: '-- replayed\n',
+      productId: 'as_replay', planId: first.id, repositoryRoot: repo, content: contentFor('as_replay'),
     })));
     expect(results.filter((r) => r.receipt !== null)).toHaveLength(1);
-    expect(readFileSync(join(repo, TARGET), 'utf8')).toBe('-- replayed\n');
+    expect(readFileSync(join(repo, TARGET), 'utf8')).toBe(contentFor('as_replay'));
   });
 
   it('performs zero mutation when authority is revoked between plan and execution', async () => {
     const repo = freshRepo();
     const { responsibilityId, consentId } = await seedAssisting('as_revoke', 'rev', 'as_owner');
-    const plan = await planDevelopmentChange({
-      productId: 'as_revoke', responsibilityId, repository: REPO,
-      path: TARGET, content: NEW_CONTENT, changeClass: 'generated_artifact',
-    });
+    const plan = await planDevelopmentChange({ productId: 'as_revoke', responsibilityId, repository: REPO });
 
     await revokeDevelopmentAuthority('as_revoke', consentId, 'as_owner');
 
     const { plan: refused, receipt } = await executeDevelopmentChange({
-      productId: 'as_revoke', planId: plan.id, repositoryRoot: repo, content: NEW_CONTENT,
+      productId: 'as_revoke', planId: plan.id, repositoryRoot: repo, content: contentFor('as_revoke'),
     });
     expect(refused).toMatchObject({ status: 'refused', refusedReason: 'authority_absent' });
     expect(receipt).toBeNull();
@@ -203,15 +210,12 @@ describe('first bounded development Assisting vertical', () => {
   it('performs zero mutation when authority has expired between plan and execution', async () => {
     const repo = freshRepo();
     const { responsibilityId, consentId } = await seedAssisting('as_scope', 'sco', 'as_owner');
-    const plan = await planDevelopmentChange({
-      productId: 'as_scope', responsibilityId, repository: REPO,
-      path: TARGET, content: NEW_CONTENT, changeClass: 'generated_artifact',
-    });
+    const plan = await planDevelopmentChange({ productId: 'as_scope', responsibilityId, repository: REPO });
     await query('UPDATE autonomy_consents SET expires_at=? WHERE id=?',
       [new Date(Date.now() - 1000).toISOString(), consentId]);
 
     const { plan: refused } = await executeDevelopmentChange({
-      productId: 'as_scope', planId: plan.id, repositoryRoot: repo, content: NEW_CONTENT,
+      productId: 'as_scope', planId: plan.id, repositoryRoot: repo, content: contentFor('as_scope'),
     });
     expect(refused).toMatchObject({ status: 'refused', refusedReason: 'authority_absent' });
     expect(readFileSync(join(repo, TARGET), 'utf8')).toBe('-- stale\n');
@@ -219,45 +223,49 @@ describe('first bounded development Assisting vertical', () => {
 
   it('refuses substituted content after the plan was authorized, before writing anything', async () => {
     const repo = freshRepo();
-    const plan = await planDevelopmentChange({
-      productId: 'as_main', responsibilityId: 'as_resp', repository: REPO,
-      path: TARGET, content: '-- authorized\n', changeClass: 'generated_artifact',
-    });
+    const { responsibilityId } = await seedAssisting('as_sub', 'sub', 'as_owner');
+    const plan = await planDevelopmentChange({ productId: 'as_sub', responsibilityId, repository: REPO });
     const { plan: refused, receipt } = await executeDevelopmentChange({
-      productId: 'as_main', planId: plan.id, repositoryRoot: repo, content: '-- something else entirely\n',
+      productId: 'as_sub', planId: plan.id, repositoryRoot: repo, content: '-- something else entirely\n',
     });
     expect(refused).toMatchObject({ status: 'refused', refusedReason: 'content_does_not_match_plan' });
     expect(receipt).toBeNull();
     expect(readFileSync(join(repo, TARGET), 'utf8')).toBe('-- stale\n');
   });
 
-  it('refuses out-of-scope paths, foreign repositories, and unauthorized change classes at plan time', async () => {
-    const base = {
-      productId: 'as_main', responsibilityId: 'as_resp', repository: REPO,
-      content: 'x\n', changeClass: 'generated_artifact' as const,
-    };
-    await expect(planDevelopmentChange({ ...base, path: 'src/index.ts' }))
-      .rejects.toThrow(/path not authorized/);
-    await expect(planDevelopmentChange({ ...base, path: 'src/db/migrations/999.sql' }))
-      .rejects.toThrow(/path not authorized/);
-    await expect(planDevelopmentChange({ ...base, path: 'AGENTS.md' }))
-      .rejects.toThrow(/path not authorized/);
-    await expect(planDevelopmentChange({ ...base, path: '../elsewhere/x.sql' }))
-      .rejects.toThrow(/path not authorized/);
-    await expect(planDevelopmentChange({ ...base, path: TARGET, repository: 'someone/else' }))
+  it("refuses to plan its own proposal when the proposal falls outside authority", async () => {
+    // Foundry selecting the change does not mean Foundry may make it. Each
+    // case grounds a real intended change that authority does not permit.
+    const cases: Array<[string, unknown, RegExp]> = [
+      ['osp_src', { path: 'src/index.ts', content: 'x\n', changeClass: 'generated_artifact' }, /path not authorized/],
+      ['osp_ring', { path: 'src/db/migrations/999.sql', content: 'x\n', changeClass: 'generated_artifact' }, /path not authorized/],
+      ['osp_agents', { path: 'AGENTS.md', content: 'x\n', changeClass: 'generated_artifact' }, /path not authorized/],
+      ['osp_escape', { path: '../elsewhere/x.sql', content: 'x\n', changeClass: 'generated_artifact' }, /path not authorized/],
+      ['osp_class', { path: TARGET, content: 'x\n', changeClass: 'documentation' }, /change class not authorized/],
+    ];
+    for (const [productId, intended, expected] of cases) {
+      await query('INSERT INTO products (id,name,owner_id) VALUES (?,?,?)', [productId, productId, 'as_owner']);
+      const { responsibilityId } = await seedAssisting(productId, productId, 'as_owner');
+      // Replace the in-scope proposal with the out-of-scope one under test.
+      await query(`UPDATE reconstruction_claims SET value_json=? WHERE product_id=?
+        AND subject=? AND predicate='development_intended_content'`,
+      [JSON.stringify(intended), productId, `responsibility:${responsibilityId}`]);
+
+      await expect(planDevelopmentChange({ productId, responsibilityId, repository: REPO })).rejects.toThrow(expected);
+      expect((await query('SELECT COUNT(*) n FROM development_change_plans WHERE product_id=?', [productId])).rows[0])
+        .toMatchObject({ n: 0 });
+    }
+    // A foreign repository is refused even for an otherwise valid proposal.
+    await expect(planDevelopmentChange({ productId: 'as_main', responsibilityId: 'as_resp', repository: 'someone/else' }))
       .rejects.toThrow(/repository not authorized/);
-    await expect(planDevelopmentChange({ ...base, path: TARGET, changeClass: 'documentation' }))
-      .rejects.toThrow(/change class not authorized/);
-    expect((await query("SELECT COUNT(*) n FROM development_change_plans WHERE target_path='src/index.ts'", [])).rows[0])
-      .toMatchObject({ n: 0 });
   });
 
   it('refuses a plan for a foreign tenant responsibility and never crosses repositories', async () => {
     await seedAssisting('as_foreign', 'fgn', 'as_other');
-    await expect(planDevelopmentChange({
-      productId: 'as_main', responsibilityId: 'fgn_resp', repository: REPO,
-      path: TARGET, content: 'x\n', changeClass: 'generated_artifact',
-    })).rejects.toThrow(/no current authority/);
+    // The foreign responsibility's evidence is simply invisible in this
+    // product, so Foundry has nothing to act on rather than acting wrongly.
+    await expect(planDevelopmentChange({ productId: 'as_main', responsibilityId: 'fgn_resp', repository: REPO }))
+      .rejects.toThrow(/disposition is do_nothing/);
     await expect(executeDevelopmentChange({
       productId: 'as_foreign', planId: 'nonexistent', repositoryRoot: root, content: 'x\n',
     })).rejects.toThrow(/refused/);
@@ -295,12 +303,25 @@ describe('first bounded development Assisting vertical', () => {
   it('refuses a plan written directly against a non-Assisting or unauthorized binding', async () => {
     // Even with a well-formed row, the database refuses a plan that is not
     // bound to an Assisting development responsibility holding that consent.
+    const grounding = JSON.stringify([String(((await query(
+      "SELECT id FROM reconstruction_claims WHERE product_id='as_main' AND predicate='development_need'", [],
+    )).rows[0] as Record<string, unknown>).id)]);
     await expect(query(
       `INSERT INTO development_change_plans
-       (id,product_id,responsibility_id,authority_consent_id,change_id,repository_ref,target_path,change_class,content_digest)
-       SELECT 'forged','as_main','as_resp',a.id,'chg_forged',?,?,'generated_artifact','d'
-       FROM autonomy_consents a WHERE a.product_id='as_revoke' LIMIT 1`, [REPO, TARGET],
+       (id,product_id,responsibility_id,authority_consent_id,change_id,repository_ref,target_path,change_class,
+        content_digest,disposition,disposition_evidence_json)
+       SELECT 'forged','as_main','as_resp',a.id,'chg_forged',?,?,'generated_artifact','d','change',?
+       FROM autonomy_consents a WHERE a.product_id='as_revoke' LIMIT 1`, [REPO, TARGET, grounding],
     )).rejects.toThrow(/binding_invalid/);
+
+    // And a plan that never passed the disposition gate is refused outright.
+    await expect(query(
+      `INSERT INTO development_change_plans
+       (id,product_id,responsibility_id,authority_consent_id,change_id,repository_ref,target_path,change_class,
+        content_digest,disposition,disposition_evidence_json)
+       SELECT 'nogate','as_main','as_resp',a.id,'chg_nogate',?,?,'generated_artifact','d','investigate',?
+       FROM autonomy_consents a WHERE a.product_id='as_main' LIMIT 1`, [REPO, TARGET, grounding],
+    )).rejects.toThrow(/disposition_invalid/);
     expect(existsSync(join(root, 'src'))).toBe(false);
   });
 });
