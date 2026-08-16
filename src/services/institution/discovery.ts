@@ -9,17 +9,54 @@ const SIGNAL_RESPONSIBILITIES: Record<string, { title: string; capability: strin
   activation_failure: { title: 'Investigate customer activation failure', capability: 'customer_success' },
 };
 
-/** Admit only signal kinds whose operational responsibility is unambiguous.
+/** Generic operational obligations a founder can report about any company.
+ *
+ * The four event kinds above are SaaS-shaped by history: a marina or a dance
+ * school can only be recognised through them when its reality happens to fit a
+ * software company's words. These are the same semantic rule — evidence whose
+ * operational responsibility is unambiguous — expressed without that
+ * vocabulary. None of them names an industry, and migration 126 holds the same
+ * closed set, so a sector-specific kind cannot be introduced at runtime.
+ *
+ * The title is the founder's own description of what must be handled. Foundry
+ * does not paraphrase the company back to itself. */
+const OBLIGATION_CAPABILITIES: Record<string, string> = {
+  recurring_work: 'operations',
+  customer_commitment: 'customer_support',
+  exception: 'operations',
+  revenue_collection: 'billing_recovery',
+  delivery: 'operations',
+  maintenance: 'operations',
+  development: 'development',
+  operational_dependency: 'operations',
+};
+
+/** Admit only evidence whose operational responsibility is unambiguous.
  * Unsupported evidence remains evidence; it does not manufacture ontology. */
 export async function discoverResponsibilityFromSignal(
   productId: string, signalEventId: string,
 ): Promise<Responsibility | null> {
   const evidence = await query(
-    'SELECT event_type,summary FROM signal_events WHERE id=? AND product_id=?', [signalEventId, productId],
+    'SELECT source,event_type,summary,payload_json FROM signal_events WHERE id=? AND product_id=?',
+    [signalEventId, productId],
   );
   if (!evidence.rows.length) return null;
   const row = evidence.rows[0] as Record<string, unknown>;
-  const contract = SIGNAL_RESPONSIBILITIES[String(row.event_type)];
+  let contract = SIGNAL_RESPONSIBILITIES[String(row.event_type)];
+  if (!contract && String(row.source) === 'founder_report') {
+    // The founder stated, explicitly and from a closed set, what kind of
+    // obligation this is. Nothing is inferred from prose: an unrecognised kind
+    // is refused by migration 126 before it reaches here, and a report without
+    // one never becomes a responsibility.
+    try {
+      const payload = JSON.parse(String(row.payload_json)) as { obligation_kind?: unknown; what?: unknown };
+      const capability = typeof payload.obligation_kind === 'string'
+        ? OBLIGATION_CAPABILITIES[payload.obligation_kind] : undefined;
+      if (capability && typeof payload.what === 'string' && payload.what.trim()) {
+        contract = { title: payload.what.trim(), capability };
+      }
+    } catch { return null; }
+  }
   if (!contract) return null;
   const evidenceRef = `signal_event:${signalEventId}`;
   const existing = await query(

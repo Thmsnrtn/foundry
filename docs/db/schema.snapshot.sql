@@ -58,6 +58,9 @@
 
 
 
+
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -226,6 +229,7 @@
     'concern', 'endorsement', 'question', 'context', 'precedent'
     'correction',        -- Founder changed what the agent proposed
     'decision_made', 'decision_outcome',
+    'delivery','maintenance','development','operational_dependency');
     'dependencies','systems','current_carrier','commitments','authority_requirements',
     'designed','running','paused','completed','stopped_early','abandoned'
     'direct','experiment','contribution','protective'
@@ -250,6 +254,7 @@
     'proposed','approved','active','completed','abandoned','disproven'
     'purpose','desired_outcome','success_conditions','failure_conditions','operating_constraints',
     'recovery_protocol'        -- What we do in RED state
+    'recurring_work','customer_commitment','exception','revenue_collection',
     'retention','messaging','feature','operations','other'
     'risk_state_change', 'lifecycle_gate',
     'signal_spike', 'signal_drop',
@@ -321,26 +326,37 @@
     OR json_array_length(NEW.required_verification_json)=0;
     OR json_extract(NEW.payload_json,'$.alternatives_considered') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.authority') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.authority') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.capability') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.capability') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.conflict_identity') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.consent_id') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.consent_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.expected_event_type') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.expires_at') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.expires_at') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.grant') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.grant') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.responsibility_id') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.scope') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.scope') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.state') IS NOT NULL;
+    OR json_extract(NEW.payload_json,'$.state') IS NOT NULL;
+    OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL
     OR json_type(NEW.payload_json,'$.evidence_claim_ids')<>'array'
     OR json_valid(NEW.disposition_evidence_json)=0
     OR json_valid(NEW.evidence_refs_json)=0 OR json_array_length(NEW.evidence_refs_json)=0;
     OR trim(coalesce(json_extract(NEW.payload_json,'$.check'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.judgment_id'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.obligation_kind'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.predicate'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.request_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.result'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.statement'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.what'),''))=''
     SELECT 'founder', NEW.founder_id, NEW.date, 0, NEW.reserved_cents, NEW.updated_at WHERE NEW.founder_id IS NOT NULL
     SELECT 'product', NEW.product_id, NEW.date, 0, NEW.reserved_cents, NEW.updated_at WHERE NEW.product_id IS NOT NULL
     SELECT 1
@@ -363,6 +379,7 @@
     SELECT 1 FROM json_each(NEW.grounding_evidence_json) ref WHERE NOT EXISTS (
     SELECT 1 FROM json_each(NEW.payload_json,'$.evidence_claim_ids') c
     SELECT 1 FROM json_each(NEW.responsibility_refs_json) refs
+    SELECT 1 FROM products p
     SELECT 1 FROM products p
     SELECT 1 FROM products p WHERE p.id=NEW.product_id AND p.owner_id=NEW.owner_id);
     SELECT 1 FROM products p WHERE p.id=NEW.product_id);
@@ -412,6 +429,7 @@
     WHERE json_valid(NEW.evidence_refs_json)=0 OR json_type(NEW.evidence_refs_json)!='array';
     WHERE old.id=NEW.candidate_id AND replacement.product_id=old.product_id
     WHERE p.id=NEW.product_id AND p.owner_id=json_extract(NEW.payload_json,'$.founder_id'));
+    WHERE p.id=NEW.product_id AND p.owner_id=json_extract(NEW.payload_json,'$.founder_id'));
     WHERE q.id=json_extract(NEW.payload_json,'$.request_id')
     WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id
     WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id AND p.owner_id=NEW.owner_id
@@ -431,9 +449,11 @@
     instr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', '|' || NEW.to_state || '|') >
     instr(NEW.target_path,'..')>0 OR substr(NEW.target_path,1,1)='/' OR EXISTS (
     json_extract(NEW.payload_json,'$.consent') IS NOT NULL
+    json_extract(NEW.payload_json,'$.consent') IS NOT NULL
     json_extract(NEW.payload_json,'$.expectation_id') IS NOT NULL
     json_extract(NEW.payload_json,'$.expected_outcome') IS NOT NULL
     json_valid(NEW.evidence_refs_json)=0 OR json_type(NEW.evidence_refs_json)!='array' OR json_array_length(NEW.evidence_refs_json)=0;
+    json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
@@ -563,7 +583,9 @@
   -- Founder assertion is not authority. An answer that carries a consent, a
   -- Foundry is allowed to do — institutional guards live in migrations, the
   -- Foundry may only ask about a fact the institution actually requires; it may
+  -- Generic operational semantics only. Each of these is a shape of obligation
   -- Health composite (0-100)
+  -- Identity is verified against real ownership. A caller-supplied founder
   -- Identity is verified against real ownership. A caller-supplied founder
   -- JSON object keyed by agent name containing the signal or flag that was raised
   -- Key terms
@@ -588,6 +610,7 @@
   -- Promotions advance exactly one rung; demotion may move to any lower rung.
   -- Re-resolve every source at decision time. Positive claim evidence must
   -- Relative, non-escaping prefixes only. A prefix that can climb out of the
+  -- Reporting an obligation is not granting permission to discharge it. As with
   -- Required (≥5) for status='active'; nullable for drafts.
   -- Retrospective fields — populated ~90 days after the decision
   -- Revenue
@@ -622,6 +645,8 @@
   -- What the agent saw
   -- What was asked never changes. Rewriting the question after the fact would
   -- Widening the ring requires a new migration, which is itself inside the
+  -- a founder assertion, the whole report is refused rather than stored with
+  -- any company can have; none of them names an industry. Widening the set
   -- are not a verified outcome, and neither is a successful write.
   -- assumptions: { monthly_burn_delta_usd, mrr_growth_rate_pct, churn_rate_override, headcount_additions, ... }
   -- caller-supplied owner string cannot establish its own authority.
@@ -645,6 +670,7 @@
   -- judgment's expectation or alternatives inside the observation makes a
   -- justified by another tenant's evidence is not a justification.
   -- let one answer be reused as the answer to a different question.
+  -- means editing a migration, which is inside the constitutional ring — so a
   -- migration, which is inside the constitutional ring.
   -- not invent a field to be curious about. Widening this list means editing a
   -- observation, and the original answer survives as history.
@@ -658,6 +684,7 @@
   -- responsibility-bound, and low consequence.
   -- results: { runway_months, probability_series_a, target_hit_probability, ... }
   -- ring, so the boundary cannot be moved by ordinary development authority.
+  -- sector-specific enum cannot be added at runtime by anyone, including a
   -- self-confirming, not independent, and a fabricated pass would be
   -- separate owner-governed decision with its own evidence, not something a
   -- silently dropped field is a silently granted one waiting to happen.
@@ -665,12 +692,15 @@
   -- so it is refused rather than believed.
   -- still be current, non-conflicting, and canonically grounded.
   -- string cannot establish who is speaking for the company.
+  -- string cannot establish who is speaking for the company.
   -- table decision_id points at (the founder-facing queue vs the strategic log).
   -- tenant boundary to speak about another company's judgment.
   -- than stored and ignored — the shape of the attempt is the problem, and a
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
+  -- the field quietly dropped.
   -- the founder changing their mind appends a new claim through a new
   -- the ratchets/audits are what make any of it binding.
+  -- well-meaning integration.
   -- { company_name, problem, solution, target_customer, revenue_model,
   -- { metrics_snapshot_date, integration_events_count, unread_messages_count,
   -- { traction: 0-10, team: 0-10, market: 0-10, unit_economics: 0-10, narrative: 0-10 }
@@ -814,6 +844,10 @@
   SELECT RAISE(ABORT,'founder_evidence:immutable_question') WHERE
   SELECT RAISE(ABORT,'founder_evidence:predicate_invalid') WHERE NEW.predicate NOT IN (
   SELECT RAISE(ABORT,'founder_evidence:responsibility_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'founder_report:authority_smuggled') WHERE
+  SELECT RAISE(ABORT,'founder_report:founder_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'founder_report:obligation_kind_invalid')
+  SELECT RAISE(ABORT,'founder_report:payload_invalid') WHERE
   SELECT RAISE(ABORT,'institutional_judgment:provenance_required') WHERE
   SELECT RAISE(ABORT,'institutional_judgment:tenant_invalid') WHERE EXISTS (
   SELECT RAISE(ABORT,'judgment_disposition:alternative_invalid') WHERE
@@ -922,6 +956,7 @@
   WHERE discovery_evidence_ref IS NOT NULL;
   WHERE id = NEW.responsibility_id AND state = NEW.from_state;
   WHERE id=NEW.responsibility_id AND product_id=NEW.product_id;
+  WHERE json_extract(NEW.payload_json,'$.obligation_kind') NOT IN (
   WHERE resolved_at IS NULL;
   WHERE trim(NEW.established_reason)='';
   accepted_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -4129,6 +4164,7 @@ BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='assisting'
 BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='operating'
 BEFORE INSERT ON signal_events WHEN NEW.source='development_verification'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_assertion'
+BEFORE INSERT ON signal_events WHEN NEW.source='founder_report'
 BEFORE INSERT ON signal_events WHEN NEW.source='institutional_judgment_observation'
 BEFORE INSERT ON strategic_decisions_log WHEN NEW.conflict_identity IS NOT NULL
 BEFORE INSERT ON strategic_decisions_log WHEN NEW.responsibility_refs_json IS NOT NULL
@@ -4138,6 +4174,7 @@ BEFORE UPDATE ON development_change_plans
 BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4799,6 +4836,7 @@ CREATE TRIGGER development_verification_observation_guard
 CREATE TRIGGER founder_assertion_guard
 CREATE TRIGGER founder_evidence_request_guard
 CREATE TRIGGER founder_evidence_request_resolution_guard
+CREATE TRIGGER founder_report_guard
 CREATE TRIGGER institutional_judgment_disposition_append_only_delete
 CREATE TRIGGER institutional_judgment_disposition_append_only_update
 CREATE TRIGGER institutional_judgment_disposition_guard
@@ -4860,6 +4898,7 @@ CREATE UNIQUE INDEX idx_role_permissions_unique ON role_permissions(role, permis
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
 END;
 END;
 END;

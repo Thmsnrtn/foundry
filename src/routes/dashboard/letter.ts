@@ -118,6 +118,24 @@ const evidenceQuestionSection = (
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">Answering tells me how your company works. It does not let me do anything on your behalf — that still needs a separate permission from you. If you skip, I'll leave it as something I don't know.</div>
   </div>`;
 
+// The founder tells Foundry something the company has to handle. The kind is
+// chosen explicitly rather than guessed from the words, so an ambiguous
+// sentence never becomes company ontology by accident.
+const reportObligationSection = (options: Array<[string, string]>) => html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Tell me something the company has to handle</div>
+    <form method="POST" action="/letter/company/report"
+      style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+      <select name="obligation_kind" style="font-size:0.78rem;">
+        ${options.map(([value, label]) => html`<option value="${value}">${label}</option>`)}
+      </select>
+      <input name="what" required maxlength="200" placeholder="What is it, in your words?"
+        style="flex:1;min-width:220px;" />
+      <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Add it</button>
+    </form>
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll start keeping track of it. I won't do anything about it — I'd need to understand it first, and then you'd have to give me permission separately.</div>
+  </div>`;
+
 letterRoutes.get('/letter', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
@@ -208,6 +226,8 @@ letterRoutes.get('/letter', async (c) => {
   const development = await getFounderDevelopmentActivity(ctx.productId);
   const { selectFounderEvidenceQuestion } = await import('../../services/institution/founder-evidence.js');
   const evidenceQuestion = await selectFounderEvidenceQuestion(ctx.productId);
+  const { REPORTABLE_OBLIGATIONS, OBLIGATION_LABELS } = await import('../../services/founder/company-report.js');
+  const obligationOptions: Array<[string, string]> = REPORTABLE_OBLIGATIONS.map((k) => [k, OBLIGATION_LABELS[k]]);
   // A day is not quiet if Foundry is blocked on something only the founder
   // knows. Hiding the question behind "nothing needs you" would be hiding
   // uncertainty, which founder UX may never do.
@@ -254,6 +274,7 @@ letterRoutes.get('/letter', async (c) => {
           : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${evidenceQuestionSection(evidenceQuestion)}
+      ${reportObligationSection(obligationOptions)}
       ${judgmentSection(materialJudgments)}
       ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
       ${development.permitted.length ? html`
@@ -632,5 +653,31 @@ letterRoutes.post('/letter/evidence/:requestId/defer', async (c) => {
   const { deferFounderEvidenceRequest } = await import('../../services/institution/founder-evidence.js');
   const deferred = await deferFounderEvidenceRequest(c.req.param('requestId'), founder.id as string);
   if (!deferred) return c.text('Answer refused', 403);
+  return c.redirect('/letter');
+});
+
+// The founder tells Foundry something their company has to handle. This is the
+// institution's evidence intake: until it existed, nothing in production
+// created a company signal at all, so nothing ever reached the first rung.
+//
+// The kind of obligation is chosen explicitly from a closed, generic set —
+// never inferred from prose — so an ambiguous message stays a conversation
+// instead of quietly becoming company ontology. Reporting is not permission:
+// what it creates is a visible responsibility with everything still to learn.
+letterRoutes.post('/letter/company/report', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const what = String(body.what ?? '').trim();
+  const obligationKind = String(body.obligation_kind ?? '');
+  if (!what) return c.text('Say what needs handling', 400);
+  if (what.length > 200) return c.text('Keep it to a short description', 400);
+
+  const { reportCompanyObligation } = await import('../../services/founder/company-report.js');
+  const reported = await reportCompanyObligation({
+    productId: ctx.productId, founderId: founder.id as string, obligationKind, what,
+  });
+  if (!reported) return c.text('Report refused', 403);
   return c.redirect('/letter');
 });

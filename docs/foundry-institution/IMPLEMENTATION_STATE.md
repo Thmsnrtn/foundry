@@ -703,6 +703,19 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## The evidence intake, and the production discovery bound (migration 126)
+
+- **Audit finding, worse than the one it was looking for:** `emitSignalEvent` — the only function that records a company signal **and** runs responsibility discovery — had **no caller anywhere in `src/`**. Nothing in production produced company evidence at all. The previous session's record said discovery was "driven in production"; it was reachable, and it was never fed. That correction matters more than the fix: the ladder's first rung had no supply either, so "the institution is dark above Visible" was understating it.
+- **Why the reachability gate missed it:** the gate scans `src/services/institution/**`, and the intake lives in `src/services/scp/events/`. It now asserts the intake directly — if the last caller of `emitSignalEvent` is ever removed, that fails here rather than in silence.
+- **The four-signal bound, audited as the owner asked:** the limit is **both** intentional and accidental. Intentional in its semantics — discovery admits only evidence whose operational responsibility is unambiguous, which is exactly why `nps_drop`, `revenue_milestone`, `expansion_signal`, and `competitor_signal` are excluded: they are observations, not obligations. Accidental in its vocabulary — the four admitted names are SaaS-shaped, so a marina or a blacksmith could only be recognised when its reality happened to fit a software company's words.
+- **Generalisation, keeping the semantics and dropping the vocabulary dependency:** an authenticated founder reports something the company must handle, choosing from a closed set of **generic operational obligations** — `recurring_work`, `customer_commitment`, `exception`, `revenue_collection`, `delivery`, `maintenance`, `development`, `operational_dependency`. No industry enums, no per-sector heuristics, and **nothing inferred from free-form prose**: the kind is stated explicitly, an unrecognised kind never becomes a responsibility, and ambiguous chat stays conversation. The responsibility is titled in the founder's own words — Foundry does not paraphrase the company back to itself. The original four integration signal kinds are unchanged, asserted by test.
+- **Constitutional boundary:** reporting an obligation is not permission to discharge it. Migration 126's guard verifies the founder against real product ownership and refuses a report carrying `consent`, `capability`, `authority`, `scope`, `to_mode`, `expires_at`, `grant`, or `state` — the whole report, not the field.
+- **Composition proven:** a blacksmith's forge, with no deployment, churn, or activation anywhere in it, is reported → recognised at Visible → asked the facts Foundry cannot observe → Understood. Two slices that were built separately compose into the first complete production path onto the ladder.
+- **Challenge (9 tests):** the intake wiring itself; recognition of a company unlike a software business; that reporting grants nothing; the full report → Understood path; refusal of unrecognised kinds and empty words at both service and database; the reportable set checked for industry names; foreign tenant and forged founder refused; four authority-smuggling payloads refused; and the original four signal kinds pinned unchanged.
+- **Evidence maturity:** E2. The path is proven locally end to end. Real founders reporting real obligations, and integrations feeding the same intake, remain unproven — and **integrations stay the preferred evidence for anything a system can actually observe**; founder report is the honest bridge, not the permanent answer.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the second autonomous session. Supersedes the previous continuation record. Everything needed to resume without reconstructing history.*

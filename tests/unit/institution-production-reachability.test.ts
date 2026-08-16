@@ -123,6 +123,24 @@ describe('institutional reachability', () => {
       `DARK names modules that no longer exist:\n${missing.join('\n')}`).toEqual([]);
   });
 
+  it('the institution has a production evidence intake that something calls', () => {
+    // The gate above scans institution modules, and by doing so it missed the
+    // worst orphan in the system: `emitSignalEvent` — the only function that
+    // records a company signal AND runs responsibility discovery — lived in
+    // src/services/scp and had no caller anywhere. Discovery was reachable and
+    // never fed, so nothing in production ever reached the first rung.
+    //
+    // Module-level reachability could not see that, so this asserts the intake
+    // directly. If the last caller is ever removed, the ladder loses its
+    // supply, and that must fail here rather than in silence.
+    const callers = tsFiles(resolve(ROOT, 'src'))
+      .filter((f) => !f.endsWith('services/scp/events/dispatcher.ts'))
+      .filter((f) => /\bemitSignalEvent\b/.test(readFileSync(f, 'utf8')));
+    expect(callers,
+      'Nothing produces company evidence. The institution cannot recognise a ' +
+      'responsibility it is never told about.').not.toEqual([]);
+  });
+
   it('the reasons are load-bearing, not decoration', () => {
     // A reason that says "later" is exactly the speculative architecture the
     // constitution forbids. Every entry must name a real blocker or a real
