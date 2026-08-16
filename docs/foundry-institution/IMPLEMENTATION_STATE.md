@@ -690,6 +690,19 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## Production reachability proof program (`production-reachability-v1`)
+
+- **The question it exists to answer:** can a normal new company actually enter the institutional ladder? Every other benchmark measures one step in isolation. This measures the path — observed evidence → recognised responsibility → sufficient grounding → Understood — including the part where Foundry must ask the founder because nothing it can see answers the question.
+- **Thresholds fixed prospectively**, before any behaviour was tuned against them, and every rate is absolute: grounded-responsibility precision 1, unsupported-responsibility rate 0, question relevance 1, unnecessary-question rate 0, claim precision 1, provenance completeness 1, unknown preservation 1, conflict preservation 1, question deduplication 1, tenant isolation and authority separation required, zero hard failures. Metrics stay separate so an average can never conceal a tenancy, provenance, authority, or invention failure.
+- **Catastrophic failures:** `invented_evidence`, `cross_tenant_claim`, `founder_answer_created_authority`, `unsupported_responsibility`, `hidden_maturity_jump`, `fabricated_company_fact`, `silence_treated_as_evidence`.
+- **Coverage integrity:** enforced across the corpus rather than per fixture — one company may legitimately have no conflict, the corpus may not. A test proves the point directly: an empty observation scores a vacuous 1 on every rate, and the gate still refuses it with `conflictPreservation_untested` and `claimPrecision_untested`.
+- **Corpus:** four companies, none of them software — a marina, a dance school, a printing house, an apiary supplier — each driven through the **real production services** (signal ingestion, `discoverResponsibilityFromSignal`, founder elicitation, the understanding projection) with nothing seeded past the first observation. One founder skips a question; one company receives a later independent observation that disagrees with an answer. A neighbouring company holds its own institutional state so tenant isolation is a real question rather than a vacuous one.
+- **Adversarial scoring proven, not assumed:** an injected claim with no evidence, a responsibility nobody discovered sitting at `operating` with a forged authority ref, and a consent the answer created together produce five hard failures; a claim derived from the founder *not* answering produces `silence_treated_as_evidence` and drops unknown preservation to zero.
+- **What a pass does not mean:** this is a synthetic corpus authored by the same author as the code. It proves the path is reachable and that its refusals hold. **It is not production proof, and no E4/E5 claim may be derived from it.**
+- **Evidence maturity:** E3 for production reachability over the exercised synthetic dimensions only — four companies, four admitted signal shapes, one responsibility each, one skip, one conflict. Real founders answering real questions remains unproven.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the second autonomous session. Supersedes the previous continuation record. Everything needed to resume without reconstructing history.*
