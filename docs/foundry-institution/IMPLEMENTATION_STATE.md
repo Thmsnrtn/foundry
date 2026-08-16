@@ -806,82 +806,91 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 # CONTINUATION — self-contained resume record
 
-*Rewritten 2026-08-16 at the close of the fifth autonomous session. Supersedes all earlier continuation records.*
+*Rewritten 2026-08-16 at the close of the sixth autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
-- **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. One accumulated branch; never merged to master (owner instruction).
-- **Migrations:** through **130**. Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **155 files / 1,248 tests**. The chain now includes `guards:nullsafe`.
+- **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
+- **Migrations:** through **131**. Schema snapshot regenerated and committed.
+- **Full `npm run check`:** green — **156 files / 1,259 tests**.
 - **Working tree:** clean.
-- **Environment notes:** `sqlite3` is not preinstalled; `scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first, and `console.*` trips the second (use `log` from `src/lib/logger.js`). Reword or fix the code; never the gate.
+- **Environment notes:** `sqlite3` is not preinstalled (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first; use `log` from `src/lib/logger.js`, never `console.*`. Fix the code, never the gate.
 
 ## What this session did
 
-1. **Systematic NULL-semantics audit of every guard (migration 130)** + `scripts/check-guard-null-safety.mjs`, mutation-tested both ways.
-2. **Explicit model-free founder fact affordance** — the founder-initiated half of the existing elicitation path, no new store.
-3. **Shadowing → Assisting made production-reachable** — the two missing writers, a founder-facing bounded grant, and revocation.
+**Inbound customer communication as canonical external evidence (migration 131)** — the intake the previous session identified as the missing piece, built provider-neutral, and proven **alone** as the owner's section 5 requires: no reply, no plan, no send.
 
-## The ladder, as it actually stands in production-facing code
+## Part 7 audit — completed, and it determines the next slice
+
+I audited how reply content is produced before wiring `planAssistedSupportEmail`, as instructed. Findings, verified:
+
+- **`planAssistedSupportEmail` expects already-authored content** — it takes `to`, `subject`, `html`, `rationale`, `effectId` and writes an `outbound_actions` row. It composes nothing.
+- **There is no governed support-reply generator anywhere in the repository.** `src/services/ai/composer.ts` is a generic model composer with no support contract, no grounding requirement, and no safety constraints for customer-facing text. `scp/agents/harbor.ts` is a customer-*intelligence* agent that emits signals; it drafts no replies and is not bound to an inbound message.
+- **No model currently produces candidate support replies.** Nothing is model-generated but production-dark in this area — the capability simply does not exist.
+
+**Therefore the next slice is a reply *proposal*, not autonomous generation.** The owner's own instruction applies directly: *"It is acceptable for the first production-reachability slice to stop at a truthful, founder-visible candidate reply if actual autonomous reply generation has not yet earned its contract. Do not use a canned meaningless reply merely to make the pipeline green."*
+
+Concretely, the recommended next build:
+1. A **founder-authored reply proposal** bound to a specific inbound message — the founder writes the reply, Foundry carries it. That is honest, deterministic, model-free, and it makes every downstream binding real.
+2. Then wire `planAssistedSupportEmail` with real inputs (§9): product, responsibility, exact consent, capability, fixed scope, inbound message identity, recipient from the message's `contact_email` (never caller-supplied), stable effect id, consequence class.
+3. Then execution-time revalidation (§10) — the existing checks in `currentAuthority()` already cover product, responsibility, `state='assisting'`, capability, consent, scope, consequence, expiry, and revocation. **Re-verify the race invariant** (authority valid at plan → revoked → execution attempted = NO SEND) and mutation-test one check.
+4. Only then the reachability gate extension (§13) and pilot readiness (§14–15).
+
+A model-drafted reply is a separate, later decision requiring the marginal-value discipline the cognition gate enforces, plus §8's full adversarial evaluation (prompt injection inside customer content, fabricated policies, invented refunds).
+
+## The ladder in production-facing code
 
 ```
 outside tool → POST /ingest/:token → external observation ──────────┐
 founder reports an obligation → discovery → Visible                 │
-  → founder answers (or volunteers) what Foundry cannot observe → Understood
+  → founder answers/volunteers what Foundry cannot observe → Understood
     → founder states a bounded expectation → Shadowing ─────────────┘
       → external reading → matched / deviated / unresolved
         → founder grants exact bounded authority → Assisting admission
-          → ✗ no production planner (see below)
+          → ✗ no reply proposal → ✗ no planner caller → ✗ no send
+
+provider adapter → POST /ingest/customer-message/:channelKey
+  → canonical message evidence, attributed by channel binding    ← NEW, and
+    currently a leaf: nothing consumes messages yet.
 ```
-Alongside: two understood responsibilities → their costs → company capacity → a deterministic judgment that authorises nothing.
 
-Everything above is **E2 — local runtime**. Nothing here has been exercised by a real founder or a real outside system.
-
-## The one honest gap, and why it is not mine to close
-
-`planAssistedSupportEmail` has **no production caller**, deliberately. Planning a support reply requires knowing *whom* to write to and *about what*. The only independent observation channel in production is metric movement, which can say support volume fell but cannot identify a waiting customer or their question. Wiring a planner to that would be fabricated linkage.
-
-**The missing piece is an inbound customer-message source** — a real support/email/webhook intake — not more institutional machinery. Until one exists, Assisting is reachable through admission and no further, and no end-to-end execution claim may be made.
+All of it is **E2 — local runtime**. Nothing has been exercised by a real founder, a real outside system, or a real provider.
 
 ## Evidence frontier (do not inflate)
 
-| Capability | Level | Scope of the claim |
+| Capability | Level | Scope |
 |---|---|---|
-| Bounded sparse reconstruction | E3 | exercised fixture dimensions only |
-| Responsibility recognition | E3 | exercised dimensions + an unfamiliar-company corpus |
-| Responsibility understanding | E3 | four exercised capability shapes |
-| Shadowing | E3 | **prior synthetic dimensions only** |
-| Assisting (support reply) | E3 | **prior synthetic dimensions only — not extended this session** |
-| Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus |
-| Development (recognition → outcome) | E3 | five synthetic companies, one change class |
+| Reconstruction / recognition / understanding / Shadowing / judgment / development | E3 | prior exercised synthetic dimensions only |
+| Assisting (support reply) | E3 | **prior synthetic dimensions only — unchanged for three sessions** |
 | Production reachability | E3 | four synthetic non-software companies |
-| Everything wired this session | E2 | local runtime through production-facing services |
+| Everything wired in sessions 4–6 | E2 | local runtime through production-facing services |
 | Assisting → Operating | frozen | migration 115; unchanged |
-| Real founders, real outside systems, pilots, production | unproven | E4/E5/E6 |
+| Real founders, providers, pilots, production | unproven | E4/E5/E6 |
 
 ## Open proof debt
 
-- **Nothing has met reality.** No real founder, no real outside tool, no real inbound message.
-- **Assisting execution** blocked on an inbound customer-message source (above).
-- Judgment observation still cannot report `contradicted` — needs an observer that can see a deadline pass.
-- Development paths (`development-observation.ts`, `development-shadowing.ts`) remain on the reachability gate's DARK list.
-- Executive cognition (Tranche 4): no marginal-value comparison. The cognition gate forces one before adoption.
-- Economics (Tranche 12): near-vacuous while the institution is model-free.
+- **Nothing has met reality.** No real founder, outside tool, or provider.
+- **Reply proposal → plan → execution** is the open chain (above).
+- **Message consumers:** inbound messages are currently a leaf. Until a proposal path exists, nothing reads them.
+- **Outcome (§12) remains untouched and must stay so:** provider acknowledgement, delivery, customer silence, and elapsed time are all *not* resolution. If a provider can emit an explicit case-status event, audit whether its contract genuinely establishes the outcome before believing it. Preserve `unresolved`.
+- Judgment observation still cannot report `contradicted`.
+- Development paths remain on the reachability gate's DARK list.
+- Executive cognition: no marginal-value comparison; the cognition gate forces one.
+- Economics: near-vacuous while the institution is model-free.
 - Duplicate founder reports still create duplicate responsibilities.
-- Re-asking after deferral is deliberately absent rather than given an invented interval.
-- The NULL-safety gate does not analyse nullable **columns** compared with `NOT IN`/`<>` — that needs schema nullability analysis, and one of the two real defects was that shape. Trigger tests are the backstop; the script says so itself.
+- NULL-safety gate does not analyse nullable **columns**; trigger tests are the backstop.
 
 ## Next highest-value unblocked work
 
-1. **Pilot-readiness infrastructure (owner Part V)** — owner-visible authority and revocation now exist; what remains is auditability, clear unresolved states, an intervention path, receipt/outcome reconciliation surfaces, and an emergency stop. Build as readiness, never as pilot evidence.
-2. **An inbound message intake** would unblock Assisting execution end to end. Treat it as an ordinary governed intake, and do not let provider acknowledgement stand in for business outcome.
-3. **Recursive Foundry operation through ordinary authority** — the identity work is done; the grant path now exists.
-4. **Non-software generalization sweep** across the shapes the owner named, preserving abstention.
-5. **Simplification sweep over `src/services/**`** — the reachability gate covers the institution only.
+1. **Founder-authored reply proposal** bound to an inbound message (§7 conclusion above).
+2. **Wire the planner** with real inputs, then execution revalidation and the race invariant (§9–10).
+3. **Extend the reachability gate** across intake → association → authority → admission → proposal → planner → execution, mutation-testing one disconnected link (§13).
+4. **Pilot readiness** on existing surfaces — never a pilot dashboard, never simulated E4 (§14–15).
+5. Recursive Foundry operation through ordinary authority; unfamiliar-company breadth; deletion sweep.
 
 ## Working rules that mattered most
 
-- **Audit the writers, not just the modules.** Four sessions running, the biggest finding was something built, reachable, benchmarked, and never called. This session it was `recordConsent` — full responsibility-bound authority support with zero callers.
-- **A guard is not a guard until you have tried to slip past it.** The NULL audit found two live fail-open defects, one of which let an institutional judgment exist with no evidence at all.
-- **Verify the gap before building for it.** The Shadowing → Assisting gap looked architectural and was not; it was two missing function calls.
-- **When the honest path stops, stop and say why.** The support planner is unwired because the evidence to drive it does not exist, not because the code is missing.
+- **Audit the writers, not just the modules.** Five sessions running, the biggest finding was something built and never called.
+- **Attribution must be structural, not semantic.** The temptation this session was to infer which responsibility a customer message belongs to from its text. Binding the channel to the responsibility makes it a fact instead of a guess.
+- **Identity comes from the credential, not the payload.** If the authentication channel can establish the source, the body must not be able to claim it.
+- **When the honest path stops, stop and say why.** There is still no reply generator; inventing one to turn the pipeline green would have been the worst available outcome.
