@@ -761,6 +761,19 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 
 ---
 
+## The explicit founder fact affordance — model-free, and no new store
+
+- **Owner decision:** no model interprets arbitrary chat into company evidence yet. Chat stays chat. The founder may deliberately state a bounded fact through a structured interaction, using only fact shapes the institution currently consumes.
+- **No new noun, no new path.** This is the founder-**initiated** half of the same elicitation already in place. The selection logic was refactored into a pure `factOpportunities()` — what the institution is currently blocked on, highest value first — which now serves both directions: `selectFounderEvidenceQuestion()` materialises the first one as a question, and `listFounderFactOpportunities()` returns the top five for the founder to choose from. Submission opens the same request row and records through the same authenticated answer, into the same `signal_events` → reconstruction path.
+- **The offered shapes come from real consumers, never from a field list.** An opportunity exists only because the understanding projection or the capacity judgment is waiting on it. A founder cannot volunteer into a predicate nothing consumes, and cannot restate one that is already grounded — `submitFounderFact` re-resolves the opportunity server-side and returns null if it is not currently live.
+- **Two stages, and the first writes nothing.** Listing is pure. `previewFounderFact()` is pure. The founder sees the exact sentence Foundry would remember — *"Keeping up "Answer the shop phone" takes about 2 days of my time a week — …"* — and only an explicit second POST stores it. Cancelling is simply not confirming; there is nothing to roll back.
+- **Replay is inert by construction rather than by a flag:** a resubmitted fact is one that is now grounded, so it is no longer an opportunity, so it resolves to nothing.
+- **Challenge (10 tests):** nothing offered for a company with nothing recognised; every offer names a real responsibility and contains no internal vocabulary; opening and previewing create no signal, claim, or request; submission stores exactly one claim through a real signal event; replay inert; three unconsumed facts refused; foreign tenant and caller-supplied identity refused; responsibility facts and company facts stay at their own scope, with a structured fact stated as prose refused; no consent, execution, or maturity created; a later contradicting observation preserved as a conflict with the contested fact no longer offered; and an assertion that the conversational surface writes no canonical fact.
+- **Not claimed:** this is not semantically general. Foundry understands only the fact shapes it already consumes, and says so by offering nothing else. Interpreting free prose remains unbuilt and unclaimed.
+- **Evidence maturity:** E2 — local runtime through production-facing services.
+
+---
+
 # CONTINUATION — self-contained resume record
 
 *Rewritten 2026-08-16 at the close of the fourth autonomous session. Supersedes all earlier continuation records.*

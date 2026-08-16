@@ -141,6 +141,33 @@ const reportObligationSection = (options: Array<[string, string]>) => html`
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll start keeping track of it. I won't do anything about it — I'd need to understand it first, and then you'd have to give me permission separately.</div>
   </div>`;
 
+// "Tell me something important." The founder-initiated half of the same
+// elicitation path — the shapes offered are exactly the facts an institutional
+// consumer is currently waiting on, never a list of fields that happen to
+// exist. Choosing one and typing an answer shows the founder the exact sentence
+// Foundry would remember, and nothing is remembered until they confirm it.
+const tellMeSection = (
+  opportunities: Array<import('../../services/institution/founder-evidence.js').FactOpportunity
+    & { question: string; answerShape: 'text' | 'resource_amount' }>,
+) => opportunities.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Tell me something important</div>
+    <form method="POST" action="/letter/facts/preview"
+      style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+      <select name="opportunity" style="font-size:0.78rem;max-width:100%;">
+        ${opportunities.map((o, i) => html`<option value="${i}">${o.question}</option>`)}
+      </select>
+      <input name="resource" maxlength="60" placeholder="Of what? (only if I asked)"
+        style="flex:1;min-width:150px;" />
+      <input name="amount" type="number" min="0" step="any" placeholder="How much?"
+        style="width:120px;" />
+      <input name="statement" required maxlength="1000" placeholder="In your own words"
+        style="flex:1;min-width:200px;" />
+      <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Show me what you'd remember</button>
+    </form>
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">You'll see exactly what I'd write down before anything is saved. Telling me something does not let me act on it.</div>
+  </div>`;
+
 letterRoutes.get('/letter', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
@@ -231,6 +258,8 @@ letterRoutes.get('/letter', async (c) => {
   const development = await getFounderDevelopmentActivity(ctx.productId);
   const { selectFounderEvidenceQuestion } = await import('../../services/institution/founder-evidence.js');
   const evidenceQuestion = await selectFounderEvidenceQuestion(ctx.productId);
+  const { listFounderFactOpportunities } = await import('../../services/institution/founder-evidence.js');
+  const factOpportunities = await listFounderFactOpportunities(ctx.productId);
   const { REPORTABLE_OBLIGATIONS, OBLIGATION_LABELS } = await import('../../services/founder/company-report.js');
   const obligationOptions: Array<[string, string]> = REPORTABLE_OBLIGATIONS.map((k) => [k, OBLIGATION_LABELS[k]]);
   // A day is not quiet if Foundry is blocked on something only the founder
@@ -280,6 +309,7 @@ letterRoutes.get('/letter', async (c) => {
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${evidenceQuestionSection(evidenceQuestion)}
       ${reportObligationSection(obligationOptions)}
+      ${tellMeSection(factOpportunities)}
       ${judgmentSection(materialJudgments)}
       ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
       ${development.permitted.length ? html`
@@ -714,5 +744,77 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/watch', async (c) 
   });
   // Do not reveal whether another tenant's responsibility exists.
   if (!started) return c.text('Refused', 403);
+  return c.redirect('/letter');
+});
+
+// Stage one of the founder-initiated fact path: show, do not store. This route
+// writes nothing at all — it renders the exact sentence Foundry would remember
+// and asks the founder to confirm it. Cancelling is simply not confirming.
+letterRoutes.post('/letter/facts/preview', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const statement = String(body.statement ?? '').trim();
+  if (!statement || statement.length > 1000) return c.text('Say it in a sentence or two', 400);
+
+  const { listFounderFactOpportunities, previewFounderFact } = await import(
+    '../../services/institution/founder-evidence.js'
+  );
+  const opportunities = await listFounderFactOpportunities(ctx.productId);
+  const chosen = opportunities[Number(body.opportunity ?? -1)];
+  if (!chosen) return c.text('That is not something I am waiting on', 400);
+
+  const resource = String(body.resource ?? '').trim() || undefined;
+  const rawAmount = String(body.amount ?? '').trim();
+  const amount = rawAmount === '' ? undefined : Number(rawAmount);
+  const preview = previewFounderFact({
+    fact: chosen.fact, scope: chosen.scope, responsibilityTitle: chosen.responsibilityTitle,
+    statement, resource, amount,
+  });
+  if (!preview) return c.text('I need both what it is and how much, as a number', 400);
+
+  const content = html`
+    <h1 style="margin-bottom:0.25rem;">Is this right?</h1>
+    <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">Nothing is saved yet.</p>
+    <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What I would remember</div>
+      <div style="font-size:0.95rem;color:var(--text-primary);">${preview}</div>
+      <form method="POST" action="/letter/facts/confirm" style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+        <input type="hidden" name="fact" value="${chosen.fact}" />
+        <input type="hidden" name="scope" value="${chosen.scope}" />
+        <input type="hidden" name="responsibility_id" value="${chosen.responsibilityId}" />
+        <input type="hidden" name="statement" value="${statement}" />
+        <input type="hidden" name="resource" value="${resource ?? ''}" />
+        <input type="hidden" name="amount" value="${rawAmount}" />
+        <button type="submit" class="btn btn-primary" style="font-size:0.8rem;">Yes, remember that</button>
+        <a href="/letter" class="btn btn-ghost" style="font-size:0.8rem;">No, cancel</a>
+      </form>
+      <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem;">This tells me how your company works. It does not let me do anything on your behalf.</div>
+    </div>`;
+  return c.html(dashboardLayout(ctx, content));
+});
+
+// Stage two: explicit authenticated confirmation. The product, the fact, and
+// its scope are all re-resolved server-side against what the institution is
+// actually waiting on, so a replayed or hand-edited submission for a fact that
+// is already grounded resolves to nothing.
+letterRoutes.post('/letter/facts/confirm', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const rawAmount = String(body.amount ?? '').trim();
+
+  const { submitFounderFact } = await import('../../services/institution/founder-evidence.js');
+  const recorded = await submitFounderFact({
+    productId: ctx.productId, founderId: founder.id as string,
+    fact: String(body.fact ?? ''), scope: String(body.scope ?? ''),
+    responsibilityId: String(body.responsibility_id ?? ''),
+    statement: String(body.statement ?? ''),
+    resource: String(body.resource ?? '').trim() || undefined,
+    amount: rawAmount === '' ? undefined : Number(rawAmount),
+  });
+  if (!recorded) return c.text('I could not use that', 403);
   return c.redirect('/letter');
 });
