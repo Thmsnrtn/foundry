@@ -48,7 +48,12 @@ export async function earnResponsibilityUnderstanding(productId:string,responsib
   if (understanding.responsibility.state!=='visible' || understanding.missingCriticalFacts.length || understanding.unresolvedFacts.length) {
     throw new Error('responsibility understanding insufficient');
   }
-  const evidence=understanding.facts.find((fact)=>fact.predicate==='purpose')!;
+  // `facts` is the full appended history, oldest first, so a fact the founder
+  // later revised appears twice. The transition must cite the claim that
+  // establishes understanding NOW — taking the first would ground the rung in
+  // a superseded statement.
+  const purposeClaims=understanding.facts.filter((fact)=>fact.predicate==='purpose');
+  const evidence=purposeClaims[purposeClaims.length-1];
   return transitionResponsibility({productId,responsibilityId,from:'visible',to:'understood',
     evidenceRef:`reconstruction_claim:${evidence.claimId}`,reason:'Critical operating facts are current and canonically grounded',
     actorRef:'institution:responsibility_understanding_verifier'});

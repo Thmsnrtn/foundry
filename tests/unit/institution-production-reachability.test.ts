@@ -52,14 +52,11 @@ const DARK: Record<string, string> = {
   'responsibility-shadowing-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
   'responsibility-understanding-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
 
-  // The responsibility ladder above Visible is not driven in production, and
-  // cannot honestly be until Foundry observes the facts each rung requires.
-  // Understanding needs eight provenance-bearing claims about a responsibility;
-  // Shadowing needs an independent observer of the same reality. For a
-  // customer's company those facts come from the founder or an integration,
-  // and neither supply exists yet. Wiring a driver now would mean inventing
+  // Understanding left this list when migration 125 gave the founder a way to
+  // supply the facts no connected system observes. Shadowing has not: it needs
+  // an independent observer of the same reality, and for a customer's company
+  // that supply does not exist yet. Wiring a driver now would mean inventing
   // the evidence, which is the one thing the evidence ladder forbids.
-  'responsibility-understanding.ts': 'blocked on real evidence supply — see IMPLEMENTATION_STATE proof debt',
   'development-observation.ts': 'blocked — development responsibilities are not discovered in production',
   'development-shadowing.ts': 'blocked — development responsibilities are not discovered in production',
 };

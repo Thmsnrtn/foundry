@@ -95,6 +95,29 @@ const judgmentSection = (
       </div>`)}
   </div>`;
 
+// One question, when Foundry genuinely cannot learn a material fact any other
+// way. It says which responsibility it is about and why it is asking, so the
+// founder can judge whether answering is worth their time — and it never
+// implies that answering lets Foundry act.
+const evidenceQuestionSection = (
+  q: import('../../services/institution/founder-evidence.js').FounderEvidenceQuestion | null,
+) => q === null ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">One thing I still need to know</div>
+    <div style="font-size:0.78rem;color:var(--text-muted);">${q.because}.</div>
+    <div style="font-size:0.95rem;color:var(--text-primary);margin-top:0.5rem;">${q.question}</div>
+    <form method="POST" action="/letter/evidence/${q.requestId}/answer"
+      style="display:flex;gap:0.4rem;margin-top:0.5rem;align-items:center;flex-wrap:wrap;">
+      <input name="statement" required maxlength="1000" placeholder="In your own words"
+        style="flex:1;min-width:220px;" />
+      <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Tell me</button>
+    </form>
+    <form method="POST" action="/letter/evidence/${q.requestId}/defer" style="margin-top:0.35rem;">
+      <button type="submit" class="btn btn-ghost" style="font-size:0.7rem;padding:0.2rem 0.45rem;">Skip this</button>
+    </form>
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">Answering tells me how your company works. It does not let me do anything on your behalf — that still needs a separate permission from you. If you skip, I'll leave it as something I don't know.</div>
+  </div>`;
+
 letterRoutes.get('/letter', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
@@ -183,8 +206,13 @@ letterRoutes.get('/letter', async (c) => {
   const materialJudgments = await getMaterialJudgments(ctx.productId);
   const { getFounderDevelopmentActivity } = await import('../../services/institution/development-assisting.js');
   const development = await getFounderDevelopmentActivity(ctx.productId);
+  const { selectFounderEvidenceQuestion } = await import('../../services/institution/founder-evidence.js');
+  const evidenceQuestion = await selectFounderEvidenceQuestion(ctx.productId);
+  // A day is not quiet if Foundry is blocked on something only the founder
+  // knows. Hiding the question behind "nothing needs you" would be hiding
+  // uncertainty, which founder UX may never do.
   const hasResponsibilitySummary = Object.values(responsibilitySummary).some((items) => items.length > 0)
-    || materialJudgments.length > 0;
+    || materialJudgments.length > 0 || evidenceQuestion !== null;
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
     : null;
@@ -225,6 +253,7 @@ letterRoutes.get('/letter', async (c) => {
           ? `the outcome remains unresolved (${item.observedSummary})`
           : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
+      ${evidenceQuestionSection(evidenceQuestion)}
       ${judgmentSection(materialJudgments)}
       ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
       ${development.permitted.length ? html`
@@ -570,4 +599,38 @@ letterRoutes.post('/talk/message', async (c) => {
   } catch {
     return c.json({ error: 'The company could not respond (AI unavailable)' }, 503);
   }
+});
+
+// The founder answers one question about their own company. The authenticated
+// session is the only identity source: the product, the responsibility, and the
+// fact being answered are all resolved server-side from the request id plus real
+// ownership, so a caller cannot answer another tenant's question, answer a
+// question that was never asked, or replay one that is already resolved.
+//
+// An answer is evidence. It creates no consent, no capability, and no maturity —
+// the database refuses a payload that even carries the shape of one.
+letterRoutes.post('/letter/evidence/:requestId/answer', async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.parseBody();
+  const statement = String(body.statement ?? '').trim();
+  if (!statement) return c.text('An answer is required', 400);
+  if (statement.length > 1000) return c.text('That is longer than I can take in one answer', 400);
+
+  const { recordFounderEvidenceAnswer } = await import('../../services/institution/founder-evidence.js');
+  const recorded = await recordFounderEvidenceAnswer({
+    requestId: c.req.param('requestId'), founderId: founder.id as string, statement,
+  });
+  // Do not reveal whether another tenant's question, or a resolved one, exists.
+  if (!recorded) return c.text('Answer refused', 403);
+  return c.redirect('/letter');
+});
+
+// Setting a question aside leaves the fact unknown. Silence is never recorded as
+// a negative answer, and Foundry does not ask again.
+letterRoutes.post('/letter/evidence/:requestId/defer', async (c) => {
+  const founder = c.get('founder');
+  const { deferFounderEvidenceRequest } = await import('../../services/institution/founder-evidence.js');
+  const deferred = await deferFounderEvidenceRequest(c.req.param('requestId'), founder.id as string);
+  if (!deferred) return c.text('Answer refused', 403);
+  return c.redirect('/letter');
 });
