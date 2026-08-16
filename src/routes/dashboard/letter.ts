@@ -144,6 +144,8 @@ letterRoutes.get('/letter', async (c) => {
   const responsibilityCandidates = await getPendingResponsibilityCandidates(ctx.productId);
   const { getMaterialShadowingExceptions } = await import('../../services/institution/responsibility-shadowing.js');
   const shadowingExceptions = await getMaterialShadowingExceptions(ctx.productId);
+  const { getFounderAssistingActivity } = await import('../../services/institution/responsibility-assisted-email.js');
+  const assistingActivity = await getFounderAssistingActivity(ctx.productId);
   const hasResponsibilitySummary = Object.values(responsibilitySummary).some((items) => items.length > 0);
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
@@ -184,6 +186,7 @@ letterRoutes.get('/letter', async (c) => {
         `${item.title} — expected ${item.expectedEventType}; ${item.classification === 'unresolved'
           ? `the outcome remains unresolved (${item.observedSummary})`
           : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
+      ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${responsibilityCandidates.length ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Possible responsibilities requiring your judgment</div>
