@@ -246,6 +246,28 @@ describe('institutional judgment in production', () => {
     )).rejects.toThrow(/judgment_invalid/);
   });
 
+  it('refuses an observation carrying no evidence at all', async () => {
+    // Migration 124's guard had a NULL trap: `json_type(payload,'$.missing')`
+    // is NULL, `NULL <> 'array'` is NULL, and a RAISE guarded by an OR chain of
+    // false and NULL does not fire. The guard therefore accepted exactly what it
+    // existed to refuse — an observation claiming an expectation was supported,
+    // with nothing behind it. Migration 128 coalesces every absence.
+    const p = 'jp_groundless';
+    await overSubscribedCompany(p);
+    const { judgmentId } = await runInstitutionalJudgmentPass(p);
+    for (const payload of [
+      { judgment_id: judgmentId },
+      { judgment_id: judgmentId, evidence_claim_ids: [] },
+      { judgment_id: judgmentId, evidence_claim_ids: 'not-an-array' },
+    ]) {
+      await expect(query(
+        `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+         VALUES (?,?,'institutional_judgment_observation','judgment_expected_supported','low',?,'Groundless')`,
+        [`jp_groundless_${JSON.stringify(payload).length}`, p, JSON.stringify(payload)],
+      )).rejects.toThrow(/payload_invalid/);
+    }
+  });
+
   it('is wired to a scheduled pass, so the founder-facing loop has a supply', () => {
     // The defect this slice closes was an orphan: machinery with no writer. The
     // wiring itself is therefore part of the contract.

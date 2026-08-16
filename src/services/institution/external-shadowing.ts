@@ -1,0 +1,212 @@
+// =============================================================================
+// FOUNDRY — Shadowing against externally observed reality (migration 127)
+//
+// Shadowing means: Foundry states in advance what it expects to see if a
+// responsibility is being carried, then finds out. It was the last rung with no
+// honest supply, because every observation Foundry could produce came from
+// Foundry.
+//
+// The expectation here is the founder's, stated as a bounded structured choice
+// rather than parsed out of prose — a metric an outside system already reports,
+// and a direction. Foundry does not infer "support is handled" from "support
+// volume fell"; it records that the founder said the second is what they would
+// expect to see, and then compares.
+//
+// Two refusals that keep the rung honest:
+//
+//   • Shadowing may only begin on a channel that has ALREADY produced real
+//     external evidence. Otherwise entering the rung is a promise that
+//     observation will arrive rather than proof that it does.
+//   • Absence stays unresolved. No external reading in the window is neither
+//     success nor failure, and it is never rounded toward either.
+//
+// Shadowing authorises nothing. It is watching, and being right while watching
+// is still not permission.
+// =============================================================================
+
+import { nanoid } from 'nanoid';
+import { query } from '../../db/client.js';
+import { recordReconstructionClaim } from './reconstruction.js';
+import { getResponsibility, type Responsibility } from './responsibility.js';
+import { beginResponsibilityShadowing, compareShadowObservation } from './responsibility-shadowing.js';
+import {
+  availableObservationChannels, externalObservationEventType,
+  isObservableField, type ObservedDirection,
+} from './external-observation.js';
+
+/** Plain labels for the founder. The metric column never appears on screen. */
+export const OBSERVABLE_FIELD_LABELS: Record<string, string> = {
+  new_mrr_cents: 'new revenue',
+  expansion_mrr_cents: 'revenue from existing customers',
+  contraction_mrr_cents: 'revenue lost to downgrades',
+  churned_mrr_cents: 'revenue lost to cancellations',
+  activation_rate: 'how many new people get started',
+  day_30_retention: 'how many people are still here after a month',
+  churn_rate: 'how many people leave',
+  mrr_health_ratio: 'money lost against money won',
+  signups_7d: 'new signups',
+  active_users: 'people actively using it',
+  support_volume_7d: 'how much support comes in',
+  nps_score: 'how people rate us',
+};
+
+export interface ShadowableResponsibility {
+  responsibilityId: string;
+  title: string;
+  channels: Array<{ field: string; label: string }>;
+}
+
+/**
+ * Responsibilities that could honestly be shadowed right now: understood, not
+ * already shadowing, and with at least one live external observation channel.
+ */
+export async function getShadowableResponsibilities(
+  productId: string,
+): Promise<ShadowableResponsibility[]> {
+  const channels = await availableObservationChannels(productId);
+  if (!channels.length) return [];
+  const rows = await query(
+    `SELECT id,title FROM institutional_responsibilities
+      WHERE product_id=? AND state='understood' AND disposition='active' ORDER BY created_at,id`,
+    [productId],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
+    responsibilityId: String(row.id), title: String(row.title),
+    channels: channels.map((field) => ({ field, label: OBSERVABLE_FIELD_LABELS[field] ?? field })),
+  }));
+}
+
+/**
+ * The founder states what they would expect to see if this responsibility is
+ * being carried, and Foundry begins watching.
+ *
+ * The expectation is recorded as a provenance-bearing claim grounded in the
+ * founder's own authenticated statement, exactly like every other founder fact.
+ * The observation source cited is a real prior external reading, so the channel
+ * is proven rather than assumed.
+ */
+export async function beginExternalMetricShadowing(input: {
+  productId: string; responsibilityId: string; founderId: string;
+  field: string; direction: ObservedDirection; validUntil?: Date;
+}): Promise<Responsibility | null> {
+  if (!isObservableField(input.field)) return null;
+  if (!['rose', 'fell', 'held'].includes(input.direction)) return null;
+
+  const owned = await query(
+    `SELECT r.id FROM institutional_responsibilities r JOIN products p ON p.id=r.product_id
+      WHERE r.id=? AND r.product_id=? AND p.owner_id=? AND r.state='understood'`,
+    [input.responsibilityId, input.productId, input.founderId],
+  );
+  if (!owned.rows.length) return null;
+
+  // The channel must already have produced real outside evidence for this
+  // exact metric. Entering Shadowing on a silent channel would be a promise.
+  const channel = await query(
+    `SELECT id FROM signal_events
+      WHERE product_id=? AND source='external_metric_ingest'
+        AND json_extract(payload_json,'$.field')=?
+      ORDER BY created_at DESC LIMIT 1`,
+    [input.productId, input.field],
+  );
+  if (!channel.rows.length) return null;
+  const channelSignalId = String((channel.rows[0] as Record<string, unknown>).id);
+
+  // The founder's statement is the evidence for the expectation. It is a
+  // bounded structured choice, not prose Foundry interpreted.
+  const statementId = nanoid();
+  await query(
+    `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+     VALUES (?,?,'founder_assertion_structured',?,'low',?,?)`,
+    [statementId, input.productId, `founder_expects:${input.field}:${input.direction}`,
+      JSON.stringify({
+        founder_id: input.founderId, responsibility_id: input.responsibilityId,
+        field: input.field, direction: input.direction,
+      }),
+      `The founder said what they would expect to see if this is being handled`],
+  );
+  const expectationClaimId = await recordReconstructionClaim({
+    productId: input.productId, subject: `responsibility:${input.responsibilityId}`,
+    predicate: 'shadow_expectation',
+    value: { field: input.field, direction: input.direction },
+    epistemicStatus: 'known',
+    evidenceRefs: [{ kind: 'signal_event', id: statementId }],
+    derivationMethod: 'authenticated founder expectation, stated as a bounded choice',
+    observedAt: new Date(),
+  });
+
+  await beginResponsibilityShadowing({
+    productId: input.productId, responsibilityId: input.responsibilityId,
+    expectedEventType: externalObservationEventType(input.field, input.direction),
+    expectationClaimId, observationSourceSignalId: channelSignalId,
+    validUntil: input.validUntil,
+  });
+  return getResponsibility(input.productId, input.responsibilityId);
+}
+
+export interface ExternalShadowResolution {
+  classification: 'matched' | 'deviated' | 'unresolved';
+  observationsConsidered: number;
+  learnedClaimId: string | null;
+}
+
+/**
+ * Compare the expectation against every external reading that arrived after it.
+ *
+ * Deviation dominates. A favourable reading cannot bury an unfavourable one, so
+ * a channel that reported both the expected movement and its opposite resolves
+ * as deviated rather than matched. With no reading at all, the answer is
+ * unresolved — absence is not a result.
+ */
+export async function resolveExternalMetricShadowing(
+  productId: string, expectationId: string,
+): Promise<ExternalShadowResolution> {
+  const expectation = (await query(
+    `SELECT expected_event_type,created_at,responsibility_id FROM responsibility_shadow_expectations
+      WHERE id=? AND product_id=?`, [expectationId, productId],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!expectation) throw new Error('external shadow resolution refused');
+
+  const field = String(expectation.expected_event_type).split(':')[1];
+  // Strictly after the expectation, and only from the external channel. Both
+  // are also refused by migration 127 at insert time; reading them the same way
+  // here means the caller cannot present a comparison the guard would reject.
+  const observations = await query(
+    `SELECT id,event_type FROM signal_events
+      WHERE product_id=? AND source='external_metric_ingest'
+        AND json_extract(payload_json,'$.field')=?
+        AND datetime(created_at)>datetime(?)
+      ORDER BY created_at,id`,
+    [productId, field, String(expectation.created_at)],
+  );
+  const rows = observations.rows as unknown as Array<Record<string, unknown>>;
+  if (!rows.length) return { classification: 'unresolved', observationsConsidered: 0, learnedClaimId: null };
+
+  let classification: 'matched' | 'deviated' | 'unresolved' = 'unresolved';
+  for (const row of rows) {
+    const result = await compareShadowObservation({
+      productId, expectationId, observationSignalId: String(row.id),
+    });
+    if (result === 'deviated') classification = 'deviated';
+    else if (result === 'matched' && classification !== 'deviated') classification = 'matched';
+  }
+
+  // What was learned is recorded as an ordinary claim with real provenance:
+  // the external readings themselves, not Foundry's summary of them.
+  //
+  // The status is `known` even when the expectation failed. The comparison
+  // result is not in doubt — what deviated is the world from the prediction,
+  // and that disagreement is the claim's value, not an epistemic conflict about
+  // a fact. Marking it `conflicting` would also have meant reaching for a
+  // second evidence source to satisfy the multi-source rule, which is exactly
+  // the kind of accommodation that turns an invariant into a formality.
+  const learnedClaimId = await recordReconstructionClaim({
+    productId, subject: `responsibility:${String(expectation.responsibility_id)}`,
+    predicate: 'shadow_comparison',
+    value: { expected: String(expectation.expected_event_type), classification },
+    epistemicStatus: 'known',
+    evidenceRefs: rows.map((row) => ({ kind: 'signal_event' as const, id: String(row.id) })),
+    derivationMethod: 'bounded comparison against independently observed readings',
+    observedAt: new Date(),
+  });
+  return { classification, observationsConsidered: rows.length, learnedClaimId };
+}

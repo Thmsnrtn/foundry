@@ -681,3 +681,29 @@ letterRoutes.post('/letter/company/report', async (c) => {
   if (!reported) return c.text('Report refused', 403);
   return c.redirect('/letter');
 });
+
+// The founder says what they would expect to see from outside if a
+// responsibility is being carried, and Foundry starts watching. The metric and
+// the direction are chosen from what an outside system already reports — never
+// parsed out of prose — so the expectation is the founder's, stated exactly.
+//
+// Watching is not permission. Being right while watching is still not
+// permission.
+letterRoutes.post('/letter/responsibilities/:responsibilityId/watch', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const field = String(body.field ?? '');
+  const direction = String(body.direction ?? '');
+  if (!['rose', 'fell', 'held'].includes(direction)) return c.text('Invalid expectation', 400);
+
+  const { beginExternalMetricShadowing } = await import('../../services/institution/external-shadowing.js');
+  const started = await beginExternalMetricShadowing({
+    productId: ctx.productId, responsibilityId: c.req.param('responsibilityId'),
+    founderId: founder.id as string, field, direction: direction as 'rose' | 'fell' | 'held',
+  });
+  // Do not reveal whether another tenant's responsibility exists.
+  if (!started) return c.text('Refused', 403);
+  return c.redirect('/letter');
+});

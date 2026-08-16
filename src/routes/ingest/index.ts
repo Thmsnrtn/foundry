@@ -171,6 +171,28 @@ ingestRoutes.post('/ingest/:token', async (c) => {
     // Invalidate Signal cache so next read recomputes fresh
     invalidateSignalCache(productId);
 
+    // The institution's only source of evidence it did not produce itself.
+    // This reading came from outside over an authenticated tenant-bound
+    // channel and knows nothing about any expectation, which is what makes it
+    // usable as independent observation for Shadowing. Recording it must never
+    // fail the founder's ingest.
+    try {
+      const { recordExternalMetricObservations } = await import(
+        '../../services/institution/external-observation.js'
+      );
+      await recordExternalMetricObservations({
+        productId, origin: 'ingest_endpoint',
+        readings: columns.map((field, i) => ({ field, observedValue: Number(values[i]) }))
+          .filter((r) => Number.isFinite(r.observedValue)),
+      });
+    } catch (err) {
+      const { log } = await import('../../lib/logger.js');
+      log.error(
+        `external observation failed: ${err instanceof Error ? err.message : String(err)}`,
+        { productId },
+      );
+    }
+
     return c.json({
       status: 'accepted',
       updated_fields: columns,

@@ -61,6 +61,10 @@
 
 
 
+
+
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -142,6 +146,7 @@
       )
       AND (c.valid_until IS NULL OR datetime(c.valid_until)>datetime('now'))
       AND (claim.valid_until IS NULL OR datetime(claim.valid_until)>datetime('now'))
+      AND NEW.observation_ref='signal_event:' || e.id
       AND a.allowed_change_class=NEW.change_class
       AND a.capability='development' AND a.to_mode='act'
       AND a.capability=r.capability
@@ -161,8 +166,10 @@
       AND d.product_id=NEW.product_id AND d.responsibility_refs_json IS NOT NULL);
       AND d.responsibility_refs_json IS NOT NULL);
       AND datetime(a.expires_at)>datetime('now')
+      AND datetime(e.created_at)<=datetime(x.created_at));
       AND e.product_id=NEW.product_id
       AND e.product_id=NEW.product_id AND e.source='development_verification'
+      AND e.product_id=NEW.product_id AND e.source='external_metric_ingest');
       AND e.source='founder_assertion'
       AND json_array_length(a.allowed_scope_json)>0
       AND json_array_length(c.evidence_refs_json)>0
@@ -181,6 +188,8 @@
       AND replacement.id!=old.id AND replacement.status='pending'
       AND substr(NEW.target_path,1,length(p.value))=p.value
       AND x.expected_event_type LIKE 'development_verified:%'
+      AND x.expected_event_type LIKE 'external_metric:%'
+      AND x.expected_event_type LIKE 'external_metric:%'
       AND x.responsibility_id=NEW.responsibility_id
       JOIN institutional_responsibilities r ON r.id=x.responsibility_id
       JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
@@ -215,6 +224,7 @@
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=r.product_id
      WHERE NEW.outcome_ref='action_execution:' || x.id AND x.product_id=r.product_id
     'activation_playbook',     -- How we improve activation
+    'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
     'aggregate_insights',      -- receive insights derived from pool
     'ai_training_opt_out'      -- opt out of AI training on their data
     'atlas','compass','prism','beacon','scribe','forge',
@@ -243,6 +253,7 @@
     'lead_investor', 'angel', 'advisor', 'board_member', 'observer'
     'llm_tokens','integration_api','email_send','compute','experiment','other'
     'milestone', 'integration_connected',
+    'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
     'onboarding_kit',          -- First hire onboarding from DNA + history
     'operating_principles',    -- "The [Product] Way" — decision heuristics
     'pending_approval','approved','executing','executed','failed','rejected','cancelled'
@@ -258,6 +269,7 @@
     'retention','messaging','feature','operations','other'
     'risk_state_change', 'lifecycle_gate',
     'signal_spike', 'signal_drop',
+    'signups_7d','active_users','support_volume_7d','nps_score');
     'stressor_created', 'stressor_resolved',
     'tool_preferences', 'error_recovery', 'shared_knowledge'
     'unknown','visible','understood','shadowing','assisting','operating','mature','exception_owned'
@@ -320,23 +332,30 @@
     OR NEW.predicate<>OLD.predicate OR NEW.asked_at<>OLD.asked_at;
     OR NEW.repository_ref<>OLD.repository_ref OR NEW.target_path<>OLD.target_path
     OR NOT EXISTS (
+    OR coalesce(json_array_length(NEW.payload_json,'$.evidence_claim_ids'),0)=0;
+    OR coalesce(json_type(NEW.payload_json,'$.evidence_claim_ids'),'absent')<>'array'
+    OR coalesce(json_type(NEW.payload_json,'$.observed_value'),'absent') NOT IN ('integer','real')
+    OR coalesce(json_type(NEW.payload_json,'$.previous_value'),'absent') NOT IN ('integer','real');
     OR json_array_length(NEW.allowed_path_prefixes_json)=0;
     OR json_array_length(NEW.disposition_evidence_json)=0;
-    OR json_array_length(NEW.payload_json,'$.evidence_claim_ids')=0;
     OR json_array_length(NEW.required_verification_json)=0;
     OR json_extract(NEW.payload_json,'$.alternatives_considered') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.authority') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.authority') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.capability') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.capability') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.claim_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.conflict_identity') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.consent_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.consent_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.expected_event_type') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.expected_event_type') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.expires_at') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.expires_at') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.grant') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.grant') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.judgment_id') IS NOT NULL
+    OR json_extract(NEW.payload_json,'$.responsibility_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.responsibility_id') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.scope') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.scope') IS NOT NULL
@@ -344,7 +363,6 @@
     OR json_extract(NEW.payload_json,'$.state') IS NOT NULL;
     OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.to_mode') IS NOT NULL
-    OR json_type(NEW.payload_json,'$.evidence_claim_ids')<>'array'
     OR json_valid(NEW.disposition_evidence_json)=0
     OR json_valid(NEW.evidence_refs_json)=0 OR json_array_length(NEW.evidence_refs_json)=0;
     OR trim(coalesce(json_extract(NEW.payload_json,'$.check'),''))=''
@@ -352,6 +370,7 @@
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.judgment_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.obligation_kind'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.origin'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.predicate'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.request_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.result'),''))='';
@@ -393,7 +412,10 @@
     SELECT 1 FROM responsibility_candidates old
     SELECT 1 FROM responsibility_shadow_comparisons c
     SELECT 1 FROM responsibility_shadow_expectations x
+    SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x JOIN institutional_responsibilities r ON r.id=x.responsibility_id
+    SELECT 1 FROM responsibility_shadow_expectations x, signal_events e
+    SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
@@ -413,6 +435,7 @@
     WHERE NEW.epistemic_status='inferred' AND NEW.confidence IS NULL;
     WHERE NEW.epistemic_status='unknown' AND NEW.value_json IS NOT NULL;
     WHERE NEW.evidence_ref='shadow_comparison:' || c.id
+    WHERE NEW.observation_ref='signal_event:' || e.id
     WHERE NEW.observation_ref='signal_event:' || e.id
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
@@ -441,6 +464,8 @@
     WHERE substr(g.value,1,length(r.value))=r.value OR substr(r.value,1,length(g.value))=g.value
     WHERE trim(g.value)='' OR instr(g.value,'..')>0 OR substr(g.value,1,1)='/'
     WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
+    WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
+    WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
     authority_ref = NEW.authority_ref,
     disposition_at=NEW.created_at, updated_at=NEW.created_at
     disposition_reason=NEW.reason, disposition_evidence_ref=NEW.evidence_ref,
@@ -451,8 +476,10 @@
     json_extract(NEW.payload_json,'$.consent') IS NOT NULL
     json_extract(NEW.payload_json,'$.consent') IS NOT NULL
     json_extract(NEW.payload_json,'$.expectation_id') IS NOT NULL
+    json_extract(NEW.payload_json,'$.expectation_id') IS NOT NULL
     json_extract(NEW.payload_json,'$.expected_outcome') IS NOT NULL
     json_valid(NEW.evidence_refs_json)=0 OR json_type(NEW.evidence_refs_json)!='array' OR json_array_length(NEW.evidence_refs_json)=0;
+    json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
@@ -469,10 +496,13 @@
     updated_at = NEW.updated_at WHERE scope = 'founder' AND scope_id = OLD.founder_id AND date = OLD.date;
     updated_at = NEW.updated_at WHERE scope = 'global' AND scope_id = '__global__' AND date = OLD.date;
     updated_at = NEW.updated_at WHERE scope = 'product' AND scope_id = OLD.product_id AND date = OLD.date;
+    || json_extract(NEW.payload_json,'$.direction');
+    || json_extract(NEW.payload_json,'$.field') || ':'
    SELECT 1 FROM signal_events s WHERE refs.value='signal_event:'||s.id AND s.product_id=NEW.product_id));
    WHERE NEW.authority_ref IS NOT NULL AND NOT EXISTS (
    WHERE NEW.evidence_ref IS NOT NULL AND NOT EXISTS (
    WHERE NEW.outcome_ref IS NOT NULL AND NOT EXISTS (
+  ) AND NOT EXISTS (
   ) AND NOT EXISTS (
   )),
   )),
@@ -558,6 +588,7 @@
   -- Calibration outcome, resolved later by the Memory Kernel:
   -- Closed vocabulary, mirroring the institutional understanding requirements.
   -- Closed vocabulary. A new system identity cannot be invented at runtime;
+  -- Closed vocabulary: the metric columns the public intake actually accepts,
   -- Communication
   -- Communication style
   -- Comp analysis
@@ -575,8 +606,8 @@
   -- Did the bytes actually on disk match what was intended? Never inferred
   -- Dimension scores
   -- Each agent writes its key finding as it completes (JSON object, agent_name -> finding)
-  -- Every cited claim must exist, belong to this product, and have been
-  -- Evidence must follow the prediction it tests; a claim that predates the
+  -- Every absence is coalesced before comparison. `X NOT IN (...)` is NULL when
+  -- Evidence must follow the prediction it tests. An observation recorded
   -- Evolution signals
   -- Export state
   -- For CEO briefing assembly
@@ -595,6 +626,7 @@
   -- Meta
   -- Meta
   -- Narrative
+  -- No echo. An external observer cannot know what it is being compared
   -- No high-consequence development authority exists at this evidence level.
   -- Only a real institutional judgment of this product may be dispositioned.
   -- Outcome fields (populated when measured)
@@ -629,9 +661,8 @@
   -- The compressed content
   -- The constitutional ring. Ordinary development authority may not reach the
   -- The decision this premise underpins. decision_source disambiguates which
+  -- The event type is derived from the reading, so a comparison matches on what
   -- The grounding must be this product's own current claims. A disposition
-  -- The judgment must be this product's. An observation cannot reach across a
-  -- The observer may not echo what it is being compared against. Restating the
   -- The observer may not see, cite, or echo the expectation it will be
   -- The signal that says "stop iterating" when yield drops below threshold.
   -- The slot is claimed once. A second claimant is refused with a domain
@@ -645,19 +676,23 @@
   -- What the agent saw
   -- What was asked never changes. Rewriting the question after the fact would
   -- Widening the ring requires a new migration, which is itself inside the
+  -- X is missing, and a NULL condition does not fire RAISE — so an unguarded
   -- a founder assertion, the whole report is refused rather than stored with
+  -- against, so an observation that names one is not external.
+  -- and the only three movements arithmetic on two numbers can support.
   -- any company can have; none of them names an industry. Widening the set
   -- are not a verified outcome, and neither is a successful write.
   -- assumptions: { monthly_burn_delta_usd, mrr_growth_rate_pct, churn_rate_override, headcount_additions, ... }
+  -- before — or in the same instant as — the expectation cannot be news about
   -- caller-supplied owner string cannot establish its own authority.
   -- capability, a scope, an expiry, or a mode change is refused outright rather
+  -- check of this shape accepts exactly the payload it was written to refuse:
   -- code, migrations, documents, or enforcement scripts that define what
   -- company, about this exact question.
   -- company/product row; there is no separate privileged entity kind.
   -- compared against. Verification that can read the expectation is
   -- constitutional ring that ordinary development authority cannot reach.
   -- evidence provenance this contract governs.
-  -- fabricated confirmation indistinguishable from a real one.
   -- for "it was independently checked".
   -- from the fact that a write returned without throwing.
   -- governing contract lives in the institution documents and services, and
@@ -665,9 +700,8 @@
   -- grant that somehow held a ring path could still never be planned against.
   -- indistinguishable from a real one.
   -- it requires editing this migration, and migrations are inside the
-  -- judgment cannot be news about it, and same-second evidence is ambiguous,
+  -- it, and ambiguity is refused rather than believed.
   -- judgment time; the owner cannot introduce an unrepresented direction here.
-  -- judgment's expectation or alternatives inside the observation makes a
   -- justified by another tenant's evidence is not a justification.
   -- let one answer be reused as the answer to a different question.
   -- means editing a migration, which is inside the constitutional ring — so a
@@ -676,7 +710,6 @@
   -- observation, and the original answer survives as history.
   -- question that was never asked, another tenant's question, or one already
   -- reason rather than a primary-key error, so the invariant reads as intent.
-  -- recorded STRICTLY AFTER the judgment it is offered as evidence about.
   -- reference is exactly this consent, and a consent that is currently valid,
   -- refused, and so is a broad prefix that would contain part of the ring.
   -- repository is not a bound scope.
@@ -689,17 +722,17 @@
   -- separate owner-governed decision with its own evidence, not something a
   -- silently dropped field is a silently granted one waiting to happen.
   -- so an answer can never exist without the founder having given one.
-  -- so it is refused rather than believed.
   -- still be current, non-conflicting, and canonically grounded.
   -- string cannot establish who is speaking for the company.
   -- string cannot establish who is speaking for the company.
   -- table decision_id points at (the founder-facing queue vs the strategic log).
-  -- tenant boundary to speak about another company's judgment.
   -- than stored and ignored — the shape of the attempt is the problem, and a
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
   -- the field quietly dropped.
   -- the founder changing their mind appends a new claim through a new
+  -- the one with the field left out entirely.
   -- the ratchets/audits are what make any of it binding.
+  -- was observed rather than on a label a caller chose.
   -- well-meaning integration.
   -- { company_name, problem, solution, target_customer, revenue_model,
   -- { metrics_snapshot_date, integration_events_count, unread_messages_count,
@@ -833,6 +866,13 @@
   SELECT RAISE(ABORT,'development_observation:circular_grounding') WHERE
   SELECT RAISE(ABORT,'development_observation:payload_invalid') WHERE
   SELECT RAISE(ABORT,'development_shadowing:observation_not_independent') WHERE EXISTS (
+  SELECT RAISE(ABORT,'external_observation:circular_grounding') WHERE
+  SELECT RAISE(ABORT,'external_observation:direction_invalid')
+  SELECT RAISE(ABORT,'external_observation:event_type_mismatch')
+  SELECT RAISE(ABORT,'external_observation:field_invalid')
+  SELECT RAISE(ABORT,'external_observation:payload_invalid') WHERE
+  SELECT RAISE(ABORT,'external_shadowing:observation_not_independent') WHERE EXISTS (
+  SELECT RAISE(ABORT,'external_shadowing:observation_predates_expectation') WHERE EXISTS (
   SELECT RAISE(ABORT,'founder_assertion:authority_smuggled') WHERE
   SELECT RAISE(ABORT,'founder_assertion:founder_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'founder_assertion:payload_invalid') WHERE
@@ -944,6 +984,7 @@
   UPDATE responsibility_candidates SET status='promoted',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='rejected',updated_at=NEW.created_at
   UPDATE responsibility_candidates SET status='superseded',updated_at=NEW.created_at
+  WHERE NEW.event_type <> 'external_metric:'
   WHERE NEW.identity_key NOT IN ('foundry');
   WHERE NEW.status<>'open' OR NEW.answer_signal_id IS NOT NULL OR NEW.resolved_at IS NOT NULL;
   WHERE NEW.status='answered' AND NOT EXISTS (
@@ -951,6 +992,8 @@
   WHERE OLD.conflict_identity IS NOT NULL
   WHERE apns_device_token IS NOT NULL;
   WHERE apns_device_token IS NOT NULL;
+  WHERE coalesce(json_extract(NEW.payload_json,'$.direction'),'absent') NOT IN ('rose','fell','held');
+  WHERE coalesce(json_extract(NEW.payload_json,'$.field'),'absent') NOT IN (
   WHERE conflict_identity IS NOT NULL;
   WHERE decision_acted_at IS NULL;
   WHERE discovery_evidence_ref IS NOT NULL;
@@ -4157,12 +4200,14 @@ BEFORE INSERT ON responsibility_dispositions
 BEFORE INSERT ON responsibility_dispositions
 BEFORE INSERT ON responsibility_shadow_comparisons
 BEFORE INSERT ON responsibility_shadow_comparisons
+BEFORE INSERT ON responsibility_shadow_comparisons
 BEFORE INSERT ON responsibility_shadow_expectations
 BEFORE INSERT ON responsibility_transitions
 BEFORE INSERT ON responsibility_transitions
 BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='assisting'
 BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='operating'
 BEFORE INSERT ON signal_events WHEN NEW.source='development_verification'
+BEFORE INSERT ON signal_events WHEN NEW.source='external_metric_ingest'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_assertion'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_report'
 BEFORE INSERT ON signal_events WHEN NEW.source='institutional_judgment_observation'
@@ -4174,6 +4219,8 @@ BEFORE UPDATE ON development_change_plans
 BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4833,6 +4880,8 @@ CREATE TRIGGER development_change_plan_guard
 CREATE TRIGGER development_change_plan_immutable_binding
 CREATE TRIGGER development_shadow_observation_independence_guard
 CREATE TRIGGER development_verification_observation_guard
+CREATE TRIGGER external_metric_observation_guard
+CREATE TRIGGER external_shadow_observation_independence_guard
 CREATE TRIGGER founder_assertion_guard
 CREATE TRIGGER founder_evidence_request_guard
 CREATE TRIGGER founder_evidence_request_resolution_guard
@@ -4898,6 +4947,8 @@ CREATE UNIQUE INDEX idx_role_permissions_unique ON role_permissions(role, permis
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
+END;
 END;
 END;
 END;
