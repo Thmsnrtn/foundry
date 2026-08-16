@@ -301,3 +301,65 @@ export async function rollbackDevelopmentChange(input: {
   }
   return reversed;
 }
+
+export interface FounderDevelopmentActivity {
+  /** What Foundry is currently permitted to change, in plain terms. */
+  permitted: Array<{ what: string; where: string[]; until: string }>;
+  /** Only changes with a material state — quiet successes stay quiet. */
+  changes: Array<{ what: string; detail: string }>;
+}
+
+/**
+ * What the founder needs to know about Foundry touching their systems: what it
+ * is allowed to change, and what actually happened. Authority is always shown,
+ * even when nothing happened, because permission is not something to discover
+ * after the fact.
+ */
+export async function getFounderDevelopmentActivity(productId: string): Promise<FounderDevelopmentActivity> {
+  const grants = (await query(
+    `SELECT a.allowed_change_class,a.allowed_path_prefixes_json,a.expires_at,r.title
+     FROM autonomy_consents a JOIN institutional_responsibilities r ON r.id=a.responsibility_id
+     WHERE a.product_id=? AND a.capability='development' AND a.to_mode='act'
+       AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
+     ORDER BY a.expires_at`,
+    [productId],
+  )).rows as Array<Record<string, unknown>>;
+
+  const plans = (await query(
+    `SELECT p.target_path,p.status,p.refused_reason,p.verification_status,p.outcome_status,r.title
+     FROM development_change_plans p JOIN institutional_responsibilities r ON r.id=p.responsibility_id
+     WHERE p.product_id=? AND datetime(p.created_at)>=datetime('now','-7 days')
+     ORDER BY p.created_at DESC`,
+    [productId],
+  )).rows as Array<Record<string, unknown>>;
+
+  const CHANGE_CLASS_LABELS: Record<string, string> = {
+    generated_artifact: 'regenerate files that are built from your other files',
+    test: 'add or update tests',
+    documentation: 'update documentation',
+  };
+
+  return {
+    permitted: grants.map((grant) => ({
+      what: CHANGE_CLASS_LABELS[String(grant.allowed_change_class)] ?? String(grant.allowed_change_class),
+      where: JSON.parse(String(grant.allowed_path_prefixes_json)) as string[],
+      until: String(grant.expires_at).slice(0, 10),
+    })),
+    changes: plans.flatMap((plan) => {
+      const what = `${String(plan.title)} — ${String(plan.target_path)}`;
+      const status = String(plan.status);
+      if (status === 'refused') {
+        return [{ what, detail: `I did not make this change: ${String(plan.refused_reason ?? 'it was not permitted')}.` }];
+      }
+      if (status === 'rolled_back') return [{ what, detail: 'I made this change and then undid it.' }];
+      if (!['applied', 'already_applied'].includes(status)) return [];
+      if (plan.outcome_status === 'verified_success') {
+        return [{ what, detail: 'I made this change and an independent check confirmed it.' }];
+      }
+      if (plan.outcome_status === 'verified_failure' || plan.verification_status === 'failed') {
+        return [{ what, detail: 'I made this change and the check then failed. This needs you.' }];
+      }
+      return [{ what, detail: 'I made this change. Nothing has independently confirmed it yet.' }];
+    }),
+  };
+}

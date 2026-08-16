@@ -325,3 +325,30 @@ describe('first bounded development Assisting vertical', () => {
     expect(existsSync(join(root, 'src'))).toBe(false);
   });
 });
+
+describe('what the founder is told about development', () => {
+  it('always states what Foundry may change, and reports only material changes', async () => {
+    const { getFounderDevelopmentActivity } = await import('../../src/services/institution/development-assisting.js');
+    const activity = await getFounderDevelopmentActivity('as_main');
+
+    // Authority is shown in plain language even when nothing happened, because
+    // permission is not something a founder should discover after the fact.
+    expect(activity.permitted).toEqual([expect.objectContaining({
+      what: 'regenerate files that are built from your other files',
+      where: ['docs/db/'],
+    })]);
+    // No internal machinery leaks into founder-facing copy.
+    const rendered = JSON.stringify(activity);
+    for (const term of ['migration', 'epistemic', 'E3', 'assisting', 'consent_id', 'change_id']) {
+      expect(rendered.toLowerCase()).not.toContain(term.toLowerCase());
+    }
+
+    // A withdrawn grant stops being advertised.
+    const withdrawn = await getFounderDevelopmentActivity('as_revoke');
+    expect(withdrawn.permitted).toEqual([]);
+    expect(withdrawn.changes.some((c) => /did not make this change/.test(c.detail))).toBe(true);
+
+    // A change that was made and then undone says exactly that.
+    expect(activity.changes.some((c) => /made this change and then undid it/.test(c.detail))).toBe(true);
+  });
+});

@@ -181,6 +181,8 @@ letterRoutes.get('/letter', async (c) => {
   const assistingActivity = await getFounderAssistingActivity(ctx.productId);
   const { getMaterialJudgments } = await import('../../services/institution/institutional-judgment-disposition.js');
   const materialJudgments = await getMaterialJudgments(ctx.productId);
+  const { getFounderDevelopmentActivity } = await import('../../services/institution/development-assisting.js');
+  const development = await getFounderDevelopmentActivity(ctx.productId);
   const hasResponsibilitySummary = Object.values(responsibilitySummary).some((items) => items.length > 0)
     || materialJudgments.length > 0;
   const needsYou = letter.needsYou
@@ -224,6 +226,16 @@ letterRoutes.get('/letter', async (c) => {
           : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${judgmentSection(materialJudgments)}
+      ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
+      ${development.permitted.length ? html`
+      <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What I'm allowed to change right now</div>
+        ${development.permitted.map((p) => html`
+          <div style="font-size:0.85rem;color:var(--text-primary);padding:0.35rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+            I may ${p.what}, only under ${p.where.join(', ')}, until ${p.until}.
+          </div>`)}
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">You can withdraw this at any time in Controls.</div>
+      </div>` : ''}
       ${responsibilityCandidates.length ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Possible responsibilities requiring your judgment</div>

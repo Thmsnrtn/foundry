@@ -595,3 +595,82 @@ The post-merge baseline contains the exact `/api/v1` namespace exception and its
 - **Why it was not changed here:** it is customer-reaching behaviour outside the recursive-development scope, and the obvious repairs each introduce something that needs its own justification — a canonical Foundry-company identifier, a configured product id, or a genuine platform-level effect scope. Choosing among those is a design decision about what "the Foundry company" *is*, which belongs with the owner rather than being invented mid-slice. It is recorded here rather than silently fixed or silently ignored.
 - **Recommended next step:** introduce one explicit, owned identifier for the Foundry company and have the welcome path resolve through it, or give founder-scoped transactional mail a platform scope of its own instead of borrowing a tenant's.
 - **Continuation:** the highest-value unblocked work is now founder-facing legibility of development and judgment (Tranche 8 shape) and the executive-cognition marginal-value comparison (Tranche 4), both of which are measurement-first rather than capability-first. AcreOS remains DEFERRED BY OWNER. Full check green at 143 files / 1,148 tests.
+
+## Founder legibility of development authority
+
+- **Gap closed:** development authority and real repository changes existed with no founder-facing surface at all. Founder UX may hide complexity, but never authority or consequence — a founder should not have to discover after the fact what Foundry was permitted to change.
+- **Build/cutover:** the existing Letter gains two compressed blocks and no new surface. "What I'm allowed to change right now" is shown **whenever a grant is live, even when nothing happened**, in plain language ("I may regenerate files that are built from your other files, only under `docs/db/`, until <date>") with the reminder that it can be withdrawn in Controls. "Changes I made to your systems" reports only material states — confirmed, unconfirmed, failed-and-needs-you, refused-and-why, or made-then-undone. A change made and independently confirmed says so; one that is merely applied explicitly says nothing has confirmed it yet.
+- **Challenge:** tests assert the permitted block appears with the correct plain-language scope, that a withdrawn grant stops being advertised, that a refusal states it was not made, that an undone change says so, and that no internal machinery — migrations, epistemic states, E-levels, rung names, or internal identifiers — leaks into founder-facing copy.
+- **Evidence maturity:** E2 local wiring and copy-boundary evidence. Founder comprehension and attention reduction remain unproven and require E4 pilot evidence.
+
+---
+
+# CONTINUATION — self-contained resume record
+
+*Written 2026-08-16 at the close of this session. Everything needed to resume without reconstructing history.*
+
+## Exact state
+
+- **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Started from `9b3128b` (merge of PR #5).
+- **HEAD at handoff:** the final commit on that branch — `git log --oneline -10` shows the nine slices below.
+- **Migrations:** through **122**. Fresh migrations apply cleanly.
+- **Full `npm run check`:** green — **143 files / 1,149 tests**, plus typecheck, ratchets, kernel boundary, public-claims audit, and consequential-effects audit.
+- **Working tree:** clean.
+- **Environment note:** `sqlite3` is not preinstalled here; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). **Regenerate and commit the snapshot after every migration** — the first defect found this session was exactly this drift.
+
+## What this session did, in order
+
+1. Repaired stale schema snapshot (a real red baseline gate).
+2. Authenticated owner disposition on institutional judgments (migration 118).
+3. Development Shadowing on an evidenced repository responsibility (migration 119).
+4. Frozen `development-v1` benchmark + responsibility-bound development authority and the constitutional ring (migration 120).
+5. First bounded development Assisting vertical (migration 121).
+6. Knowing when not to code — development disposition (migration 122).
+7. Executable development benchmark corpus, mutation-tested.
+8. Bounded recursive Foundry operation.
+9. Founder legibility of development authority.
+
+## Evidence frontier (do not inflate)
+
+| Capability | Level | Scope of the claim |
+|---|---|---|
+| Bounded sparse reconstruction | E3 | exercised fixture dimensions only |
+| Responsibility recognition | E3 | exercised dimensions only |
+| Responsibility understanding | E3 | four exercised capability shapes |
+| Shadowing | E3 | four exercised responsibility shapes — **not** development verification |
+| Assisting (support reply) | E3 | exercised synthetic dimensions only |
+| Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus |
+| **Development (recognition → disposition → authority → change → verification → outcome)** | **E3** | **five synthetic companies, one change class (`generated_artifact`), single-file changes, one repository; constitutional isolation has one case** |
+| Judgment → later-reality evaluation | E2 | local |
+| Owner judgment disposition | E2 | local |
+| Recursive Foundry operation | E2 | one low-consequence development responsibility |
+| Founder legibility of development | E2 | local wiring and copy boundary |
+| Assisting → Operating | frozen | migration 115; unchanged |
+| Operating, founder-value reduction, unfamiliar-company adoption, pilots, production | unproven | requires E4/E5/E6 real-world evidence |
+
+## Open proof debt
+
+- Development: source-code change classes, multi-file changes, refactor and rollback as *selectable* dispositions, real repository operation, concurrent multi-plan.
+- Executive cognition (Tranche 4): no marginal-value comparison has been run. A deterministic/no-model baseline is in place everywhere; every model-assisted alternative must still beat it on decision quality, error reduction, latency, cost, and founder attention before adoption.
+- Founder attention: infrastructure exists; no empirical reduction is claimed or measured.
+- Economics: AI spend controls are E2; cost-per-institutional-work attribution (Tranche 12) is unstarted.
+- Everything E4/E5/E6 — pilots, production, broad institutional evidence.
+
+## Owner deferrals and decisions waiting
+
+- **AcreOS: DEFERRED BY OWNER.** Not accessed, inspected, ingested, benchmarked, or special-cased anywhere in this work. Preserved as a genuine unfamiliar-company generalization test.
+- **Owner decision needed — implicit Foundry identity.** See the finding recorded above: the welcome path resolves Foundry's own product by the literal name `'Foundry'` and borrows that tenant's scope for platform-level mail. Not a bypass and not presently exploitable, but Foundry-as-a-company is identified by an unowned string. Fixing it means deciding what "the Foundry company" canonically *is* — an owned identifier, a configured id, or a real platform-level effect scope. That is an owner-level design decision, deliberately not invented here.
+
+## Next highest-value unblocked work
+
+1. **Broaden the development corpus** to a second change class (`test` or `documentation`) and multi-file changes, re-running the unchanged `development-v1` gate. Do not touch the gate.
+2. **Executive-cognition marginal value (Tranche 4)** — measurement first: compare no cognition, deterministic cognition, and cheap/large models on the existing judgment corpus. Adopt nothing that does not beat the deterministic baseline. Create no permanent named personas.
+3. **Cost truth (Tranche 12)** — make spend attributable to institutional work.
+4. **Simplification sweep** — the mandate's deletion discipline has not had a dedicated pass this session; look for obsolete named-agent paths and duplicate abstractions with cutover proof.
+
+## Working rules that mattered most this session
+
+- A red gate is evidence. Three real defects were found by refusing to weaken one: the stale snapshot; content validated *after* mutation instead of before; and an independence guard that retroactively invalidated a frozen benchmark (the guard was re-keyed, the benchmark untouched).
+- Evidence must strictly follow the prediction it tests. Both the Shadowing window and change verification use exclusive lower bounds; where timestamp resolution is ambiguous the result stays unresolved rather than falsely confirmed.
+- A passing corpus that cannot fail is not evidence — mutation-test benchmarks before believing them.
+- Never let one subsystem's E3 bootstrap an adjacent one.
