@@ -212,6 +212,10 @@ describe('unfamiliar companies climb the ordinary ladder', () => {
       .join('\n')
       .replace(/\/\*[\s\S]*?\*\//g, ' ')
       .split('\n').map((line) => line.replace(/\/\/.*$/, '')).join('\n')
+      // camelCase split BEFORE the case fold. Folding first turns `danceStudio`
+      // into `dancestudio`, where no word boundary can see either word — a
+      // mutation found this on the sibling gate and it was true here too.
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
       .toLowerCase();
 
     // Words that can only mean the business. `class` and `order` are excluded
