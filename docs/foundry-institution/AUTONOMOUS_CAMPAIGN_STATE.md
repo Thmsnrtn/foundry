@@ -63,6 +63,9 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 16 billing ↔ capability access | 2 | 2 | 1 high, 1 med | 1 | 2 | 0 | 0 | 2 |
 | 17 onboarding ↔ entitlement | 2 | 1 | med | 1 | 1 | 0 | 0 | 1 |
 | 18 recursive reassessment (§13) | 1 | 0 | — | 0 | 0 | 0 | 0 | 0 |
+| 19 notifications/digests ↔ entitlement | 4 | 4 | 2 high, 2 med | 2 | 3 | 1 | 0 | 34 |
+| 20 URL gate falsification (§9) | 1 | 2 | 1 high, 1 med | 1 | 1 | 0 | 0 | 3 |
+| 21 SaaS convention (owner direction) | 3 | 3 | 1 high, 2 med | 1 | 2 | 0 | 0 | 5 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -80,8 +83,24 @@ break, and it had not. **One empty batch is not the phase-change trigger** —
 that needs several consecutive independently-chosen batches, and 16 and 17 were
 neither empty nor low-severity.
 
+Batches 19–21 are the strongest run of the campaign, and 19 is the one worth
+reading twice. The entitlement work of batch 16 was written believing that
+`scp_status='paused'` was honoured everywhere a cancellation mattered — the
+commit says so in as many words. It was honoured by the SCP scheduler and by
+nothing else: the outbound gateway read the ARCHIVE axis, thirty-four
+background jobs chose their work on it, and the deletion path wrote it without
+touching the acting axis at all. **A fix built on an assumption about the rest
+of the codebase is a hypothesis, and this campaign's job is to falsify those.**
+
+Batch 20 is the §9 case in miniature: widening a load-bearing gate to see a
+syntax it had never been able to see found a live defect underneath it — the
+request payload choosing which provider endpoint to call. The gate had claimed
+to cover "exactly the modules we think", and five modules had never been
+examined by it.
+
 **Phase-change trigger:** several consecutive independently-chosen batches
-yielding only cosmetic findings and no invariant violations. Not reached.
+yielding only cosmetic findings and no invariant violations. Not reached — and
+further away than it was three batches ago.
 
 ## Unfamiliar-company generalization evidence (§1)
 
@@ -249,8 +268,16 @@ Bootstrap from disk: verify the branch and clean tree, read this file and
 history.
 
 **The method is: read neighbouring subsystems side by side and ask what each
-assumes about the other.** Eighteen batches, fourteen of which found a real
+assumes about the other.** Twenty-one batches, seventeen of which found a real
 defect. Do not go back to extending a subsystem while that is still true.
+
+**What batch 19 should change about how the next one is chosen.** The
+entitlement pause was built one batch earlier on the belief that writing
+`scp_status='paused'` meant every cancellation-aware check would honour it. That
+belief was written into a commit message as a design argument, and it was false
+in three separate places. When a fix says "this reuses the existing mechanism,
+so everything downstream already works", **that sentence is the next thing to
+falsify**, not a reason to move on.
 
 **Unread seams, in rough order of expected yield:**
 
@@ -260,25 +287,18 @@ defect. Do not go back to extending a subsystem while that is still true.
    credential-keyed.
 2. **AI context assembly ↔ tenancy.** What a model is shown, and whether one
    company's material can reach another's prompt.
-3. **Notifications / digests ↔ entitlement.** A read-only account should not be
-   emailed as though it were active; that rule is one day old and nothing
-   checks it there.
-4. **`agent_audit_log` ↔ compliance.** The deletion processor uses it as its own
-   work queue AND its completion marker; that coupling has already produced one
-   high-severity defect.
+3. **AI spend ↔ entitlement.** Half done. The pause now reaches work selection
+   and every outbound effect, but `callClaude` takes `productId` as a trailing
+   OPTIONAL argument and roughly half of the ~104 call sites omit it. Those
+   calls are outside per-product spend accounting entirely, which also means
+   outside any per-product entitlement check that might later be put there.
+   A baseline ratchet over unattributed AI calls is the obvious shape.
+4. **`agent_audit_log` ↔ compliance.** What is recorded, what a founder can
+   actually retrieve, and whether deletion removes it.
+5. **§14 named-agent retirement.** Untouched this session: classify remaining
+   modules A–E, delete A, migrate-then-delete B, treat C as capability input,
+   retain D, investigate E. No mass deletion.
 
-**Paying down, not urgent:**
-
-- 36 known SELECT column-drift offenders in `docs/db/select-column-baseline.txt`.
-  The baseline may only shrink. Each is a query that throws at runtime.
-- The two integration credential designs (`credentials`/`config`/`provider`
-  versus `credentials_json`/`config_json`/`name`). Migration 141 records why
-  they are not converged; that reasoning should be re-read before anyone tries.
-
-**Standing constraints unchanged:** AcreOS deferred. Operating frozen
-(migration 115). Never merge to master. No PR unless asked. Entitlement to act
-= paid tier or live trial, enforced through `scp_status` and nothing else.
-
-Do not build the three deferred systems. When audit yield genuinely falls —
-several consecutive batches finding only cosmetic issues — turn hard toward
-reality acquisition, capability breadth, and executive cognition.
+**Debt with a number on it:** 35 SELECT column-drift baseline entries
+(`docs/db/select-column-baseline.txt`), down from 36. Each is a query that
+throws if it runs.

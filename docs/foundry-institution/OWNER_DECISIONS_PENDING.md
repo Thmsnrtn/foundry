@@ -12,7 +12,7 @@ around each item.
 
 ---
 
-# ALL SIX DECISIONS ANSWERED
+# ALL EIGHT DECISIONS ANSWERED
 
 The owner answered every queued decision. Nothing is pending. Recorded here as
 settled; the record of what was asked and why is in git history.
@@ -113,9 +113,64 @@ trial too. No second mechanism to keep in agreement.
 
 **Standing consequences:**
 
-- Entitlement to act = a paid tier OR a live trial. Nothing else.
+- Entitlement to act = a paid tier OR a live trial **OR a period already paid
+  for** (amended by decision 7). Nothing else.
 - The sweep resumes as well as pauses. Do not make it one-way.
 - It is **not a revocation**: consents are untouched and nothing is demoted, so
   subscribing restores the permission the founder already gave.
 - Any NEW capability that spends money or reaches outward must be reachable only
   through a path that already honours `scp_status`, or it will silently be free.
+
+**Correction, one batch later.** The sentence above about "every check that
+honours a cancellation" was an assumption about the rest of the codebase, and it
+was false in three places: the outbound gateway's kill-switch read
+`products.status` (the archive axis) and never `scp_status`; thirty-four
+background jobs chose their work through a helper that did the same; and the
+data-deletion path wrote `status='archived'` without touching the acting axis,
+so a company whose founder had withdrawn consent stayed on every agent's work
+list. Both axes are now read through one exported predicate,
+`operatingProduct()`. **Reusing an existing mechanism does not mean the
+mechanism was already total.**
+
+## RESOLVED 7 — Follow **ordinary SaaS convention** for access and communication
+
+Asked whether a paused account should be reachable at all, the owner answered a
+larger question: *"People should be able to use their accounts until their
+subscription period is ended even if they cancel like most apps do.
+Communication between foundry and customers should be typical and consistent
+with SaaS convention."*
+
+**Standing consequences:**
+
+- **Cancelling ends the plan, not the period.** `cancelSubscription` sets
+  `cancel_at_period_end`; it must never call `subscriptions.cancel()`, which
+  forfeits time already paid for. `founders.paid_through` records the period
+  Stripe reports, and it survives cancellation on purpose.
+- **The billing webhook records facts and asks the rule.** It must not decide a
+  pause itself — that was how service came to end mid-period. One rule,
+  `entitledToAct`, used by both the webhook and the hourly sweep.
+- **Dunning is a grace period, not a cut-off.** A past-due account keeps working
+  through Stripe's retries, which falls out of `paid_through` rather than being
+  a second mechanism.
+- **Account mail always reaches the customer; operational mail does not.**
+  `send_account_notice` is the ONLY capability exempt from the pause, its body
+  is rendered server-side from five fixed kinds, and it covers `paused` but not
+  `archived`. A second exempt capability is a decision, not a copy-paste — a
+  test asserts exactly one exists.
+- Lifecycle mail that must exist: trial ending (3 days out), trial ended /
+  read-only started, cancellation confirmed with the date access stops, payment
+  failed.
+
+## RESOLVED 8 — Push notifications: **WIRE THEM THROUGH THE GATEWAY**
+
+`POST /api/push/register` and `/api/push/preferences` had been live since the
+mobile API shipped, and nothing had ever sent a push. The owner chose to build
+the channel rather than remove the surface.
+
+**Standing consequences:**
+
+- Push is the `send_push` gateway capability. It inherits the kill-switch, the
+  entitlement pause, dedup and audit; it must never reach the network directly.
+- A push with no `productId` has no authority context and fails closed.
+- The notification type names a database COLUMN. It is resolved through a frozen
+  map, never interpolated from an argument.
