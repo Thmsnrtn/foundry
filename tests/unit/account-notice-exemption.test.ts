@@ -196,7 +196,10 @@ describe('naming the exempt tool does not buy arbitrary content', () => {
     // The handler must build subject/html from render(), never pass through
     // caller-supplied ones.
     expect(src).toMatch(/const \{ subject, html \} = render\(notice\)/);
-    expect(src).toMatch(/params: \{ to: params\.to, subject, html \}/);
+    // The recipient is the account owner, resolved here — not `params.to`.
+    expect(src).toMatch(/params: \{ to: \[owner\], subject, html \}/);
+    expect(src, 'a pause-exempt capability must not take its recipient from the caller')
+      .not.toMatch(/to: params\.to/);
   });
 
   it('escapes the one caller-supplied string that reaches the body', async () => {
@@ -205,5 +208,52 @@ describe('naming the exempt tool does not buy arbitrary content', () => {
     const interpolations = src.match(/\$\{notice\.companyName\}/g) ?? [];
     expect(interpolations, 'company name must go through escapeHtml').toEqual([]);
     expect(src).toMatch(/escapeHtml\(notice\.companyName\)/);
+  });
+});
+
+// =============================================================================
+// §3: the exemption must stay narrow. These are the negative cases — what the
+// one pause-exempt capability must NOT become.
+// =============================================================================
+
+describe('the exemption is account administration and nothing else', () => {
+  it('sends only the five account-administration kinds', async () => {
+    const { NOTICE_KINDS } = await import('../../src/services/billing/account-notice.js');
+    // Stated as an exact set on purpose. Adding a kind is then a deliberate
+    // edit to this line, where the boundary is written down, rather than a
+    // quiet widening of the one capability that survives a pause.
+    expect([...NOTICE_KINDS].sort()).toEqual([
+      'payment_failed',
+      'read_only_started',
+      'subscription_cancelled',
+      'trial_ended',
+      'trial_ending',
+    ]);
+  });
+
+  it('refuses marketing, support and operations kinds', async () => {
+    for (const kind of [
+      'product_update', 'newsletter', 'support_reply', 'customer_outreach',
+      'weekly_digest', 'agent_action',
+    ]) {
+      const r = await invoke(noticeReq({
+        params: { notice: { kind, companyName: 'X' } },
+      }));
+      expect(r.ok, `${kind} is not account administration`).toBe(false);
+    }
+  });
+
+  it('refuses when the product has no owner to reach', async () => {
+    const orphan = nanoid();
+    await query(
+      `INSERT INTO products (id, name, owner_id, status, scp_status)
+       VALUES (?,?,?,'active','paused')`, [orphan, 'Orphan', founderId]);
+    await query(`DELETE FROM founders WHERE id = ?`, [founderId]).catch(() => undefined);
+    const r = await invoke({
+      productId: orphan, tool: 'send_account_notice', action: 'notice',
+      params: { notice: { kind: 'trial_ended', companyName: 'X' } },
+      dedupKey: `n-${nanoid()}`, customerExternalId: 'x@example.com',
+    } as Parameters<typeof invoke>[0]);
+    expect(r.ok).toBe(false);
   });
 });

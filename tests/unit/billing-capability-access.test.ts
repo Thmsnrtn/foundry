@@ -300,14 +300,20 @@ describe('entitlement to act', () => {
       `INSERT INTO products (id,name,owner_id,status,scp_status)
        VALUES ('ent_p4','Notified','ent_f4','active','active')`, []);
 
+    // Scoped to THIS founder: the sweep now selects on the record rather than
+    // on operation, so other cases' lapsed companies are legitimately in scope
+    // too and counting every notice would be counting other tests.
+    const mine = () => notices.filter(
+      (n) => JSON.stringify(n).includes('ent_p4')
+        || (n.notice as Record<string, unknown> | undefined)?.companyName === 'Notified');
+
     await sweepEntitlements();
-    expect(notices.length, 'exactly one notice for the lapse').toBe(1);
-    expect((notices[0].to as string[])[0]).toBe('notice@example.com');
+    expect(mine().length, 'exactly one notice for the lapse').toBe(1);
 
     // The hourly sweep runs again. The company is already paused, so there is
     // nothing to pause and nothing to say.
     await sweepEntitlements();
-    expect(notices.length, 'a repeated sweep must not re-send').toBe(1);
+    expect(mine().length, 'a repeated sweep must not re-send').toBe(1);
   });
 
   it('stops that company acting, on the axis that belongs to billing', async () => {

@@ -23,6 +23,7 @@
 // it concerns, so re-running the sweep that triggers it cannot re-send it.
 // =============================================================================
 
+import { query } from '../../db/client.js';
 import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/gateway.js';
 import { sendEmailHandler } from '../integration/resend.js';
 import { log } from '../../lib/logger.js';
@@ -92,23 +93,56 @@ function render(notice: AccountNotice): { subject: string; html: string } {
   }
 }
 
-/** The tool. Same transport as every other email; different authority. */
+/**
+ * The tool. Same transport as every other email; different authority.
+ *
+ * THE RECIPIENT IS RESOLVED HERE, not taken from the request. This capability
+ * survives a company pause, so a caller-chosen address would make it a way to
+ * mail anyone at all from an account that is supposed to be silent — five
+ * templates' worth of content, but any recipient. The only person an account
+ * notice is for is the account's owner, and the server knows who that is.
+ */
 async function accountNoticeHandler(req: GatewayRequest): Promise<unknown> {
-  const params = req.params as unknown as { to?: unknown; notice?: AccountNotice };
+  const params = req.params as unknown as { notice?: AccountNotice };
   const notice = params.notice;
   if (!notice || !KINDS.has(notice.kind)) {
     // A caller naming this tool cannot invent a notice: an unknown kind has no
     // body to render, and refusing is the only honest answer.
     throw new Error('unknown account notice kind');
   }
+  const owner = await ownerEmail(req.productId);
+  if (!owner) throw new Error('account notice has no owner to reach');
+
   const { subject, html } = render(notice);
-  return sendEmailHandler({ ...req, params: { to: params.to, subject, html } });
+  return sendEmailHandler({ ...req, params: { to: [owner], subject, html } });
 }
 
-const KINDS = new Set<NoticeKind>([
+/** The address on the account, from the database. */
+async function ownerEmail(productId: string): Promise<string | null> {
+  const res = await query(
+    `SELECT f.email FROM products p JOIN founders f ON f.id = p.owner_id WHERE p.id = ?`,
+    [productId]);
+  const row = res.rows[0] as Record<string, unknown> | undefined;
+  const email = row?.email ? String(row.email) : '';
+  return email || null;
+}
+
+/**
+ * THE BOUNDARY OF THE EXEMPTION, written down.
+ *
+ * Every one of these is account administration: what the account costs, what
+ * state it is in, and when that changes. None is marketing, support, growth, a
+ * company's operations, or anything an agent decided to say. Adding a kind
+ * widens the single capability that survives a pause, so it is a decision, not
+ * a convenience — the test file states this set exactly, and an addition has to
+ * change that line too.
+ */
+export const NOTICE_KINDS: readonly NoticeKind[] = [
   'read_only_started', 'trial_ending', 'trial_ended',
   'subscription_cancelled', 'payment_failed',
-]);
+] as const;
+
+const KINDS = new Set<NoticeKind>(NOTICE_KINDS);
 
 export const ACCOUNT_NOTICE_POLICY = {
   actor: 'account_notice',
@@ -134,6 +168,10 @@ registerToolHandler('send_account_notice', accountNoticeHandler, ACCOUNT_NOTICE_
  */
 export async function sendAccountNotice(input: {
   productId: string;
+  /** Kept for the communication budget and for logging. The address the mail
+   * actually goes to is resolved server-side from the product's owner — a
+   * capability that survives a pause must not let a caller choose who hears
+   * from it. */
   to: string;
   notice: AccountNotice;
 }): Promise<boolean> {
@@ -142,7 +180,7 @@ export async function sendAccountNotice(input: {
     productId,
     tool: 'send_account_notice',
     action: `account notice: ${notice.kind}`,
-    params: { to: [to], notice },
+    params: { notice },
     // Keyed on the date it concerns, so the hourly sweep that pauses a company
     // cannot send this every hour, and a genuinely new lapse still sends.
     dedupKey: `notice:${notice.kind}:${productId}:${notice.effectiveAt ?? 'none'}`,
