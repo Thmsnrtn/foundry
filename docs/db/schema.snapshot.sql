@@ -1020,7 +1020,7 @@
   AND NOT EXISTS (
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
   CHECK(disposition IN ('active','deliberately_not_done')), disposition_reason TEXT, disposition_evidence_ref TEXT, disposition_at DATETIME, capability TEXT NOT NULL DEFAULT 'general', discovery_evidence_ref TEXT);
-  CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, health_score INTEGER DEFAULT 0, scp_constitution_version INTEGER DEFAULT 1, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT);
+  CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, health_score INTEGER DEFAULT 0, scp_constitution_version INTEGER DEFAULT 1, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT);
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
@@ -1078,6 +1078,7 @@
   ON product_voice_fingerprints(product_id) WHERE status = 'active';
   ON product_voice_fingerprints(product_id, status, version DESC);
   ON product_webhooks(product_id, enabled);
+  ON products(entitlement_paused_at);
   ON push_subscriptions(founder_id, apns_device_token)
   ON push_subscriptions(founder_id, apns_device_token)
   ON rate_limit_counters(window_start);
@@ -1108,6 +1109,8 @@
   SELECT RAISE(ABORT, 'ai_spend_ceiling:founder') WHERE NEW.founder_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:global') WHERE COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:product') WHERE NEW.product_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
+  SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
+  SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_required') WHERE trim(NEW.evidence_ref)='';
   SELECT RAISE(ABORT, 'responsibility_disposition:not_found') WHERE NOT EXISTS (
@@ -4628,6 +4631,7 @@ BEFORE INSERT ON institutional_judgment_dispositions
 BEFORE INSERT ON integrations
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
+BEFORE INSERT ON products
 BEFORE INSERT ON reconstruction_claims
 BEFORE INSERT ON responsibility_candidate_decisions WHEN NEW.decision!='promoted'
 BEFORE INSERT ON responsibility_candidate_decisions WHEN NEW.decision='promoted'
@@ -4664,7 +4668,10 @@ BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON governed_effect_kinds
 BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
+BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4987,6 +4994,7 @@ CREATE INDEX idx_premises_decision ON decision_premises(decision_id);
 CREATE INDEX idx_premises_product_status ON decision_premises(product_id, status);
 CREATE INDEX idx_priority_actions_product ON priority_actions(product_id, priority_score DESC) WHERE is_active = 1;
 CREATE INDEX idx_product_dna_product ON product_dna(product_id);
+CREATE INDEX idx_products_entitlement_paused
 CREATE INDEX idx_products_market_category ON products(market_category);
 CREATE INDEX idx_products_owner ON products(owner_id);
 CREATE INDEX idx_products_status ON products(status);
@@ -5393,6 +5401,8 @@ CREATE TRIGGER integration_config_no_secrets_insert
 CREATE TRIGGER integration_config_no_secrets_update
 CREATE TRIGGER judgment_conflict_identity_guard
 CREATE TRIGGER judgment_conflict_identity_immutable
+CREATE TRIGGER products_status_is_lifecycle_only_insert
+CREATE TRIGGER products_status_is_lifecycle_only_update
 CREATE TRIGGER reconstruction_claim_guard
 CREATE TRIGGER responsibility_assisting_entry_guard
 CREATE TRIGGER responsibility_authority_guard
@@ -5515,6 +5525,10 @@ END;
 END;
 END;
 END;
+END;
+END;
+FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
+FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
 WHEN COALESCE(OLD.product_id,'')    <> COALESCE(NEW.product_id,'')
 WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')

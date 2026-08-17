@@ -46,6 +46,7 @@ async function setupSchema(): Promise<void> {
       -- it would let a paused company pass every assertion in this file.
       scp_status TEXT DEFAULT 'active'
         CHECK(scp_status IN ('provisioning','active','paused','archived')),
+      entitlement_paused_at TEXT,
       disabled_tools TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );

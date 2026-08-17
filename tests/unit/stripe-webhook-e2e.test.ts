@@ -122,15 +122,21 @@ describe('Stripe billing webhook — real handler, real DB', () => {
     expect((await founder()).tier).toBe('growth'); // unchanged — replay ignored
   });
 
-  it('cancel: subscription.deleted → tier cleared and SCP paused (stops AI spend)', async () => {
+  it('cancel: subscription.deleted → tier cleared and the billing axis paused', async () => {
     const [payload, sig] = signedEvent('evt_deleted', 'customer.subscription.deleted',
       subscription({ status: 'canceled', priceId: 'price_growth_test', trialEnd: null }));
     await handleWebhook(payload, sig);
 
     const f = await founder();
     expect(f.tier).toBeNull();
-    const prod = await query("SELECT scp_status FROM products WHERE id = 'p_e2e'", []);
-    expect((prod.rows[0] as Record<string, string>).scp_status).toBe('paused');
+    // The webhook records facts and asks the entitlement rule; the rule writes
+    // the COMMERCIAL axis. `scp_status` belongs to the founder and the
+    // operator, and a billing event has no business writing over it.
+    const prod = await query(
+      "SELECT scp_status, entitlement_paused_at FROM products WHERE id = 'p_e2e'", []);
+    const row = prod.rows[0] as Record<string, string | null>;
+    expect(row.entitlement_paused_at).not.toBeNull();
+    expect(row.scp_status).not.toBe('paused');
   });
 
   it('foreign event: a subscription on an AcreOS/land price is a harmless no-op', async () => {

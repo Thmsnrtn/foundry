@@ -368,7 +368,23 @@ export async function getAllActiveProducts(): Promise<ResultSet> {
 }
 
 /**
- * The SQL predicate for "Foundry is operating this company right now".
+ * MAY THE INSTITUTION ACT FOR THIS PRODUCT NOW?
+ *
+ * The canonical predicate. Three independent facts have to be true, and each is
+ * owned by a different writer — which is the whole reason they are three fields
+ * and not one:
+ *
+ *   status = 'active'          LIFECYCLE. The record exists. Written by
+ *                              onboarding and by erasure.
+ *   scp_status not paused      OPERATING PERMISSION. Written by the founder
+ *                              pausing their own company, or by an operator.
+ *   entitlement_paused_at NULL COMMERCIAL ENTITLEMENT. Written by the billing
+ *                              sweep, and by nobody else.
+ *
+ * They used to share two fields between them, so a billing sweep could resume a
+ * company its founder had deliberately paused, and pausing a company removed it
+ * from the population that billing mail is selected against. A field cannot
+ * record which of three subjects spoke into it.
  *
  * Exported as one definition rather than copied, because several jobs cannot
  * use `getAllActiveProducts` — they join `founders` or `lifecycle_state` and
@@ -384,5 +400,24 @@ export async function getAllActiveProducts(): Promise<ResultSet> {
  */
 export function operatingProduct(alias = ''): string {
   const p = alias ? `${alias}.` : '';
-  return `${p}status = 'active' AND COALESCE(${p}scp_status,'active') NOT IN ('paused','archived')`;
+  return `${p}status = 'active'`
+    + ` AND COALESCE(${p}scp_status,'active') NOT IN ('paused','archived')`
+    + ` AND ${p}entitlement_paused_at IS NULL`;
+}
+
+/**
+ * DOES THIS PRODUCT RECORD STILL EXIST?
+ *
+ * The administration predicate, and deliberately NOT the one above. A company
+ * that is paused — by its founder, or by an unpaid bill — still has an owner,
+ * still has data, and still has an account. It must stay reachable by the
+ * things that administer the relationship rather than operate the company:
+ * the entitlement sweep, account mail, data export, erasure.
+ *
+ * Selecting those on `status = 'active'` is what silently stopped a paused
+ * founder being told their subscription had been cancelled.
+ */
+export function productRecordLives(alias = ''): string {
+  const p = alias ? `${alias}.` : '';
+  return `COALESCE(${p}status,'active') <> 'archived'`;
 }

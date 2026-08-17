@@ -47,8 +47,14 @@ export const tenantMiddleware = createMiddleware<TenantEnv>(async (c, next) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
-  // Paused products show a static page instead of 404 — agents are stopped
-  if (row.status === 'paused') {
+  // Paused products show a static page instead of 404 — agents are stopped.
+  //
+  // Keyed on the OPERATING axis, which is where a founder's pause now lives.
+  // Deliberately not on `entitlement_paused_at`: an unpaid account is
+  // read-only, and the owner's decision is that its data and history stay
+  // readable. Blocking the dashboard on a billing pause would take away the
+  // one thing that decision promised to keep.
+  if (row.scp_status === 'paused') {
     return c.html(html`<div style="text-align:center;padding:4rem;">
       <h2>Company Paused</h2>
       <p>This company is paused. Agents are not running. <a href="/settings">Resume in Settings</a>.</p>

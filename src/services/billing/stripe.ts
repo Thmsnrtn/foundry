@@ -154,9 +154,10 @@ async function notifyOwnedCompanies(
 ): Promise<void> {
   try {
     const { sendAccountNotice } = await import('./account-notice.js');
+    const { productRecordLives } = await import('../../db/client.js');
     const rows = await query(
       `SELECT p.id, p.name, f.email FROM products p JOIN founders f ON f.id = p.owner_id
-        WHERE f.id = ? AND COALESCE(p.status,'active') = 'active'`, [founderId]);
+        WHERE f.id = ? AND ${productRecordLives('p')}`, [founderId]);
     for (const raw of rows.rows as unknown as Array<Record<string, unknown>>) {
       await sendAccountNotice({
         productId: String(raw.id),

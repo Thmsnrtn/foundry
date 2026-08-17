@@ -310,16 +310,24 @@ describe('entitlement to act', () => {
     expect(notices.length, 'a repeated sweep must not re-send').toBe(1);
   });
 
-  it('stops that company acting, through the mechanism cancellation already uses', async () => {
-    // No second pause mechanism: this writes the same `scp_status` the
-    // cancellation webhook writes, so everything that already honours a
-    // cancellation honours a lapsed trial too.
-    expect((await query('SELECT scp_status FROM products WHERE id=?', [lapsed])).rows[0])
-      .toMatchObject({ scp_status: 'paused' });
-    // And the SCP scheduler's own filter is the same field.
+  it('stops that company acting, on the axis that belongs to billing', async () => {
+    // Migration 145 gave commercial entitlement its own field. It used to write
+    // `scp_status`, which is where a founder's own pause and an operator's
+    // pause also live — so the sweep could resume a company somebody had
+    // deliberately stopped, and no reader could tell which subject had spoken.
+    const row = (await query(
+      'SELECT scp_status, entitlement_paused_at FROM products WHERE id=?', [lapsed]))
+      .rows[0] as Record<string, string | null>;
+    expect(row.entitlement_paused_at, 'the billing axis carries the billing pause')
+      .not.toBeNull();
+    expect(row.scp_status, 'and the operating axis is left to its own writers')
+      .toBe('active');
+
+    // The canonical predicate is what every reader uses, and it is false now.
+    const { operatingProduct } = await import('../../src/db/client.js');
     expect((await query(
-      "SELECT COUNT(*) n FROM products WHERE scp_status='active' AND id=?", [lapsed])).rows[0])
-      .toMatchObject({ n: 0 });
+      `SELECT COUNT(*) n FROM products WHERE id=? AND ${operatingProduct()}`, [lapsed]))
+      .rows[0]).toMatchObject({ n: 0 });
   });
 
   it('resumes when they subscribe, without asking for permission again', async () => {
@@ -329,8 +337,8 @@ describe('entitlement to act', () => {
     await query("UPDATE founders SET tier='solo' WHERE id='ent_f2'", []);
     const { resumed } = await sweepEntitlements();
     expect(resumed).toContain(lapsed);
-    expect((await query('SELECT scp_status FROM products WHERE id=?', [lapsed])).rows[0])
-      .toMatchObject({ scp_status: 'active' });
+    expect((await query('SELECT entitlement_paused_at FROM products WHERE id=?', [lapsed]))
+      .rows[0]).toMatchObject({ entitlement_paused_at: null });
   });
 
   it('never forges a revocation or a demotion', async () => {

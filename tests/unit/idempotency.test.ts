@@ -34,6 +34,8 @@ async function setupSchema(): Promise<void> {
       name TEXT NOT NULL,
       owner_id TEXT NOT NULL REFERENCES founders(id),
       status TEXT DEFAULT 'active',
+      scp_status TEXT DEFAULT 'active',
+      entitlement_paused_at TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);

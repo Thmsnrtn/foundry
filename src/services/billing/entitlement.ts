@@ -27,7 +27,7 @@
 // "you withdrew permission" are different facts.
 // =============================================================================
 
-import { query } from '../../db/client.js';
+import { productRecordLives, query } from '../../db/client.js';
 import { getTrialStatus } from './trial.js';
 
 /** What the account looks like to the entitlement rule. */
@@ -97,9 +97,10 @@ export interface EntitlementSweep {
  */
 export async function sweepEntitlements(now: Date = new Date()): Promise<EntitlementSweep> {
   const rows = await query(
-    `SELECT p.id, p.name, p.scp_status, f.email, f.tier, f.trial_ends_at, f.paid_through
+    `SELECT p.id, p.name, p.scp_status, p.entitlement_paused_at,
+            f.email, f.tier, f.trial_ends_at, f.paid_through
        FROM products p JOIN founders f ON f.id = p.owner_id
-      WHERE COALESCE(p.status,'active') = 'active'`, []);
+      WHERE ${productRecordLives('p')}`, []);
 
   return applyToRows(rows.rows as unknown as Array<Record<string, unknown>>, now);
 }
@@ -114,22 +115,28 @@ async function applyToRows(
   const resumed: string[] = [];
   for (const raw of rows) {
     const productId = String(raw.id);
-    const scpStatus = String(raw.scp_status ?? '');
     const mayAct = entitledToAct({
       tier: raw.tier as string | null,
       trialEndsAt: raw.trial_ends_at as string | null,
       paidThrough: raw.paid_through as string | null,
     }, now);
 
-    if (!mayAct && scpStatus === 'active') {
-      await query("UPDATE products SET scp_status='paused' WHERE id=?", [productId]);
+    // The COMMERCIAL axis, and only it. This used to write `scp_status`, which
+    // is where a founder's own pause and an operator's pause also live — so the
+    // sweep could resume a company somebody had deliberately stopped, and the
+    // comment claiming otherwise could not have been true, because one field
+    // cannot record which of three subjects wrote it.
+    const alreadyPaused = raw.entitlement_paused_at != null;
+    if (!mayAct && !alreadyPaused) {
+      await query(
+        "UPDATE products SET entitlement_paused_at = datetime('now') WHERE id=?", [productId]);
       paused.push(productId);
       await tellTheFounder(raw, productId);
-    } else if (mayAct && scpStatus === 'paused') {
-      // Only a product this sweep would itself have paused is resumed, which is
-      // exactly one that is now entitled. A pause set by an operator for a
-      // different reason is not visible here and is not undone by accident.
-      await query("UPDATE products SET scp_status='active' WHERE id=?", [productId]);
+    } else if (mayAct && alreadyPaused) {
+      // Lifting the billing pause does NOT resume a company whose founder
+      // paused it: that is a different axis and this sweep never touches it.
+      await query(
+        'UPDATE products SET entitlement_paused_at = NULL WHERE id=?', [productId]);
       resumed.push(productId);
     }
   }
@@ -182,9 +189,10 @@ export async function applyEntitlementForFounder(
   founderId: string, now: Date = new Date(),
 ): Promise<EntitlementSweep> {
   const rows = await query(
-    `SELECT p.id, p.name, p.scp_status, f.email, f.tier, f.trial_ends_at, f.paid_through
+    `SELECT p.id, p.name, p.scp_status, p.entitlement_paused_at,
+            f.email, f.tier, f.trial_ends_at, f.paid_through
        FROM products p JOIN founders f ON f.id = p.owner_id
-      WHERE f.id = ? AND COALESCE(p.status,'active') = 'active'`, [founderId]);
+      WHERE f.id = ? AND ${productRecordLives('p')}`, [founderId]);
   return applyToRows(rows.rows as unknown as Array<Record<string, unknown>>, now);
 }
 
@@ -206,8 +214,7 @@ export async function sendTrialEndingNotices(
   const rows = await query(
     `SELECT p.id, p.name, f.email, f.trial_ends_at
        FROM products p JOIN founders f ON f.id = p.owner_id
-      WHERE COALESCE(p.status,'active') = 'active'
-        AND COALESCE(p.scp_status,'active') NOT IN ('paused','archived')
+      WHERE ${productRecordLives('p')}
         AND f.tier IS NULL
         AND f.trial_ends_at IS NOT NULL
         AND f.trial_ends_at > ? AND f.trial_ends_at <= ?`,

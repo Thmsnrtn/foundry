@@ -56,7 +56,7 @@ settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
 
-  const products = await query('SELECT id, name, github_repo_url, share_token, ingest_token, status FROM products WHERE owner_id = ?', [founder.id]);
+  const products = await query('SELECT id, name, github_repo_url, share_token, ingest_token, status, scp_status FROM products WHERE owner_id = ?', [founder.id]);
 
   // Use the cookie-selected product (consistent with ctx.productId), fall back to first
   const cookieProductId = getCookie(c, 'foundry_product');
@@ -170,7 +170,7 @@ settingsRoutes.get('/settings', async (c) => {
           <form method="POST" action="/settings/toggle-product-status">
             <input type="hidden" name="product_id" value="${productId}" />
             <button type="submit" class="btn btn-secondary btn-sm" aria-label="Pause or resume product">
-              ${(firstProduct as Record<string, string> | null)?.status === 'paused' ? 'Resume' : 'Pause'}
+              ${(firstProduct as Record<string, string> | null)?.scp_status === 'paused' ? 'Resume' : 'Pause'}
             </button>
           </form>
         </div>
@@ -687,16 +687,14 @@ settingsRoutes.post('/settings/pause-company', requireRole('owner'), async (c) =
   );
   if (ownership.rows.length === 0) return c.redirect('/settings');
 
+  // The OPERATING axis only. This used to write `status='paused'` as well, and
+  // `status` is the lifecycle axis — so pausing a company also removed it from
+  // the population that administration reads: the entitlement sweep, account
+  // mail, billing notices. A founder who paused their company and then had a
+  // card declined would have been told nothing.
   await query(
-    "UPDATE products SET status = 'paused', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    "UPDATE products SET scp_status = 'paused', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
     [cookieProductId, founder.id]
-  );
-
-  // Also pause the SCP lifecycle to stop agent runs. scp_status lives on
-  // products (the scheduler gates on it), not lifecycle_state.
-  await query(
-    "UPDATE products SET scp_status = 'paused', updated_at = datetime('now') WHERE id = ?",
-    [cookieProductId]
   );
 
   return c.redirect('/settings?success=company_paused');
@@ -716,14 +714,12 @@ settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) 
   );
   if (ownership.rows.length === 0) return c.redirect('/settings');
 
+  // Resuming lifts the founder's own pause. It does NOT lift a billing pause:
+  // `entitlement_paused_at` belongs to the sweep and is untouched here, so a
+  // founder cannot resume their way out of an unpaid account.
   await query(
-    "UPDATE products SET status = 'active', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    "UPDATE products SET scp_status = 'active', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
     [cookieProductId, founder.id]
-  );
-
-  await query(
-    "UPDATE products SET scp_status = 'active', updated_at = datetime('now') WHERE id = ?",
-    [cookieProductId]
   );
 
   return c.redirect('/settings?success=company_resumed');
@@ -740,26 +736,22 @@ settingsRoutes.post('/settings/toggle-product-status', requireRole('owner'), asy
 
   // Verify ownership
   const prodResult = await query(
-    'SELECT id, status FROM products WHERE id = ? AND owner_id = ?',
+    'SELECT id, scp_status FROM products WHERE id = ? AND owner_id = ?',
     [productId, founder.id]
   );
   if (prodResult.rows.length === 0) return c.redirect('/settings');
 
-  const currentStatus = (prodResult.rows[0] as Record<string, string>).status;
-  const newStatus = currentStatus === 'paused' ? 'active' : 'paused';
-  const newScpStatus = currentStatus === 'paused' ? 'active' : 'paused';
+  // Read and write the SAME axis. This read `status` and wrote both, which is
+  // how the lifecycle axis came to carry an operating decision.
+  const paused = (prodResult.rows[0] as Record<string, string>).scp_status === 'paused';
+  const newScpStatus = paused ? 'active' : 'paused';
 
   await query(
-    "UPDATE products SET status = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
-    [newStatus, productId, founder.id]
+    "UPDATE products SET scp_status = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    [newScpStatus, productId, founder.id]
   );
 
-  await query(
-    "UPDATE products SET scp_status = ?, updated_at = datetime('now') WHERE id = ?",
-    [newScpStatus, productId]
-  ).catch(() => { /* product row may not exist yet */ });
-
-  return c.redirect(`/settings?success=company_${newStatus === 'paused' ? 'paused' : 'resumed'}`);
+  return c.redirect(`/settings?success=company_${paused ? 'resumed' : 'paused'}`);
 });
 
 // ─── Fluency (one product, many voices) ───────────────────────────────────────

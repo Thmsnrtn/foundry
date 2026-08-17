@@ -60,7 +60,8 @@ export async function checkKillSwitch(
   capability?: { deliverableWhilePaused?: boolean },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
-    `SELECT status, scp_status, disabled_tools FROM products WHERE id = ?`,
+    `SELECT status, scp_status, entitlement_paused_at, disabled_tools
+       FROM products WHERE id = ?`,
     [productId]
   );
   const productRow = productResult.rows[0] as Record<string, unknown> | undefined;
@@ -77,17 +78,25 @@ export async function checkKillSwitch(
   // migration 017 with a default, so NULL means a row older than the SCP model
   // rather than a company anybody paused — and refusing outbound for those
   // would silence accounts nobody made a decision about.
+  // TWO PAUSE REASONS, ONE ANSWER TO "MAY WE ACT", DIFFERENT ANSWERS TO "MAY WE
+  // WRITE TO THE ACCOUNT". `scp_status` is the founder's or an operator's
+  // decision to stop the company; `entitlement_paused_at` is the billing
+  // sweep's. Both stop the institution acting. Neither stops account mail,
+  // because account mail is about the pause — and a founder who paused their
+  // own company still needs to hear that their card was declined.
+  //
+  // 'archived' is exempt from nothing: that record is gone and there is no
+  // relationship left to write to.
   const scpStatus = String(productRow.scp_status ?? '');
-  if (NOT_ACTING.has(scpStatus)) {
-    // Account mail is delivered to a paused customer, as every subscription
-    // product delivers it: the notice explaining the pause cannot itself be
-    // blocked by the pause. 'archived' is not exempt — that record is gone, and
-    // there is no relationship left to write to.
-    const exempt = capability?.deliverableWhilePaused === true && scpStatus === 'paused';
+  const entitlementPaused = productRow.entitlement_paused_at != null;
+  const pausedReason = NOT_ACTING.has(scpStatus) ? scpStatus
+    : entitlementPaused ? 'unentitled' : null;
+  if (pausedReason) {
+    const exempt = capability?.deliverableWhilePaused === true && pausedReason !== 'archived';
     if (!exempt) {
       return {
         blocked: true,
-        reason: `company is ${scpStatus} — Foundry is not acting for this product`,
+        reason: `company is ${pausedReason} — Foundry is not acting for this product`,
       };
     }
   }

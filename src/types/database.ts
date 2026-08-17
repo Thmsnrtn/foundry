@@ -55,7 +55,15 @@ export interface ProductRow {
   market_category: string | null;
   created_at: string;
   updated_at: string;
+  /** LIFECYCLE axis: 'active' | 'archived'. Not an operating state — migration
+   * 145 moved 'paused' off it and a trigger refuses the value. */
   status: string;
+  /** OPERATING axis: may the institution carry work for this company now.
+   * Written by the founder pausing, or by an operator. */
+  scp_status: string | null;
+  /** COMMERCIAL axis: set by the billing sweep when the account is unpaid, and
+   * by nothing else. Null means entitled. */
+  entitlement_paused_at: string | null;
   sector_profile: string | null;
   growth_stage: string | null;
   growth_stage_updated_at: string | null;
