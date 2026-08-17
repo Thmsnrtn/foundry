@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **190 files / 1,540 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **191 files / 1,556 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -26,6 +26,11 @@ not a diary — git history is the diary. Keep it short enough to stay true.
   same exported name; the unmounted one was weaker, and a stale audit doc named
   it as the live one.
 - **The whole ladder is generic now.** Four SaaS-shaped bindings were found and removed in sequence, each revealed by the previous one: the observation vocabulary (135), the effect guard (136), the authority-read, and the grantable-capability map. A dance school is carried end to end — owner report → Understood → Shadowing → resolved comparison → exact grant → Assisting → founder-authored notice → governed send → receipt → outcome.
+- **The support vertical is reachable by a person.** It had three write routes
+  and no way in: messages were stored and never rendered, and the channel they
+  arrive on could not be created at all. Register a channel → point a helpdesk
+  at it → a message arrives → the founder sees it → replies → grants → it is
+  carried → someone outside says whether it worked.
 - **The loop closes, and closes itself.** Someone outside can say whether an effect achieved what it was for (137), and an hourly pass now turns those reports into resolved outcomes. Before it, the only caller of reconciliation was the founder answering by hand — the external half had nowhere to land.
 - **A company's own systems can raise work** (138), so the first rung is no longer fed only by a person.
 - **The ladder is no longer SaaS-only.** Independent observation was admissible for twelve hard-coded metrics backed by physical columns, in the service *and* in a database trigger. A company now declares what it counts, in its own words, and the kernel treats it as an opaque named quantity. A boatyard reaches Shadowing in test.
@@ -126,6 +131,9 @@ Newest first. Trimmed as it ages — git history is the diary.
 - The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
 - Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
 - One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
+- The support vertical made reachable by a person: message surface, channel creation, the intake URL, revocation.
+- Disagreement shown — `conflicting` named who said what, instead of asking for judgment while withholding the evidence.
+- Notices written and not sent stop vanishing; the reachability gate gains a READ chain.
 - CI runs the composite gate; four audit gates had been laptop-only.
 - The last four untraced consequential effects traced; an ungoverned Linear write deleted; the audit ratcheted to zero untraced.
 - The epistemic-status margin gated — the database admits by allow-list, the service denies by list, and they were equivalent only by luck.
@@ -179,7 +187,7 @@ Next, in order:
    Still: prefer a source a real responsibility already demands over a vendor
    checklist, and remember that every new intake needs a purpose in migration
    139's closed set, which is a migration and a review by design.
-2. **Keep reassessing — seven reads, five real defects.** The intakes (one
+2. **Keep reassessing — eight reads, nine real defects.** The intakes (one
    credential, three consequences), the authority surfaces (two
    authenticators, one weaker, an audit doc naming them backwards), the
    founder-facing writes (CSRF complete but unenforced — gated), the scheduler
@@ -187,8 +195,12 @@ Next, in order:
    allow-list/deny-list margin gated), the integrations fabric (an ungoverned
    `issueCreate` into a customer's workspace, with no callers — deleted), and
    the validation paths themselves (four audit gates ran only locally).
-   **Not yet read side-by-side:** the rendering/escaping layer and the AI
-   spend path. One deliberate read each, and stop when the yield drops.
+   The rendering layer was the highest-yield of all: hunting an escaping defect
+   in customer content found that the customer content never reached a page —
+   four surfaces unreachable by a human being, and a reachability gate that
+   checked every WRITE link while all four were dark. It now checks READS too,
+   and a reader only counts when a route calls it.
+   **Not yet read side-by-side:** the AI spend path. Stop when the yield drops.
 3. **Executive cognition remains the genuine frontier** and remains gated on a
    consumed task with a real baseline. It must not be started by sprinkling
    model calls.
