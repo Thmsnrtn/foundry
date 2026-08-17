@@ -59,7 +59,7 @@ export async function addJobSignal(
  */
 export async function interpretJobSignal(signalId: string): Promise<void> {
   const result = await query(
-    `SELECT competitor_name, job_title, department, seniority, description_excerpt
+    `SELECT product_id, competitor_name, job_title, department, seniority, description_excerpt
      FROM competitor_job_signals WHERE id = ?`,
     [signalId],
   );
@@ -84,7 +84,7 @@ ${excerpt ? `Job excerpt: ${excerpt.slice(0, 500)}` : ''}
 Provide a 2-3 sentence interpretation focusing on: what product/market bet this suggests, what capability they're building, and what it means for competitive positioning. Be specific, not generic.`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 512);
+    const response = await callSonnet(systemPrompt, userPrompt, 512, row.product_id as string);
     const interpretation = response.content.trim();
 
     await query(
@@ -171,7 +171,7 @@ export async function getJobSignalTrends(
         const response = await callSonnet(
           'You are a competitive intelligence analyst. Synthesize hiring signals into a concise strategic direction summary.',
           `Based on these recent hiring signals from ${competitor}, summarize their overall strategic direction in 1-2 sentences:\n\n${interpretations}`,
-          256,
+          256, productId,
         );
         strategicDirection = response.content.trim();
       } catch { /* use default */ }

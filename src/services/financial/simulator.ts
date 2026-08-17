@@ -168,7 +168,7 @@ Project 12 months forward. Return JSON:
   const response = await callSonnet(
     'You are a SaaS financial modeler. Use realistic growth assumptions. Be conservative.',
     prompt,
-    4096
+    4096, productId
   );
 
   const result = parseJSONResponse<{

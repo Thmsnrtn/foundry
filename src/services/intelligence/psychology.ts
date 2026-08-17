@@ -64,7 +64,7 @@ If no overcorrection detected:
   const response = await callOpus(
     'You are a founder behavior analyst. Detect overcorrection patterns. Be sensitive and non-judgmental.',
     prompt,
-    1024
+    1024, productId
   );
 
   const result = parseJSONResponse<{

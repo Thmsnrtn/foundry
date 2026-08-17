@@ -207,7 +207,7 @@ Return JSON only:
   ]
 }`;
 
-    const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600);
+    const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, p.id);
     const plan = parseJSONResponse<{ synthesis: string; items: Array<{ id: string; text: string; category: string; impact: string }> }>(raw.content);
 
     if (plan?.items) {

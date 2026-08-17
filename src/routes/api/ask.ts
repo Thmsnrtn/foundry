@@ -64,7 +64,7 @@ apiAskRoutes.post('/api/ask', validateBody(askSchema), async (c) => {
 
   const [ctx, classified] = await Promise.all([
     buildConversationContext(body.product_id, product.name as string, product.market_category as string | null),
-    classifyIntent(question),
+    classifyIntent(question, body.product_id),
   ]);
 
   const systemPrompt = buildSystemPromptForIntent(classified.intent);
@@ -106,11 +106,11 @@ apiAskRoutes.post('/api/threads', validateBody(createThreadSchema), async (c) =>
 
   const [ctx, classified] = await Promise.all([
     buildConversationContext(body.product_id, product.name as string, product.market_category as string | null),
-    classifyIntent(firstMsg),
+    classifyIntent(firstMsg, body.product_id),
   ]);
 
   // Generate thread title from first message
-  const title = await generateThreadTitle(firstMsg);
+  const title = await generateThreadTitle(firstMsg, body.product_id);
 
   const threadId = nanoid();
   const contextSnapshot = {
@@ -239,7 +239,7 @@ apiAskRoutes.post('/api/threads/:id/messages', validateBody(threadMessageSchema)
 
   const [ctx, classified] = await Promise.all([
     buildConversationContext(thread.product_id as string, product.name as string, product.market_category as string | null),
-    classifyIntent(body.message.trim()),
+    classifyIntent(body.message.trim(), thread.product_id as string),
   ]);
 
   const reply = await processMessage(
@@ -331,7 +331,7 @@ async function processMessage(
   const actionsTaken: Array<{ type: string; description: string; entity_id?: string }> = [];
 
   if (intent === 'action') {
-    const classified = await classifyIntent(message);
+    const classified = await classifyIntent(message, productId);
     if (classified.actionable && classified.action_type) {
       const action = await executeAction(classified, productId, founderId);
       if (action) actionsTaken.push(action);
@@ -488,13 +488,13 @@ async function executeAction(
 
 // ─── Thread Title Generation ──────────────────────────────────────────────────
 
-async function generateThreadTitle(firstMessage: string): Promise<string> {
+async function generateThreadTitle(firstMessage: string, productId: string): Promise<string> {
   if (firstMessage.length <= 60) return firstMessage;
   try {
     const r = await callSonnet(
       'Generate a concise title (max 60 chars) for a business conversation starting with this message. Return only the title, no quotes.',
       firstMessage,
-      64,
+      64, productId,
     );
     return r.content.trim().slice(0, 60);
   } catch {

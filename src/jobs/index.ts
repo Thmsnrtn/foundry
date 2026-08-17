@@ -296,7 +296,7 @@ export async function scenarioAccuracy(): Promise<void> {
       const response = await callOpus(
         'Evaluate scenario prediction accuracy. Return JSON: {"predicted_direction": "positive|neutral|negative", "actual_direction": "positive|neutral|negative", "accuracy_score": 0.0-1.0}',
         `Base case prediction: ${JSON.stringify(baseCase)}\nActual outcome: ${outcome}`,
-        512
+        512, d.product_id as string
       );
       const accuracy = parseJSONResponse<Record<string, unknown>>(response.content);
 
@@ -800,7 +800,7 @@ Return JSON only, no markdown:
   "action": "The one concrete thing to do today, ≤80 chars, or null if none"
 }`;
 
-      const raw = await callOpus('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400);
+      const raw = await callOpus('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400, p.id);
       const insight = parseJSONResponse<{ headline: string; context: string; action: string | null }>(raw.content);
 
       if (insight?.headline) {
@@ -874,7 +874,7 @@ Return JSON only:
   ]
 }`;
 
-      const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600);
+      const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, p.id);
       const plan = parseJSONResponse<{ synthesis: string; items: Array<{ id: string; text: string; category: string; impact: string }> }>(raw.content);
 
       if (plan?.items) {

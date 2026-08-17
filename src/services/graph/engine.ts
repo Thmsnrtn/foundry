@@ -196,7 +196,7 @@ Return JSON:
   const response = await callOpus(
     'You are a causal reasoning analyst. Find non-obvious multi-hop causal chains in business data.',
     prompt,
-    4096
+    4096, productId
   );
 
   const chains = parseJSONResponse<Array<{

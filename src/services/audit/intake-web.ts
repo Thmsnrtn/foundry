@@ -132,7 +132,7 @@ ${htmlContent.slice(0, 15000)}`;
   const response = await callSonnet(
     'You are a SaaS product auditor analyzing a web page. Be specific and evidence-based.',
     analysisPrompt,
-    4096
+    4096, productId
   );
 
   const analysis = parseJSONResponse<{
@@ -196,7 +196,7 @@ Return JSON array of recommendations. Be specific about what type of vendor/free
   const response = await callSonnet(
     'You are a technical advisor for non-technical founders. Translate technical audit findings into actionable hiring decisions.',
     prompt,
-    4096
+    4096, productId
   );
 
   const recommendations = parseJSONResponse<VendorRecommendation[]>(response.content);
@@ -272,7 +272,7 @@ Outline 3-5 steps with timeline and cost estimates.`;
     const response = await callSonnet(
       'You are a technical migration advisor. Be practical and cost-conscious.',
       prompt,
-      1024
+      1024, productId
     );
     transitionPlan = response.content;
   }

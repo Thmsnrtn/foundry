@@ -186,7 +186,7 @@ Verdict: ${audit.verdict}`;
     const response = await callOpus(
       'You are Foundry\'s audit analyst. Generate brief, specific dimension explanations.',
       prompt,
-      2048,
+      2048, productId,
     );
     const hintsMap = parseJSONResponse<Record<string, string>>(response.content);
 

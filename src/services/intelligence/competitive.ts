@@ -55,7 +55,7 @@ ${competitorContext}
 
 Identify any competitive changes worth noting. Be conservative — only flag genuine signal.`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 4096);
+  const response = await callSonnet(systemPrompt, userPrompt, 4096, productId);
   const signals = parseJSONResponse<ScanResult[]>(response.content);
 
   const persisted: CompetitiveSignal[] = [];

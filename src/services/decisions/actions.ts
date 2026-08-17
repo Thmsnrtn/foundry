@@ -83,10 +83,10 @@ Return JSON:
 
   const response = gate <= 1 ? await callSonnet(
     'You are a COO generating ready-to-execute business artifacts. Be specific and complete.',
-    prompt, 4096
+    prompt, 4096, productId
   ) : await callOpus(
     'You are a COO generating high-stakes business artifacts. Be thorough and strategic.',
-    prompt, 4096
+    prompt, 4096, productId
   );
 
   const result = parseJSONResponse<{

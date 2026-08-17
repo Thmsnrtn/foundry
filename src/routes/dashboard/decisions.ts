@@ -549,7 +549,7 @@ Context: ${decision.why_now ?? ''}
 Give them 2-3 sentences of direct clarity on their specific uncertainty. Address exactly what they're unsure about.`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 300);
+    const response = await callSonnet(systemPrompt, userPrompt, 300, decision.product_id as string);
     return c.json({ clarity: response.content.trim() });
   } catch {
     return c.json({ clarity: 'Unable to generate clarity right now. Trust what you know.' });
@@ -636,7 +636,7 @@ decisionRoutes.get('/decisions/analytics', async (c) => {
       const raw = await callOpus(
         'You are Foundry. Given decision history data, synthesize the founder\'s pattern in 2-3 direct sentences. No markdown. No hedging. Address them as "You".',
         `Categories:\n${catSummary}\n\nSpeed vs quality:\n${speedSummary}\n\nReturn JSON only: { "synthesis": "2-3 sentence pattern insight" }`,
-        350,
+        350, productId,
       );
       const parsed = parseJSONResponse<{ synthesis: string }>(raw.content);
       synthesis = parsed?.synthesis ?? null;

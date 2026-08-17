@@ -43,7 +43,7 @@ Return JSON:
   const extraction = await callSonnet(
     'You are extracting structured data from a founder\'s stream-of-consciousness voice memo. Be perceptive.',
     prompt,
-    2048
+    2048, productId
   );
 
   const extracted = parseJSONResponse<{
@@ -130,7 +130,7 @@ Speak naturally. Start with the most important thing. End with what needs attent
   const response = await callSonnet(
     'You are a COO giving a verbal briefing. Natural speech, no formatting. Conversational but direct.',
     prompt,
-    512
+    512, productId
   );
 
   return response.content;
@@ -169,7 +169,15 @@ Return JSON: {"decisions": ["decision questions"], "actions": ["action items"], 
 Transcript:
 ${transcript.slice(0, 5000)}`;
 
-  const response = await callSonnet('Extract structured data from a conversation transcript.', prompt, 1024);
+  // The session row carries the company. Without it this call is charged to
+  // nobody, which means no per-product ceiling applies to it.
+  const sessionRow = await query(
+    'SELECT product_id FROM voice_sessions WHERE id = ?', [voiceSessionId]);
+  const sessionProductId =
+    (sessionRow.rows[0] as Record<string, string> | undefined)?.product_id;
+
+  const response = await callSonnet(
+    'Extract structured data from a conversation transcript.', prompt, 1024, sessionProductId);
   const extracted = parseJSONResponse<{ decisions: string[]; actions: string[]; summary: string }>(response.content);
 
   await query(

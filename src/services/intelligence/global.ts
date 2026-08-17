@@ -129,7 +129,7 @@ Only include real, current risks. Return empty array if none are relevant.`;
   const response = await callSonnet(
     'You are a geopolitical risk analyst for SaaS businesses. Only flag real, current risks.',
     prompt,
-    2048
+    2048, productId
   );
 
   const signals = parseJSONResponse<Array<{

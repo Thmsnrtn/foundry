@@ -40,7 +40,7 @@ Return JSON:
   const response = await callOpus(
     'You are a competitive strategist. Model probable competitive responses based on market dynamics.',
     prompt,
-    1024
+    1024, productId
   );
 
   const result = parseJSONResponse<{
@@ -84,7 +84,7 @@ Return JSON:
   const response = await callSonnet(
     'You are a platform risk analyst for SaaS products.',
     prompt,
-    2048
+    2048, productId
   );
 
   return parseJSONResponse<{
@@ -120,7 +120,7 @@ Return JSON:
   const response = await callOpus(
     'You are a technology moat analyst. Evaluate defensibility and erosion trends.',
     prompt,
-    2048
+    2048, productId
   );
 
   return parseJSONResponse<{
@@ -161,7 +161,7 @@ Return JSON:
   const response = await callSonnet(
     'You are a switching cost analyst for SaaS products.',
     prompt,
-    1024
+    1024, productId
   );
 
   const result = parseJSONResponse<{
@@ -211,7 +211,7 @@ Return JSON:
   const response = await callSonnet(
     'You are a market dynamics analyst. Identify structural market shifts.',
     prompt,
-    1024
+    1024, productId
   );
 
   return parseJSONResponse<{
@@ -263,7 +263,7 @@ Write a strategic brief (500-800 words) with specific recommendations.`;
   const response = await callOpus(
     'You are a competitive strategist writing a strategic brief for a SaaS founder.',
     prompt,
-    4096
+    4096, productId
   );
 
   return response.content;

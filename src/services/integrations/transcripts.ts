@@ -132,7 +132,7 @@ export async function ingestTranscript(
  */
 export async function analyzeTranscript(transcriptId: string): Promise<void> {
   const result = await query(
-    `SELECT transcript_text, call_type, participant_emails FROM call_transcripts WHERE id = ?`,
+    `SELECT product_id, transcript_text, call_type, participant_emails FROM call_transcripts WHERE id = ?`,
     [transcriptId],
   );
   if (result.rows.length === 0) return;
@@ -168,7 +168,7 @@ ${transcriptText.slice(0, 12000)}
 <<<TRANSCRIPT_END>>>`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 2048);
+    const response = await callSonnet(systemPrompt, userPrompt, 2048, row.product_id as string);
     // Bounded before anything is written. The delimiters and the instruction
     // above reduce the chance of a transcript steering the answer; this is what
     // holds when they do not.

@@ -186,7 +186,7 @@ Provide 3-5 specific, actionable insights about the business model health. Focus
   const response = await callOpus(
     'You are a SaaS business model analyst. Be specific and actionable.',
     prompt,
-    2048
+    2048, productId
   );
   return response.content;
 }

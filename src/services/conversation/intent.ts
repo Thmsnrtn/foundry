@@ -55,7 +55,13 @@ const INTENT_EXAMPLES: Record<ConversationIntent, string[]> = {
  * Classify the intent of a founder's message using a fast Sonnet call.
  * Falls back to 'general' if classification fails.
  */
-export async function classifyIntent(message: string): Promise<ClassifiedIntent> {
+export async function classifyIntent(
+  message: string,
+  /** The company the message is about. Optional only because one caller
+   * classifies before a thread exists; when it is known, the model call is
+   * charged to that company and falls under its ceiling. */
+  productId?: string,
+): Promise<ClassifiedIntent> {
   const systemPrompt = `You are a business message intent classifier for a SaaS analytics platform.
 Classify the message into exactly one intent category.
 Also detect if the message implies an action the system should take.
@@ -86,7 +92,7 @@ Respond with JSON only:
   const userPrompt = `Message: "${message}"`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 256);
+    const response = await callSonnet(systemPrompt, userPrompt, 256, productId);
     const result = parseJSONResponse<ClassifiedIntent>(response.content);
     return {
       intent: result.intent ?? 'general',

@@ -39,6 +39,10 @@ jobs:
       # Verifies every INSERT column list and UPDATE-SET column against the real
       # migrated schema — the drift class that shipped ~55 runtime 500s this cycle.
       - run: npm run lint:columns
+      # Every model call must name the company paying for it. Without a
+      # productId only the GLOBAL spend ceiling applies, so one company's
+      # runaway loop exhausts the budget for all of them.
+      - run: npm run lint:ai-attribution
 
   evals:
     name: Prompt/AI eval net (2.7)

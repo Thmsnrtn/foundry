@@ -55,7 +55,7 @@ Return JSON: {"tam_estimate_usd": number (annual), "methodology": "brief explana
   const response = await callOpus(
     'You are a market sizing analyst. Provide defensible TAM estimates.',
     prompt,
-    1024
+    1024, productId
   );
 
   const result = parseJSONResponse<{ tam_estimate_usd: number }>(response.content);
@@ -128,7 +128,7 @@ Return JSON array of opportunities, ordered by tam_delta descending.`;
   const response = await callOpus(
     'You are a market expansion strategist. Identify actionable adjacent market opportunities.',
     prompt,
-    4096
+    4096, productId
   );
 
   return parseJSONResponse<ExpansionOpportunity[]>(response.content);
@@ -175,7 +175,7 @@ Return JSON:
   const response = await callOpus(
     'You are a SaaS strategy advisor. Model realistic scenarios with specific numbers.',
     prompt,
-    2048
+    2048, productId
   );
 
   return parseJSONResponse<{
@@ -212,7 +212,7 @@ Return JSON:
   const response = await callOpus(
     'You are a product architecture analyst evaluating expansion readiness.',
     prompt,
-    1024
+    1024, productId
   );
 
   return parseJSONResponse<{

@@ -66,7 +66,7 @@ Return JSON:
   const response = await callSonnet(
     'You are a growth experiment designer. Design statistically rigorous experiments.',
     prompt,
-    2048
+    2048, productId
   );
 
   return parseJSONResponse<ExperimentDesign>(response.content);

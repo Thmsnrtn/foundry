@@ -221,13 +221,13 @@ Reference specific past decisions and outcomes where relevant.
 The goal: a new team member or returning founder can pick this up and act on it immediately.`;
 
   const [execSummary, principles, body, antiPatterns] = await Promise.all([
-    callOpus(systemPrompt, `${context}\n\nWrite a 2-3 sentence executive summary for this ${type.replace('_', ' ')} playbook. What problem does it solve, and what does it contain?`, 256)
+    callOpus(systemPrompt, `${context}\n\nWrite a 2-3 sentence executive summary for this ${type.replace('_', ' ')} playbook. What problem does it solve, and what does it contain?`, 256, productId)
       .then((r) => r.content.trim()).catch(() => ''),
-    callOpus(systemPrompt, `${context}\n\nWrite the core principles section of this ${type.replace('_', ' ')} playbook.\nDerive 3-5 actionable principles from the decision history and judgment patterns above.\nFor each principle: state it clearly, explain the reasoning, and cite a specific past example from the data.`, 1024)
+    callOpus(systemPrompt, `${context}\n\nWrite the core principles section of this ${type.replace('_', ' ')} playbook.\nDerive 3-5 actionable principles from the decision history and judgment patterns above.\nFor each principle: state it clearly, explain the reasoning, and cite a specific past example from the data.`, 1024, productId)
       .then((r) => r.content.trim()).catch(() => ''),
-    callOpus(systemPrompt, `${context}\n\nWrite the main playbook body for this ${type.replace('_', ' ')} playbook.\nCover: ${config.sections.join(', ')}.\nBe specific, reference actual data from the context, and provide concrete steps.`, 2048)
+    callOpus(systemPrompt, `${context}\n\nWrite the main playbook body for this ${type.replace('_', ' ')} playbook.\nCover: ${config.sections.join(', ')}.\nBe specific, reference actual data from the context, and provide concrete steps.`, 2048, productId)
       .then((r) => r.content.trim()).catch(() => ''),
-    callOpus(systemPrompt, `${context}\n\nWrite the anti-patterns section: 3-5 things this company should never do in this area, based on what has failed and the judgment patterns above. Be direct about what went wrong.`, 512)
+    callOpus(systemPrompt, `${context}\n\nWrite the anti-patterns section: 3-5 things this company should never do in this area, based on what has failed and the judgment patterns above. Be direct about what went wrong.`, 512, productId)
       .then((r) => r.content.trim()).catch(() => ''),
   ]);
 

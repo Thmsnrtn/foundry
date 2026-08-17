@@ -60,7 +60,7 @@ Only include genuinely relevant regulations for this specific sector. Don't over
   const response = await callOpus(
     'You are a SaaS regulatory analyst. Only flag genuinely applicable regulations.',
     prompt,
-    2048
+    2048, productId
   );
 
   const result = parseJSONResponse<RegulatoryExposure>(response.content);
@@ -140,7 +140,7 @@ Only include real, significant changes. Return empty array if none.`;
   const response = await callSonnet(
     'You are a regulatory intelligence analyst. Only flag real, verified regulatory changes.',
     prompt,
-    2048
+    2048, productId
   );
 
   const changes = parseJSONResponse<Array<{
@@ -183,7 +183,7 @@ Return JSON: {"cost": "$X-$Y", "timeline": "N months", "alternatives": ["alterna
   const response = await callSonnet(
     'You are a compliance pathway advisor. Be practical and cost-conscious.',
     prompt,
-    1024
+    1024, productId
   );
 
   return parseJSONResponse<{ cost: string; timeline: string; alternatives: string[] }>(response.content);

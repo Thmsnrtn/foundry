@@ -70,7 +70,7 @@ export async function scoreAudit(
     systemPrompt += `\n\nSECTOR: ${sector}. Adjust scoring expectations for this sector's norms.`;
   }
 
-  const response = await callOpus(systemPrompt, userPrompt, 8192);
+  const response = await callOpus(systemPrompt, userPrompt, 8192, productId);
   const output = parseJSONResponse<ScoringOutput>(response.content);
 
   // Filter out sector-irrelevant findings

@@ -360,9 +360,16 @@ Format each bullet with an emoji:
 4. Risk summary
 5. Recommended action for today`;
 
+  // This briefing is about the PLATFORM, aggregated across every company, so
+  // there is no customer product to charge it to. It is charged to Foundry's
+  // own company instead of to nobody: Foundry is a company in this system, and
+  // an unattributed model call is one no per-product ceiling can reach.
+  const { resolveFoundryProductId } = await import('../system-identity.js');
+  const ownProductId = (await resolveFoundryProductId()) ?? undefined;
+
   const response = await callSonnet(
     'You are a COO writing a 30-second morning briefing for the CEO. Be specific, use numbers.',
-    prompt, 512
+    prompt, 512, ownProductId
   );
 
   return response.content;

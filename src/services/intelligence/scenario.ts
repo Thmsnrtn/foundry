@@ -88,7 +88,7 @@ Historical metrics: ${input.historicalMetrics}
 Cohort data: ${input.cohortData}
 Stressor history: ${input.stressorHistory}`;
 
-  const response = await callOpus(systemPrompt, userPrompt, 8192);
+  const response = await callOpus(systemPrompt, userPrompt, 8192, input.productId);
   const scenarios = parseJSONResponse<ScenarioOutput[]>(response.content);
 
   const models: ScenarioModel[] = [];

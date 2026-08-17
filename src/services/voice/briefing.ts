@@ -101,7 +101,7 @@ Rules:
   let headline = '';
 
   try {
-    const r = await callSonnet(systemPrompt, userPrompt, 512);
+    const r = await callSonnet(systemPrompt, userPrompt, 512, productId);
     briefingText = r.content.trim();
     // Extract the headline (first sentence)
     const firstSentence = briefingText.split('.')[0];
@@ -166,7 +166,7 @@ Return JSON:
   let summary = '';
 
   try {
-    const r = await callSonnet(systemPrompt, `Transcript: "${transcript}"`, 512);
+    const r = await callSonnet(systemPrompt, `Transcript: "${transcript}"`, 512, productId);
     const parsed = JSON.parse(r.content) as { updates: VoiceUpdate[]; summary: string };
     updates.push(...(parsed.updates ?? []));
     summary = parsed.summary ?? '';

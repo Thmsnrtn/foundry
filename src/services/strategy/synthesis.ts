@@ -158,7 +158,7 @@ Rules:
 
   const userPrompt = `Product ID: ${productId}\nPeriod: ${periodStart} to ${periodEnd}\n\nContext:\n${contextBlock}`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 4096);
+  const response = await callSonnet(systemPrompt, userPrompt, 4096, productId);
   const parsed = parseJSONResponse<SynthesisAIOutput>(response.content);
 
   const tokensUsed = (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);

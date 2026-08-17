@@ -176,7 +176,7 @@ RELEVANT FILES:
 ${fileContext}`;
 
   try {
-    const response = await callOpus(systemPrompt, userPrompt, 16384);
+    const response = await callOpus(systemPrompt, userPrompt, 16384, productId);
     const fix = parseJSONResponse<FixGenerationOutput>(response.content);
 
     // Confidence check — non-negotiable
