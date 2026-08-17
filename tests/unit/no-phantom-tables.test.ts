@@ -35,7 +35,11 @@ function schemaTables(): Set<string> {
   // means "a Foundry table created somewhere other than a migration", and
   // filing a built-in under it would quietly widen what the exception means.
   const tables = new Set<string>([
-    'sqlite_sequence', 'sqlite_master', 'json_each', 'json_tree']);
+    'sqlite_sequence', 'sqlite_master', 'json_each', 'json_tree',
+    // Also a table-valued function, not a Foundry table: the erasure path uses
+    // it to derive which tables carry a product_id, rather than trusting a list
+    // written by hand against a schema that has grown by two hundred tables.
+    'pragma_table_info']);
   const re = /CREATE\s+(?:TABLE|VIEW)\s+(?:IF NOT EXISTS\s+)?["'`]?([a-zA-Z0-9_]+)["'`]?/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(snap)) !== null) tables.add(m[1].toLowerCase());

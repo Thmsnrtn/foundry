@@ -293,6 +293,48 @@ export async function exportProductData(
   };
 }
 
+// ─── What an erasure erases ───────────────────────────────────────────────────
+
+/**
+ * Tables that survive a product's erasure, and why.
+ *
+ * Everything else carrying `product_id` is deleted. An entry here has to be an
+ * argument that erasing it would destroy something the erasure itself depends
+ * on, or something a law requires be kept — never that clearing it was
+ * inconvenient.
+ */
+const RETAINED_ON_ERASURE: Record<string, string> = {
+  agent_audit_log:
+    'holds the deletion request and its completion record; erasing it would erase the evidence that the erasure happened',
+  products:
+    'archived rather than deleted, so the id cannot be reissued and every foreign key stays resolvable',
+  ai_daily_spend:
+    'Foundry\'s own cost accounting, carrying no company content beyond an id',
+  ai_spend_reservations:
+    'the same accounting, mid-flight; dropping reservations would release ceilings that are still holding',
+  idempotency_keys:
+    'at-most-once records for effects already sent; deleting them would let a retry re-send a real message',
+  stripe_webhook_events:
+    'financial event ledger required for billing reconciliation',
+};
+
+/** Every table the live schema says carries a `product_id`, minus the ones
+ * recorded above. Read from the database rather than written down, so a table
+ * added later is erased by default. */
+export async function tablesToErase(): Promise<string[]> {
+  const res = await query(
+    `SELECT m.name FROM sqlite_master m
+      WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'
+        AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name = 'product_id')
+      ORDER BY m.name`, []);
+  return (res.rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => String(r.name))
+    .filter((t) => !(t in RETAINED_ON_ERASURE));
+}
+
+/** Exported for the gate that checks each retention has a reason. */
+export const RETAINED_ON_ERASURE_REASONS = RETAINED_ON_ERASURE;
+
 // ─── scheduleDataDeletion ──────────────────────────────────────────────────────
 
 /**
@@ -348,19 +390,28 @@ export async function processScheduledDeletions(): Promise<number> {
 
     if (new Date() < deletionDate) continue; // Not yet time
 
-    // Actually delete the product's data across all tables
-    const tables = [
-      'metric_snapshots', 'stressor_history', 'decisions', 'scenario_models',
-      'audit_scores', 'lifecycle_conditions', 'lifecycle_state',
-      'founding_story_artifacts', 'beta_intake', 'competitive_signals',
-      'competitors', 'cohorts', 'agent_instances',
-    ];
-
-    for (const table of tables) {
+    // Actually delete the product's data across all tables.
+    //
+    // This was a hand-written list of thirteen table names. The schema has two
+    // hundred and eighteen tables carrying `product_id` — agent messages, chat
+    // sessions, call transcripts, customer intelligence, API keys, integration
+    // records — so an erasure request deleted about six per cent of the
+    // company's data and then wrote `data_deletion_completed`. The claim was
+    // the part that worked.
+    //
+    // The list is now DERIVED from the live schema, so it cannot drift from it,
+    // and what survives an erasure is an explicit allow-list with a reason
+    // each. That is the fail-closed direction: a new table added next year is
+    // deleted by default rather than quietly retained forever.
+    for (const table of await tablesToErase()) {
       try {
         await query(`DELETE FROM ${table} WHERE product_id = ?`, [productId]);
-      } catch {
-        // Table may not exist in all migration states — continue
+      } catch (err) {
+        // A table that cannot be cleared must not be silently skipped: the
+        // completion record below would then be false. Recorded and rethrown to
+        // the caller's per-product catch, which leaves the deletion pending and
+        // retries it on the next run.
+        throw new Error(`data deletion incomplete: ${table}: ${String(err)}`);
       }
     }
 
