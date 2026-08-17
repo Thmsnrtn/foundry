@@ -16,10 +16,13 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run ratchet
+      # `npm run check` is the composite gate: typecheck, ratchets, kernel
+      # boundary, guard NULL-safety, public-claims audit, consequential-effects
+      # audit, and the full test suite. CI used to run typecheck, ratchet and
+      # the tests individually, which meant the four audit gates ran ONLY on a
+      # developer's machine — a PR could turn one red and still go green here.
+      - run: npm run check
       - run: npm run build
-      - run: npm test -- --run
       - run: npm audit --audit-level=high || true
 
   column-drift:
