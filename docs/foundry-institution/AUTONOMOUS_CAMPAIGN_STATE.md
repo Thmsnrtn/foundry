@@ -71,6 +71,12 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 24 AI context ↔ tenancy | 3 | 2 | 1 high, 1 med | 2 | 2 | 0 | 0 | 2 |
 | 25 erasure ↔ schema | 2 | 3 | 2 high, 1 med | 1 | 2 | 0 | 0 | 205 |
 | 26 export ↔ schema | 1 | 2 | 1 high, 1 med | 1 | 1 | 0 | 0 | 208 |
+| 27 product axis separation | 3 | 2 | 2 high | 2 | 2 | 0 | 0 | 3 |
+| 28 spend subject made explicit | 1 | 2 | 1 high, 1 med | 1 | 1 | 0 | 0 | 6 |
+| 29 provider confused deputy | 3 | 3 | 2 high, 1 med | 2 | 2 | 0 | 0 | 3 |
+| 30 network contributor independence | 1 | 1 | high | 1 | 1 | 0 | 0 | 1 |
+| 31 retention disposition (§9–§11) | 2 | 3 | 1 high, 2 med | 2 | 2 | 0 | 2 | 4 |
+| 32 requester + actor identity | 2 | 2 | 2 high | 1 | 2 | 0 | 0 | 12 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -334,6 +340,26 @@ falsify**, not a reason to move on.
    modules A–E, delete A, migrate-then-delete B, treat C as capability input,
    retain D, investigate E. No mass deletion.
 
+**Batches 27–32 were run under an explicit lens** the owner named: the defect is
+not "rule missing" but *rule exists → rule is enforced → rule is bound to the
+wrong subject, identity, axis, scope or population*. Six batches, ten material
+defects, nothing cosmetic. The sharpest were:
+
+- **Twelve founder-facing routes were unreachable.** `requireRole` read context
+  keys that only the PUBLIC API's key middleware sets, so a founder pressing
+  "pause my company" got a 401 from an owner check on a company they own. A
+  guard that refuses everyone looks exactly like a guard that works.
+- **Three product facts shared two fields.** The billing sweep wrote its pause
+  into `scp_status`, where a founder's own pause lives; the founder's pause wrote
+  into `status`, the lifecycle axis that administration reads. Each writer was
+  correct about itself and wrong about the other two.
+- **Omission meant two things.** A missing model-call subject meant both
+  "institutional" and "somebody forgot", and the two differ by an unbounded
+  amount of money. Making it required found six more calls the parser gate could
+  never have seen — five indirect through a variable, one through `callClaude`.
+- **A peer signal counted rows and called them founders.** One company's five
+  decisions produced "5 founders at your stage chose X" in a competitor's queue.
+
 **A pattern across 19, 22, 23, 24 and 25.** Every one was a rule that existed,
 was believed, and was enforced on the wrong thing: the wrong pause axis, the
 wrong (optional) argument, the wrong process, the wrong population, a list
@@ -347,6 +373,14 @@ added by a fix whose comment reads "Export was 60% incomplete", measured against
 a denominator that was itself a guess. Both are derived from the live schema
 now. **When one half of a right is enforced against a hand-written list, check
 the other half before believing it.**
+
+**What the lens is good for next.** Every one of these was found by asking two
+questions of a rule rather than one: *what does it think its subject is*, and
+*what subject does the implementation actually bind*. Places that have NOT been
+read that way yet: onboarding (who is provisioning for whom), integration
+lifecycle (whose credential is being refreshed), scheduled work (which company a
+job believes it is acting for when it fans out), and the responsibility ladder
+itself (which actor a demotion applies to).
 
 **Debt with a number on it:** 34 SELECT column-drift baseline entries
 (`docs/db/select-column-baseline.txt`), down from 36 at the start of this
