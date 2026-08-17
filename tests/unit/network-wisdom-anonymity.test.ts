@@ -30,7 +30,21 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+
+// The model call is stubbed: every assertion here is about which NUMBER is
+// recorded, and a real Opus call would make the test about the narrative and
+// about having an API key.
+vi.mock('../../src/services/ai/client.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/services/ai/client.js')>()),
+  callOpus: async () => ({
+    content: JSON.stringify([{
+      insight_type: 'pricing_strategy', description: 'Raising prices worked.',
+      confidence: 0.8, avg_impact: 12, conditions: null,
+    }]),
+    model: 'stub', usage: { input_tokens: 0, output_tokens: 0 }, stop_reason: null,
+  }),
+}));
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -102,14 +116,44 @@ describe('an insight needs contributors, not just a cohort', () => {
 });
 
 describe('the number in the claim is the number that was measured', () => {
-  it('reports contributors rather than cohort size', () => {
-    const source = readFileSync(
-      resolve(__dirname, '../../src/services/wisdom/network.ts'), 'utf8');
-    // sample_size on the insight is what injectNetworkWisdom prints into
-    // another founder's prompt. It must be the contributor count.
-    expect(source).toMatch(/contributorCount/);
-    expect(source, 'the cohort size must not be stored as the sample size')
-      .not.toMatch(/insight\.confidence,\s*$\s*.*sampleSize/m);
+  it('publishes the contributor count, not the cohort size', async () => {
+    // Behavioural, not textual: an earlier version of this test only checked
+    // that the word appeared in the file, and a mutant that stored the cohort
+    // size again survived it. What matters is the number that lands in the row
+    // a founder is eventually shown.
+    const { aggregateInsights } = await import('../../src/services/wisdom/network.js');
+
+    // Cohort of twelve, of whom exactly four contributed this pattern.
+    for (let i = 0; i < 12; i++) {
+      await query(
+        `INSERT INTO founders (id, clerk_user_id, email, wisdom_network_opted_in)
+         VALUES (?,?,?,1)`, [`cn_f${i}`, `cn_c${i}`, `cn${i}@example.com`]);
+      await query(
+        `INSERT INTO products (id, name, owner_id, status, sector_profile, growth_stage)
+         VALUES (?,?,?,'active','marketplace','growth')`,
+        [`cn_p${i}`, `Co ${i}`, `cn_f${i}`]);
+    }
+    for (let i = 0; i < 4; i++) {
+      await query(
+        `INSERT INTO decision_patterns
+           (id, decision_type, product_lifecycle_stage, risk_state_at_decision,
+            key_metrics_context, option_chosen_category,
+            outcome_direction, outcome_magnitude, market_category, contributor_hash)
+         VALUES (?, 'pricing_change', 'growth', 'green', '{}', 'raise',
+                 'positive', 'significant', 'marketplace', ?)`,
+        [`cn_dp${i}`, contributorHash(`cn_p${i}`)]);
+    }
+
+    await aggregateInsights();
+
+    const published = await query(
+      `SELECT sample_size FROM cross_product_insights WHERE sector = 'marketplace'`);
+    expect(published.rows.length, 'four contributors clears the threshold').toBeGreaterThan(0);
+    for (const row of published.rows as unknown as Array<Record<string, unknown>>) {
+      expect(Number(row.sample_size),
+        'the published number must be the companies that contributed, not the cohort')
+        .toBe(4);
+    }
   });
 
   it('says what it is counting where a founder reads it', () => {
