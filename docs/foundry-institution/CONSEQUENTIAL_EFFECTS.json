@@ -68,8 +68,8 @@
       "file": "src/services/integration/linear.ts",
       "line": 181,
       "detector": "external_post",
-      "status": "unresolved",
-      "capability": "GraphQL operation requires operation tracing"
+      "status": "read_only",
+      "capability": "GraphQL queries: in-progress, completed and velocity issue counts"
     },
     {
       "file": "src/services/integration/resend.ts",
@@ -94,24 +94,10 @@
     },
     {
       "file": "src/services/integrations/linear.ts",
-      "line": 129,
+      "line": 123,
       "detector": "external_post",
-      "status": "unresolved",
-      "capability": "GraphQL read/write operation requires operation tracing"
-    },
-    {
-      "file": "src/services/integrations/linear.ts",
-      "line": 157,
-      "detector": "external_post",
-      "status": "unresolved",
-      "capability": "GraphQL read/write operation requires operation tracing"
-    },
-    {
-      "file": "src/services/integrations/linear.ts",
-      "line": 196,
-      "detector": "external_post",
-      "status": "unresolved",
-      "capability": "GraphQL read/write operation requires operation tracing"
+      "status": "read_only",
+      "capability": "GraphQL query: completed issues for ship-cadence metrics"
     },
     {
       "file": "src/services/integrations/stripe-sync.ts",

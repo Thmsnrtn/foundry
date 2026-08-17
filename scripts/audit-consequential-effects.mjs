@@ -21,8 +21,16 @@ const classifications = new Map(Object.entries({
   'src/services/integration/github-gateway.ts|external_post': ['governed', 'GitHub capability handlers'],
   'src/services/integration/mcp-client.ts|dynamic_webhook_post': ['governed', 'MCP capability handler'],
   'src/services/integration/slack.ts|external_post': ['control_path', 'Slack credential owner with effect receipts'],
-  'src/services/integrations/linear.ts|external_post': ['unresolved', 'GraphQL read/write operation requires operation tracing'],
-  'src/services/integration/linear.ts|external_post': ['unresolved', 'GraphQL operation requires operation tracing'],
+  // Traced, not assumed. Both files POST to a GraphQL endpoint, which is what
+  // the detector sees; every remaining operation is a QUERY. `read_only` is a
+  // real classification and deliberately not `governed` — a read does not need
+  // the gateway, and calling it governed would overstate what holds.
+  //
+  // The one genuine mutation these files contained — an `issueCreate` into a
+  // customer's workspace, outside the gateway and with no callers — was
+  // deleted. See the header of services/integrations/linear.ts.
+  'src/services/integrations/linear.ts|external_post': ['read_only', 'GraphQL query: completed issues for ship-cadence metrics'],
+  'src/services/integration/linear.ts|external_post': ['read_only', 'GraphQL queries: in-progress, completed and velocity issue counts'],
   'src/services/scp/briefing/email-digest.ts|external_post': ['direct', 'Resend/SendGrid weekly digest delivery'],
   'src/services/scp/actions/executor.ts|external_post': ['control_path', 'approved Linear action with durable receipt'],
   'src/services/scp/actions/executor.ts|dynamic_webhook_post': ['control_path', 'approved custom webhook with SSRF guard and durable receipt'],
@@ -59,10 +67,25 @@ if (process.argv.includes('--write')) {
     console.error('Consequential-effect inventory drift. Run: node scripts/audit-consequential-effects.mjs --write');
     process.exit(1);
   }
+  // An untraced consequential effect is the state this audit exists to surface.
+  const unresolvedCount = findings.filter((f) => f.status === 'unresolved').length;
   if (unclassified.length) {
     console.error(`Unclassified consequential effects: ${unclassified.length}`);
     process.exit(1);
   }
+  // Ratcheted to zero once the last four were traced. `unresolved` meant "a
+  // consequential effect nobody has determined the consequence of", which is
+  // precisely the state this audit exists to surface — it sat at four for a
+  // long time, and tracing them found an ungoverned write into a customer's
+  // Linear workspace with no callers. Leaving the door open would let the next
+  // one sit just as long. Trace it, then classify it.
+  if (unresolvedCount) {
+    console.error(
+      `Untraced consequential effects: ${unresolvedCount}. Determine whether each one reads or `
+      + `writes, then classify it (governed / control_path / read_only / direct).`);
+    process.exit(1);
+  }
+  const readOnly = findings.filter((f) => f.status === 'read_only').length;
   const direct = findings.filter((f) => f.status === 'direct').length;
-  console.log(`✓ consequential-effect inventory holds (${findings.length} findings; ${direct} direct)`);
+  console.log(`✓ consequential-effect inventory holds (${findings.length} findings; ${direct} direct, ${readOnly} read-only, ${unresolvedCount} untraced)`);
 }
