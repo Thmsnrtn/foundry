@@ -364,8 +364,19 @@ export async function processScheduledDeletions(): Promise<number> {
       }
     }
 
-    // Archive the product itself
-    await query(`UPDATE products SET status = 'deleted', github_access_token = NULL WHERE id = ?`, [productId]);
+    // Archive the product itself.
+    //
+    // This wrote `status='deleted'`, which the CHECK constraint on
+    // `products.status` has never permitted — the vocabulary is
+    // active/paused/archived. So the scheduled deletion job deleted rows from
+    // thirty tables and then threw on this line: the data was gone, the product
+    // was never marked, and the "deletion completed" record below was never
+    // written. A compliance path that half-completes and leaves no evidence of
+    // having run is worse than one that fails early.
+    //
+    // `archived` is what the code's own comment says it is doing and is the
+    // value the constraint has always expected.
+    await query(`UPDATE products SET status = 'archived', github_access_token = NULL WHERE id = ?`, [productId]);
 
     // Log completion
     await query(

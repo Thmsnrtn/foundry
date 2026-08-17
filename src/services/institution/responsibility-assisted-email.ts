@@ -27,7 +27,29 @@ async function currentAuthority(actionId:string):Promise<Record<string,unknown>|
     JOIN autonomy_consents a ON a.id=oa.authority_consent_id
     JOIN governed_effect_kinds k ON k.scope_key=oa.authority_scope
       AND k.action_type=oa.action_type AND k.integration_name=oa.integration_name
+    JOIN products p ON p.id=oa.product_id
     WHERE oa.id=?
+      -- BILLING ↔ CAPABILITY ACCESS. Cancelling a subscription paused the SCP
+      -- agents at both levels and left institutional authority entirely alone,
+      -- so a founder who had stopped paying still had emails sent on their
+      -- behalf under a grant given while they were a customer. The pause
+      -- reached the old layer and never learned about the new one.
+      --
+      -- Read here rather than by revoking the grants, because "you stopped
+      -- paying" and "you withdrew permission" are different facts and this
+      -- codebase already distinguishes them. Resubscribing restores the
+      -- permission the founder already gave; it does not ask them to give it
+      -- again, and a genuine revocation is still a revocation.
+      --
+      -- ONLY scp_status is checked here. A first version also tested
+      -- status <> 'archived', which reads as load-bearing and is not: the
+      -- outbound gateway's kill switch already refuses any product whose
+      -- status is not 'active'. Mutation showed deleting that line changed
+      -- nothing, and a predicate that cannot fail is worse than no predicate,
+      -- because the next reader believes it. scp_status genuinely is
+      -- load-bearing: cancellation sets it and leaves status alone, so the
+      -- kill switch never sees a cancelled subscription at all.
+      AND COALESCE(p.scp_status,'') <> 'paused'
       AND r.state='assisting'
       AND r.authority_ref='autonomy_consent:' || a.id
       AND a.product_id=oa.product_id AND a.responsibility_id=r.id AND a.capability=r.capability
