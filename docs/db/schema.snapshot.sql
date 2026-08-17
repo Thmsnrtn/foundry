@@ -4566,7 +4566,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4580,6 +4579,7 @@
 , name TEXT, secret_hash TEXT, is_active INTEGER DEFAULT 1, updated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);
 , origin TEXT NOT NULL DEFAULT 'founder', review_id TEXT, effective_at DATETIME);
+, paid_through TEXT);
 , payload_json TEXT, attempt_count INTEGER, failed_at DATETIME, effect_certainty TEXT, provider_acknowledged_at TEXT, reconcile_after TEXT);
 , power_check_passed          INTEGER NOT NULL DEFAULT 0, conflict_check_passed       INTEGER NOT NULL DEFAULT 0);
 , pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT, success_threshold REAL, outcome TEXT, winning_variant_id TEXT, concluded_at DATETIME);
@@ -4882,6 +4882,7 @@ CREATE INDEX idx_fh_founder ON founder_health(founder_id);
 CREATE INDEX idx_fhs_founder_date ON founder_health_snapshots(founder_id, snapshot_date);
 CREATE INDEX idx_fin_scenarios_product ON financial_scenarios(product_id);
 CREATE INDEX idx_founder_state_product ON founder_state_assessments(product_id, assessed_at DESC);
+CREATE INDEX idx_founders_paid_through ON founders(paid_through);
 CREATE INDEX idx_founders_tier ON founders(tier);
 CREATE INDEX idx_freeze_periods_product_active
 CREATE INDEX idx_freeze_periods_started

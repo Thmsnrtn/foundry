@@ -53,7 +53,11 @@ const NOT_ACTING = new Set(['paused', 'archived']);
 export async function checkKillSwitch(
   productId: string,
   tool: string,
-  agentName?: string | null
+  agentName?: string | null,
+  /** Server-owned capability facts. Supplied by the gateway from the REGISTERED
+   * policy for the tool — never from the request, which is why this parameter
+   * has no route to a caller. */
+  capability?: { deliverableWhilePaused?: boolean },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
     `SELECT status, scp_status, disabled_tools FROM products WHERE id = ?`,
@@ -73,11 +77,19 @@ export async function checkKillSwitch(
   // migration 017 with a default, so NULL means a row older than the SCP model
   // rather than a company anybody paused — and refusing outbound for those
   // would silence accounts nobody made a decision about.
-  if (NOT_ACTING.has(String(productRow.scp_status ?? ''))) {
-    return {
-      blocked: true,
-      reason: `company is ${String(productRow.scp_status)} — Foundry is not acting for this product`,
-    };
+  const scpStatus = String(productRow.scp_status ?? '');
+  if (NOT_ACTING.has(scpStatus)) {
+    // Account mail is delivered to a paused customer, as every subscription
+    // product delivers it: the notice explaining the pause cannot itself be
+    // blocked by the pause. 'archived' is not exempt — that record is gone, and
+    // there is no relationship left to write to.
+    const exempt = capability?.deliverableWhilePaused === true && scpStatus === 'paused';
+    if (!exempt) {
+      return {
+        blocked: true,
+        reason: `company is ${scpStatus} — Foundry is not acting for this product`,
+      };
+    }
   }
   if (isToolDisabledForRow(productRow.disabled_tools, tool)) {
     return {

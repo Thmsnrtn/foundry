@@ -66,7 +66,7 @@
     },
     {
       "file": "src/services/billing/stripe.ts",
-      "line": 125,
+      "line": 134,
       "detector": "stripe_sdk_mutation",
       "status": "control_path",
       "capability": "Foundry SaaS billing credential owner"
@@ -80,14 +80,14 @@
     },
     {
       "file": "src/services/integration/github-gateway.ts",
-      "line": 51,
+      "line": 52,
       "detector": "templated_post",
       "status": "governed",
       "capability": "GitHub capability handlers"
     },
     {
       "file": "src/services/integration/github-gateway.ts",
-      "line": 92,
+      "line": 93,
       "detector": "templated_post",
       "status": "governed",
       "capability": "GitHub capability handlers"
@@ -122,14 +122,14 @@
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",
-      "line": 68,
+      "line": 69,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Stripe capability handlers"
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",
-      "line": 113,
+      "line": 114,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Stripe capability handlers"
@@ -150,7 +150,7 @@
     },
     {
       "file": "src/services/notifications/push.ts",
-      "line": 206,
+      "line": 219,
       "detector": "templated_post",
       "status": "unreachable",
       "capability": "APNs/FCM device push with no importer anywhere in src/ — real devices, no caller. Kept rather than deleted because it is complete and working, and classified so that wiring it up has to be a deliberate act that changes this line"

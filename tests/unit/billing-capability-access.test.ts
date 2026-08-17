@@ -204,16 +204,26 @@ describe('entitlement to act', () => {
   const lapsed = 'ent_lapsed';
   const trialing = 'ent_trialing';
 
-  it('is granted by a paid tier or a live trial, and by nothing else', async () => {
+  it('is granted by a paid tier, a live trial, or a period already paid for', async () => {
     const { entitledToAct } = await import('../../src/services/billing/entitlement.js');
     const future = new Date(Date.now() + 86_400_000).toISOString();
     const past = new Date(Date.now() - 86_400_000).toISOString();
 
-    expect(entitledToAct('solo', null)).toBe(true);
-    expect(entitledToAct('solo', past), 'a paid tier outlives its trial window').toBe(true);
-    expect(entitledToAct(null, future), 'a live trial is entitlement').toBe(true);
-    expect(entitledToAct(null, past), 'an expired trial is not').toBe(false);
-    expect(entitledToAct(null, null), 'never having started is not').toBe(false);
+    expect(entitledToAct({ tier: 'solo', trialEndsAt: null })).toBe(true);
+    expect(entitledToAct({ tier: 'solo', trialEndsAt: past }),
+      'a paid tier outlives its trial window').toBe(true);
+    expect(entitledToAct({ tier: null, trialEndsAt: future }),
+      'a live trial is entitlement').toBe(true);
+    expect(entitledToAct({ tier: null, trialEndsAt: past }),
+      'an expired trial is not').toBe(false);
+    expect(entitledToAct({ tier: null, trialEndsAt: null }),
+      'never having started is not').toBe(false);
+    // The convention the owner asked for: cancelling ends the plan, not the
+    // period already bought.
+    expect(entitledToAct({ tier: null, trialEndsAt: past, paidThrough: future }),
+      'a cancelled founder keeps what they paid for').toBe(true);
+    expect(entitledToAct({ tier: null, trialEndsAt: past, paidThrough: past }),
+      'and loses it when that period ends').toBe(false);
   });
 
   it('pauses a company whose trial lapsed without converting', async () => {
@@ -233,6 +243,37 @@ describe('entitlement to act', () => {
     expect(paused).toContain(lapsed);
     expect(paused, 'a paying company must not be paused').not.toContain(paying);
     expect(paused, 'a live trial must not be paused').not.toContain(trialing);
+  });
+
+  it('tells the founder their company went read-only, and only once', async () => {
+    // The pause is total, so the notice is the only mail that can reach them —
+    // and the reason it may is that it is the mail ABOUT the pause. An account
+    // that silently stops working is the version of this feature that produces
+    // support tickets.
+    const notices: Array<Record<string, unknown>> = [];
+    const { registerToolHandler } = await import('../../src/services/outbound/gateway.js');
+    const { ACCOUNT_NOTICE_POLICY } = await import('../../src/services/billing/account-notice.js');
+    registerToolHandler('send_account_notice', async (req) => {
+      notices.push(req.params as Record<string, unknown>);
+      return { message_id: 'em_notice' };
+    }, ACCOUNT_NOTICE_POLICY);
+
+    const { sweepEntitlements } = await import('../../src/services/billing/entitlement.js');
+    await query(
+      `INSERT INTO founders (id,clerk_user_id,email,tier,trial_ends_at) VALUES
+        ('ent_f4','ent_c4','notice@example.com',NULL,datetime('now','-3 days'))`, []);
+    await query(
+      `INSERT INTO products (id,name,owner_id,status,scp_status)
+       VALUES ('ent_p4','Notified','ent_f4','active','active')`, []);
+
+    await sweepEntitlements();
+    expect(notices.length, 'exactly one notice for the lapse').toBe(1);
+    expect((notices[0].to as string[])[0]).toBe('notice@example.com');
+
+    // The hourly sweep runs again. The company is already paused, so there is
+    // nothing to pause and nothing to say.
+    await sweepEntitlements();
+    expect(notices.length, 'a repeated sweep must not re-send').toBe(1);
   });
 
   it('stops that company acting, through the mechanism cancellation already uses', async () => {

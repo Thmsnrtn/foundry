@@ -67,6 +67,20 @@ export interface ToolPolicy {
   dataClass: string;
   requireDedupKey: boolean;
   requireCustomerExternalId: boolean;
+  /**
+   * Survives a company pause. Almost nothing should: a paused company reaches
+   * nobody. The exception is Foundry's own account mail to its own customer —
+   * "your trial has ended", "your subscription is cancelled and here is when
+   * access stops" — which every subscription product delivers regardless of
+   * plan state, and which a founder cannot be left without, since the reason
+   * they are paused is exactly what it explains.
+   *
+   * It is a property of the REGISTERED capability, never of the request. A
+   * caller chooses a tool name; the server chooses what that tool may do. The
+   * one tool that carries this flag also builds its own body from a fixed set
+   * of notice kinds, so naming it does not buy the ability to send anything.
+   */
+  deliverableWhilePaused?: boolean;
 }
 
 const DEFAULT_IDEM_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
@@ -97,7 +111,9 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   }
 
   // 1. Kill-switch
-  const ks = await checkKillSwitch(req.productId, req.tool, policy.actor);
+  const ks = await checkKillSwitch(req.productId, req.tool, policy.actor, {
+    deliverableWhilePaused: policy.deliverableWhilePaused === true,
+  });
   if (ks.blocked) {
     await recordGatewayInvocation({
       invocation_id: invocationId,
