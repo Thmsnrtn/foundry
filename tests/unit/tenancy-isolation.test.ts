@@ -259,6 +259,29 @@ describe('Cross-company data anonymization (decision_patterns)', () => {
     expect(sql).not.toMatch(/\bfounder_id\s*=\s*\?/i);
   });
 
+  it('carries a keyed contributor hash, never a raw identifier', () => {
+    // Migration 144 gave `decision_patterns` a contributor_hash so the wisdom
+    // aggregation could require k DISTINCT companies — full anonymity had cost
+    // it the ability to tell three companies from one, and an insight derived
+    // from a single company was publishable to that company's competitors.
+    //
+    // The column must stay a KEYED hash. A plain hash of a product id is
+    // reversible by anyone who can enumerate ids, which is everyone who has the
+    // products table, and would turn this row back into an identified one.
+    const patterns = readFileSync(
+      resolve(__dirname, '../../src/services/wisdom/network.ts'), 'utf-8');
+    expect(patterns).toMatch(/createHmac\(/);
+    expect(patterns, 'the hash must be keyed with the application secret')
+      .toMatch(/process\.env\.ENCRYPTION_KEY/);
+    expect(patterns, 'an unkeyed digest of a product id is not anonymous')
+      .not.toMatch(/createHash\(['"]sha256['"]\)\.update\(productId/);
+
+    // And the row still names nobody.
+    expect(schemaSource.includes('contributor_hash')
+      || readFileSync(resolve(__dirname, '../../src/db/migrations/144_pattern_contributor_hash.sql'), 'utf-8')
+        .includes('contributor_hash')).toBe(true);
+  });
+
   it('getRelevantPatterns is documented as intentionally cross-tenant', () => {
     // The JSDoc comment above the function documents the design decision
     // Look for the comment block preceding the function

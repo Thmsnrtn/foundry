@@ -68,6 +68,7 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 21 SaaS convention (owner direction) | 3 | 3 | 1 high, 2 med | 1 | 2 | 0 | 0 | 5 |
 | 22 AI spend attribution | 1 | 1 | high | 1 | 1 | 0 | 0 | 54 |
 | 23 rate limiting ↔ deployment | 2 | 3 | 2 high, 1 med | 1 | 2 | 0 | 0 | 8 |
+| 24 AI context ↔ tenancy | 3 | 2 | 1 high, 1 med | 2 | 2 | 0 | 0 | 2 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -303,8 +304,14 @@ falsify**, not a reason to move on.
    defects. What remains unexamined: `productOwnerCache` in the AI client never
    expires, so a transferred product would keep attributing spend to its former
    owner — low severity, bounded by product count.
-2. **AI context assembly ↔ tenancy.** What a model is shown, and whether one
-   company's material can reach another's prompt.
+2. ~~**AI context assembly ↔ tenancy.**~~ Done in batch 24. `buildConversationContext`
+   and `getRelevantPatterns` are properly product-scoped. The cross-product
+   wisdom network was not: its "min sample size = 10" gated the COHORT while the
+   patterns feeding an insight needed only three ROWS, so an insight derived
+   from ONE company was publishable to that company's competitors — and the
+   cohort number travelled into other founders' prompts as though it were the
+   contributor count. Migration 144 adds a keyed contributor hash so k-anonymity
+   can be enforced without the row naming anyone.
 3. ~~**AI spend ↔ entitlement.**~~ Done in batch 22. 103 of 104 call sites now
    name their company, one recorded exception (cross-product aggregation), and
    `scripts/check-ai-attribution.mjs` fails the build on a new one. The pause
@@ -315,6 +322,13 @@ falsify**, not a reason to move on.
 5. **§14 named-agent retirement.** Untouched this session: classify remaining
    modules A–E, delete A, migrate-then-delete B, treat C as capability input,
    retain D, investigate E. No mass deletion.
+
+**A pattern across 19, 22, 23 and 24.** Every one was a rule that existed,
+was believed, and was enforced on the wrong thing: the wrong pause axis, the
+wrong (optional) argument, the wrong process, the wrong population. None was a
+missing feature. **When a guarantee is stated in a header comment, the question
+to ask is not "is it implemented" but "what exactly does the implementation
+count, and is that the same thing the sentence claims".**
 
 **Debt with a number on it:** 35 SELECT column-drift baseline entries
 (`docs/db/select-column-baseline.txt`), down from 36. Each is a query that
