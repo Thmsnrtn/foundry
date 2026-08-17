@@ -284,6 +284,38 @@ const supportChannelSection = (
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem;">Point your helpdesk or mailbox at that URL and I will see what people send. Seeing a message lets me show it to you — nothing more.</div>
   </div>`;
 
+// Two people looked at the same effect and said different things.
+//
+// Reconciliation preserves that deliberately: two witnesses who disagree are
+// never resolved toward the convenient answer. But the founder was told only
+// "business evidence conflicts; owner judgment may be needed" — asking a person
+// to exercise judgment while withholding the thing they would exercise it on.
+//
+// This shows who said what, and nothing else. Foundry does not rank the
+// reporters, suggest which to believe, or offer to settle it: it has no way of
+// knowing, and pretending otherwise is the whole failure mode the outcome layer
+// exists to avoid.
+const disputedSection = (
+  items: Array<{
+    effectId: string; title: string; preview: string;
+    reports: Array<{ reporter: string; verdict: string; detail: string | null }>;
+  }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">People disagree about this</div>
+    ${items.map((item) => html`
+      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${item.preview}</div>
+        ${item.reports.map((r) => html`
+          <div style="font-size:0.8rem;color:var(--text-primary);margin-top:0.3rem;">
+            <span style="color:var(--text-muted);">${r.reporter}</span>
+            — ${r.verdict === 'achieved' ? 'it worked' : 'it did not work'}${r.detail ? html`: ${r.detail}` : ''}
+          </div>`)}
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.35rem;">I have kept both. I have no way to tell which is right, so I am not going to pick one.</div>
+      </div>`)}
+  </div>`;
+
 const noticeSection = (
   items: Array<{ responsibilityId: string; title: string; state: string }>,
 ) => {
@@ -529,8 +561,9 @@ letterRoutes.get('/letter', async (c) => {
   const obligationOptions: Array<[string, string]> = REPORTABLE_OBLIGATIONS.map((k) => [k, OBLIGATION_LABELS[k]]);
   const { getObservationChannels } = await import('../../services/institution/company-observation.js');
   const observationChannels = await getObservationChannels(ctx.productId);
-  const { getUnresolvedEffects } = await import('../../services/institution/effect-outcome.js');
+  const { getUnresolvedEffects, getDisputedEffects } = await import('../../services/institution/effect-outcome.js');
   const unresolvedEffects = await getUnresolvedEffects(ctx.productId);
+  const disputedEffects = await getDisputedEffects(ctx.productId);
   const { getMessagesAwaitingReply } = await import('../../services/institution/support-reply.js');
   const customerMessages = await getMessagesAwaitingReply(ctx.productId);
   const { getSupportChannels } = await import('../../services/institution/customer-message-intake.js');
@@ -619,6 +652,7 @@ letterRoutes.get('/letter', async (c) => {
         process.env.APP_URL ?? 'http://localhost:8080')}
       ${customerMessageSection(customerMessages)}
       ${outcomeSection(unresolvedEffects)}
+      ${disputedSection(disputedEffects)}
       ${observationChannelSection(observationChannels)}
       ${noticeSection([...responsibilitySummary.NEEDS_YOU, ...responsibilitySummary.CHANGED,
         ...responsibilitySummary.HANDLED, ...responsibilitySummary.STILL_OPEN])}

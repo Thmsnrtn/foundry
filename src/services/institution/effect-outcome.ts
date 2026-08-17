@@ -128,3 +128,41 @@ export async function getUnresolvedEffects(
     title: String(row.title), preview: String(row.preview_text ?? ''),
   }));
 }
+
+/**
+ * Effects whose reporters disagree, with what each of them actually said.
+ *
+ * `conflicting` is a state the reconciliation goes out of its way to preserve —
+ * two witnesses who disagree are not resolved toward the convenient answer. But
+ * the founder-facing surface said only "business evidence conflicts; owner
+ * judgment may be needed", which asks a person to exercise judgment while
+ * withholding the thing they would exercise it on. `getEffectOutcomeReports`
+ * had no route caller at all; this is its first production reader.
+ *
+ * Nothing here resolves the disagreement, ranks the reporters, or suggests
+ * which to believe. It shows who said what.
+ */
+export async function getDisputedEffects(
+  productId: string, limit = 5,
+): Promise<Array<{
+  effectId: string; title: string; preview: string;
+  reports: EffectOutcomeReport[];
+}>> {
+  const rows = await query(
+    `SELECT o.effect_id, o.preview_text, r.title
+       FROM outbound_actions o
+       JOIN institutional_responsibilities r ON r.id=o.responsibility_id AND r.product_id=o.product_id
+      WHERE o.product_id=? AND o.outcome_status='conflicting' AND o.effect_id IS NOT NULL
+      ORDER BY o.executed_at DESC LIMIT ?`,
+    [productId, limit],
+  );
+  const out = [];
+  for (const row of rows.rows as unknown as Array<Record<string, unknown>>) {
+    const effectId = String(row.effect_id);
+    out.push({
+      effectId, title: String(row.title), preview: String(row.preview_text ?? ''),
+      reports: await getEffectOutcomeReports(productId, effectId),
+    });
+  }
+  return out;
+}

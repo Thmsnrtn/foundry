@@ -1,5 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
@@ -182,5 +184,50 @@ describe('effect outcome reports', () => {
     expect(await reportEffectOutcome({
       productId: 'eo_other', effectId: 'eo_effect_1', verdict: 'failed', reporter: 'founder:eo_o2',
     })).toEqual({ refused: 'not_executed' });
+  });
+});
+
+// =============================================================================
+// Disagreement, shown.
+//
+// `conflicting` is preserved deliberately — two witnesses who disagree are
+// never resolved toward the convenient answer. But the founder-facing surface
+// said only "business evidence conflicts; owner judgment may be needed", which
+// asks a person to exercise judgment while withholding the thing they would
+// exercise it on. `getEffectOutcomeReports` had no route caller at all.
+// =============================================================================
+
+describe('what the owner is shown when reporters disagree', () => {
+  it('names who said what, on the effect they disagreed about', async () => {
+    const { getDisputedEffects } = await import('../../src/services/institution/effect-outcome.js');
+    const disputed = await getDisputedEffects(P);
+
+    // eo_effect_2 is the one two reporters split on, earlier in this file.
+    expect(disputed.map((d) => d.effectId)).toEqual(['eo_effect_2']);
+    const reports = disputed[0].reports;
+    expect(reports).toHaveLength(2);
+    expect(reports.map((r) => `${r.reporter}:${r.verdict}`).sort())
+      .toEqual([`external:rota_system:failed`, `founder:${OWNER}:achieved`]);
+  });
+
+  it('shows only genuine disagreement, not every effect', async () => {
+    const { getDisputedEffects } = await import('../../src/services/institution/effect-outcome.js');
+    const disputed = await getDisputedEffects(P);
+    // eo_effect_1 was agreed (verified_success) and must not appear as disputed.
+    expect(disputed.map((d) => d.effectId)).not.toContain('eo_effect_1');
+  });
+
+  it('keeps one company\'s dispute out of another\'s', async () => {
+    const { getDisputedEffects } = await import('../../src/services/institution/effect-outcome.js');
+    expect(await getDisputedEffects('eo_other')).toEqual([]);
+  });
+
+  it('is read by production, not only by this test', () => {
+    const letter = readFileSync(
+      resolve(__dirname, '../../src/routes/dashboard/letter.ts'), 'utf8');
+    expect(letter).toContain('getDisputedEffects');
+    expect(letter).toContain('disputedSection(disputedEffects)');
+    // And it must not offer to settle what it cannot settle.
+    expect(letter).toContain('I am not going to pick one');
   });
 });
