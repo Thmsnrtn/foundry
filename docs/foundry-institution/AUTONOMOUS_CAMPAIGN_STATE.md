@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **192 files / 1,563 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **193 files / 1,573 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -109,6 +109,15 @@ records them as settled. Standing consequences:
 - **Judgment calibration.** Requires real later-outcome evidence reaching the evaluation path.
 - **Business outcomes.** Provider acknowledgement is not resolution; `unresolved` is preserved deliberately.
 
+## Worth an owner's attention, not a decision
+
+- **Any integration configured through `/agents/integrations` before this
+  session stored its provider secret in a plaintext column.** Reads fall back
+  to it so nothing breaks, and `plaintextCredentialKeys(productId)` names
+  exactly which keys to rotate. **No real credentials are affected** — nothing
+  has met reality, so there are no production integrations. Recorded here so
+  the rotation step is not forgotten if that changes.
+
 ## Proof debt
 
 - Everything wired in sessions 4–10 is **E2** — local runtime through production-facing services. A production-facing code path is not production evidence.
@@ -131,6 +140,7 @@ Newest first. Trimmed as it ages — git history is the diary.
 - The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
 - Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
 - One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
+- Provider credentials stop being written to a plaintext column; one shared allow-list decides what may be stored in the clear, and six adapters now read the encrypted store.
 - Whisper transcription brought under the spend ceilings; the effects detector taught to read templated URLs, surfacing seven previously invisible calls.
 - The support vertical made reachable by a person: message surface, channel creation, the intake URL, revocation.
 - Disagreement shown — `conflicting` named who said what, instead of asking for judgment while withholding the evidence.
@@ -188,7 +198,7 @@ Next, in order:
    Still: prefer a source a real responsibility already demands over a vendor
    checklist, and remember that every new intake needs a purpose in migration
    139's closed set, which is a migration and a review by design.
-2. **Keep reassessing — nine reads, seven of them found a real defect.** The intakes (one
+2. **Keep reassessing — ten reads, eight of them found a real defect.** The intakes (one
    credential, three consequences), the authority surfaces (two
    authenticators, one weaker, an audit doc naming them backwards), the
    founder-facing writes (CSRF complete but unenforced — gated), the scheduler
@@ -205,9 +215,13 @@ Next, in order:
    and the reason nobody had noticed was that the effects detector could not
    read a templated URL — teaching it surfaced seven more calls and a whole
    uninventoried module.
-   **The list is exhausted and the method is not.** Unread: credential storage
-   and encryption, the tenancy layer, onboarding, billing, webhook delivery.
-   Stop when a read stops finding anything.
+   Credential storage was the most serious: two founder-facing forms disagreed
+   about what a credential is, six adapters read secrets from the plaintext
+   config blob, and the path that stored provider API keys IN THE CLEAR was the
+   only one that worked.
+   **Unread:** the tenancy layer (has a strong dedicated gate already),
+   onboarding, billing, outbound webhook delivery. Stop when a read stops
+   finding anything.
 3. **Executive cognition remains the genuine frontier** and remains gated on a
    consumed task with a real baseline. It must not be started by sprinkling
    model calls.
