@@ -8,8 +8,16 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 ## Current frontier
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** through **138**. Schema snapshot current.
-- **Validation:** `npm run check` green — **179 files / 1,462 tests**, all 4 ratchets hold.
+- **Migrations:** through **139**. Schema snapshot current.
+- **Validation:** `npm run check` green — **182 files / 1,491 tests**, all 4 ratchets hold.
+- **Three companies now cross a governed effect,** not one, and between them
+  they use both declared effect kinds and both directions of the outcome loop.
+  A groundworks contractor is raised by its own system and reports ACHIEVED; a
+  heating firm is raised by its owner and reports FAILED. The kernel did not
+  move for either.
+- **Credentials are scoped to their purpose** (139). One product-wide secret
+  authenticated three intakes with quite different consequences, including the
+  outcome ledger. Found by reassessing rather than by continuing down a list.
 - **The whole ladder is generic now.** Four SaaS-shaped bindings were found and removed in sequence, each revealed by the previous one: the observation vocabulary (135), the effect guard (136), the authority-read, and the grantable-capability map. A dance school is carried end to end — owner report → Understood → Shadowing → resolved comparison → exact grant → Assisting → founder-authored notice → governed send → receipt → outcome.
 - **The loop closes.** Someone outside can finally say whether an effect achieved what it was for (137), so `outcome_status` can leave `unresolved` by fact rather than staying there by construction. HANDLED now means "it worked", not "it reached a rung".
 - **A company's own systems can raise work** (138), so the first rung is no longer fed only by a person.
@@ -23,19 +31,22 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 Ordered by distance from the final state, not by effort.
 
-1. **Senses are still thin, but no longer closed.** Four provider-neutral intakes exist — metrics, company-defined quantities, inbound customer messages, external obligations, and effect outcomes. All are generic in shape; none is domain-specific. What is missing is breadth of ADAPTERS, not more kernel.
+1. **Senses are still thin, but no longer closed.** Five provider-neutral intakes exist — metrics, company-defined quantities, inbound customer messages, external obligations, and effect outcomes. All are generic in shape; none is domain-specific. What is missing is breadth of ADAPTERS, not more kernel. Each intake's credential is now scoped to its purpose (139), so a sixth needs a purpose added by migration — deliberately.
 2. **Capability fabric is still narrow.** Governed email send now serves any capability through two declared effect kinds, plus bounded generated-artifact development. No scheduling, record mutation, publishing, billing operations, or reconciliation.
 3. **World model is sparse.** Facts and claims exist; promise / obligation / workflow / dependency / resource / constraint composition does not.
 4. **No frontier cognition anywhere**, by design — no consumed task has yet established a baseline that a model would beat.
-5. **Unfamiliar-company breadth** is one held-out corpus plus five hand-authored businesses, one of which is carried through a governed effect end to end. More shapes would harden it; none has needed a kernel change so far.
+5. **Unfamiliar-company breadth** is one held-out corpus plus seven hand-authored businesses, three of which are carried through a governed effect end to end. None has needed a kernel change, and the last two were chosen to take different branches rather than repeat one.
 6. **Judgment calibration still has no supply.** Effect outcomes are now reportable; JUDGMENT outcomes are a different shape and nothing produces them, so evaluation can still only report `not_yet_observable`. Deliberately unbuilt.
 7. **Nothing has met reality.** No real founder, provider, customer, or pilot.
 
 ## Ready work
 
-- **Adapters** for the existing intakes — the shape is proven five times over; what is missing is breadth, not architecture.
-- A second and third unfamiliar company carried through a governed effect end to end.
+- **Adapters** for the existing intakes — the shape is proven; what is missing
+  is breadth, not architecture. The owner's pilot decision gates on this, so it
+  is endorsed rather than speculative. Prefer a source a real responsibility
+  demands over a vendor checklist.
 - More effect kinds, when a real responsibility demands one. Each is a migration, deliberately.
+- ~~A second and third unfamiliar company through a governed effect~~ — **DONE**.
 
 ## Blocked — needs a design decision, not effort
 
@@ -46,7 +57,15 @@ Ordered by distance from the final state, not by effort.
 
 None in flight. Last package closed and pushed.
 
-## Two findings worth not re-learning
+## Three findings worth not re-learning
+
+- **A credential is an authority surface, and shared ones widen silently.** One
+  secret authenticated posting numbers, raising work, AND declaring that an
+  effect succeeded. Migration 137 refuses reports from the institution because
+  self-declared success is not an outcome layer — and a metrics integration is
+  not the institution, so it walked straight through that check. Whenever a
+  route is added behind an existing token, ask what ELSE that token already
+  opens. Found by reassessing rather than by continuing down the list.
 
 - **47 assertions existed under `src/` where the runner never looked.** Invisible coverage reads exactly like coverage. Two had silently gone stale — one contradicted a security improvement (SEC-10 moved a GitHub token out of the request body), one required a credential the setup deliberately stopped providing. A gate now enforces both directions.
 - **The orphan report is only trustworthy after the dynamic loaders are accounted for.** A naive run once named ~160KB of live, dynamically-loaded agents as dead. Seven modules were deleted this session only after checking module path, bare name, config, CI, and docs.
@@ -90,27 +109,26 @@ records them as settled. Standing consequences:
 
 ## Recently completed
 
-1. The owner can open a development expectation — the last non-benchmark DARK module goes live.
-2. Four owner decisions answered and recorded; the effect-kind line made structural.
-3. `challenger`/`synthesizer` reclassified: already production-reachable via the debate orchestrator. My directory-based classification was the same category error the orphan report once made.
-4. Seven proven-dead modules deleted on evidence; as-any ratchet tightened 30 → 29.
-2. 47 unrun assertions recovered from under `src/`, two stale ones corrected, and a gate against invisible tests.
-3. External company reports (138) — a company's own systems can raise work, without laundering provenance.
-2. Effect outcome reports (137) — the loop's last link finally has a supply; HANDLED means "it worked".
-3. Governed effect boundary generalized (136) — declared effect kinds, capability out of the guard, founder-authored notices as the second real kind.
-4. A dance school carried end to end through a governed effect.
-5. The long-standing intermittent RESOLVED — a 1-in-64 fixture collision, not a system defect.
-6. Four unfamiliar businesses carried to a resolved Shadowing with no kernel branch.
-7. Company-defined observation channels (135) — the ladder stops being SaaS-only.
-2. Founder surface + ingest wiring for observation channels, guarded by the chain gate.
-3. Failure-forensics readiness for the open nondeterminism.
-4. Dynamic-loader blind spot closed; bidirectional agent classification gate; dead config seeder deleted.
-5. `recursive-institution-v1` reports ordinary, earned by real exercise.
-6. Owner-named schema-snapshot responsibility carried end to end; `verifyDiffScope` added.
-7. Institutional cost attribution (migration 134).
-8. Deletion sweep — five proven-dead shims; discovered the naive orphan report would have deleted live dynamically-loaded code.
-9. Seven-day absence view consumes institutional truth.
-10. `support-drafting-v1` frozen (E1); `support-pilot-readiness-v1` built.
+Newest first. Trimmed as it ages — git history is the diary.
+
+- Scoped ingest credentials (139); public surfaces stop selecting rows that carry secrets.
+- A second and third unfamiliar company through a governed effect, closing the outcome loop in both directions.
+- Both kernel-ignorance gates hardened — camelCase was folding the domain word out of existence.
+- The owner can open a development expectation — the last non-benchmark DARK module goes live.
+- Four owner decisions answered; the effect-kind line made structural.
+- `challenger`/`synthesizer` reclassified: already production-reachable via the debate orchestrator.
+- Seven proven-dead modules deleted on evidence; as-any ratchet tightened 30 → 29.
+- 47 unrun assertions recovered from under `src/`, and a gate against invisible tests.
+- External company reports (138) — a company's own systems can raise work, without laundering provenance.
+- Effect outcome reports (137) — the loop's last link has a supply; HANDLED means "it worked".
+- Governed effect kinds (136) — capability out of the guard; founder-authored notices as the second kind.
+- A dance school carried end to end through a governed effect.
+- The long-standing intermittent RESOLVED — a 1-in-64 fixture collision, not a system defect.
+- Company-defined observation channels (135) — the ladder stops being SaaS-only.
+- Dynamic-loader blind spot closed; bidirectional agent classification gate.
+- `recursive-institution-v1` reports ordinary, earned by real exercise.
+- Owner-named schema-snapshot responsibility carried end to end; `verifyDiffScope` added.
+- Institutional cost attribution (migration 134).
 
 ## NEXT SESSION START HERE
 
@@ -128,17 +146,26 @@ found no further binding to remove. The recurring defect shape — a general
 mechanism bound to one special case — has been swept from observation,
 effects, authority reads, the grant surface, recognition, and outcomes.
 
+**Items 2 and 3 of the previous list are done, and item 3 was the one that
+paid.** Carrying two more companies confirmed the generalization and found
+nothing — eleven of twelve assertions passed on the first run. Then reassessing
+instead of moving to item 1 found a real defect: one credential opening three
+intakes, including the outcome ledger. **Reading a subsystem's surfaces
+side-by-side beats extending it.**
+
 Next, in order:
-1. **Adapters, not architecture.** The provider-neutral shape is proven five
-   times; breadth is now an integration exercise. Prefer a source a real
-   responsibility already demands over a vendor checklist.
-2. **Carry a second and third unfamiliar company through a governed effect**
-   end to end, and treat any kernel change they force as a defect in the
-   generalization.
-3. **Reassess final-state distance** rather than continuing down this list by
-   habit. The next genuine frontier is probably executive cognition — which is
-   gated on a consumed task with a real baseline, and must not be started by
-   sprinkling model calls.
+1. **Adapters, not architecture.** Now the honest top of the list, and
+   owner-endorsed — the pilot decision explicitly gates on adapter breadth.
+   Still: prefer a source a real responsibility already demands over a vendor
+   checklist, and remember that every new intake needs a purpose in migration
+   139's closed set, which is a migration and a review by design.
+2. **Keep reassessing.** The credential finding came from reading four intakes
+   together, not from building a fifth. Other subsystems have not had that
+   treatment: the authority surfaces, the founder-facing writes, and the
+   scheduler are each worth one deliberate side-by-side read.
+3. **Executive cognition remains the genuine frontier** and remains gated on a
+   consumed task with a real baseline. It must not be started by sprinkling
+   model calls.
 
 Do not build the three deferred systems. Do not unlock Operating. Do not touch
 AcreOS.

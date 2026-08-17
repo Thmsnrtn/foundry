@@ -1210,17 +1210,115 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 
 ### Still open
 
-*Reconciled again at the close of the eighth session.*
+*Reconciled again at the close of the eleventh session.*
 
-1. **Recursive operation in production.** The vertical is proven locally and end to end, but it has only ever run in tests. **External proof debt, explicitly:** the deployed Foundry company still requires a genuine owner-authenticated report and a genuine owner-authenticated grant, performed outside the coding environment. Neither has happened, and neither may be fabricated. What remains after that is an outcome nobody has independently established.
-2. **`challenger` and `synthesizer`** are classified evidence-insufficient. Resolving them needs a person who knows whether they were retired deliberately; it is not derivable from the repository.
-3. **Named-agent retirement.** Twelve implementations remain live and production-reachable. Retiring them is Class-B work — prove equivalence, move callers to the institutional capability, verify, then delete. No dual-write.
-2. **Judgment calibration — blocked on reality, not on effort.** Nothing in production writes `judgment_expected_supported` / `judgment_expected_contradicted`, so evaluation can only ever report `not_yet_observable`. Left as E2 proof debt deliberately: manufacturing longitudinal examples to improve a calibration metric would corrupt the one number that is supposed to be honest.
-3. **Quality/cost comparator.** Deferred with a stated trigger — buildable when a second candidate method exists. The cost side, the quality gate, and the deterministic baseline are all now in place.
-4. **Architecture deletion — 34 candidates remain**, each needing per-module proof. The reachability gate resolves literal imports only and is blind to dynamically-loaded modules in both directions; that blind spot is now documented and is the thing to fix before the next sweep.
-5. **`development-shadowing.ts` remains dark** — observations are supplied now, but no production path opens a development expectation for them to resolve.
-6. **The unreproduced `customer-message-intake` flake**, with six hypotheses eliminated.
-7. **Founder attention** stays unbuilt until a real consumer needs it.
+- **Recursive operation in production.** The vertical is proven locally and end
+  to end, but it has only ever run in tests. **External proof debt, explicitly:**
+  the deployed Foundry company still requires a genuine owner-authenticated
+  report, performed outside the coding environment. The owner has decided on
+  **report only, not the grant**, so Foundry still may not mutate its own
+  repository outside a test. Neither may be fabricated.
+- **Named-agent retirement.** Twelve implementations remain live and
+  production-reachable. Retiring them is Class-C, not Class-B: they are
+  model-driven and the institution is deliberately model-free, so cutting them
+  over would LOSE capability rather than preserve it. Blocked on executive
+  cognition, itself blocked on a consumed task with a real baseline.
+- **Judgment calibration — blocked on reality, not on effort.** Nothing in
+  production writes `judgment_expected_supported` /
+  `judgment_expected_contradicted`, so evaluation can only ever report
+  `not_yet_observable`. Manufacturing longitudinal examples to improve a
+  calibration metric would corrupt the one number that is supposed to be honest.
+- **Quality/cost comparator.** Deferred with a stated trigger — buildable when a
+  second candidate method exists for a consumed capability.
+- **Architecture deletion.** Candidates remain, each needing per-module proof.
+  The dynamic-loader blind spot is now closed and the classification gate is
+  bidirectional, so the next sweep starts from a trustworthy report.
+- **Founder attention** stays unbuilt until a real consumer needs it.
+
+**Closed since the last reconciliation, and not to be re-listed:**
+
+- ~~`challenger` and `synthesizer` are evidence-insufficient~~ — the owner
+  answered, and the answer was that my classification was wrong. Both are
+  standalone debate functions reached by ordinary static import from
+  `debate/orchestrator.ts`. Being in `agents/` is not what makes something an
+  agent; the gate now checks reachability rather than location.
+- ~~`development-shadowing.ts` remains dark~~ — the owner can now open a
+  development expectation, so the DARK list contains only frozen benchmark
+  gates, which is what it was always supposed to mean.
+- ~~The unreproduced `customer-message-intake` flake~~ — **RESOLVED.** A
+  near-miss key fixture built as `key.slice(0,-1) + 'X'` collided with the real
+  key whenever it ended in `X`, once in sixty-four. Every one of the six
+  eliminated hypotheses was correctly eliminated, and none of them could have
+  found it.
+
+## Completed slice: a second and third unfamiliar company through a governed effect
+
+- **Requirement:** carry two more unfamiliar companies end to end, and treat any
+  kernel change they force as a defect in the generalization rather than a
+  feature request from the company.
+- **Implementation:** deliberately different branches rather than a repeat.
+  Barrowfield Groundworks is raised by the company's OWN SYSTEM (migration 138),
+  runs on `customer_support` through the support-reply effect kind, and its
+  client reports the outcome ACHIEVED. Whitlow Heating is raised by its owner,
+  runs on `operations` through the notice effect kind, watches a quantity whose
+  good direction is DOWN, and its householder reports FAILED.
+- **Observe:** eleven of twelve assertions passed on the first run; the twelfth
+  was a wrong table name in my own test. `governed_effect_kinds` still holds
+  exactly two rows, and the two companies used one each. No capability,
+  obligation kind, effect kind, metric column, or business-aware branch was
+  added.
+- **What this closes:** the dance school's effect ended at `unresolved`, which
+  was honest and is not a destination. These two leave it in both directions. A
+  loop that can only be closed by good news is a reporting feature, not an
+  outcome layer.
+- **Defect found in my own gate:** the kernel-ignorance check could be evaded by
+  an identifier. Folding case before matching turns `heatingHint` into
+  `heatinghint`, where no word boundary can see the word. camelCase is now split
+  before the fold, the boundary is lowercase-or-digit rather than `\b`, and
+  plurals are caught — verified against four mutants. The sibling gate in the
+  ladder test had the same blind spot and was fixed with it.
+- **Evidence maturity:** E2. Seven hand-authored businesses and one held-out
+  corpus is not the world.
+
+## Completed slice: ingest credentials that carry their own purpose (migration 139)
+
+- **How it was found:** by reassessing final-state distance instead of
+  continuing down the ready-work list, and reading the four intakes side by
+  side. Building a fifth would not have surfaced it.
+- **Verified defect:** three public routes authenticated against the same
+  product-wide `products.ingest_token` — the secret the settings page tells
+  founders to give to Stripe, to Zapier, to a cron job. Handing it to an
+  analytics tool also handed that tool the ability to raise responsibilities
+  and, worse, to declare that any executed effect had achieved its intent.
+- **Why the third is the serious one:** an outcome report is the only evidence
+  that can move an effect off `unresolved`. It becomes a learned reconstruction
+  claim and takes the effect off the owner's "did this work?" list. Migration
+  137 refuses reports attributed to the institution, precisely because a system
+  that can declare its own success has no outcome layer — and a metrics
+  integration is not the institution, so it passed that check while being no
+  better placed than Foundry to know whether anybody turned up.
+- **Shape:** the recurring defect of this codebase in new clothes — a general
+  mechanism bound to a widening consequence. Also the exact inverse of the rule
+  applied everywhere else, including the one the owner ratified for recursive
+  Foundry: authority is NARROWER than the credential you hold, never a side
+  effect of holding it.
+- **Implementation:** a credential names its purposes at mint time from a closed
+  set held in SQL, so it cannot be widened at runtime by a service, a company,
+  an integration, or a model. Purposes are immutable — a credential is withdrawn
+  and a new one issued, so "what was this secret ever allowed to do?" stays true
+  instead of being re-described by the present. The legacy token keeps working
+  for metrics and nowhere else. Minting is a founder assertion recorded as
+  canonical evidence, and the owner issues and withdraws them from settings.
+- **Challenge:** mutation-tested three ways — dropping the purpose check in the
+  query, the outcome route falling back to the metrics token, and widening the
+  SQL vocabulary. Caught by 1, 2 and 4 assertions respectively.
+- **Second finding, same sweep:** the public share page ran `SELECT p.*` and
+  rendered only `id` and `name`. Nothing leaked, and it was one added field away
+  from handing an investor the credential their tools post metrics with.
+  Narrowed to named columns and gated on REACH rather than rendering — asserting
+  "no secret is printed" would pass right up until somebody printed one.
+- **Evidence maturity:** E2. `api_keys` and the webhook secrets were checked in
+  the same pass and are not of this shape.
 
 ## Working rules that mattered most
 
@@ -1245,3 +1343,8 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **A cast is a promise, not a check.** `agentName as AgentName` on a database row type-checks and validates nothing. Two of three dynamic loaders were secured by a type annotation that does not exist at runtime.
 - **Verifying the thing you changed cannot see the thing you didn't.** The whole point of `verifyDiffScope`: every other check passes while the repository is unauthorised.
 - **Being ready to learn beats continuing to look.** After nine full runs and twenty-five saturated ones, the honest move on the intermittent was forensics readiness, not more guessing.
+- **A credential is an authority surface.** Whenever a route is added behind an existing token, ask what ELSE that token already opens. One secret authenticated posting numbers, raising work, and declaring that an effect succeeded — and the third walked straight through the guard built to stop exactly that.
+- **Reading a subsystem's surfaces side by side beats extending it.** Two more companies through the ladder confirmed the generalization and found nothing. Stopping to reassess found a real defect within the hour.
+- **Gate on reach, not on rendering.** "No secret is printed" passes right up until somebody prints one. A row that never arrives has nothing to print.
+- **Commit before mutation-testing.** A `git checkout` to revert a mutant silently reverted real edits in the same file, and left mutants standing in the untracked ones. Second time this has happened; the fix is to commit first, not to be more careful.
+- **A word boundary is not a boundary once you fold case.** `heatingHint` lowercases to `heatinghint`, and `\bheating\b` cannot see it. Two gates read as if they checked something they did not.
