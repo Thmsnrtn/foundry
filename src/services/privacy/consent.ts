@@ -233,64 +233,71 @@ export async function updateDataResidencySettings(
 // ─── exportProductData ─────────────────────────────────────────────────────────
 
 /**
+ * Columns never included in an export, by name pattern.
+ *
+ * A subject access request is a right to one's own data, not a mechanism for
+ * extracting live credentials. An encrypted provider token or an API key hash
+ * is material that can be replayed or attacked offline, and handing it back in
+ * a downloadable file — to whoever has the session at that moment — is a worse
+ * outcome than omitting it. The row still appears, so the founder can see THAT
+ * an integration exists and when it was connected.
+ */
+const SECRET_COLUMN = /(token|secret|password|credential|api_key|key_hash|private|signature)/i;
+
+/**
+ * Tables left out of an export, and why. Same discipline as the erasure
+ * retention list: an entry is an argument, not a convenience.
+ */
+const EXCLUDED_FROM_EXPORT: Record<string, string> = {
+  idempotency_keys: 'internal at-most-once bookkeeping; carries no company content',
+  communication_budgets: 'internal send counters',
+  rate_limit_counters: 'internal request counters',
+  ai_spend_reservations: 'internal cost accounting, mid-flight',
+};
+
+/** Exported for the gate that checks each exclusion has a reason. */
+export const EXCLUDED_FROM_EXPORT_REASONS = EXCLUDED_FROM_EXPORT;
+
+/**
  * Gather all product data for a GDPR-style export.
- * Returns structured data suitable for JSON or CSV serialization.
+ *
+ * DERIVED FROM THE SCHEMA, like the erasure. This was a hand-written list of
+ * ten tables — five of them added by a fix whose comment reads "Export was 60%
+ * incomplete", measured against a denominator that was itself a guess. The real
+ * denominator is 218 tables carrying `product_id`. An access request answered
+ * with ten of them is not an access request answered.
+ *
+ * Empty tables are omitted from the result rather than exported as empty
+ * arrays: a file with two hundred empty keys is harder to read, not more
+ * complete.
  */
 export async function exportProductData(
   productId: string,
   _format: 'json' | 'csv'
 ): Promise<Record<string, unknown[]>> {
-  const [metricsResult, briefingsResult, decisionsResult, customersResult, agentConfigResult] =
-    await Promise.all([
-      query(
-        `SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC`,
-        [productId]
-      ),
-      query(
-        `SELECT id, product_id, briefing_date, headline, health_score, signal_score, risk_state, created_at
-         FROM scp_briefings WHERE product_id = ? ORDER BY briefing_date DESC`,
-        [productId]
-      ),
-      query(
-        `SELECT id, product_id, what, why_now, status, category, gate, created_at
-         FROM decisions WHERE product_id = ? ORDER BY created_at DESC`,
-        [productId]
-      ),
-      query(
-        `SELECT id, product_id, name, email, plan, mrr_cents, signed_up_at, last_active_at,
-                health_score, churn_risk, created_at
-         FROM customers WHERE product_id = ? ORDER BY created_at DESC`,
-        [productId]
-      ).catch(() => ({ rows: [] })),
-      query(
-        `SELECT id, product_id, agent_name, config_json, updated_at
-         FROM agent_configs WHERE product_id = ? ORDER BY agent_name ASC`,
-        [productId]
-      ).catch(() => ({ rows: [] })),
-    ]);
+  const tables = (await tablesWithProductId())
+    .filter((t) => !(t in EXCLUDED_FROM_EXPORT));
 
-  // v5 FRICTION: Export was 60% incomplete. Add missing tables.
-  const [stressorsResult, auditResult, lifecycleResult, competitorsResult, signalsResult] =
-    await Promise.all([
-      query('SELECT * FROM stressor_history WHERE product_id = ? ORDER BY identified_at DESC', [productId]).catch(() => ({ rows: [] })),
-      query('SELECT * FROM audit_scores WHERE product_id = ? ORDER BY created_at DESC', [productId]).catch(() => ({ rows: [] })),
-      query('SELECT * FROM lifecycle_state WHERE product_id = ?', [productId]).catch(() => ({ rows: [] })),
-      query('SELECT * FROM competitors WHERE product_id = ?', [productId]).catch(() => ({ rows: [] })),
-      query('SELECT * FROM competitive_signals WHERE product_id = ? ORDER BY detected_at DESC', [productId]).catch(() => ({ rows: [] })),
-    ]);
-
-  return {
-    metrics: metricsResult.rows,
-    briefings: briefingsResult.rows,
-    decisions: decisionsResult.rows,
-    customers: customersResult.rows,
-    agent_config: agentConfigResult.rows,
-    stressors: stressorsResult.rows,
-    audit_scores: auditResult.rows,
-    lifecycle_state: lifecycleResult.rows,
-    competitors: competitorsResult.rows,
-    competitive_signals: signalsResult.rows,
-  };
+  const out: Record<string, unknown[]> = {};
+  for (const table of tables) {
+    try {
+      const res = await query(`SELECT * FROM ${table} WHERE product_id = ?`, [productId]);
+      if (res.rows.length === 0) continue;
+      out[table] = (res.rows as unknown as Array<Record<string, unknown>>).map((row) => {
+        const clean: Record<string, unknown> = {};
+        for (const [col, value] of Object.entries(row)) {
+          clean[col] = SECRET_COLUMN.test(col) && value != null ? '[redacted]' : value;
+        }
+        return clean;
+      });
+    } catch {
+      // A table that cannot be read is omitted rather than failing the whole
+      // export. Unlike the erasure, a partial export makes no claim to be
+      // complete — it is a file, not a completion record.
+      continue;
+    }
+  }
+  return out;
 }
 
 // ─── What an erasure erases ───────────────────────────────────────────────────
@@ -318,18 +325,21 @@ const RETAINED_ON_ERASURE: Record<string, string> = {
     'financial event ledger required for billing reconciliation',
 };
 
-/** Every table the live schema says carries a `product_id`, minus the ones
- * recorded above. Read from the database rather than written down, so a table
- * added later is erased by default. */
-export async function tablesToErase(): Promise<string[]> {
+/** Every table the live schema says carries a `product_id`. Read from the
+ * database rather than written down, so a table added later is covered by
+ * default — by both the erasure and the export. */
+export async function tablesWithProductId(): Promise<string[]> {
   const res = await query(
     `SELECT m.name FROM sqlite_master m
       WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'
         AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name = 'product_id')
       ORDER BY m.name`, []);
-  return (res.rows as unknown as Array<Record<string, unknown>>)
-    .map((r) => String(r.name))
-    .filter((t) => !(t in RETAINED_ON_ERASURE));
+  return (res.rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.name));
+}
+
+/** Those tables minus the ones an erasure deliberately keeps. */
+export async function tablesToErase(): Promise<string[]> {
+  return (await tablesWithProductId()).filter((t) => !(t in RETAINED_ON_ERASURE));
 }
 
 /** Exported for the gate that checks each retention has a reason. */

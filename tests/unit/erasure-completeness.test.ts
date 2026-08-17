@@ -29,21 +29,13 @@ import { resolve } from 'path';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
-  RETAINED_ON_ERASURE_REASONS, tablesToErase,
+  EXCLUDED_FROM_EXPORT_REASONS, RETAINED_ON_ERASURE_REASONS,
+  exportProductData, tablesToErase, tablesWithProductId,
 } from '../../src/services/privacy/consent.js';
 
 beforeAll(async () => {
   await runMigrations();
 });
-
-async function tablesWithProductId(): Promise<string[]> {
-  const res = await query(
-    `SELECT m.name FROM sqlite_master m
-      WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%'
-        AND EXISTS (SELECT 1 FROM pragma_table_info(m.name) WHERE name = 'product_id')
-      ORDER BY m.name`, []);
-  return (res.rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.name));
-}
 
 describe('every table holding a company is erased or explains itself', () => {
   it('covers the whole schema, not a list written once', async () => {
@@ -163,5 +155,56 @@ describe('the completion record cannot outrun the deletion', () => {
     const source = readFileSync(
       resolve(__dirname, '../../src/services/privacy/consent.ts'), 'utf8');
     expect(source).toMatch(/scp_status = 'archived'/);
+  });
+});
+
+// =============================================================================
+// The other half of the same right. Erasure and access are the same question
+// asked twice, and the export had the same defect in a smaller font: a
+// hand-written list of ten tables, five of them added by a fix whose comment
+// reads "Export was 60% incomplete" — measured against a denominator that was
+// itself a guess.
+// =============================================================================
+
+describe('an export that exports', () => {
+  it('covers every table holding the company, minus recorded exclusions', async () => {
+    const all = await tablesWithProductId();
+    const unaccounted = all.filter((t) => !(t in EXCLUDED_FROM_EXPORT_REASONS));
+    expect(unaccounted.length, 'the export is derived from the schema')
+      .toBeGreaterThan(150);
+    for (const reason of Object.values(EXCLUDED_FROM_EXPORT_REASONS)) {
+      expect(reason.length).toBeGreaterThan(20);
+    }
+  });
+
+  it('returns the tables that actually hold rows, and omits the empty ones', async () => {
+    await query(
+      `INSERT INTO founders (id, clerk_user_id, email) VALUES ('ex_f','ex_c','ex@example.com')`);
+    await query(
+      `INSERT INTO products (id, name, owner_id, status) VALUES ('ex_p','Exportable','ex_f','active')`);
+    await query(`INSERT INTO metric_snapshots (id, product_id, snapshot_date)
+                 VALUES ('ex_m','ex_p','2026-02-01')`);
+    await query(`INSERT INTO decisions (id, product_id, gate, what, why_now, status)
+                 VALUES ('ex_d','ex_p',2,'ship it','because','approved')`);
+
+    const data = await exportProductData('ex_p', 'json');
+    expect(Object.keys(data)).toContain('metric_snapshots');
+    expect(Object.keys(data)).toContain('decisions');
+    expect(Object.keys(data), 'a table with no rows is noise, not completeness')
+      .not.toContain('competitors');
+  });
+
+  it('redacts credential material rather than handing it back', async () => {
+    // A subject access request is a right to one's own data, not a mechanism
+    // for extracting a live token to whoever holds the session right now.
+    await query(
+      `INSERT INTO integrations (id, product_id, type, status, credentials_json)
+       VALUES ('ex_i','ex_p','slack','active','{"bot_token":"xoxb-REALSECRET"}')`);
+    const data = await exportProductData('ex_p', 'json');
+    const rows = data.integrations as Array<Record<string, unknown>>;
+    expect(rows.length, 'the row still appears, so the founder sees the connection exists')
+      .toBe(1);
+    expect(rows[0].credentials_json).toBe('[redacted]');
+    expect(JSON.stringify(data)).not.toContain('REALSECRET');
   });
 });
