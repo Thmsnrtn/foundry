@@ -7,6 +7,12 @@ const root = resolve(import.meta.dirname, '..');
 const files = globSync('src/**/*.ts', { cwd: root, absolute: true }).sort();
 const rules = [
   { id: 'external_post', re: /fetch\(\s*(['"`])https:\/\/(?!api\.openrouter\.ai)([^'"`]+)\1\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
+  // A URL assembled from a template was invisible to the detector above, which
+  // requires the host to appear inside the quotes. `fetch(`${baseUrl}/audio/
+  // transcriptions`, {method:'POST'})` is exactly as consequential as a literal
+  // one — it was the codebase's only unreserved paid provider call, and the
+  // inventory reported zero direct effects while it existed.
+  { id: 'templated_post', re: /fetch\(\s*`\$\{[^`]*`\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
   { id: 'dynamic_webhook_post', re: /fetch\(\s*(url|payload\.webhook_url|config\.url|webhook\.url)\s*,\s*\{[\s\S]{0,300}?method:\s*['"]POST['"]/g },
   { id: 'stripe_sdk_mutation', re: /stripe\.(customers\.create|subscriptions\.(?:create|update|cancel)|checkout\.sessions\.create|billingPortal\.sessions\.create|oauth\.token)\s*\(/g },
   { id: 'resend_sdk_send', re: /resend\.emails\.send\s*\(/g },
@@ -31,6 +37,14 @@ const classifications = new Map(Object.entries({
   // deleted. See the header of services/integrations/linear.ts.
   'src/services/integrations/linear.ts|external_post': ['read_only', 'GraphQL query: completed issues for ship-cadence metrics'],
   'src/services/integration/linear.ts|external_post': ['read_only', 'GraphQL queries: in-progress, completed and velocity issue counts'],
+  'src/services/scp/briefing/voice-reply.ts|templated_post': ['control_path', 'Whisper transcription — reserves against the AI ceilings before dispatch, settles at a conservative bound, releases only on a definitive refusal'],
+  // Surfaced the moment the detector learned to read templated URLs. Six were
+  // already-known handlers reached by a URL it could not see; the seventh had
+  // never been inventoried at all.
+  'src/services/ai/client.ts|templated_post': ['control_path', 'the central AI client — atomic reservation before dispatch, settlement or release after'],
+  'src/services/integration/github-gateway.ts|templated_post': ['governed', 'GitHub capability handlers'],
+  'src/services/integration/stripe-gateway.ts|templated_post': ['governed', 'Stripe capability handlers'],
+  'src/services/notifications/push.ts|templated_post': ['unreachable', 'APNs/FCM device push with no importer anywhere in src/ — real devices, no caller. Kept rather than deleted because it is complete and working, and classified so that wiring it up has to be a deliberate act that changes this line'],
   'src/services/scp/briefing/email-digest.ts|external_post': ['direct', 'Resend/SendGrid weekly digest delivery'],
   'src/services/scp/actions/executor.ts|external_post': ['control_path', 'approved Linear action with durable receipt'],
   'src/services/scp/actions/executor.ts|dynamic_webhook_post': ['control_path', 'approved custom webhook with SSRF guard and durable receipt'],
@@ -69,6 +83,25 @@ if (process.argv.includes('--write')) {
   }
   // An untraced consequential effect is the state this audit exists to surface.
   const unresolvedCount = findings.filter((f) => f.status === 'unresolved').length;
+
+  // `unreachable` is a claim about the rest of the repository, so it is checked
+  // rather than believed: a module classified that way must have no importer in
+  // src/. The day somebody wires one up, the audit says so instead of letting a
+  // stale reassurance stand.
+  const wronglyUnreachable = [];
+  for (const finding of findings.filter((f) => f.status === 'unreachable')) {
+    const base = finding.file.replace(/^src\//, '').replace(/\.ts$/, '');
+    const importers = files.filter((abs) => {
+      const rel = relative(root, abs).replaceAll('\\', '/');
+      if (rel === finding.file) return false;
+      return new RegExp(`${base.split('/').pop()}\\.js`).test(readFileSync(abs, 'utf8'));
+    });
+    if (importers.length) wronglyUnreachable.push(`${finding.file} is imported by ${importers.length} module(s)`);
+  }
+  if (wronglyUnreachable.length) {
+    console.error(`Classified unreachable but reachable:\n${wronglyUnreachable.join('\n')}`);
+    process.exit(1);
+  }
   if (unclassified.length) {
     console.error(`Unclassified consequential effects: ${unclassified.length}`);
     process.exit(1);
@@ -87,5 +120,6 @@ if (process.argv.includes('--write')) {
   }
   const readOnly = findings.filter((f) => f.status === 'read_only').length;
   const direct = findings.filter((f) => f.status === 'direct').length;
-  console.log(`✓ consequential-effect inventory holds (${findings.length} findings; ${direct} direct, ${readOnly} read-only, ${unresolvedCount} untraced)`);
+  const unreachable = findings.filter((f) => f.status === 'unreachable').length;
+  console.log(`✓ consequential-effect inventory holds (${findings.length} findings; ${direct} direct, ${readOnly} read-only, ${unreachable} unreachable, ${unresolvedCount} untraced)`);
 }

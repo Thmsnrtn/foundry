@@ -16,6 +16,20 @@
       "capability": "GitHub OAuth credential exchange"
     },
     {
+      "file": "src/services/ai/client.ts",
+      "line": 257,
+      "detector": "templated_post",
+      "status": "control_path",
+      "capability": "the central AI client — atomic reservation before dispatch, settlement or release after"
+    },
+    {
+      "file": "src/services/ai/client.ts",
+      "line": 416,
+      "detector": "templated_post",
+      "status": "control_path",
+      "capability": "the central AI client — atomic reservation before dispatch, settlement or release after"
+    },
+    {
       "file": "src/services/billing/stripe.ts",
       "line": 45,
       "detector": "stripe_sdk_mutation",
@@ -65,6 +79,20 @@
       "capability": "post_webhook capability handler"
     },
     {
+      "file": "src/services/integration/github-gateway.ts",
+      "line": 51,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "GitHub capability handlers"
+    },
+    {
+      "file": "src/services/integration/github-gateway.ts",
+      "line": 92,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "GitHub capability handlers"
+    },
+    {
       "file": "src/services/integration/linear.ts",
       "line": 181,
       "detector": "external_post",
@@ -93,6 +121,20 @@
       "capability": "Slack credential owner with effect receipts"
     },
     {
+      "file": "src/services/integration/stripe-gateway.ts",
+      "line": 68,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "Stripe capability handlers"
+    },
+    {
+      "file": "src/services/integration/stripe-gateway.ts",
+      "line": 113,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "Stripe capability handlers"
+    },
+    {
       "file": "src/services/integrations/linear.ts",
       "line": 123,
       "detector": "external_post",
@@ -107,6 +149,13 @@
       "capability": "Stripe OAuth credential exchange"
     },
     {
+      "file": "src/services/notifications/push.ts",
+      "line": 206,
+      "detector": "templated_post",
+      "status": "unreachable",
+      "capability": "APNs/FCM device push with no importer anywhere in src/ — real devices, no caller. Kept rather than deleted because it is complete and working, and classified so that wiring it up has to be a deliberate act that changes this line"
+    },
+    {
       "file": "src/services/scp/actions/executor.ts",
       "line": 429,
       "detector": "external_post",
@@ -119,6 +168,13 @@
       "detector": "dynamic_webhook_post",
       "status": "control_path",
       "capability": "approved custom webhook with SSRF guard and durable receipt"
+    },
+    {
+      "file": "src/services/scp/briefing/voice-reply.ts",
+      "line": 117,
+      "detector": "templated_post",
+      "status": "control_path",
+      "capability": "Whisper transcription — reserves against the AI ceilings before dispatch, settles at a conservative bound, releases only on a definitive refusal"
     }
   ]
 }
