@@ -85,8 +85,8 @@ describe('api key authentication', () => {
     const consumers = walk(resolve(ROOT, 'src'))
       .filter((f) => /validateApiKey/.test(
         readFileSync(f, 'utf8')
-          .replace(/\/\*[\s\S]*?\*\//g, ' ')
-          .split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n')))
+          .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, ' ')
+          .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n')))
       .map((f) => f.slice(ROOT.length + 1))
       .filter((f) => f !== 'src/services/rbac/permissions.ts')
       .sort();

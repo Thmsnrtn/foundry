@@ -443,8 +443,8 @@ describe('what the two of them cost the kernel', () => {
     ]
       .map((f) => readFileSync(resolve(__dirname, '../../src/services', f), 'utf8'))
       .join('\n')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .split('\n').map((line) => line.replace(/\/\/.*$/, '')).join('\n')
+      .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, ' ')
+      .split('\n').map((line) => line.replace(/^\s*\/\/.*$/, '')).join('\n')
       // camelCase is split BEFORE the case fold. Folding first turns
       // `heatingHint` into `heatinghint`, where no boundary rule can see the
       // word — which a mutation demonstrated, twice.

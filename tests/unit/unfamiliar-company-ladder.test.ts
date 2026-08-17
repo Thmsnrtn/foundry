@@ -210,8 +210,8 @@ describe('unfamiliar companies climb the ordinary ladder', () => {
       'responsibility-shadowing.ts']
       .map((f) => readFileSync(resolve(__dirname, '../../src/services/institution', f), 'utf8'))
       .join('\n')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .split('\n').map((line) => line.replace(/\/\/.*$/, '')).join('\n')
+      .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, ' ')
+      .split('\n').map((line) => line.replace(/^\s*\/\/.*$/, '')).join('\n')
       // camelCase split BEFORE the case fold. Folding first turns `danceStudio`
       // into `dancestudio`, where no word boundary can see either word — a
       // mutation found this on the sibling gate and it was true here too.
