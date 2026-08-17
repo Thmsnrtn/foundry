@@ -951,7 +951,19 @@ A dance school, a brand agency, a village provisions shop and a veterinary pract
 
 The claim is made structural rather than asserted: with comments stripped, no executable line in discovery, responsibility, understanding, shadowing or observation contains any of those domains' words, and no company's channel key or obligation appears in a closed list anywhere. What a company is asked for comes from its **capability**, never its industry.
 
-**What it revealed — and this is the next package.** All four stop at Shadowing, because the consequential-effect boundary is hard-bound to one use: migration 114's guard requires `capability='customer_support'` and `authority_scope='send_email:support_reply'`. A dance school telling a teacher their class needs cover cannot use the governed send, though the mechanism, authority semantics, receipt and outcome separation would be identical. **The same defect shape as the twelve metrics, one layer up.** Reality revealed it; architecture did not invent it.
+**What it revealed, and what was then built.** All four stopped at Shadowing, because the consequential-effect boundary was hard-bound to one use: migration 114's guard required `capability='customer_support'` and `authority_scope='send_email:support_reply'`. The same defect shape as the twelve metrics, one layer up. Reality revealed it; architecture did not invent it. Migration 136 fixed it — see below.
+
+## The governed effect boundary stops being support-only (migration 136)
+
+- **Permitted effects became a declared vocabulary instead of a literal**, and capability dropped out of the guard entirely. What still must hold — that a responsibility and its consent *agree* about capability — is unchanged.
+- **The vocabulary stays CONSTITUTIONAL, and that is the whole point of this sitting next to 135.** A company may declare what it *counts*, because reading a number is harmless. A company may never declare a new irreversible way to reach the outside world: effect kinds can only be added by editing a migration, and migrations are inside the ring. **Closed vocabularies are wrong when they encode a business assumption and right when they encode a consequence boundary.**
+- **The second kind has a real founder behind it.** A founder writes a notice about a responsibility and, as a separate decision on the same form, asks Foundry to carry it. Foundry composes nothing; there is no model on that path. Authoring is not planning, planning is not sending, dispatch is not the teacher turning up.
+- **A NULL hole in migration 114 closed on the way.** `NEW.authority_scope!='send_email:support_reply'` is NULL rather than true when the column is absent, so a plan with no scope, no effect id and no consent walked past the boundary and was caught downstream by luck.
+
+### Two mutations survived, and both taught something
+
+1. Removing the explicit `IS NULL` clauses changes nothing — the declared-kind lookup already refuses a NULL scope, because `k.scope_key = NULL` matches nothing. They are kept as stated intent; the test now says which mechanism is load-bearing.
+2. Removing `a.capability=r.capability` broke nothing, because a mismatched consent **cannot be created** — migration 133 refuses it at the source. Defence in depth against a state the schema does not permit. Now asserted where it is actually enforced.
 
 ---
 
@@ -1015,6 +1027,8 @@ Two assertions in `tests/unit/customer-message-intake.test.ts` failed once on a 
 **Reproduction attempts:** nine full-suite runs and twenty-five isolated runs under saturation. Zero reproductions.
 
 **Found along the way, and fixed — but explicitly NOT the cause.** `getDb()` applied `PRAGMA foreign_keys = ON` as an unawaited promise and swallowed failure, while its own comment noted that without it every `REFERENCES` clause is decorative. Every entry point now awaits readiness and a failed PRAGMA is surfaced. **Reverting the fix does not fail the new tests** — the PRAGMA reliably wins the race on this driver — so this was a latent defect, not the flake. Claiming otherwise would close the item on a coincidence.
+
+**Second sighting (tenth session), and it narrows the search.** Both failing assertions were in the same file and are consistent with ONE root cause: a revoked support channel still accepting a message. `refuses an unknown, forged, or revoked key identically` got a message where it expected `unknown_channel`, and the message count was 2 instead of 1 — exactly what a failed revocation produces. It did not reproduce in three subsequent full runs. Forensics were emitted but filtered out of the captured output by the grep in use; **capture `[forensics]` lines unfiltered next time.**
 
 **Status: evidence debt retained.** The remaining untested hypotheses are container-level (memory pressure, worker reuse across 161 files). Per the owner's bounded-investigation instruction, the roadmap continues rather than guessing further.
 - **Environment notes:** `sqlite3` is not preinstalled (`apt-get update && apt-get install -y sqlite3`). `as-any` and `console-in-src` are substring ratchets — prose containing "has anyone" trips the first; use `log` from `src/lib/logger.js`, never `console.*`. Fix the code, never the gate.
