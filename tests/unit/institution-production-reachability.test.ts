@@ -185,6 +185,11 @@ describe('institutional reachability', () => {
       ['action planning', 'planProposedReply', 'services/institution/support-reply.ts'],
       ['assisted plan writer', 'planAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
       ['governed execution', 'executeAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
+      // The last link of the loop. Without a production caller the institution
+      // can act and can never learn, and `unresolved` becomes permanent by
+      // construction rather than by fact.
+      ['outcome reporting', 'reportEffectOutcome', 'services/institution/effect-outcome.ts'],
+      ['outcome reconciliation', 'reconcileAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
     ];
     const files = tsFiles(resolve(ROOT, 'src'));
     const dark: string[] = [];

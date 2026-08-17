@@ -1,0 +1,186 @@
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+
+import { beforeAll, describe, expect, it } from 'vitest';
+import { runMigrations } from '../../src/db/migrate.js';
+import { query } from '../../src/db/client.js';
+import {
+  getEffectOutcomeReports, getUnresolvedEffects, reportEffectOutcome,
+} from '../../src/services/institution/effect-outcome.js';
+import { reconcileAssistedSupportEmail } from '../../src/services/institution/responsibility-assisted-email.js';
+
+// =============================================================================
+// The last link of the loop finally has a supply.
+//
+//   … → Execution → Receipt → Outcome → Learning
+//
+// Nothing in production had ever produced outcome evidence, so `outcome_status`
+// was permanently `unresolved` — correct as a default and a poor destination.
+// Preserving `unresolved` was always right; being UNABLE to leave it means the
+// institution can act and can never learn.
+//
+// What must stay true: Foundry may not report on itself, disagreement is
+// preserved rather than resolved toward the convenient answer, and learning
+// that something worked grants nothing.
+// =============================================================================
+
+const P = 'eo_co';
+const OWNER = 'eo_owner';
+const RESP = 'eo_resp';
+
+/** An executed effect, built through the real bindings. The plan guard refuses
+ * an action bound to a responsibility with no live authority — as it should —
+ * so the fixture carries a genuine grant rather than side-stepping it. */
+async function executedEffect(effectId: string, actionId: string): Promise<void> {
+  await query(
+    `INSERT INTO outbound_actions
+       (id,product_id,agent_name,integration_name,action_type,status,parameters_json,rationale,
+        preview_text,responsibility_id,authority_consent_id,authority_scope,effect_id,executed_at,outcome_status)
+     VALUES (?,?,'institution:assisting','resend','send_email','executed','{}','r',
+             'Send bounded responsibility notice to ines@example.com',?,'eo_consent',
+             'send_email:responsibility_notice',?,datetime('now'),'unresolved')`,
+    [actionId, P, RESP, effectId]);
+}
+
+beforeAll(async () => {
+  await runMigrations();
+  await query(`INSERT INTO founders (id,clerk_user_id,email) VALUES ('${OWNER}','eo_c','o@example.com')`, []);
+  await query(`INSERT INTO products (id,name,owner_id) VALUES ('${P}','Fold Street Dance','${OWNER}')`, []);
+  await query(
+    `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+     VALUES ('eo_sig',?,'repository','development_need_observed','low','{}','seed')`, [P]);
+  await query(
+    `INSERT INTO institutional_responsibilities (id,product_id,title,capability,state,discovery_evidence_ref)
+     VALUES (?,?,'Every timetabled class has a teacher','operations','shadowing','signal_event:eo_sig')`, [RESP, P]);
+  await query(
+    `INSERT INTO autonomy_consents
+       (id,founder_id,product_id,capability,from_mode,to_mode,disclosure_version,
+        responsibility_id,allowed_scope_json,consequence_boundary,expires_at)
+     VALUES ('eo_consent',?,?,'operations','suggest','act','v1',?,?, 'low',datetime('now','+1 day'))`,
+    [OWNER, P, RESP, JSON.stringify(['send_email:responsibility_notice'])]);
+  await query(
+    "UPDATE institutional_responsibilities SET state='assisting',authority_ref='autonomy_consent:eo_consent' WHERE id=?",
+    [RESP]);
+  await executedEffect('eo_effect_1', 'eo_action_1');
+});
+
+describe('effect outcome reports', () => {
+  it('asks about effects that dispatched and that nobody has answered', async () => {
+    const open = await getUnresolvedEffects(P);
+    expect(open).toHaveLength(1);
+    expect(open[0]).toMatchObject({ effectId: 'eo_effect_1', responsibilityId: RESP });
+    expect(open[0].title).toContain('teacher');
+  });
+
+  it('records what someone outside says, with their name on it', async () => {
+    const reported = await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_1', verdict: 'achieved',
+      reporter: `founder:${OWNER}`, detail: 'Ines took the class',
+    });
+    expect(reported).toMatchObject({ verdict: 'achieved', reporter: `founder:${OWNER}` });
+
+    const reports = await getEffectOutcomeReports(P, 'eo_effect_1');
+    expect(reports).toHaveLength(1);
+    expect(reports[0].detail).toBe('Ines took the class');
+
+    // The same reporter saying the same thing twice is one witness, not two.
+    await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_1', verdict: 'achieved', reporter: `founder:${OWNER}`,
+    });
+    expect(await getEffectOutcomeReports(P, 'eo_effect_1')).toHaveLength(1);
+  });
+
+  it('lets reconciliation finally leave unresolved', async () => {
+    // Before migration 137 this could only ever return `unresolved`, because
+    // nothing in production produced either shape of evidence.
+    expect(await reconcileAssistedSupportEmail(P, 'eo_action_1')).toBe('verified_success');
+    expect((await query(
+      'SELECT outcome_status FROM outbound_actions WHERE id=?', ['eo_action_1'])).rows[0])
+      .toMatchObject({ outcome_status: 'verified_success' });
+
+    // Answered effects stop being asked about.
+    expect(await getUnresolvedEffects(P)).toHaveLength(0);
+
+    // Learning grants nothing. The grant that authorised the send is still the
+    // only one, unchanged and unwidened by the news that it worked.
+    const consents = (await query(
+      'SELECT id,allowed_scope_json,consequence_boundary,expires_at FROM autonomy_consents WHERE product_id=?', [P],
+    )).rows;
+    expect(consents).toHaveLength(1);
+    expect(consents[0]).toMatchObject({ id: 'eo_consent', consequence_boundary: 'low' });
+    // And nothing was promoted by succeeding.
+    expect((await query(
+      'SELECT state FROM institutional_responsibilities WHERE id=?', [RESP])).rows[0])
+      .toMatchObject({ state: 'assisting' });
+  });
+
+  it('preserves disagreement instead of resolving it toward the convenient answer', async () => {
+    await executedEffect('eo_effect_2', 'eo_action_2');
+    await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_2', verdict: 'achieved', reporter: `founder:${OWNER}` });
+    await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_2', verdict: 'failed', reporter: 'external:rota_system' });
+
+    expect(await reconcileAssistedSupportEmail(P, 'eo_action_2')).toBe('conflicting');
+    // Both witnesses survive. Neither is deleted to make the record tidy.
+    expect(await getEffectOutcomeReports(P, 'eo_effect_2')).toHaveLength(2);
+  });
+
+  it('refuses to let Foundry report on itself', async () => {
+    // A system that can declare its own success has no outcome layer, only a
+    // louder execution layer. Refused in the service AND in the database.
+    await executedEffect('eo_effect_3', 'eo_action_3');
+    expect(await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_3', verdict: 'achieved', reporter: 'institution:assisting',
+    })).toEqual({ refused: 'reporter_invalid' });
+
+    await expect(query(
+      `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+       VALUES ('eo_self',?,'effect_outcome_report','effect_outcome:eo_effect_3:achieved','low',
+               json_object('effect_id','eo_effect_3','verdict','achieved','reporter','institution:assisting'),'x')`,
+      [P])).rejects.toThrow(/self_reported/);
+  });
+
+  it('refuses an outcome for something that never happened', async () => {
+    // An effect that was refused, revoked, or never dispatched has no result to
+    // report, and inventing one would be manufacturing the thing the whole loop
+    // exists to establish honestly.
+    expect(await reportEffectOutcome({
+      productId: P, effectId: 'never_dispatched', verdict: 'achieved', reporter: `founder:${OWNER}`,
+    })).toEqual({ refused: 'not_executed' });
+
+    await query(
+      `INSERT INTO outbound_actions (id,product_id,agent_name,integration_name,action_type,status,
+        parameters_json,rationale,responsibility_id,authority_consent_id,authority_scope,effect_id)
+       VALUES ('eo_planned',?,'x','resend','send_email','approved','{}','r',?,'eo_consent',
+               'send_email:responsibility_notice','eo_effect_planned')`, [P, RESP]);
+    expect(await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_planned', verdict: 'achieved', reporter: `founder:${OWNER}`,
+    })).toEqual({ refused: 'not_executed' });
+  });
+
+  it('refuses a malformed verdict, a missing reporter, and a mislabelled event', async () => {
+    expect(await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_1', verdict: 'probably', reporter: `founder:${OWNER}`,
+    })).toEqual({ refused: 'verdict_invalid' });
+    expect(await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_1', verdict: 'achieved', reporter: '  ',
+    })).toEqual({ refused: 'reporter_invalid' });
+
+    // The event type is derived from the report, so a comparison matches on
+    // what was reported rather than on a label the caller chose.
+    await expect(query(
+      `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+       VALUES ('eo_mislabel',?,'effect_outcome_report','effect_outcome:eo_effect_1:failed','low',
+               json_object('effect_id','eo_effect_1','verdict','achieved','reporter','external:x'),'x')`,
+      [P])).rejects.toThrow(/event_type_mismatch/);
+  });
+
+  it('keeps one company\'s outcome reports out of another\'s', async () => {
+    await query(`INSERT INTO founders (id,clerk_user_id,email) VALUES ('eo_o2','eo_c2','x@example.com')`, []);
+    await query(`INSERT INTO products (id,name,owner_id) VALUES ('eo_other','Other Co','eo_o2')`, []);
+    // The effect belongs to another company; this one cannot report on it.
+    expect(await reportEffectOutcome({
+      productId: 'eo_other', effectId: 'eo_effect_1', verdict: 'failed', reporter: 'founder:eo_o2',
+    })).toEqual({ refused: 'not_executed' });
+  });
+});

@@ -156,6 +156,33 @@ const reportObligationSection = (options: Array<[string, string]>) => html`
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll start keeping track of it. I won't do anything about it — I'd need to understand it first, and then you'd have to give me permission separately.</div>
   </div>`;
 
+// The one question only the founder can answer.
+//
+// Shown for effects that actually dispatched and that nobody has reported on.
+// Asking about something already answered spends the one resource the
+// institution exists to conserve.
+const outcomeSection = (
+  items: Array<{ effectId: string; title: string; preview: string }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Did that work?</div>
+    ${items.map((item) => html`
+      <form method="POST" action="/letter/effects/${item.effectId}/outcome"
+        style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${item.preview}</div>
+        <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.45rem;">
+          <select name="verdict" style="font-size:0.78rem;">
+            <option value="achieved">Yes — it did what it was for</option>
+            <option value="failed">No — it did not</option>
+          </select>
+          <input name="detail" maxlength="300" placeholder="Anything worth remembering?" style="flex:1;min-width:180px;" />
+          <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Tell me</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I can see that it was sent. I can't see whether it worked — only you or something outside can tell me that.</div>
+      </form>`)}
+  </div>`;
+
 // Telling someone something, about a responsibility Foundry is already helping
 // with. The founder writes the words; Foundry carries them under the same
 // governed boundary a support reply crosses.
@@ -379,6 +406,8 @@ letterRoutes.get('/letter', async (c) => {
   const obligationOptions: Array<[string, string]> = REPORTABLE_OBLIGATIONS.map((k) => [k, OBLIGATION_LABELS[k]]);
   const { getObservationChannels } = await import('../../services/institution/company-observation.js');
   const observationChannels = await getObservationChannels(ctx.productId);
+  const { getUnresolvedEffects } = await import('../../services/institution/effect-outcome.js');
+  const unresolvedEffects = await getUnresolvedEffects(ctx.productId);
   // A day is not quiet if Foundry is blocked on something only the founder
   // knows. Hiding the question behind "nothing needs you" would be hiding
   // uncertainty, which founder UX may never do.
@@ -427,6 +456,7 @@ letterRoutes.get('/letter', async (c) => {
       ${evidenceQuestionSection(evidenceQuestion)}
       ${permissionSection(assistingCandidates)}
       ${reportObligationSection(obligationOptions)}
+      ${outcomeSection(unresolvedEffects)}
       ${observationChannelSection(observationChannels)}
       ${noticeSection([...responsibilitySummary.NEEDS_YOU, ...responsibilitySummary.CHANGED,
         ...responsibilitySummary.HANDLED, ...responsibilitySummary.STILL_OPEN])}
@@ -852,6 +882,42 @@ letterRoutes.post('/letter/company/report', async (c) => {
 //
 // Declaring something grants nothing. It says what may be observed, not what
 // Foundry may do.
+// "Did that work?"
+//
+// Foundry can act and, until migration 137, could never find out whether the
+// acting achieved anything: nothing in production produced outcome evidence, so
+// every effect stayed `unresolved` by construction rather than by fact. The
+// owner usually knows, and their word is evidence — not proof, and recorded as
+// their claim with their name on it.
+//
+// Foundry may not answer this question about itself. The database refuses any
+// report attributed to the institution.
+letterRoutes.post('/letter/effects/:effectId/outcome', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const { reportEffectOutcome } = await import('../../services/institution/effect-outcome.js');
+  const reported = await reportEffectOutcome({
+    productId: ctx.productId, effectId: c.req.param('effectId'),
+    verdict: String(body.verdict ?? ''), reporter: `founder:${founder.id as string}`,
+    detail: String(body.detail ?? ''),
+  });
+  if ('refused' in reported) return c.text(`Not recorded: ${reported.refused}`, 400);
+
+  // Reconcile immediately so the founder sees their own answer reflected.
+  const action = (await import('../../db/client.js')).query;
+  const row = (await action(
+    'SELECT id FROM outbound_actions WHERE product_id=? AND effect_id=?',
+    [ctx.productId, c.req.param('effectId')])).rows[0] as Record<string, unknown> | undefined;
+  if (row) {
+    const { reconcileAssistedSupportEmail } = await import(
+      '../../services/institution/responsibility-assisted-email.js');
+    await reconcileAssistedSupportEmail(ctx.productId, String(row.id));
+  }
+  return c.redirect('/letter');
+});
+
 // A founder writes a notice about a responsibility, and — separately — asks
 // Foundry to carry it.
 //

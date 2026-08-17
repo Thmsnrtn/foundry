@@ -238,6 +238,39 @@ ingestRoutes.post('/ingest/:token', async (c) => {
 // The key establishes both tenant and channel, so nothing about identity is
 // taken from the body — there is no channel field to forge. An adapter for any
 // helpdesk, mailbox, or form is an ordinary caller.
+// An outside system reports whether an effect achieved what it was for.
+//
+// The other half of migration 137's supply: the founder can answer from The
+// Letter, and a tool that can actually see the result — a rota system, a
+// helpdesk, a delivery scan — can answer here. Same tenant-bound token, same
+// canonical evidence, and the database refuses any report attributed to the
+// institution itself.
+ingestRoutes.post('/ingest/effect-outcome/:token', async (c) => {
+  const token = c.req.param('token');
+  if (!token || !/^[\w-]{8,64}$/.test(token)) return c.json({ error: 'Invalid token' }, 400);
+
+  const productResult = await query('SELECT id FROM products WHERE ingest_token = ?', [token]);
+  if (productResult.rows.length === 0) return c.json({ error: 'Unknown ingest token' }, 401);
+  const productId = (productResult.rows[0] as Record<string, string>).id;
+
+  let raw: unknown;
+  try { raw = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+  const body = (raw ?? {}) as Record<string, unknown>;
+
+  const { reportEffectOutcome } = await import('../../services/institution/effect-outcome.js');
+  const reported = await reportEffectOutcome({
+    productId,
+    effectId: String(body.effect_id ?? ''),
+    verdict: String(body.verdict ?? ''),
+    // The reporter is the origin the tool names for itself, never a claim about
+    // who it is. Identity here is the token; this is provenance, not authority.
+    reporter: `external:${String(body.reported_by ?? 'unnamed_system')}`.slice(0, 120),
+    detail: typeof body.detail === 'string' ? body.detail : undefined,
+  });
+  if ('refused' in reported) return c.json({ status: 'refused', reason: reported.refused }, 422);
+  return c.json({ status: 'accepted', observation_id: reported.id });
+});
+
 ingestRoutes.post('/ingest/customer-message/:channelKey', async (c) => {
   const channelKey = c.req.param('channelKey');
   if (!channelKey || !/^[\w-]{24,128}$/.test(channelKey)) {

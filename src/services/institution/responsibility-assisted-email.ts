@@ -93,11 +93,30 @@ export async function reconcileAssistedSupportEmail(productId:string,actionId:st
   const action=(await query(`SELECT responsibility_id,effect_id,effect_certainty FROM outbound_actions
     WHERE id=? AND product_id=? AND responsibility_id IS NOT NULL`,[actionId,productId])).rows[0] as Record<string,unknown>|undefined;
   if (!action) throw new Error('assisted action not found');
-  const observations=await query(`SELECT id,event_type FROM signal_events WHERE product_id=?
-    AND json_extract(payload_json,'$.effect_id')=? AND event_type IN ('support_reply_effective','support_reply_failed') ORDER BY id`,
+  // Two shapes of independent evidence, read together.
+  //
+  // The support-specific pair came first and is kept because real rows may
+  // exist under it. `effect_outcome_report` (migration 137) is the general
+  // form: it works for any effect kind, carries its reporter, and is refused by
+  // the database if the institution tries to report on itself. Before it, this
+  // function could only ever return `unresolved`, because nothing in production
+  // produced either support event.
+  const observations=await query(`SELECT id,event_type,source,payload_json FROM signal_events WHERE product_id=?
+    AND json_extract(payload_json,'$.effect_id')=?
+    AND (event_type IN ('support_reply_effective','support_reply_failed') OR source='effect_outcome_report')
+    ORDER BY id`,
     [productId,String(action.effect_id)]);
-  const kinds=new Set(observations.rows.map(row=>String((row as Record<string,unknown>).event_type)));
-  const outcome:AssistedOutcome=kinds.size===0?'unresolved':kinds.size>1?'conflicting':kinds.has('support_reply_effective')?'verified_success':'verified_failure';
+
+  // Normalised to success/failure regardless of which shape carried it, so a
+  // company using the general form and a company using the legacy pair reach
+  // the same verdict from the same reality.
+  const verdicts=new Set((observations.rows as unknown as Record<string,unknown>[]).map(row=>{
+    if (String(row.source)==='effect_outcome_report') {
+      return String((JSON.parse(String(row.payload_json)) as {verdict?:string}).verdict)==='achieved'?'success':'failure';
+    }
+    return String(row.event_type)==='support_reply_effective'?'success':'failure';
+  }));
+  const outcome:AssistedOutcome=verdicts.size===0?'unresolved':verdicts.size>1?'conflicting':verdicts.has('success')?'verified_success':'verified_failure';
   let learnedClaimId:string|undefined;
   if (observations.rows.length) {
     const refs=observations.rows.map(row=>({kind:'signal_event' as const,id:String((row as Record<string,unknown>).id)}));
