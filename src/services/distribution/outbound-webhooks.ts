@@ -101,6 +101,16 @@ async function postWebhookHandler(req: GatewayRequest): Promise<{ status: number
   const body = formatPayload(config.target, payload);
   const serialized = JSON.stringify(body);
 
+  // Checked at CALL time, not only at registration — a hostname that resolved
+  // publicly when the founder saved it can resolve to a private address later,
+  // which is the whole point of DNS rebinding. The two sibling senders
+  // (`lib/webhooks.ts` and the approved-action executor) both do this; this one
+  // did not, and the only reason that was not exploitable is that nothing can
+  // currently register a target: `addWebhookConfig` has no caller. One wiring
+  // away is not a safety property.
+  const { assertUrlSafe } = await import('../outbound/ssrf.js');
+  await assertUrlSafe(config.url);
+
   const response = await withRetry(
     () =>
       fetch(config.url, {
@@ -212,6 +222,11 @@ export async function addWebhookConfig(opts: {
   secret?: string;
   event_types?: WebhookEventType[];
 }): Promise<string> {
+  // Refused at registration as well, so a founder gets an error when they save
+  // rather than silence at dispatch time.
+  const { assertUrlSafe } = await import('../outbound/ssrf.js');
+  await assertUrlSafe(opts.url);
+
   const id = nanoid();
   const events = opts.event_types ?? [
     'decision_needed',

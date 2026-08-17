@@ -217,6 +217,11 @@ export async function sendProactiveMessage(
     const wh = webhook.rows[0] as Record<string, string> | undefined;
     if (wh?.webhook_url) {
       try {
+        // A founder-configured destination, so it is checked at call time —
+        // `services/outbound/ssrf.ts` states the rule its own header sets:
+        // every outbound call to a founder-supplied URL passes this first.
+        const { assertUrlSafe } = await import('../outbound/ssrf.js');
+        await assertUrlSafe(wh.webhook_url);
         await fetch(wh.webhook_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

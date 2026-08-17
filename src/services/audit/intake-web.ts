@@ -72,6 +72,12 @@ export async function runWebAudit(url: string, productId: string, ownerId: strin
   // Fetch the URL (basic HTTP)
   let htmlContent = '';
   let hasSSL = false;
+  // The most literal SSRF shape in the codebase: a founder hands us a URL over
+  // an API route and the server fetches it. Checked before the request, with
+  // DNS re-resolution, so a public hostname that now points at loopback or a
+  // cloud metadata endpoint is refused.
+  const { assertUrlSafe } = await import('../outbound/ssrf.js');
+  await assertUrlSafe(url);
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Foundry-Audit-Bot/1.0' },

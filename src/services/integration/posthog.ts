@@ -160,6 +160,10 @@ async function fetchPostHogTrend(
 
   const url = `${host}${projectPath}/insights/trend/?events=[{"id":"${encodeURIComponent(eventName)}"}]&date_from=${dateFrom}&interval=day`;
 
+  // `host` is founder-configured, so this URL is founder-supplied. Checked at
+  // call time with DNS re-resolution, exactly as the webhook senders are.
+  const { assertUrlSafe } = await import('../outbound/ssrf.js');
+  await assertUrlSafe(url);
   const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(10000),
@@ -191,6 +195,10 @@ async function fetchTopEvents(
   const projectPath = projectId ? `/api/projects/${projectId}` : '/api/projects/@current';
   const url = `${host}${projectPath}/events/values/?key=event&limit=10`;
 
+  // `host` is founder-configured, so this URL is founder-supplied. Checked at
+  // call time with DNS re-resolution, exactly as the webhook senders are.
+  const { assertUrlSafe } = await import('../outbound/ssrf.js');
+  await assertUrlSafe(url);
   const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(8000),
@@ -203,3 +211,4 @@ async function fetchTopEvents(
 
   return json.slice(0, 10).map(e => ({ name: e.name, count: e.count ?? 0 }));
 }
+

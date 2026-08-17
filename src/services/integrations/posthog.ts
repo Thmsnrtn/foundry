@@ -114,6 +114,10 @@ async function fetchPostHogCount(
   });
 
   try {
+    // `host` is founder-configured, so this URL is founder-supplied. Checked at
+  // call time with DNS re-resolution, exactly as the webhook senders are.
+  const { assertUrlSafe } = await import('../outbound/ssrf.js');
+  await assertUrlSafe(url);
     const response = await fetch(url, { headers });
     if (!response.ok) return null;
     const data = await response.json() as PostHogInsightResult;
@@ -143,6 +147,10 @@ async function fetchPostHogRetention(
   });
 
   try {
+    // `host` is founder-configured, so this URL is founder-supplied. Checked at
+  // call time with DNS re-resolution, exactly as the webhook senders are.
+  const { assertUrlSafe } = await import('../outbound/ssrf.js');
+  await assertUrlSafe(url);
     const response = await fetch(url, { headers });
     if (!response.ok) return null;
     const data = await response.json() as { result?: Array<{ values: Array<{ count: number }> }> };
@@ -157,3 +165,4 @@ async function fetchPostHogRetention(
     return null;
   }
 }
+

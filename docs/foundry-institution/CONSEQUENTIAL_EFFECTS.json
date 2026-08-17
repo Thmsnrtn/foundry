@@ -73,7 +73,7 @@
     },
     {
       "file": "src/services/distribution/outbound-webhooks.ts",
-      "line": 106,
+      "line": 116,
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "post_webhook capability handler"
