@@ -12,110 +12,61 @@ around each item.
 
 ---
 
-## 1. Activate the first real bounded support pilot (E4)
+# ALL FOUR DECISIONS ANSWERED
 
-**Decision:** whether to run a real bounded support pilot with a real company, a
-real customer message, and a real reply delivered to a real person.
-
-**Evidence:** `support-pilot-readiness-v1` is green across 25 dimensions
-exercised against real services. Green means only *READY TO ATTEMPT A BOUNDED
-PILOT* — it is not E4, and no pilot has occurred. Six items of outstanding
-external proof are named in the module itself.
-
-**Options:**
-- (a) Authorise a pilot with a named company and an explicit envelope.
-- (b) Hold until more senses and capabilities exist.
-- (c) Hold indefinitely; keep support at its current bounded state.
-
-**Recommendation:** (b) still, but the argument has weakened. When this was
-first queued the institution was narrow enough that a pilot would have tested
-one thin path. It is now generic across recognition, observation, effects,
-authority and outcomes, and an unfamiliar non-SaaS company is carried end to
-end. The remaining reason to wait is adapter breadth, not architecture — so
-this is worth revisiting sooner than it was.
-
-**Blocks:** E4/E5 evidence for support, and every claim that depends on it.
-**Unblocked:** everything else — senses, capabilities, generalization, recursion.
+The owner answered every queued decision. Nothing is pending. Recorded here as
+settled; the record of what was asked and why is in git history.
 
 ---
 
-## 2. Perform the real owner actions for recursive Foundry operation
+## RESOLVED 1 — Real bounded support pilot: **HOLD for adapter breadth**
 
-**Decision:** whether to perform, in the deployed environment, the genuine
-owner-authenticated actions that recursive operation requires — reporting the
-schema-snapshot obligation for the Foundry company, and granting the bounded
-regeneration authority.
+`support-pilot-readiness-v1` stays green and keeps meaning only *READY TO
+ATTEMPT*. E4 remains unclaimed and external. Revisit when integration breadth
+catches up with the architecture — the remaining gap is adapters, not kernel.
 
-**Evidence:** the vertical is carried end to end locally and
-`recursive-institution-v1` reports ordinary on all thirteen dimensions. It has
-only ever run in tests. Owner naming is recognition evidence; the grant is a
-separate deliberate act. Neither may be fabricated, and Foundry auto-recognising
-its own responsibilities would be precisely the bypass the contract forbids.
+## RESOLVED 2 — Recursive Foundry: **REPORT ONLY, NOT THE GRANT**
 
-**Options:**
-- (a) Perform both actions in the deployed environment.
-- (b) Perform only the report, leaving the grant for later.
-- (c) Keep recursion at local proof.
+The owner will report the schema-snapshot obligation in the deployed
+environment. The bounded regeneration grant is deliberately NOT performed yet,
+so Foundry may not mutate its own repository outside a test.
 
-**Recommendation:** (b). The report costs nothing irreversible and makes the
-responsibility real; the grant can follow once there is appetite for Foundry
-mutating its own repository outside a test.
+**What this means for the campaign:** the recursive vertical stays proven
+locally. Do not simulate the report, and do not treat a local run as the
+deployed one. `recursive-institution-v1` continues to report ordinary on the
+dimensions it exercises, and production recursion remains external proof debt
+until the owner's action lands.
 
-**Blocks:** any claim that recursive operation is production-real.
-**Unblocked:** all further recursive engineering, which stays local.
+## RESOLVED 3 — `challenger` and `synthesizer`: **THEY SHOULD BE LIVE**
 
----
+The owner was right, and my classification was wrong. Both are already
+production-reachable and always were:
 
-## 3. Disposition of two unclassified legacy agents
+- Neither is an agent. Both say so in their own first lines — *"NOT a BaseAgent
+  subclass — runs on demand during debate orchestration"* — and both export
+  standalone functions with no `run(productId)`, so no loader could instantiate
+  them even if the vocabulary named them.
+- `debate/orchestrator.ts` statically imports both, and the orchestrator is
+  called from the scheduler and from a dashboard route.
 
-**Decision:** whether `challenger` and `synthesizer` were retired deliberately.
+I had classified them `evidence-insufficient` on the reasoning "outside
+ALL_AGENTS, so no loader can select it". True, and irrelevant: it inferred
+deadness from the DIRECTORY rather than from reachability — the same category
+error that once made the orphan report name ~160KB of live dynamically-loaded
+code as dead. **Being in `agents/` is not what makes something an agent.**
 
-**Evidence:** both exist under `src/services/scp/agents/` but sit outside
-`ALL_AGENTS`, so no loader can select them and they cannot run. Nothing in the
-repository establishes whether that was a decision or a drop. They are recorded
-as `evidence-insufficient` rather than dead, because deleting on a guess is how
-live code gets removed.
+Reclassified as production-reachable, and the gate now checks the distinction
+directly: a module in that directory is an agent only if the vocabulary names
+it, and anything else there must have a real importer or it really is dead.
+Mutation-tested with a stray module claiming reachability it did not have.
 
-**Options:**
-- (a) Confirm retirement — they are deleted with their tests and docs.
-- (b) Confirm they should be live — they are added to the vocabulary and
-  classified with a real dispatcher.
-- (c) Leave classified as evidence-insufficient.
+## RESOLVED 4 — Effect kinds stay **CONSTITUTIONAL**
 
-**Recommendation:** (a) unless the owner recognises a capability in them worth
-extracting. Neither has a production dispatcher today.
+A company may declare what it counts, because reading a number is harmless. It
+may never declare a new irreversible way to reach the outside world. Every new
+effect kind is a migration and a review — that cost is small and visible, and
+the cost of the alternative is a company inventing an irreversible action for
+itself.
 
-**Blocks:** completing the named-agent retirement sweep.
-**Unblocked:** all other deletion and migration work.
-
----
-
-## 4. Whether a company may declare its own effect kinds
-
-**Decision:** whether the constitutional line drawn in migration 136 is where
-the owner wants it.
-
-**Evidence:** a company may now declare what it COUNTS (migration 135) because
-reading a number is harmless, but it may NOT declare a new irreversible way to
-reach the outside world — effect kinds widen only by editing a migration, which
-is inside the protected ring. Two exist: a support reply and a responsibility
-notice.
-
-That line is a judgement, not a derivation. A different owner could reasonably
-say a company should be able to define its own bounded effects with its own
-credentials, the way it defines its own observation channels.
-
-**Options:**
-- (a) Keep it constitutional. Every new effect kind is a migration and a review.
-- (b) Allow company-declared effect kinds within a fixed consequence ceiling.
-- (c) Allow them only for integrations the owner has separately approved.
-
-**Recommendation:** (a). The cost is a migration per effect kind, which is
-small and visible. The cost of getting (b) wrong is a company inventing an
-irreversible action for itself, which is the failure this architecture exists
-to prevent.
-
-**Blocks:** nothing today. Raised because it is a constitutional boundary the
-campaign chose, and choosing it silently would be exactly the kind of quiet
-redefinition the constitution forbids.
-**Unblocked:** everything.
+**Standing rule for future work:** do not add a mechanism that lets effect
+kinds be created at runtime, by a company, an integration, or a model.

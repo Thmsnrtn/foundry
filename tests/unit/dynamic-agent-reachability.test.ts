@@ -23,6 +23,14 @@ import { ALL_AGENTS, isLoadableAgentName } from '../../src/services/scp/types.js
 // =============================================================================
 
 const AGENTS_DIR = resolve(__dirname, '../../src/services/scp/agents');
+const SRC = resolve(__dirname, '../../src');
+
+function walkSrc(dir: string = SRC): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = resolve(dir, entry.name);
+    return entry.isDirectory() ? walkSrc(path) : path.endsWith('.ts') ? [path] : [];
+  });
+}
 const modules = readdirSync(AGENTS_DIR).filter((f) => f.endsWith('.ts')).map((f) => f.replace(/\.ts$/, ''));
 
 /**
@@ -57,11 +65,21 @@ const CLASSIFICATION: Record<string, { status: string; why: string }> = {
   // reached by ordinary static import from the agents themselves.
   base: { status: 'compatibility-retained', why: 'shared base class extended by every agent module; never loaded by name' },
 
-  // Present on disk, absent from the vocabulary. The loaders now refuse them,
-  // so they cannot run — but they are not proven dead either, because nothing
-  // has established whether they were removed deliberately or dropped.
-  challenger: { status: 'evidence-insufficient', why: 'outside ALL_AGENTS so no loader can select it; whether it was retired deliberately is unestablished' },
-  synthesizer: { status: 'evidence-insufficient', why: 'outside ALL_AGENTS so no loader can select it; whether it was retired deliberately is unestablished' },
+  // NOT agents, despite living here. Both say so in their own first lines:
+  // "NOT a BaseAgent subclass — runs on demand during debate orchestration."
+  // They export standalone functions with no `run(productId)`, so no loader
+  // could instantiate them even if the vocabulary named them — and the debate
+  // orchestrator reaches both by ordinary static import, from the scheduler and
+  // from a dashboard route.
+  //
+  // They were first classified `evidence-insufficient` on the reasoning "outside
+  // ALL_AGENTS, so no loader can select it". That was true and irrelevant: it
+  // inferred deadness from the DIRECTORY rather than from reachability, which is
+  // the same category error the orphan report made when it named live
+  // dynamically-loaded code as dead. Being in `agents/` is not what makes
+  // something an agent.
+  challenger: { status: 'production-reachable', why: 'standalone debate function, statically imported by debate/orchestrator.ts which the scheduler and a dashboard route both call' },
+  synthesizer: { status: 'production-reachable', why: 'standalone debate function, statically imported by debate/orchestrator.ts which the scheduler and a dashboard route both call' },
 };
 
 const VALID_STATUSES = [
@@ -133,6 +151,31 @@ describe('dynamic agent reachability', () => {
       const source = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
       expect(source, `${rel} imports an agent by name without validating it`)
         .toMatch(/isLoadableAgentName|isValidAgentName/);
+    }
+  });
+
+  it('distinguishes "loadable by name" from "reachable at all"', () => {
+    // The error this prevents. Two modules in `agents/` are not agents: they
+    // export standalone debate functions with no `run(productId)`, and they are
+    // reached by ordinary static import. Classifying them from the directory
+    // rather than from reachability produced a wrong `evidence-insufficient`
+    // verdict that would have justified deleting live code.
+    //
+    // A module in this directory is an AGENT only if the vocabulary names it.
+    // Everything else here must be reachable some other way, or it really is
+    // dead — and the difference has to be checked, not assumed.
+    const notAgents = modules.filter((m) => !isLoadableAgentName(m) && m !== 'base');
+    expect(notAgents.sort()).toEqual(['challenger', 'synthesizer']);
+
+    for (const m of notAgents) {
+      const source = readFileSync(resolve(AGENTS_DIR, `${m}.ts`), 'utf8');
+      // No runnable export, so no loader could use it even if named.
+      expect(source, `${m} must not look like a loadable agent`).not.toMatch(/\brun\s*\(\s*productId/);
+      // And something outside this directory must actually import it.
+      const importers = walkSrc()
+        .filter((f) => !f.includes('/agents/'))
+        .filter((f) => new RegExp(`agents/${m}\\.js`).test(readFileSync(f, 'utf8')));
+      expect(importers, `${m} is classified production-reachable but nothing imports it`).not.toEqual([]);
     }
   });
 
