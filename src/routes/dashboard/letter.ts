@@ -242,6 +242,48 @@ const customerMessageSection = (
       </div>`)}
   </div>`;
 
+// How customers reach you about a responsibility, and the URL that carries it.
+//
+// The registration route existed with no form pointing at it, and it discarded
+// the intake key on redirect — so even a founder who found the endpoint could
+// never obtain the URL their helpdesk needs. Registering a channel is the only
+// way a customer message can ever arrive, which made the whole support vertical
+// unreachable in production while being fully exercised in tests.
+//
+// The key is shown because it IS the credential: it establishes both tenant and
+// channel, which is what lets a message be attributed without guessing from its
+// text. Withdrawing one is immediate, and an unknown key and a withdrawn key
+// are refused identically, so nobody learns which channels exist.
+const supportChannelSection = (
+  candidates: Array<{ responsibilityId: string; title: string }>,
+  existing: Array<{ id: string; label: string; intakeKey: string; responsibilityTitle: string; revoked: boolean }>,
+  appUrl: string,
+) => candidates.length === 0 && existing.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">How customers reach you</div>
+    ${existing.filter((c) => !c.revoked).map((c) => html`
+      <div style="padding:0.4rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.84rem;color:var(--text-primary);">${c.label}
+          <span style="color:var(--text-muted);font-size:0.72rem;"> — ${c.responsibilityTitle}</span>
+        </div>
+        <input type="text" readonly value="${appUrl}/ingest/customer-message/${c.intakeKey}"
+          style="width:100%;font-size:0.72rem;font-family:monospace;margin-top:0.25rem;cursor:pointer;"
+          onclick="this.select()" />
+        <form method="POST" action="/letter/channels/${c.id}/revoke" style="margin-top:0.25rem;">
+          <button type="submit" class="btn btn-ghost" style="font-size:0.7rem;padding:0.2rem 0.45rem;">Stop using this</button>
+        </form>
+      </div>`)}
+    ${candidates.map((item) => html`
+      <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/channel"
+        style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid rgba(255,255,255,0.05);">
+        <span style="font-size:0.8rem;color:var(--text-muted);flex-basis:100%;">${item.title}</span>
+        <input name="label" required maxlength="120" placeholder="What is it? (e.g. the quotes@ inbox)"
+          style="flex:1;min-width:220px;" />
+        <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Add it</button>
+      </form>`)}
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem;">Point your helpdesk or mailbox at that URL and I will see what people send. Seeing a message lets me show it to you — nothing more.</div>
+  </div>`;
+
 const noticeSection = (
   items: Array<{ responsibilityId: string; title: string; state: string }>,
 ) => {
@@ -491,6 +533,22 @@ letterRoutes.get('/letter', async (c) => {
   const unresolvedEffects = await getUnresolvedEffects(ctx.productId);
   const { getMessagesAwaitingReply } = await import('../../services/institution/support-reply.js');
   const customerMessages = await getMessagesAwaitingReply(ctx.productId);
+  const { getSupportChannels } = await import('../../services/institution/customer-message-intake.js');
+  const supportChannels = await getSupportChannels(ctx.productId);
+  // Offered only where a message could actually be acted on, and only where one
+  // is not already registered — a second channel for the same responsibility is
+  // a real thing to want, but not the default the form should suggest.
+  const channelCandidates = (await (await import('../../db/client.js')).query(
+    `SELECT id,title FROM institutional_responsibilities
+      WHERE product_id=? AND capability='customer_support' AND disposition='active'
+        AND state IN ('understood','shadowing','assisting')
+        AND id NOT IN (SELECT responsibility_id FROM support_channels
+                        WHERE product_id=? AND revoked_at IS NULL)
+      ORDER BY created_at`, [ctx.productId, ctx.productId],
+  )).rows.map((r) => ({
+    responsibilityId: String((r as Record<string, unknown>).id),
+    title: String((r as Record<string, unknown>).title),
+  }));
   const { availableDevelopmentChecks } = await import('../../services/institution/development-shadowing.js');
   const developmentChecks = await availableDevelopmentChecks(ctx.productId);
   const understoodDevelopment = (await (await import('../../db/client.js')).query(
@@ -522,7 +580,8 @@ letterRoutes.get('/letter', async (c) => {
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — from your team.</p>
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}
 
-    ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0 ? html`
+    ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
+      && supportChannels.length === 0 ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
         <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
         <div style="font-size:0.88rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.55;">
@@ -556,6 +615,8 @@ letterRoutes.get('/letter', async (c) => {
       ${permissionSection(assistingCandidates)}
       ${reportObligationSection(obligationOptions)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
+      ${supportChannelSection(channelCandidates, supportChannels,
+        process.env.APP_URL ?? 'http://localhost:8080')}
       ${customerMessageSection(customerMessages)}
       ${outcomeSection(unresolvedEffects)}
       ${observationChannelSection(observationChannels)}
@@ -1287,6 +1348,24 @@ letterRoutes.post('/letter/replies/:actionId/send', async (c) => {
     '../../services/institution/responsibility-assisted-email.js'
   );
   await executeAssistedSupportEmail(c.req.param('actionId'));
+  return c.redirect('/letter');
+});
+
+// Withdrawing a channel. Immediate, and it needs no reason: intake reads
+// `revoked_at IS NULL` on every message, so the next one is simply refused —
+// identically to an unknown key, so nobody learns which channels exist.
+letterRoutes.post('/letter/channels/:channelId/revoke', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const { revokeSupportChannel } = await import(
+    '../../services/institution/customer-message-intake.js'
+  );
+  const revoked = await revokeSupportChannel({
+    productId: ctx.productId, channelId: c.req.param('channelId'),
+    founderId: founder.id as string,
+  });
+  if (!revoked) return c.text('Refused', 403);
   return c.redirect('/letter');
 });
 

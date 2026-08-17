@@ -160,3 +160,74 @@ describe('a customer message reaches the founder', () => {
     expect(letter).toContain('customerMessageSection(customerMessages)');
   });
 });
+
+describe('the channel a customer message arrives on', () => {
+  it('can be created from the letter, which nothing offered before', async () => {
+    // The registration route existed with no form pointing at it, so the whole
+    // vertical was unreachable in production: no channel, no message, nothing
+    // to reply to. `getSupportChannels` had no route caller at all.
+    await responsibility('cms_nochannel', P, 'understood');
+
+    const page = await (await app.request('/letter')).text();
+    expect(page).toContain('How customers reach you');
+    expect(page).toMatch(/action="\/letter\/responsibilities\/cms_nochannel\/channel"/);
+  });
+
+  it('is not offered twice for the same responsibility', async () => {
+    // A second channel for one responsibility is a real thing to want, and it
+    // is not what the form should suggest by default.
+    const res = await app.request('/letter/responsibilities/cms_nochannel/channel', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'label=the+second+inbox',
+    });
+    expect(res.status).toBe(302);
+
+    const page = await (await app.request('/letter')).text();
+    expect(page).toContain('the second inbox');
+    expect(page).not.toMatch(/action="\/letter\/responsibilities\/cms_nochannel\/channel"/);
+  });
+
+  it('shows the URL the helpdesk actually needs', async () => {
+    // The route discarded the intake key on redirect. A credential the founder
+    // cannot read is a credential they cannot use.
+    const page = await (await app.request('/letter')).text();
+    expect(page).toContain('/ingest/customer-message/');
+    const { getSupportChannels } = await import(
+      '../../src/services/institution/customer-message-intake.js');
+    const channels = await getSupportChannels(P);
+    expect(channels.length).toBeGreaterThan(0);
+    expect(page, 'the live key must be on the page').toContain(channels[0].intakeKey);
+  });
+
+  it('never shows another company\'s channel key', async () => {
+    const { getSupportChannels } = await import(
+      '../../src/services/institution/customer-message-intake.js');
+    const theirs = await getSupportChannels(OTHER);
+    expect(theirs.length).toBeGreaterThan(0);
+    const page = await (await app.request('/letter')).text();
+    for (const channel of theirs) expect(page).not.toContain(channel.intakeKey);
+  });
+
+  it('stops accepting messages once withdrawn, and says nothing about why', async () => {
+    const { getSupportChannels, ingestCustomerMessage: ingest } = await import(
+      '../../src/services/institution/customer-message-intake.js');
+    const before = (await getSupportChannels(P)).filter((c) => !c.revoked);
+    const target = before.find((c) => c.label === 'quotes@ inbox')!;
+
+    const res = await app.request(`/letter/channels/${target.id}/revoke`, { method: 'POST' });
+    expect(res.status).toBe(302);
+
+    const refused = await ingest({
+      intakeKey: target.intakeKey, externalMessageId: 'evt-after-revoke',
+      contactEmail: 'jo@fieldstone.example', body: 'anything',
+    });
+    // Identical to an unknown key: the caller learns nothing about which
+    // channels exist or once existed.
+    expect(refused).toEqual({ refused: 'unknown_channel' });
+    expect(await ingest({
+      intakeKey: 'a-key-that-never-existed-at-all', externalMessageId: 'e',
+      contactEmail: 'x@example.com', body: 'y',
+    })).toEqual({ refused: 'unknown_channel' });
+  });
+});
