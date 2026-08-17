@@ -1,0 +1,36 @@
+-- Migration 141: the constraint `registerIntegration` has always assumed.
+--
+-- `POST /api/products/:id/integrations` is mounted and founder-authenticated,
+-- and it has never worked. Its writer upserts with
+--
+--   ON CONFLICT (product_id, provider) DO UPDATE SET …
+--
+-- and no unique index on `(product_id, provider)` has ever existed, so SQLite
+-- refuses the statement outright: "ON CONFLICT clause does not match any
+-- PRIMARY KEY or UNIQUE constraint". Every call to that route has thrown.
+--
+-- Found while writing a gate for credential ENCODING, not for this: the gate's
+-- behavioural case called the writer, and the writer could not run. A defect
+-- one layer beneath the one being tested.
+--
+-- WHY A SECOND KEY EXISTS AT ALL. Two integration designs coexist on one table:
+--
+--   name + credentials_json + config_json    the integration fabric
+--   provider + credentials + config          the ingestion framework and MCP
+--
+-- That duplication is real and is recorded rather than hidden. It is NOT
+-- resolved here, deliberately: `runAllDueSyncs` and the MCP client both read
+-- the second family in production, and converging them by pointing the
+-- framework at `name` would make fabric adapters start finding framework rows
+-- that have no `credentials_json` — an integration that reads as connected and
+-- has no credential. Trading a broken route for a silently credential-less one
+-- is not a fix.
+--
+-- So each family gets the uniqueness its own writer already assumes. `provider`
+-- is NULL on every fabric-written row, and SQLite treats NULLs as distinct in a
+-- unique index, so the two families do not collide and no partial predicate is
+-- needed. (A partial index would in fact be WRONG here: SQLite will not use one
+-- as an `ON CONFLICT` target unless the statement repeats the same WHERE
+-- clause, so the route would have gone on throwing exactly as before.)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_integrations_product_provider
+  ON integrations(product_id, provider);

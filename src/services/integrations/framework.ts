@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { encryptToken, getPlaintextToken } from '../../lib/crypto.js';
 import { nanoid } from 'nanoid';
 
 export type ProviderType = 'stripe' | 'github' | 'posthog' | 'mixpanel' | 'intercom' | 'plausible' | 'google_analytics';
@@ -25,6 +26,19 @@ export interface SyncResult {
 /**
  * Register a new integration for a product.
  */
+
+/** Which direction a provider moves data. Mirrors the fabric's map rather than
+ * inventing a second answer; anything unrecognised is inbound, which is the
+ * bounded default — reading is the lesser capability. */
+function providerType(provider: string): string {
+  const map: Record<string, string> = {
+    stripe: 'inbound', posthog: 'inbound', plausible: 'inbound',
+    resend: 'outbound', github: 'bidirectional', sentry: 'inbound',
+    linear: 'bidirectional', mcp: 'outbound',
+  };
+  return map[provider] ?? 'inbound';
+}
+
 export async function registerIntegration(
   productId: string,
   ownerId: string,
@@ -32,15 +46,26 @@ export async function registerIntegration(
 ): Promise<string> {
   const id = nanoid();
   await query(
-    `INSERT INTO integrations (id, product_id, owner_id, provider, status, credentials, config, sync_frequency_minutes)
-     VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
+    // `type` is NOT NULL and was never supplied — the second of two
+    // independent reasons this mounted route had never once succeeded. The
+    // first was an `ON CONFLICT` target with no matching unique index
+    // (migration 141). A route with two unrelated fatal defects is a route
+    // nobody has ever called.
+    `INSERT INTO integrations (id, product_id, owner_id, provider, type, status, credentials, config, sync_frequency_minutes)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
      ON CONFLICT (product_id, provider) DO UPDATE SET
        credentials = excluded.credentials, config = excluded.config,
        status = 'active', sync_frequency_minutes = excluded.sync_frequency_minutes,
        updated_at = datetime('now')`,
     [
-      id, productId, ownerId, config.provider,
-      JSON.stringify(config.credentials),
+      id, productId, ownerId, config.provider, providerType(config.provider),
+      // Encrypted, like every other writer of this column. `connections.ts`
+      // has always written it through `encryptToken` and `mcp-client.ts` reads
+      // it back through `getPlaintextToken`; this writer stored the JSON in the
+      // clear, so the SAME COLUMN carried two encodings depending on which
+      // route the founder happened to use — and this one is mounted at
+      // POST /api/products/:id/integrations.
+      encryptToken(JSON.stringify(config.credentials)),
       config.config ? JSON.stringify(config.config) : null,
       config.sync_frequency_minutes ?? 60,
     ]
@@ -93,7 +118,11 @@ export async function runSync(integrationId: string): Promise<SyncResult> {
 
   const provider = row.provider as ProviderType;
   const productId = row.product_id as string;
-  const credentials = row.credentials ? JSON.parse(row.credentials as string) : {};
+  // Decrypted through the migration-safe reader, so a row written before this
+  // was fixed still syncs rather than failing to parse — and a row written
+  // since is never in the clear to begin with.
+  const storedCredentials = getPlaintextToken((row.credentials as string | null) ?? null);
+  const credentials = storedCredentials ? JSON.parse(storedCredentials) as Record<string, string> : {};
 
   let result: SyncResult;
   try {

@@ -1063,6 +1063,7 @@
   ON institutional_responsibilities(product_id, discovery_evidence_ref)
   ON institutional_responsibilities(product_id, state, updated_at);
   ON integration_secret_quarantine(product_id, rotated_at);
+  ON integrations(product_id, provider);
   ON metric_validation_rules(product_id, metric_name);
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);
   ON operator_attention(founder_id, product_id, created_at);
@@ -5422,6 +5423,7 @@ CREATE UNIQUE INDEX idx_idem_unique
 CREATE UNIQUE INDEX idx_inbound_message_identity
 CREATE UNIQUE INDEX idx_integration_health_key ON integration_health(product_id, integration_source);
 CREATE UNIQUE INDEX idx_integrations_product_name ON integrations(product_id, name);
+CREATE UNIQUE INDEX idx_integrations_product_provider
 CREATE UNIQUE INDEX idx_investor_updates_month ON investor_updates(product_id, month);
 CREATE UNIQUE INDEX idx_judgment_conflict_identity
 CREATE UNIQUE INDEX idx_milestones_unique ON milestone_events(founder_id, product_id, milestone_key);
