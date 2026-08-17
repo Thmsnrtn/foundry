@@ -12,7 +12,7 @@ around each item.
 
 ---
 
-# ALL FIVE DECISIONS ANSWERED
+# ALL SIX DECISIONS ANSWERED
 
 The owner answered every queued decision. Nothing is pending. Recorded here as
 settled; the record of what was asked and why is in git history.
@@ -92,3 +92,30 @@ route needs a scope that a founder can actually grant, and the bidirectional
 gate enforces that in both directions. Transcript ingestion is reachable, which
 means real customer call content can now arrive and be analysed — that path is
 customer data and untrusted external content, and must be treated as both.
+
+---
+
+## RESOLVED 6 — An unpaid account is **READ-ONLY**
+
+A founder who never subscribed, or whose trial expired without converting, was
+indistinguishable from a paying customer to every capability gate: `scp_status`
+stayed 'active' from onboarding, `tier` stayed NULL, and nothing read trial
+expiry. Agents kept running, governed effects kept sending, AI spend kept
+accruing — indefinitely, for an account that would never pay.
+
+The owner chose: **data and history stay readable; Foundry stops spending money
+and stops reaching outward.**
+
+**How it is enforced, and why that way.** The hourly `entitlement_sweep` writes
+the same `products.scp_status = 'paused'` that `customer.subscription.deleted`
+already writes, so every check that honours a cancellation honours a lapsed
+trial too. No second mechanism to keep in agreement.
+
+**Standing consequences:**
+
+- Entitlement to act = a paid tier OR a live trial. Nothing else.
+- The sweep resumes as well as pauses. Do not make it one-way.
+- It is **not a revocation**: consents are untouched and nothing is demoted, so
+  subscribing restores the permission the founder already gave.
+- Any NEW capability that spends money or reaches outward must be reachable only
+  through a path that already honours `scp_status`, or it will silently be free.

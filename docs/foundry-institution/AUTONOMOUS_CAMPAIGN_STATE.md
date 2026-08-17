@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **141**. Schema snapshot current.
-- **Validation:** `npm run check` green — **196 files / 1,600 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **197 files / 1,613 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -52,11 +52,18 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 13 outcome provenance | 1 | 1 | low | 0 | 1 | 0 | 0 | 1 |
 | 14 tenancy ↔ public API | 2 | 2 | 1 med, 1 low | 1 | 1 | 0 | 0 | 1 |
 | 15 SSRF totality + SELECT drift | 3 | 5 | 2 high, 3 med | 2 | 3 | 0 | 0 | 12 |
+| 16 billing ↔ capability access | 2 | 2 | 1 high, 1 med | 1 | 2 | 0 | 0 | 2 |
+| 17 onboarding ↔ entitlement | 2 | 1 | med | 1 | 1 | 0 | 0 | 1 |
 
-**Reading it:** yield has not fallen. Batches 12 and 15 each found a high-severity
-defect, and batch 15 repaired twelve production paths that had never once worked.
-Three of the last five batches also found a GATE or FIXTURE weaker than its name —
-that is its own signal, and it argues for continuing rather than for stopping.
+**Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
+high-severity defect, and batch 15 repaired twelve production paths that had
+never once worked. Batch 16's second finding — the data-deletion job writing a
+status its own CHECK constraint forbids, so it deleted thirty tables' rows and
+then threw, leaving every completed deletion permanently pending — was found
+only because a test for something else needed that column.
+
+Four of the last six batches also found a GATE or FIXTURE weaker than its name.
+That is its own signal and it argues for continuing.
 
 **Phase-change trigger:** several consecutive independently-chosen batches
 yielding only cosmetic findings and no invariant violations. Not reached.
@@ -184,6 +191,8 @@ Newest first. Trimmed as it ages — git history is the diary.
 - The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
 - Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
 - One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
+- An unpaid account becomes read-only (owner decision 6): the entitlement sweep reuses the cancellation pause rather than adding a second mechanism.
+- Cancelling a subscription stops Foundry acting; the data-deletion job can reach its own end.
 - The SSRF boundary made total: redirects re-screened on every hop, the rebinding defence made testable and actually tested for the first time.
 - The SELECT column drift class swept — 46 findings, 10 on the public API fixed, 36 ratcheted; three phantom tables removed.
 - Public API limited by CREDENTIAL rather than by source address, with a tighter budget for the model-backed transport. (This change rode into commit b8360d4, whose message describes only the SSRF and drift work.)
