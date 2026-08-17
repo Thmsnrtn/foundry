@@ -32,12 +32,24 @@ import { getResponsibility, type Responsibility } from './responsibility.js';
 
 /** Capabilities a founder may currently grant, with the exact effect each
  * permits. Closed on purpose: a capability appears here only when a bounded,
- * governed action exists for it. */
+ * governed action exists for it — this is a list of things Foundry can actually
+ * do, not a list of things it would like to.
+ *
+ * `operations` was added when migration 136 gave it a real governed effect. It
+ * is the third and last place the effect boundary named customer support: the
+ * trigger, the authority read, and this — the one a founder actually touches.
+ * Until it was added, an unfamiliar company could be understood and watched and
+ * then be refused permission for work Foundry was fully able to carry. */
 export const GRANTABLE_CAPABILITIES: Record<string, { scope: string; may: string; mayNot: string }> = {
   customer_support: {
     scope: 'send_email:support_reply',
     may: 'write and send one reply to a customer who is waiting on this',
     mayNot: 'contact anyone else, promise anything, change your systems, or spend money',
+  },
+  operations: {
+    scope: 'send_email:responsibility_notice',
+    may: 'send one message you have written, to the person you named',
+    mayNot: 'write anything itself, contact anyone else, promise anything, change your systems, or spend money',
   },
 };
 

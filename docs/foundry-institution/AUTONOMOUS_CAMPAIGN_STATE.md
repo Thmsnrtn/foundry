@@ -55,7 +55,7 @@ See `OWNER_DECISIONS_PENDING.md`. Nothing currently blocks all high-value work.
 - Everything wired in sessions 4–10 is **E2** — local runtime through production-facing services. A production-facing code path is not production evidence.
 - E3 claims cover **only the synthetic dimensions their corpora actually exercise**.
 - `development-shadowing.ts` remains DARK: observations are supplied, but no production path opens a development expectation.
-- **Open nondeterminism evidence debt** — `customer-message-intake`, now **two sightings**, neither reproducible. Both sightings are consistent with ONE root cause: a revoked support channel still accepting a message. Six hypotheses already eliminated by measurement. Not flaky, not fixed. Forensics fire on any failure — **capture `[forensics]` lines unfiltered**, they were greped away during the second sighting.
+- ~~Open nondeterminism evidence debt~~ — **RESOLVED**. A near-miss key fixture built as `key.slice(0,-1) + 'X'` collided with the real key whenever it ended in `X` (1 in 64). Not a database, scheduling, or concurrency problem. See IMPLEMENTATION_STATE for the full record.
 - The foreign-key PRAGMA defect fixed during that investigation is **latent, not the cause**.
 
 ## Deferred

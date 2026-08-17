@@ -1007,16 +1007,26 @@ The claim is made structural rather than asserted: with comments stripped, no ex
 6. **Audited judgment calibration and correctly built nothing** — no production path writes judgment-outcome evidence, so there is no longitudinal supply to calibrate against.
 
 **The recurring shape, second session running: the disciplined answer was frequently to build nothing.** Three of this session's audits ended in a deferral with a stated reason — the quality/cost comparator (one candidate method exists), judgment calibration (no real outcomes), and founder attention (no consumer). Each is recorded with the trigger that would make it buildable.
-- **One unreproduced flake — investigated seriously, still open.** See the investigation record below. It is not diagnosed; do not treat the suite as fully deterministic.
+- **The long-standing intermittent is RESOLVED** — a 1/64 collision in a test fixture, not a system defect. See the investigation record below.
 
-## Investigation: the `customer-message-intake` nondeterminism (NOT RESOLVED)
+## Investigation: the `customer-message-intake` nondeterminism — **RESOLVED**
 
-Two assertions in `tests/unit/customer-message-intake.test.ts` failed once on a message count, during a full run. It has not reproduced since. What was actually tested, so the next attempt does not repeat this ground:
+Carried as evidence debt across three sessions and four sightings. It was never flaky in the dismissive sense, and it was never a database, scheduling, or concurrency problem. **It was a one-in-sixty-four draw inside the fixture itself.**
 
-**Ruled out by measurement, not by argument:**
+**The mechanism.** The test builds a *near miss* key — the real intake key with its last character changed — and checks that it is refused. It built it as `intakeKey.slice(0, -1) + 'X'`. But `X` is in the base64url alphabet, and `randomBytes(24).toString('base64url')` produces a 32-character key whose last character is uniform over all 64. So roughly one key in sixty-four already ended in `X`, and the "forged" key **was the real key**. The channel then accepted the message, which produces exactly the two symptoms observed every time:
 
-| Hypothesis | How it was eliminated |
-|---|---|
+- `refuses an unknown, forged, or revoked key identically` gets `{ message, duplicate: false }` where it expected `{ refused: 'unknown_channel' }`;
+- the next test's message count is 2 instead of 1, because a real message was created.
+
+Measured: 95 of 6,400 generated keys end in `X` (≈1.5%, i.e. 1/64). Verified across the whole alphabet — of all 64 possible final characters, **exactly one** broke the old construction.
+
+**Why every earlier hypothesis was eliminated correctly, and why none of them found it.** Shared databases, the 10s query timeout, CPU contention, detached signal processing, and file parallelism were all genuinely ruled out by measurement — the cause was in none of them. Twenty-five isolated runs under saturation passing is entirely consistent with a 1/64 draw (≈68% chance of no hit), as are nine consecutive green full runs (≈87%). The investigation kept looking at the machinery because the failure *looked* like an ordering or isolation problem, and the fixture was the one thing assumed correct.
+
+**The fix** builds the near miss so it cannot collide, and asserts that it differs from the real key — the assertion the original silently lacked.
+
+**The foreign-key PRAGMA defect found during this investigation was, as recorded at the time, NOT the cause.** That judgement holds and was worth making: closing the item on it would have been closing it on a coincidence.
+
+---|---|
 | Suites share one in-process `file::memory:` DB | **Directly probed.** One file creates a table, another looks for it — invisible. Each test file gets its own module registry and its own database. The vitest config comment asserting otherwise was stale and has been corrected. |
 | Cross-file contamination of this table | Only one other suite touches `inbound_customer_messages`, under a different product id, and files are isolated anyway. |
 | `query()`'s 10s timeout firing under load | At `DB_QUERY_TIMEOUT_MS=1` the file still passes 11/11 — local sqlite resolves before the timer can fire. This class of failure is not reachable here. |

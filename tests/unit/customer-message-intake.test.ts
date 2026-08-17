@@ -149,7 +149,20 @@ describe('inbound customer messages', () => {
 
   it('refuses an unknown, forged, or revoked key identically', async () => {
     // The caller learns nothing about which channels exist.
-    for (const key of ['a'.repeat(32), 'not-a-real-key-but-long-enough-x', intakeKey.slice(0, -1) + 'X']) {
+    //
+    // The third key is a NEAR MISS — the real key with its last character
+    // changed — and building it needs care. It used to be
+    // `intakeKey.slice(0, -1) + 'X'`, but 'X' is in the base64url alphabet, so
+    // roughly one key in sixty-four already ended in 'X' and the "forged" key
+    // was the real one. The channel then accepted the message, this assertion
+    // failed, and the message count in the next test became 2. That was the
+    // intermittent failure carried as evidence debt across three sessions and
+    // six eliminated hypotheses: not shared databases, not query timeouts, not
+    // CPU contention, not detached work, not file parallelism — a one-in-64
+    // draw inside the fixture itself.
+    const nearMiss = intakeKey.slice(0, -1) + (intakeKey.endsWith('X') ? 'Y' : 'X');
+    expect(nearMiss, 'the near-miss key must never equal the real one').not.toBe(intakeKey);
+    for (const key of ['a'.repeat(32), 'not-a-real-key-but-long-enough-x', nearMiss]) {
       expect(await ingestCustomerMessage({
         intakeKey: key, externalMessageId: 'x', contactEmail: 'a@b.com', body: 'hello',
       })).toEqual({ refused: 'unknown_channel' });
