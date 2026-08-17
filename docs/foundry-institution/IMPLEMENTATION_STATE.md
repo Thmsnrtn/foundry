@@ -929,17 +929,52 @@ The intermittent failure stays **open evidence debt** — not flaky, not fixed. 
 
 ---
 
+## The ladder stops being SaaS-only (migration 135)
+
+- **The defect.** Independent observation — the evidence that lets a responsibility enter Shadowing — was admissible only for twelve hard-coded metrics (`new_mrr_cents`, `activation_rate`, `day_30_retention`, `churn_rate`, `nps_score`…), each a physical **column** in `metric_snapshots`. Observing anything else required a schema migration.
+- **The consequence was structural.** A boatyard, a dance school or an agency could be Visible and Understood, and then the ladder **dead-ended**: nothing it could report was admissible, so Shadowing was unreachable and Assisting could never be earned. "Boats serviced this week" was not a quantity the kernel was willing to hear. That is a business-specific branch inside the constitution.
+- **It had two halves.** The service refused unknown fields *and* migration 127's trigger repeated the same twelve names in SQL. Fixing one alone would have produced a system that admits a boatyard's readings right up until the insert — worse than refusing them honestly.
+- **A company now declares what it counts**, in its own words, and the kernel treats it as an **opaque named quantity**: it knows readings arrived and whether the latest rose, fell or held, and nothing tries to interpret what it means. Direction over time is business-independent.
+- **No parallel mechanism, no readings table.** Observations are written as the same `external_metric_ingest` signals with the same event-type shape, so shadow entry, comparison and resolution work unmodified — the institution cannot tell a boatyard's reading from a SaaS metric, which is the whole point. Only the *declaration* needs a table, because admission must be checkable by a guard before evidence is accepted.
+- **Honest boundaries kept:** a single reading records a baseline under its own source and never a direction; a revoked channel stops being admitted without erasing what it already observed; declaring grants nothing; Shadowing still requires real movement.
+- **Reachability closed in the same slice.** `registerObservationChannel` initially had no production caller — the exact "existed, well-tested, never invoked" failure this repository keeps finding. The Letter now asks "What do you count?", and both the declaration and the intake are named links in the chain gate.
+
+### Three things the tests caught, worth remembering
+
+1. **Reading identity included `previous_value`**, so a replayed webhook chained 9→14 (rose) then 14→14 (held): one delivered-twice payload became two contradicting observations and resolved the founder's expectation as *deviated*. Identity is now the reading itself.
+2. **The first tenant-isolation test only exercised the service**, so deleting the guard's tenant binding passed everything. The forged insert now names a channel that is **live** for another company — naming a revoked one proved nothing, because `revoked_at` would refuse it either way.
+3. **Recreating the trigger reproduced only the vocabulary checks**, silently dropping the no-echo and event-type-derivation guards. The independence tests caught it. Widening a vocabulary must not become a way to quietly narrow everything else.
+
+## Four unfamiliar businesses climb the ordinary ladder
+
+A dance school, a brand agency, a village provisions shop and a veterinary practice, each carried from an owner report through Understood to a **resolved** Shadowing. None is a SaaS product or a variation on one.
+
+The claim is made structural rather than asserted: with comments stripped, no executable line in discovery, responsibility, understanding, shadowing or observation contains any of those domains' words, and no company's channel key or obligation appears in a closed list anywhere. What a company is asked for comes from its **capability**, never its industry.
+
+**What it revealed — and this is the next package.** All four stop at Shadowing, because the consequential-effect boundary is hard-bound to one use: migration 114's guard requires `capability='customer_support'` and `authority_scope='send_email:support_reply'`. A dance school telling a teacher their class needs cover cannot use the governed send, though the mechanism, authority semantics, receipt and outcome separation would be identical. **The same defect shape as the twelve metrics, one layer up.** Reality revealed it; architecture did not invent it.
+
+---
+
 # CONTINUATION — self-contained resume record
 
-*Rewritten at the close of the ninth autonomous session. Supersedes all earlier continuation records.*
+*Rewritten at the close of the tenth autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
-- **Migrations:** through **134**. Schema snapshot current — verified in sync by regeneration, and now also observed by Foundry itself.
-- **Full `npm run check`:** green — **167 files / 1,354 tests**.
+- **Migrations:** through **135**. Schema snapshot current — verified in sync by regeneration, and now also observed by Foundry itself.
+- **Full `npm run check`:** green — **169 files / 1,369 tests**, all 4 ratchets hold.
+- **Campaign state lives on disk:** `AUTONOMOUS_CAMPAIGN_STATE.md` is the scheduler across contexts and `OWNER_DECISIONS_PENDING.md` holds three genuinely owner-level decisions. Start there, not here, for what to do next.
 - **Working tree:** clean.
 - **`sqlite3` IS available in this environment** (`/usr/bin/sqlite3`), so `bash scripts/schema-snapshot.sh` runs directly. Earlier records said otherwise.
+
+## What the tenth session did
+
+1. **Broke the ladder's SaaS dependency** (migration 135) — company-defined observation channels, fixing both the service and the database guard that each hard-coded twelve metrics.
+2. **Made it reachable** — The Letter asks what a company counts; declaration and intake are both chain-gate links.
+3. **Proved the generalization from outside** — four unfamiliar businesses carried to a resolved Shadowing with no kernel branch that knows what any of them is.
+4. **Created the durable campaign files** the mandate requires, so continuation needs no chat history.
+5. **Found the next package by evidence rather than by planning** — the consequential-effect boundary is hard-bound to `customer_support` and one scope, which is why all four companies stop at Shadowing.
 
 ## What the ninth session did
 
@@ -1146,6 +1181,10 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **An audit that finds nothing is a result, not a failure to deliver.** Three slices this session ended in building nothing, because the structure already held. The instinct to add *something* so the work looks substantial is how privileged bypasses and second kill-switches get built.
 - **Freeze the contract before the thing it judges exists.** Thresholds written after the first model are thresholds the first model passes.
 - **A gate you have not mutated is a gate you are guessing about.** Every detector and classifier added this session was broken deliberately first, in both directions, before being trusted.
+- **The same defect shape recurs at every layer.** A general mechanism bound to one SaaS-shaped special case: twelve metric columns for observation, one capability and one scope for effects. Finding it once teaches you where to look next.
+- **Let reality reveal the missing primitive.** The effect-boundary gap was not designed into a roadmap; four fictional-but-honest businesses walked the ladder and stopped at the same wall.
+- **Replacing a guard means reproducing ALL of it.** Migration 135's first draft recreated the vocabulary checks and silently dropped two independence guards. Widening a vocabulary must never quietly narrow anything else.
+- **A test that only exercises the service has not tested the database.** Deleting the trigger's tenant binding passed every test until a forged insert named a channel that was live for another company.
 - **Fix the fixture, never the feature.** The seven-day view failed against a hand-built stub that had drifted two migrations behind production. The stub was wrong; the query was right.
 - **Check the observation against reality BEFORE building on it.** The recursive slice began by measuring the live schema against the committed snapshot — 698 objects each side, exact match — because an observer that reports drift where there is none is not a recursive proof, it is a fabricated fact about the company.
 - **A tool's blind spot is more dangerous than its silence.** The orphan report confidently named 160KB of live, dynamically-loaded code as dead. Any analysis that resolves only static imports will do this, and the failure mode is a production outage rather than a test failure.

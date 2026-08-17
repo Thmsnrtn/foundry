@@ -78,22 +78,51 @@ See `OWNER_DECISIONS_PENDING.md`. Nothing currently blocks all high-value work.
 9. Seven-day absence view consumes institutional truth.
 10. `support-drafting-v1` frozen (E1); `support-pilot-readiness-v1` built.
 
+## What the generalization test revealed — the next package, evidenced
+
+Four unfamiliar businesses now climb to a resolved Shadowing. **None of them can
+go further, and the reason is the same defect shape that migration 135 just
+fixed one layer down.**
+
+The governed effect boundary is hard-bound to one use. Migration 114's guard
+requires `action_type='send_email'`, `integration_name='resend'`,
+`authority_scope='send_email:support_reply'`, and `capability='customer_support'`.
+So a dance school that wants to tell a teacher their class needs cover cannot
+use the governed send — even though the mechanism, the authority semantics, the
+receipt, and the outcome separation would all be identical. The general
+machinery exists and is bound to a SaaS-shaped special case, exactly as the
+twelve observation metrics were.
+
+This is the strongest available evidence for the next package, and it came from
+reality rather than from architecture: **generalize the consequential-effect
+boundary so a capability and a scope are supplied by the responsibility rather
+than hard-coded in the guard.**
+
+Do it in the shape migration 135 proved: both halves at once (the guard and the
+service), the closed vocabulary replaced by a declared, tenant-bound,
+revocable binding, everything else the guard enforced reproduced verbatim, and
+the whole thing mutation-tested. **Reproducing the trigger in full matters** —
+the first attempt at 135 silently dropped two independence guards, and only the
+existing tests caught it.
+
+Treat this as safety-critical. It is the boundary that makes irreversible
+things irreversible, so it deserves a fresh context rather than the tail of one.
+
 ## NEXT SESSION START HERE
 
 Bootstrap from disk: verify the branch and clean tree, read this file and
 `IMPLEMENTATION_STATE.md`, skim recent git history, then continue without chat
 history.
 
-**Next package: broaden company senses on the generic shape now that the
-observation vocabulary is no longer SaaS-bound.** The pattern to reuse is
-`docs/db` → declaration table with a guard → canonical signal evidence → the
-same institutional machinery, exactly as migration 135 did. Prefer a sense that
-a real responsibility already demands over a vendor checklist.
+**Start with the package described directly above: generalize the
+consequential-effect boundary.** It is evidence-grounded, it unblocks Assisting
+for every company that is not doing SaaS support, and it is the last known
+SaaS-shaped binding in the ladder.
 
-Then: carry a second and third independently authored unfamiliar company
-(deliberately not SaaS, not a boatyard) from owner report to Shadowing through
-the generic path, and treat any kernel change they force as a defect in the
-generalization rather than a feature request.
+After that, in order: broaden company senses on the generic shape (declaration
+table with a guard → canonical signal evidence → the same machinery); extract a
+real capability from a live named agent and cut over; then reassess final-state
+distance rather than continuing down this list by habit.
 
 Do not build the three deferred systems. Do not unlock Operating. Do not touch
 AcreOS.
