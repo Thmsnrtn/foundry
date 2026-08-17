@@ -5,6 +5,9 @@
 
 import { createMiddleware } from 'hono/factory';
 
+import { query } from '../db/client.js';
+import { log } from '../lib/logger.js';
+
 interface RateLimitEntry {
   count: number;
   resetAt: number;
@@ -114,7 +117,7 @@ export const authRateLimit = rateLimit(10, 60000, undefined, 'auth');        // 
  * Keys on the founder id when authenticated, falls back to IP for
  * pre-auth paths so an unauthenticated burst can't drain quota.
  */
-export const aiRateLimit = rateLimit(30, 60 * 60 * 1000, (c) => {
+export const aiRateLimit = sharedRateLimit(30, 60 * 60 * 1000, (c) => {
   const founder = c.get('founder' as never) as { id?: string } | undefined;
   if (founder?.id) return `ai:founder:${founder.id}`;
   return `ai:ip:${clientIp(c)}`;
@@ -159,13 +162,84 @@ export const apiKeyRateLimit = rateLimit(600, 60 * 60 * 1000, (c) => {
  * per key, guarded only by the global AI spend ceiling, which is a blunt
  * instrument that stops everyone at once when one caller is expensive.
  */
-export const apiModelRateLimit = rateLimit(60, 60 * 60 * 1000, (c) => {
+export const apiModelRateLimit = sharedRateLimit(60, 60 * 60 * 1000, (c) => {
   const productId = c.get('productId' as never) as string | undefined;
   return `apimodel:${productId ?? 'unattributed'}`;
 });
 
-export const auditRateLimit = rateLimit(6, 60 * 60 * 1000, (c) => {
+export const auditRateLimit = sharedRateLimit(6, 60 * 60 * 1000, (c) => {
   const founder = c.get('founder' as never) as { id?: string } | undefined;
   if (founder?.id) return `audit:founder:${founder.id}`;
   return `audit:ip:${clientIp(c)}`;
 });
+
+// ─── Shared counters, for the limits that guard money ────────────────────────
+//
+// Every limit above is a Map in ONE Node process, and fly.toml runs
+// `min_machines_running = 2` behind a load balancer. So each of those limits is
+// really twice what its docstring says, and more if the web group is ever
+// scaled up. For flood control that is tolerable — blunting a burst twice as
+// generously still blunts it. For the limits that exist to stop a bill it is
+// not: those are the front stop to real money, and a ceiling multiplied by the
+// machine count is not a ceiling.
+//
+// These count in the database instead, so every machine shares one number.
+
+/** Increment and read the shared counter for (key, window). One statement, so
+ * two machines incrementing at once cannot both read 9 and both write 10. */
+async function bumpSharedCounter(
+  key: string, windowMs: number, now: number,
+): Promise<number | null> {
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  try {
+    const res = await query(
+      `INSERT INTO rate_limit_counters (key, window_start, window_ms, count, updated_at)
+            VALUES (?, ?, ?, 1, datetime('now'))
+       ON CONFLICT(key, window_start)
+       DO UPDATE SET count = count + 1, updated_at = datetime('now')
+         RETURNING count`,
+      [key, windowStart, windowMs]);
+    const row = res.rows[0] as Record<string, unknown> | undefined;
+    return row ? Number(row.count) : null;
+  } catch (err) {
+    log.warn('rate_limit.shared_counter_failed', { key, error: (err as Error).message });
+    return null;
+  }
+}
+
+/**
+ * A rate limit every machine agrees on.
+ *
+ * Falls back to the in-process limiter when the database is unreachable. That
+ * is deliberately fail-OPEN relative to the shared counter and fail-CLOSED
+ * relative to nothing: the caller is still limited, just per-machine, which is
+ * exactly the behaviour this replaced. Refusing all traffic because a counter
+ * table is unavailable would turn a bookkeeping outage into an outage.
+ */
+export function sharedRateLimit(
+  maxRequests: number, windowMs: number, keyFn: (c: any) => string,
+) {
+  const fallback = rateLimit(maxRequests, windowMs, keyFn);
+  return createMiddleware(async (c, next) => {
+    const key = keyFn(c);
+    const count = await bumpSharedCounter(key, windowMs, Date.now());
+    if (count === null) return fallback(c, next);
+
+    const windowStart = Math.floor(Date.now() / windowMs) * windowMs;
+    c.header('X-RateLimit-Limit', String(maxRequests));
+    c.header('X-RateLimit-Remaining', String(Math.max(0, maxRequests - count)));
+    c.header('X-RateLimit-Reset', String(Math.ceil((windowStart + windowMs) / 1000)));
+    if (count > maxRequests) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
+    }
+    await next();
+  });
+}
+
+/** Drop counters for windows that have closed. Called by an hourly job; the
+ * table is otherwise append-mostly and would grow without bound. */
+export async function sweepRateLimitCounters(now: number = Date.now()): Promise<number> {
+  const res = await query(
+    `DELETE FROM rate_limit_counters WHERE window_start + window_ms < ?`, [now]);
+  return Number(res.rowsAffected ?? 0);
+}

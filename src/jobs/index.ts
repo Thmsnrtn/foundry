@@ -2508,6 +2508,20 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // agreement. It resumes as well as pauses: one-way enforcement leaves a
   // founder who subscribes after a lapse stuck read-only until somebody
   // notices, which is a worse product than not enforcing at all.
+  // Shared rate-limit counters accumulate one row per (key, window). Nothing
+  // else deletes them.
+  rate_limit_counter_sweep: {
+    fn: async () => {
+      const { sweepRateLimitCounters } = await import('../middleware/rate-limit.js');
+      const removed = await sweepRateLimitCounters();
+      if (removed > 0) {
+        logger.info(`rate_limit_counter_sweep: removed ${removed} closed windows`,
+          { jobName: 'rate_limit_counter_sweep' });
+      }
+    },
+    schedule: '40 * * * *', // Hourly
+    description: 'Delete rate-limit counters for windows that have closed',
+  },
   entitlement_sweep: {
     fn: async () => {
       const { sweepEntitlements, sendTrialEndingNotices } = await import(

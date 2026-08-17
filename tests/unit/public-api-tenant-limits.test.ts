@@ -85,8 +85,11 @@ describe('the public API limits by credential, not by address', () => {
     const source = readFileSync(resolve(ROOT, 'src/api/v1/index.ts'), 'utf8');
     expect(source).toContain('apiModelRateLimit');
     const limits = readFileSync(resolve(ROOT, 'src/middleware/rate-limit.ts'), 'utf8');
-    const model = /apiModelRateLimit = rateLimit\((\d+),/.exec(limits);
-    const ordinary = /apiKeyRateLimit = rateLimit\((\d+),/.exec(limits);
+    // Either limiter shape counts: the model limit moved to the shared,
+    // DB-backed counter so that two machines cannot each grant the full
+    // allowance, and what this test cares about is the RATIO.
+    const model = /apiModelRateLimit = (?:shared)?[rR]ateLimit\((\d+),/.exec(limits);
+    const ordinary = /apiKeyRateLimit = (?:shared)?[rR]ateLimit\((\d+),/.exec(limits);
     expect(Number(model![1]),
       'a call that spends money must not share the ordinary allowance')
       .toBeLessThan(Number(ordinary![1]));

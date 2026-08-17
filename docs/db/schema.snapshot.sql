@@ -1079,6 +1079,7 @@
   ON product_webhooks(product_id, enabled);
   ON push_subscriptions(founder_id, apns_device_token)
   ON push_subscriptions(founder_id, apns_device_token)
+  ON rate_limit_counters(window_start);
   ON reconstruction_claims(product_id,subject,predicate,created_at DESC);
   ON referral_conversions(referral_link_id, created_at DESC);
   ON rejection_streaks(founder_id, product_id, COALESCE(agent_name, '*'));
@@ -1098,6 +1099,7 @@
   OR COALESCE(OLD.purposes_json,'') <> COALESCE(NEW.purposes_json,'')
   OR COALESCE(OLD.secret,'')        <> COALESCE(NEW.secret,'')
   PRIMARY KEY (founder_id, product_id, item_key)
+  PRIMARY KEY (key, window_start)
   PRIMARY KEY (product_id, prompt, condition_name)
   PRIMARY KEY (scope, scope_id, date)
   SELECT 1 FROM json_each(NEW.evidence_refs_json) refs WHERE NOT EXISTS (
@@ -1838,6 +1840,7 @@
   cost_usd REAL DEFAULT 0.0,
   cost_usd REAL DEFAULT 0.0,
   cost_usd REAL NOT NULL DEFAULT 0,
+  count         INTEGER NOT NULL DEFAULT 0,
   country_code TEXT DEFAULT 'US',
   created_at             TEXT NOT NULL DEFAULT (datetime('now'))
   created_at            TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2852,6 +2855,7 @@
   judgment_id          TEXT NOT NULL REFERENCES strategic_decisions_log(id),
   jurisdiction TEXT NOT NULL,
   jurisdictions TEXT,
+  key           TEXT    NOT NULL,
   key_assumptions TEXT NOT NULL,
   key_decisions_made TEXT,             -- JSON: array of resolved decisions
   key_gaps TEXT,                       -- JSON: string[] — what's blocking raise readiness
@@ -4186,6 +4190,7 @@
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -4304,6 +4309,8 @@
   what_we_decided TEXT NOT NULL,
   why_now TEXT NOT NULL,
   willing_to_help_with TEXT,
+  window_ms     INTEGER NOT NULL,
+  window_start  INTEGER NOT NULL,          -- epoch ms, floored to the window
   winner TEXT CHECK(winner IN ('control','treatment','inconclusive')),
   wisdom_context_pct INTEGER,
   wisdom_failures_used INTEGER DEFAULT 0,
@@ -4323,6 +4330,7 @@
  evidence_refs_json TEXT NOT NULL, economic_result_json TEXT NOT NULL, learned_claim_id TEXT REFERENCES reconstruction_claims(id),
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
+);
 );
 );
 );
@@ -4987,6 +4995,7 @@ CREATE INDEX idx_push_log_founder ON push_log(founder_id, sent_at DESC);
 CREATE INDEX idx_push_log_type ON push_log(notification_type, sent_at DESC);
 CREATE INDEX idx_push_subscriptions_founder ON push_subscriptions(founder_id, active);
 CREATE INDEX idx_pwh_product
+CREATE INDEX idx_rate_limit_counters_window
 CREATE INDEX idx_rec_outcomes_agent ON recommendation_outcomes(product_id, agent_name, outcome);
 CREATE INDEX idx_rec_outcomes_product ON recommendation_outcomes(product_id, recommendation_date DESC);
 CREATE INDEX idx_reconstruction_claims_product_subject
@@ -5284,6 +5293,7 @@ CREATE TABLE product_webhooks (
 CREATE TABLE products (
 CREATE TABLE push_log (
 CREATE TABLE push_subscriptions (
+CREATE TABLE rate_limit_counters (
 CREATE TABLE recommendation_outcomes (
 CREATE TABLE reconstruction_claims (
 CREATE TABLE red_team_reviews (
