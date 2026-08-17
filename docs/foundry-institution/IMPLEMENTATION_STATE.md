@@ -904,17 +904,51 @@ What the frontier actually needs is now in place: the cost side is attributable 
 
 ---
 
+## The owner-named recursive responsibility, carried end to end
+
+- **The owner named it:** keep the committed canonical schema snapshot synchronized with the migration-defined schema. It entered through the **ordinary owner-report path** — the same entry any company uses — and became Visible while creating **zero consents**. Naming is recognition evidence; a stranger reporting for the same company is refused.
+- **The grant is narrower than write access:** one repository, one artefact path, the generated-artifact class, a required verification, low consequence, expiring, revocable. Everything the owner put out of scope is refused *by the authority itself* — inventing a migration, editing application source, tests, or the ring. `scripts/` is inside the ring, so **Foundry may update the description of its schema and can never change what produces the description**.
+- **New boundary — `verifyDiffScope`.** Everything previously verified the *intended* file, which is necessary and insufficient: it cannot see a second file that also changed. A generator that rewrites a lockfile produces a correct artefact and an unauthorised repository while every other check passes. Out-of-scope mutation is now a **failed** verification, not merely an unverified diff. The rule is pure — the kernel runs no git and spawns no process; the caller observes and hands the list in.
+- **No exemptions on the recursive path:** replay converges instead of mutating twice, authority withdrawn between planning and execution writes nothing, and a fresh grant cannot revive a refused plan — otherwise revocation would only ever be a pause.
+- **Two fixtures were wrong and the system was right**, both kept as comments: an ambiguous same-second observation is correctly refused rather than credited, and two live proposals for one need correctly defer.
+
+## `recursive-institution-v1` now reports ordinary — earned, not forced
+
+All thirteen dimensions are genuinely exercised; the last three by carrying the responsibility through a real governed effect, a real withdrawal, and a real attributable cost. Nothing was weakened: the plan guard refused a responsibility that had not entered Assisting and the shadowing guard refused one that was not Understood, so the fixture climbs the ordinary ladder. **Green still means only that the recursive path preserved ordinary semantics** — five items of outstanding proof remain, including that no recursive *outcome* has ever been independently established. Cost observable is not ROI proven.
+
+## The dynamic-loader blind spot, closed
+
+- **Three loaders, three name sources, one validated.** The dispatcher's names come from `EVENT_AGENT_MAP` but reach the loader from `signal_events.relevant_agents_json` — a database column. `instance.runAgent` is typed `AgentName`, but `runAllDueAgents` *casts* a row from `agent_instances`, and a cast is a promise rather than a check. Only the dashboard route validated its input. **A module specifier resolves paths**, so an unvalidated stored string is a directory traversal, not a missing agent. All three now narrow through one closed vocabulary.
+- **A bidirectional gate replaces the blind spot:** every registry entry must resolve to a module that exists, every loadable module carries exactly one status with a reason naming real evidence, every event-map name is in the vocabulary, and no fourth loader can appear unclassified. Twelve agents are production-reachable; `base` is the shared class; `challenger` and `synthesizer` are **evidence-insufficient** — outside the vocabulary so no loader can select them, but nothing establishes whether they were retired deliberately. Unknown is a valid classification.
+- **Deleted: `seedAgentConfigs` and its orphaned helpers.** No caller in `src`, `tests`, or `scripts`, and it seeded twelve Title-Case names — five of which (Meridian, Nexus, Catalyst, Vanguard, Echo) have no implementation at all — while every runtime lookup uses lowercase. A second, conflicting agent vocabulary that could never have matched a read.
+- **No agent implementations were deleted.** Retirement is the confirmed direction; a candidate is not a corpse.
+
+## Failure-forensics readiness (Part IV)
+
+The intermittent failure stays **open evidence debt** — not flaky, not fixed. Chasing a non-reproducible event indefinitely is not a good use of anything; being ready to learn from the next occurrence is. A test-only `afterEach` now prints, on failure only, the state the investigation kept needing and could not recover afterwards: failing test and file, worker and pool id, database URL, query timeout, the live `foreign_keys` PRAGMA, and table count. It writes straight to stderr rather than through the structured logger so it survives whatever logging a suite installed, and it can never turn one failure into two.
+
+---
+
 # CONTINUATION — self-contained resume record
 
-*Rewritten 2026-08-16 at the close of the eighth autonomous session. Supersedes all earlier continuation records.*
+*Rewritten at the close of the ninth autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
-- **Migrations:** through **134** (institutional cost attribution). Schema snapshot regenerated and committed.
-- **Full `npm run check`:** green — **165 files / 1,337 tests**.
+- **Migrations:** through **134**. Schema snapshot current — verified in sync by regeneration, and now also observed by Foundry itself.
+- **Full `npm run check`:** green — **167 files / 1,354 tests**.
 - **Working tree:** clean.
 - **`sqlite3` IS available in this environment** (`/usr/bin/sqlite3`), so `bash scripts/schema-snapshot.sh` runs directly. Earlier records said otherwise.
+
+## What the ninth session did
+
+1. **Carried the owner-named schema-snapshot responsibility** through the ordinary path — owner report → Visible → Understood → Shadowing → Assisting → plan → governed effect → independent verification — with a grant narrower than write access.
+2. **Added `verifyDiffScope`**, the boundary that was genuinely missing: a correct target file in an incorrectly-changed repository is no longer a verified change.
+3. **`recursive-institution-v1` now reports ordinary**, earned by exercising effect governance, revocation and cost observability for real. Guards refused the fixture twice on the way, which is the result rather than an obstacle to it.
+4. **Closed the dynamic-loader blind spot** — three loaders audited, two of which passed a database value to `import()` unvalidated; a bidirectional classification gate now replaces the guesswork.
+5. **Deleted a dead config seeder** carrying a second, conflicting agent vocabulary that could never have matched a read.
+6. **Built failure-forensics readiness** for the open intermittent, instead of chasing it further.
 
 ## What the eighth session did
 
@@ -1010,7 +1044,7 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 | Assisting (support reply) | E3 | **prior synthetic dimensions only — unchanged for three sessions** |
 | Production reachability | E3 | four synthetic non-software companies |
 | Everything wired in sessions 4–8 | E2 | local runtime through production-facing services |
-| Recursive Foundry operation | E2 | one responsibility, observation only; `recursive-institution-v1` reports NOT ordinary — three dimensions unexercised |
+| Recursive Foundry operation | E2 | one responsibility carried end to end LOCALLY; `recursive-institution-v1` reports ordinary on all thirteen dimensions. Never run by a real owner in production. |
 | Institutional economics | E2 | attribution is structural; only model spend and recorded provider spend are measured, seven components named unmeasured |
 | Assisting → Operating | frozen | migration 115; unchanged |
 | Real founders, providers, pilots, production | unproven | E4/E5/E6 |
@@ -1093,7 +1127,9 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 
 *Reconciled again at the close of the eighth session.*
 
-1. **Recursive operation past observation.** Foundry observes its own repository; it has never carried a consequential recursive effect. `effect_governance`, `revocation` and `cost_observability` are unexercised on that path, and `recursive-institution-v1` correctly reports NOT ordinary because of it. The next honest step needs an owner-reported obligation for the Foundry company, because recognition begins with the owner naming the responsibility — Foundry auto-recognising its own responsibilities would be the bypass the whole contract forbids.
+1. **Recursive operation in production.** The vertical is proven locally and end to end, but it has only ever run in tests. **External proof debt, explicitly:** the deployed Foundry company still requires a genuine owner-authenticated report and a genuine owner-authenticated grant, performed outside the coding environment. Neither has happened, and neither may be fabricated. What remains after that is an outcome nobody has independently established.
+2. **`challenger` and `synthesizer`** are classified evidence-insufficient. Resolving them needs a person who knows whether they were retired deliberately; it is not derivable from the repository.
+3. **Named-agent retirement.** Twelve implementations remain live and production-reachable. Retiring them is Class-B work — prove equivalence, move callers to the institutional capability, verify, then delete. No dual-write.
 2. **Judgment calibration — blocked on reality, not on effort.** Nothing in production writes `judgment_expected_supported` / `judgment_expected_contradicted`, so evaluation can only ever report `not_yet_observable`. Left as E2 proof debt deliberately: manufacturing longitudinal examples to improve a calibration metric would corrupt the one number that is supposed to be honest.
 3. **Quality/cost comparator.** Deferred with a stated trigger — buildable when a second candidate method exists. The cost side, the quality gate, and the deterministic baseline are all now in place.
 4. **Architecture deletion — 34 candidates remain**, each needing per-module proof. The reachability gate resolves literal imports only and is blind to dynamically-loaded modules in both directions; that blind spot is now documented and is the thing to fix before the next sweep.
@@ -1116,3 +1152,7 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **Latent is not the same as observed — say which one you fixed.** The foreign-key PRAGMA race was real in principle and unreproducible in practice. Recording it as "found and fixed, but not the cause" keeps the open flake open, which is where it belongs.
 - **When guards keep refusing your fixture, stop hand-building rows.** Four consecutive triggers refused a hand-made economics fixture. Building it through the real services was less work and proved more.
 - **Deferral with a stated trigger is a decision; deferral without one is drift.** Three things were deliberately not built this session, each recorded with the condition that would make it buildable.
+- **When a guard refuses your fixture, the guard is usually right.** Five separate refusals this session — an ambiguous same-second observation, two competing proposals, a plan without Assisting, shadowing without Understanding, a weak intake key — were every one of them the system working. The fixture changed each time; no guard did.
+- **A cast is a promise, not a check.** `agentName as AgentName` on a database row type-checks and validates nothing. Two of three dynamic loaders were secured by a type annotation that does not exist at runtime.
+- **Verifying the thing you changed cannot see the thing you didn't.** The whole point of `verifyDiffScope`: every other check passes while the repository is unauthorised.
+- **Being ready to learn beats continuing to look.** After nine full runs and twenty-five saturated ones, the honest move on the intermittent was forensics readiness, not more guessing.
