@@ -69,6 +69,7 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 22 AI spend attribution | 1 | 1 | high | 1 | 1 | 0 | 0 | 54 |
 | 23 rate limiting ↔ deployment | 2 | 3 | 2 high, 1 med | 1 | 2 | 0 | 0 | 8 |
 | 24 AI context ↔ tenancy | 3 | 2 | 1 high, 1 med | 2 | 2 | 0 | 0 | 2 |
+| 25 erasure ↔ schema | 2 | 3 | 2 high, 1 med | 1 | 2 | 0 | 0 | 205 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -317,16 +318,25 @@ falsify**, not a reason to move on.
    `scripts/check-ai-attribution.mjs` fails the build on a new one. The pause
    refuses model spend in `callClaude` itself, before the key is read and before
    a reservation is taken.
-4. **`agent_audit_log` ↔ compliance.** What is recorded, what a founder can
-   actually retrieve, and whether deletion removes it.
+4. ~~**`agent_audit_log` ↔ compliance.**~~ Done in batch 25, and it was the
+   worst finding of the campaign. `processScheduledDeletions` deleted from a
+   hand-written list of THIRTEEN tables; the schema has 218 carrying
+   `product_id`. An erasure removed about six per cent of a company — agent
+   messages, chat sessions, call transcripts, customer intelligence, API keys,
+   integration records — and then wrote `data_deletion_completed`. The list is
+   derived from the live schema now, with an explicit retention allow-list and a
+   reason each. Two smaller ones fell out: the loop swallowed delete errors so
+   the completion record could be written over a failed deletion, and
+   `delete_after_days || 30` turned an immediate erasure request into a
+   thirty-day wait.
 5. **§14 named-agent retirement.** Untouched this session: classify remaining
    modules A–E, delete A, migrate-then-delete B, treat C as capability input,
    retain D, investigate E. No mass deletion.
 
-**A pattern across 19, 22, 23 and 24.** Every one was a rule that existed,
+**A pattern across 19, 22, 23, 24 and 25.** Every one was a rule that existed,
 was believed, and was enforced on the wrong thing: the wrong pause axis, the
-wrong (optional) argument, the wrong process, the wrong population. None was a
-missing feature. **When a guarantee is stated in a header comment, the question
+wrong (optional) argument, the wrong process, the wrong population, a list
+written against a schema two hundred tables ago. None was a missing feature. **When a guarantee is stated in a header comment, the question
 to ask is not "is it implemented" but "what exactly does the implementation
 count, and is that the same thing the sentence claims".**
 
