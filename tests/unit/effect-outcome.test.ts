@@ -231,3 +231,62 @@ describe('what the owner is shown when reporters disagree', () => {
     expect(letter).toContain('I am not going to pick one');
   });
 });
+
+// =============================================================================
+// Provenance survives into what the founder actually reads.
+//
+// `outcome_status` spells its success value `verified_success`, and the
+// founder-facing sentence rendered that as "business outcome verified". It is
+// not. One person or one system saying "that worked" is a REPORT about an
+// outcome; it does not become an independent verification by having arrived
+// through an authenticated endpoint — which is exactly the claim the outcome
+// layer exists to refuse.
+//
+// The stored vocabulary is deliberately unchanged. Renaming it would touch
+// migrations, guards and readers for a vocabulary change; the honest fix is
+// smaller and closer to the person being told.
+// =============================================================================
+
+describe('what the founder is told about an outcome', () => {
+  it('says who reported it, so a self-report does not read as a verification', async () => {
+    const { getFounderAssistingActivity } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    const activity = await getFounderAssistingActivity(P);
+
+    const owned = activity.find((a) => a.detail.includes('you told me'));
+    expect(owned, 'an owner self-report must say so').toBeTruthy();
+    expect(owned!.detail).toContain('reported, not independently confirmed');
+    // The old sentence claimed more than the evidence does.
+    expect(JSON.stringify(activity)).not.toContain('business outcome verified');
+  });
+
+  it('distinguishes a connected system from the owner', async () => {
+    await executedEffect('eo_effect_ext', 'eo_action_ext');
+    await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_ext', verdict: 'achieved',
+      reporter: 'external:rota_system' });
+    await reconcileAssistedSupportEmail(P, 'eo_action_ext');
+
+    const { getFounderAssistingActivity } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    const activity = await getFounderAssistingActivity(P);
+    expect(activity.some((a) => a.detail.includes('a system you connected told me'))).toBe(true);
+  });
+
+  it('says plainly that it will not settle a disagreement', async () => {
+    const { getFounderAssistingActivity } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    const activity = await getFounderAssistingActivity(P);
+    const disputed = activity.find((a) => a.detail.includes('disagree'));
+    expect(disputed?.detail).toContain('will not pick one');
+  });
+
+  it('never calls a provider receipt an outcome', async () => {
+    const { getFounderAssistingActivity } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    for (const item of await getFounderAssistingActivity(P)) {
+      if (!item.detail.includes('provider accepted')) continue;
+      expect(item.detail).toContain('whether it worked is still unknown');
+    }
+  });
+});

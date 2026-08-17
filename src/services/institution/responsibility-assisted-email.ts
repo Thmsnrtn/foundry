@@ -131,16 +131,56 @@ export async function reconcileAssistedSupportEmail(productId:string,actionId:st
   return outcome;
 }
 
+/**
+ * SOURCE PROVENANCE SURVIVES INTO WHAT THE FOUNDER READS.
+ *
+ * `outcome_status` is a stored vocabulary whose success value is spelled
+ * `verified_success`, and the founder-facing text used to render that as
+ * "business outcome verified". It is not. One person or one system saying
+ * "that worked" is a REPORT about an outcome, and it does not become an
+ * independent verification by having arrived through an authenticated
+ * endpoint — which is precisely the claim an outcome layer exists to refuse.
+ *
+ * The stored value is left alone: renaming it would touch migrations, guards
+ * and readers for a vocabulary change, and the honest fix is smaller and
+ * closer to the person being told. What changes is that the sentence names
+ * WHO said it and how many said it, so "the owner told me" and "three
+ * independent systems told me" stop reading identically.
+ */
 export async function getFounderAssistingActivity(productId:string):Promise<Array<{title:string;state:string;detail:string}>> {
-  const result=await query(`SELECT r.title,oa.status,oa.effect_certainty,oa.outcome_status
+  const result=await query(`SELECT r.title,oa.status,oa.effect_certainty,oa.outcome_status,oa.effect_id
     FROM outbound_actions oa JOIN institutional_responsibilities r ON r.id=oa.responsibility_id
     WHERE oa.product_id=? AND r.product_id=? ORDER BY oa.created_at DESC LIMIT 10`,[productId,productId]);
-  return (result.rows as unknown as Record<string,unknown>[]).map(row=>{
+  const rows=result.rows as unknown as Record<string,unknown>[];
+
+  // Who reported each outcome, so the sentence can say so.
+  const reporters=new Map<string,string[]>();
+  const effectIds=rows.map(row=>row.effect_id).filter(Boolean).map(String);
+  if (effectIds.length) {
+    const reports=await query(
+      `SELECT json_extract(payload_json,'$.effect_id') e, json_extract(payload_json,'$.reporter') r
+         FROM signal_events WHERE product_id=? AND source='effect_outcome_report'`,[productId]);
+    for (const raw of reports.rows as unknown as Record<string,unknown>[]) {
+      const key=String(raw.e); if (!effectIds.includes(key)) continue;
+      reporters.set(key,[...(reporters.get(key)??[]),String(raw.r)]);
+    }
+  }
+
+  /** "the owner", "a system you connected", or a count when several agree. */
+  const attribution=(effectId:string):string=>{
+    const who=reporters.get(effectId)??[];
+    if (who.length===0) return 'somebody outside';
+    if (who.length>1) return `${who.length} separate reports`;
+    return who[0].startsWith('founder:')?'you told me':'a system you connected told me';
+  };
+
+  return rows.map(row=>{
     const certainty=String(row.effect_certainty??'not_attempted'); const outcome=String(row.outcome_status??'unresolved');
-    const detail=outcome==='verified_success'?'business outcome verified'
-      :outcome==='verified_failure'?'business evidence shows the action failed'
-      :outcome==='conflicting'?'business evidence conflicts; owner judgment may be needed'
-      :certainty==='provider_acknowledged'?'provider accepted it; business outcome remains unresolved'
+    const effectId=String(row.effect_id??'');
+    const detail=outcome==='verified_success'?`${attribution(effectId)} it worked — reported, not independently confirmed`
+      :outcome==='verified_failure'?`${attribution(effectId)} it did not work`
+      :outcome==='conflicting'?'reports about this disagree; I have kept both and will not pick one'
+      :certainty==='provider_acknowledged'?'provider accepted it; whether it worked is still unknown'
       :certainty==='ambiguous'?'dispatch is ambiguous and needs reconciliation'
       :String(row.status)==='approved'?'authorized to help with this bounded support reply; not yet performed'
       :'no consequential action was verified';
