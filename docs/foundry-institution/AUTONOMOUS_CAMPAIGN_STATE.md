@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **193 files / 1,573 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **194 files / 1,578 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -140,6 +140,7 @@ Newest first. Trimmed as it ages — git history is the diary.
 - The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
 - Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
 - One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
+- Five unguarded outbound fetches of founder-supplied URLs closed, and the SSRF rule made structural.
 - Provider credentials stop being written to a plaintext column; one shared allow-list decides what may be stored in the clear, and six adapters now read the encrypted store.
 - Whisper transcription brought under the spend ceilings; the effects detector taught to read templated URLs, surfacing seven previously invisible calls.
 - The support vertical made reachable by a person: message surface, channel creation, the intake URL, revocation.
@@ -198,7 +199,7 @@ Next, in order:
    Still: prefer a source a real responsibility already demands over a vendor
    checklist, and remember that every new intake needs a purpose in migration
    139's closed set, which is a migration and a review by design.
-2. **Keep reassessing — ten reads, eight of them found a real defect.** The intakes (one
+2. **Keep reassessing — eleven reads, nine of them found a real defect.** The intakes (one
    credential, three consequences), the authority surfaces (two
    authenticators, one weaker, an audit doc naming them backwards), the
    founder-facing writes (CSRF complete but unenforced — gated), the scheduler
@@ -219,9 +220,12 @@ Next, in order:
    about what a credential is, six adapters read secrets from the plaintext
    config blob, and the path that stored provider API keys IN THE CLEAR was the
    only one that worked.
-   **Unread:** the tenancy layer (has a strong dedicated gate already),
-   onboarding, billing, outbound webhook delivery. Stop when a read stops
-   finding anything.
+   Outbound delivery closed with five unguarded fetches of URLs Foundry did not
+   choose, against a module whose own header says every such call must be
+   checked first.
+   **Unread:** the tenancy layer (which already has a strong dedicated gate),
+   onboarding, billing. **The yield has not dropped yet** — stop when a read
+   stops finding anything, not before.
 3. **Executive cognition remains the genuine frontier** and remains gated on a
    consumed task with a real baseline. It must not be started by sprinkling
    model calls.

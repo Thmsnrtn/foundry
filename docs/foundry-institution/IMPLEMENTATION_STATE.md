@@ -1332,7 +1332,7 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **Evidence maturity:** E2. `api_keys` and the webhook secrets were checked in
   the same pass and are not of this shape.
 
-## Completed slices: nine side-by-side reads
+## Completed slices: eleven side-by-side reads
 
 The method that produced almost everything after the second unfamiliar-company
 package. Instead of extending a subsystem, read its surfaces beside each other
@@ -1349,6 +1349,8 @@ defect; the two that did not produced a gate for the margin that made them safe.
 | The integrations fabric | Four findings had sat `unresolved` — untraced — for a long time. Three were reads; the fourth was an `issueCreate` into a customer's workspace, outside the gateway, with no callers. Deleted; audit ratcheted to zero untraced. |
 | The validation paths | CI's check job had been hand-assembled from the pieces `npm run check` happened to contain, and stopped tracking it. Four audit gates ran only on a laptop. |
 | The rendering layer | Highest yield of all. Hunting an escaping defect in customer content found the customer content never reached a page: messages stored and never rendered, channels that could not be created, `conflicting` outcomes that withheld the disagreement, vanishing notices. The reachability gate checked every WRITE link and was green throughout; it now checks READS, and a reader only counts when a route calls it. |
+| Credential storage | Two founder-facing forms disagreed about what a credential is. Six adapters read secrets from the plaintext config blob, so the path that stored provider API keys IN THE CLEAR was the only one that worked, and the encrypting path produced integrations that silently never synced. One shared allow-list now decides. |
+| Outbound delivery | Five modules fetched a URL Foundry did not choose without checking it, against a guard whose own header says every such call must pass it first — including the most literal SSRF shape in the codebase, a founder handing us a URL over an API route. |
 | The AI spend path | One paid provider call reserved nothing. Invisible because the effects detector matches a quoted literal URL and that call templates one — teaching it surfaced seven more calls and an uninventoried APNs module with no importer. |
 
 **Evidence maturity:** E2 throughout. These are structural and behavioural
