@@ -310,19 +310,101 @@ export async function exportProductData(
  * on, or something a law requires be kept — never that clearing it was
  * inconvenient.
  */
-const RETAINED_ON_ERASURE: Record<string, string> = {
-  agent_audit_log:
-    'holds the deletion request and its completion record; erasing it would erase the evidence that the erasure happened',
-  products:
-    'archived rather than deleted, so the id cannot be reissued and every foreign key stays resolvable',
-  ai_daily_spend:
-    'Foundry\'s own cost accounting, carrying no company content beyond an id',
-  ai_spend_reservations:
-    'the same accounting, mid-flight; dropping reservations would release ceilings that are still holding',
-  idempotency_keys:
-    'at-most-once records for effects already sent; deleting them would let a retry re-send a real message',
-  stripe_webhook_events:
-    'financial event ledger required for billing reconciliation',
+/**
+ * WHAT SURVIVES AN ERASURE, AND ON WHAT TERMS.
+ *
+ * This was a map from table name to a sentence. A table name is not a legal
+ * conclusion: it says nothing about which FIELDS are kept, what may be done
+ * with them while they are kept, or when the decision should be looked at
+ * again. It also let two tables be "retained" that the erasure had never
+ * touched — `stripe_webhook_events` and `ai_daily_spend` carry no `product_id`
+ * at all, so retaining them was a decision about nothing, recorded as though it
+ * were a decision about something.
+ *
+ * A disposition says what is kept and why. Three shapes:
+ *
+ *   RETAIN   the rows stay, whole, because the purpose needs them whole
+ *   REDACT   the rows stay, with named columns cleared — the record survives,
+ *            the personal content does not
+ *   PROJECT  only the rows matching `keepRows` stay; the rest are deleted
+ *
+ * Durations are deliberately absent from most entries. A number here would be
+ * folklore: retention periods are a policy question about jurisdictions and
+ * record classes, and inventing "seven years" in a source file would make a
+ * legal claim this codebase is not entitled to make. `reviewAfterDays` records
+ * when somebody has to decide, not what they will decide.
+ */
+export type RetentionCategory =
+  | 'compliance_evidence'
+  | 'financial_record'
+  | 'safety_control'
+  | 'referential_integrity';
+
+export interface RetentionDisposition {
+  category: RetentionCategory;
+  /** Why this may be kept when the rest was erased. */
+  basis: string;
+  /** What may be done with it while it is kept. Narrow by default: surviving an
+   * erasure does not make data ordinarily usable again. */
+  processing: string;
+  /** When the decision must be revisited, or null when the purpose does not
+   * expire (evidence that an erasure happened does not expire on a timer). */
+  reviewAfterDays: number | null;
+  /** Extra predicate: rows NOT matching it are deleted like anything else. */
+  keepRows?: string;
+  /** Columns cleared to NULL on the rows that stay. */
+  redactColumns?: string[];
+  /** Columns the schema forbids from being NULL, overwritten with a marker
+   * instead. Named separately rather than inferred, so that a NOT NULL column
+   * being redacted is a visible decision rather than a silent fallback. */
+  redactToMarker?: string[];
+}
+
+const RETAINED_ON_ERASURE: Record<string, RetentionDisposition> = {
+  agent_audit_log: {
+    category: 'compliance_evidence',
+    basis: 'holds the erasure request and its completion record; erasing it would erase the evidence that the erasure happened',
+    processing: 'compliance evidence only — never product cognition, model context, network insight or analytics',
+    reviewAfterDays: null,
+    // Only the erasure record itself. The rest of this company's activity log
+    // is not evidence of the erasure and has no purpose that survives it —
+    // retaining the whole log was keeping a description of everything the
+    // company ever did, plus an IP address, forever.
+    keepRows: "event_type IN ('data_deletion_scheduled','data_deletion_completed')",
+    redactColumns: ['ip_address'],
+  },
+  products: {
+    category: 'referential_integrity',
+    basis: 'archived rather than deleted so the id cannot be reissued and every foreign key stays resolvable',
+    processing: 'identity resolution only',
+    reviewAfterDays: null,
+    // The row survives; the company does not. Keeping the name and repository
+    // of an erased company is keeping the company.
+    redactColumns: [
+      'stack_description', 'market_category', 'sector_profile',
+      'github_repo_url', 'github_repo_owner', 'github_repo_name',
+      'github_access_token',
+    ],
+    redactToMarker: ['name'],
+  },
+  ai_spend_reservations: {
+    category: 'financial_record',
+    basis: 'cost accounting, including reservations still holding a ceiling; dropping them would release limits that are live',
+    processing: 'accounting and ceiling enforcement only',
+    reviewAfterDays: 365,
+    // The amounts are the record. The person is not part of it: an accounting
+    // total does not need to say whose it was once the account is gone.
+    redactColumns: ['founder_id'],
+  },
+  idempotency_keys: {
+    category: 'safety_control',
+    basis: 'at-most-once records for effects already sent; deleting them would let a retry re-send a real message',
+    processing: 'duplicate suppression only',
+    reviewAfterDays: 30,
+    // The KEY is the control. The stored result is a provider response that can
+    // carry recipient addresses, and nothing needs it after the effect is done.
+    redactColumns: ['result_json'],
+  },
 };
 
 /** Every table the live schema says carries a `product_id`. Read from the
@@ -342,7 +424,26 @@ export async function tablesToErase(): Promise<string[]> {
   return (await tablesWithProductId()).filter((t) => !(t in RETAINED_ON_ERASURE));
 }
 
-/** Exported for the gate that checks each retention has a reason. */
+/** The SET clause for a disposition's redaction, or '' when it redacts nothing.
+ * Column names come from the disposition map in this file — never from a
+ * caller — so there is nothing here a request can reach. */
+function redactionSql(d: RetentionDisposition): string {
+  return [
+    ...(d.redactColumns ?? []).map((c) => `${c} = NULL`),
+    ...(d.redactToMarker ?? []).map((c) => `${c} = '[erased]'`),
+  ].join(', ');
+}
+
+/** What an erasure actually did, per table. The completion record states it,
+ * so "complete" can be checked rather than believed. */
+export interface ErasureOutcome {
+  deleted: string[];
+  redacted: string[];
+  retained: string[];
+  failed: string[];
+}
+
+/** Exported so the gate can check every retention explains itself. */
 export const RETAINED_ON_ERASURE_REASONS = RETAINED_ON_ERASURE;
 
 // ─── scheduleDataDeletion ──────────────────────────────────────────────────────
@@ -417,14 +518,45 @@ export async function processScheduledDeletions(): Promise<number> {
     // and what survives an erasure is an explicit allow-list with a reason
     // each. That is the fail-closed direction: a new table added next year is
     // deleted by default rather than quietly retained forever.
+    const outcome: ErasureOutcome = { deleted: [], redacted: [], retained: [], failed: [] };
+
     for (const table of await tablesToErase()) {
       try {
         await query(`DELETE FROM ${table} WHERE product_id = ?`, [productId]);
+        outcome.deleted.push(table);
       } catch (err) {
         // A table that cannot be cleared must not be silently skipped: the
         // completion record below would then be false. Recorded and rethrown to
         // the caller's per-product catch, which leaves the deletion pending and
         // retries it on the next run.
+        outcome.failed.push(table);
+        throw new Error(`data deletion incomplete: ${table}: ${String(err)}`);
+      }
+    }
+
+    // Then the tables that survive, on the terms their disposition states.
+    // "Retained" is not a synonym for "left alone": rows outside the retained
+    // purpose are deleted, and columns outside it are cleared. Keeping a
+    // company's entire activity log because two of its rows are erasure
+    // evidence is the version of this that reports success and keeps the
+    // company.
+    for (const [table, disposition] of Object.entries(RETAINED_ON_ERASURE)) {
+      if (table === 'products') continue;                 // handled below, whole
+      try {
+        if (disposition.keepRows) {
+          await query(
+            `DELETE FROM ${table} WHERE product_id = ? AND NOT (${disposition.keepRows})`,
+            [productId]);
+        }
+        const clears = redactionSql(disposition);
+        if (clears) {
+          await query(`UPDATE ${table} SET ${clears} WHERE product_id = ?`, [productId]);
+          outcome.redacted.push(table);
+        } else {
+          outcome.retained.push(table);
+        }
+      } catch (err) {
+        outcome.failed.push(table);
         throw new Error(`data deletion incomplete: ${table}: ${String(err)}`);
       }
     }
@@ -439,28 +571,54 @@ export async function processScheduledDeletions(): Promise<number> {
     // written. A compliance path that half-completes and leaves no evidence of
     // having run is worse than one that fails early.
     //
-    // `archived` is what the code's own comment says it is doing and is the
-    // value the constraint has always expected.
-    //
     // BOTH AXES. Writing only `status` left `scp_status='active'`, and around
     // twenty scheduled jobs select their work on `scp_status` alone — so a
     // company whose founder had withdrawn consent and whose data had just been
     // deleted stayed on every agent's work list, and kept being reasoned about
     // by model calls. Deletion has to end the operating relationship, not just
     // the record.
+    //
+    // AND THE ROW IS REDACTED, not merely marked. It survives so its id cannot
+    // be reissued and foreign keys stay resolvable; it does not survive as a
+    // description of the company. Keeping the name, the repository and the
+    // market of an erased company is keeping the company.
     await query(
       `UPDATE products SET status = 'archived', scp_status = 'archived',
-                          github_access_token = NULL WHERE id = ?`,
+              ${redactionSql(RETAINED_ON_ERASURE.products)}
+        WHERE id = ?`,
       [productId]);
+    outcome.redacted.push('products');
 
-    // Log completion
+    // Log completion — TRUTHFULLY.
+    //
+    // "Product data has been removed" was the whole record, and it was written
+    // over an erasure that had removed six per cent of the company. A
+    // completion record that cannot distinguish deleted from retained is a
+    // claim nobody can check, and the one thing a compliance record exists to
+    // let somebody check is exactly that.
     await query(
       `INSERT INTO agent_audit_log
          (id, product_id, event_type, actor_type, actor_id, target_type, target_id,
-          description, created_at)
+          description, metadata_json, created_at)
        VALUES (?, ?, 'data_deletion_completed', 'system', 'system', 'product', ?,
-               'Data deletion completed. Product data has been removed.', datetime('now'))`,
-      [nanoid(), productId, productId]
+               ?, ?, datetime('now'))`,
+      [nanoid(), productId, productId,
+        `Erasure complete: ${outcome.deleted.length} tables deleted, `
+        + `${outcome.redacted.length} redacted, ${outcome.retained.length} retained `
+        + 'for a stated purpose.',
+        JSON.stringify({
+          deleted: outcome.deleted,
+          redacted: outcome.redacted,
+          retained: outcome.retained,
+          failed: outcome.failed,
+          retention: Object.fromEntries(Object.entries(RETAINED_ON_ERASURE).map(
+            ([table, d]) => [table, {
+              category: d.category, basis: d.basis, processing: d.processing,
+              review_after_days: d.reviewAfterDays,
+              fields_cleared: [...(d.redactColumns ?? []), ...(d.redactToMarker ?? [])],
+              rows_kept: d.keepRows ?? 'all',
+            }])),
+        })]
     );
 
     deleted++;

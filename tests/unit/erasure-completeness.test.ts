@@ -63,9 +63,28 @@ describe('every table holding a company is erased or explains itself', () => {
     }
   });
 
-  it('gives every retained table a reason', () => {
-    for (const [table, reason] of Object.entries(RETAINED_ON_ERASURE_REASONS)) {
-      expect(reason.length, `${table} needs a real reason`).toBeGreaterThan(30);
+  it('gives every retained table a disposition, not just a sentence', () => {
+    // A table name is not a legal conclusion. A disposition says which fields
+    // are kept, what may be done with them, and when the decision is revisited.
+    for (const [table, d] of Object.entries(RETAINED_ON_ERASURE_REASONS)) {
+      expect(d.basis.length, `${table} needs a real basis`).toBeGreaterThan(30);
+      expect(d.processing.length, `${table} must say what may be done with it`)
+        .toBeGreaterThan(10);
+      expect(['compliance_evidence', 'financial_record', 'safety_control',
+        'referential_integrity']).toContain(d.category);
+      // null is allowed — "evidence that an erasure happened" does not expire
+      // on a timer — but the field has to be a deliberate answer.
+      expect(d.reviewAfterDays === null || typeof d.reviewAfterDays === 'number').toBe(true);
+    }
+  });
+
+  it('retains nothing the erasure never touched', () => {
+    // stripe_webhook_events and ai_daily_spend carry no product_id, so an
+    // erasure never reached them. Recording a retention decision for a table
+    // that was never at risk is a legal conclusion attached to a table name.
+    for (const table of Object.keys(RETAINED_ON_ERASURE_REASONS)) {
+      expect(['agent_audit_log', 'products', 'ai_spend_reservations', 'idempotency_keys'])
+        .toContain(table);
     }
   });
 
@@ -74,7 +93,10 @@ describe('every table holding a company is erased or explains itself', () => {
     // which is the one thing a compliance record exists to prove.
     const erased = new Set(await tablesToErase());
     expect(erased.has('agent_audit_log')).toBe(false);
-    expect(RETAINED_ON_ERASURE_REASONS.agent_audit_log).toMatch(/evidence|record/i);
+    expect(RETAINED_ON_ERASURE_REASONS.agent_audit_log.basis).toMatch(/evidence|record/i);
+    expect(RETAINED_ON_ERASURE_REASONS.agent_audit_log.processing,
+      'retained data is restricted data: surviving an erasure is not a licence')
+      .toMatch(/never product cognition|compliance evidence only/i);
   });
 
   it('keeps at-most-once records, so a retry cannot re-send a real message', async () => {
@@ -206,5 +228,131 @@ describe('an export that exports', () => {
       .toBe(1);
     expect(rows[0].credentials_json).toBe('[redacted]');
     expect(JSON.stringify(data)).not.toContain('REALSECRET');
+  });
+});
+
+// =============================================================================
+// §9–§11: retention is a disposition, not a table name. What survives, on what
+// terms, and what may be done with it afterwards.
+// =============================================================================
+
+describe('what survives an erasure survives on stated terms', () => {
+  const P = 'ret_p';
+
+  it('keeps the erasure evidence and deletes the rest of the activity log', async () => {
+    const { processScheduledDeletions, scheduleDataDeletion } = await import(
+      '../../src/services/privacy/consent.js');
+    await query(
+      `INSERT INTO founders (id, clerk_user_id, email) VALUES ('ret_f','ret_c','ret@example.com')`);
+    await query(
+      `INSERT INTO products (id, name, owner_id, status, stack_description, market_category)
+       VALUES (?,'Retention Co','ret_f','active','a stack','b2b_saas')`, [P]);
+    // Ordinary activity, and an IP address on it.
+    await query(
+      `INSERT INTO agent_audit_log (id, product_id, event_type, actor_type, actor_id,
+                                    target_type, target_id, description, ip_address)
+       VALUES ('ret_a1', ?, 'agent_action', 'agent', 'compass', 'decision', 'd1',
+               'raised the price', '203.0.113.9')`, [P]);
+    // Something whose retained purpose keeps only part of the row.
+    await query(
+      `INSERT INTO idempotency_keys (id, product_id, agent_id, action_type, dedup_key,
+                                     result_json, expires_at)
+       VALUES ('ret_i1', ?, 'a', 'send_email', 'dk1',
+               '{"to":"customer@example.com"}', datetime('now','+1 day'))`, [P]);
+    await query(
+      `INSERT INTO ai_spend_reservations
+         (id, product_id, founder_id, date, model, reserved_cents, global_cap_cents,
+          status, created_at, updated_at, expires_at)
+       VALUES ('ret_r1', ?, 'ret_f', '2026-01-01', 'sonnet', 12, 5000, 'settled',
+               datetime('now'), datetime('now'), datetime('now','+1 day'))`, [P]);
+
+    await scheduleDataDeletion(P, 0);
+    await processScheduledDeletions();
+
+    // The erasure record is the evidence, and it is still here.
+    const evidence = await query(
+      `SELECT event_type, ip_address FROM agent_audit_log WHERE product_id = ?`, [P]);
+    const types = (evidence.rows as unknown as Array<Record<string, string | null>>)
+      .map((r) => r.event_type);
+    expect(types).toContain('data_deletion_completed');
+    expect(types, 'the rest of the log is not evidence of the erasure')
+      .not.toContain('agent_action');
+    for (const row of evidence.rows as unknown as Array<Record<string, string | null>>) {
+      expect(row.ip_address, 'an address is not part of the evidence').toBeNull();
+    }
+  });
+
+  it('keeps the control and drops the payload', async () => {
+    const row = (await query(
+      `SELECT dedup_key, result_json FROM idempotency_keys WHERE id = 'ret_i1'`))
+      .rows[0] as Record<string, string | null> | undefined;
+    expect(row?.dedup_key, 'the key IS the at-most-once control').toBe('dk1');
+    expect(row?.result_json, 'a stored provider response can name a recipient')
+      .toBeNull();
+    expect(JSON.stringify(row)).not.toContain('customer@example.com');
+  });
+
+  it('keeps the accounting and severs the person', async () => {
+    const row = (await query(
+      `SELECT founder_id, reserved_cents FROM ai_spend_reservations WHERE id = 'ret_r1'`))
+      .rows[0] as Record<string, unknown> | undefined;
+    expect(Number(row?.reserved_cents), 'the amount is the record').toBe(12);
+    expect(row?.founder_id, 'an accounting total need not say whose it was').toBeNull();
+  });
+
+  it('keeps the product id and not the company', async () => {
+    const row = (await query(
+      `SELECT name, stack_description, market_category, status FROM products WHERE id = ?`, [P]))
+      .rows[0] as Record<string, string | null>;
+    expect(row.status).toBe('archived');
+    expect(row.name, 'the row survives so the id cannot be reissued').toBe('[erased]');
+    expect(row.stack_description).toBeNull();
+    expect(row.market_category).toBeNull();
+  });
+
+  it('says in the completion record what it actually did', async () => {
+    const row = (await query(
+      `SELECT description, metadata_json FROM agent_audit_log
+        WHERE product_id = ? AND event_type = 'data_deletion_completed'`, [P]))
+      .rows[0] as Record<string, string>;
+    expect(row.description).toMatch(/deleted/);
+    expect(row.description, 'a record that cannot distinguish deleted from retained is unfalsifiable')
+      .toMatch(/redacted|retained/);
+    const meta = JSON.parse(row.metadata_json) as Record<string, unknown>;
+    expect(Array.isArray(meta.deleted)).toBe(true);
+    expect(meta.failed).toEqual([]);
+    const retention = meta.retention as Record<string, Record<string, unknown>>;
+    expect(retention.agent_audit_log.basis).toBeTruthy();
+    expect(retention.idempotency_keys.fields_cleared).toContain('result_json');
+  });
+});
+
+describe('retained data stays restricted', () => {
+  it('is not readable by anything that assembles model context', () => {
+    // §11: surviving an erasure is a narrow permission to keep something, not
+    // a licence to keep using it. The retained tables are compliance evidence,
+    // an accounting ledger and a duplicate-suppression control — none of them
+    // belongs in a prompt, an insight or an analytic.
+    const { readFileSync, readdirSync, statSync } = require('fs') as typeof import('fs');
+    const { join, resolve: r } = require('path') as typeof import('path');
+    const walk = (d: string): string[] => readdirSync(d).flatMap((e) => {
+      const p = join(d, e);
+      return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
+    });
+    const cognition = ['services/wisdom', 'services/intelligence', 'services/chat',
+      'services/conversation', 'services/scp/agents', 'services/digest'];
+    const offenders: string[] = [];
+    for (const dir of cognition) {
+      for (const f of walk(r(__dirname, '../../src', dir))) {
+        const src = readFileSync(f, 'utf8');
+        for (const t of ['agent_audit_log', 'ai_spend_reservations', 'idempotency_keys']) {
+          if (new RegExp(`FROM\\s+${t}\\b`, 'i').test(src)) {
+            offenders.push(`${f.split('/src/')[1]} → ${t}`);
+          }
+        }
+      }
+    }
+    expect(offenders, 'retained for a narrow purpose means retained for that purpose only')
+      .toEqual([]);
   });
 });
