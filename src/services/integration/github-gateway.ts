@@ -11,6 +11,7 @@
 // =============================================================================
 
 import { registerToolHandler, invoke, type GatewayRequest } from '../outbound/gateway.js';
+import { pathSegment, repoSlug } from '../outbound/path-segment.js';
 import { withRetry } from '../resilience.js';
 import { log } from '../../lib/logger.js';
 
@@ -48,7 +49,7 @@ async function createPRHandler(req: GatewayRequest): Promise<{ url: string; numb
 
   const response = await withRetry(
     () =>
-      fetch(`${GITHUB_API}/repos/${params.repo}/pulls`, {
+      fetch(`${GITHUB_API}/repos/${repoSlug(params.repo)}/pulls`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${params.access_token}`,
@@ -90,7 +91,7 @@ async function postCommentHandler(req: GatewayRequest): Promise<{ id: number; ur
   const response = await withRetry(
     () =>
       fetch(
-        `${GITHUB_API}/repos/${params.repo}/issues/${params.issue_number}/comments`,
+        `${GITHUB_API}/repos/${repoSlug(params.repo)}/issues/${pathSegment(String(params.issue_number), 'issue_number')}/comments`,
         {
           method: 'POST',
           headers: {

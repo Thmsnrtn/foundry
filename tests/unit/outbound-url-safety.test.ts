@@ -37,15 +37,31 @@ function executable(file: string): string {
     .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
 }
 
+/** A fetch whose destination is not a literal compiled into the source.
+ *
+ * Two forms, and the second was invisible to this gate until it was checked
+ * against itself. The bare-variable pattern excludes anything starting with a
+ * quote — and a BACKTICK is a quote, so `fetch(`${host}/v1/thing`)` was skipped
+ * entirely no matter where `host` came from. Nothing exploited it: all four
+ * template-literal senders build on an operator-set constant. But a gate that
+ * cannot see a whole syntax is not total, and the next one to appear would have
+ * been just as invisible. "Nothing exploits it today" is the property this file
+ * already refuses to accept anywhere else.
+ */
+const DYNAMIC_FETCH = [
+  // fetch(config.url, …) / fetch(endpoint, …)
+  /fetch\(\s*(?!['"`])[\w.]*\b(url|endpoint|webhook_url|target)\b/i,
+  // fetch(`${anything}/path`, …) — interpolation in the host position
+  /fetch\(\s*`\s*\$\{/,
+];
+
 /** Modules that fetch a URL held in a variable — i.e. one somebody else chose,
  * rather than a provider endpoint compiled into the source. */
 function dynamicUrlSenders(): string[] {
   return walk(resolve(ROOT, 'src'))
     .filter((f) => {
       const source = executable(f);
-      // `fetch(config.url, …)`, `fetch(url, …)`, `fetch(webhook.url, …)` —
-      // never `fetch('https://api.stripe.com/…')`.
-      return /fetch\(\s*(?!['"`])[\w.]*\b(url|endpoint|webhook_url|target)\b/i.test(source);
+      return DYNAMIC_FETCH.some((re) => re.test(source));
     })
     .map((f) => f.slice(ROOT.length + 1))
     .sort();
@@ -58,6 +74,17 @@ function dynamicUrlSenders(): string[] {
 const FOUNDRY_CHOSEN: Record<string, string> = {
   'src/services/audit/github.ts': 'builds api.github.com paths from a repo owner/name; the host is a constant',
   'src/services/integrations/intercom.ts': 'builds api.intercom.io paths; the host is a constant',
+  // Template-literal senders, visible to this gate only since it learned to see
+  // that syntax. Each host is operator-configured or compiled in — none is
+  // founder-influenced. Where a founder-supplied value reaches the PATH, it is
+  // checked by `pathSegment`/`repoSlug`, which is a different defect with its
+  // own tests in provider-path-injection.test.ts: the host boundary was never
+  // the thing at risk here.
+  'src/services/ai/client.ts': 'OPENROUTER_BASE_URL, an operator env var, with a constant path',
+  'src/services/scp/briefing/voice-reply.ts': 'the same operator-set transcription base URL',
+  'src/services/integration/github-gateway.ts': 'GITHUB_API constant; the repo slug in the path is checked by repoSlug',
+  'src/services/integration/stripe-gateway.ts': 'STRIPE_API constant; the object id in the path is checked by pathSegment',
+  'src/services/notifications/push.ts': 'the APNs host is chosen by NODE_ENV; the device token in the path is checked by pathSegment',
 };
 
 describe('posting to a URL somebody else chose', () => {

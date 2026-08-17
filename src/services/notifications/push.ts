@@ -5,6 +5,7 @@
 
 import { query, getAllActiveProducts } from '../../db/client.js';
 import { nanoid } from 'nanoid';
+import { pathSegment } from '../outbound/path-segment.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,14 +19,23 @@ export interface PushPayload {
   requireInteraction?: boolean;
 }
 
-export type NotificationType =
-  | 'risk_state_change'
-  | 'critical_stressor'
-  | 'decision_deadline'
-  | 'daily_briefing'
-  | 'milestone'
-  | 'integration_error'
-  | 'weekly_digest';
+/** The notification types, as VALUES rather than only as a type. The union
+ * below is erased at runtime, and the query in `sendPushNotification` builds a
+ * column name by interpolating this string — so the only thing standing between
+ * it and SQL injection is that no route currently passes a caller-supplied
+ * type. That is a property of the wiring, not of this function, and this
+ * function is one wiring away from being live. */
+export const NOTIFICATION_TYPES = [
+  'risk_state_change',
+  'critical_stressor',
+  'decision_deadline',
+  'daily_briefing',
+  'milestone',
+  'integration_error',
+  'weekly_digest',
+] as const;
+
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 // ─── Send Push Notification ───────────────────────────────────────────────────
 
@@ -39,6 +49,9 @@ export async function sendPushNotification(
   notificationType: NotificationType,
   payload: PushPayload,
 ): Promise<{ sent: number; failed: number }> {
+  if (!(NOTIFICATION_TYPES as readonly string[]).includes(notificationType)) {
+    throw new Error('unknown notification type');
+  }
   // Check which notification types this founder has enabled
   const subscriptions = await query(
     `SELECT id, endpoint, p256dh, auth, platform, apns_device_token, apns_bundle_id,
@@ -204,7 +217,7 @@ async function sendAPNS(
   };
 
   const response = await fetch(
-    `${apnsHost}/3/device/${deviceToken}`,
+    `${apnsHost}/3/device/${pathSegment(deviceToken, 'apns_device_token')}`,
     {
       method: 'POST',
       headers: {
