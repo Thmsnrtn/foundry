@@ -70,6 +70,18 @@ export async function getSevenDayResponsibilitySummary(
     [productId],
   )).rows.map((row) => String((row as Record<string, unknown>).responsibility_id)));
 
+  // Effects that were carried in this window and that someone outside has since
+  // confirmed achieved what they were for. Until migration 137 nothing could
+  // supply this, so HANDLED could only ever mean "the responsibility reached
+  // maturity" — a rung — rather than "a thing was done and it worked", which is
+  // what a founder means by the word.
+  const verifiedRecently = new Set((await query(
+    `SELECT DISTINCT responsibility_id FROM outbound_actions
+      WHERE product_id=? AND responsibility_id IS NOT NULL AND status='executed'
+        AND outcome_status='verified_success' AND datetime(executed_at)>=datetime(?)`,
+    [productId, cutoff],
+  )).rows.map((row) => String((row as Record<string, unknown>).responsibility_id)));
+
   const out: Record<AbsenceClassification, AbsenceItem[]> = {
     HANDLED: [], CHANGED: [], NEEDS_YOU: [], DELIBERATELY_NOT_DONE: [], STILL_OPEN: [],
   };
@@ -78,7 +90,8 @@ export async function getSevenDayResponsibilitySummary(
     // Mature responsibility is only reported as handled when the outcome-bearing
     // transition happened in this window. Old mature work is neither open nor
     // falsely repeated as newly handled.
-    if ((state === 'mature' || state === 'exception_owned') && !recent && !unresolvedEffects.has(id)) continue;
+    if ((state === 'mature' || state === 'exception_owned') && !recent
+      && !unresolvedEffects.has(id) && !verifiedRecently.has(id)) continue;
     // Why this needs the founder, if it does. Order matters: a withdrawn
     // permission is more urgent than an unresolved outcome, because nothing
     // further can happen at all until it is restored.
@@ -90,11 +103,18 @@ export async function getSevenDayResponsibilitySummary(
 
     const classification: AbsenceClassification =
       row.disposition === 'deliberately_not_done' ? 'DELIBERATELY_NOT_DONE' :
-      // HANDLED is never inferred from an effect being dispatched. A
+      // HANDLED is never inferred from an effect being DISPATCHED. A
       // responsibility with an executed action whose outcome nobody has
       // established is not handled — it is waiting to be found out about.
-      (state === 'mature' || state === 'exception_owned') && row.outcome_ref && recent
-        && !unresolvedEffects.has(id) ? 'HANDLED' :
+      //
+      // It IS handled when someone outside confirmed the effect achieved what
+      // it was for, and nothing else about it is still unresolved. That is the
+      // founder's meaning of the word, and it no longer requires the
+      // responsibility to have climbed to maturity: a dance school whose cover
+      // request worked had that handled, whatever rung it is on.
+      (verifiedRecently.has(id) && !unresolvedEffects.has(id))
+      || ((state === 'mature' || state === 'exception_owned') && row.outcome_ref && recent
+        && !unresolvedEffects.has(id)) ? 'HANDLED' :
       needsYouBecause ? 'NEEDS_YOU' :
       recent ? 'CHANGED' : 'STILL_OPEN';
     out[classification].push({

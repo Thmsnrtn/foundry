@@ -23,7 +23,8 @@ async function setupCanonicalLedgers() {
     disclosure_version TEXT, accepted_at DATETIME DEFAULT CURRENT_TIMESTAMP, revoked_at TEXT,
     responsibility_id TEXT, allowed_scope_json TEXT, consequence_boundary TEXT, expires_at TEXT)`);
   await query(`CREATE TABLE IF NOT EXISTS outbound_actions (id TEXT PRIMARY KEY, product_id TEXT NOT NULL,
-    responsibility_id TEXT, status TEXT NOT NULL, outcome_status TEXT)`);
+    responsibility_id TEXT, status TEXT NOT NULL, outcome_status TEXT,
+    executed_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
   await query('CREATE TABLE IF NOT EXISTS action_executions (id TEXT PRIMARY KEY, product_id TEXT NOT NULL, action_type TEXT, integration TEXT, payload_json TEXT, status TEXT, verify_status TEXT)');
   await query("INSERT OR IGNORE INTO products (id,name,owner_id) VALUES ('p1','P1','f1'),('p2','P2','f2')");
   await query("INSERT OR IGNORE INTO signal_events (id,product_id) VALUES ('sig1','p1'),('sig_other','p2')");
@@ -204,6 +205,51 @@ describe('seven-day responsibility summary', () => {
     // It is genuinely unresolved, so it is surfaced — but as something needing
     // the founder, never as something Foundry finished.
     expect(summary.NEEDS_YOU).toMatchObject([{ responsibilityId: r.id, needsYouBecause: 'outcome_unresolved' }]);
+  });
+
+  it('calls work HANDLED once someone outside confirms it worked, at any rung', async () => {
+    // Before outcome evidence existed, HANDLED could only mean "the
+    // responsibility reached maturity" — a rung. That is not what a founder
+    // means by the word. A dance school whose cover request actually worked had
+    // that handled, whatever rung the responsibility is on.
+    const r = await advance('Find cover for Saturday', 'assisting');
+    await grant(r.id, { expiresInDays: 30 });
+    await query(
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at)
+       VALUES ('act_ok','p1',?, 'executed','verified_success',datetime('now'))`, [r.id]);
+
+    const summary = await getSevenDayResponsibilitySummary('p1');
+    expect(summary.HANDLED).toMatchObject([{ responsibilityId: r.id, state: 'assisting' }]);
+    expect(summary.HANDLED[0].needsYouBecause).toBeUndefined();
+  });
+
+  it('still refuses to call a dispatch HANDLED, and a confirmed failure is not either', async () => {
+    // The separation the whole loop exists to keep. Sending is not succeeding,
+    // and being told it failed is emphatically not success.
+    const dispatched = await advance('Chase the parts order', 'assisting');
+    await grant(dispatched.id, { expiresInDays: 30 });
+    await query(
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at)
+       VALUES ('act_pending','p1',?, 'executed',NULL,datetime('now'))`, [dispatched.id]);
+    let summary = await getSevenDayResponsibilitySummary('p1');
+    expect(summary.HANDLED).toEqual([]);
+    expect(summary.NEEDS_YOU).toMatchObject([{ needsYouBecause: 'outcome_unresolved' }]);
+
+    await query("UPDATE outbound_actions SET outcome_status='verified_failure' WHERE id='act_pending'");
+    summary = await getSevenDayResponsibilitySummary('p1');
+    expect(summary.HANDLED).toEqual([]);
+  });
+
+  it('does not call week-old verified work newly handled', async () => {
+    // Old good news is not this week's news.
+    const r = await advance('Close books', 'assisting');
+    await grant(r.id, { expiresInDays: 30 });
+    await query("UPDATE responsibility_transitions SET created_at=datetime('now','-8 days') WHERE responsibility_id=?", [r.id]);
+    await query(
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at)
+       VALUES ('act_old_ok','p1',?, 'executed','verified_success',datetime('now','-9 days'))`, [r.id]);
+    const summary = await getSevenDayResponsibilitySummary('p1');
+    expect(summary.HANDLED).toEqual([]);
   });
 
   it('every reason the classifier can produce has founder-facing words, in no ontology', async () => {
