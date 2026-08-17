@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **141**. Schema snapshot current.
-- **Validation:** `npm run check` green — **197 files / 1,613 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **197 files / 1,616 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -34,6 +34,14 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 - **The loop closes, and closes itself.** Someone outside can say whether an effect achieved what it was for (137), and an hourly pass now turns those reports into resolved outcomes. Before it, the only caller of reconciliation was the founder answering by hand — the external half had nowhere to land.
 - **A company's own systems can raise work** (138), so the first rung is no longer fed only by a person.
 - **The ladder is no longer SaaS-only.** Independent observation was admissible for twelve hard-coded metrics backed by physical columns, in the service *and* in a database trigger. A company now declares what it counts, in its own words, and the kernel treats it as an opaque named quantity. A boatyard reaches Shadowing in test.
+- **Recursive Foundry, reassessed (§13):** unchanged and still ordinary — but the
+  session's own billing work put `recursive_privilege_absence` at risk, because
+  a rule written for customers is exactly the kind of thing nobody applies to
+  the platform. Now proven: neither the entitlement sweep nor the
+  governed-effect authority read knows who Foundry is, and the sweep pauses and
+  resumes the platform's own company on the same terms as anyone's. If Foundry
+  is not entitled, its recursive operation stops — and the fix is to make it
+  entitled by ordinary means, never a branch.
 - **Recursive Foundry:** the owner-named schema-snapshot responsibility is carried end to end locally — owner report → Understood → Shadowing → Assisting → governed effect → independent verification. `recursive-institution-v1` reports ordinary on all thirteen dimensions, earned by exercise.
 - **Dynamic reachability:** all three agent loaders narrow through one closed vocabulary; a bidirectional gate classifies every loadable module.
 - **Economics:** cost attaches to responsibility and capability (migration 134), with measured / counted / unmeasured kept rigorously apart.
@@ -54,6 +62,7 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 15 SSRF totality + SELECT drift | 3 | 5 | 2 high, 3 med | 2 | 3 | 0 | 0 | 12 |
 | 16 billing ↔ capability access | 2 | 2 | 1 high, 1 med | 1 | 2 | 0 | 0 | 2 |
 | 17 onboarding ↔ entitlement | 2 | 1 | med | 1 | 1 | 0 | 0 | 1 |
+| 18 recursive reassessment (§13) | 1 | 0 | — | 0 | 0 | 0 | 0 | 0 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -64,6 +73,12 @@ only because a test for something else needed that column.
 
 Four of the last six batches also found a GATE or FIXTURE weaker than its name.
 That is its own signal and it argues for continuing.
+
+Batch 18 found nothing, which is the result: the reassessment asked whether the
+session's own work had broken the recursive dimension it was most likely to
+break, and it had not. **One empty batch is not the phase-change trigger** —
+that needs several consecutive independently-chosen batches, and 16 and 17 were
+neither empty nor low-severity.
 
 **Phase-change trigger:** several consecutive independently-chosen batches
 yielding only cosmetic findings and no invariant violations. Not reached.
@@ -233,59 +248,37 @@ Bootstrap from disk: verify the branch and clean tree, read this file and
 `IMPLEMENTATION_STATE.md`, skim recent git history, then continue without chat
 history.
 
-**The last known SaaS-shaped binding in the ladder is gone** (migration 136).
-An unfamiliar company can now be recognised, understood, watched, and — with an
-exact grant — helped, without a kernel change.
+**The method is: read neighbouring subsystems side by side and ask what each
+assumes about the other.** Eighteen batches, fourteen of which found a real
+defect. Do not go back to extending a subsystem while that is still true.
 
-**The kernel work is substantially done.** Five consecutive packages each
-removed a SaaS-shaped binding or closed a missing link, and the last of them
-found no further binding to remove. The recurring defect shape — a general
-mechanism bound to one special case — has been swept from observation,
-effects, authority reads, the grant surface, recognition, and outcomes.
+**Unread seams, in rough order of expected yield:**
 
-**Items 2 and 3 of the previous list are done, and item 3 was the one that
-paid.** Carrying two more companies confirmed the generalization and found
-nothing — eleven of twelve assertions passed on the first run. Then reassessing
-instead of moving to item 1 found a real defect: one credential opening three
-intakes, including the outcome ledger. **Reading a subsystem's surfaces
-side-by-side beats extending it.**
+1. **Caches and in-memory state.** Partly surveyed — `proseCache` is
+   tenant-keyed and fine, `src/lib/circuit-breaker.ts` has no importers at all.
+   The rate-limit store is the interesting one now that limits are
+   credential-keyed.
+2. **AI context assembly ↔ tenancy.** What a model is shown, and whether one
+   company's material can reach another's prompt.
+3. **Notifications / digests ↔ entitlement.** A read-only account should not be
+   emailed as though it were active; that rule is one day old and nothing
+   checks it there.
+4. **`agent_audit_log` ↔ compliance.** The deletion processor uses it as its own
+   work queue AND its completion marker; that coupling has already produced one
+   high-severity defect.
 
-Next, in order:
-1. **Adapters, not architecture.** Now the honest top of the list, and
-   owner-endorsed — the pilot decision explicitly gates on adapter breadth.
-   Still: prefer a source a real responsibility already demands over a vendor
-   checklist, and remember that every new intake needs a purpose in migration
-   139's closed set, which is a migration and a review by design.
-2. **Keep reassessing — eleven reads, nine of them found a real defect.** The intakes (one
-   credential, three consequences), the authority surfaces (two
-   authenticators, one weaker, an audit doc naming them backwards), the
-   founder-facing writes (CSRF complete but unenforced — gated), the scheduler
-   (79 jobs, none consuming the outcome loop), the claims layer (no defect; the
-   allow-list/deny-list margin gated), the integrations fabric (an ungoverned
-   `issueCreate` into a customer's workspace, with no callers — deleted), and
-   the validation paths themselves (four audit gates ran only locally).
-   The rendering layer was the highest-yield of all: hunting an escaping defect
-   in customer content found that the customer content never reached a page —
-   four surfaces unreachable by a human being, and a reachability gate that
-   checked every WRITE link while all four were dark. It now checks READS too,
-   and a reader only counts when a route calls it.
-   The AI spend path closed the list: one paid provider call reserved nothing,
-   and the reason nobody had noticed was that the effects detector could not
-   read a templated URL — teaching it surfaced seven more calls and a whole
-   uninventoried module.
-   Credential storage was the most serious: two founder-facing forms disagreed
-   about what a credential is, six adapters read secrets from the plaintext
-   config blob, and the path that stored provider API keys IN THE CLEAR was the
-   only one that worked.
-   Outbound delivery closed with five unguarded fetches of URLs Foundry did not
-   choose, against a module whose own header says every such call must be
-   checked first.
-   **Unread:** the tenancy layer (which already has a strong dedicated gate),
-   onboarding, billing. **The yield has not dropped yet** — stop when a read
-   stops finding anything, not before.
-3. **Executive cognition remains the genuine frontier** and remains gated on a
-   consumed task with a real baseline. It must not be started by sprinkling
-   model calls.
+**Paying down, not urgent:**
 
-Do not build the three deferred systems. Do not unlock Operating. Do not touch
-AcreOS.
+- 36 known SELECT column-drift offenders in `docs/db/select-column-baseline.txt`.
+  The baseline may only shrink. Each is a query that throws at runtime.
+- The two integration credential designs (`credentials`/`config`/`provider`
+  versus `credentials_json`/`config_json`/`name`). Migration 141 records why
+  they are not converged; that reasoning should be re-read before anyone tries.
+
+**Standing constraints unchanged:** AcreOS deferred. Operating frozen
+(migration 115). Never merge to master. No PR unless asked. Entitlement to act
+= paid tier or live trial, enforced through `scp_status` and nothing else.
+
+Do not build the three deferred systems. When audit yield genuinely falls —
+several consecutive batches finding only cosmetic issues — turn hard toward
+reality acquisition, capability breadth, and executive cognition.
