@@ -27,7 +27,7 @@ Ordered by distance from the final state, not by effort.
 2. **Capability fabric is still narrow.** Governed email send now serves any capability through two declared effect kinds, plus bounded generated-artifact development. No scheduling, record mutation, publishing, billing operations, or reconciliation.
 3. **World model is sparse.** Facts and claims exist; promise / obligation / workflow / dependency / resource / constraint composition does not.
 4. **No frontier cognition anywhere**, by design — no consumed task has yet established a baseline that a model would beat.
-5. **Unfamiliar-company breadth is one held-out corpus plus one boatyard.** Needs several genuinely different shapes exercised end to end.
+5. **Unfamiliar-company breadth** is one held-out corpus plus five hand-authored businesses, one of which is carried through a governed effect end to end. More shapes would harden it; none has needed a kernel change so far.
 6. **Judgment calibration still has no supply.** Effect outcomes are now reportable; JUDGMENT outcomes are a different shape and nothing produces them, so evaluation can still only report `not_yet_observable`. Deliberately unbuilt.
 7. **Nothing has met reality.** No real founder, provider, customer, or pilot.
 
@@ -36,11 +36,11 @@ Ordered by distance from the final state, not by effort.
 - **Adapters** for the existing intakes — the shape is proven five times over; what is missing is breadth, not architecture.
 - A second and third unfamiliar company carried through a governed effect end to end.
 - More effect kinds, when a real responsibility demands one. Each is a migration, deliberately.
-- `challenger` and `synthesizer` disposition — owner question, already queued.
 
 ## Blocked — needs a design decision, not effort
 
-- **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over to the institutional path would LOSE capability rather than preserve it. Retirement is blocked on executive-cognition design, which is itself blocked on a consumed task with a baseline. Do not force it.
+- **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.
+- **`challenger` and `synthesizer` are NOT part of that.** They are not agents at all — standalone debate functions reached by static import. Classifying them from the directory nearly justified deleting live code; the gate now checks reachability instead of location.
 
 ## Active work
 
