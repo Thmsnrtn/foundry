@@ -177,6 +177,42 @@ describe('governed effect kinds', () => {
     })).rejects.toThrow(/binding_invalid/);
   });
 
+  it('has no code path anywhere that could create an effect kind', async () => {
+    // The owner settled this: a company may declare what it COUNTS, because
+    // reading a number is harmless, and may NEVER declare a new irreversible
+    // way to reach the outside world. The database refuses it (below), but a
+    // future session could add a service that writes the table through some
+    // other route, or a migration that re-opens it.
+    //
+    // This makes the decision structural rather than a note in a document.
+    const { readFileSync, readdirSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = resolve(dir, e.name);
+      return e.isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
+    });
+
+    const writers = walk(resolve(process.cwd(), 'src'))
+      .filter((f) => /(INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+governed_effect_kinds/i
+        .test(readFileSync(f, 'utf8')))
+      .map((f) => f.replace(process.cwd() + '/', ''));
+    expect(writers,
+      'Effect kinds are constitutional: they widen only by editing a migration, '
+      + 'which is inside the ring. Nothing in src/ may write this table:\n' + writers.join('\n'),
+    ).toEqual([]);
+
+    // And the guards that enforce it must still exist, so a later migration
+    // cannot quietly drop them while leaving the table in place.
+    const triggers = (await query(
+      `SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'governed_effect_kinds%'
+        ORDER BY name`)).rows.map((r) => String((r as Record<string, unknown>).name));
+    expect(triggers).toEqual([
+      'governed_effect_kinds_immutable_delete',
+      'governed_effect_kinds_immutable_insert',
+      'governed_effect_kinds_immutable_update',
+    ]);
+  });
+
   it('keeps the effect vocabulary constitutional — nothing can widen it at runtime', async () => {
     // A company may declare what it COUNTS, because reading a number is
     // harmless. It may never declare a new irreversible way to reach the
