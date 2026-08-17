@@ -86,14 +86,11 @@ ingestRoutes.post('/ingest/:token', async (c) => {
   if (scoped) {
     productId = scoped.productId;
   } else {
-    const productResult = await query(
-      `SELECT id FROM products WHERE ingest_token = ?`,
-      [token],
-    );
-    if (productResult.rows.length === 0) {
+    const resolved = await resolveIngestProduct(token);
+    if (!resolved) {
       return c.json({ error: 'Unknown ingest token' }, 401);
     }
-    productId = (productResult.rows[0] as Record<string, string>).id;
+    productId = resolved;
   }
 
   // Parse + validate body
@@ -261,6 +258,26 @@ ingestRoutes.post('/ingest/:token', async (c) => {
 // founder id. Identity is the token; the body does not get to claim one.
 //
 // AUTHENTICATION IS SCOPED (migration 139). This route used to accept
+/**
+ * The company a legacy ingest token belongs to, if that company still exists.
+ *
+ * The credential names the subject correctly — that half was never wrong. What
+ * was missing is the other half of the same question: is the subject still one
+ * Foundry holds a relationship with? An archived company has had its data
+ * erased, and a token that survived the erasure was writing fresh rows into it.
+ *
+ * A PAUSED company still resolves. Pausing stops Foundry acting; it does not
+ * close the account, and a founder's own systems may still be posting their
+ * numbers. Only the archive axis shuts the door.
+ */
+export async function resolveIngestProduct(token: string): Promise<string | null> {
+  const { productRecordLives } = await import('../../db/client.js');
+  const res = await query(
+    `SELECT id FROM products WHERE ingest_token = ? AND ${productRecordLives()}`, [token]);
+  const row = res.rows[0] as Record<string, string> | undefined;
+  return row ? row.id : null;
+}
+
 // `products.ingest_token` — the secret the settings page tells founders to give
 // to Stripe, Zapier and cron jobs for POSTING NUMBERS. An analytics tool holding
 // it could raise work. It now requires a credential the owner minted for

@@ -58,7 +58,7 @@ shareRoutes.get('/share/:token', async (c) => {
     `SELECT p.id, p.name, f.name as founder_name
      FROM products p
      JOIN founders f ON p.owner_id = f.id
-     WHERE p.share_token = ?`,
+     WHERE p.share_token = ? AND COALESCE(p.status,'active') <> 'archived'`,
     [token],
   );
   if (productResult.rows.length === 0) return c.notFound();

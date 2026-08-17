@@ -171,6 +171,9 @@ describe('what a credential establishes', () => {
         binding === 'identity.productId'
         || binding === 'scoped.productId'
         // The metrics route resolves the legacy product-wide token by lookup.
+        // `resolveIngestProduct` is that lookup, named: it takes the TOKEN and
+        // nothing else, and returns null for a company that no longer exists.
+        || binding === 'resolved'
         || /productResult\.rows\[0\]/.test(binding);
       expect(fromCredential,
         `a tenant was bound from something other than the credential: ${binding}`).toBe(true);

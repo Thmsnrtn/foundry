@@ -383,7 +383,12 @@ const RETAINED_ON_ERASURE: Record<string, RetentionDisposition> = {
     redactColumns: [
       'stack_description', 'market_category', 'sector_profile',
       'github_repo_url', 'github_repo_owner', 'github_repo_name',
-      'github_access_token',
+      // Every credential on the row, not just the one somebody remembered.
+      // `ingest_token` is a live write credential and `share_token` is a public
+      // link; both outlived the company they belonged to, so a monitoring
+      // script kept posting metrics into a deleted company and a share URL kept
+      // rendering its name.
+      'github_access_token', 'ingest_token', 'share_token',
     ],
     redactToMarker: ['name'],
   },
