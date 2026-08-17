@@ -2,9 +2,11 @@
   "name": "as-any",
   "description": "`as any` casts erase the type safety the schema-as-code kernel is meant to provide. Prefer typed row interfaces / narrowing.",
   "pattern": "as any",
-  "roots": ["src"],
+  "roots": [
+    "src"
+  ],
   "includePath": "\\.ts$",
   "excludePath": "\\.test\\.ts$",
-  "baseline": 30,
+  "baseline": 29,
   "direction": "down"
 }
