@@ -45,7 +45,12 @@ function code(file: string): string {
     // the field being read: `(req.params as Record<string, string>).access_token`
     // is the same defect as `params.access_token`, and a mutant written the
     // first way survived a gate that only understood the second.
-    .replace(/\s+as\s+(?:unknown\s+as\s+)?[A-Za-z_$][A-Za-z0-9_$<>,.\[\]{}:|\s]*?(?=[),;=])/g, '')
+    //
+    // The lookahead stops at `)`, `;` or `=` and deliberately NOT at `,`: a
+    // generic type argument contains commas, and stopping at the first one left
+    // half a type behind and the paren unmatched — which is how the second
+    // version of this gate also let the mutant through.
+    .replace(/\s+as\s+(?:unknown\s+as\s+)?[A-Za-z_$][A-Za-z0-9_$<>,.\[\]{}:|\s]*?(?=[);=])/g, '')
     .replace(/\(\s*(req\.params|params|p)\s*\)/g, '$1');
 }
 
