@@ -75,15 +75,26 @@ ingestRoutes.post('/ingest/:token', async (c) => {
     return c.json({ error: 'Invalid token' }, 400);
   }
 
-  // Look up the product
-  const productResult = await query(
-    `SELECT id FROM products WHERE ingest_token = ?`,
-    [token],
-  );
-  if (productResult.rows.length === 0) {
-    return c.json({ error: 'Unknown ingest token' }, 401);
+  // Either the product-wide token — which is what this route was always for,
+  // and what existing integrations hold — or a credential the owner scoped for
+  // `metrics`. The legacy token keeps working HERE and nowhere else: narrowing
+  // it to its documented purpose is the whole point of migration 139, and
+  // breaking the one route it was honestly issued for would not be that.
+  const { authenticateIngest } = await import('../../services/institution/ingest-credentials.js');
+  const scoped = await authenticateIngest(token, 'metrics');
+  let productId: string;
+  if (scoped) {
+    productId = scoped.productId;
+  } else {
+    const productResult = await query(
+      `SELECT id FROM products WHERE ingest_token = ?`,
+      [token],
+    );
+    if (productResult.rows.length === 0) {
+      return c.json({ error: 'Unknown ingest token' }, 401);
+    }
+    productId = (productResult.rows[0] as Record<string, string>).id;
   }
-  const productId = (productResult.rows[0] as Record<string, string>).id;
 
   // Parse + validate body
   let rawBody: unknown;
@@ -248,13 +259,22 @@ ingestRoutes.post('/ingest/:token', async (c) => {
 // Provenance is not laundered: this is recorded as an external report, never as
 // the founder's word, and the database refuses a payload that tries to carry a
 // founder id. Identity is the token; the body does not get to claim one.
+//
+// AUTHENTICATION IS SCOPED (migration 139). This route used to accept
+// `products.ingest_token` — the secret the settings page tells founders to give
+// to Stripe, Zapier and cron jobs for POSTING NUMBERS. An analytics tool holding
+// it could raise work. It now requires a credential the owner minted for
+// `company_report` specifically.
 ingestRoutes.post('/ingest/company-report/:token', async (c) => {
   const token = c.req.param('token');
   if (!token || !/^[\w-]{8,64}$/.test(token)) return c.json({ error: 'Invalid token' }, 400);
 
-  const productResult = await query('SELECT id FROM products WHERE ingest_token = ?', [token]);
-  if (productResult.rows.length === 0) return c.json({ error: 'Unknown ingest token' }, 401);
-  const productId = (productResult.rows[0] as Record<string, string>).id;
+  const { authenticateIngest } = await import('../../services/institution/ingest-credentials.js');
+  const identity = await authenticateIngest(token, 'company_report');
+  // Unknown, revoked, and wrongly-scoped fail identically: the caller learns
+  // nothing about which credentials exist or what they are permitted to do.
+  if (!identity) return c.json({ error: 'Unknown or unscoped ingest credential' }, 401);
+  const productId = identity.productId;
 
   let raw: unknown;
   try { raw = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
@@ -290,13 +310,23 @@ ingestRoutes.post('/ingest/company-report/:token', async (c) => {
 // helpdesk, a delivery scan — can answer here. Same tenant-bound token, same
 // canonical evidence, and the database refuses any report attributed to the
 // institution itself.
+//
+// AUTHENTICATION IS SCOPED (migration 139), and this is the one that mattered
+// most. An outcome report is the only evidence that can move an effect off
+// `unresolved`; it becomes a learned claim and removes the effect from the
+// owner's "did this work?" list. Migration 137 refuses reports attributed to
+// the institution, because a system that can declare its own success has no
+// outcome layer — and a metrics integration is not the institution, so it
+// sailed through that check while being no better placed than Foundry to know
+// whether anyone actually turned up. It now requires `effect_outcome` scope.
 ingestRoutes.post('/ingest/effect-outcome/:token', async (c) => {
   const token = c.req.param('token');
   if (!token || !/^[\w-]{8,64}$/.test(token)) return c.json({ error: 'Invalid token' }, 400);
 
-  const productResult = await query('SELECT id FROM products WHERE ingest_token = ?', [token]);
-  if (productResult.rows.length === 0) return c.json({ error: 'Unknown ingest token' }, 401);
-  const productId = (productResult.rows[0] as Record<string, string>).id;
+  const { authenticateIngest } = await import('../../services/institution/ingest-credentials.js');
+  const identity = await authenticateIngest(token, 'effect_outcome');
+  if (!identity) return c.json({ error: 'Unknown or unscoped ingest credential' }, 401);
+  const productId = identity.productId;
 
   let raw: unknown;
   try { raw = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }

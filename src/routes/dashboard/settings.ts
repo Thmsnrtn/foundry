@@ -79,6 +79,21 @@ settingsRoutes.get('/settings', async (c) => {
   const wisdomOptIn = ((wisdomResult.rows[0] as Record<string, unknown>)?.wisdom_network_opted_in ?? 1) === 1;
   const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
 
+  // Systems the owner has let report to them, and exactly what each may say.
+  // The metric token above is a credential for POSTING NUMBERS; before
+  // migration 139 it also opened two intakes with quite different consequences.
+  const { getIngestCredentials, INGEST_PURPOSES, INGEST_PURPOSE_LABELS } = await import(
+    '../../services/institution/ingest-credentials.js');
+  const credentials = productId ? await getIngestCredentials(productId) : [];
+  // A freshly minted secret is shown once. The redirect carries the credential
+  // ID, never the secret itself — a secret in a URL lands in request logs, in
+  // history, and in whatever the browser sends as a referrer.
+  const mintedId = c.req.query('minted');
+  const { revealIngestSecret } = await import('../../services/institution/ingest-credentials.js');
+  const mintedSecret = mintedId && productId
+    ? await revealIngestSecret({ productId, founderId: founder.id as string, credentialId: mintedId })
+    : null;
+
   const tierLabel = getTierBadge(founder.tier);
   const capabilities = getTierCapabilities(founder.tier);
 
@@ -316,6 +331,64 @@ settingsRoutes.get('/settings', async (c) => {
         <button type="submit" class="btn btn-secondary btn-sm">Generate ingest URL</button>
       </form>`}
     </div>` : ''}
+
+    ${productId ? html`
+    <div class="card">
+      <h3>Systems that report to you</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        The metric URL above is for posting numbers. Two other things a system can
+        tell Foundry — that something needs handling, and whether something Foundry
+        sent actually worked — need their own credential, so a tool you gave a
+        metrics URL to cannot do either. Each credential says what that system may
+        say. None of them authorises anything.
+      </p>
+
+      ${mintedSecret ? html`
+      <div style="margin-bottom:1rem;padding:0.75rem;border:1px solid var(--border);border-radius:6px;">
+        <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.35rem;">
+          Copy this now — it is shown once here, and afterwards only on this page.
+        </div>
+        <input type="text" readonly value="${mintedSecret}"
+          style="width:100%;font-size:0.78rem;font-family:monospace;cursor:pointer;"
+          onclick="this.select()" />
+      </div>` : ''}
+
+      ${credentials.length ? html`
+      <table style="width:100%;font-size:0.82rem;margin-bottom:1rem;">
+        <tbody>
+        ${credentials.map((cred) => html`
+          <tr>
+            <td style="padding:0.35rem 0;">
+              <strong>${cred.label}</strong>
+              <div style="color:var(--text-dim);font-size:0.76rem;">
+                may ${cred.purposes.map((p) => INGEST_PURPOSE_LABELS[p].may).join('; ')}
+              </div>
+            </td>
+            <td style="text-align:right;padding:0.35rem 0;">
+              ${cred.revoked ? html`<span style="color:var(--text-dim);">withdrawn</span>` : html`
+              <form method="POST" action="/settings/ingest-credentials/${cred.id}/revoke" style="display:inline;">
+                <button type="submit" class="btn btn-ghost btn-sm">Withdraw</button>
+              </form>`}
+            </td>
+          </tr>`)}
+        </tbody>
+      </table>` : ''}
+
+      <form method="POST" action="/settings/ingest-credentials">
+        <input type="text" name="label" maxlength="80" required
+          placeholder="Which system is this for?"
+          style="width:100%;margin-bottom:0.5rem;font-size:0.85rem;" />
+        ${INGEST_PURPOSES.map((purpose) => html`
+        <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;">
+          <input type="checkbox" name="purpose" value="${purpose}" />
+          It may ${INGEST_PURPOSE_LABELS[purpose].may}
+          <span style="color:var(--text-dim);"> — it may not ${INGEST_PURPOSE_LABELS[purpose].mayNot}</span>
+        </label>`)}
+        <button type="submit" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;">
+          Issue credential
+        </button>
+      </form>
+    </div>` : ''}
   `;
   return c.html(dashboardLayout(ctx, content));
 });
@@ -387,6 +460,43 @@ settingsRoutes.post('/settings/generate-ingest', requireRole('admin'), async (c)
   const token = randomBytes(24).toString('hex');
 
   await query('UPDATE products SET ingest_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
+  return c.redirect('/settings');
+});
+
+// ─── Scoped ingest credentials (migration 139) ───────────────────────────────
+//
+// The owner issues one of their systems a credential and chooses, explicitly,
+// which intakes it may use. There is no "all purposes" option and no way to
+// widen one afterwards: a credential is withdrawn and a new one issued, so the
+// answer to "what was this secret ever allowed to do?" stays true.
+
+settingsRoutes.post('/settings/ingest-credentials', requireRole('admin'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+
+  const body = await c.req.parseBody({ all: true });
+  const raw = body.purpose;
+  const purposes = (Array.isArray(raw) ? raw : raw == null ? [] : [raw]).map(String);
+
+  const { mintIngestCredential } = await import('../../services/institution/ingest-credentials.js');
+  const minted = await mintIngestCredential({
+    productId: ctx.productId, founderId: founder.id as string,
+    label: String(body.label ?? ''), purposes,
+  });
+  if ('refused' in minted) return c.redirect('/settings');
+  // The ID, not the secret. The page reads the secret back and shows it once.
+  return c.redirect(`/settings?minted=${minted.id}`);
+});
+
+settingsRoutes.post('/settings/ingest-credentials/:id/revoke', requireRole('admin'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+  const { revokeIngestCredential } = await import('../../services/institution/ingest-credentials.js');
+  await revokeIngestCredential({
+    productId: ctx.productId, founderId: founder.id as string, credentialId: c.req.param('id'),
+  });
   return c.redirect('/settings');
 });
 

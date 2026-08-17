@@ -96,6 +96,11 @@
 
 
 
+
+
+
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -278,16 +283,23 @@
       length(substr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', 1,
       length(substr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', 1,
      OR (NEW.scope='company' AND NEW.predicate NOT IN ('resource_capacity'));
+     OR COALESCE(NEW.secret,'') NOT GLOB '[A-Za-z0-9_-]*';
+     OR COALESCE(json_array_length(NEW.purposes_json),0) > 3;
+     OR COALESCE(json_array_length(NEW.purposes_json),0)=0
+     OR COALESCE(json_type(NEW.purposes_json,'$'),'absent') <> 'array'
      OR length(COALESCE(NEW.channel_key,'')) < 3
      OR length(COALESCE(NEW.channel_key,'')) > 40;
      OR length(COALESCE(NEW.label,'')) > 80
+     OR length(COALESCE(NEW.label,'')) > 80;
      OR length(COALESCE(NEW.unit,'')) > 24;
+     WHERE COALESCE(json_each.value,'') NOT IN ('metrics','company_report','effect_outcome'));
      WHERE NEW.authority_ref='autonomy_consent:' || a.id AND a.product_id=r.product_id
      WHERE NEW.evidence_ref='reconstruction_claim:' || c.id AND c.product_id=r.product_id
      WHERE NEW.evidence_ref='shadow_comparison:' || c.id AND r.id=NEW.responsibility_id
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=NEW.product_id
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=r.product_id
      WHERE NEW.outcome_ref='action_execution:' || x.id AND x.product_id=r.product_id
+     WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
     'activation_playbook',     -- How we improve activation
     'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
     'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
@@ -519,6 +531,7 @@
     SELECT 1 FROM json_each(NEW.evidence_refs_json) ref WHERE
     SELECT 1 FROM json_each(NEW.grounding_evidence_json) ref WHERE NOT EXISTS (
     SELECT 1 FROM json_each(NEW.payload_json,'$.evidence_claim_ids') c
+    SELECT 1 FROM json_each(NEW.purposes_json)
     SELECT 1 FROM json_each(NEW.responsibility_refs_json) refs
     SELECT 1 FROM outbound_actions o
     SELECT 1 FROM products p
@@ -540,6 +553,7 @@
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x JOIN institutional_responsibilities r ON r.id=x.responsibility_id
     SELECT 1 FROM responsibility_shadow_expectations x, signal_events e
+    SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
@@ -767,6 +781,7 @@
   -- Every absence is coalesced. `X NOT IN (...)` is NULL when X is missing, and
   -- Every predicate coalesces its NULL. A guard whose condition evaluates to
   -- Every predicate coalesces its absence. A guard whose condition evaluates to
+  -- Every predicate coalesces its absence. A guard whose condition evaluates to
   -- Every question names the responsibility it unblocks, at either scope.
   -- Evidence must follow the prediction it tests. An observation recorded
   -- Evolution signals
@@ -779,6 +794,8 @@
   -- Health composite (0-100)
   -- Identity is verified against real ownership. A caller-supplied founder
   -- Identity is verified against real ownership. A caller-supplied founder
+  -- Issuing a credential is a founder assertion and must carry provenance, and
+  -- JSON array from the closed set below. Immutable after minting.
   -- JSON object keyed by agent name containing the signal or flag that was raised
   -- Key terms
   -- Lifecycle stage
@@ -787,6 +804,7 @@
   -- Meta
   -- Meta
   -- NULL never fires, which is how absent values have repeatedly slipped past
+  -- NULL never fires, which is how missing values have repeatedly walked past
   -- NULL never fires, which is how missing values have repeatedly walked past
   -- Narrative
   -- Negative and missing amounts. An absent amount is not zero spend; it is an
@@ -823,10 +841,12 @@
   -- Status
   -- Structured output
   -- The assertion answers an OPEN question of this company. It cannot answer a
+  -- The canonical evidence that the founder issued this, and to whom.
   -- The canonical evidence that this company said it tracks this.
   -- The channel must be this company's, live, and bound to the responsibility
   -- The channel must belong to the company the intake authenticated as. The
   -- The check is deny-dominant and bidirectional: a prefix inside the ring is
+  -- The closed vocabulary. A purpose exists here only when a route actually
   -- The compressed content
   -- The consequence class a consent must have been granted at to use this. Not
   -- The constitutional ring. Ordinary development authority may not reach the
@@ -837,6 +857,7 @@
   -- The event type is derived from the report, so what was claimed and what is
   -- The evidence row must be this company's own customer-message observation.
   -- The founder's own words for it, for founder-facing surfaces only.
+  -- The founder's own words for which system holds this.
   -- The grounding must be this product's own current claims. A disposition
   -- The kernel's identifier for the quantity. Company-defined, never parsed.
   -- The key becomes part of an event type and is matched against stored
@@ -844,6 +865,7 @@
   -- The observer may not see, cite, or echo the expectation it will be
   -- The plan must carry a real proposal, authored for that same message.
   -- The same generic operational vocabulary migration 126 established, mirrored
+  -- The secret is the whole of the authentication, so its floor is set here and
   -- The signal that says "stop iterating" when yield drops below threshold.
   -- The source's own clock, kept apart from ours. A delayed delivery is late,
   -- The target must fall inside a granted prefix.
@@ -893,11 +915,14 @@
   -- for "it was independently checked".
   -- from the fact that a write returned without throwing.
   -- from the message and the responsibility that owns its channel.
+  -- governed effect kind is.
   -- governing contract lives in the institution documents and services, and
   -- grant can invent.
   -- grant that somehow held a ring path could still never be planned against.
   -- guards in this schema.
   -- guards in this schema.
+  -- guards in this schema.
+  -- honours it; this is a list of intakes that exist, not of intakes anyone
   -- independence tests caught it. Widening a vocabulary must not become a way
   -- indistinguishable from a real one.
   -- irrespective of later reality.
@@ -909,6 +934,7 @@
   -- missing, and a NULL condition never fires a RAISE.
   -- neither can reach the other.
   -- not be asked company-wide and a company-wide one may not be pinned to a
+  -- not left to whichever service happens to mint it.
   -- not recent, and conflating the two would make evidence ordering a lie.
   -- nothing that could be mistaken for structure or a path.
   -- of adding an effect kind.
@@ -943,8 +969,10 @@
   -- string cannot establish who is speaking for the company.
   -- table decision_id points at (the founder-facing queue vs the strategic log).
   -- tenant's signal would be an attribution leak in both directions.
+  -- tenant's signal would be an attribution leak in both directions.
   -- than stored and ignored — the shape of the attempt is the problem, and a
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
+  -- the evidence must be this company's own — a credential justified by another
   -- the field quietly dropped.
   -- the message is being attributed to. Attribution is structural.
   -- the ratchets/audits are what make any of it binding.
@@ -961,6 +989,7 @@
   -- well-meaning integration.
   -- what was reported rather than on a label the caller chose.
   -- which is inside the constitutional ring, so an integration cannot introduce
+  -- would like. Widening it is a migration and a review, exactly as adding a
   -- wrote it, and neither the founder nor the institution could tell which
   -- { company_name, problem, solution, target_customer, revenue_model,
   -- { metrics_snapshot_date, integration_events_count, unread_messages_count,
@@ -1049,7 +1078,10 @@
   ON team_health_metrics(product_id, week_starting DESC);
   OR COALESCE(OLD.amount_usd,-1) <> COALESCE(NEW.amount_usd,-1)
   OR COALESCE(OLD.capability,'') <> COALESCE(NEW.capability,'')
+  OR COALESCE(OLD.evidence_signal_id,'') <> COALESCE(NEW.evidence_signal_id,'')
   OR COALESCE(OLD.product_id,'') <> COALESCE(NEW.product_id,'')
+  OR COALESCE(OLD.purposes_json,'') <> COALESCE(NEW.purposes_json,'')
+  OR COALESCE(OLD.secret,'')        <> COALESCE(NEW.secret,'')
   PRIMARY KEY (founder_id, product_id, item_key)
   PRIMARY KEY (product_id, prompt, condition_name)
   PRIMARY KEY (scope, scope_id, date)
@@ -1153,6 +1185,12 @@
   SELECT RAISE(ABORT,'inbound_message:evidence_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'inbound_message:identity_required') WHERE
   SELECT RAISE(ABORT,'inbound_message:subject_too_long')
+  SELECT RAISE(ABORT,'ingest_credential:evidence_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'ingest_credential:immutable');
+  SELECT RAISE(ABORT,'ingest_credential:label_invalid')
+  SELECT RAISE(ABORT,'ingest_credential:purpose_unknown') WHERE EXISTS (
+  SELECT RAISE(ABORT,'ingest_credential:purposes_invalid')
+  SELECT RAISE(ABORT,'ingest_credential:secret_weak')
   SELECT RAISE(ABORT,'institutional_judgment:provenance_required') WHERE
   SELECT RAISE(ABORT,'institutional_judgment:tenant_invalid') WHERE EXISTS (
   SELECT RAISE(ABORT,'judgment_disposition:alternative_invalid') WHERE
@@ -1270,6 +1308,7 @@
   WHERE COALESCE(NEW.amount_usd, -1) < 0;
   WHERE COALESCE(NEW.channel_key,'') IN (
   WHERE COALESCE(NEW.channel_key,'') NOT GLOB '[a-z][a-z0-9_]*'
+  WHERE COALESCE(json_valid(NEW.purposes_json),0)=0
   WHERE NEW.body IS NULL OR trim(NEW.body)='' OR length(NEW.body)>8192;
   WHERE NEW.effect_id IS NULL OR NEW.authority_consent_id IS NULL
   WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
@@ -1303,7 +1342,9 @@
   WHERE inbound_message_id IS NOT NULL AND status<>'cancelled';
   WHERE json_extract(NEW.payload_json,'$.founder_id') IS NOT NULL;
   WHERE json_extract(NEW.payload_json,'$.obligation_kind') NOT IN (
+  WHERE length(COALESCE(NEW.secret,'')) < 32
   WHERE resolved_at IS NULL;
+  WHERE trim(COALESCE(NEW.label,''))=''
   WHERE trim(COALESCE(NEW.label,''))=''
   accepted_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
   accepted_at DATETIME,
@@ -1800,6 +1841,7 @@
   created_at     TEXT NOT NULL DEFAULT (datetime('now')),
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
@@ -2228,6 +2270,7 @@
   evidence_refs_json TEXT NOT NULL,
   evidence_signal_id  TEXT NOT NULL REFERENCES signal_events(id)
   evidence_signal_id TEXT NOT NULL,
+  evidence_signal_id TEXT NOT NULL,
   evolution_candidates TEXT,        -- JSON: EvolutionCandidate[]
   evolution_policy TEXT,               -- JSON: evolution configuration
   evolutions_promoted_count INTEGER NOT NULL DEFAULT 0,
@@ -2484,6 +2527,7 @@
   id              TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
+  id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
@@ -2806,6 +2850,7 @@
   known_weaknesses TEXT,
   label              TEXT NOT NULL,
   label             TEXT NOT NULL,
+  label         TEXT NOT NULL,
   label TEXT NOT NULL,
   label TEXT NOT NULL,                       -- e.g. "Acquisition: 200 trial signups/mo"
   last_active_at DATETIME,
@@ -2850,6 +2895,7 @@
   last_updated     DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_updated TEXT NOT NULL DEFAULT (datetime('now'))
   last_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_used_at  TEXT,
   last_used_at DATETIME,
   last_viewed_at DATETIME,
   last_viewed_at DATETIME,
@@ -3316,6 +3362,7 @@
   product_id      TEXT NOT NULL,
   product_id     TEXT NOT NULL,
   product_id     TEXT NOT NULL,
+  product_id    TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
@@ -3543,6 +3590,7 @@
   proposer_founder_id TEXT,
   provider TEXT,
   published BOOLEAN DEFAULT FALSE
+  purposes_json TEXT NOT NULL,
   quality_score INTEGER,  -- 1-5, filled in retrospectively or inferred from outcomes
   quarter TEXT NOT NULL,               -- e.g. "2026-Q1"
   rated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -3671,6 +3719,7 @@
   revoked_at          DATETIME                -- set when the capability drops below 'act'
   revoked_at         TEXT,
   revoked_at        TEXT
+  revoked_at    TEXT,
   revoked_at   DATETIME,
   revoked_at   TEXT,                                -- NULL means currently active
   revoked_at DATETIME
@@ -3737,6 +3786,7 @@
   scratchpad_date TEXT NOT NULL DEFAULT (date('now')),
   seasonal_baseline_factor REAL,
   seasonal_peak_months TEXT,
+  secret        TEXT NOT NULL UNIQUE,
   secret TEXT NOT NULL,
   secret TEXT,                              -- HMAC signing secret (optional)
   secret TEXT,                         -- HMAC signing secret
@@ -4488,6 +4538,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4535,6 +4586,7 @@ BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON founder_evidence_requests
 BEFORE INSERT ON governed_effect_kinds
 BEFORE INSERT ON inbound_customer_messages
+BEFORE INSERT ON ingest_credentials
 BEFORE INSERT ON institutional_judgment_dispositions
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
@@ -4571,8 +4623,11 @@ BEFORE UPDATE ON cost_events
 BEFORE UPDATE ON development_change_plans
 BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON governed_effect_kinds
+BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4814,6 +4869,7 @@ CREATE INDEX idx_graph_rels_target ON graph_relationships(target_entity_id);
 CREATE INDEX idx_hypotheses_product ON hypotheses(product_id, status);
 CREATE INDEX idx_idea_validations_product ON idea_validations(product_id);
 CREATE INDEX idx_idem_expires ON idempotency_keys(expires_at);
+CREATE INDEX idx_ingest_credentials_product ON ingest_credentials(product_id, revoked_at);
 CREATE INDEX idx_initiative_queue_pending ON agent_initiative_queue(product_id, agent_name, status, priority);
 CREATE INDEX idx_integration_events_product ON integration_events(product_id, event_type, created_at DESC);
 CREATE INDEX idx_integration_events_unprocessed ON integration_events(product_id, created_at DESC);
@@ -5129,6 +5185,7 @@ CREATE TABLE hypotheses (
 CREATE TABLE idea_validations (
 CREATE TABLE idempotency_keys (
 CREATE TABLE inbound_customer_messages (
+CREATE TABLE ingest_credentials (
 CREATE TABLE institutional_judgment_dispositions (
 CREATE TABLE institutional_judgment_evaluations (
 CREATE TABLE institutional_responsibilities (
@@ -5277,6 +5334,8 @@ CREATE TRIGGER governed_effect_kinds_immutable_delete
 CREATE TRIGGER governed_effect_kinds_immutable_insert
 CREATE TRIGGER governed_effect_kinds_immutable_update
 CREATE TRIGGER inbound_customer_message_guard
+CREATE TRIGGER ingest_credential_guard
+CREATE TRIGGER ingest_credential_immutable
 CREATE TRIGGER institutional_judgment_disposition_append_only_delete
 CREATE TRIGGER institutional_judgment_disposition_append_only_update
 CREATE TRIGGER institutional_judgment_disposition_guard
@@ -5402,7 +5461,10 @@ END;
 END;
 END;
 END;
+END;
+END;
 WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
+WHEN COALESCE(OLD.product_id,'')    <> COALESCE(NEW.product_id,'')
 WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
