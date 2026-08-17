@@ -94,6 +94,12 @@ settingsRoutes.get('/settings', async (c) => {
     ? await revealIngestSecret({ productId, founderId: founder.id as string, credentialId: mintedId })
     : null;
 
+  // API keys. Until now nothing anywhere could issue one, so `/api/v1` and the
+  // transcript webhooks were mounted, authenticated, and unreachable.
+  const { getApiKeys, API_SCOPES, API_SCOPE_LABELS } = await import(
+    '../../services/api/api-key-issuance.js');
+  const apiKeys = productId ? await getApiKeys(productId) : [];
+
   const tierLabel = getTierBadge(founder.tier);
   const capabilities = getTierCapabilities(founder.tier);
 
@@ -389,6 +395,60 @@ settingsRoutes.get('/settings', async (c) => {
         </button>
       </form>
     </div>` : ''}
+
+    ${productId ? html`
+    <div class="card">
+      <h3>API keys</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        For programs that read and write your data directly — the REST API, the
+        MCP tools, and call-transcript webhooks. A key does exactly what you tick
+        and nothing else, and every key expires. It is shown once when you issue
+        it, because only a hash of it is stored.
+      </p>
+
+      ${apiKeys.length ? html`
+      <table style="width:100%;font-size:0.82rem;margin-bottom:1rem;">
+        <tbody>
+        ${apiKeys.map((key) => html`
+          <tr>
+            <td style="padding:0.35rem 0;">
+              <strong>${key.label}</strong>
+              <code style="font-size:0.72rem;color:var(--text-dim);"> ${key.prefix}…</code>
+              <div style="color:var(--text-dim);font-size:0.76rem;">
+                ${key.scopes.join(', ') || 'no scopes'}
+                ${key.expiresAt ? html` · expires ${key.expiresAt.slice(0, 10)}` : ''}
+                ${key.lastUsedAt ? html` · last used ${key.lastUsedAt.slice(0, 10)}` : html` · never used`}
+              </div>
+            </td>
+            <td style="text-align:right;padding:0.35rem 0;">
+              ${key.revoked ? html`<span style="color:var(--text-dim);">withdrawn</span>` : html`
+              <form method="POST" action="/settings/api-keys/${key.id}/revoke" style="display:inline;">
+                <button type="submit" class="btn btn-ghost btn-sm">Withdraw</button>
+              </form>`}
+            </td>
+          </tr>`)}
+        </tbody>
+      </table>` : ''}
+
+      <form method="POST" action="/settings/api-keys">
+        <input type="text" name="label" maxlength="80" required
+          placeholder="What is this key for?"
+          style="width:100%;margin-bottom:0.5rem;font-size:0.85rem;" />
+        ${API_SCOPES.map((scope) => html`
+        <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;">
+          <input type="checkbox" name="scope" value="${scope}" />
+          <code style="font-size:0.76rem;">${scope}</code> —
+          may ${API_SCOPE_LABELS[scope].may}
+          <span style="color:var(--text-dim);">; may not ${API_SCOPE_LABELS[scope].mayNot}</span>
+        </label>`)}
+        <label style="display:block;font-size:0.82rem;margin:0.6rem 0 0.5rem;">
+          Expires in
+          <input type="number" name="days" min="1" max="365" value="90"
+            style="width:5rem;font-size:0.82rem;" /> days
+        </label>
+        <button type="submit" class="btn btn-secondary btn-sm">Issue API key</button>
+      </form>
+    </div>` : ''}
   `;
   return c.html(dashboardLayout(ctx, content));
 });
@@ -496,6 +556,77 @@ settingsRoutes.post('/settings/ingest-credentials/:id/revoke', requireRole('admi
   const { revokeIngestCredential } = await import('../../services/institution/ingest-credentials.js');
   await revokeIngestCredential({
     productId: ctx.productId, founderId: founder.id as string, credentialId: c.req.param('id'),
+  });
+  return c.redirect('/settings');
+});
+
+// ─── API key issuance ────────────────────────────────────────────────────────
+//
+// Deliberately NOT at `POST /api/v1/settings/api-keys`, which the revenue
+// dashboard used to advertise and which never existed. It could not have:
+// that namespace is behind API-key authentication, so minting the first key
+// there would require already having one. Issuance belongs on the
+// authenticated founder surface.
+//
+// The key is rendered in this response and never redirected, because only its
+// hash is stored and there is nothing to read back — and because a secret in a
+// URL lands in request logs, in history, and in a referrer.
+
+settingsRoutes.post('/settings/api-keys', requireRole('admin'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+
+  const body = await c.req.parseBody({ all: true });
+  const rawScopes = body.scope;
+  const scopes = (Array.isArray(rawScopes) ? rawScopes : rawScopes == null ? [] : [rawScopes]).map(String);
+  const days = Number(body.days ?? 90);
+
+  const { issueApiKey } = await import('../../services/api/api-key-issuance.js');
+  const issued = await issueApiKey({
+    productId: ctx.productId, founderId: founder.id as string,
+    label: String(body.label ?? ''), scopes,
+    days: Number.isFinite(days) ? days : undefined,
+  });
+  if ('refused' in issued) {
+    return c.html(dashboardLayout(ctx, html`
+      <div class="card">
+        <h3>Key not issued</h3>
+        <p>${issued.refused === 'scopes_required'
+          ? 'Choose at least one thing the key may do.'
+          : issued.refused === 'label_required'
+            ? 'Give the key a name so you can recognise it later.'
+            : 'That request was refused.'}</p>
+        <a href="/settings" class="btn btn-secondary btn-sm">Back to settings</a>
+      </div>`));
+  }
+
+  return c.html(dashboardLayout(ctx, html`
+    <div class="card">
+      <h3>Copy this key now</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);">
+        It is shown once. Foundry stored only a hash of it, so nobody — including
+        Foundry — can show it to you again. If you lose it, withdraw it and issue
+        another.
+      </p>
+      <input type="text" readonly value="${issued.key}"
+        style="width:100%;font-family:monospace;font-size:0.8rem;cursor:pointer;"
+        onclick="this.select()" />
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.75rem;">
+        <strong>${issued.label}</strong> — ${issued.scopes.join(', ')} ·
+        expires ${issued.expiresAt.slice(0, 10)}
+      </p>
+      <a href="/settings" class="btn btn-secondary btn-sm">Back to settings</a>
+    </div>`));
+});
+
+settingsRoutes.post('/settings/api-keys/:id/revoke', requireRole('admin'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+  const { revokeIssuedApiKey } = await import('../../services/api/api-key-issuance.js');
+  await revokeIssuedApiKey({
+    productId: ctx.productId, founderId: founder.id as string, keyId: c.req.param('id'),
   });
   return c.redirect('/settings');
 });

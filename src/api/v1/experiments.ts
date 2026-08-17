@@ -76,7 +76,7 @@ experimentsApi.get('/:experimentId', requireScope('agents:read'), async (c) => {
 });
 
 // POST / — create new experiment
-experimentsApi.post('/', requireScope('agents:read'), async (c) => {
+experimentsApi.post('/', requireScope('experiments:write'), async (c) => {
   const productId = c.get('productId');
   const userId = c.get('userId');
 
@@ -132,7 +132,7 @@ experimentsApi.post('/', requireScope('agents:read'), async (c) => {
 });
 
 // PUT /:experimentId/results — update current results
-experimentsApi.put('/:experimentId/results', requireScope('agents:read'), async (c) => {
+experimentsApi.put('/:experimentId/results', requireScope('experiments:write'), async (c) => {
   const productId = c.get('productId');
   const experimentId = c.req.param('experimentId');
 
@@ -170,7 +170,7 @@ experimentsApi.put('/:experimentId/results', requireScope('agents:read'), async 
 });
 
 // POST /:experimentId/conclude — mark as concluded
-experimentsApi.post('/:experimentId/conclude', requireScope('agents:read'), async (c) => {
+experimentsApi.post('/:experimentId/conclude', requireScope('experiments:write'), async (c) => {
   const productId = c.get('productId');
   const experimentId = c.req.param('experimentId');
 

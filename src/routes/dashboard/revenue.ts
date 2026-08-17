@@ -125,7 +125,7 @@ curl -X POST ${process.env.APP_URL ?? 'https://foundry.dev'}/api/v1/products/${p
   -H "Content-Type: application/json" \\
   -d '{"new_mrr_cents": 9900, "churned_mrr_cents": 0, "signups_7d": 12, "active_users": 320}'
       </code>
-      <p style="font-size:0.8rem;color:#9ca3af;margin-top:0.5rem;">Create an API key via <code>POST /api/v1/settings/api-keys</code> (authenticated) — a Settings UI for keys is coming.</p>
+      <p style="font-size:0.8rem;color:#9ca3af;margin-top:0.5rem;">Issue an API key in <a href="/settings">Settings</a>, choosing exactly what it may do and when it expires.</p>
     </div>
   `;
 

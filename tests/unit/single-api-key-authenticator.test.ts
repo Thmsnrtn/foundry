@@ -79,8 +79,14 @@ describe('api key authentication', () => {
   it('the surfaces behind that credential are the ones we think they are', () => {
     // Both live consumers, named. If a third appears it should be a visible
     // edit here rather than an inherited consequence of importing a helper.
+    // Comments are stripped first. A module that MENTIONS the authenticator in
+    // prose is not a consumer of it, and counting one as such would make this
+    // list drift every time someone explains the design.
     const consumers = walk(resolve(ROOT, 'src'))
-      .filter((f) => /validateApiKey/.test(readFileSync(f, 'utf8')))
+      .filter((f) => /validateApiKey/.test(
+        readFileSync(f, 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//g, ' ')
+          .split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n')))
       .map((f) => f.slice(ROOT.length + 1))
       .filter((f) => f !== 'src/services/rbac/permissions.ts')
       .sort();

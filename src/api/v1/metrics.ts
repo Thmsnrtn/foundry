@@ -35,7 +35,7 @@ metricsApi.get('/snapshots', requireScope('agents:read'), async (c) => {
 });
 
 // POST /snapshots — create new snapshot
-metricsApi.post('/snapshots', requireScope('agents:read'), async (c) => {
+metricsApi.post('/snapshots', requireScope('metrics:write'), async (c) => {
   const productId = c.get('productId');
 
   let body: Record<string, unknown>;
