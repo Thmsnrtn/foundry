@@ -2510,11 +2510,16 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // notices, which is a worse product than not enforcing at all.
   entitlement_sweep: {
     fn: async () => {
-      const { sweepEntitlements } = await import('../services/billing/entitlement.js');
+      const { sweepEntitlements, sendTrialEndingNotices } = await import(
+        '../services/billing/entitlement.js');
+      // Warn BEFORE pausing, in that order and in the same tick: a founder
+      // whose trial ends within the hour should get the warning rather than
+      // only the obituary.
+      const warned = await sendTrialEndingNotices();
       const { paused, resumed } = await sweepEntitlements();
-      if (paused.length || resumed.length) {
+      if (paused.length || resumed.length || warned.length) {
         logger.info(
-          `entitlement_sweep: paused=${paused.length} resumed=${resumed.length}`,
+          `entitlement_sweep: paused=${paused.length} resumed=${resumed.length} warned=${warned.length}`,
           { jobName: 'entitlement_sweep' });
       }
     },

@@ -245,6 +245,40 @@ describe('entitlement to act', () => {
     expect(paused, 'a live trial must not be paused').not.toContain(trialing);
   });
 
+  it('warns before the trial ends, not only after', async () => {
+    // The lifecycle mail Foundry did not have: a trial ended, the account went
+    // read-only, and the first the founder knew was that nothing worked.
+    const notices: Array<Record<string, unknown>> = [];
+    const { registerToolHandler } = await import('../../src/services/outbound/gateway.js');
+    const { ACCOUNT_NOTICE_POLICY } = await import('../../src/services/billing/account-notice.js');
+    registerToolHandler('send_account_notice', async (req) => {
+      notices.push(req.params as Record<string, unknown>);
+      return { message_id: 'em_notice' };
+    }, ACCOUNT_NOTICE_POLICY);
+
+    const { sendTrialEndingNotices } = await import('../../src/services/billing/entitlement.js');
+    await query(
+      `INSERT INTO founders (id,clerk_user_id,email,tier,trial_ends_at) VALUES
+        ('ent_f5','ent_c5','soon@example.com',NULL,datetime('now','+2 days')),
+        ('ent_f6','ent_c6','later@example.com',NULL,datetime('now','+9 days')),
+        ('ent_f7','ent_c7','paying@example.com','growth',datetime('now','+2 days'))`, []);
+    await query(
+      `INSERT INTO products (id,name,owner_id,status,scp_status) VALUES
+        ('ent_p5','Ending Soon','ent_f5','active','active'),
+        ('ent_p6','Ending Later','ent_f6','active','active'),
+        ('ent_p7','Paying','ent_f7','active','active')`, []);
+
+    const warned = await sendTrialEndingNotices();
+    expect(warned, 'a trial ending inside the window is warned').toContain('ent_p5');
+    expect(warned, 'one ending well outside it is not').not.toContain('ent_p6');
+    expect(warned, 'a paying founder has no trial to warn about').not.toContain('ent_p7');
+    const before = notices.length;
+
+    // The job runs hourly; the founder is warned once, not every hour.
+    await sendTrialEndingNotices();
+    expect(notices.length, 'an hourly job must not send an hourly email').toBe(before);
+  });
+
   it('tells the founder their company went read-only, and only once', async () => {
     // The pause is total, so the notice is the only mail that can reach them —
     // and the reason it may is that it is the mail ABOUT the pause. An account

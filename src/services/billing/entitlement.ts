@@ -187,3 +187,50 @@ export async function applyEntitlementForFounder(
       WHERE f.id = ? AND COALESCE(p.status,'active') = 'active'`, [founderId]);
   return applyToRows(rows.rows as unknown as Array<Record<string, unknown>>, now);
 }
+
+/**
+ * Warn founders whose trial is about to run out.
+ *
+ * The lifecycle mail every subscription product sends, and the one Foundry did
+ * not: a trial ended, the account went read-only, and the first the founder
+ * knew of it was that nothing worked. Warning first is the difference between a
+ * product that lapses and one that ambushes.
+ *
+ * Runs on the same hourly tick as the sweep and dedups on the trial end date,
+ * so the notice goes once no matter how many times it runs inside the window.
+ */
+export async function sendTrialEndingNotices(
+  now: Date = new Date(), windowDays = 3,
+): Promise<string[]> {
+  const horizon = new Date(now.getTime() + windowDays * 86_400_000).toISOString();
+  const rows = await query(
+    `SELECT p.id, p.name, f.email, f.trial_ends_at
+       FROM products p JOIN founders f ON f.id = p.owner_id
+      WHERE COALESCE(p.status,'active') = 'active'
+        AND COALESCE(p.scp_status,'active') NOT IN ('paused','archived')
+        AND f.tier IS NULL
+        AND f.trial_ends_at IS NOT NULL
+        AND f.trial_ends_at > ? AND f.trial_ends_at <= ?`,
+    [now.toISOString(), horizon]);
+
+  const notified: string[] = [];
+  for (const raw of rows.rows as unknown as Array<Record<string, unknown>>) {
+    const to = raw.email ? String(raw.email) : '';
+    if (!to) continue;
+    try {
+      const { sendAccountNotice } = await import('./account-notice.js');
+      const sent = await sendAccountNotice({
+        productId: String(raw.id), to,
+        notice: {
+          kind: 'trial_ending',
+          companyName: String(raw.name ?? 'Your company'),
+          effectiveAt: raw.trial_ends_at as string,
+        },
+      });
+      if (sent) notified.push(String(raw.id));
+    } catch {
+      /* a warning that fails to send is not a reason to stop warning others */
+    }
+  }
+  return notified;
+}

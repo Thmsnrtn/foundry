@@ -138,6 +138,41 @@ export async function cancelSubscription(subscriptionId: string): Promise<void> 
   ));
 }
 
+/**
+ * Send one account notice per company a founder owns.
+ *
+ * Account mail is addressed to a person, but the gateway governs effects per
+ * COMPANY — that is where the kill-switch, the pause and the audit row live. So
+ * a notice about the account goes out once per company, through the same door,
+ * rather than around it. Failures are swallowed: a billing webhook that throws
+ * gets retried by Stripe, and re-running it for the sake of an email would
+ * re-run everything else with it.
+ */
+async function notifyOwnedCompanies(
+  founderId: string,
+  notice: { kind: 'payment_failed' | 'subscription_cancelled'; effectiveAt: string | null },
+): Promise<void> {
+  try {
+    const { sendAccountNotice } = await import('./account-notice.js');
+    const rows = await query(
+      `SELECT p.id, p.name, f.email FROM products p JOIN founders f ON f.id = p.owner_id
+        WHERE f.id = ? AND COALESCE(p.status,'active') = 'active'`, [founderId]);
+    for (const raw of rows.rows as unknown as Array<Record<string, unknown>>) {
+      await sendAccountNotice({
+        productId: String(raw.id),
+        to: String(raw.email ?? ''),
+        notice: {
+          kind: notice.kind,
+          companyName: String(raw.name ?? 'Your company'),
+          effectiveAt: notice.effectiveAt,
+        },
+      });
+    }
+  } catch {
+    /* the billing fact is recorded either way */
+  }
+}
+
 /** Stripe's `current_period_end`, as an ISO string, or null when the payload
  * does not carry one. Typed loosely on purpose: the field moved to the
  * subscription item in newer API versions, and reading it defensively is
@@ -199,6 +234,20 @@ export async function handleWebhook(payload: string, signature: string): Promise
             WHERE stripe_customer_id = ?`,
           [tier, trialEndsAt, paidThrough, sub.customer],
         );
+
+        // A cancellation scheduled for the period end is the ordinary shape,
+        // and the ordinary thing to do is confirm it and say when access
+        // actually stops — which is not today.
+        if ((sub as unknown as Record<string, unknown>).cancel_at_period_end === true) {
+          const cancelling = await query(
+            'SELECT id FROM founders WHERE stripe_customer_id = ?', [sub.customer]);
+          const cancellingId = (cancelling.rows[0] as Record<string, string> | undefined)?.id;
+          if (cancellingId) {
+            await notifyOwnedCompanies(cancellingId, {
+              kind: 'subscription_cancelled', effectiveAt: paidThrough,
+            });
+          }
+        }
 
         // Activation funnel: trial_started (trialing) / paid (active) — Phase 5.2.
         void (async () => {
@@ -321,6 +370,13 @@ export async function handleWebhook(payload: string, signature: string): Promise
           '/settings/billing',
           'Update Payment Method',
         );
+        // And by email. An in-app notice reaches a founder who happens to log
+        // in; a failed card is the one thing every subscription product emails
+        // about, because the person who needs to act may not be looking.
+        await notifyOwnedCompanies(founder.id, {
+          kind: 'payment_failed',
+          effectiveAt: String(invoice.id ?? ''),
+        });
       }
       break;
     }
