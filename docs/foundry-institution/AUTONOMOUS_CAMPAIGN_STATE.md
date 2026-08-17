@@ -66,6 +66,8 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 19 notifications/digests ↔ entitlement | 4 | 4 | 2 high, 2 med | 2 | 3 | 1 | 0 | 34 |
 | 20 URL gate falsification (§9) | 1 | 2 | 1 high, 1 med | 1 | 1 | 0 | 0 | 3 |
 | 21 SaaS convention (owner direction) | 3 | 3 | 1 high, 2 med | 1 | 2 | 0 | 0 | 5 |
+| 22 AI spend attribution | 1 | 1 | high | 1 | 1 | 0 | 0 | 54 |
+| 23 rate limiting ↔ deployment | 2 | 3 | 2 high, 1 med | 1 | 2 | 0 | 0 | 8 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -98,9 +100,23 @@ request payload choosing which provider endpoint to call. The gate had claimed
 to cover "exactly the modules we think", and five modules had never been
 examined by it.
 
+Batch 22 is the same lesson as 19 from the other end. The pause was made to
+reach model spend, and then the question "reach it how?" turned out to have a
+bad answer: `productId` is the fourth, OPTIONAL argument of the model helpers,
+and fifty-five of a hundred and four call sites omitted it. Half the spend was
+bounded only by the global ceiling, so **the rule could not have reached it
+however well the rule was written.**
+
+Batch 23 found the same shape in the deployment. Every rate limit was a Map in
+one process, `fly.toml` runs two web machines, and so every published number was
+really double. Alongside it: the default rate-limit key was the caller's own
+`X-Forwarded-For`, taken whole and preferred over the platform header, which
+made every IP-keyed limit optional for anyone who varied it. **Both defects were
+about what the limiter counts, not about the limit.**
+
 **Phase-change trigger:** several consecutive independently-chosen batches
 yielding only cosmetic findings and no invariant violations. Not reached — and
-further away than it was three batches ago.
+further away than it was five batches ago.
 
 ## Unfamiliar-company generalization evidence (§1)
 
@@ -281,18 +297,19 @@ falsify**, not a reason to move on.
 
 **Unread seams, in rough order of expected yield:**
 
-1. **Caches and in-memory state.** Partly surveyed — `proseCache` is
-   tenant-keyed and fine, `src/lib/circuit-breaker.ts` has no importers at all.
-   The rate-limit store is the interesting one now that limits are
-   credential-keyed.
+1. ~~**Caches and in-memory state.**~~ Done in batch 23. `proseCache` and the
+   AI spend cache are correctly keyed; `src/lib/circuit-breaker.ts` still has no
+   importers. The rate-limit store was the interesting one and it had two real
+   defects. What remains unexamined: `productOwnerCache` in the AI client never
+   expires, so a transferred product would keep attributing spend to its former
+   owner — low severity, bounded by product count.
 2. **AI context assembly ↔ tenancy.** What a model is shown, and whether one
    company's material can reach another's prompt.
-3. **AI spend ↔ entitlement.** Half done. The pause now reaches work selection
-   and every outbound effect, but `callClaude` takes `productId` as a trailing
-   OPTIONAL argument and roughly half of the ~104 call sites omit it. Those
-   calls are outside per-product spend accounting entirely, which also means
-   outside any per-product entitlement check that might later be put there.
-   A baseline ratchet over unattributed AI calls is the obvious shape.
+3. ~~**AI spend ↔ entitlement.**~~ Done in batch 22. 103 of 104 call sites now
+   name their company, one recorded exception (cross-product aggregation), and
+   `scripts/check-ai-attribution.mjs` fails the build on a new one. The pause
+   refuses model spend in `callClaude` itself, before the key is read and before
+   a reservation is taken.
 4. **`agent_audit_log` ↔ compliance.** What is recorded, what a founder can
    actually retrieve, and whether deletion removes it.
 5. **§14 named-agent retirement.** Untouched this session: classify remaining
