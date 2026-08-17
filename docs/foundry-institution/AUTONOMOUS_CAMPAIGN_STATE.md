@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **138**. Schema snapshot current.
-- **Validation:** `npm run check` green — **179 files / 1,459 tests**, all 4 ratchets hold. (+50 of that is recovered coverage, not new code.)
+- **Validation:** `npm run check` green — **179 files / 1,462 tests**, all 4 ratchets hold.
 - **The whole ladder is generic now.** Four SaaS-shaped bindings were found and removed in sequence, each revealed by the previous one: the observation vocabulary (135), the effect guard (136), the authority-read, and the grantable-capability map. A dance school is carried end to end — owner report → Understood → Shadowing → resolved comparison → exact grant → Assisting → founder-authored notice → governed send → receipt → outcome.
 - **The loop closes.** Someone outside can finally say whether an effect achieved what it was for (137), so `outcome_status` can leave `unresolved` by fact rather than staying there by construction. HANDLED now means "it worked", not "it reached a rung".
 - **A company's own systems can raise work** (138), so the first rung is no longer fed only by a person.
@@ -53,7 +53,18 @@ None in flight. Last package closed and pushed.
 
 ## Blocked — owner
 
-See `OWNER_DECISIONS_PENDING.md`. Nothing currently blocks all high-value work.
+**Nothing.** All four queued decisions are answered; `OWNER_DECISIONS_PENDING.md`
+records them as settled. Standing consequences:
+
+- Support pilot: **hold for adapter breadth.** E4 stays unclaimed.
+- Recursive Foundry: the owner performs the **report only, not the grant** —
+  Foundry still may not mutate its own repository outside a test. Do not
+  simulate the report; do not treat a local run as the deployed one.
+- Effect kinds stay **constitutional**. Never add a mechanism that lets them be
+  created at runtime, by a company, an integration, or a model. Now gated
+  structurally, not just documented.
+- `challenger`/`synthesizer` were **already live** — my classification was
+  wrong, corrected on evidence.
 
 ## Blocked — external
 
@@ -66,7 +77,7 @@ See `OWNER_DECISIONS_PENDING.md`. Nothing currently blocks all high-value work.
 
 - Everything wired in sessions 4–10 is **E2** — local runtime through production-facing services. A production-facing code path is not production evidence.
 - E3 claims cover **only the synthetic dimensions their corpora actually exercise**.
-- `development-shadowing.ts` remains DARK: observations are supplied, but no production path opens a development expectation.
+- The institution DARK list now contains **only frozen benchmark gates**, which is what it was always supposed to mean. `development-shadowing.ts` left it when the owner gained a way to state what they expect a check to report.
 - ~~Open nondeterminism evidence debt~~ — **RESOLVED**. A near-miss key fixture built as `key.slice(0,-1) + 'X'` collided with the real key whenever it ended in `X` (1 in 64). Not a database, scheduling, or concurrency problem. See IMPLEMENTATION_STATE for the full record.
 - The foreign-key PRAGMA defect fixed during that investigation is **latent, not the cause**.
 
@@ -79,7 +90,10 @@ See `OWNER_DECISIONS_PENDING.md`. Nothing currently blocks all high-value work.
 
 ## Recently completed
 
-1. Seven proven-dead modules deleted on evidence; as-any ratchet tightened 30 → 29.
+1. The owner can open a development expectation — the last non-benchmark DARK module goes live.
+2. Four owner decisions answered and recorded; the effect-kind line made structural.
+3. `challenger`/`synthesizer` reclassified: already production-reachable via the debate orchestrator. My directory-based classification was the same category error the orphan report once made.
+4. Seven proven-dead modules deleted on evidence; as-any ratchet tightened 30 → 29.
 2. 47 unrun assertions recovered from under `src/`, two stale ones corrected, and a gate against invisible tests.
 3. External company reports (138) — a company's own systems can raise work, without laundering provenance.
 2. Effect outcome reports (137) — the loop's last link finally has a supply; HANDLED means "it worked".

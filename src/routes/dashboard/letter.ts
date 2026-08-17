@@ -217,6 +217,34 @@ const noticeSection = (
   </div>`;
 };
 
+// What the owner would expect a development check to report.
+//
+// The twin of the metric watch. Offered only for development responsibilities
+// that are Understood, and only for checks that have ALREADY produced real
+// results — watching a silent check would be a promise rather than proof.
+const developmentWatchSection = (
+  items: Array<{ responsibilityId: string; title: string }>,
+  checks: string[],
+) => items.length === 0 || checks.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What would you expect to see?</div>
+    ${items.map((item) => html`
+      <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/watch-check"
+        style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+        <div style="font-size:0.9rem;color:var(--text-primary);width:100%;">${item.title}</div>
+        <span style="font-size:0.78rem;color:var(--text-muted);">If this is being handled, I'd expect</span>
+        <select name="check" style="font-size:0.78rem;">
+          ${checks.map((c) => html`<option value="${c}">${c.replaceAll('-', ' ')}</option>`)}
+        </select>
+        <select name="expected_result" style="font-size:0.78rem;">
+          <option value="passed">to pass</option>
+          <option value="failed">to fail</option>
+        </select>
+        <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Watch it</button>
+      </form>`)}
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll watch and tell you whether you were right. Watching doesn't let me change anything.</div>
+  </div>`;
+
 // What the company actually counts.
 //
 // Until a company tells Foundry what to listen for, the only readings it can
@@ -408,6 +436,16 @@ letterRoutes.get('/letter', async (c) => {
   const observationChannels = await getObservationChannels(ctx.productId);
   const { getUnresolvedEffects } = await import('../../services/institution/effect-outcome.js');
   const unresolvedEffects = await getUnresolvedEffects(ctx.productId);
+  const { availableDevelopmentChecks } = await import('../../services/institution/development-shadowing.js');
+  const developmentChecks = await availableDevelopmentChecks(ctx.productId);
+  const understoodDevelopment = (await (await import('../../db/client.js')).query(
+    `SELECT id,title FROM institutional_responsibilities
+      WHERE product_id=? AND state='understood' AND capability='development' AND disposition='active'
+      ORDER BY created_at`, [ctx.productId],
+  )).rows.map((r) => ({
+    responsibilityId: String((r as Record<string, unknown>).id),
+    title: String((r as Record<string, unknown>).title),
+  }));
   // A day is not quiet if Foundry is blocked on something only the founder
   // knows. Hiding the question behind "nothing needs you" would be hiding
   // uncertainty, which founder UX may never do.
@@ -456,6 +494,7 @@ letterRoutes.get('/letter', async (c) => {
       ${evidenceQuestionSection(evidenceQuestion)}
       ${permissionSection(assistingCandidates)}
       ${reportObligationSection(obligationOptions)}
+      ${developmentWatchSection(understoodDevelopment, developmentChecks)}
       ${outcomeSection(unresolvedEffects)}
       ${observationChannelSection(observationChannels)}
       ${noticeSection([...responsibilitySummary.NEEDS_YOU, ...responsibilitySummary.CHANGED,
