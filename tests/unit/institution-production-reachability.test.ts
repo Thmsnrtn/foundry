@@ -222,6 +222,56 @@ describe('institutional reachability', () => {
     ).toEqual([]);
   });
 
+  it('every link a person needs to SEE has a production reader', () => {
+    // The write chain above is thorough and was green while four separate
+    // surfaces were unreachable by a human being:
+    //
+    //   • customer messages were stored and never rendered, so the three reply
+    //     routes could never be given a message id;
+    //   • support channels could not be created, and the intake key was thrown
+    //     away on redirect, so no message could ever arrive;
+    //   • `conflicting` outcomes told the owner their judgment was needed
+    //     without showing them what the disagreement was;
+    //   • a notice saved without ticking "send it for me" vanished.
+    //
+    // Every one of them is the same defect as the write links this gate was
+    // built for, on the other side of the glass. A chain that can only be
+    // driven by a test is not reachable, and neither is one whose output a
+    // person can never see.
+    const READ_CHAIN: Array<[string, string, string]> = [
+      ['messages a founder can act on', 'getMessagesAwaitingReply', 'services/institution/support-reply.ts'],
+      ['the channel a message arrives on', 'getSupportChannels', 'services/institution/customer-message-intake.ts'],
+      ['effects awaiting an answer', 'getUnresolvedEffects', 'services/institution/effect-outcome.ts'],
+      ['what the disagreement actually is', 'getDisputedEffects', 'services/institution/effect-outcome.ts'],
+      ['notices written and not sent', 'getUncarriedNotices', 'services/institution/responsibility-notice.ts'],
+      ['quantities the company declared', 'getObservationChannels', 'services/institution/company-observation.ts'],
+      ['responsibilities worth granting', 'getAssistingCandidates', 'services/institution/assisting-admission.ts'],
+      ['what Foundry did under permission', 'getFounderAssistingActivity', 'services/institution/responsibility-assisted-email.ts'],
+    ];
+    const files = tsFiles(resolve(ROOT, 'src'));
+    // A reader only counts when a ROUTE reads it. A service calling another
+    // service proves the data moves; it does not prove a person can see it,
+    // which is the whole property being asserted here.
+    const routes = files.filter((f) => f.includes(`${'/'}routes${'/'}`));
+    const unseen: string[] = [];
+    for (const [link, symbol, definedIn] of READ_CHAIN) {
+      const readers = routes
+        .filter((f) => !f.endsWith(definedIn))
+        .filter((f) => {
+          const source = readFileSync(f, 'utf8')
+            .split('\n')
+            .filter((line) => !/^\s*(import|export)\s/.test(line) && !/^\s*[\w,{} ]+\}?\s*from\s/.test(line))
+            .join('\n');
+          return new RegExp(`\\b${symbol}\\s*\\(`).test(source);
+        });
+      if (!readers.length) unseen.push(`${link} — no route calls ${symbol}()`);
+    }
+    expect(unseen,
+      'Something the institution records can never be seen by the person it is for. '
+      + 'A service-to-service caller does not count:\n' + unseen.join('\n'),
+    ).toEqual([]);
+  });
+
   it('the reasons are load-bearing, not decoration', () => {
     // A reason that says "later" is exactly the speculative architecture the
     // constitution forbids. Every entry must name a real blocker or a real

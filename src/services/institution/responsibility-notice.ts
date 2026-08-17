@@ -195,3 +195,49 @@ export async function getResponsibilityNotices(
     };
   });
 }
+
+/**
+ * Notices the founder wrote and did not ask Foundry to carry.
+ *
+ * Authoring and carrying are deliberately separate — writing something down is
+ * not permission to send it. But the letter offered both on one form and then
+ * rendered neither afterwards, so a notice saved WITHOUT ticking "send it for
+ * me" simply vanished: the founder wrote something and had no way to find it,
+ * finish it, or send it later. `getResponsibilityNotices` had no route caller
+ * at all.
+ *
+ * Only notices with no live plan are returned. One that has been planned is
+ * already visible as bounded help, and offering to carry it twice would invite
+ * sending the same words to the same person twice.
+ */
+export async function getUncarriedNotices(
+  productId: string, limit = 10,
+): Promise<Array<ResponsibilityNotice & { responsibilityTitle: string; canCarry: boolean }>> {
+  const rows = await query(
+    `SELECT e.id, e.payload_json, e.created_at, r.title, r.state
+       FROM signal_events e
+       JOIN institutional_responsibilities r
+         ON r.id = json_extract(e.payload_json,'$.responsibility_id') AND r.product_id = e.product_id
+      WHERE e.product_id=? AND e.source='founder_responsibility_notice'
+        AND r.disposition='active'
+        AND NOT EXISTS (SELECT 1 FROM outbound_actions o
+                         WHERE o.product_id=e.product_id AND o.effect_id=e.id
+                           AND o.status<>'cancelled')
+      ORDER BY e.created_at DESC, e.rowid DESC LIMIT ?`,
+    [productId, limit],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => {
+    const payload = JSON.parse(String(row.payload_json)) as {
+      responsibility_id: string; recipient: string; subject: string; body: string;
+    };
+    return {
+      id: String(row.id), responsibilityId: payload.responsibility_id,
+      recipient: payload.recipient, subject: payload.subject, body: payload.body,
+      authoredAt: String(row.created_at),
+      responsibilityTitle: String(row.title),
+      // Carrying needs Assisting and a live grant. Planning re-checks both and
+      // refuses without them, so this only governs what is OFFERED.
+      canCarry: String(row.state) === 'assisting',
+    };
+  });
+}

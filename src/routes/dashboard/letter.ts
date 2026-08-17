@@ -316,6 +316,32 @@ const disputedSection = (
       </div>`)}
   </div>`;
 
+// Notices the founder wrote and did not send.
+//
+// Authoring and carrying are deliberately separate — writing something down is
+// not permission to send it. But the form offered both and then rendered
+// neither afterwards, so a notice saved without ticking the box simply
+// vanished: the founder wrote something and had no way to find it, finish it,
+// or send it later. `getResponsibilityNotices` had no route caller at all.
+const uncarriedNoticeSection = (
+  items: Array<{ id: string; recipient: string; subject: string; body: string;
+    responsibilityTitle: string; canCarry: boolean }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Written, not sent</div>
+    ${items.map((item) => html`
+      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.78rem;color:var(--text-muted);">To ${item.recipient} — about ${item.responsibilityTitle}</div>
+        <div style="font-size:0.88rem;color:var(--text-primary);margin-top:0.15rem;">${item.subject}</div>
+        <div style="font-size:0.82rem;color:var(--text-muted);white-space:pre-wrap;margin-top:0.2rem;">${item.body}</div>
+        ${item.canCarry ? html`
+        <form method="POST" action="/letter/notices/${item.id}/carry" style="margin-top:0.35rem;">
+          <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Send it for me</button>
+        </form>` : html`
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I cannot carry this — you have not given me permission for this responsibility.</div>`}
+      </div>`)}
+  </div>`;
+
 const noticeSection = (
   items: Array<{ responsibilityId: string; title: string; state: string }>,
 ) => {
@@ -566,6 +592,8 @@ letterRoutes.get('/letter', async (c) => {
   const disputedEffects = await getDisputedEffects(ctx.productId);
   const { getMessagesAwaitingReply } = await import('../../services/institution/support-reply.js');
   const customerMessages = await getMessagesAwaitingReply(ctx.productId);
+  const { getUncarriedNotices } = await import('../../services/institution/responsibility-notice.js');
+  const uncarriedNotices = await getUncarriedNotices(ctx.productId);
   const { getSupportChannels } = await import('../../services/institution/customer-message-intake.js');
   const supportChannels = await getSupportChannels(ctx.productId);
   // Offered only where a message could actually be acted on, and only where one
@@ -656,6 +684,7 @@ letterRoutes.get('/letter', async (c) => {
       ${observationChannelSection(observationChannels)}
       ${noticeSection([...responsibilitySummary.NEEDS_YOU, ...responsibilitySummary.CHANGED,
         ...responsibilitySummary.HANDLED, ...responsibilitySummary.STILL_OPEN])}
+      ${uncarriedNoticeSection(uncarriedNotices)}
       ${tellMeSection(factOpportunities)}
       ${judgmentSection(materialJudgments)}
       ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
@@ -1382,6 +1411,25 @@ letterRoutes.post('/letter/replies/:actionId/send', async (c) => {
     '../../services/institution/responsibility-assisted-email.js'
   );
   await executeAssistedSupportEmail(c.req.param('actionId'));
+  return c.redirect('/letter');
+});
+
+// Carrying a notice the founder wrote earlier. The other half of the
+// separation: authoring records what they said, and this binds it to exact
+// current authority. Planning re-resolves the grant from scratch and refuses
+// when it is absent, so a notice written before permission was given cannot be
+// carried by having been written.
+letterRoutes.post('/letter/notices/:noticeId/carry', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const { planResponsibilityNotice } = await import(
+    '../../services/institution/responsibility-notice.js');
+  const planned = await planResponsibilityNotice({
+    productId: ctx.productId, founderId: founder.id as string,
+    noticeId: c.req.param('noticeId'),
+  });
+  if ('refused' in planned) return c.text(`Not carried: ${planned.refused}`, 400);
   return c.redirect('/letter');
 });
 
