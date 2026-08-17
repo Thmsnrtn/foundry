@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **182 files / 1,491 tests**, all 4 ratchets hold.
+- **Validation:** `npm run check` green — **185 files / 1,516 tests**, all 4 ratchets hold.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -18,6 +18,13 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 - **Credentials are scoped to their purpose** (139). One product-wide secret
   authenticated three intakes with quite different consequences, including the
   outcome ledger. Found by reassessing rather than by continuing down a list.
+- **The public API is reachable, and safe to be.** Owner decision. It was
+  mounted, authenticated, and unusable — nothing could issue a key. Turning it
+  on required fixing three write routes gated by a read scope and an MCP
+  transport with no scope check at all.
+- **One authenticator for one credential.** `api_keys` had two readers with the
+  same exported name; the unmounted one was weaker, and a stale audit doc named
+  it as the live one.
 - **The whole ladder is generic now.** Four SaaS-shaped bindings were found and removed in sequence, each revealed by the previous one: the observation vocabulary (135), the effect guard (136), the authority-read, and the grantable-capability map. A dance school is carried end to end — owner report → Understood → Shadowing → resolved comparison → exact grant → Assisting → founder-authored notice → governed send → receipt → outcome.
 - **The loop closes.** Someone outside can finally say whether an effect achieved what it was for (137), so `outcome_status` can leave `unresolved` by fact rather than staying there by construction. HANDLED now means "it worked", not "it reached a rung".
 - **A company's own systems can raise work** (138), so the first rung is no longer fed only by a person.
@@ -72,8 +79,13 @@ None in flight. Last package closed and pushed.
 
 ## Blocked — owner
 
-**Nothing.** All four queued decisions are answered; `OWNER_DECISIONS_PENDING.md`
+**Nothing.** All five queued decisions are answered; `OWNER_DECISIONS_PENDING.md`
 records them as settled. Standing consequences:
+
+- The public API is **live**. Every new v1 route needs a scope a founder can
+  actually grant; the bidirectional gate enforces both directions. Transcript
+  ingestion is reachable, so real customer call content can arrive — it is
+  customer data AND untrusted external content, and is treated as both.
 
 - Support pilot: **hold for adapter breadth.** E4 stays unclaimed.
 - Recursive Foundry: the owner performs the **report only, not the grant** —
@@ -111,6 +123,9 @@ records them as settled. Standing consequences:
 
 Newest first. Trimmed as it ages — git history is the diary.
 
+- The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
+- Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
+- One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
 - Scoped ingest credentials (139); public surfaces stop selecting rows that carry secrets.
 - A second and third unfamiliar company through a governed effect, closing the outcome loop in both directions.
 - Both kernel-ignorance gates hardened — camelCase was folding the domain word out of existence.
@@ -159,10 +174,11 @@ Next, in order:
    Still: prefer a source a real responsibility already demands over a vendor
    checklist, and remember that every new intake needs a purpose in migration
    139's closed set, which is a migration and a review by design.
-2. **Keep reassessing.** The credential finding came from reading four intakes
-   together, not from building a fifth. Other subsystems have not had that
-   treatment: the authority surfaces, the founder-facing writes, and the
-   scheduler are each worth one deliberate side-by-side read.
+2. **Keep reassessing.** Two side-by-side reads have now paid: the four intakes
+   (one credential, three consequences) and the authority surfaces (two
+   authenticators, one weaker, and an audit doc that named them backwards).
+   **The founder-facing writes and the scheduler have NOT had that treatment
+   yet.** Do those next, one deliberate read each.
 3. **Executive cognition remains the genuine frontier** and remains gated on a
    consumed task with a real baseline. It must not be started by sprinkling
    model calls.
