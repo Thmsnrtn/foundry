@@ -2405,6 +2405,84 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '20 */6 * * *', // Every 6 hours
     description: 'Raise deterministic institutional judgments from real institutional state and observe conflicts later evidence has settled',
   },
+  // The outcome loop's external half had nowhere to land.
+  //
+  // Migration 137 gave `outcome_status` a supply, and `/ingest/effect-outcome`
+  // lets a system that can actually see the result report it. But
+  // `reconcileAssistedSupportEmail` — the only function that turns those
+  // observations into an outcome — had exactly one caller: the founder
+  // answering the question themselves in The Letter.
+  //
+  // So an outcome reported by a rota system, a delivery scan or a helpdesk sat
+  // in `signal_events` and changed nothing, and the effect stayed `unresolved`
+  // until a person happened to answer. `reconcile_after`, written by the
+  // dispatch path since the day it was built, was read by nobody.
+  //
+  // This pass buys NO privilege. It calls the same canonical function the
+  // founder's answer calls, which reads only independently recorded evidence
+  // and refuses to invent any. It reconciles only effects that ALREADY have an
+  // observation, so a run with nothing to learn changes nothing at all.
+  institutional_effect_reconciliation: {
+    fn: async () => {
+      const { reconcileAssistedSupportEmail } = await import(
+        '../services/institution/responsibility-assisted-email.js'
+      );
+      // Effects that dispatched, are still unresolved, and about which somebody
+      // outside has said something. The effect-id join is what makes this a
+      // reconciliation rather than a sweep: no observation, no work.
+      //
+      // The source/event-type filter is NOT what makes that safe — mutation
+      // testing showed removing it changes nothing, because a signal event with
+      // no matching `$.effect_id` is excluded already. It is here so this pass
+      // considers exactly the evidence `reconcileAssistedSupportEmail` itself
+      // accepts, rather than selecting rows that function would then ignore.
+      //
+      // Nor is the tenant clause what protects tenancy: that function is
+      // itself product-scoped and refuses an action belonging to someone else.
+      // Both are defence in depth on WHICH ROWS ARE CONSIDERED. Saying so
+      // keeps the safety story where it actually lives.
+      const pending = await query(
+        `SELECT DISTINCT o.id, o.product_id
+           FROM outbound_actions o
+           JOIN signal_events e ON e.product_id = o.product_id
+            AND json_extract(e.payload_json,'$.effect_id') = o.effect_id
+          WHERE o.responsibility_id IS NOT NULL
+            AND o.effect_id IS NOT NULL
+            AND (o.outcome_status IS NULL OR o.outcome_status = 'unresolved')
+            AND (e.source = 'effect_outcome_report'
+                 OR e.event_type IN ('support_reply_effective','support_reply_failed'))
+          ORDER BY o.executed_at`,
+        [],
+      );
+
+      let reconciled = 0; let verified = 0; let conflicting = 0;
+      for (const row of pending.rows as unknown as Array<Record<string, unknown>>) {
+        // One company's state must never stop another's reconciliation.
+        try {
+          const outcome = await reconcileAssistedSupportEmail(
+            String(row.product_id), String(row.id));
+          reconciled++;
+          if (outcome === 'verified_success' || outcome === 'verified_failure') verified++;
+          if (outcome === 'conflicting') conflicting++;
+        } catch (err) {
+          logger.error(
+            `institutional_effect_reconciliation failed for ${String(row.id)}: ${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'institutional_effect_reconciliation', productId: String(row.product_id) },
+          );
+        }
+      }
+      if (reconciled > 0) {
+        // Disagreement is worth saying out loud. It is a real state, it stays
+        // visible, and nothing here resolves it toward the convenient answer.
+        logger.info(
+          `institutional_effect_reconciliation: reconciled=${reconciled} verified=${verified} conflicting=${conflicting}`,
+          { jobName: 'institutional_effect_reconciliation' },
+        );
+      }
+    },
+    schedule: '10 * * * *', // Hourly
+    description: 'Turn independently reported effect outcomes into resolved outcome status; reconciles only effects that already have an observation',
+  },
   // Wave 2 / Council 16: Foundry's own customer onboarding sequence
   welcome_sequence_tick: {
     fn: async () => {
