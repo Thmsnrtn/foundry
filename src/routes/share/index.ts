@@ -49,8 +49,13 @@ shareRoutes.get('/share/:token', async (c) => {
   const token = c.req.param('token');
   if (!token || !/^[\w-]{8,64}$/.test(token)) return c.notFound();
 
+  // Named columns, not `p.*`. This page is public and unauthenticated, and the
+  // products row carries two secrets — `ingest_token` and `share_token` itself.
+  // Nothing rendered them, but a `SELECT *` on a public surface means the next
+  // person to add a field is one line away from handing an investor the
+  // credential their tools post metrics with. The fix is to not have them here.
   const productResult = await query(
-    `SELECT p.*, f.name as founder_name
+    `SELECT p.id, p.name, f.name as founder_name
      FROM products p
      JOIN founders f ON p.owner_id = f.id
      WHERE p.share_token = ?`,
