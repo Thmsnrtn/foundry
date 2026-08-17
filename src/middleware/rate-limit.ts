@@ -27,16 +27,52 @@ setInterval(() => {
 }, 60000);
 
 /**
+ * The caller's address, as reported by something the caller cannot write.
+ *
+ * The default key used to be `x-forwarded-for` verbatim, whole, and first in
+ * preference order. That header is APPENDED to by each hop: on Fly, which is
+ * where this runs, the platform adds the real address to the end of whatever
+ * the client sent. Reading the whole string therefore let a caller choose its
+ * own bucket — a random value per request is a fresh counter every time and no
+ * limit at all — and filled a store whose emergency eviction resets the
+ * counters of everyone else in it.
+ *
+ * Order of trust: the platform's own header, then the CDN's, then the LAST hop
+ * of X-Forwarded-For, which is the entry the nearest trusted proxy wrote. Only
+ * the front of that list is attacker-controlled.
+ */
+export function clientIp(c: { req: { header: (name: string) => string | undefined } }): string {
+  const fly = c.req.header('fly-client-ip');
+  if (fly) return fly.trim();
+  const cf = c.req.header('cf-connecting-ip');
+  if (cf) return cf.trim();
+  const xff = c.req.header('x-forwarded-for');
+  if (xff) {
+    const hops = xff.split(',').map((h) => h.trim()).filter(Boolean);
+    if (hops.length) return hops[hops.length - 1]!;
+  }
+  return 'unknown';
+}
+
+/**
  * Rate limiting middleware factory.
  * @param maxRequests Maximum requests per window
  * @param windowMs Window size in milliseconds
  * @param keyFn Function to extract the rate limit key from the request
+ * @param namespace Distinguishes this limiter's counters from every other
+ *   limiter's. Required, because omitting it is not a smaller mistake: four
+ *   limiters previously shared the default IP key and therefore ONE counter, so
+ *   fifty page views spent the ten-request login allowance and the 120/min API
+ *   budget was really "120 minus whatever else that address did".
  */
-export function rateLimit(maxRequests: number, windowMs: number, keyFn?: (c: any) => string) {
+export function rateLimit(
+  maxRequests: number,
+  windowMs: number,
+  keyFn?: (c: any) => string,
+  namespace = 'ip',
+) {
   return createMiddleware(async (c, next) => {
-    const key = keyFn
-      ? keyFn(c)
-      : c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
+    const key = keyFn ? keyFn(c) : `${namespace}:${clientIp(c)}`;
 
     const now = Date.now();
     let entry = store.get(key);
@@ -61,11 +97,11 @@ export function rateLimit(maxRequests: number, windowMs: number, keyFn?: (c: any
   });
 }
 
-/** Standard rate limits */
-export const publicRateLimit = rateLimit(60, 60000);   // 60 req/min for public routes
-export const apiRateLimit = rateLimit(120, 60000);      // 120 req/min for authenticated API
-export const webhookRateLimit = rateLimit(300, 60000);  // 300 req/min for webhooks
-export const authRateLimit = rateLimit(10, 60000);      // 10 req/min for auth endpoints
+/** Standard rate limits. Each namespaced, so they count their own traffic. */
+export const publicRateLimit = rateLimit(60, 60000, undefined, 'public');    // 60 req/min
+export const apiRateLimit = rateLimit(120, 60000, undefined, 'api');         // 120 req/min
+export const webhookRateLimit = rateLimit(300, 60000, undefined, 'webhook'); // 300 req/min
+export const authRateLimit = rateLimit(10, 60000, undefined, 'auth');        // 10 req/min
 
 /**
  * AI rate limit — 30 requests / hour per founder. Front-stop to the
@@ -81,8 +117,7 @@ export const authRateLimit = rateLimit(10, 60000);      // 10 req/min for auth e
 export const aiRateLimit = rateLimit(30, 60 * 60 * 1000, (c) => {
   const founder = c.get('founder' as never) as { id?: string } | undefined;
   if (founder?.id) return `ai:founder:${founder.id}`;
-  const ip = c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
-  return `ai:ip:${ip}`;
+  return `ai:ip:${clientIp(c)}`;
 });
 
 /**
@@ -132,6 +167,5 @@ export const apiModelRateLimit = rateLimit(60, 60 * 60 * 1000, (c) => {
 export const auditRateLimit = rateLimit(6, 60 * 60 * 1000, (c) => {
   const founder = c.get('founder' as never) as { id?: string } | undefined;
   if (founder?.id) return `audit:founder:${founder.id}`;
-  const ip = c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
-  return `audit:ip:${ip}`;
+  return `audit:ip:${clientIp(c)}`;
 });

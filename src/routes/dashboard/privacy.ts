@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { clientIp } from '../../middleware/rate-limit.js';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
@@ -390,7 +391,10 @@ privacySettings.post('/privacy/consent', async (c) => {
     return c.redirect('/privacy');
   }
 
-  const ip = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? undefined;
+  // The address is stored as EVIDENCE of the consent, so it has to be one the
+  // consenting browser could not have written itself. The raw header is
+  // client-supplied; `clientIp` reads the hop a trusted proxy added.
+  const ip = clientIp(c);
 
   await recordConsent(ctx.productId, founder.id, consentType, granted, ip);
 
