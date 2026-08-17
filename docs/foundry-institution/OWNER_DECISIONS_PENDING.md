@@ -12,7 +12,7 @@ around each item.
 
 ---
 
-# ALL FOUR DECISIONS ANSWERED
+# ALL FIVE DECISIONS ANSWERED
 
 The owner answered every queued decision. Nothing is pending. Recorded here as
 settled; the record of what was asked and why is in git history.
@@ -70,3 +70,25 @@ itself.
 
 **Standing rule for future work:** do not add a mechanism that lets effect
 kinds be created at runtime, by a company, an integration, or a model.
+
+---
+
+## RESOLVED 5 — The public API: **MAKE IT LIVE**
+
+`/api/v1` and the Fathom/Fireflies transcript webhooks were mounted,
+authenticated, and unreachable by anyone — nothing could issue a key, and the
+endpoint the dashboard advertised did not exist and could not have.
+
+The owner chose to make it live rather than leave it dormant or delete it.
+
+**What this meant in practice.** Turning it on required first fixing what would
+otherwise have shipped with it: three write routes gated by `agents:read`, and
+an MCP transport with no scope check at all. Issuance is built like the scoped
+ingest credentials — explicit scopes from a closed set, mandatory expiry,
+revocable, evidence-recorded, hash-only storage.
+
+**Standing consequence:** the API is now a real external surface. Every new v1
+route needs a scope that a founder can actually grant, and the bidirectional
+gate enforces that in both directions. Transcript ingestion is reachable, which
+means real customer call content can now arrive and be analysed — that path is
+customer data and untrusted external content, and must be treated as both.
