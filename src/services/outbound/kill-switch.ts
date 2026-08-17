@@ -3,6 +3,23 @@
 // Refuses outbound when the product is paused, the specific tool is disabled,
 // or the calling agent is paused. Reads existing fields plus the new
 // products.disabled_tools JSON column added in migration 068.
+//
+// TWO PAUSE AXES, BOTH LOAD-BEARING. `products.status` is the archive axis: the
+// record is gone. `products.scp_status` is the acting axis: the company is not
+// operating right now. Three separate places write `scp_status='paused'` — a
+// cancelled Stripe subscription, a founder pausing from settings, and the
+// hourly entitlement sweep that enforces "unpaid means read-only" — and until
+// this file read it, none of them stopped a single outbound effect. The SCP
+// scheduler honoured the pause, so no NEW agent work started; but every job
+// that emails on its own timer (red daily, yellow pulse, DNA nudge, behavioural
+// triggers) filtered on `status='active'` and sent anyway. The pause looked
+// total from the code that wrote it and was not.
+//
+// It is checked HERE rather than at those call sites deliberately. This is the
+// single door every outbound effect passes through, and the alternative —
+// adding `AND scp_status='active'` to a dozen SELECTs — is the exact shape this
+// codebase keeps finding broken: several implementations of one rule, drifting
+// apart, with the weakest one live.
 // =============================================================================
 
 import { query } from '../../db/client.js';
@@ -16,9 +33,18 @@ export interface KillSwitchResult {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/** SCP states in which the company is not acting outward.
+ *
+ * Named rather than inverted — `scp_status <> 'active'` would also catch
+ * 'provisioning', and onboarding email is sent before a product is ever marked
+ * active. Blocking signup in order to enforce billing is not the trade the
+ * owner decision asked for. */
+const NOT_ACTING = new Set(['paused', 'archived']);
+
 /**
  * Check whether (product, tool, agent) is allowed to invoke. Blocks on:
- *   - product status != 'active' (product-wide pause)
+ *   - product status != 'active' (the record is archived or deleted)
+ *   - product scp_status in ('paused','archived') (the company is not acting)
  *   - tool listed in products.disabled_tools (per-tool kill)
  *   - agent_instances row for (product, agent) with status='paused'
  *
@@ -30,7 +56,7 @@ export async function checkKillSwitch(
   agentName?: string | null
 ): Promise<KillSwitchResult> {
   const productResult = await query(
-    `SELECT status, disabled_tools FROM products WHERE id = ?`,
+    `SELECT status, scp_status, disabled_tools FROM products WHERE id = ?`,
     [productId]
   );
   const productRow = productResult.rows[0] as Record<string, unknown> | undefined;
@@ -41,6 +67,16 @@ export async function checkKillSwitch(
     return {
       blocked: true,
       reason: `product status is '${productRow.status}'`,
+    };
+  }
+  // A missing scp_status does not block. The column has been on products since
+  // migration 017 with a default, so NULL means a row older than the SCP model
+  // rather than a company anybody paused — and refusing outbound for those
+  // would silence accounts nobody made a decision about.
+  if (NOT_ACTING.has(String(productRow.scp_status ?? ''))) {
+    return {
+      blocked: true,
+      reason: `company is ${String(productRow.scp_status)} — Foundry is not acting for this product`,
     };
   }
   if (isToolDisabledForRow(productRow.disabled_tools, tool)) {

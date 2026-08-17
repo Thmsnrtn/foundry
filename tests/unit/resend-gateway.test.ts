@@ -41,6 +41,11 @@ async function setupSchema(): Promise<void> {
       name TEXT NOT NULL,
       owner_id TEXT NOT NULL REFERENCES founders(id),
       status TEXT DEFAULT 'active',
+      -- The acting axis, distinct from the archive axis above. Present because
+      -- the real table has it and the kill-switch reads it: a fixture without
+      -- it would let a paused company pass every assertion in this file.
+      scp_status TEXT DEFAULT 'active'
+        CHECK(scp_status IN ('provisioning','active','paused','archived')),
       disabled_tools TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
