@@ -156,6 +156,37 @@ const reportObligationSection = (options: Array<[string, string]>) => html`
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll start keeping track of it. I won't do anything about it — I'd need to understand it first, and then you'd have to give me permission separately.</div>
   </div>`;
 
+// What the company actually counts.
+//
+// Until a company tells Foundry what to listen for, the only readings it can
+// admit are twelve SaaS metrics — so a boatyard or a dance school could be
+// understood and then never watched. This asks for the founder's own words and
+// a short key their tools can post under.
+//
+// Declaring something grants nothing. It says what may be observed, not what
+// Foundry may do about it.
+const observationChannelSection = (
+  existing: Array<{ channelKey: string; label: string; unit: string | null; revoked: boolean }>,
+) => html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Something you count</div>
+    ${existing.filter((c) => !c.revoked).map((c) => html`
+      <div style="font-size:0.82rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        ${c.label}${c.unit ? html` <span style="color:var(--text-muted);">(${c.unit})</span>` : ''}
+        <span style="color:var(--text-muted);font-size:0.72rem;"> — post as <code>${c.channelKey}</code></span>
+      </div>`)}
+    <form method="POST" action="/letter/company/observation-channel"
+      style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;">
+      <input name="label" required maxlength="80" placeholder="What do you count? (e.g. boats serviced this week)"
+        style="flex:1;min-width:220px;" />
+      <input name="unit" maxlength="24" placeholder="Of what? (optional)" style="width:130px;" />
+      <input name="channel_key" required maxlength="40" placeholder="short_name_for_tools"
+        style="width:170px;" />
+      <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Track it</button>
+    </form>
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">Your tools can send me this number and I'll notice when it moves. Telling me what you count does not let me do anything about it.</div>
+  </div>`;
+
 // "Tell me something important." The founder-initiated half of the same
 // elicitation path — the shapes offered are exactly the facts an institutional
 // consumer is currently waiting on, never a list of fields that happen to
@@ -312,6 +343,8 @@ letterRoutes.get('/letter', async (c) => {
   const factOpportunities = await listFounderFactOpportunities(ctx.productId);
   const { REPORTABLE_OBLIGATIONS, OBLIGATION_LABELS } = await import('../../services/founder/company-report.js');
   const obligationOptions: Array<[string, string]> = REPORTABLE_OBLIGATIONS.map((k) => [k, OBLIGATION_LABELS[k]]);
+  const { getObservationChannels } = await import('../../services/institution/company-observation.js');
+  const observationChannels = await getObservationChannels(ctx.productId);
   // A day is not quiet if Foundry is blocked on something only the founder
   // knows. Hiding the question behind "nothing needs you" would be hiding
   // uncertainty, which founder UX may never do.
@@ -360,6 +393,7 @@ letterRoutes.get('/letter', async (c) => {
       ${evidenceQuestionSection(evidenceQuestion)}
       ${permissionSection(assistingCandidates)}
       ${reportObligationSection(obligationOptions)}
+      ${observationChannelSection(observationChannels)}
       ${tellMeSection(factOpportunities)}
       ${judgmentSection(materialJudgments)}
       ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
@@ -769,6 +803,35 @@ letterRoutes.post('/letter/company/report', async (c) => {
     productId: ctx.productId, founderId: founder.id as string, obligationKind, what,
   });
   if (!reported) return c.text('Report refused', 403);
+  return c.redirect('/letter');
+});
+
+// The company says what it actually counts.
+//
+// Independent observation used to be admissible only for twelve SaaS metrics,
+// so a company whose reality is boats serviced or classes taught could reach
+// Understood and never reach Shadowing. This is how a company tells Foundry
+// what to listen for, in its own words. Outside systems then post readings to
+// the ordinary ingest endpoint under this key.
+//
+// Declaring something grants nothing. It says what may be observed, not what
+// Foundry may do.
+letterRoutes.post('/letter/company/observation-channel', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const label = String(body.label ?? '').trim();
+  const channelKey = String(body.channel_key ?? '').trim();
+  const unit = String(body.unit ?? '').trim() || undefined;
+  if (!label) return c.text('Say what you count', 400);
+
+  const { registerObservationChannel } = await import(
+    '../../services/institution/company-observation.js');
+  const channel = await registerObservationChannel({
+    productId: ctx.productId, founderId: founder.id as string, channelKey, label, unit,
+  });
+  if (!channel) return c.text('That name will not work — use lower-case letters, numbers and underscores', 400);
   return c.redirect('/letter');
 });
 

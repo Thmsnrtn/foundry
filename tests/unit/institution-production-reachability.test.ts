@@ -163,6 +163,11 @@ describe('institutional reachability', () => {
       ['company evidence intake', 'emitSignalEvent', 'services/scp/events/dispatcher.ts'],
       ['responsibility discovery', 'discoverResponsibilityFromSignal', 'services/institution/discovery.ts'],
       ['founder evidence', 'recordFounderEvidenceAnswer', 'services/institution/founder-evidence.ts'],
+      // Without a production caller for the declaration, a company could never
+      // tell Foundry what to listen for, and independent observation would
+      // silently remain SaaS-only however general the machinery underneath.
+      ['company observation channel', 'registerObservationChannel', 'services/institution/company-observation.ts'],
+      ['company observation intake', 'recordCompanyObservations', 'services/institution/company-observation.ts'],
       ['understanding advancement', 'earnResponsibilityUnderstanding', 'services/institution/responsibility-understanding.ts'],
       ['expectation + shadowing entry', 'beginExternalMetricShadowing', 'services/institution/external-shadowing.ts'],
       ['independent observation', 'recordExternalMetricObservations', 'services/institution/external-observation.ts'],
