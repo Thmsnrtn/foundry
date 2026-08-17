@@ -238,6 +238,51 @@ ingestRoutes.post('/ingest/:token', async (c) => {
 // The key establishes both tenant and channel, so nothing about identity is
 // taken from the body — there is no channel field to forge. An adapter for any
 // helpdesk, mailbox, or form is an ordinary caller.
+// One of the company's own systems says something needs handling.
+//
+// Until migration 138 the ladder's first rung was fed by a person or by four
+// SaaS-shaped signals, so the more a company had already automated, the less
+// Foundry could see. A rota, a till, a delivery scan or a monitor can now raise
+// work — choosing from the same closed vocabulary the founder chooses from.
+//
+// Provenance is not laundered: this is recorded as an external report, never as
+// the founder's word, and the database refuses a payload that tries to carry a
+// founder id. Identity is the token; the body does not get to claim one.
+ingestRoutes.post('/ingest/company-report/:token', async (c) => {
+  const token = c.req.param('token');
+  if (!token || !/^[\w-]{8,64}$/.test(token)) return c.json({ error: 'Invalid token' }, 400);
+
+  const productResult = await query('SELECT id FROM products WHERE ingest_token = ?', [token]);
+  if (productResult.rows.length === 0) return c.json({ error: 'Unknown ingest token' }, 401);
+  const productId = (productResult.rows[0] as Record<string, string>).id;
+
+  let raw: unknown;
+  try { raw = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+  const body = (raw ?? {}) as Record<string, unknown>;
+
+  const { reportExternalObligation, REPORTABLE_OBLIGATIONS } = await import(
+    '../../services/founder/company-report.js');
+  const reported = await reportExternalObligation({
+    productId,
+    reportedBy: String(body.reported_by ?? 'unnamed_system').slice(0, 120),
+    obligationKind: String(body.obligation_kind ?? ''),
+    what: String(body.what ?? ''),
+  });
+  if (!reported) {
+    return c.json({
+      error: 'Report refused', accepted_kinds: REPORTABLE_OBLIGATIONS,
+      note: 'what is required and bounded to 200 characters; obligation_kind must be one of accepted_kinds',
+    }, 422);
+  }
+  // A report is evidence, never permission. Saying so in the response keeps an
+  // integration author from concluding otherwise.
+  return c.json({
+    status: 'accepted', signal_id: reported.signalId,
+    responsibility_id: reported.responsibility?.id ?? null,
+    note: 'recorded as evidence; nothing is authorised by reporting it',
+  });
+});
+
 // An outside system reports whether an effect achieved what it was for.
 //
 // The other half of migration 137's supply: the founder can answer from The

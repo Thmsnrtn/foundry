@@ -43,7 +43,12 @@ export async function discoverResponsibilityFromSignal(
   if (!evidence.rows.length) return null;
   const row = evidence.rows[0] as Record<string, unknown>;
   let contract = SIGNAL_RESPONSIBILITIES[String(row.event_type)];
-  if (!contract && String(row.source) === 'founder_report') {
+  // A person said it, or one of the company's own systems did. Both state the
+  // kind explicitly from the same closed set, and both are refused by the
+  // database if they do not. What differs is provenance, which is preserved in
+  // the evidence rather than flattened here — a rota system noticing a class
+  // has no teacher is not the founder saying so, and the record says which.
+  if (!contract && ['founder_report', 'external_company_report'].includes(String(row.source))) {
     // The founder stated, explicitly and from a closed set, what kind of
     // obligation this is. Nothing is inferred from prose: an unrecognised kind
     // is refused by migration 126 before it reaches here, and a report without

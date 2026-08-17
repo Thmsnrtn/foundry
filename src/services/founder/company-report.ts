@@ -90,3 +90,40 @@ export async function reportCompanyObligation(input: {
     : null;
   return { signalId, responsibility };
 }
+
+/**
+ * One of the company's own systems reports something that must be handled.
+ *
+ * The same closed vocabulary the founder uses, and the same consequence: the
+ * responsibility enters at Visible with nothing granted. Provenance is NOT
+ * laundered — this is recorded under its own source, so a rota system noticing
+ * a class has no teacher is never mistaken for the founder saying it, and the
+ * database refuses any payload that tries to carry a founder id.
+ *
+ * Identity is the ingest token. The body does not get to claim one.
+ */
+export async function reportExternalObligation(input: {
+  productId: string; reportedBy: string; obligationKind: string; what: string;
+}): Promise<{ signalId: string; responsibility: Responsibility | null } | null> {
+  const what = input.what.trim();
+  const reportedBy = input.reportedBy.trim();
+  if (!what || what.length > 200 || !reportedBy) return null;
+  if (!isReportableObligation(input.obligationKind)) return null;
+
+  const signalId = await emitSignalEvent(input.productId, {
+    source: 'external_company_report',
+    event_type: `external_reported:${input.obligationKind}`,
+    severity: 'medium',
+    payload: { obligation_kind: input.obligationKind, what, reported_by: reportedBy },
+    summary: what,
+  });
+
+  const discovered = await query(
+    'SELECT id FROM institutional_responsibilities WHERE product_id=? AND discovery_evidence_ref=?',
+    [input.productId, `signal_event:${signalId}`],
+  );
+  const responsibility = discovered.rows.length
+    ? await getResponsibility(input.productId, String((discovered.rows[0] as Record<string, unknown>).id))
+    : null;
+  return { signalId, responsibility };
+}

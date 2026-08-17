@@ -93,6 +93,9 @@
 
 
 
+
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -303,6 +306,7 @@
     'correction',        -- Founder changed what the agent proposed
     'decision_made', 'decision_outcome',
     'delivery','maintenance','development','operational_dependency');
+    'delivery','maintenance','development','operational_dependency');
     'dependencies','systems','current_carrier','commitments','authority_requirements',
     'designed','running','paused','completed','stopped_early','abandoned'
     'direct','experiment','contribution','protective'
@@ -329,6 +333,7 @@
     'proposed','approved','active','completed','abandoned','disproven'
     'purpose','desired_outcome','success_conditions','failure_conditions','operating_constraints',
     'recovery_protocol'        -- What we do in RED state
+    'recurring_work','customer_commitment','exception','revenue_collection',
     'recurring_work','customer_commitment','exception','revenue_collection',
     'resource_demand'))
     'retention','messaging','feature','operations','other'
@@ -465,6 +470,7 @@
     OR json_valid(NEW.evidence_refs_json)=0
     OR json_valid(NEW.responsibility_refs_json)=0
     OR length(coalesce(json_extract(NEW.payload_json,'$.body'),''))>8192;
+    OR length(coalesce(json_extract(NEW.payload_json,'$.what'),''))>200
     OR trim(coalesce(json_extract(NEW.payload_json,'$.body'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.channel_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.check'),''))=''
@@ -476,12 +482,15 @@
     OR trim(coalesce(json_extract(NEW.payload_json,'$.judgment_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.message_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.obligation_kind'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.obligation_kind'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.origin'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.predicate'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.reported_by'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.reporter'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.request_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.result'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.statement'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.what'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.what'),''))=''
     SELECT 'founder', NEW.founder_id, NEW.date, 0, NEW.reserved_cents, NEW.updated_at WHERE NEW.founder_id IS NOT NULL
     SELECT 'product', NEW.product_id, NEW.date, 0, NEW.reserved_cents, NEW.updated_at WHERE NEW.product_id IS NOT NULL
@@ -624,6 +633,7 @@
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
+    json_valid(NEW.payload_json)=0
     outcome_ref = NEW.outcome_ref,
     spent_cents = spent_cents + COALESCE(NEW.actual_cents, 0),
     spent_cents = spent_cents + COALESCE(NEW.actual_cents, 0),
@@ -638,6 +648,7 @@
     || json_extract(NEW.payload_json,'$.direction');
     || json_extract(NEW.payload_json,'$.effect_id') || ':'
     || json_extract(NEW.payload_json,'$.field') || ':'
+    || json_extract(NEW.payload_json,'$.obligation_kind');
     || json_extract(NEW.payload_json,'$.verdict');
    SELECT 1 FROM signal_events s WHERE refs.value='signal_event:'||s.id AND s.product_id=NEW.product_id));
    WHERE NEW.authority_ref IS NOT NULL AND NOT EXISTS (
@@ -714,6 +725,7 @@
   -- A new grant is a new authority identity. Reviving a revoked one is not a
   -- A proposal answers one real message of this company. There is no way to
   -- A selected alternative must be one Foundry actually represented at
+  -- A tool may say what it observed. It may not say who said it.
   -- A verified outcome requires BOTH independent verification and proof that
   -- APNs (iOS)
   -- Access control
@@ -751,6 +763,7 @@
   -- Did the bytes actually on disk match what was intended? Never inferred
   -- Dimension scores
   -- Each agent writes its key finding as it completes (JSON object, agent_name -> finding)
+  -- Every absence coalesced, as always: `X NOT IN (...)` is NULL when X is
   -- Every absence is coalesced. `X NOT IN (...)` is NULL when X is missing, and
   -- Every predicate coalesces its NULL. A guard whose condition evaluates to
   -- Every predicate coalesces its absence. A guard whose condition evaluates to
@@ -821,6 +834,7 @@
   -- The effect must be this company's own, and must have actually executed. An
   -- The event type is derived from the reading, so a comparison matches on what
   -- The event type is derived from the report, so a later comparison matches on
+  -- The event type is derived from the report, so what was claimed and what is
   -- The evidence row must be this company's own customer-message observation.
   -- The founder's own words for it, for founder-facing surfaces only.
   -- The grounding must be this product's own current claims. A disposition
@@ -829,6 +843,7 @@
   -- The message must be this company's, and the responsibility on the plan must
   -- The observer may not see, cite, or echo the expectation it will be
   -- The plan must carry a real proposal, authored for that same message.
+  -- The same generic operational vocabulary migration 126 established, mirrored
   -- The signal that says "stop iterating" when yield drops below threshold.
   -- The source's own clock, kept apart from ours. A delayed delivery is late,
   -- The target must fall inside a granted prefix.
@@ -846,6 +861,7 @@
   -- a NULL condition never fires a RAISE — the recurring way an absent field
   -- a founder assertion, the whole report is refused rather than stored with
   -- a minimum: an exact match, so widening consequence is never a side effect
+  -- a sector-specific kind at runtime however well meant.
   -- against, so an observation that names one is not external.
   -- any company can have; none of them names an industry. Widening the set
   -- are not a verified outcome, and neither is a successful write.
@@ -868,6 +884,7 @@
   -- company-wide predicates the owner named (cash constraint, operating
   -- compared against. Verification that can read the expectation is
   -- conclusions — never claims a message can carry.
+  -- deliberately rather than shared: widening it means editing a migration,
   -- evidence provenance this contract governs.
   -- evidence row must be this company's own — a channel justified by another
   -- evidence, so its shape is bounded: lower-case, starts with a letter, and
@@ -889,6 +906,7 @@
   -- justified by another tenant's evidence is not a justification.
   -- means editing a migration, which is inside the constitutional ring — so a
   -- message cannot be planned against another, and one responsibility cannot
+  -- missing, and a NULL condition never fires a RAISE.
   -- neither can reach the other.
   -- not be asked company-wide and a company-wide one may not be pinned to a
   -- not recent, and conflating the two would make evidence ordering a lie.
@@ -900,6 +918,7 @@
   -- question that was never asked, another tenant's question, or one already
   -- re-grant; it is erasing that the founder ever said stop.
   -- reality a reading described. Mirrors OBSERVABLE_FIELDS; a test asserts the
+  -- recorded cannot disagree.
   -- reference is exactly this consent, and a consent that is currently valid,
   -- refused, and so is a broad prefix that would contain part of the ring.
   -- repository is not a bound scope.
@@ -941,6 +960,7 @@
   -- was refused or revoked has no result to report.
   -- well-meaning integration.
   -- what was reported rather than on a label the caller chose.
+  -- which is inside the constitutional ring, so an integration cannot introduce
   -- wrote it, and neither the founder nor the institution could tell which
   -- { company_name, problem, solution, target_customer, revenue_model,
   -- { metrics_snapshot_date, integration_events_count, unread_messages_count,
@@ -1103,6 +1123,10 @@
   SELECT RAISE(ABORT,'external_observation:event_type_mismatch')
   SELECT RAISE(ABORT,'external_observation:field_invalid')
   SELECT RAISE(ABORT,'external_observation:payload_invalid') WHERE
+  SELECT RAISE(ABORT,'external_report:event_type_mismatch')
+  SELECT RAISE(ABORT,'external_report:identity_forged')
+  SELECT RAISE(ABORT,'external_report:kind_invalid')
+  SELECT RAISE(ABORT,'external_report:payload_invalid') WHERE
   SELECT RAISE(ABORT,'external_shadowing:observation_not_independent') WHERE EXISTS (
   SELECT RAISE(ABORT,'external_shadowing:observation_predates_expectation') WHERE EXISTS (
   SELECT RAISE(ABORT,'founder_assertion:authority_smuggled') WHERE
@@ -1251,6 +1275,7 @@
   WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
   WHERE NEW.event_type <> 'effect_outcome:'
   WHERE NEW.event_type <> 'external_metric:'
+  WHERE NEW.event_type <> 'external_reported:'
   WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
   WHERE NEW.intake_key IS NULL OR length(NEW.intake_key)<24;
   WHERE NEW.label IS NULL OR trim(NEW.label)='';
@@ -1268,6 +1293,7 @@
   WHERE apns_device_token IS NOT NULL;
   WHERE coalesce(json_extract(NEW.payload_json,'$.direction'),'absent') NOT IN ('rose','fell','held');
   WHERE coalesce(json_extract(NEW.payload_json,'$.field'),'absent') NOT IN (
+  WHERE coalesce(json_extract(NEW.payload_json,'$.obligation_kind'),'absent') NOT IN (
   WHERE coalesce(json_extract(NEW.payload_json,'$.reporter'),'') LIKE 'institution:%';
   WHERE conflict_identity IS NOT NULL;
   WHERE decision_acted_at IS NULL;
@@ -1275,6 +1301,7 @@
   WHERE id = NEW.responsibility_id AND state = NEW.from_state;
   WHERE id=NEW.responsibility_id AND product_id=NEW.product_id;
   WHERE inbound_message_id IS NOT NULL AND status<>'cancelled';
+  WHERE json_extract(NEW.payload_json,'$.founder_id') IS NOT NULL;
   WHERE json_extract(NEW.payload_json,'$.obligation_kind') NOT IN (
   WHERE resolved_at IS NULL;
   WHERE trim(COALESCE(NEW.label,''))=''
@@ -4528,6 +4555,7 @@ BEFORE INSERT ON signal_events
 BEFORE INSERT ON signal_events WHEN NEW.source='customer_message_ingest'
 BEFORE INSERT ON signal_events WHEN NEW.source='development_verification'
 BEFORE INSERT ON signal_events WHEN NEW.source='effect_outcome_report'
+BEFORE INSERT ON signal_events WHEN NEW.source='external_company_report'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_assertion'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_reply_proposal'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_report'
@@ -4545,6 +4573,7 @@ BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON governed_effect_kinds
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5236,6 +5265,7 @@ CREATE TRIGGER development_change_plan_immutable_binding
 CREATE TRIGGER development_shadow_observation_independence_guard
 CREATE TRIGGER development_verification_observation_guard
 CREATE TRIGGER effect_outcome_report_guard
+CREATE TRIGGER external_company_report_guard
 CREATE TRIGGER external_metric_observation_guard
 CREATE TRIGGER external_shadow_observation_independence_guard
 CREATE TRIGGER founder_assertion_guard
@@ -5313,6 +5343,7 @@ CREATE UNIQUE INDEX idx_role_permissions_unique ON role_permissions(role, permis
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
 END;
 END;
 END;

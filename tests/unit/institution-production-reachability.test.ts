@@ -166,6 +166,10 @@ describe('institutional reachability', () => {
       // Without a production caller for the declaration, a company could never
       // tell Foundry what to listen for, and independent observation would
       // silently remain SaaS-only however general the machinery underneath.
+      // A company's own systems raising work. Without a production caller the
+      // first rung is fed by a person or by nothing, and the more a company has
+      // automated the less Foundry can see.
+      ['external company report', 'reportExternalObligation', 'services/founder/company-report.ts'],
       ['company observation channel', 'registerObservationChannel', 'services/institution/company-observation.ts'],
       ['company observation intake', 'recordCompanyObservations', 'services/institution/company-observation.ts'],
       ['understanding advancement', 'earnResponsibilityUnderstanding', 'services/institution/responsibility-understanding.ts'],
