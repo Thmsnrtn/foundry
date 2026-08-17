@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **185 files / 1,516 tests**, all 4 ratchets hold.
+- **Validation:** `npm run check` green — **187 files / 1,528 tests**, all 4 ratchets hold.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -26,7 +26,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
   same exported name; the unmounted one was weaker, and a stale audit doc named
   it as the live one.
 - **The whole ladder is generic now.** Four SaaS-shaped bindings were found and removed in sequence, each revealed by the previous one: the observation vocabulary (135), the effect guard (136), the authority-read, and the grantable-capability map. A dance school is carried end to end — owner report → Understood → Shadowing → resolved comparison → exact grant → Assisting → founder-authored notice → governed send → receipt → outcome.
-- **The loop closes.** Someone outside can finally say whether an effect achieved what it was for (137), so `outcome_status` can leave `unresolved` by fact rather than staying there by construction. HANDLED now means "it worked", not "it reached a rung".
+- **The loop closes, and closes itself.** Someone outside can say whether an effect achieved what it was for (137), and an hourly pass now turns those reports into resolved outcomes. Before it, the only caller of reconciliation was the founder answering by hand — the external half had nowhere to land.
 - **A company's own systems can raise work** (138), so the first rung is no longer fed only by a person.
 - **The ladder is no longer SaaS-only.** Independent observation was admissible for twelve hard-coded metrics backed by physical columns, in the service *and* in a database trigger. A company now declares what it counts, in its own words, and the kernel treats it as an opaque named quantity. A boatyard reaches Shadowing in test.
 - **Recursive Foundry:** the owner-named schema-snapshot responsibility is carried end to end locally — owner report → Understood → Shadowing → Assisting → governed effect → independent verification. `recursive-institution-v1` reports ordinary on all thirteen dimensions, earned by exercise.
@@ -126,6 +126,8 @@ Newest first. Trimmed as it ages — git history is the diary.
 - The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
 - Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
 - One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
+- The outcome loop's external half lands: an hourly reconciliation pass, where reports previously sat unread.
+- CSRF coverage gated rather than remembered; two of my own gates found weaker than they read.
 - Scoped ingest credentials (139); public surfaces stop selecting rows that carry secrets.
 - A second and third unfamiliar company through a governed effect, closing the outcome loop in both directions.
 - Both kernel-ignorance gates hardened — camelCase was folding the domain word out of existence.
@@ -174,11 +176,13 @@ Next, in order:
    Still: prefer a source a real responsibility already demands over a vendor
    checklist, and remember that every new intake needs a purpose in migration
    139's closed set, which is a migration and a review by design.
-2. **Keep reassessing.** Two side-by-side reads have now paid: the four intakes
-   (one credential, three consequences) and the authority surfaces (two
-   authenticators, one weaker, and an audit doc that named them backwards).
-   **The founder-facing writes and the scheduler have NOT had that treatment
-   yet.** Do those next, one deliberate read each.
+2. **Keep reassessing — four reads, four results.** The intakes (one
+   credential, three consequences), the authority surfaces (two
+   authenticators, one weaker, and an audit doc naming them backwards), the
+   founder-facing writes (CSRF complete but unenforced — now gated), and the
+   scheduler (79 jobs, none consuming the outcome loop). **Not yet read
+   side-by-side:** the reconstruction/claims layer, the evidence ladder's own
+   readers, and the integrations fabric. One deliberate read each.
 3. **Executive cognition remains the genuine frontier** and remains gated on a
    consumed task with a real baseline. It must not be started by sprinkling
    model calls.
