@@ -44,7 +44,7 @@ const classifications = new Map(Object.entries({
   'src/services/ai/client.ts|templated_post': ['control_path', 'the central AI client — atomic reservation before dispatch, settlement or release after'],
   'src/services/integration/github-gateway.ts|templated_post': ['governed', 'GitHub capability handlers'],
   'src/services/integration/stripe-gateway.ts|templated_post': ['governed', 'Stripe capability handlers'],
-  'src/services/notifications/push.ts|templated_post': ['unreachable', 'APNs/FCM device push with no importer anywhere in src/ — real devices, no caller. Kept rather than deleted because it is complete and working, and classified so that wiring it up has to be a deliberate act that changes this line'],
+  'src/services/notifications/push.ts|templated_post': ['governed', 'APNs/FCM device push, registered as the send_push gateway capability. It was classified unreachable — registration routes live, no sender anywhere — and the owner chose to wire it rather than remove the surface. Wiring it was the deliberate act this line asked for: it now inherits the kill-switch, the entitlement pause, dedup and audit from the same door as email, and the live caller is the risk-state transition'],
   'src/services/scp/briefing/email-digest.ts|external_post': ['direct', 'Resend/SendGrid weekly digest delivery'],
   'src/services/scp/actions/executor.ts|external_post': ['control_path', 'approved Linear action with durable receipt'],
   'src/services/scp/actions/executor.ts|dynamic_webhook_post': ['control_path', 'approved custom webhook with SSRF guard and durable receipt'],

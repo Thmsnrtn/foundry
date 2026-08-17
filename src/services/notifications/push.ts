@@ -1,11 +1,33 @@
 // =============================================================================
-// FOUNDRY — Notification Infrastructure
-// Web Push (VAPID), Slack webhooks, and outbound webhooks.
+// FOUNDRY — Push notifications (Web Push / APNs)
+//
+// MOUNTED, NEVER LIVE. `POST /api/push/register` and `/api/push/preferences`
+// have been accepting device registrations and per-type preferences the whole
+// time, and nothing has ever sent a push: `sendPushNotification` had no callers
+// anywhere in the tree. Founders could opt into a channel that had never
+// delivered anything — the same "mounted is not live" shape as the public API.
+//
+// The owner's decision was to make it real, through the gateway rather than
+// beside it. That matters more here than anywhere else, because this module
+// reached the network directly: no kill-switch, no pause, no budget, no dedup,
+// no audit row. A push is an outward effect on a founder's phone; it belongs to
+// the same door as email and webhooks, and now it uses it.
+//
+// Consequences that fall out of that, rather than being bolted on:
+//   • a paused or read-only company sends no push, because the kill-switch
+//     refuses it — the entitlement rule reaches this channel for free;
+//   • a retried job cannot double-notify, because the gateway dedups;
+//   • every send is in audit_log with its refusal reason if it did not go.
+//
+// A push with no product has no authority context, so there is nothing to check
+// it against. Those fail closed rather than sending ungoverned.
 // =============================================================================
 
-import { query, getAllActiveProducts } from '../../db/client.js';
+import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { pathSegment } from '../outbound/path-segment.js';
+import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/gateway.js';
+import { log } from '../../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,27 +59,38 @@ export const NOTIFICATION_TYPES = [
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+/** Notification type → the `push_subscriptions` column holding the founder's
+ * preference for it. A lookup, so an unknown key yields undefined rather than a
+ * column name assembled from whatever was passed in. */
+const PREFERENCE_COLUMN: Record<string, string> = Object.freeze(
+  Object.fromEntries(NOTIFICATION_TYPES.map((t) => [t, `notify_${t}`])));
+
 // ─── Send Push Notification ───────────────────────────────────────────────────
 
 /**
- * Send a Web Push notification to all active subscriptions for a founder.
- * Uses VAPID authentication from environment variables.
+ * The transport: deliver to every subscription a founder has enabled for this
+ * type. NOT the entry point — `notifyFounder` is, and it goes through the
+ * gateway. Exported for the handler and for tests; production callers that
+ * reach this directly would be reaching around the kill-switch.
  */
-export async function sendPushNotification(
+export async function deliverPushNotification(
   founderId: string,
   productId: string | null,
   notificationType: NotificationType,
   payload: PushPayload,
 ): Promise<{ sent: number; failed: number }> {
-  if (!(NOTIFICATION_TYPES as readonly string[]).includes(notificationType)) {
-    throw new Error('unknown notification type');
-  }
-  // Check which notification types this founder has enabled
+  // The type names a COLUMN, so it is resolved through a frozen map rather than
+  // interpolated from the argument. The union that used to guarantee this is
+  // erased at runtime, and the difference between an allow-list and a string
+  // concatenation here is the difference between a preference and an injection.
+  const column = PREFERENCE_COLUMN[notificationType];
+  if (!column) throw new Error('unknown notification type');
+
+  // `SELECT *` on purpose: the enabled-flag column differs per notification
+  // type, so naming it would mean building the select list from the same value.
   const subscriptions = await query(
-    `SELECT id, endpoint, p256dh, auth, platform, apns_device_token, apns_bundle_id,
-            notify_${notificationType} as enabled
-     FROM push_subscriptions
-     WHERE founder_id = ? AND active = TRUE AND notify_${notificationType} = TRUE`,
+    `SELECT * FROM push_subscriptions
+      WHERE founder_id = ? AND active = TRUE AND ${column} = TRUE`,
     [founderId],
   );
 
@@ -150,8 +183,76 @@ export async function notifyProductTeam(
   }
 
   for (const founderId of founderIds) {
-    await sendPushNotification(founderId, productId, notificationType, payload).catch(() => {});
+    await notifyFounder({ productId, founderId, notificationType, payload }).catch(() => {});
   }
+}
+
+// ─── The governed entry point ────────────────────────────────────────────────
+
+interface PushToolParams {
+  founder_id: string;
+  notification_type: NotificationType;
+  payload: PushPayload;
+}
+
+async function pushHandler(req: GatewayRequest): Promise<{ sent: number; failed: number }> {
+  const params = req.params as unknown as PushToolParams;
+  if (!(NOTIFICATION_TYPES as readonly string[]).includes(params.notification_type)) {
+    throw new Error('unknown notification type');
+  }
+  return deliverPushNotification(
+    params.founder_id, req.productId, params.notification_type, params.payload);
+}
+
+export const SEND_PUSH_POLICY = {
+  actor: 'push_delivery',
+  surface: 'push_notification',
+  dataClass: 'general',
+  requireDedupKey: true,
+  requireCustomerExternalId: false,
+} as const;
+
+registerToolHandler('send_push', pushHandler, SEND_PUSH_POLICY);
+
+/**
+ * Send one founder a push, through the gateway.
+ *
+ * The dedup key defaults to the payload's own `tag` when it has one — that
+ * field already means "replace the previous notification with this" on both
+ * platforms, so it is the caller's own statement of identity — and otherwise to
+ * the notification type and title for the day. Either way a job that runs twice
+ * notifies once.
+ */
+export async function notifyFounder(input: {
+  productId: string | null;
+  founderId: string;
+  notificationType: NotificationType;
+  payload: PushPayload;
+  dedupKey?: string;
+}): Promise<{ sent: number; failed: number }> {
+  const { productId, founderId, notificationType, payload } = input;
+  if (!productId) {
+    // No company, no authority to check the send against.
+    log.warn('push.no_product_context', { founderId, notificationType });
+    return { sent: 0, failed: 0 };
+  }
+  const day = new Date().toISOString().slice(0, 10);
+  const result = await invoke({
+    productId,
+    tool: 'send_push',
+    action: `push: ${notificationType} — ${payload.title}`,
+    params: { founder_id: founderId, notification_type: notificationType, payload },
+    dedupKey: input.dedupKey
+      ?? `push:${notificationType}:${founderId}:${payload.tag ?? payload.title}:${day}`,
+  });
+  if (!result.ok) {
+    log.warn('push.refused', {
+      productId, founderId, notificationType,
+      phase: result.phase, reason: result.reason,
+    });
+    return { sent: 0, failed: 0 };
+  }
+  return result.result as { sent: number; failed: number };
 }
 
 // ─── Platform-Specific Senders ────────────────────────────────────────────────

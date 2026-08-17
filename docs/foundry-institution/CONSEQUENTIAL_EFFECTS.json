@@ -150,10 +150,10 @@
     },
     {
       "file": "src/services/notifications/push.ts",
-      "line": 219,
+      "line": 320,
       "detector": "templated_post",
-      "status": "unreachable",
-      "capability": "APNs/FCM device push with no importer anywhere in src/ — real devices, no caller. Kept rather than deleted because it is complete and working, and classified so that wiring it up has to be a deliberate act that changes this line"
+      "status": "governed",
+      "capability": "APNs/FCM device push, registered as the send_push gateway capability. It was classified unreachable — registration routes live, no sender anywhere — and the owner chose to wire it rather than remove the surface. Wiring it was the deliberate act this line asked for: it now inherits the kill-switch, the entitlement pause, dedup and audit from the same door as email, and the live caller is the risk-state transition"
     },
     {
       "file": "src/services/scp/actions/executor.ts",

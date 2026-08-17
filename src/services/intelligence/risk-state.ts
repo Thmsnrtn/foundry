@@ -142,6 +142,26 @@ export async function transitionRiskState(
       detail: reason,
       url: `${process.env.APP_URL ?? ''}/dashboard`,
     }).catch(() => {});
+
+    // And the founder's phone. Device registration and per-type preferences
+    // have been live since the mobile API shipped; nothing ever sent to them,
+    // so a founder could switch on 'risk state change' and never hear from it
+    // again. This is the caller that makes the promise true.
+    //
+    // Governed like every other outward effect: it goes through the gateway, so
+    // a paused company sends nothing, a re-run cannot double-notify, and the
+    // send is in audit_log either way. Failure is swallowed on purpose — the
+    // transition is the fact, and a notification is not worth losing it over.
+    const { notifyFounder } = await import('../notifications/push.js');
+    notifyFounder({
+      productId, founderId: ownerId, notificationType: 'risk_state_change',
+      payload: {
+        title: `${ownerRow?.name ?? 'Your company'} is now ${toState.toUpperCase()}`,
+        body: reason,
+        tag: `risk:${productId}:${toState}`,
+        data: { product_id: productId, from_state: fromState, to_state: toState },
+      },
+    }).catch(() => {});
   }
 }
 
