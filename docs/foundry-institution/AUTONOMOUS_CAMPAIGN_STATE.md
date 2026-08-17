@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **194 files / 1,578 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **196 files / 1,600 tests**, all 4 ratchets hold. Migrations through **141**. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -38,6 +38,50 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 - **Dynamic reachability:** all three agent loaders narrow through one closed vocabulary; a bidirectional gate classifies every loadable module.
 - **Economics:** cost attaches to responsibility and capability (migration 134), with measured / counted / unmeasured kept rigorously apart.
 - **Operating:** frozen (migration 115). **AcreOS:** deferred by owner.
+
+## Audit yield (§3)
+
+Kept to decide when marginal audit value falls, not as a scoreboard. A batch is
+a set of surfaces chosen together; "material" means a defect that could produce
+wrong behaviour, a leak, or a false claim — not a tidy-up.
+
+| Batch | Seams | Material | Severity | New invariant | Existing violated | Kernel change | Deletion | Prod path repaired |
+|---|---|---|---|---|---|---|---|---|
+| 1–11 (previous) | 11 | 9 | 2 high, 5 med, 2 low | 4 | 6 | 0 | 3 | 6 |
+| 12 credential canonicalization | 3 | 3 | 1 high, 2 med | 1 | 2 | 0 | 0 | 2 |
+| 13 outcome provenance | 1 | 1 | low | 0 | 1 | 0 | 0 | 1 |
+| 14 tenancy ↔ public API | 2 | 2 | 1 med, 1 low | 1 | 1 | 0 | 0 | 1 |
+| 15 SSRF totality + SELECT drift | 3 | 5 | 2 high, 3 med | 2 | 3 | 0 | 0 | 12 |
+
+**Reading it:** yield has not fallen. Batches 12 and 15 each found a high-severity
+defect, and batch 15 repaired twelve production paths that had never once worked.
+Three of the last five batches also found a GATE or FIXTURE weaker than its name —
+that is its own signal, and it argues for continuing rather than for stopping.
+
+**Phase-change trigger:** several consecutive independently-chosen batches
+yielding only cosmetic findings and no invariant violations. Not reached.
+
+## Unfamiliar-company generalization evidence (§1)
+
+**Bounded executable evidence. NOT E4.** Barrowfield Groundworks and Whitlow
+Heating are synthetic companies in a controlled test, carried by ordinary
+machinery with no kernel change. What that establishes is that the ladder's
+shape does not depend on the business — different origins, different governed
+effect kinds, a quantity whose favourable direction is downward, and outcomes in
+both directions.
+
+What it does not establish is anything about reality. A synthetic company is not
+a pilot, and no external party has used any of this.
+
+**Provenance of the two outcomes, kept exact:**
+
+- Groundworks — `achieved`, reported by `customer:jo@fieldstone.example`. A
+  customer's report about an effect. Not independently verified.
+- Heating — `failed`, reported by `customer:ardley@selby.example`. Likewise.
+
+`outcome_status` spells its success value `verified_success`; that is a stored
+vocabulary, not a claim. Since batch 13 the founder-facing sentence names the
+reporter and says "reported, not independently confirmed".
 
 ## Final-state gaps
 
@@ -140,6 +184,10 @@ Newest first. Trimmed as it ages — git history is the diary.
 - The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
 - Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
 - One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
+- The SSRF boundary made total: redirects re-screened on every hop, the rebinding defence made testable and actually tested for the first time.
+- The SELECT column drift class swept — 46 findings, 10 on the public API fixed, 36 ratcheted; three phantom tables removed.
+- Public API limited by CREDENTIAL rather than by source address, with a tighter budget for the model-backed transport. (This change rode into commit b8360d4, whose message describes only the SSRF and drift work.)
+- Integration secrets canonicalized (140/141): plaintext quarantined for rotation, fallback removed, a third writer found storing JSON in the clear behind a route that had never once run.
 - Five unguarded outbound fetches of founder-supplied URLs closed, and the SSRF rule made structural.
 - Provider credentials stop being written to a plaintext column; one shared allow-list decides what may be stored in the clear, and six adapters now read the encrypted store.
 - Whisper transcription brought under the spend ceilings; the effects detector taught to read templated URLs, surfacing seven previously invisible calls.
