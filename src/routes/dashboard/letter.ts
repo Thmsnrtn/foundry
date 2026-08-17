@@ -189,6 +189,59 @@ const outcomeSection = (
 //
 // Only offered for responsibilities that are Assisting — anywhere else there is
 // no authority to carry anything, and offering the form would imply otherwise.
+// Customers who wrote in, and what Foundry may do about each.
+//
+// Three write routes existed — author a reply, plan it, send it — and nothing
+// rendered the messages, so a founder could never obtain a message id to post
+// to. The whole support vertical was reachable only from a test.
+//
+// The customer's own words are interpolated through `html`, which escapes
+// them. That is the surface half of the promise the intake makes: a message
+// containing a script tag is a message containing a script tag, in the
+// database and on the page.
+const customerMessageSection = (
+  items: Array<{
+    messageId: string; responsibilityTitle: string; contactEmail: string;
+    subject: string | null; body: string; state: string;
+    actionId: string | null; proposal: string | null; canSend: boolean;
+  }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Someone wrote in</div>
+    ${items.map((item) => html`
+      <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.78rem;color:var(--text-muted);">
+          ${item.contactEmail} — about ${item.responsibilityTitle}
+        </div>
+        ${item.subject ? html`<div style="font-size:0.88rem;color:var(--text-primary);margin-top:0.2rem;">${item.subject}</div>` : ''}
+        <div style="font-size:0.85rem;color:var(--text-primary);margin-top:0.3rem;white-space:pre-wrap;">${item.body}</div>
+
+        ${item.state === 'sent' ? html`
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">Your reply was sent. Whether it settled anything is a separate question, and still open.</div>
+        ` : item.state === 'failed' ? html`
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">The send did not complete. Nothing was silently retried.</div>
+        ` : item.state === 'planned' ? html`
+          <div style="font-size:0.78rem;color:var(--text-primary);margin-top:0.4rem;">Ready to send, in your words:</div>
+          <div style="font-size:0.82rem;color:var(--text-muted);white-space:pre-wrap;">${item.proposal}</div>
+          <form method="POST" action="/letter/replies/${item.actionId}/send" style="margin-top:0.35rem;">
+            <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Send it</button>
+          </form>
+        ` : item.state === 'proposed' ? html`
+          <div style="font-size:0.78rem;color:var(--text-primary);margin-top:0.4rem;">You wrote:</div>
+          <div style="font-size:0.82rem;color:var(--text-muted);white-space:pre-wrap;">${item.proposal}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">Saved, not sent. ${item.canSend ? 'Ask me to carry it when you are ready.' : 'I cannot carry this yet — you have not given me permission for this responsibility.'}</div>
+        ` : html`
+          <form method="POST" action="/letter/messages/${item.messageId}/reply" style="margin-top:0.4rem;">
+            <input name="reply" required maxlength="8000" placeholder="What would you like to say back? I send exactly this."
+              style="width:100%;" />
+            <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.35rem;">
+              <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Save my reply</button>
+              <span style="font-size:0.7rem;color:var(--text-muted);">I write nothing myself, and saving sends nothing.</span>
+            </div>
+          </form>`}
+      </div>`)}
+  </div>`;
+
 const noticeSection = (
   items: Array<{ responsibilityId: string; title: string; state: string }>,
 ) => {
@@ -436,6 +489,8 @@ letterRoutes.get('/letter', async (c) => {
   const observationChannels = await getObservationChannels(ctx.productId);
   const { getUnresolvedEffects } = await import('../../services/institution/effect-outcome.js');
   const unresolvedEffects = await getUnresolvedEffects(ctx.productId);
+  const { getMessagesAwaitingReply } = await import('../../services/institution/support-reply.js');
+  const customerMessages = await getMessagesAwaitingReply(ctx.productId);
   const { availableDevelopmentChecks } = await import('../../services/institution/development-shadowing.js');
   const developmentChecks = await availableDevelopmentChecks(ctx.productId);
   const understoodDevelopment = (await (await import('../../db/client.js')).query(
@@ -451,6 +506,12 @@ letterRoutes.get('/letter', async (c) => {
   // uncertainty, which founder UX may never do.
   const hasResponsibilitySummary = Object.values(responsibilitySummary).some((items) => items.length > 0)
     || materialJudgments.length > 0 || evidenceQuestion !== null;
+  // `firstRun` means "a new founder, not an established one on a quiet day",
+  // and it was checked BEFORE any of that. So a company whose customer had
+  // written in was shown "Welcome — let's get your first signal" while somebody
+  // sat waiting for an answer. The quiet branch has always been overridden by
+  // real institutional state; first-run needs the same override for the same
+  // reason. Founder UX may not hide uncertainty, and it may not hide a person.
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
     : null;
@@ -461,7 +522,7 @@ letterRoutes.get('/letter', async (c) => {
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — from your team.</p>
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}
 
-    ${letter.firstRun ? html`
+    ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0 ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
         <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
         <div style="font-size:0.88rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.55;">
@@ -495,6 +556,7 @@ letterRoutes.get('/letter', async (c) => {
       ${permissionSection(assistingCandidates)}
       ${reportObligationSection(obligationOptions)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
+      ${customerMessageSection(customerMessages)}
       ${outcomeSection(unresolvedEffects)}
       ${observationChannelSection(observationChannels)}
       ${noticeSection([...responsibilitySummary.NEEDS_YOU, ...responsibilitySummary.CHANGED,

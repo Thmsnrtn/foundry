@@ -224,3 +224,63 @@ export async function getSupportReplyState(
   const proposal = await getReplyProposalForMessage(productId, messageId);
   return { state: proposal ? 'proposed' : 'message_only', actionId: null, outcome: null };
 }
+
+/**
+ * Messages a founder can actually act on, with the state of each.
+ *
+ * THE GAP THIS CLOSES. Three write routes existed — author a reply, plan it,
+ * send it — and nothing rendered the messages, so there was no way to obtain a
+ * message id to post to. The whole support vertical was reachable only from a
+ * test. `getMessagesForResponsibility` and `getSupportReplyState` had no caller
+ * outside their own module; this is their first production reader.
+ *
+ * Only responsibilities that have actually reached Shadowing or Assisting
+ * appear. A message about work Foundry has not yet understood is not something
+ * it can offer to help with, and showing it would imply otherwise.
+ *
+ * The customer's words are returned as TEXT. The surface escapes them at the
+ * point of rendering — a message containing a script tag is a message
+ * containing a script tag.
+ */
+export async function getMessagesAwaitingReply(
+  productId: string, limit = 10,
+): Promise<Array<{
+  messageId: string; responsibilityId: string; responsibilityTitle: string;
+  contactEmail: string; subject: string | null; body: string;
+  receivedAt: string; state: SupportReplyState; actionId: string | null;
+  proposal: string | null; canSend: boolean;
+}>> {
+  const rows = await query(
+    `SELECT m.id, m.responsibility_id, m.contact_email, m.subject, m.body, m.source_observed_at,
+            r.title, r.state AS responsibility_state
+       FROM inbound_customer_messages m
+       JOIN institutional_responsibilities r ON r.id=m.responsibility_id AND r.product_id=m.product_id
+      WHERE m.product_id=? AND r.disposition='active'
+        AND r.state IN ('shadowing','assisting')
+      ORDER BY datetime(m.source_observed_at) DESC, m.id DESC LIMIT ?`,
+    [productId, limit],
+  );
+
+  const out = [];
+  for (const raw of rows.rows as unknown as Array<Record<string, unknown>>) {
+    const messageId = String(raw.id);
+    const state = await getSupportReplyState(productId, messageId);
+    const proposal = await getReplyProposalForMessage(productId, messageId);
+    out.push({
+      messageId,
+      responsibilityId: String(raw.responsibility_id),
+      responsibilityTitle: String(raw.title),
+      contactEmail: String(raw.contact_email),
+      subject: raw.subject == null ? null : String(raw.subject),
+      body: String(raw.body),
+      receivedAt: String(raw.source_observed_at),
+      state: state.state,
+      actionId: state.actionId,
+      proposal: proposal?.body ?? null,
+      // Sending needs Assisting AND a live grant; planning re-resolves both and
+      // refuses when they are absent, so this only governs what is OFFERED.
+      canSend: String(raw.responsibility_state) === 'assisting',
+    });
+  }
+  return out;
+}
