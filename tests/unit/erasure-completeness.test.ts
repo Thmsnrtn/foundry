@@ -92,18 +92,41 @@ describe('every table holding a company is erased or explains itself', () => {
 });
 
 describe('the completion record cannot outrun the deletion', () => {
-  it('throws rather than skipping a table it could not clear', () => {
-    // The old loop swallowed every error with a bare catch, so a table that
-    // refused to delete left the data in place and the completion record was
-    // written anyway.
-    const source = readFileSync(
-      resolve(__dirname, '../../src/services/privacy/consent.ts'), 'utf8');
-    const loop = source.slice(
-      source.indexOf('for (const table of await tablesToErase())'),
-      source.indexOf('// Archive the product itself'));
-    expect(loop).toMatch(/throw new Error\(`data deletion incomplete/);
-    expect(loop, 'a swallowed failure makes the completion record false')
-      .not.toMatch(/}\s*catch\s*\{\s*\/\/[^\n]*\n\s*}/);
+  it('writes no completion record when a table could not be cleared', async () => {
+    // Behavioural, not textual. The old loop swallowed every delete error with
+    // a bare catch, so a table that refused left the data in place and the
+    // completion record was written anyway — and a structural version of this
+    // test was satisfied by a mutant that kept the throw unreachable.
+    const { processScheduledDeletions, scheduleDataDeletion } = await import(
+      '../../src/services/privacy/consent.js');
+
+    await query(
+      `INSERT INTO founders (id, clerk_user_id, email) VALUES ('er_f','er_c','er@example.com')`);
+    await query(
+      `INSERT INTO products (id, name, owner_id, status) VALUES ('er_p','Erase Me','er_f','active')`);
+    await scheduleDataDeletion('er_p', 0);
+
+    // One of the tables the erasure must clear is unavailable.
+    await query('ALTER TABLE decisions RENAME TO decisions_hidden');
+    try {
+      await processScheduledDeletions();
+    } catch {
+      // The caller's own catch may surface it; either way, what matters is the
+      // record below.
+    } finally {
+      await query('ALTER TABLE decisions_hidden RENAME TO decisions');
+    }
+
+    const completed = await query(
+      `SELECT id FROM agent_audit_log
+        WHERE event_type = 'data_deletion_completed' AND target_id = 'er_p'`);
+    expect(completed.rows.length,
+      'an incomplete deletion must not claim to have completed').toBe(0);
+
+    // And the product must not be archived either — that is the signal to every
+    // other subsystem that this company is finished with.
+    const product = await query(`SELECT status FROM products WHERE id = 'er_p'`);
+    expect((product.rows[0] as Record<string, string>).status).toBe('active');
   });
 
   it('still ends the operating relationship as well as the record', () => {
