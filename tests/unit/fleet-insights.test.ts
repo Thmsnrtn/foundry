@@ -13,12 +13,15 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { getFleetInsights } from '../../src/services/fleet/insights.js';
 
+// Each seeded pattern is a DIFFERENT company. The reader counts companies, not
+// rows — "abstains below 5 peers" means five peers, and rows with no
+// contributor name no peer at all.
 const seedPattern = (type: string, stage: string, option: string, outcome: string) => query(
   `INSERT INTO decision_patterns
      (id, decision_type, product_lifecycle_stage, risk_state_at_decision,
-      key_metrics_context, option_chosen_category, outcome_direction)
-   VALUES (?, ?, ?, 'green', '{}', ?, ?)`,
-  [nanoid(), type, stage, option, outcome],
+      key_metrics_context, option_chosen_category, outcome_direction, contributor_hash)
+   VALUES (?, ?, ?, 'green', '{}', ?, ?, ?)`,
+  [nanoid(), type, stage, option, outcome, nanoid()],
 );
 
 beforeAll(async () => {
@@ -54,7 +57,7 @@ describe('the cross-company reader', () => {
     const ins = insights[0];
     expect(ins.decisionId).toBe('fi_d1');
     expect(ins.productName).toBe('AlphaCo');
-    expect(ins.summary).toContain('5 founders at your stage');
+    expect(ins.summary).toContain('5 companies at your stage');
     expect(ins.summary).toContain('raise prices');
     expect(ins.summary).toContain('80%'); // 4/5 positive
     expect(ins.sampleSize).toBe(6);

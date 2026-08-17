@@ -20,6 +20,10 @@ beforeAll(async () => {
       outcome_magnitude TEXT,
       outcome_timeframe_days INTEGER,
       market_category TEXT,
+      -- Present because the real table has it and the reader counts it: a
+      -- fixture without it makes every row anonymous, and the reader is
+      -- required to abstain on rows that name no company.
+      contributor_hash TEXT,
       contributing_factors TEXT,
       scenario_accuracy_score REAL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -31,11 +35,17 @@ beforeEach(async () => {
   await executeRaw('DELETE FROM decision_patterns');
 });
 
-async function addPattern(type: string, stage: string, option: string, outcome: string, market: string | null = null): Promise<void> {
+/** Each call is a DIFFERENT company unless a contributor is named. The reader
+ * counts companies, so a helper that wrote every row as one company would test
+ * the opposite of what these cases mean. */
+async function addPattern(
+  type: string, stage: string, option: string, outcome: string,
+  market: string | null = null, contributor: string = nanoid(),
+): Promise<void> {
   await query(
-    `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage, risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction, market_category)
-     VALUES (?, ?, ?, 'green', '{}', ?, ?, ?)`,
-    [nanoid(), type, stage, option, outcome, market],
+    `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage, risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction, market_category, contributor_hash)
+     VALUES (?, ?, ?, 'green', '{}', ?, ?, ?, ?)`,
+    [nanoid(), type, stage, option, outcome, market, contributor],
   );
 }
 
@@ -48,21 +58,25 @@ describe('getPeerSignal', () => {
   });
 
   it('returns the dominant option and its positive rate at/above the threshold', async () => {
-    // 4 chose raise_price (3 positive, 1 negative); 2 chose hold (both neutral). n=6.
-    await addPattern('pricing_change', 'pre_launch', 'raise_price', 'positive');
-    await addPattern('pricing_change', 'pre_launch', 'raise_price', 'positive');
-    await addPattern('pricing_change', 'pre_launch', 'raise_price', 'positive');
+    // Five companies chose raise_price (4 positive, 1 negative); two chose
+    // hold. The threshold is on the CLAIM's population — the companies that
+    // chose the option being reported — because that is what the sentence
+    // asserts. Four backers used to be enough here, and the sentence it
+    // produced was about "founders" who might all have been one.
+    for (let i = 0; i < 4; i++) {
+      await addPattern('pricing_change', 'pre_launch', 'raise_price', 'positive');
+    }
     await addPattern('pricing_change', 'pre_launch', 'raise_price', 'negative');
     await addPattern('pricing_change', 'pre_launch', 'hold', 'neutral');
     await addPattern('pricing_change', 'pre_launch', 'hold', 'neutral');
 
     const signal = await getPeerSignal({ decisionType: 'pricing_change', lifecycleStage: 'pre_launch' });
     expect(signal).not.toBeNull();
-    expect(signal!.sampleSize).toBe(6);
+    expect(signal!.sampleSize).toBe(7);
     expect(signal!.dominantOption).toBe('raise_price');
-    expect(signal!.dominantOptionCount).toBe(4);
-    expect(signal!.positiveRate).toBeCloseTo(0.75, 5);
-    expect(signal!.summary).toContain('75%');
+    expect(signal!.dominantOptionCount).toBe(5);
+    expect(signal!.positiveRate).toBeCloseTo(0.8, 5);
+    expect(signal!.summary).toContain('80%');
   });
 
   it('scopes by market category when provided', async () => {
