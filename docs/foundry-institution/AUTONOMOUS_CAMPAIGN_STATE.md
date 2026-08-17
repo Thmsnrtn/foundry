@@ -70,6 +70,7 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 23 rate limiting ↔ deployment | 2 | 3 | 2 high, 1 med | 1 | 2 | 0 | 0 | 8 |
 | 24 AI context ↔ tenancy | 3 | 2 | 1 high, 1 med | 2 | 2 | 0 | 0 | 2 |
 | 25 erasure ↔ schema | 2 | 3 | 2 high, 1 med | 1 | 2 | 0 | 0 | 205 |
+| 26 export ↔ schema | 1 | 2 | 1 high, 1 med | 1 | 1 | 0 | 0 | 208 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -340,6 +341,14 @@ written against a schema two hundred tables ago. None was a missing feature. **W
 to ask is not "is it implemented" but "what exactly does the implementation
 count, and is that the same thing the sentence claims".**
 
-**Debt with a number on it:** 35 SELECT column-drift baseline entries
-(`docs/db/select-column-baseline.txt`), down from 36. Each is a query that
+**Erasure and access are the same question asked twice.** Batch 26 found the
+export had batch 25's defect in a smaller font — ten tables of 218, five of them
+added by a fix whose comment reads "Export was 60% incomplete", measured against
+a denominator that was itself a guess. Both are derived from the live schema
+now. **When one half of a right is enforced against a hand-written list, check
+the other half before believing it.**
+
+**Debt with a number on it:** 34 SELECT column-drift baseline entries
+(`docs/db/select-column-baseline.txt`), down from 36 at the start of this
+stretch. Each is a query that
 throws if it runs.
