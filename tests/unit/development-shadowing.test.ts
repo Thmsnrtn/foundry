@@ -263,6 +263,56 @@ describe('development as an ordinary shadowed responsibility', () => {
     )).rows[0]).toMatchObject({ n: 0 });
   });
 
+  it('lets the owner open a development expectation, and refuses a silent check', async () => {
+    // The reason `development-shadowing.ts` was DARK: nothing in production
+    // OPENED an expectation, so independent check results arrived with nothing
+    // to resolve. Foundry predicting on its own behalf would have been
+    // manufacturing the prediction to fit the evidence — so the owner states
+    // it, as a bounded choice among checks that already report.
+    const { availableDevelopmentChecks, beginFounderDevelopmentShadowing } = await import(
+      '../../src/services/institution/development-shadowing.js');
+    const { recordDevelopmentObservation } = await import(
+      '../../src/services/institution/development-observation.js');
+
+    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+      VALUES ('fds_sig','dev_product','repository','development_need_observed','low','{}','seed')`, []);
+    await query(`INSERT INTO institutional_responsibilities
+      (id,product_id,title,capability,state,discovery_evidence_ref)
+      VALUES ('fds_resp','dev_product','Keep the snapshot consistent','development','understood','signal_event:fds_sig')`, []);
+
+    // A check nothing reports cannot be watched: entering the rung would be a
+    // promise that observation will arrive rather than proof that it does.
+    expect(await availableDevelopmentChecks('dev_product')).not.toContain('never-runs');
+    expect(await beginFounderDevelopmentShadowing({
+      productId: 'dev_product', responsibilityId: 'fds_resp', founderId: 'dev_owner',
+      check: 'never-runs', expectedResult: 'passed',
+    })).toBeNull();
+
+    await recordDevelopmentObservation({
+      productId: 'dev_product', check: 'fds-check', result: 'passed', detail: 'ran' });
+    expect(await availableDevelopmentChecks('dev_product')).toContain('fds-check');
+
+    // A stranger cannot open an expectation for this company.
+    expect(await beginFounderDevelopmentShadowing({
+      productId: 'dev_product', responsibilityId: 'fds_resp', founderId: 'not-the-owner',
+      check: 'fds-check', expectedResult: 'passed',
+    })).toBeNull();
+
+    const started = await beginFounderDevelopmentShadowing({
+      productId: 'dev_product', responsibilityId: 'fds_resp', founderId: 'dev_owner',
+      check: 'fds-check', expectedResult: 'passed',
+    });
+    expect(started).toMatchObject({ state: 'shadowing' });
+    // Watching is not permission.
+    expect(started!.authorityRef).toBeNull();
+
+    // The expectation is the owner's own statement, recorded with provenance.
+    const statement = (await query(
+      `SELECT COUNT(*) n FROM signal_events WHERE product_id='dev_product'
+        AND event_type='founder_expects_check:fds-check:passed'`, [])).rows[0];
+    expect(statement).toMatchObject({ n: 1 });
+  });
+
   it('keeps the verification intake the only writer of development observations', () => {
     // A second writer would make "independently observed" unverifiable: any
     // caller could mint its own passing result. Bounded static ratchet, in the
@@ -271,15 +321,24 @@ describe('development as an ordinary shadowed responsibility', () => {
       const path = join(dir, entry);
       return statSync(path).isDirectory() ? walk(path) : path.endsWith('.ts') ? [path] : [];
     });
-    // Bounded: it catches a file that both inserts signal events and names the
-    // development verification source. Reading those observations is expected
-    // and unrestricted; only minting them is confined.
+    // Precise about what is forbidden: MINTING a row whose source is
+    // `development_verification`. The first version flagged any file that both
+    // inserted signal events anywhere and mentioned the source anywhere, which
+    // caught the founder-expectation path — a module that only READS those
+    // observations to prove a check reports, and writes a founder assertion
+    // under a different source entirely.
+    //
+    // Reading is expected and unrestricted. Widening the rule to co-occurrence
+    // would have forced the honest path to work around a ratchet, which is how
+    // ratchets get weakened for real.
     const writers = walk(resolve(process.cwd(), 'src'))
       .filter((path) => !path.endsWith('development-observation.ts'))
       .filter((path) => {
         const source = readFileSync(path, 'utf8');
-        return /INSERT\s+(OR\s+\w+\s+)?INTO\s+signal_events/i.test(source)
-          && /development_verification/.test(source);
+        // Each INSERT INTO signal_events, up to the end of its statement.
+        const statements = [...source.matchAll(
+          /INSERT\s+(?:OR\s+\w+\s+)?INTO\s+signal_events[\s\S]{0,600}?(?:`|;)/gi)];
+        return statements.some((m) => /development_verification/.test(m[0]));
       });
     expect(writers).toEqual([]);
   });

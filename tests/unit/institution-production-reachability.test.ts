@@ -63,12 +63,12 @@ const DARK: Record<string, string> = {
   // exists, so the scheduled pass now records a real deterministic check
   // through the ordinary intake.
   //
-  // `development-shadowing.ts` stays dark, and the distinction is the point:
-  // observations are now supplied, but nothing in production yet *opens* a
-  // development expectation for them to resolve. Wiring a driver that invents
-  // expectations to consume the observations would be manufacturing the
-  // prediction to fit the evidence.
-  'development-shadowing.ts': 'blocked — no production path opens a development expectation, only observations are supplied',
+  // `development-shadowing.ts` left this list when the owner gained a way to
+  // state what they expect a check to report. The blocker was always that
+  // opening an expectation requires someone to PREDICT, and Foundry predicting
+  // on its own behalf would be manufacturing the prediction to fit the
+  // evidence. The owner stating it — a bounded choice among checks that already
+  // report — is the same shape the metric path has always used.
 };
 
 function tsFiles(dir: string): string[] {
@@ -174,6 +174,9 @@ describe('institutional reachability', () => {
       ['company observation intake', 'recordCompanyObservations', 'services/institution/company-observation.ts'],
       ['understanding advancement', 'earnResponsibilityUnderstanding', 'services/institution/responsibility-understanding.ts'],
       ['expectation + shadowing entry', 'beginExternalMetricShadowing', 'services/institution/external-shadowing.ts'],
+      // The development twin. Without it, independent check results arrive with
+      // nothing to resolve and development shadowing stays dark.
+      ['development expectation entry', 'beginFounderDevelopmentShadowing', 'services/institution/development-shadowing.ts'],
       ['independent observation', 'recordExternalMetricObservations', 'services/institution/external-observation.ts'],
       ['shadow comparison', 'resolveExternalMetricShadowing', 'services/institution/external-shadowing.ts'],
       ['authority grant', 'grantAssistingAuthority', 'services/institution/assisting-admission.ts'],

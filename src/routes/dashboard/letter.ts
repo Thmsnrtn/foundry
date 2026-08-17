@@ -978,6 +978,35 @@ letterRoutes.post('/letter/company/observation-channel', async (c) => {
 //
 // Watching is not permission. Being right while watching is still not
 // permission.
+// The owner says what they would expect a development CHECK to report.
+//
+// The twin of the metric watch below, and it exists for the same reason: until
+// now nothing in production opened a development expectation, so independent
+// check results arrived with nothing to resolve and `development-shadowing`
+// sat dark. The choice is bounded — a check that already reports, and one of
+// two results — never parsed out of prose.
+//
+// Watching is not permission.
+letterRoutes.post('/letter/responsibilities/:responsibilityId/watch-check', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const check = String(body.check ?? '');
+  const expectedResult = String(body.expected_result ?? '');
+  if (!['passed', 'failed'].includes(expectedResult)) return c.text('Invalid expectation', 400);
+
+  const { beginFounderDevelopmentShadowing } = await import(
+    '../../services/institution/development-shadowing.js');
+  const started = await beginFounderDevelopmentShadowing({
+    productId: ctx.productId, responsibilityId: c.req.param('responsibilityId'),
+    founderId: founder.id as string, check, expectedResult,
+  });
+  // Do not reveal whether another tenant's responsibility exists.
+  if (!started) return c.text('Refused', 403);
+  return c.redirect('/letter');
+});
+
 letterRoutes.post('/letter/responsibilities/:responsibilityId/watch', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
