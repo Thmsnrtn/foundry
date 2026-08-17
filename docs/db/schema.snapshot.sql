@@ -133,10 +133,15 @@
           AND w.id=json_extract(ref.value,'$.id') AND w.product_id=NEW.product_id
           AND x.id=json_extract(ref.value,'$.id') AND x.product_id=NEW.product_id
          OR NEW.status NOT IN ('applied','already_applied'));
+        -- Capability is no longer named. What matters is that the
+        -- The consent must have been granted at exactly the consequence class
+        -- below exactly as before.
+        -- responsibility and the consent agree about it, which is checked
+        -- this effect kind requires.
         AND (c.valid_until IS NULL OR datetime(c.valid_until)>datetime('now'))
         AND (c.valid_until IS NULL OR datetime(c.valid_until)>datetime('now'))
         AND EXISTS (SELECT 1 FROM json_each(a.allowed_scope_json) WHERE value=NEW.authority_scope)
-        AND a.consequence_boundary='low'
+        AND a.consequence_boundary=k.consequence_boundary
         AND a.product_id=NEW.product_id AND a.responsibility_id=r.id AND a.capability=r.capability
         AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
         AND c.epistemic_status IN ('known','inferred')
@@ -145,7 +150,9 @@
         AND d.id=json_extract(NEW.payload_json,'$.judgment_id')
         AND datetime(rc.created_at)>datetime(d.made_at)));
         AND e.id=json_extract(ref.value,'$.id') AND e.product_id=NEW.product_id
-        AND r.capability='customer_support' AND r.authority_ref='autonomy_consent:' || a.id
+        AND k.action_type = NEW.action_type
+        AND k.integration_name = NEW.integration_name)
+        AND r.authority_ref='autonomy_consent:' || a.id
         SELECT 1 FROM products p WHERE json_extract(ref.value,'$.kind')='product'
         SELECT 1 FROM reconstruction_claims c WHERE json_extract(ref.value,'$.kind')='reconstruction_claim'
         SELECT 1 FROM responsibility_candidates c WHERE c.id=NEW.candidate_id AND c.epistemic_status='known'
@@ -230,13 +237,16 @@
       AND x.expected_event_type LIKE 'external_metric:%'
       AND x.expected_event_type LIKE 'external_metric:%'
       AND x.responsibility_id=NEW.responsibility_id
+      JOIN autonomy_consents a ON a.id=NEW.authority_consent_id
+      JOIN governed_effect_kinds k ON k.scope_key=NEW.authority_scope
       JOIN institutional_responsibilities r ON r.id=x.responsibility_id
       JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
       NEW.actor_ref!='institution:deterministic_candidate_grounder' OR NOT EXISTS (
       ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
       OR NOT EXISTS (
+      SELECT 1 FROM governed_effect_kinds k
       SELECT 1 FROM institutional_responsibilities r
-      SELECT 1 FROM institutional_responsibilities r JOIN autonomy_consents a ON a.id=NEW.authority_consent_id
+      SELECT 1 FROM institutional_responsibilities r
       SELECT 1 FROM json_each('["src/db/migrations/","docs/foundry-institution/","scripts/",'
       SELECT 1 FROM products p WHERE p.id=NEW.product_id AND ('founder:' || p.owner_id)=NEW.actor_ref
       SELECT 1 FROM products p WHERE p.id=NEW.product_id AND ('founder:' || p.owner_id)=NEW.actor_ref
@@ -247,6 +257,7 @@
       UNION ALL SELECT 1 FROM reconstruction_claims c WHERE json_extract(ref.value,'$.kind')='reconstruction_claim'
       WHERE c.id=e.value AND c.product_id=NEW.product_id
       WHERE d.id=NEW.judgment_id AND alt.value=NEW.selected_alternative)))
+      WHERE k.scope_key = NEW.authority_scope
       WHERE r.id=NEW.responsibility_id AND r.product_id=NEW.product_id AND r.state='assisting'
       WHERE r.id=refs.value AND r.product_id=NEW.product_id));
       WHERE rc.id=c.value AND rc.product_id=NEW.product_id
@@ -336,6 +347,9 @@
     );
     );
     );
+    -- The action, the integration and the scope must be one DECLARED effect
+    -- kind, taken together. A caller cannot mix the action of one kind with the
+    -- scope of another and land somewhere nobody authorised.
     ;
     ;
     ;
@@ -381,12 +395,12 @@
     OR (NEW.disposition<>'alternative_selected' AND NEW.selected_alternative IS NOT NULL);
     OR NEW.allowed_change_class NOT IN ('generated_artifact','test','documentation');
     OR NEW.authority_consent_id<>OLD.authority_consent_id OR NEW.change_id<>OLD.change_id
-    OR NEW.authority_scope!='send_email:support_reply' OR NEW.effect_id IS NULL OR NEW.authority_consent_id IS NULL
     OR NEW.change_class<>OLD.change_class OR NEW.content_digest<>OLD.content_digest;
     OR NEW.contact_email IS NULL OR instr(NEW.contact_email,'@')=0;
     OR NEW.disposition_evidence_json IS NULL
     OR NEW.predicate<>OLD.predicate OR NEW.asked_at<>OLD.asked_at OR NEW.scope<>OLD.scope;
     OR NEW.repository_ref<>OLD.repository_ref OR NEW.target_path<>OLD.target_path
+    OR NOT EXISTS (
     OR NOT EXISTS (
     OR coalesce(json_array_length(NEW.allowed_scope_json),0)=0;
     OR coalesce(json_array_length(NEW.evidence_refs_json),0)=0;
@@ -786,6 +800,7 @@
   -- The channel must belong to the company the intake authenticated as. The
   -- The check is deny-dominant and bidirectional: a prefix inside the ring is
   -- The compressed content
+  -- The consequence class a consent must have been granted at to use this. Not
   -- The constitutional ring. Ordinary development authority may not reach the
   -- The decision this premise underpins. decision_source disambiguates which
   -- The event type is derived from the reading, so a comparison matches on what
@@ -805,12 +820,14 @@
   -- Value delivered
   -- Voice input processing
   -- Web Push
+  -- What a founder is actually agreeing to when they grant this scope.
   -- What the agent decided
   -- What the agent saw
   -- Widening the ring requires a new migration, which is itself inside the
   -- Writing a reply is not deciding what Foundry may do with it. A proposal
   -- `resource_demand` is responsibility-scoped and `resource_capacity` is
   -- a founder assertion, the whole report is refused rather than stored with
+  -- a minimum: an exact match, so widening consequence is never a side effect
   -- against, so an observation that names one is not external.
   -- any company can have; none of them names an industry. Widening the set
   -- are not a verified outcome, and neither is a successful write.
@@ -858,6 +875,7 @@
   -- not be asked company-wide and a company-wide one may not be pinned to a
   -- not recent, and conflating the two would make evidence ordering a lie.
   -- nothing that could be mistaken for structure or a path.
+  -- of adding an effect kind.
   -- or maturity is refused whole — every one of those is resolved server-side
   -- policy) are deliberately absent until something consumes them; adding a
   -- question that was never asked, another tenant's question, or one already
@@ -1011,7 +1029,7 @@
   SELECT RAISE(ABORT, 'responsibility_transition:outcome_not_applicable') WHERE NEW.to_state NOT IN ('mature','exception_owned') AND NEW.outcome_ref IS NOT NULL;
   SELECT RAISE(ABORT, 'responsibility_transition:outcome_required') WHERE NEW.to_state IN ('mature','exception_owned') AND NEW.outcome_ref IS NULL;
   SELECT RAISE(ABORT, 'responsibility_transition:stale_state') WHERE NOT EXISTS (
-  SELECT RAISE(ABORT,'assisted_action:binding_invalid') WHERE NEW.action_type!='send_email' OR NEW.integration_name!='resend'
+  SELECT RAISE(ABORT,'assisted_action:binding_invalid')
   SELECT RAISE(ABORT,'assisted_reply:message_binding_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'assisted_reply:proposal_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'assisting:authority_invalid') WHERE NOT EXISTS (
@@ -1075,6 +1093,9 @@
   SELECT RAISE(ABORT,'founder_report:founder_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'founder_report:obligation_kind_invalid')
   SELECT RAISE(ABORT,'founder_report:payload_invalid') WHERE
+  SELECT RAISE(ABORT,'governed_effect_kind:constitutional');
+  SELECT RAISE(ABORT,'governed_effect_kind:constitutional');
+  SELECT RAISE(ABORT,'governed_effect_kind:constitutional');
   SELECT RAISE(ABORT,'inbound_message:channel_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'inbound_message:content_required')
   SELECT RAISE(ABORT,'inbound_message:evidence_invalid') WHERE NOT EXISTS (
@@ -1198,6 +1219,7 @@
   WHERE COALESCE(NEW.channel_key,'') IN (
   WHERE COALESCE(NEW.channel_key,'') NOT GLOB '[a-z][a-z0-9_]*'
   WHERE NEW.body IS NULL OR trim(NEW.body)='' OR length(NEW.body)>8192;
+  WHERE NEW.effect_id IS NULL OR NEW.authority_consent_id IS NULL
   WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
   WHERE NEW.event_type <> 'external_metric:'
   WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
@@ -1264,6 +1286,7 @@
   action_taken INTEGER NOT NULL DEFAULT 0,    -- 0=ignored, 1=acted_on
   action_taken_at TEXT,
   action_taken_days_after INTEGER,            -- how many days after recommendation
+  action_type          TEXT NOT NULL,
   action_type TEXT NOT NULL,
   action_type TEXT NOT NULL,
   action_type TEXT NOT NULL,
@@ -1641,6 +1664,7 @@
   consensus_points_json TEXT NOT NULL DEFAULT '[]',  -- things multiple agents agree on
   consent_adequacy_score REAL,
   consent_type TEXT NOT NULL CHECK (consent_type IN (
+  consequence_boundary TEXT NOT NULL,
   contact_email       TEXT NOT NULL,
   content          TEXT NOT NULL,
   content      TEXT NOT NULL,
@@ -1984,6 +2008,7 @@
   derivation_method TEXT NOT NULL,
   derivation_method TEXT NOT NULL,
   description            TEXT,
+  description          TEXT NOT NULL
   description     TEXT NOT NULL,
   description    TEXT NOT NULL,
   description   TEXT NOT NULL,
@@ -2653,6 +2678,7 @@
   integration_complexity_score REAL NOT NULL, -- API quality, data portability, tech debt
   integration_depth_score REAL,
   integration_id TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+  integration_name     TEXT NOT NULL,
   integration_name TEXT NOT NULL,
   integration_name TEXT NOT NULL,
   integration_name TEXT NOT NULL,
@@ -3644,6 +3670,7 @@
   scope       TEXT NOT NULL,              -- e.g. 'mcp:my-crm'
   scope TEXT NOT NULL DEFAULT 'architecture_class',
   scope_id    TEXT NOT NULL,
+  scope_key            TEXT PRIMARY KEY,
   score INTEGER NOT NULL,
   score INTEGER NOT NULL,              -- 0-100
   score INTEGER,                            -- 0-10 for NPS, 1-5 for CSAT, null for rejection_reason
@@ -4403,6 +4430,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4437,6 +4465,7 @@ AFTER INSERT ON responsibility_candidate_decisions WHEN NEW.decision='promoted'
 AFTER INSERT ON responsibility_dispositions
 AFTER INSERT ON responsibility_transitions
 AFTER UPDATE OF status ON ai_spend_reservations
+BEFORE DELETE ON governed_effect_kinds
 BEFORE DELETE ON institutional_judgment_dispositions
 BEFORE DELETE ON system_identities
 BEFORE INSERT ON ai_spend_reservations
@@ -4447,6 +4476,7 @@ BEFORE INSERT ON cost_events
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON founder_evidence_requests
+BEFORE INSERT ON governed_effect_kinds
 BEFORE INSERT ON inbound_customer_messages
 BEFORE INSERT ON institutional_judgment_dispositions
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
@@ -4481,8 +4511,12 @@ BEFORE UPDATE ON company_observation_channels
 BEFORE UPDATE ON cost_events
 BEFORE UPDATE ON development_change_plans
 BEFORE UPDATE ON founder_evidence_requests
+BEFORE UPDATE ON governed_effect_kinds
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5026,6 +5060,7 @@ CREATE TABLE funnel_events (
 CREATE TABLE gate_events (
 CREATE TABLE geopolitical_signals (
 CREATE TABLE golden_suite (
+CREATE TABLE governed_effect_kinds (
 CREATE TABLE graph_entities (
 CREATE TABLE graph_relationships (
 CREATE TABLE hypotheses (
@@ -5174,6 +5209,9 @@ CREATE TRIGGER founder_evidence_request_guard
 CREATE TRIGGER founder_evidence_request_resolution_guard
 CREATE TRIGGER founder_reply_proposal_guard
 CREATE TRIGGER founder_report_guard
+CREATE TRIGGER governed_effect_kinds_immutable_delete
+CREATE TRIGGER governed_effect_kinds_immutable_insert
+CREATE TRIGGER governed_effect_kinds_immutable_update
 CREATE TRIGGER inbound_customer_message_guard
 CREATE TRIGGER institutional_judgment_disposition_append_only_delete
 CREATE TRIGGER institutional_judgment_disposition_append_only_update
@@ -5241,6 +5279,9 @@ CREATE UNIQUE INDEX idx_role_permissions_unique ON role_permissions(role, permis
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
+END;
+END;
 END;
 END;
 END;

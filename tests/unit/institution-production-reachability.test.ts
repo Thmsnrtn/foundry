@@ -178,6 +178,10 @@ describe('institutional reachability', () => {
       ['customer message intake', 'ingestCustomerMessage', 'services/institution/customer-message-intake.ts'],
       ['responsibility/channel association', 'registerSupportChannel', 'services/institution/customer-message-intake.ts'],
       ['founder reply proposal', 'proposeSupportReply', 'services/institution/support-reply.ts'],
+      // The second effect kind must have a real founder behind it, or migration
+      // 136 widened the boundary for nobody.
+      ['founder notice authoring', 'proposeResponsibilityNotice', 'services/institution/responsibility-notice.ts'],
+      ['notice planning', 'planResponsibilityNotice', 'services/institution/responsibility-notice.ts'],
       ['action planning', 'planProposedReply', 'services/institution/support-reply.ts'],
       ['assisted plan writer', 'planAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
       ['governed execution', 'executeAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],

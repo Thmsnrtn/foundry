@@ -156,6 +156,40 @@ const reportObligationSection = (options: Array<[string, string]>) => html`
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll start keeping track of it. I won't do anything about it — I'd need to understand it first, and then you'd have to give me permission separately.</div>
   </div>`;
 
+// Telling someone something, about a responsibility Foundry is already helping
+// with. The founder writes the words; Foundry carries them under the same
+// governed boundary a support reply crosses.
+//
+// Only offered for responsibilities that are Assisting — anywhere else there is
+// no authority to carry anything, and offering the form would imply otherwise.
+const noticeSection = (
+  items: Array<{ responsibilityId: string; title: string; state: string }>,
+) => {
+  const assisting = items.filter((i) => i.state === 'assisting');
+  return assisting.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Tell someone something</div>
+    ${assisting.map((item) => html`
+      <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/notice"
+        style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.9rem;color:var(--text-primary);margin-bottom:0.35rem;">${item.title}</div>
+        <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+          <input name="recipient" required maxlength="320" placeholder="Who? (email)" style="width:200px;" />
+          <input name="subject" required maxlength="200" placeholder="About what?" style="flex:1;min-width:180px;" />
+        </div>
+        <input name="message" required maxlength="8000" placeholder="What do you want to say? I'll send exactly this."
+          style="width:100%;margin-top:0.4rem;" />
+        <div style="display:flex;gap:0.5rem;align-items:center;margin-top:0.4rem;">
+          <label style="font-size:0.72rem;color:var(--text-muted);">
+            <input type="checkbox" name="carry" value="yes" /> Send it for me
+          </label>
+          <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Save</button>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I send your words exactly as written — I don't write anything myself. If you don't tick the box, I'll just keep it.</div>
+      </form>`)}
+  </div>`;
+};
+
 // What the company actually counts.
 //
 // Until a company tells Foundry what to listen for, the only readings it can
@@ -394,6 +428,8 @@ letterRoutes.get('/letter', async (c) => {
       ${permissionSection(assistingCandidates)}
       ${reportObligationSection(obligationOptions)}
       ${observationChannelSection(observationChannels)}
+      ${noticeSection([...responsibilitySummary.NEEDS_YOU, ...responsibilitySummary.CHANGED,
+        ...responsibilitySummary.HANDLED, ...responsibilitySummary.STILL_OPEN])}
       ${tellMeSection(factOpportunities)}
       ${judgmentSection(materialJudgments)}
       ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
@@ -816,6 +852,40 @@ letterRoutes.post('/letter/company/report', async (c) => {
 //
 // Declaring something grants nothing. It says what may be observed, not what
 // Foundry may do.
+// A founder writes a notice about a responsibility, and — separately — asks
+// Foundry to carry it.
+//
+// Two posts, deliberately. Writing records what the founder said; carrying binds
+// it to exact current authority and revalidates again before dispatch. Merging
+// them would make authoring imply sending, which is the separation the whole
+// boundary exists to keep.
+letterRoutes.post('/letter/responsibilities/:responsibilityId/notice', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const { proposeResponsibilityNotice, planResponsibilityNotice } = await import(
+    '../../services/institution/responsibility-notice.js');
+
+  const authored = await proposeResponsibilityNotice({
+    productId: ctx.productId, founderId: founder.id as string,
+    responsibilityId: c.req.param('responsibilityId'),
+    recipient: String(body.recipient ?? ''), subject: String(body.subject ?? ''),
+    body: String(body.message ?? ''),
+  });
+  if ('refused' in authored) return c.text(`Not written: ${authored.refused}`, 400);
+
+  // Carrying it is a separate decision the founder makes on the same form. If
+  // they only wrote it, it stays written and nothing is planned.
+  if (String(body.carry ?? '') !== 'yes') return c.redirect('/letter');
+
+  const planned = await planResponsibilityNotice({
+    productId: ctx.productId, founderId: founder.id as string, noticeId: authored.notice.id,
+  });
+  if ('refused' in planned) return c.text(`Written, but not carried: ${planned.refused}`, 400);
+  return c.redirect('/letter');
+});
+
 letterRoutes.post('/letter/company/observation-channel', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);

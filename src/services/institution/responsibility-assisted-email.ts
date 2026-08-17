@@ -4,34 +4,53 @@ import { invoke } from '../outbound/gateway.js';
 import { recordReconstructionClaim } from './reconstruction.js';
 
 export const ASSISTED_EMAIL_SCOPE='send_email:support_reply';
+/** A founder-authored notice to a named recipient about a responsibility.
+ * The same governed boundary, for a company whose work is not customer support. */
+export const RESPONSIBILITY_NOTICE_SCOPE='send_email:responsibility_notice';
 export type AssistedOutcome='unresolved'|'verified_success'|'verified_failure'|'conflicting';
 
+/**
+ * The live authority for one planned effect, or null.
+ *
+ * Mirrors migration 136's guard rather than restating a literal. Capability is
+ * deliberately absent: what must hold is that the responsibility and its
+ * consent AGREE about capability, not that the capability is customer support.
+ * Hard-coding it here was the same defect as hard-coding it in the trigger, and
+ * it would have made this the one place a dance school still could not act.
+ *
+ * The action, integration and scope must together be one declared effect kind,
+ * so a caller cannot combine the action of one with the scope of another.
+ */
 async function currentAuthority(actionId:string):Promise<Record<string,unknown>|null> {
   const result=await query(`SELECT oa.* FROM outbound_actions oa
     JOIN institutional_responsibilities r ON r.id=oa.responsibility_id AND r.product_id=oa.product_id
     JOIN autonomy_consents a ON a.id=oa.authority_consent_id
-    WHERE oa.id=? AND oa.action_type='send_email' AND oa.integration_name='resend'
-      AND r.state='assisting' AND r.capability='customer_support'
+    JOIN governed_effect_kinds k ON k.scope_key=oa.authority_scope
+      AND k.action_type=oa.action_type AND k.integration_name=oa.integration_name
+    WHERE oa.id=?
+      AND r.state='assisting'
       AND r.authority_ref='autonomy_consent:' || a.id
       AND a.product_id=oa.product_id AND a.responsibility_id=r.id AND a.capability=r.capability
       AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
-      AND a.consequence_boundary='low' AND oa.authority_scope=?
-      AND instr(a.allowed_scope_json,json_quote(oa.authority_scope))>0`,[actionId,ASSISTED_EMAIL_SCOPE]);
+      AND a.consequence_boundary=k.consequence_boundary
+      AND instr(a.allowed_scope_json,json_quote(oa.authority_scope))>0`,[actionId]);
   return result.rows[0] as Record<string,unknown>|undefined ?? null;
 }
 
 /** Create a bounded plan only. Dispatch is deliberately a separate call. */
 export async function planAssistedSupportEmail(input:{productId:string;responsibilityId:string;authorityConsentId:string;
-  effectId:string;to:string;subject:string;html:string;rationale:string}):Promise<string> {
+  effectId:string;to:string;subject:string;html:string;rationale:string;scope?:string}):Promise<string> {
   if (!input.effectId.trim() || !input.to.trim() || !input.subject.trim()) throw new Error('assisted action plan invalid');
+  const scope=input.scope??ASSISTED_EMAIL_SCOPE;
   const id=nanoid();
   await query(`INSERT INTO outbound_actions
     (id,product_id,agent_name,integration_name,action_type,authority_level,status,parameters_json,preview_text,rationale,
      confidence,expires_at,responsibility_id,authority_consent_id,authority_scope,effect_id,outcome_status)
     VALUES (?,?,'institution:assisting','resend','send_email',0,'approved',?,?,?,?,datetime('now','+48 hours'),?,?,?,?,'unresolved')`,[
     id,input.productId,JSON.stringify({to:[input.to],subject:input.subject,html:input.html}),
-    `Send bounded support reply to ${input.to}`,input.rationale,1,input.responsibilityId,input.authorityConsentId,
-    ASSISTED_EMAIL_SCOPE,input.effectId]);
+    `Send bounded ${scope==='send_email:support_reply'?'support reply':'responsibility notice'} to ${input.to}`,
+    input.rationale,1,input.responsibilityId,input.authorityConsentId,
+    scope,input.effectId]);
   return id;
 }
 
@@ -51,7 +70,7 @@ export async function executeAssistedSupportEmail(actionId:string, lifecycle:{af
     return {dispatched:false,certainty:'not_attempted'};
   }
   const parameters=JSON.parse(String(row.parameters_json)) as {to:string[];subject:string;html:string};
-  const result=await invoke({productId:String(row.product_id),tool:'send_email',action:`assisted support reply ${row.effect_id}`,
+  const result=await invoke({productId:String(row.product_id),tool:'send_email',action:`assisted ${row.authority_scope} ${row.effect_id}`,
     params:parameters,dedupKey:String(row.effect_id),customerExternalId:parameters.to[0],surface:'email_outbound',dataClass:'customer'});
   if (!result.ok) {
     const ambiguous=result.phase==='execution';

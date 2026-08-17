@@ -228,7 +228,16 @@ describe('the first production-facing support execution chain', () => {
           responsibility_id,inbound_message_id,reply_proposal_id)
        VALUES ('sc_claim',?,'x','resend','send_email','approved','{}','r',?,?,?)`,
       [PRODUCT, other, messageId, proposalId],
-    )).rejects.toThrow(/message_binding_invalid/);
+      // Refused — but since migration 136 the refusal comes from the effect
+      // boundary rather than the message binding, and that is an improvement
+      // rather than a regression. Migration 114's guard read
+      // `NEW.authority_scope!='send_email:support_reply'`, which is NULL — not
+      // true — when the column is absent, so a plan with no scope, no effect id
+      // and no consent walked straight past the boundary and was caught further
+      // down by luck. The rewritten guard tests those for NULL explicitly and
+      // refuses first. A responsibility with no authority at all can no longer
+      // reach the question of whose message it is.
+    )).rejects.toThrow(/assisted_action:binding_invalid|message_binding_invalid/);
   });
 
   it('crosses the governed gateway, and leaves the outcome unresolved', async () => {
