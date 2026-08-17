@@ -7,6 +7,40 @@ import { createMiddleware } from 'hono/factory';
 import { hasPermission } from '../services/rbac/permissions.js';
 
 /**
+ * WHO IS ACTING, AND ON WHICH COMPANY.
+ *
+ * Both guards below read `c.get('productId')` and `c.get('userId')` — context
+ * keys that ONLY the public API's key middleware sets. Every dashboard route
+ * they guard therefore returned 401 to the founder who owns the company: pause,
+ * resume, checkout, manage subscription, API keys, ingest credentials, share
+ * links, the wisdom-network toggle. Twelve founder-facing routes, guarded into
+ * unreachability by a check that was looking at the wrong surface's identity.
+ *
+ * The policy is "the acting user must hold this role on this company". This
+ * resolves that subject once, for whichever surface the request arrived on,
+ * so the two guards cannot disagree about who is asking.
+ *
+ * The selected-company cookie is a SELECTION, not an authorisation: it says
+ * which company the user means, and the role check below decides whether they
+ * may. A forged cookie therefore buys nothing — it can only name a company the
+ * caller must still prove a role on.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function actingSubject(c: any): Promise<{ userId?: string; productId?: string }> {
+  const apiUserId = c.get('userId') as string | undefined;
+  const apiProductId = c.get('productId') as string | undefined;
+  if (apiUserId && apiProductId) return { userId: apiUserId, productId: apiProductId };
+
+  const founder = c.get('founder') as { id?: string } | undefined;
+  const product = c.get('product') as { id?: string } | undefined;
+  const { getCookie } = await import('hono/cookie');
+  return {
+    userId: apiUserId ?? founder?.id,
+    productId: apiProductId ?? product?.id ?? getCookie(c, 'foundry_product'),
+  };
+}
+
+/**
  * Require a specific RBAC permission for a route.
  * Falls back to owner-level access (always allowed) if user is the product owner.
  *
@@ -16,12 +50,10 @@ import { hasPermission } from '../services/rbac/permissions.js';
  */
 export function requirePermission(permission: string) {
   return createMiddleware(async (c, next) => {
-    const productId = c.get('productId') as string | undefined;
-    const userId = c.get('userId') as string | undefined;
+    const { userId, productId } = await actingSubject(c);
 
-    if (!productId || !userId) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+    if (!productId) return c.json({ error: 'No company selected' }, 400);
 
     // Check if user is the product owner (owners always have all permissions)
     const { query } = await import('../db/client.js');
@@ -65,12 +97,10 @@ export function requireRole(minimumRole: 'viewer' | 'analyst' | 'admin' | 'owner
   const roleRank = { viewer: 1, analyst: 2, admin: 3, owner: 4 };
 
   return createMiddleware(async (c, next) => {
-    const productId = c.get('productId') as string | undefined;
-    const userId = c.get('userId') as string | undefined;
+    const { userId, productId } = await actingSubject(c);
 
-    if (!productId || !userId) {
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+    if (!productId) return c.json({ error: 'No company selected' }, 400);
 
     const { getUserRole } = await import('../services/rbac/permissions.js');
     const { query } = await import('../db/client.js');
