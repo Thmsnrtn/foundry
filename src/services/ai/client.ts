@@ -115,6 +115,54 @@ export function computeCostCents(model: AIModel | string, inputTokens: number, o
   return inputCostCents + outputCostCents;
 }
 
+/** Refuse before anything is reserved or dispatched. */
+async function refuseIfNotEntitled(productId: string | undefined): Promise<void> {
+  if (!productId) return;
+  const notActing = await companyMayIncurCost(productId);
+  if (notActing) throw new NotEntitledError(productId, notActing);
+}
+
+/** Raised when the company is not entitled to have money spent on it. Named,
+ * so a caller can tell "we are not doing this" from "the provider failed". */
+export class NotEntitledError extends Error {
+  constructor(productId: string, state: string) {
+    super(`AI spend refused: company ${productId} is ${state}`);
+    this.name = 'NotEntitledError';
+  }
+}
+
+/**
+ * Is this company one Foundry is currently operating?
+ *
+ * The owner's decision is that an unpaid account is read-only: no spend, no
+ * outward effects. The outbound gateway enforces the second half and the job
+ * work-lists enforce most of the first, but an interactive dashboard request
+ * reaches a model directly — so the rule is checked here too, at the one place
+ * every model call passes through.
+ *
+ * An UNKNOWN product does not refuse. This is an entitlement check, not an
+ * authorization check: refusing an id that names no company would turn a
+ * missing row into a silent outage, and `authorizeSpend` already fails on one
+ * whose owner cannot be resolved.
+ */
+async function companyMayIncurCost(productId: string): Promise<string | null> {
+  try {
+    const res = await query(
+      `SELECT COALESCE(status,'active') AS s, COALESCE(scp_status,'active') AS scp
+         FROM products WHERE id = ?`, [productId]);
+    const row = res.rows[0] as Record<string, string> | undefined;
+    if (!row) return null;
+    if (row.s !== 'active') return `archived (${row.s})`;
+    if (row.scp === 'paused' || row.scp === 'archived') return row.scp;
+    return null;
+  } catch (err) {
+    // A ceiling that fails open on a DB error is the existing posture in this
+    // file, and an entitlement check is not a safety boundary — the gateway is.
+    log.warn('ai_spend.entitlement_lookup_failed', { productId, error: (err as Error).message });
+    return null;
+  }
+}
+
 async function authorizeSpend(
   productId: string | undefined,
   model: AIModel | string,
@@ -241,6 +289,11 @@ function buildSystemMessageContent(
  * Make an LLM call via OpenRouter with cost ceiling, timeout, and retry.
  */
 export async function callClaude(config: AICallConfig & { productId?: string }): Promise<AIResponse> {
+  // BEFORE the key and before the reservation. Refusing to spend must not
+  // depend on whether a provider is configured, and a reservation taken and
+  // then abandoned by a later throw sits as 'reserved' until it expires at the
+  // full authorized amount.
+  await refuseIfNotEntitled(config.productId);
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const reservation = await authorizeSpend(
@@ -400,6 +453,7 @@ export async function callClaudeMultiTurn(
   useOpus: boolean = false,
   productId?: string,
 ): Promise<AIResponse> {
+  await refuseIfNotEntitled(productId);
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const model = useOpus ? MODELS.OPUS : MODELS.SONNET;

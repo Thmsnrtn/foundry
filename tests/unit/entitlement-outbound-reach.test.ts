@@ -193,3 +193,29 @@ describe('the pause is read from the database, not from the caller', () => {
     expect(handler).not.toHaveBeenCalled();
   });
 });
+
+// The gateway stops effects and the work-lists stop jobs, but an interactive
+// dashboard request reaches a model directly — a founder clicking "generate my
+// weekly plan" on a read-only account. "No spend" has to mean that too, so the
+// rule is checked at the one place every model call passes through.
+describe('the pause reaches model spend', () => {
+  it('refuses to reserve spend for a paused company', async () => {
+    await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [productId]);
+    const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
+    await expect(callSonnet('sys', 'user', 16, productId)).rejects.toThrow(NotEntitledError);
+  });
+
+  it('refuses for an archived record too', async () => {
+    await query(`UPDATE products SET status='archived' WHERE id=?`, [productId]);
+    const { callSonnet } = await import('../../src/services/ai/client.js');
+    await expect(callSonnet('sys', 'user', 16, productId)).rejects.toThrow(/refused/i);
+  });
+
+  it('does not refuse an id that names no company', async () => {
+    // An entitlement check, not an authorization check. Turning a missing row
+    // into a refusal would make a bad id look like a billing decision.
+    const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
+    await expect(callSonnet('sys', 'user', 16, 'no-such-product'))
+      .rejects.not.toThrow(NotEntitledError);
+  });
+});
