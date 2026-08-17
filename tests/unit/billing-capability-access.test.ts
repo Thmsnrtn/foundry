@@ -183,3 +183,96 @@ describe('a governed effect and the subscription behind it', () => {
     expect(body).toContain('JOIN products p');
   });
 });
+
+// =============================================================================
+// ONBOARDING ↔ BILLING: an account that never paid looked exactly like one that did.
+//
+// The cancellation path is a Stripe webhook, so it only fires for a
+// subscription that once existed. A founder who onboarded and never started
+// one has no Stripe customer at all, and a trial that expires without
+// converting produces no event either. `scp_status` stayed 'active' from
+// onboarding and `tier` stayed NULL, and nothing anywhere read trial expiry —
+// `getTrialStatus` was computed for a dashboard badge and consulted by nothing
+// that spends money or acts.
+//
+// Owner decision: such an account is READ-ONLY. Its data stays readable;
+// Foundry stops spending and stops reaching outward on its behalf.
+// =============================================================================
+
+describe('entitlement to act', () => {
+  const paying = 'ent_paying';
+  const lapsed = 'ent_lapsed';
+  const trialing = 'ent_trialing';
+
+  it('is granted by a paid tier or a live trial, and by nothing else', async () => {
+    const { entitledToAct } = await import('../../src/services/billing/entitlement.js');
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+
+    expect(entitledToAct('solo', null)).toBe(true);
+    expect(entitledToAct('solo', past), 'a paid tier outlives its trial window').toBe(true);
+    expect(entitledToAct(null, future), 'a live trial is entitlement').toBe(true);
+    expect(entitledToAct(null, past), 'an expired trial is not').toBe(false);
+    expect(entitledToAct(null, null), 'never having started is not').toBe(false);
+  });
+
+  it('pauses a company whose trial lapsed without converting', async () => {
+    const { sweepEntitlements } = await import('../../src/services/billing/entitlement.js');
+    await query(
+      `INSERT INTO founders (id,clerk_user_id,email,tier,trial_ends_at) VALUES
+        ('ent_f1','ent_c1','p@example.com','growth',NULL),
+        ('ent_f2','ent_c2','l@example.com',NULL,datetime('now','-3 days')),
+        ('ent_f3','ent_c3','t@example.com',NULL,datetime('now','+3 days'))`, []);
+    await query(
+      `INSERT INTO products (id,name,owner_id,status,scp_status) VALUES
+        (?,'Paying','ent_f1','active','active'),
+        (?,'Lapsed','ent_f2','active','active'),
+        (?,'Trialing','ent_f3','active','active')`, [paying, lapsed, trialing]);
+
+    const { paused } = await sweepEntitlements();
+    expect(paused).toContain(lapsed);
+    expect(paused, 'a paying company must not be paused').not.toContain(paying);
+    expect(paused, 'a live trial must not be paused').not.toContain(trialing);
+  });
+
+  it('stops that company acting, through the mechanism cancellation already uses', async () => {
+    // No second pause mechanism: this writes the same `scp_status` the
+    // cancellation webhook writes, so everything that already honours a
+    // cancellation honours a lapsed trial too.
+    expect((await query('SELECT scp_status FROM products WHERE id=?', [lapsed])).rows[0])
+      .toMatchObject({ scp_status: 'paused' });
+    // And the SCP scheduler's own filter is the same field.
+    expect((await query(
+      "SELECT COUNT(*) n FROM products WHERE scp_status='active' AND id=?", [lapsed])).rows[0])
+      .toMatchObject({ n: 0 });
+  });
+
+  it('resumes when they subscribe, without asking for permission again', async () => {
+    // One-way enforcement leaves a founder who pays after a lapse stuck
+    // read-only until somebody notices — a worse product than not enforcing.
+    const { sweepEntitlements } = await import('../../src/services/billing/entitlement.js');
+    await query("UPDATE founders SET tier='solo' WHERE id='ent_f2'", []);
+    const { resumed } = await sweepEntitlements();
+    expect(resumed).toContain(lapsed);
+    expect((await query('SELECT scp_status FROM products WHERE id=?', [lapsed])).rows[0])
+      .toMatchObject({ scp_status: 'active' });
+  });
+
+  it('never forges a revocation or a demotion', async () => {
+    // A billing pause is not the founder saying "stop". Nothing is revoked and
+    // nothing is demoted, which is what makes resuming honest.
+    const { sweepEntitlements } = await import('../../src/services/billing/entitlement.js');
+    await query("UPDATE founders SET tier=NULL, trial_ends_at=datetime('now','-1 day') WHERE id=?", [OWNER]);
+    await sweepEntitlements();
+    expect((await query('SELECT revoked_at FROM autonomy_consents WHERE id=?', ['bca_consent'])).rows[0])
+      .toMatchObject({ revoked_at: null });
+    expect((await query('SELECT state FROM institutional_responsibilities WHERE id=?', ['bca_resp'])).rows[0])
+      .toMatchObject({ state: 'assisting' });
+  });
+
+  it('is registered on a schedule, or it is a function nobody runs', async () => {
+    const { JOB_REGISTRY } = await import('../../src/jobs/index.js');
+    expect(JOB_REGISTRY.entitlement_sweep).toBeTruthy();
+    expect(JOB_REGISTRY.entitlement_sweep.schedule).toMatch(/^\S+ \S+ \S+ \S+ \S+$/);
+  });
+});
