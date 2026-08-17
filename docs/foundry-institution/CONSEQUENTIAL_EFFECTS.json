@@ -80,14 +80,14 @@
     },
     {
       "file": "src/services/integration/github-gateway.ts",
-      "line": 52,
+      "line": 57,
       "detector": "templated_post",
       "status": "governed",
       "capability": "GitHub capability handlers"
     },
     {
       "file": "src/services/integration/github-gateway.ts",
-      "line": 93,
+      "line": 100,
       "detector": "templated_post",
       "status": "governed",
       "capability": "GitHub capability handlers"

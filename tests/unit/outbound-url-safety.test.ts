@@ -49,8 +49,12 @@ function executable(file: string): string {
  * already refuses to accept anywhere else.
  */
 const DYNAMIC_FETCH = [
-  // fetch(config.url, …) / fetch(endpoint, …)
-  /fetch\(\s*(?!['"`])[\w.]*\b(url|endpoint|webhook_url|target)\b/i,
+  // fetch(config.url, …) / fetch(endpoint, …) / fetch(p.server_url, …)
+  //
+  // No leading \b: `_` is a word character, so `\burl\b` does not match inside
+  // `server_url` — and the MCP client, which posts to a URL a founder
+  // configured, was invisible to this gate for exactly that reason.
+  /fetch\(\s*(?!['"`])[\w.]*(url|endpoint|target)\b/i,
   // fetch(`${anything}/path`, …) — interpolation in the host position
   /fetch\(\s*`\s*\$\{/,
 ];
@@ -85,6 +89,11 @@ const FOUNDRY_CHOSEN: Record<string, string> = {
   'src/services/integration/github-gateway.ts': 'GITHUB_API constant; the repo slug in the path is checked by repoSlug',
   'src/services/integration/stripe-gateway.ts': 'STRIPE_API constant; the object id in the path is checked by pathSegment',
   'src/services/notifications/push.ts': 'the APNs host is chosen by NODE_ENV; the device token in the path is checked by pathSegment',
+  // Newly visible for the same reason the MCP client was: `fullUrl` and
+  // `baseUrl` contain the keyword but not as a whole word. Every caller passes
+  // a compiled-in https://api.stripe.com/v1/... base; the only dynamic part is
+  // a query string built from a fixed parameter map.
+  'src/services/integrations/stripe.ts': 'paginates a compiled-in api.stripe.com URL; only the query string varies',
 };
 
 describe('posting to a URL somebody else chose', () => {
@@ -117,6 +126,7 @@ describe('posting to a URL somebody else chose', () => {
       'src/services/audit/intake-web.ts',
       'src/services/chat/coo.ts',
       'src/services/distribution/outbound-webhooks.ts',
+      'src/services/integration/mcp-client.ts',
       'src/services/integration/posthog.ts',
       'src/services/integrations/posthog.ts',
       'src/services/outbound/ssrf.ts',

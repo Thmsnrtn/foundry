@@ -264,12 +264,13 @@ export async function openRemediationPR(
     const { gatewayCreatePR } = await import('../integration/github-gateway.js');
     const gatewayResult = await gatewayCreatePR({
       productId: remProductId,
-      repo: `${owner}/${repo}`,
+      // The repository and the credential are no longer passed: the handler
+      // reads both from the product, so a caller cannot pair one company's
+      // token with another company's repo.
       title: `[Foundry] Fix ${blockingIssue.id}: ${fixSummary}`,
       body: prBody,
       head: branchName,
       base: baseBranch,
-      accessToken,
       // Stable dedup: re-running this code path for the same remediation
       // returns the cached result instead of opening a second PR.
       dedupKey: `remediation:${remediationPrId}`,

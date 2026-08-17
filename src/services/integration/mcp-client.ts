@@ -87,33 +87,59 @@ export async function revokeGrant(grantId: string, productId: string): Promise<v
 // ── The gateway handler: the only code path that actually leaves the building ─
 
 interface McpHandlerParams {
-  server_url: string;
-  bearer: string | null;
+  /** The connected server's NAME. Not its URL, and not its credential: those
+   * are facts about the company's integration that the server holds. */
+  server_name: string;
   tool: string;
   args: Record<string, unknown>;
 }
 
+/** The endpoint and credential for one of this company's connected servers.
+ *
+ * Read here rather than accepted from the request. A handler that takes both a
+ * destination and a bearer token from its caller is a general-purpose proxy
+ * wearing a capability's name — and it carries the credential through the
+ * gateway in the request payload, where the next person to add parameter
+ * logging would find it. */
+async function resolveServer(
+  productId: string, serverName: string,
+): Promise<{ url: string; bearer: string | null } | null> {
+  const res = await query(
+    `SELECT config, credentials FROM integrations
+      WHERE product_id = ? AND provider = 'mcp' AND name = ? AND status = 'active'`,
+    [productId, serverName]);
+  const row = res.rows[0] as Record<string, string> | undefined;
+  if (!row) return null;
+  let url: string | undefined;
+  try { url = (JSON.parse(row.config ?? '{}') as { url?: string }).url; } catch { /* none */ }
+  if (!url) return null;
+  return { url, bearer: getPlaintextToken(row.credentials ?? null) };
+}
+
 async function mcpToolHandler(req: GatewayRequest): Promise<unknown> {
   const p = req.params as unknown as McpHandlerParams;
+  const server = await resolveServer(req.productId, p.server_name);
+  if (!server) throw new Error(`MCP server '${p.server_name}' is not connected`);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MCP_TIMEOUT_MS);
   try {
-    // SSRF guard at CALL time (defeats DNS rebinding after add-time approval).
-    const { assertUrlSafe } = await import('../outbound/ssrf.js');
-    await assertUrlSafe(p.server_url, { allowLoopback: true });
-    const res = await fetch(p.server_url, {
+    // SSRF guard at CALL time (defeats DNS rebinding after add-time approval),
+    // and through `safeFetch` so every redirect hop is re-screened too — a host
+    // that passes every check can still answer with a 302 to somewhere private.
+    const { safeFetch } = await import('../outbound/ssrf.js');
+    const res = await safeFetch(server.url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         accept: 'application/json',
-        ...(p.bearer ? { authorization: `Bearer ${p.bearer}` } : {}),
+        ...(server.bearer ? { authorization: `Bearer ${server.bearer}` } : {}),
       },
       body: JSON.stringify({
         jsonrpc: '2.0', id: 1, method: 'tools/call',
         params: { name: p.tool, arguments: p.args },
       }),
       signal: controller.signal,
-    });
+    }, { allowLoopback: true });
     if (!res.ok) throw new Error(`MCP server responded ${res.status}`);
     const body = await res.json() as { result?: unknown; error?: { message?: string } };
     if (body.error) throw new Error(`MCP error: ${body.error.message ?? 'unknown'}`);
@@ -131,17 +157,13 @@ registerToolHandler('mcp_tool', mcpToolHandler, {
 export async function callMcpTool(input: McpCallInput): Promise<
   { ok: true; result: unknown; cached: boolean } | { ok: false; reason: string }
 > {
-  // 1. The server must be connected + active.
-  const server = await query(
-    `SELECT config, credentials FROM integrations
-     WHERE product_id = ? AND provider = 'mcp' AND name = ? AND status = 'active'`,
-    [input.productId, input.serverName],
-  );
-  const row = server.rows[0] as Record<string, string> | undefined;
-  if (!row) return { ok: false, reason: `MCP server '${input.serverName}' is not connected` };
-  let url: string | undefined;
-  try { url = (JSON.parse(row.config ?? '{}') as { url?: string }).url; } catch { /* fall through */ }
-  if (!url) return { ok: false, reason: `MCP server '${input.serverName}' has no URL configured` };
+  // 1. The server must be connected + active. The SAME resolver the handler
+  // uses — this is only an early, friendly refusal so an unconnected server
+  // does not consume an envelope unit on its way to failing. Two resolutions
+  // of one fact is how the two halves of a rule start to disagree.
+  if (!(await resolveServer(input.productId, input.serverName))) {
+    return { ok: false, reason: `MCP server '${input.serverName}' is not connected` };
+  }
 
   // 2. The call must be licensed by a live grant.
   const grant = await checkGrant(input.productId, input.serverName, input.tool);
@@ -168,8 +190,7 @@ export async function callMcpTool(input: McpCallInput): Promise<
     tool: 'mcp_tool',
     action: `MCP ${input.serverName}/${input.tool}`,
     params: {
-      server_url: url,
-      bearer: getPlaintextToken(row.credentials ?? null),
+      server_name: input.serverName,
       tool: input.tool,
       args: input.args,
     },
