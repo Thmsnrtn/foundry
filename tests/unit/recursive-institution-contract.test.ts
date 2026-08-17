@@ -187,18 +187,154 @@ describe('recursive-institution-v1 contract', () => {
       'nothing on the recursive observation path can create or widen authority');
   });
 
+  it('exercises effect governance, revocation, and cost observability on a real recursive effect', async () => {
+    // These three were unexercised while the recursive path only observed.
+    // Carrying the owner-named schema-snapshot responsibility makes them real:
+    // a governed file mutation, a withdrawal that stops one, and a cost that is
+    // actually attributable rather than assumed free.
+    const { mkdtempSync, mkdirSync, writeFileSync, readFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { recordReconstructionClaim } = await import('../../src/services/institution/reconstruction.js');
+    const { grantDevelopmentAuthority, revokeDevelopmentAuthority } = await import(
+      '../../src/services/institution/development-authority.js');
+    const { planDevelopmentChange, executeDevelopmentChange } = await import(
+      '../../src/services/institution/development-assisting.js');
+    const { logCost } = await import('../../src/services/financial/economics.js');
+    const { getResponsibilityCost } = await import('../../src/services/financial/institutional-economics.js');
+
+    const SNAP = 'docs/db/schema.snapshot.sql';
+    const CONTENT = '-- generated\nCREATE TABLE x (id TEXT);\n';
+    const dir = mkdtempSync(join(tmpdir(), 'ric-effect-'));
+    mkdirSync(join(dir, 'docs/db'), { recursive: true });
+    writeFileSync(join(dir, SNAP), '-- stale\n');
+
+    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+      VALUES ('ric_dev','${P_FOUNDRY}','repository','development_need_observed','low','{}','snapshot drift')`, []);
+    await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state,discovery_evidence_ref)
+      VALUES ('ric_resp','${P_FOUNDRY}','Keep the canonical snapshot synchronized','development','understood','signal_event:ric_dev')`, []);
+    for (const [predicate, value] of [
+      ['development_need', { check: 'schema-snapshot-freshness' }],
+      ['development_intended_content', { path: SNAP, content: CONTENT, changeClass: 'generated_artifact' }],
+    ] as Array<[string, unknown]>) {
+      await recordReconstructionClaim({
+        productId: P_FOUNDRY, subject: 'responsibility:ric_resp', predicate, value, epistemicStatus: 'known',
+        evidenceRefs: [{ kind: 'signal_event', id: 'ric_dev' }],
+        derivationMethod: 'canonical generator output', observedAt: new Date(),
+      });
+    }
+    // Assisting is entered the ordinary way — a real expectation, a real
+    // independent observation, a real comparison. The plan guard requires it,
+    // which is the ladder refusing to be skipped on the recursive path exactly
+    // as it would anywhere else.
+    const { beginDevelopmentShadowing, resolveDevelopmentShadowing } = await import(
+      '../../src/services/institution/development-shadowing.js');
+    const { enterDevelopmentAssisting } = await import(
+      '../../src/services/institution/development-assisting.js');
+    const expectationClaimId = await recordReconstructionClaim({
+      productId: P_FOUNDRY, subject: 'responsibility:ric_resp', predicate: 'development_expectation',
+      value: { check: 'schema-snapshot-freshness', expected: 'failed' }, epistemicStatus: 'inferred',
+      confidence: 0.8, evidenceRefs: [{ kind: 'signal_event', id: 'ric_dev' }],
+      derivationMethod: 'the snapshot predates the migration set', observedAt: new Date(),
+    });
+    const { expectationId } = await beginDevelopmentShadowing({
+      productId: P_FOUNDRY, responsibilityId: 'ric_resp', expectedCheck: 'schema-snapshot-freshness',
+      expectedResult: 'failed', expectationClaimId, observationSourceSignalId: 'ric_dev',
+    });
+    await query("UPDATE responsibility_shadow_expectations SET created_at=datetime(created_at,'-60 seconds') WHERE id=?",
+      [expectationId]);
+    const { recordDevelopmentObservation } = await import(
+      '../../src/services/institution/development-observation.js');
+    await recordDevelopmentObservation({
+      productId: P_FOUNDRY, check: 'schema-snapshot-freshness', result: 'failed',
+      detail: 'committed snapshot disagrees with the migrations',
+      observedAt: new Date(Date.now() - 30_000),
+    });
+    await resolveDevelopmentShadowing({ productId: P_FOUNDRY, expectationId });
+
+    const consentId = await grantDevelopmentAuthority({
+      productId: P_FOUNDRY, responsibilityId: 'ric_resp', ownerId: 'ric_owner', repository: 'Thmsnrtn/foundry',
+      allowedPathPrefixes: [SNAP], changeClass: 'generated_artifact',
+      requiredVerification: ['schema-snapshot-freshness'], expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    const comparisonId = String(((await query(
+      'SELECT id FROM responsibility_shadow_comparisons WHERE expectation_id=?', [expectationId],
+    )).rows[0] as Record<string, unknown>).id);
+    await enterDevelopmentAssisting({
+      productId: P_FOUNDRY, responsibilityId: 'ric_resp',
+      shadowComparisonId: comparisonId, authorityConsentId: consentId,
+    });
+
+    // Effect governance: the mutation happens only through the governed path,
+    // touches only the authorised artefact, and yields a receipt.
+    const startedAt = Date.now();
+    const plan = await planDevelopmentChange({
+      productId: P_FOUNDRY, responsibilityId: 'ric_resp', repository: 'Thmsnrtn/foundry' });
+    const { plan: applied, receipt } = await executeDevelopmentChange({
+      productId: P_FOUNDRY, planId: plan.id, repositoryRoot: dir, content: CONTENT });
+    const durationMs = Date.now() - startedAt;
+    observe('effect_governance',
+      applied.status === 'applied' && receipt !== null
+      && readFileSync(join(dir, SNAP), 'utf8') === CONTENT,
+      'the recursive effect crossed the ordinary governed boundary and produced a receipt');
+
+    // Revocation: a second plan, authority withdrawn before execution, no
+    // mutation at all.
+    const dir2 = mkdtempSync(join(tmpdir(), 'ric-revoked-'));
+    mkdirSync(join(dir2, 'docs/db'), { recursive: true });
+    writeFileSync(join(dir2, SNAP), '-- stale\n');
+    await query(
+      `UPDATE reconstruction_claims SET valid_until=datetime('now','-1 second')
+        WHERE product_id=? AND predicate='development_intended_content'`, [P_FOUNDRY]);
+    await recordReconstructionClaim({
+      productId: P_FOUNDRY, subject: 'responsibility:ric_resp', predicate: 'development_intended_content',
+      value: { path: SNAP, content: CONTENT + 'CREATE TABLE y (id TEXT);\n', changeClass: 'generated_artifact' },
+      epistemicStatus: 'known', evidenceRefs: [{ kind: 'signal_event', id: 'ric_dev' }],
+      derivationMethod: 'canonical generator output after a further migration', observedAt: new Date(),
+    });
+    const plan2 = await planDevelopmentChange({
+      productId: P_FOUNDRY, responsibilityId: 'ric_resp', repository: 'Thmsnrtn/foundry' });
+    await revokeDevelopmentAuthority(P_FOUNDRY, consentId, 'ric_owner');
+    const { plan: refused } = await executeDevelopmentChange({
+      productId: P_FOUNDRY, planId: plan2.id, repositoryRoot: dir2,
+      content: CONTENT + 'CREATE TABLE y (id TEXT);\n' });
+    observe('revocation',
+      refused.status === 'refused' && readFileSync(join(dir2, SNAP), 'utf8') === '-- stale\n',
+      'withdrawal between planning and execution produced no mutation on the recursive path');
+
+    // Cost observability — deliberately NOT ROI. Model spend is genuinely zero
+    // because no model was used, duration is genuinely measured, and the cost
+    // is attributable to the responsibility rather than assumed free. What this
+    // does not establish is whether carrying it was worth anything.
+    await logCost({
+      productId: P_FOUNDRY, costType: 'compute', amountUsd: 0,
+      responsibilityId: 'ric_resp', capability: 'development',
+      details: { duration_ms: durationMs, model_invocations: 0 },
+    });
+    const cost = await getResponsibilityCost(P_FOUNDRY, 'ric_resp');
+    observe('cost_observability',
+      cost.measured.events === 1 && cost.measured.modelUsd === 0
+      && durationMs >= 0 && cost.unmeasured.length > 0,
+      'model spend measured at zero, duration measured, and seven components still named unmeasured');
+  });
+
   it('scores the real recursive path, and reports what is not yet exercised', () => {
-    // Dimensions no recursive production path reaches yet. Naming them as
-    // unexercised is the honest result: a consequential recursive effect has
-    // never been carried, so effect governance, revocation, and cost on this
-    // path are untested rather than passing.
+    // All thirteen are now genuinely exercised — the last three by carrying the
+    // owner-named responsibility through a real governed effect, a real
+    // withdrawal, and a real attributable cost.
     const result = evaluateRecursiveInstitution(observations);
 
     expect(result.failed, `recursive path deviated from ordinary: ${result.failed.join(', ')}`).toEqual([]);
-    expect(result.unexercised.sort()).toEqual(
-      ['cost_observability', 'effect_governance', 'revocation'].sort());
-    // Therefore NOT ordinary-green — and that is the correct answer today.
-    expect(result.ordinary).toBe(false);
-    expect(result.meaning).not.toBe(MEANING_ORDINARY);
+    expect(result.unexercised, `still unexercised: ${result.unexercised.join(', ')}`).toEqual([]);
+    expect(result.ordinary).toBe(true);
+    expect(result.meaning).toBe(MEANING_ORDINARY);
+
+    // And green means exactly the bounded thing it says. The recursive path
+    // preserved ordinary semantics; that is not a claim that operating itself
+    // is valuable, safe at scale, or ready to widen — five items of outstanding
+    // proof remain, including that no recursive OUTCOME has ever been
+    // independently established.
+    expect(result.meaning).toMatch(/not proof/i);
+    expect(RECURSIVE_OUTSTANDING_PROOF.join(' ')).toMatch(/independently established/i);
   });
 });
