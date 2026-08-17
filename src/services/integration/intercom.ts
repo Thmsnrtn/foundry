@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { storeEvent, getIntegration } from './fabric.js';
+import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ export async function syncIntercomEvents(productId: string): Promise<{ synced: n
     return { synced: 0 };
   }
 
-  const accessToken = integration.config_json.access_token as string | undefined;
+  const accessToken = (await getIntegrationCredentials(productId, 'intercom')).access_token;
 
   if (!accessToken) {
     return { synced: 0, error: 'Missing required Intercom config field (access_token)' };

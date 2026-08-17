@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { storeEvent, getIntegration } from './fabric.js';
+import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ export async function syncPostHogEvents(productId: string): Promise<{ synced: nu
     return { synced: 0 };
   }
 
-  const apiKey = integration.config_json.api_key as string | undefined;
+  const apiKey = (await getIntegrationCredentials(productId, 'posthog')).api_key;
   const host = (integration.config_json.host as string | undefined) ?? 'https://app.posthog.com';
   const projectId = integration.config_json.project_id as string | undefined;
 

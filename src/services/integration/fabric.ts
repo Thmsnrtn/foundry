@@ -5,7 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
-import { encryptCredentialPayload } from '../encryption.js';
+import { decryptCredentialPayload, encryptCredentialPayload } from '../encryption.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +37,105 @@ export interface NormalizedEvent {
   relevance_scores: Record<string, number>;
   processed_by: string[];
   created_at: string;
+}
+
+// ─── What is a credential, and what is merely configuration ──────────────────
+//
+// Two founder-facing forms configured integrations and disagreed about this,
+// with real consequences in both directions:
+//
+//   /integrations/:type/connect         split the form, encrypting everything
+//                                       that was not one of five named config
+//                                       keys into `credentials_json`.
+//   /agents/integrations/:name/connect  put EVERY form field into `config_json`
+//                                       in plaintext — api keys, bot tokens and
+//                                       auth tokens included.
+//
+// And all four sync adapters read their credential from `config_json`. So the
+// path that worked was the one storing provider secrets in the clear, and the
+// path that encrypted them correctly produced integrations that silently never
+// synced: the adapter looked in the wrong place and reported "missing config
+// field" forever.
+//
+// One list now decides, in both writers and every reader. It is an ALLOW-list
+// of non-secret keys, so a field nobody has classified is treated as a
+// credential — the fail-closed direction. A new provider whose config key is
+// missing here gets encrypted unnecessarily, which costs nothing; the opposite
+// mistake writes somebody's API key to a plaintext column.
+export const NON_SECRET_CONFIG_KEYS = [
+  'activation_event', 'active_user_event', 'team_id', 'host', 'account_id',
+  'org_slug', 'project_slug', 'project_id', 'workspace', 'region', 'channel',
+  // Identifiers, not secrets: which org, which repo, which channel. Knowing
+  // one tells you where to point a credential you do not have.
+  'org', 'repo', 'owner', 'channel_id', 'workspace_id', 'base_url',
+] as const;
+
+export function isNonSecretConfigKey(key: string): boolean {
+  return (NON_SECRET_CONFIG_KEYS as readonly string[]).includes(key);
+}
+
+/** Split a submitted form into what may be stored in the clear and what may not. */
+export function splitIntegrationFields(
+  fields: Record<string, unknown>,
+): { config: Record<string, unknown>; credentials: Record<string, string> } {
+  const config: Record<string, unknown> = {};
+  const credentials: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value == null || value === '') continue;
+    if (isNonSecretConfigKey(key)) config[key] = value;
+    else credentials[key] = String(value);
+  }
+  return { config, credentials };
+}
+
+/**
+ * The credentials an adapter needs, decrypted.
+ *
+ * Falls back to `config_json` for values stored there before the split was
+ * enforced. That fallback is compatibility, not endorsement: those values are
+ * in the clear, and `plaintextCredentialKeys` exists so an operator can find
+ * them and re-enter them.
+ */
+export async function getIntegrationCredentials(
+  productId: string, name: string,
+): Promise<Record<string, string>> {
+  const row = (await query(
+    'SELECT credentials_json, config_json FROM integrations WHERE product_id=? AND name=?',
+    [productId, name],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!row) return {};
+
+  let credentials: Record<string, string> = {};
+  try {
+    const plaintext = decryptCredentialPayload(row.credentials_json as string | null);
+    if (plaintext) credentials = JSON.parse(plaintext) as Record<string, string>;
+  } catch { credentials = {}; }
+
+  try {
+    const config = JSON.parse(String(row.config_json ?? '{}')) as Record<string, unknown>;
+    for (const [key, value] of Object.entries(config)) {
+      if (isNonSecretConfigKey(key) || key in credentials) continue;
+      if (typeof value === 'string') credentials[key] = value;
+    }
+  } catch { /* config is not required to be readable for credentials to work */ }
+  return credentials;
+}
+
+/** Credential-shaped keys sitting in a plaintext config blob, for one company.
+ * An operator surface can use this to tell someone which secrets to rotate. */
+export async function plaintextCredentialKeys(
+  productId: string,
+): Promise<Array<{ integration: string; keys: string[] }>> {
+  const rows = await query(
+    'SELECT name, config_json FROM integrations WHERE product_id=?', [productId]);
+  const out: Array<{ integration: string; keys: string[] }> = [];
+  for (const raw of rows.rows as unknown as Array<Record<string, unknown>>) {
+    let config: Record<string, unknown> = {};
+    try { config = JSON.parse(String(raw.config_json ?? '{}')) as Record<string, unknown>; } catch { continue; }
+    const keys = Object.keys(config).filter((k) => !isNonSecretConfigKey(k));
+    if (keys.length) out.push({ integration: String(raw.name), keys });
+  }
+  return out;
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────

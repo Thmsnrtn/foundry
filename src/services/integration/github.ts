@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { storeEvent, getIntegration } from './fabric.js';
+import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ export async function syncGitHubEvents(productId: string): Promise<{ synced: num
     return { synced: 0 };
   }
 
-  const token = integration.config_json.access_token as string | undefined;
+  const token = (await getIntegrationCredentials(productId, 'github')).access_token;
   const org = integration.config_json.org as string | undefined;
   const repo = integration.config_json.repo as string | undefined;
 

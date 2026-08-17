@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { storeEvent, getIntegration } from './fabric.js';
+import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export async function syncSentryEvents(productId: string): Promise<{ synced: num
     return { synced: 0 };
   }
 
-  const authToken = integration.config_json.auth_token as string | undefined;
+  const authToken = (await getIntegrationCredentials(productId, 'sentry')).auth_token;
   const orgSlug = integration.config_json.org_slug as string | undefined;
   const projectSlug = integration.config_json.project_slug as string | undefined;
 

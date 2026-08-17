@@ -410,16 +410,25 @@ agentIntegrationRoutes.post('/agents/integrations/:name/connect', async (c) => {
   );
   if (prodResult.rows.length === 0) return c.redirect('/agents/integrations');
 
-  // Collect all form fields as config
-  const configMap: Record<string, unknown> = {};
+  // Every submitted field used to go into `config_json` in the clear — api
+  // keys, bot tokens and auth tokens included — while the sibling form at
+  // /integrations encrypted the same fields into `credentials_json`. The
+  // adapters read config_json, so the plaintext path was the one that worked.
+  //
+  // One shared split now decides, and it is an allow-list of non-secret keys,
+  // so a field nobody has classified is encrypted rather than exposed.
+  const { splitIntegrationFields } = await import('../../services/integration/fabric.js');
+  const submitted: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(body)) {
     if (key !== 'product_id' && typeof value === 'string' && value.trim()) {
-      configMap[key] = value.trim();
+      submitted[key] = value.trim();
     }
   }
+  const { config, credentials } = splitIntegrationFields(submitted);
 
   await connectIntegration(productId, integrationName, {
-    config_json: configMap,
+    config_json: config,
+    credentials_json: Object.keys(credentials).length ? JSON.stringify(credentials) : undefined,
     authorized_agents: ['all'],
   });
 

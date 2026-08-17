@@ -245,20 +245,15 @@ integrationsRoutes.post('/integrations/:type/connect', async (c) => {
 
   const body = await c.req.parseBody() as Record<string, string>;
 
-  // Build credentials object from form fields
-  const credentials: Record<string, string> = {};
-  const config: Record<string, unknown> = {};
-
+  // The same split the sibling form at /agents/integrations uses. It used to be
+  // a literal list here and nothing there, which is how one form encrypted a
+  // bot token while the other wrote it to a plaintext column.
+  const { splitIntegrationFields } = await import('../../services/integration/fabric.js');
+  const submitted: Record<string, unknown> = {};
   for (const field of (meta.fields ?? [])) {
-    if (body[field.key]) {
-      // Separate config fields from credential fields
-      if (['activation_event', 'active_user_event', 'team_id', 'host', 'account_id'].includes(field.key)) {
-        config[field.key] = body[field.key];
-      } else {
-        credentials[field.key] = body[field.key];
-      }
-    }
+    if (body[field.key]) submitted[field.key] = body[field.key];
   }
+  const { config, credentials } = splitIntegrationFields(submitted);
 
   const existing = await query(
     `SELECT id FROM integrations WHERE product_id = ? AND type = ?`,
