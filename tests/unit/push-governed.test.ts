@@ -47,6 +47,23 @@ beforeAll(async () => {
       id TEXT PRIMARY KEY, product_id TEXT NOT NULL,
       agent_name TEXT NOT NULL, status TEXT DEFAULT 'active'
     );
+    CREATE TABLE IF NOT EXISTS team_members (
+      id TEXT PRIMARY KEY, product_id TEXT NOT NULL, founder_id TEXT NOT NULL,
+      status TEXT DEFAULT 'active'
+    );
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id TEXT PRIMARY KEY, founder_id TEXT NOT NULL, platform TEXT,
+      endpoint TEXT, p256dh TEXT, auth TEXT,
+      apns_device_token TEXT, apns_bundle_id TEXT,
+      active INTEGER DEFAULT 1, failure_count INTEGER DEFAULT 0,
+      last_delivered_at DATETIME,
+      notify_risk_state_change INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS push_log (
+      id TEXT PRIMARY KEY, founder_id TEXT, product_id TEXT, subscription_id TEXT,
+      notification_type TEXT, title TEXT, body TEXT, data TEXT, status TEXT,
+      sent_at DATETIME
+    );
     CREATE TABLE IF NOT EXISTS audit_log (
       id TEXT PRIMARY KEY, product_id TEXT NOT NULL, action_type TEXT NOT NULL,
       gate INTEGER NOT NULL, trigger TEXT NOT NULL, reasoning TEXT NOT NULL,
@@ -166,5 +183,75 @@ describe('the channel is actually wired', () => {
     expect(source, 'the old ungoverned entry point must not come back')
       .not.toMatch(/export async function sendPushNotification/);
     expect(source).toMatch(/registerToolHandler\('send_push'/);
+  });
+});
+
+// =============================================================================
+// §12: the capability's semantics, not the first consumer's. The gateway
+// establishes the COMPANY; everything else about a push has to be checked
+// against that, and a receipt has to describe what actually happened.
+// =============================================================================
+
+describe('a push goes to someone who belongs to the company', () => {
+  it('refuses a recipient who is not the owner or a team member', async () => {
+    const outsider = nanoid();
+    await query(`INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
+      [outsider, `clerk_${outsider}`, `${outsider}@elsewhere.test`]);
+    // The REAL handler: the authority check is what is under test, and a stub
+    // would prove only that the stub was called.
+    const { pushHandler } = await import('../../src/services/notifications/push.js');
+    registerToolHandler('send_push', pushHandler, SEND_PUSH_POLICY);
+
+    const direct = await invoke({
+      productId, tool: 'send_push', action: 'push',
+      params: {
+        founder_id: outsider, notification_type: 'risk_state_change',
+        payload: { title: 'not yours', body: 'x' },
+      },
+      dedupKey: `p-${nanoid()}`,
+    } as Parameters<typeof invoke>[0]);
+    expect(direct.ok, 'company authority is not authority over any person').toBe(false);
+  });
+
+  it('allows an active team member', async () => {
+    const mate = nanoid();
+    await query(`INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
+      [mate, `clerk_${mate}`, `${mate}@team.test`]);
+    await query(
+      `INSERT INTO team_members (id, product_id, founder_id, status) VALUES (?,?,?,'active')`,
+      [nanoid(), productId, mate]);
+    const { pushHandler } = await import('../../src/services/notifications/push.js');
+    registerToolHandler('send_push', pushHandler, SEND_PUSH_POLICY);
+    const r = await invoke({
+      productId, tool: 'send_push', action: 'push',
+      params: {
+        founder_id: mate, notification_type: 'risk_state_change',
+        payload: { title: 'yours', body: 'x' },
+      },
+      dedupKey: `p-${nanoid()}`,
+    } as Parameters<typeof invoke>[0]);
+    expect(r.ok ? 'ok' : `${r.phase}: ${r.reason}`).toBe('ok');
+  });
+});
+
+describe('a receipt says what happened, not what was attempted', () => {
+  it('does not count an unconfigured provider as a delivery', async () => {
+    // No VAPID keys and no APNs keys in tests. Both senders used to return
+    // quietly and the caller counted a delivery, then wrote a push_log row
+    // saying 'sent' — a receipt for something that never left the building.
+    const sub = nanoid();
+    await query(
+      `INSERT INTO push_subscriptions (id, founder_id, platform, endpoint, p256dh, auth)
+       VALUES (?,?, 'web', 'https://push.example/x', 'k', 'a')`, [sub, founderId]);
+    const { deliverPushNotification } = await import(
+      '../../src/services/notifications/push.js');
+
+    const result = await deliverPushNotification(
+      founderId, productId, 'risk_state_change', { title: 'hi', body: 'there' });
+    expect(result.sent, 'nothing was configured, so nothing was sent').toBe(0);
+
+    const logged = await query(
+      `SELECT status FROM push_log WHERE subscription_id = ?`, [sub]);
+    expect((logged.rows[0] as Record<string, string>).status).toBe('not_configured');
   });
 });

@@ -101,28 +101,34 @@ export async function deliverPushNotification(
     const sub = row as Record<string, unknown>;
 
     try {
+      // DISPATCHED, OR ONLY ATTEMPTED? Both platform senders return quietly
+      // when their credentials are unset — and `sent++` counted that as a
+      // delivery, then wrote a push_log row saying 'sent'. A receipt for
+      // something that never left the building is worse than no receipt: it is
+      // the one record anybody would check.
+      let dispatched = false;
       if (sub.platform === 'web' && sub.endpoint) {
-        await sendWebPush(
+        dispatched = await sendWebPush(
           sub.endpoint as string,
           sub.p256dh as string,
           sub.auth as string,
           payload,
         );
-        sent++;
       } else if (sub.platform === 'ios' && sub.apns_device_token) {
-        await sendAPNS(
+        dispatched = await sendAPNS(
           sub.apns_device_token as string,
           sub.apns_bundle_id as string,
           payload,
         );
-        sent++;
       }
+      if (dispatched) sent++;
 
-      // Log delivery
+      // Log delivery, saying which of the two happened.
       await query(
         `INSERT INTO push_log (id, founder_id, product_id, subscription_id, notification_type, title, body, data, status, sent_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sent', CURRENT_TIMESTAMP)`,
-        [nanoid(), founderId, productId, sub.id, notificationType, payload.title, payload.body, JSON.stringify(payload.data ?? {})],
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [nanoid(), founderId, productId, sub.id, notificationType, payload.title, payload.body,
+          JSON.stringify(payload.data ?? {}), dispatched ? 'sent' : 'not_configured'],
       );
 
       // Update last delivered
@@ -195,13 +201,35 @@ interface PushToolParams {
   payload: PushPayload;
 }
 
-async function pushHandler(req: GatewayRequest): Promise<{ sent: number; failed: number }> {
+/** Exported for tests that must exercise the real authority check rather than a
+ * stub — the same reason `sendEmailHandler` is exported. Production callers use
+ * `notifyFounder`, which goes through the gateway. */
+export async function pushHandler(req: GatewayRequest): Promise<{ sent: number; failed: number }> {
   const params = req.params as unknown as PushToolParams;
   if (!(NOTIFICATION_TYPES as readonly string[]).includes(params.notification_type)) {
     throw new Error('unknown notification type');
   }
+  // THE GATEWAY ESTABLISHED THE COMPANY, NOT THE PERSON. `founder_id` arrives
+  // in the payload, so without this a caller holding one company's authority
+  // could push to anybody's phone — the company is checked, the recipient was
+  // taken on trust. Same shape as an account notice addressed by its caller.
+  if (!(await belongsToCompany(params.founder_id, req.productId))) {
+    throw new Error('recipient does not belong to this company');
+  }
   return deliverPushNotification(
     params.founder_id, req.productId, params.notification_type, params.payload);
+}
+
+/** Owner, or an active team member. Anyone else is not this company's to notify. */
+async function belongsToCompany(founderId: string, productId: string): Promise<boolean> {
+  if (!founderId) return false;
+  const res = await query(
+    `SELECT 1 AS ok FROM products WHERE id = ? AND owner_id = ?
+      UNION ALL
+     SELECT 1 AS ok FROM team_members
+      WHERE product_id = ? AND founder_id = ? AND status = 'active'`,
+    [productId, founderId, productId, founderId]);
+  return res.rows.length > 0;
 }
 
 export const SEND_PUSH_POLICY = {
@@ -257,26 +285,28 @@ export async function notifyFounder(input: {
 
 // ─── Platform-Specific Senders ────────────────────────────────────────────────
 
+/** Returns whether the notification actually left for the provider. */
 async function sendWebPush(
   endpoint: string,
   p256dh: string,
   auth: string,
   payload: PushPayload,
-): Promise<void> {
+): Promise<boolean> {
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
   const vapidSubject = process.env.VAPID_SUBJECT ?? 'mailto:hello@foundry.app';
 
   if (!vapidPublicKey || !vapidPrivateKey) {
-    // Web Push not configured — skip silently
-    return;
+    // Web Push is not configured. Nothing was delivered, and the caller is told
+    // so rather than being handed a success.
+    return false;
   }
 
   // Use web-push library if available, otherwise skip
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const webpush = await import('web-push' as any).catch(() => null);
-    if (!webpush) return;
+    if (!webpush) return false;
 
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
@@ -284,23 +314,25 @@ async function sendWebPush(
       { endpoint, keys: { p256dh, auth } },
       JSON.stringify(payload),
     );
+    return true;
   } catch (err) {
     throw new Error(`Web Push failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
+/** Returns whether the notification actually left for the provider. */
 async function sendAPNS(
   deviceToken: string,
   bundleId: string,
   payload: PushPayload,
-): Promise<void> {
+): Promise<boolean> {
   const apnsKey = process.env.APNS_KEY;
   const apnsKeyId = process.env.APNS_KEY_ID;
   const apnsTeamId = process.env.APNS_TEAM_ID;
 
   if (!apnsKey || !apnsKeyId || !apnsTeamId) {
-    // APNs not configured — skip silently
-    return;
+    // Not configured. Not delivered. Said so.
+    return false;
   }
 
   const apnsHost = process.env.NODE_ENV === 'production'
@@ -336,6 +368,7 @@ async function sendAPNS(
     const error = await response.text().catch(() => 'unknown');
     throw new Error(`APNs error: ${response.status} ${error}`);
   }
+  return true;
 }
 
 async function generateAPNSJWT(key: string, keyId: string, teamId: string): Promise<string> {
