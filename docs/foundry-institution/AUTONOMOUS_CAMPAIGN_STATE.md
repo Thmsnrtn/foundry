@@ -8,8 +8,11 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 ## Current frontier
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** through **136**. Schema snapshot current.
-- **Validation:** `npm run check` green — **171 files / 1,383 tests**, all 4 ratchets hold.
+- **Migrations:** through **138**. Schema snapshot current.
+- **Validation:** `npm run check` green — **174 files / 1,409 tests**, all 4 ratchets hold.
+- **The whole ladder is generic now.** Four SaaS-shaped bindings were found and removed in sequence, each revealed by the previous one: the observation vocabulary (135), the effect guard (136), the authority-read, and the grantable-capability map. A dance school is carried end to end — owner report → Understood → Shadowing → resolved comparison → exact grant → Assisting → founder-authored notice → governed send → receipt → outcome.
+- **The loop closes.** Someone outside can finally say whether an effect achieved what it was for (137), so `outcome_status` can leave `unresolved` by fact rather than staying there by construction. HANDLED now means "it worked", not "it reached a rung".
+- **A company's own systems can raise work** (138), so the first rung is no longer fed only by a person.
 - **The ladder is no longer SaaS-only.** Independent observation was admissible for twelve hard-coded metrics backed by physical columns, in the service *and* in a database trigger. A company now declares what it counts, in its own words, and the kernel treats it as an opaque named quantity. A boatyard reaches Shadowing in test.
 - **Recursive Foundry:** the owner-named schema-snapshot responsibility is carried end to end locally — owner report → Understood → Shadowing → Assisting → governed effect → independent verification. `recursive-institution-v1` reports ordinary on all thirteen dimensions, earned by exercise.
 - **Dynamic reachability:** all three agent loaders narrow through one closed vocabulary; a bidirectional gate classifies every loadable module.
@@ -20,20 +23,24 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 Ordered by distance from the final state, not by effort.
 
-1. **Senses are thin.** One generic ingest endpoint, one inbound-message channel, one company-defined observation channel. No communications, money, sales, project, deployment, document, or calendar reality.
+1. **Senses are still thin, but no longer closed.** Four provider-neutral intakes exist — metrics, company-defined quantities, inbound customer messages, external obligations, and effect outcomes. All are generic in shape; none is domain-specific. What is missing is breadth of ADAPTERS, not more kernel.
 2. **Capability fabric is still narrow.** Governed email send now serves any capability through two declared effect kinds, plus bounded generated-artifact development. No scheduling, record mutation, publishing, billing operations, or reconciliation.
 3. **World model is sparse.** Facts and claims exist; promise / obligation / workflow / dependency / resource / constraint composition does not.
 4. **No frontier cognition anywhere**, by design — no consumed task has yet established a baseline that a model would beat.
 5. **Unfamiliar-company breadth is one held-out corpus plus one boatyard.** Needs several genuinely different shapes exercised end to end.
-6. **Outcome learning has no real longitudinal supply.** Judgment evaluation can only ever report `not_yet_observable`.
+6. **Judgment calibration still has no supply.** Effect outcomes are now reportable; JUDGMENT outcomes are a different shape and nothing produces them, so evaluation can still only report `not_yet_observable`. Deliberately unbuilt.
 7. **Nothing has met reality.** No real founder, provider, customer, or pilot.
 
 ## Ready work
 
-- More company senses on the existing provider-neutral shape (`adapter → authenticated tenant-bound evidence → canonical machinery`).
-- A second and third unfamiliar company carried to Shadowing through the generic path, from independently authored fixtures.
-- Extract a real capability from a live named agent (Class B/C) and cut over.
-- Continue evidence-driven named-agent classification; `challenger` and `synthesizer` are evidence-insufficient.
+- **Adapters** for the existing intakes — the shape is proven five times over; what is missing is breadth, not architecture.
+- A second and third unfamiliar company carried through a governed effect end to end.
+- More effect kinds, when a real responsibility demands one. Each is a migration, deliberately.
+- `challenger` and `synthesizer` disposition — owner question, already queued.
+
+## Blocked — needs a design decision, not effort
+
+- **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over to the institutional path would LOSE capability rather than preserve it. Retirement is blocked on executive-cognition design, which is itself blocked on a consumed task with a baseline. Do not force it.
 
 ## Active work
 
@@ -67,9 +74,13 @@ See `OWNER_DECISIONS_PENDING.md`. Nothing currently blocks all high-value work.
 
 ## Recently completed
 
-1. Governed effect boundary generalized (migration 136) — declared effect kinds, capability out of the guard, founder-authored responsibility notices as the second real kind.
-2. Four unfamiliar businesses carried to a resolved Shadowing with no kernel branch.
-3. Company-defined observation channels (migration 135) — the ladder stops being SaaS-only.
+1. External company reports (138) — a company's own systems can raise work, without laundering provenance.
+2. Effect outcome reports (137) — the loop's last link finally has a supply; HANDLED means "it worked".
+3. Governed effect boundary generalized (136) — declared effect kinds, capability out of the guard, founder-authored notices as the second real kind.
+4. A dance school carried end to end through a governed effect.
+5. The long-standing intermittent RESOLVED — a 1-in-64 fixture collision, not a system defect.
+6. Four unfamiliar businesses carried to a resolved Shadowing with no kernel branch.
+7. Company-defined observation channels (135) — the ladder stops being SaaS-only.
 2. Founder surface + ingest wiring for observation channels, guarded by the chain gate.
 3. Failure-forensics readiness for the open nondeterminism.
 4. Dynamic-loader blind spot closed; bidirectional agent classification gate; dead config seeder deleted.
@@ -90,16 +101,23 @@ history.
 An unfamiliar company can now be recognised, understood, watched, and — with an
 exact grant — helped, without a kernel change.
 
+**The kernel work is substantially done.** Five consecutive packages each
+removed a SaaS-shaped binding or closed a missing link, and the last of them
+found no further binding to remove. The recurring defect shape — a general
+mechanism bound to one special case — has been swept from observation,
+effects, authority reads, the grant surface, recognition, and outcomes.
+
 Next, in order:
-1. **Extract a real capability from a live named agent and cut over** (Class B).
-   Twelve agents are production-reachable and institutionally superseded; prove
-   equivalence, move callers to the ordinary capability, verify, then delete. No
-   dual-write.
-2. **Broaden company senses** on the generic shape — declaration table with a
-   guard → canonical signal evidence → the same machinery. Prefer a sense a real
+1. **Adapters, not architecture.** The provider-neutral shape is proven five
+   times; breadth is now an integration exercise. Prefer a source a real
    responsibility already demands over a vendor checklist.
+2. **Carry a second and third unfamiliar company through a governed effect**
+   end to end, and treat any kernel change they force as a defect in the
+   generalization.
 3. **Reassess final-state distance** rather than continuing down this list by
-   habit.
+   habit. The next genuine frontier is probably executive cognition — which is
+   gated on a consumed task with a real baseline, and must not be started by
+   sprinkling model calls.
 
 Do not build the three deferred systems. Do not unlock Operating. Do not touch
 AcreOS.

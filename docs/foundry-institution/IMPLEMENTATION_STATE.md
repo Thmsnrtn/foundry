@@ -967,18 +967,44 @@ The claim is made structural rather than asserted: with comments stripped, no ex
 
 ---
 
+## Sweeping one defect shape out of the whole ladder
+
+Five packages in sequence, each revealed by the one before it. The shape was always the same: **a general mechanism bound to one SaaS-shaped special case.**
+
+| Where it hid | What it blocked | Fixed by |
+|---|---|---|
+| Twelve metric columns as the only admissible observation | Shadowing unreachable for any non-SaaS company | migration 135 |
+| `capability='customer_support'` in the effect guard | Assisting unreachable for any non-support capability | migration 136 |
+| The same literal in the authority read | Same, one layer up | migration 136 |
+| `GRANTABLE_CAPABILITIES` naming one capability | A founder could not grant work Foundry could already do | migration 136 slice |
+| Recognition fed only by a person or four SaaS signals | The more a company had automated, the less Foundry could see | migration 138 |
+
+And one link that was missing rather than bound: **nothing had ever produced outcome evidence**, so `outcome_status` was permanently `unresolved` — correct as a default, impossible as a destination (migration 137).
+
+**What this bought, end to end:** a dance school is now carried owner report → Understood → Shadowing → resolved comparison → exact bounded grant → Assisting → founder-authored notice → plan → revalidation → governed send → receipt → outcome, with a mid-flight revocation proving nothing is sent, and `HANDLED` meaning *it worked* rather than *it reached a rung*.
+
+**The distinction that keeps this safe.** A company may declare what it COUNTS, because reading a number is harmless. A company may never declare a new irreversible way to reach the outside world — effect kinds are constitutional and widen only by migration. **Closed vocabularies are wrong when they encode a business assumption and right when they encode a consequence boundary.**
+
+**Named-agent retirement is blocked, and correctly so.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B — cutting them over would lose capability rather than preserve it. That is an executive-cognition design question gated on a consumed task with a real baseline, and forcing it now would mean sprinkling model calls to justify a deletion.
+
+---
+
 # CONTINUATION — self-contained resume record
 
-*Rewritten at the close of the tenth autonomous session. Supersedes all earlier continuation records.*
+*Rewritten at the close of the eleventh autonomous session. Supersedes all earlier continuation records.*
 
 ## Exact state
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Never merged to master (owner instruction).
-- **Migrations:** through **135**. Schema snapshot current — verified in sync by regeneration, and now also observed by Foundry itself.
-- **Full `npm run check`:** green — **169 files / 1,369 tests**, all 4 ratchets hold.
+- **Migrations:** through **138**. Schema snapshot current — verified in sync by regeneration, and now also observed by Foundry itself.
+- **Full `npm run check`:** green — **174 files / 1,409 tests**, all 4 ratchets hold.
 - **Campaign state lives on disk:** `AUTONOMOUS_CAMPAIGN_STATE.md` is the scheduler across contexts and `OWNER_DECISIONS_PENDING.md` holds three genuinely owner-level decisions. Start there, not here, for what to do next.
 - **Working tree:** clean.
 - **`sqlite3` IS available in this environment** (`/usr/bin/sqlite3`), so `bash scripts/schema-snapshot.sh` runs directly. Earlier records said otherwise.
+
+## What the eleventh session did
+
+Swept the recurring SaaS-shaped-binding defect out of the entire ladder (migrations 135–138), closed the loop's last link, carried an unfamiliar company end to end through a governed effect, and **resolved the long-standing intermittent** — a 1-in-64 collision in a test fixture, not a system defect. Details in the sections above.
 
 ## What the tenth session did
 
