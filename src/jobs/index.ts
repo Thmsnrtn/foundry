@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { logger } from '../services/logger.js';
-import { getAllActiveProducts, query, getActiveStressors, getLatestMetrics, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
+import { getAllActiveProducts, operatingProduct, query, getActiveStressors, getLatestMetrics, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
 import { evaluateConditions } from '../services/lifecycle/monitor.js';
 import { runCompetitiveScan } from '../services/intelligence/competitive.js';
 import { identifyStressors, type StressorInputs } from '../services/intelligence/stressor.js';
@@ -162,7 +162,7 @@ export async function digestGenerate(): Promise<void> {
   for (const fRow of founders.rows) {
     const f = fRow as Record<string, unknown>;
     try {
-      const products = await query("SELECT id, name FROM products WHERE owner_id = ? AND status = 'active'", [f.id]);
+      const products = await query("SELECT id, name FROM products WHERE owner_id = ? AND ${operatingProduct()}", [f.id]);
       for (const pRow of products.rows) {
         const p = pRow as Record<string, string>;
         const ls = await query('SELECT risk_state FROM lifecycle_state WHERE product_id = ?', [p.id]);
@@ -335,7 +335,7 @@ export async function yellowPulse(): Promise<void> {
     `SELECT p.*, f.email FROM products p
      JOIN founders f ON p.owner_id = f.id
      JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE ls.risk_state = 'yellow' AND p.status = 'active'`, []);
+     WHERE ls.risk_state = 'yellow' AND ${operatingProduct('p')}`, []);
 
   for (const row of products.rows) {
     const p = row as Record<string, unknown>;
@@ -356,7 +356,7 @@ export async function redDaily(): Promise<void> {
     `SELECT p.*, f.email FROM products p
      JOIN founders f ON p.owner_id = f.id
      JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE ls.risk_state = 'red' AND p.status = 'active'`, []);
+     WHERE ls.risk_state = 'red' AND ${operatingProduct('p')}`, []);
 
   for (const row of products.rows) {
     const p = row as Record<string, unknown>;
@@ -458,7 +458,7 @@ export async function dnaCompletionNudge(): Promise<void> {
      FROM products p
      JOIN founders f ON p.owner_id = f.id
      JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE p.status = 'active'
+     WHERE ${operatingProduct('p')}
        AND (ls.dna_completion_pct IS NULL OR ls.dna_completion_pct < 60)
        AND p.created_at < datetime('now', '-14 days')`, []
   );
@@ -1087,7 +1087,7 @@ async function scpTemporalAnalysis(): Promise<void> {
   // Weekly: analyze temporal trends for all active SCP products
   const { query } = await import('../db/client.js');
   const { getSignalTimeline, analyzeTemporalTrends } = await import('../services/scp/temporal.js');
-  const products = await query(`SELECT id FROM products WHERE scp_status = 'active'`);
+  const products = await query(`SELECT id FROM products WHERE ${operatingProduct()}`);
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
@@ -1129,7 +1129,7 @@ async function scpWisdomSynthesis(): Promise<void> {
   // Weekly: synthesize wisdom patterns for all active SCP products
   const { query } = await import('../db/client.js');
   const { synthesizeWisdomPatterns } = await import('../services/scp/wisdom.js');
-  const products = await query(`SELECT id FROM products WHERE scp_status = 'active'`);
+  const products = await query(`SELECT id FROM products WHERE ${operatingProduct()}`);
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
@@ -1159,7 +1159,7 @@ async function scpDNANudge(): Promise<void> {
     `SELECT p.id, p.name, f.email
      FROM products p
      JOIN founders f ON p.owner_id = f.id
-     WHERE p.scp_status = 'active'
+     WHERE ${operatingProduct('p')}
        AND p.company_lifecycle_state IN ('setup', 'learning')
      LIMIT 50`
   );
@@ -1174,7 +1174,7 @@ async function scpLifecycleRules(): Promise<void> {
   logger.info('scp_lifecycle_rules starting', { jobName: 'scp_lifecycle_rules' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
-    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
   );
   const { evaluateLifecycleRules } = await import('../services/customer/lifecycle.js');
   let totalTriggered = 0;
@@ -1191,7 +1191,7 @@ async function scpPLUpdate(): Promise<void> {
   logger.info('scp_pl_update starting', { jobName: 'scp_pl_update' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
-    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
   );
   const { getAICompanyPL } = await import('../services/financial/economics.js');
   for (const row of products.rows) {
@@ -1212,7 +1212,7 @@ async function scpStrategySynthesis(): Promise<void> {
   logger.info('scp_strategy_synthesis starting', { jobName: 'scp_strategy_synthesis' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
-    `SELECT id FROM products WHERE scp_status = 'active' AND company_lifecycle_state NOT IN ('setup') LIMIT 50`
+    `SELECT id FROM products WHERE ${operatingProduct()} AND company_lifecycle_state NOT IN ('setup') LIMIT 50`
   );
   const { generateStrategicSynthesis } = await import('../services/strategy/synthesis.js');
   let generated = 0;
@@ -1233,7 +1233,7 @@ async function scpIntegrationFabricSync(): Promise<void> {
   logger.info('scp_integration_fabric_sync starting', { jobName: 'scp_integration_fabric_sync' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
-    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
   );
   const { syncPostHogEvents } = await import('../services/integration/posthog.js');
   const { syncGitHubEvents } = await import('../services/integration/github.js');
@@ -1261,7 +1261,7 @@ async function scpIntegrationFabricSync(): Promise<void> {
 async function scpExtendedIntegrationsSync(): Promise<void> {
   logger.info('scp_extended_integrations_sync starting', { jobName: 'scp_extended_integrations_sync' });
   const { query: dbQuery } = await import('../db/client.js');
-  const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+  const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
 
   let total = 0;
   for (const row of products.rows) {
@@ -1306,7 +1306,7 @@ async function scpBenchmarkRefresh(): Promise<void> {
        JOIN products p ON ms.product_id = p.id
        JOIN lifecycle_state ls ON ms.product_id = ls.product_id
        WHERE ms.snapshot_date = date('now', '-1 day')
-         AND p.scp_status = 'active'
+         AND ${operatingProduct('p')}
        LIMIT 200`
     );
 
@@ -1342,7 +1342,7 @@ async function scpDecisionRetrospectives(): Promise<void> {
     const { getDecisionsDueForRetrospective } = await import('../services/scp/decision-log.js');
     const { query: dbQuery } = await import('../db/client.js');
 
-    const products = await dbQuery(`SELECT id, owner_id, name FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id, owner_id, name FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let notified = 0;
 
     for (const row of products.rows) {
@@ -1415,7 +1415,7 @@ async function scpPredictionAccuracyCheck(): Promise<void> {
   try {
     const { measurePendingPredictions } = await import('../services/scp/accuracy/tracker.js');
     const { query: dbQuery } = await import('../db/client.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status='active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let totalMeasured = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
@@ -1437,7 +1437,7 @@ async function scpCompressedBrief(): Promise<void> {
   try {
     const { generateCompressedWeeklyBrief } = await import('../services/scp/briefing/compressed.js');
     const { query: dbQuery } = await import('../db/client.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status='active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let generated = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
@@ -1460,7 +1460,7 @@ async function scpScenarioRefresh(): Promise<void> {
     const { generateScenariosForProduct } = await import('../services/scp/forecasting/runway.js');
     const { query: dbQuery } = await import('../db/client.js');
     const products = await dbQuery(
-      `SELECT id FROM products WHERE scp_status='active' LIMIT 100`
+      `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
     );
     let generated = 0;
     for (const row of products.rows) {
@@ -1482,7 +1482,10 @@ async function scpDebateRun(): Promise<void> {
   logger.info('scp_debate_run starting', { jobName: 'scp_debate_run' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
+    const rows = await query(
+      `SELECT DISTINCT ai.product_id FROM agent_instances ai
+         JOIN products p ON p.id = ai.product_id
+        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     const today = new Date().toISOString().slice(0, 10);
     let ran = 0;
     for (const row of rows.rows) {
@@ -1503,7 +1506,10 @@ async function scpFailurePatternScan(): Promise<void> {
   logger.info('scp_failure_pattern_scan starting', { jobName: 'scp_failure_pattern_scan' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
+    const rows = await query(
+      `SELECT DISTINCT ai.product_id FROM agent_instances ai
+         JOIN products p ON p.id = ai.product_id
+        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let scanned = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
@@ -1524,7 +1530,10 @@ async function scpPromptEvolution(): Promise<void> {
   logger.info('scp_prompt_evolution starting', { jobName: 'scp_prompt_evolution' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
+    const rows = await query(
+      `SELECT DISTINCT ai.product_id FROM agent_instances ai
+         JOIN products p ON p.id = ai.product_id
+        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let evolved = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
@@ -1545,7 +1554,10 @@ async function scpExecutionPlaybookEval(): Promise<void> {
   logger.info('scp_playbook_eval starting', { jobName: 'scp_playbook_eval' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
+    const rows = await query(
+      `SELECT DISTINCT ai.product_id FROM agent_instances ai
+         JOIN products p ON p.id = ai.product_id
+        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let triggered = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
@@ -1568,7 +1580,7 @@ async function scpSignalEvents(): Promise<void> {
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { processPendingSignalEvents } = await import('../services/scp/events/dispatcher.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let total = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
@@ -1590,7 +1602,7 @@ async function scpROIMonthly(): Promise<void> {
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { computeMonthlyROI } = await import('../services/scp/roi/calculator.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let computed = 0;
@@ -1617,7 +1629,7 @@ async function scpFounderStateAssessment(): Promise<void> {
     const founders = await dbQuery(
       `SELECT DISTINCT f.id FROM founders f
        JOIN products p ON p.owner_id = f.id
-       WHERE p.scp_status = 'active'
+       WHERE ${operatingProduct('p')}
        LIMIT 100`
     );
     let assessed = 0;
@@ -1642,7 +1654,7 @@ async function scpPriorityRebuild(): Promise<void> {
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { rebuildPriorityQueue } = await import('../services/scp/priority/ranker.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let total = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
@@ -2306,7 +2318,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // authority, and direction is still not permission.
   institutional_judgment_tick: {
     fn: async () => {
-      const products = await query("SELECT id FROM products WHERE status = 'active'", []);
+      const products = await query(`SELECT id FROM products WHERE ${operatingProduct()}`, []);
       const { runInstitutionalJudgmentPass } = await import(
         '../services/institution/institutional-judgment.js'
       );

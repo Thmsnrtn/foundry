@@ -347,7 +347,42 @@ export async function getFounderByClerkId(clerkUserId: string): Promise<ResultSe
 
 /**
  * Get all active products (for scheduled jobs that iterate all products).
+ *
+ * ACTIVE ON BOTH AXES. `status` says the record exists; `scp_status` says the
+ * company is being operated. Thirty-four background jobs choose their work
+ * through this one function — competitive scans, daily insight generation,
+ * morning briefings, autopilot, customer success — and nearly all of them spend
+ * money on model calls per product they are handed.
+ *
+ * Filtering only on `status` meant a cancelled or read-only company kept being
+ * handed to every one of them. The outbound gateway now refuses the resulting
+ * effect, but refusing the send after paying for the work is the expensive half
+ * of the fix and none of the value: `redDaily` generates an Opus narrative and
+ * THEN emails it. The pause has to reach the work.
+ *
+ * 'provisioning' is deliberately kept. A product is provisioning before its
+ * first agent run, and excluding it would stall onboarding to enforce billing.
  */
 export async function getAllActiveProducts(): Promise<ResultSet> {
-  return query("SELECT * FROM products WHERE status = 'active'", []);
+  return query(`SELECT * FROM products WHERE ${operatingProduct()}`, []);
+}
+
+/**
+ * The SQL predicate for "Foundry is operating this company right now".
+ *
+ * Exported as one definition rather than copied, because several jobs cannot
+ * use `getAllActiveProducts` — they join `founders` or `lifecycle_state` and
+ * need the predicate under an alias. Copying it is how the two halves of a rule
+ * start to disagree, which is the defect shape this codebase keeps finding.
+ *
+ * Takes a table alias, never a caller value: it is composed into SQL text, so
+ * there is nothing here for a request to reach.
+ *
+ * COALESCE, not a bare comparison. `scp_status` is NULL on rows older than
+ * migration 017, and in SQLite `NULL NOT IN (...)` is NULL, which is not true,
+ * which would silently drop every legacy company from every job.
+ */
+export function operatingProduct(alias = ''): string {
+  const p = alias ? `${alias}.` : '';
+  return `${p}status = 'active' AND COALESCE(${p}scp_status,'active') NOT IN ('paused','archived')`;
 }

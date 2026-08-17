@@ -3,7 +3,7 @@
 // Manages when agents run. Called by cron jobs / background workers.
 // =============================================================================
 
-import { query } from '../../db/client.js';
+import { operatingProduct, query } from '../../db/client.js';
 import { SCPInstance } from './instance.js';
 import { generateDailyBriefing } from './briefing.js';
 import { runEvolutionSynthesis } from './evolution.js';
@@ -29,7 +29,7 @@ export async function runDueAgentsForProduct(productId: string): Promise<void> {
 export async function runDueAgentsForAllProducts(): Promise<void> {
   const result = await query(
     `SELECT id FROM products
-     WHERE scp_status='active' AND company_lifecycle_state != 'setup'`,
+     WHERE ${operatingProduct()} AND company_lifecycle_state != 'setup'`,
     []
   );
 
@@ -104,7 +104,7 @@ export async function getDueAgents(productId: string): Promise<AgentName[]> {
 
 export async function runEvolutionForAllProducts(): Promise<void> {
   const result = await query(
-    `SELECT id FROM products WHERE scp_status='active' AND evolution_enabled=1`,
+    `SELECT id FROM products WHERE ${operatingProduct()} AND evolution_enabled=1`,
     []
   );
 
@@ -130,7 +130,7 @@ export async function runEvolutionForAllProducts(): Promise<void> {
 
 export async function generateBriefingsForAllProducts(): Promise<void> {
   const result = await query(
-    `SELECT id FROM products WHERE scp_status='active'`,
+    `SELECT id FROM products WHERE ${operatingProduct()}`,
     []
   );
 

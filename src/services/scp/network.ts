@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { operatingProduct, query } from '../../db/client.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ export async function computeAndStoreBenchmarks(): Promise<void> {
        FROM agent_instances
        GROUP BY product_id
      ) ai ON ai.product_id = p.id
-     WHERE p.scp_status = 'active'`,
+     WHERE ${operatingProduct('p')}`,
     []
   );
 

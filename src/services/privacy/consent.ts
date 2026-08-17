@@ -376,7 +376,17 @@ export async function processScheduledDeletions(): Promise<number> {
     //
     // `archived` is what the code's own comment says it is doing and is the
     // value the constraint has always expected.
-    await query(`UPDATE products SET status = 'archived', github_access_token = NULL WHERE id = ?`, [productId]);
+    //
+    // BOTH AXES. Writing only `status` left `scp_status='active'`, and around
+    // twenty scheduled jobs select their work on `scp_status` alone — so a
+    // company whose founder had withdrawn consent and whose data had just been
+    // deleted stayed on every agent's work list, and kept being reasoned about
+    // by model calls. Deletion has to end the operating relationship, not just
+    // the record.
+    await query(
+      `UPDATE products SET status = 'archived', scp_status = 'archived',
+                          github_access_token = NULL WHERE id = ?`,
+      [productId]);
 
     // Log completion
     await query(

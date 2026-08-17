@@ -28,7 +28,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
-import { query, executeRaw } from '../../src/db/client.js';
+import { query, executeRaw, getAllActiveProducts } from '../../src/db/client.js';
 import { invoke, registerToolHandler, clearToolHandlers } from '../../src/services/outbound/gateway.js';
 
 let founderId: string;
@@ -136,6 +136,42 @@ describe('the entitlement pause reaches the outbound gateway', () => {
       `SELECT outcome, reasoning FROM audit_log WHERE product_id = ?`, [productId]);
     expect(audit.rows.length).toBeGreaterThan(0);
     expect((audit.rows[0] as Record<string, string>).outcome).toBe('refused');
+  });
+});
+
+// The outbound gateway stops the EFFECT. It does not stop the WORK that
+// produced it — and the work is where the money goes. `redDaily` generates an
+// Opus narrative and then sends it; blocking only the send means Foundry pays
+// for a briefing nobody receives. Thirty-four background jobs choose their work
+// through one helper, and that helper filtered on the archive axis too.
+describe('the pause reaches the work, not only the send', () => {
+  it('drops a paused company from the background work list', async () => {
+    await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [productId]);
+    const ids = (await getAllActiveProducts()).rows.map((r) => (r as Record<string, string>).id);
+    expect(ids, 'a paused company must not be picked up by AI-spending jobs')
+      .not.toContain(productId);
+  });
+
+  it('drops a company archived on the SCP axis', async () => {
+    await query(`UPDATE products SET scp_status='archived' WHERE id=?`, [productId]);
+    const ids = (await getAllActiveProducts()).rows.map((r) => (r as Record<string, string>).id);
+    expect(ids).not.toContain(productId);
+  });
+
+  it('keeps provisioning and active companies, so onboarding work still runs', async () => {
+    const other = nanoid();
+    await query(`INSERT INTO products (id, name, owner_id, status, scp_status) VALUES (?,?,?,'active','provisioning')`,
+      [other, 'Provisioning', founderId]);
+    const ids = (await getAllActiveProducts()).rows.map((r) => (r as Record<string, string>).id);
+    expect(ids).toContain(productId);
+    expect(ids).toContain(other);
+    await query(`DELETE FROM products WHERE id=?`, [other]);
+  });
+
+  it('still drops an archived record, whatever the SCP axis says', async () => {
+    await query(`UPDATE products SET status='archived', scp_status='active' WHERE id=?`, [productId]);
+    const ids = (await getAllActiveProducts()).rows.map((r) => (r as Record<string, string>).id);
+    expect(ids).not.toContain(productId);
   });
 });
 
