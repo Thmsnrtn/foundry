@@ -184,6 +184,12 @@
        AND c.epistemic_status IN ('known','inferred') AND json_array_length(c.evidence_refs_json)>0
        AND c.product_id=r.product_id
        AND x.status='completed' AND x.verify_status='passed'
+      'activation_event','active_user_event','team_id','host','account_id',
+      'activation_event','active_user_event','team_id','host','account_id',
+      'org','repo','owner','channel_id','workspace_id','base_url'));
+      'org','repo','owner','channel_id','workspace_id','base_url'));
+      'org_slug','project_slug','project_id','workspace','region','channel',
+      'org_slug','project_slug','project_id','workspace','region','channel',
       )
       )
       )
@@ -526,6 +532,8 @@
     SELECT 1 FROM institutional_responsibilities r WHERE r.id=NEW.responsibility_id
     SELECT 1 FROM json_each(NEW.allowed_path_prefixes_json) g
     SELECT 1 FROM json_each(NEW.allowed_path_prefixes_json) g,
+    SELECT 1 FROM json_each(NEW.config_json) k
+    SELECT 1 FROM json_each(NEW.config_json) k
     SELECT 1 FROM json_each(NEW.disposition_evidence_json) e
     SELECT 1 FROM json_each(NEW.evidence_refs_json) ref WHERE
     SELECT 1 FROM json_each(NEW.evidence_refs_json) ref WHERE
@@ -572,6 +580,8 @@
     UNION ALL
     UNION ALL
     VALUES('global', '__global__', NEW.date, 0, NEW.reserved_cents, NEW.updated_at)
+    WHERE COALESCE(k.key,'') NOT IN (
+    WHERE COALESCE(k.key,'') NOT IN (
     WHERE NEW.authority_ref='autonomy_consent:' || a.id
     WHERE NEW.epistemic_status!='unknown' AND NEW.value_json IS NULL;
     WHERE NEW.epistemic_status!='unknown' AND json_array_length(NEW.evidence_refs_json)=0;
@@ -840,6 +850,7 @@
   -- State
   -- Status
   -- Structured output
+  -- The KEY only. The value is deliberately not copied here: this table exists
   -- The assertion answers an OPEN question of this company. It cannot answer a
   -- The canonical evidence that the founder issued this, and to whom.
   -- The canonical evidence that this company said it tracks this.
@@ -928,6 +939,7 @@
   -- irrespective of later reality.
   -- it, and ambiguity is refused rather than believed.
   -- judgment time; the owner cannot introduce an unrepresented direction here.
+  -- just the plaintext column with a more reassuring name.
   -- justified by another tenant's evidence is not a justification.
   -- means editing a migration, which is inside the constitutional ring — so a
   -- message cannot be planned against another, and one responsibility cannot
@@ -979,6 +991,7 @@
   -- the two attribution axes can never disagree about the same row.
   -- the vocabulary checks, silently dropping the two guards below, and the
   -- thing worked, and this is exactly where that would be easiest to fudge.
+  -- to name what must be rotated, and a quarantine that stores the secret is
   -- to quietly narrow everything else the guard enforced.
   -- two never drift apart.
   -- unrecorded event, and it must not be able to enter the ledger as a credit.
@@ -1049,6 +1062,7 @@
   ON inbound_customer_messages(product_id,channel_id,external_message_id);
   ON institutional_responsibilities(product_id, discovery_evidence_ref)
   ON institutional_responsibilities(product_id, state, updated_at);
+  ON integration_secret_quarantine(product_id, rotated_at);
   ON metric_validation_rules(product_id, metric_name);
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);
   ON operator_attention(founder_id, product_id, created_at);
@@ -1193,6 +1207,8 @@
   SELECT RAISE(ABORT,'ingest_credential:secret_weak')
   SELECT RAISE(ABORT,'institutional_judgment:provenance_required') WHERE
   SELECT RAISE(ABORT,'institutional_judgment:tenant_invalid') WHERE EXISTS (
+  SELECT RAISE(ABORT,'integration_config:secret_in_plaintext') WHERE EXISTS (
+  SELECT RAISE(ABORT,'integration_config:secret_in_plaintext') WHERE EXISTS (
   SELECT RAISE(ABORT,'judgment_disposition:alternative_invalid') WHERE
   SELECT RAISE(ABORT,'judgment_disposition:append_only');
   SELECT RAISE(ABORT,'judgment_disposition:append_only');
@@ -1263,6 +1279,7 @@
   UNIQUE(founder_id)
   UNIQUE(founder_id, product_id)
   UNIQUE(founder_id, product_id, step)
+  UNIQUE(integration_id, secret_key)
   UNIQUE(metric, market_category, lifecycle_stage, mrr_bracket)
   UNIQUE(portfolio_id, product_id)
   UNIQUE(product_id)
@@ -2527,6 +2544,7 @@
   id              TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
+  id             TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
@@ -2779,10 +2797,12 @@
   integration_complexity_score REAL NOT NULL, -- API quality, data portability, tech debt
   integration_depth_score REAL,
   integration_id TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+  integration_id TEXT NOT NULL,
   integration_name     TEXT NOT NULL,
   integration_name TEXT NOT NULL,
   integration_name TEXT NOT NULL,
   integration_name TEXT NOT NULL,
+  integration_name TEXT,
   integration_source TEXT NOT NULL,  -- 'stripe' | 'intercom' | 'linear' | 'slack' | 'github'
   integration_type TEXT NOT NULL,
   intent TEXT CHECK(intent IN (
@@ -3362,6 +3382,7 @@
   product_id      TEXT NOT NULL,
   product_id     TEXT NOT NULL,
   product_id     TEXT NOT NULL,
+  product_id     TEXT NOT NULL,
   product_id    TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
@@ -3592,6 +3613,7 @@
   published BOOLEAN DEFAULT FALSE
   purposes_json TEXT NOT NULL,
   quality_score INTEGER,  -- 1-5, filled in retrospectively or inferred from outcomes
+  quarantined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   quarter TEXT NOT NULL,               -- e.g. "2026-Q1"
   rated_at TEXT NOT NULL DEFAULT (datetime('now')),
   rated_in_session_id TEXT                    -- groups ratings into calibration sessions
@@ -3748,6 +3770,7 @@
   role TEXT,
   role_description TEXT,
   root_cause_entity_id TEXT,
+  rotated_at     TEXT,
   round_type TEXT NOT NULL, -- 'seed' | 'series_a' | 'series_b'
   row_id TEXT NOT NULL,
   rule_id        TEXT REFERENCES metric_validation_rules(id),  -- NULL for non-rule alerts
@@ -3790,6 +3813,7 @@
   secret TEXT NOT NULL,
   secret TEXT,                              -- HMAC signing secret (optional)
   secret TEXT,                         -- HMAC signing secret
+  secret_key     TEXT NOT NULL,
   section      TEXT NOT NULL CHECK (section IN (
   sections_completed TEXT DEFAULT '[]',
   sector TEXT NOT NULL,
@@ -4290,12 +4314,15 @@
   workspace_name TEXT,
   writing_tone TEXT, -- 'formal', 'casual', 'technical', 'friendly', 'direct'
   years_to_saturation REAL,
+ AND COALESCE(json_type(NEW.config_json),'absent')='object'
+ AND COALESCE(json_type(NEW.config_json),'absent')='object'
  SELECT RAISE(ABORT,'judgment_evaluation:evidence_invalid') WHERE json_valid(NEW.evidence_refs_json)=0 OR EXISTS (
  SELECT RAISE(ABORT,'judgment_evaluation:tenant_invalid') WHERE NOT EXISTS (
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
  evidence_refs_json TEXT NOT NULL, economic_result_json TEXT NOT NULL, learned_claim_id TEXT REFERENCES reconstruction_claims(id),
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
+);
 );
 );
 );
@@ -4588,6 +4615,7 @@ BEFORE INSERT ON governed_effect_kinds
 BEFORE INSERT ON inbound_customer_messages
 BEFORE INSERT ON ingest_credentials
 BEFORE INSERT ON institutional_judgment_dispositions
+BEFORE INSERT ON integrations
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
 BEFORE INSERT ON reconstruction_claims
@@ -4616,6 +4644,7 @@ BEFORE INSERT ON strategic_decisions_log WHEN NEW.conflict_identity IS NOT NULL
 BEFORE INSERT ON strategic_decisions_log WHEN NEW.responsibility_refs_json IS NOT NULL
 BEFORE INSERT ON support_channels
 BEFORE INSERT ON system_identities
+BEFORE UPDATE OF config_json ON integrations
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
 BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE ON company_observation_channels
@@ -4626,6 +4655,8 @@ BEFORE UPDATE ON governed_effect_kinds
 BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4873,6 +4904,7 @@ CREATE INDEX idx_ingest_credentials_product ON ingest_credentials(product_id, re
 CREATE INDEX idx_initiative_queue_pending ON agent_initiative_queue(product_id, agent_name, status, priority);
 CREATE INDEX idx_integration_events_product ON integration_events(product_id, event_type, created_at DESC);
 CREATE INDEX idx_integration_events_unprocessed ON integration_events(product_id, created_at DESC);
+CREATE INDEX idx_integration_secret_quarantine_product
 CREATE INDEX idx_integrations_product ON integrations(product_id);
 CREATE INDEX idx_introductions_founders ON introductions(founder_a_id);
 CREATE INDEX idx_investor_annotations_decision ON investor_annotations(decision_id);
@@ -5191,6 +5223,7 @@ CREATE TABLE institutional_judgment_evaluations (
 CREATE TABLE institutional_responsibilities (
 CREATE TABLE integration_events (
 CREATE TABLE integration_health (
+CREATE TABLE integration_secret_quarantine (
 CREATE TABLE integration_sync_log (
 CREATE TABLE intelligence_benchmarks (
 CREATE TABLE introductions (
@@ -5342,6 +5375,8 @@ CREATE TRIGGER institutional_judgment_disposition_guard
 CREATE TRIGGER institutional_judgment_evaluation_guard BEFORE INSERT ON institutional_judgment_evaluations BEGIN
 CREATE TRIGGER institutional_judgment_non_authorizing_guard
 CREATE TRIGGER institutional_judgment_observation_guard
+CREATE TRIGGER integration_config_no_secrets_insert
+CREATE TRIGGER integration_config_no_secrets_update
 CREATE TRIGGER judgment_conflict_identity_guard
 CREATE TRIGGER judgment_conflict_identity_immutable
 CREATE TRIGGER reconstruction_claim_guard
@@ -5463,9 +5498,13 @@ END;
 END;
 END;
 END;
+END;
+END;
 WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
 WHEN COALESCE(OLD.product_id,'')    <> COALESCE(NEW.product_id,'')
 WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')
+WHEN COALESCE(json_valid(NEW.config_json),0)=1
+WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
 WHEN OLD.status IN ('reserved','ambiguous') AND NEW.status IN ('settled','released','expired')

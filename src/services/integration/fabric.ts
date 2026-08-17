@@ -91,51 +91,73 @@ export function splitIntegrationFields(
 /**
  * The credentials an adapter needs, decrypted.
  *
- * Falls back to `config_json` for values stored there before the split was
- * enforced. That fallback is compatibility, not endorsement: those values are
- * in the clear, and `plaintextCredentialKeys` exists so an operator can find
- * them and re-enter them.
+ * ONE SOURCE. There is deliberately no `config_json` fallback any more.
+ * Migration 140 moved every secret-shaped key out of that column and now
+ * refuses new ones, so a value that is not in `credentials_json` is not a
+ * credential this system will use.
+ *
+ * The fallback existed for one session as compatibility, and removing it is
+ * the point rather than a tidy-up: while it was there, an adapter would
+ * silently authenticate with a secret that had been sitting in a plaintext
+ * column, which is exactly the state that needs to become impossible instead
+ * of merely deprecated.
  */
 export async function getIntegrationCredentials(
   productId: string, name: string,
 ): Promise<Record<string, string>> {
   const row = (await query(
-    'SELECT credentials_json, config_json FROM integrations WHERE product_id=? AND name=?',
+    'SELECT credentials_json FROM integrations WHERE product_id=? AND name=?',
     [productId, name],
   )).rows[0] as Record<string, unknown> | undefined;
   if (!row) return {};
-
-  let credentials: Record<string, string> = {};
   try {
     const plaintext = decryptCredentialPayload(row.credentials_json as string | null);
-    if (plaintext) credentials = JSON.parse(plaintext) as Record<string, string>;
-  } catch { credentials = {}; }
-
-  try {
-    const config = JSON.parse(String(row.config_json ?? '{}')) as Record<string, unknown>;
-    for (const [key, value] of Object.entries(config)) {
-      if (isNonSecretConfigKey(key) || key in credentials) continue;
-      if (typeof value === 'string') credentials[key] = value;
-    }
-  } catch { /* config is not required to be readable for credentials to work */ }
-  return credentials;
+    return plaintext ? JSON.parse(plaintext) as Record<string, string> : {};
+  } catch { return {}; }
 }
 
-/** Credential-shaped keys sitting in a plaintext config blob, for one company.
- * An operator surface can use this to tell someone which secrets to rotate. */
-export async function plaintextCredentialKeys(
-  productId: string,
-): Promise<Array<{ integration: string; keys: string[] }>> {
+export interface QuarantinedSecret {
+  integration: string; key: string; quarantinedAt: string; rotated: boolean;
+}
+
+/**
+ * Secrets that were found sitting in a plaintext config column, by key.
+ *
+ * Migration 140 recorded the KEY and discarded the value on purpose: this list
+ * exists to tell an operator what to rotate, and a quarantine that stores the
+ * secret is the plaintext column with a more reassuring name.
+ *
+ * A secret that has been in a plaintext column must be rotated, not relocated.
+ * Nothing here can do that for them — the new value has to come from the
+ * provider — so the honest product behaviour is to say so plainly.
+ */
+export async function quarantinedSecrets(
+  productId: string, includeRotated = false,
+): Promise<QuarantinedSecret[]> {
   const rows = await query(
-    'SELECT name, config_json FROM integrations WHERE product_id=?', [productId]);
-  const out: Array<{ integration: string; keys: string[] }> = [];
-  for (const raw of rows.rows as unknown as Array<Record<string, unknown>>) {
-    let config: Record<string, unknown> = {};
-    try { config = JSON.parse(String(raw.config_json ?? '{}')) as Record<string, unknown>; } catch { continue; }
-    const keys = Object.keys(config).filter((k) => !isNonSecretConfigKey(k));
-    if (keys.length) out.push({ integration: String(raw.name), keys });
-  }
-  return out;
+    `SELECT integration_name, secret_key, quarantined_at, rotated_at
+       FROM integration_secret_quarantine
+      WHERE product_id=?${includeRotated ? '' : ' AND rotated_at IS NULL'}
+      ORDER BY quarantined_at, secret_key`, [productId]);
+  return (rows.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    integration: String(r.integration_name ?? 'unknown'),
+    key: String(r.secret_key),
+    quarantinedAt: String(r.quarantined_at),
+    rotated: r.rotated_at != null,
+  }));
+}
+
+/** Marks a quarantined key as rotated. Called when a founder re-enters the
+ * credential through the ordinary form, because re-entering IS the rotation —
+ * the new value arrives encrypted and the old one is already gone. */
+export async function markSecretsRotated(
+  productId: string, integrationName: string,
+): Promise<number> {
+  const result = await query(
+    `UPDATE integration_secret_quarantine SET rotated_at=datetime('now')
+      WHERE product_id=? AND integration_name=? AND rotated_at IS NULL`,
+    [productId, integrationName]);
+  return Number(result.rowsAffected ?? 0);
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -247,6 +269,11 @@ export async function connectIntegration(
   const authorizedAgents = JSON.stringify(config.authorized_agents ?? ['all']);
   const now = new Date().toISOString();
   const credentialsCiphertext = encryptCredentialPayload(config.credentials_json);
+
+  // Re-entering a credential IS the rotation: the new value arrives encrypted
+  // and the plaintext one is already gone. Anything still quarantined for this
+  // integration is therefore settled by this write.
+  if (credentialsCiphertext) await markSecretsRotated(productId, name);
 
   if (existing) {
     await query(
