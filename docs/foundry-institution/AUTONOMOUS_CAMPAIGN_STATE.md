@@ -8,8 +8,8 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 ## Current frontier
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **196 files / 1,600 tests**, all 4 ratchets hold. Migrations through **141**. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Migrations:** through **141**. Schema snapshot current.
+- **Validation:** `npm run check` green — **196 files / 1,600 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
