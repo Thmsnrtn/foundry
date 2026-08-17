@@ -1,6 +1,18 @@
 # Implementation State
 
-> Last verified: 2026-08-14. Baseline commit: `88be45c` on local branch `work`, the current post-Tranche-0 merge head (no Git remote is configured in this checkout). This manifest is evidence, not a claim that every listed surface has been exhaustively audited.
+> **Provenance.** The Tranche-0 manifest below was taken at commit `88be45c`, on
+> a local branch named `work`, in a checkout with no Git remote. None of that is
+> true of this repository any more: work continues on
+> `claude/foundry-autonomous-continuation-0gents`, which has a remote and is
+> pushed. The header used to assert the old state in the present tense, which is
+> a false statement about its own provenance at the top of the document
+> everything else is read against.
+>
+> Read the table below as a **dated snapshot of Tranche 0**, not as current
+> state. Current state is the "Completed slice" sections further down, the
+> campaign scheduler in `AUTONOMOUS_CAMPAIGN_STATE.md`, and git history — in
+> that order of specificity. This manifest is evidence, not a claim that every
+> listed surface has been exhaustively audited.
 
 ## Tranche 0 baseline reality manifest
 

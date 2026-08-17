@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **187 files / 1,528 tests**, all 4 ratchets hold.
+- **Validation:** `npm run check` green — **190 files / 1,540 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -126,6 +126,9 @@ Newest first. Trimmed as it ages — git history is the diary.
 - The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
 - Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
 - One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
+- CI runs the composite gate; four audit gates had been laptop-only.
+- The last four untraced consequential effects traced; an ungoverned Linear write deleted; the audit ratcheted to zero untraced.
+- The epistemic-status margin gated — the database admits by allow-list, the service denies by list, and they were equivalent only by luck.
 - The outcome loop's external half lands: an hourly reconciliation pass, where reports previously sat unread.
 - CSRF coverage gated rather than remembered; two of my own gates found weaker than they read.
 - Scoped ingest credentials (139); public surfaces stop selecting rows that carry secrets.
@@ -176,13 +179,16 @@ Next, in order:
    Still: prefer a source a real responsibility already demands over a vendor
    checklist, and remember that every new intake needs a purpose in migration
    139's closed set, which is a migration and a review by design.
-2. **Keep reassessing — four reads, four results.** The intakes (one
+2. **Keep reassessing — seven reads, five real defects.** The intakes (one
    credential, three consequences), the authority surfaces (two
-   authenticators, one weaker, and an audit doc naming them backwards), the
-   founder-facing writes (CSRF complete but unenforced — now gated), and the
-   scheduler (79 jobs, none consuming the outcome loop). **Not yet read
-   side-by-side:** the reconstruction/claims layer, the evidence ladder's own
-   readers, and the integrations fabric. One deliberate read each.
+   authenticators, one weaker, an audit doc naming them backwards), the
+   founder-facing writes (CSRF complete but unenforced — gated), the scheduler
+   (79 jobs, none consuming the outcome loop), the claims layer (no defect; the
+   allow-list/deny-list margin gated), the integrations fabric (an ungoverned
+   `issueCreate` into a customer's workspace, with no callers — deleted), and
+   the validation paths themselves (four audit gates ran only locally).
+   **Not yet read side-by-side:** the rendering/escaping layer and the AI
+   spend path. One deliberate read each, and stop when the yield drops.
 3. **Executive cognition remains the genuine frontier** and remains gated on a
    consumed task with a real baseline. It must not be started by sprinkling
    model calls.
