@@ -193,6 +193,31 @@ ingestRoutes.post('/ingest/:token', async (c) => {
       );
     }
 
+    // Quantities this company declared it tracks. Before migration 135 these
+    // arrived here, fell into `custom_metrics` as opaque JSON, and no
+    // institutional path could ever read them — so a company whose reality is
+    // boats serviced or classes taught could never reach Shadowing. A reading
+    // for a declared channel is now ordinary independent observation; anything
+    // undeclared still goes to custom_metrics untouched, because a value nobody
+    // said they track is not evidence about a responsibility.
+    try {
+      const { recordCompanyObservations } = await import(
+        '../../services/institution/company-observation.js'
+      );
+      await recordCompanyObservations({
+        productId, origin: 'ingest_endpoint',
+        readings: Object.entries(customMetrics)
+          .map(([channelKey, value]) => ({ channelKey, observedValue: Number(value) }))
+          .filter((r) => Number.isFinite(r.observedValue)),
+      });
+    } catch (err) {
+      const { log } = await import('../../lib/logger.js');
+      log.error(
+        `company observation failed: ${err instanceof Error ? err.message : String(err)}`,
+        { productId },
+      );
+    }
+
     return c.json({
       status: 'accepted',
       updated_fields: columns,

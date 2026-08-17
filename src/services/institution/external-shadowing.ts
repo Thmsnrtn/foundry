@@ -33,6 +33,7 @@ import {
   availableObservationChannels, externalObservationEventType,
   isObservableField, type ObservedDirection,
 } from './external-observation.js';
+import { getObservationChannels, isAdmissibleObservationField } from './company-observation.js';
 
 /** Plain labels for the founder. The metric column never appears on screen. */
 export const OBSERVABLE_FIELD_LABELS: Record<string, string> = {
@@ -63,7 +64,24 @@ export interface ShadowableResponsibility {
 export async function getShadowableResponsibilities(
   productId: string,
 ): Promise<ShadowableResponsibility[]> {
-  const channels = await availableObservationChannels(productId);
+  // Built-in metrics this company has actually received readings for, plus the
+  // quantities it declared and has actually reported. Both are "a channel that
+  // has produced real evidence"; only their vocabulary differs, and the
+  // institution has no reason to prefer one.
+  const builtIn = (await availableObservationChannels(productId))
+    .map((field) => ({ field, label: OBSERVABLE_FIELD_LABELS[field] ?? field }));
+
+  const declared = await getObservationChannels(productId);
+  const reported = new Set((await query(
+    `SELECT DISTINCT json_extract(payload_json,'$.field') AS field FROM signal_events
+      WHERE product_id=? AND source='external_metric_ingest'`, [productId],
+  )).rows.map((r) => String((r as Record<string, unknown>).field)));
+
+  const companyDefined = declared
+    .filter((c) => !c.revoked && reported.has(c.channelKey))
+    .map((c) => ({ field: c.channelKey, label: c.unit ? `${c.label} (${c.unit})` : c.label }));
+
+  const channels = [...builtIn, ...companyDefined];
   if (!channels.length) return [];
   const rows = await query(
     `SELECT id,title FROM institutional_responsibilities
@@ -71,8 +89,7 @@ export async function getShadowableResponsibilities(
     [productId],
   );
   return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
-    responsibilityId: String(row.id), title: String(row.title),
-    channels: channels.map((field) => ({ field, label: OBSERVABLE_FIELD_LABELS[field] ?? field })),
+    responsibilityId: String(row.id), title: String(row.title), channels,
   }));
 }
 
@@ -89,7 +106,12 @@ export async function beginExternalMetricShadowing(input: {
   productId: string; responsibilityId: string; founderId: string;
   field: string; direction: ObservedDirection; validUntil?: Date;
 }): Promise<Responsibility | null> {
-  if (!isObservableField(input.field)) return null;
+  // Built-in metrics, or a quantity this company declared it tracks. Before
+  // this, the admissible set was twelve SaaS fields, so a company whose reality
+  // is boats serviced or classes taught could reach Understood and then never
+  // reach Shadowing — the ladder dead-ended on vocabulary rather than on
+  // evidence. Everything downstream already treats the field as an opaque name.
+  if (!await isAdmissibleObservationField(input.productId, input.field)) return null;
   if (!['rose', 'fell', 'held'].includes(input.direction)) return null;
 
   const owned = await query(
