@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **138**. Schema snapshot current.
-- **Validation:** `npm run check` green — **174 files / 1,409 tests**, all 4 ratchets hold.
+- **Validation:** `npm run check` green — **179 files / 1,459 tests**, all 4 ratchets hold. (+50 of that is recovered coverage, not new code.)
 - **The whole ladder is generic now.** Four SaaS-shaped bindings were found and removed in sequence, each revealed by the previous one: the observation vocabulary (135), the effect guard (136), the authority-read, and the grantable-capability map. A dance school is carried end to end — owner report → Understood → Shadowing → resolved comparison → exact grant → Assisting → founder-authored notice → governed send → receipt → outcome.
 - **The loop closes.** Someone outside can finally say whether an effect achieved what it was for (137), so `outcome_status` can leave `unresolved` by fact rather than staying there by construction. HANDLED now means "it worked", not "it reached a rung".
 - **A company's own systems can raise work** (138), so the first rung is no longer fed only by a person.
@@ -46,6 +46,11 @@ Ordered by distance from the final state, not by effort.
 
 None in flight. Last package closed and pushed.
 
+## Two findings worth not re-learning
+
+- **47 assertions existed under `src/` where the runner never looked.** Invisible coverage reads exactly like coverage. Two had silently gone stale — one contradicted a security improvement (SEC-10 moved a GitHub token out of the request body), one required a credential the setup deliberately stopped providing. A gate now enforces both directions.
+- **The orphan report is only trustworthy after the dynamic loaders are accounted for.** A naive run once named ~160KB of live, dynamically-loaded agents as dead. Seven modules were deleted this session only after checking module path, bare name, config, CI, and docs.
+
 ## Blocked — owner
 
 See `OWNER_DECISIONS_PENDING.md`. Nothing currently blocks all high-value work.
@@ -74,7 +79,9 @@ See `OWNER_DECISIONS_PENDING.md`. Nothing currently blocks all high-value work.
 
 ## Recently completed
 
-1. External company reports (138) — a company's own systems can raise work, without laundering provenance.
+1. Seven proven-dead modules deleted on evidence; as-any ratchet tightened 30 → 29.
+2. 47 unrun assertions recovered from under `src/`, two stale ones corrected, and a gate against invisible tests.
+3. External company reports (138) — a company's own systems can raise work, without laundering provenance.
 2. Effect outcome reports (137) — the loop's last link finally has a supply; HANDLED means "it worked".
 3. Governed effect boundary generalized (136) — declared effect kinds, capability out of the guard, founder-authored notices as the second real kind.
 4. A dance school carried end to end through a governed effect.
