@@ -114,11 +114,11 @@ async function fetchPostHogCount(
   });
 
   try {
-    // `host` is founder-configured, so this URL is founder-supplied. Checked at
-  // call time with DNS re-resolution, exactly as the webhook senders are.
-  const { assertUrlSafe } = await import('../outbound/ssrf.js');
-  await assertUrlSafe(url);
-    const response = await fetch(url, { headers });
+    // `host` is founder-configured, so this URL is founder-supplied. The
+    // canonical guarded path screens it AND re-screens every redirect hop,
+    // because the server at the far end chooses those.
+    const { safeFetch } = await import('../outbound/ssrf.js');
+    const response = await safeFetch(url, { headers });
     if (!response.ok) return null;
     const data = await response.json() as PostHogInsightResult;
     if (!data.result?.length) return null;
@@ -147,11 +147,11 @@ async function fetchPostHogRetention(
   });
 
   try {
-    // `host` is founder-configured, so this URL is founder-supplied. Checked at
-  // call time with DNS re-resolution, exactly as the webhook senders are.
-  const { assertUrlSafe } = await import('../outbound/ssrf.js');
-  await assertUrlSafe(url);
-    const response = await fetch(url, { headers });
+    // `host` is founder-configured, so this URL is founder-supplied. The
+    // canonical guarded path screens it AND re-screens every redirect hop,
+    // because the server at the far end chooses those.
+    const { safeFetch } = await import('../outbound/ssrf.js');
+    const response = await safeFetch(url, { headers });
     if (!response.ok) return null;
     const data = await response.json() as { result?: Array<{ values: Array<{ count: number }> }> };
     if (!data.result?.length) return null;

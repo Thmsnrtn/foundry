@@ -182,7 +182,8 @@ customersApi.put('/:customerId/health', requireScope('customers:manage'), async 
     );
 
     const result = await query(
-      `SELECT id, external_customer_id, name, health_score, updated_at
+      // The column is `account_name`.
+      `SELECT id, external_customer_id, account_name, health_score, updated_at
        FROM customer_intelligence WHERE id = ? AND product_id = ?`,
       [customerId, productId]
     );
@@ -208,9 +209,13 @@ customersApi.get('/:customerId/timeline', requireScope('customers:read'), async 
       return c.json({ error: 'Customer not found' }, 404);
     }
 
+    // `customer_timeline_events` exists in no migration and no snapshot: this
+    // route queried a table that has never been created, so it answered 500 to
+    // every request. The real ledger is `customer_events`, whose payload column
+    // is `event_data`.
     const result = await query(
-      `SELECT id, event_type, event_data_json, created_at
-       FROM customer_timeline_events
+      `SELECT id, event_type, event_data, created_at
+       FROM customer_events
        WHERE customer_id = ? AND product_id = ?
        ORDER BY created_at DESC
        LIMIT ?`,

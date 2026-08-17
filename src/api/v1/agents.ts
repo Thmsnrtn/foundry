@@ -15,7 +15,9 @@ agentsApi.get('/', requireScope('agents:read'), async (c) => {
   const productId = c.get('productId');
   try {
     const result = await query(
-      `SELECT agent_name, last_run_at, domain_health_score, is_active, created_at, updated_at
+      // `is_active` has never existed on this table; the column is `status`.
+      // The route answered 500 to every caller.
+      `SELECT agent_name, last_run_at, domain_health_score, status, created_at, updated_at
        FROM agent_instances
        WHERE product_id = ?
        ORDER BY agent_name ASC`,
@@ -52,7 +54,10 @@ agentsApi.get('/:agentName/decisions', requireScope('agents:read'), async (c) =>
   const agentName = c.req.param('agentName');
   try {
     const result = await query(
-      `SELECT id, title, description, status, category, expected_impact, estimated_impact_usd, created_at, updated_at
+      // Four of the eight columns this asked for do not exist. The table has
+      // `decision_title`, `rationale` and `reasoning`; it has no category, no
+      // impact estimate and no `updated_at`.
+      `SELECT id, title, decision_title, description, rationale, reasoning, priority, status, approved_at, created_at
        FROM agent_decisions
        WHERE product_id = ? AND agent_name = ?
        ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, created_at DESC
@@ -95,12 +100,16 @@ agentsApi.get('/:agentName/messages', requireScope('agents:read'), async (c) => 
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
   try {
     const result = await query(
-      `SELECT id, direction, role, content, created_at
+      // `direction`, `role` and `content` do not exist. Messages are addressed
+      // (`from_agent` → `to_agent`) rather than directional, and the text is in
+      // `subject`/`body`. Selecting an agent's messages therefore means the
+      // ones it sent or received, not a column that says which.
+      `SELECT id, from_agent, to_agent, type, priority, subject, body, created_at
        FROM agent_messages
-       WHERE product_id = ? AND agent_name = ?
+       WHERE product_id = ? AND (from_agent = ? OR to_agent = ?)
        ORDER BY created_at DESC
        LIMIT ?`,
-      [productId, agentName, limit]
+      [productId, agentName, agentName, limit]
     );
     return c.json({ data: result.rows, meta: { agent: agentName, total: result.rows.length } });
   } catch (err) {

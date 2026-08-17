@@ -116,7 +116,8 @@ metricsApi.get('/health', requireScope('agents:read'), async (c) => {
 
     // Active data quality alerts
     const alertsResult = await query(
-      `SELECT id, alert_type, severity, message, created_at FROM data_quality_alerts
+      // The column is `description`; there is no `message`.
+      `SELECT id, alert_type, severity, description, created_at FROM data_quality_alerts
        WHERE product_id = ? AND resolved_at IS NULL
        ORDER BY created_at DESC`,
       [productId]

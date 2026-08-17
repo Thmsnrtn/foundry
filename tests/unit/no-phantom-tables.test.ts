@@ -61,18 +61,28 @@ describe('no phantom table references', () => {
 
     for (const file of tsFiles(resolve(ROOT, 'src'))) {
       const rel = file.slice(ROOT.length + 1);
-      readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
-        const t = line.trim();
-        if (t.startsWith('//') || t.startsWith('*')) return; // skip comments
-        if (!/['"`]/.test(line)) return;                      // must be in a string
-        let m: RegExpExecArray | null;
-        ref.lastIndex = 0;
-        while ((m = ref.exec(line)) !== null) {
-          const name = m[1].toLowerCase();
-          if (tables.has(name) || ALLOWLIST.has(name) || name.includes('${')) continue;
-          offenders.push(`${rel}:${i + 1} → ${name}`);
-        }
-      });
+      // WHOLE FILE, not line by line.
+      //
+      // This scan used to run per line and required a quote character on the
+      // same line, so it saw nothing inside a multi-line SQL template — which
+      // is how most non-trivial queries in this codebase are written. A public
+      // API route querying `customer_timeline_events`, a table that exists in
+      // no migration and no snapshot, sat behind that blind spot: `FROM` ended
+      // one line and the table name began the next.
+      //
+      // Comments are stripped first, and only where they open a line, because a
+      // naive block-comment regex also fires on `/*` inside a string literal.
+      const source = readFileSync(file, 'utf8')
+        .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, ' ')
+        .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+      let m: RegExpExecArray | null;
+      ref.lastIndex = 0;
+      while ((m = ref.exec(source)) !== null) {
+        const name = m[1].toLowerCase();
+        if (tables.has(name) || ALLOWLIST.has(name) || name.includes('${')) continue;
+        const line = source.slice(0, m.index).split('\n').length;
+        offenders.push(`${rel}:${line} → ${name}`);
+      }
     }
 
     expect(

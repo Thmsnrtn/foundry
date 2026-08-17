@@ -12,7 +12,7 @@ export interface FinancialSnapshot {
   mrr_cents: number | null;
   mrr_delta_30d_cents: number | null;       // current MRR - MRR 30 days ago
   arr_cents: number | null;                  // 12 × MRR (caveat in §15 reading)
-  ai_cost_30d_usd: number;                   // from ai_cost_log
+  ai_cost_30d_usd: number;                   // from ai_usage_log.cost_cents
   operating_margin_30d_usd: number | null;   // (MRR/100 × 30/30) - ai_cost_30d_usd
   margin_pct_30d: number | null;             // operating_margin / (MRR/100)
   net_mrr_growth_rate_30d: number | null;    // delta / prior MRR
@@ -59,14 +59,17 @@ export async function computeFinancialSnapshot(
       : null;
 
   // AI cost over trailing 30 days
+  // `ai_cost_log` never existed. The ledger is `ai_usage_log`, its money column
+  // is `cost_cents`, and its clock is `created_at` — so this query threw on
+  // every call and the operating-margin figure below it was never computed.
   const ai = await query(
-    `SELECT COALESCE(SUM(cost_usd), 0) AS total
-       FROM ai_cost_log
+    `SELECT COALESCE(SUM(cost_cents), 0) AS total_cents
+       FROM ai_usage_log
       WHERE product_id = ?
-        AND datetime(timestamp) > datetime('now', '-30 days')`,
+        AND datetime(created_at) > datetime('now', '-30 days')`,
     [productId]
   );
-  const aiCost30dUsd = Number((ai.rows[0] as Record<string, number>).total ?? 0);
+  const aiCost30dUsd = Number((ai.rows[0] as Record<string, number>).total_cents ?? 0) / 100;
 
   // Operating margin: monthly MRR (in dollars) - AI cost over the same window.
   // This is "Foundry's view" of margin — narrowly the AI infrastructure cost

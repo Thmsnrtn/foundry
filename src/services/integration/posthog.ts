@@ -162,9 +162,8 @@ async function fetchPostHogTrend(
 
   // `host` is founder-configured, so this URL is founder-supplied. Checked at
   // call time with DNS re-resolution, exactly as the webhook senders are.
-  const { assertUrlSafe } = await import('../outbound/ssrf.js');
-  await assertUrlSafe(url);
-  const resp = await fetch(url, {
+  const { safeFetch } = await import('../outbound/ssrf.js');
+  const resp = await safeFetch(url, {
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(10000),
   });
@@ -197,9 +196,8 @@ async function fetchTopEvents(
 
   // `host` is founder-configured, so this URL is founder-supplied. Checked at
   // call time with DNS re-resolution, exactly as the webhook senders are.
-  const { assertUrlSafe } = await import('../outbound/ssrf.js');
-  await assertUrlSafe(url);
-  const resp = await fetch(url, {
+  const { safeFetch } = await import('../outbound/ssrf.js');
+  const resp = await safeFetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(8000),
   });

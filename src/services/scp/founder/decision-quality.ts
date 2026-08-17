@@ -142,18 +142,28 @@ export async function detectBehavioralSignals(productId: string): Promise<Behavi
 
   // 6. Decision contradiction: two strategic decisions within 48h that appear to contradict
   const contradictionResult = await query(
-    `SELECT d1.id as id1, d1.decision_type as type1, d1.direction as dir1,
-            d2.id as id2, d2.decision_type as type2, d2.direction as dir2
-     FROM strategic_decisions d1
-     JOIN strategic_decisions d2
+    // `strategic_decisions` does not exist. The table is
+    // `strategic_decisions_log`, its category column is `decision_category`,
+    // and its clock is `made_at` — so this query threw on every call and the
+    // contradiction signal has never once fired.
+    //
+    // There is no `direction` column anywhere in that schema, so "two decisions
+    // with OPPOSING directions" is a question this data cannot answer. What it
+    // can answer is that two decisions in the same category were made within 48
+    // hours of each other, which is the volatility the signal was reaching for.
+    // The description says that instead of claiming a contradiction nothing
+    // here can see.
+    `SELECT d1.id as id1, d1.decision_category as type1, d1.decision_title as dir1,
+            d2.id as id2, d2.decision_category as type2, d2.decision_title as dir2
+     FROM strategic_decisions_log d1
+     JOIN strategic_decisions_log d2
        ON d1.product_id = d2.product_id
        AND d1.id != d2.id
-       AND d1.decision_type = d2.decision_type
-       AND d1.direction != d2.direction
-       AND d2.decided_at > d1.decided_at
-       AND (julianday(d2.decided_at) - julianday(d1.decided_at)) * 24 < 48
+       AND d1.decision_category = d2.decision_category
+       AND d2.made_at > d1.made_at
+       AND (julianday(d2.made_at) - julianday(d1.made_at)) * 24 < 48
      WHERE d1.product_id = ?
-       AND d1.decided_at >= datetime('now', '-7 days')
+       AND d1.made_at >= datetime('now', '-7 days')
      LIMIT 1`,
     [productId]
   );
@@ -161,7 +171,7 @@ export async function detectBehavioralSignals(productId: string): Promise<Behavi
     const c = contradictionResult.rows[0] as Record<string, unknown>;
     signals.push({
       signal_type: 'contradiction',
-      description: `Two ${c.type1} decisions with opposing directions (${c.dir1} vs ${c.dir2}) made within 48 hours`,
+      description: `Two ${c.type1} decisions made within 48 hours ("${c.dir1}" and "${c.dir2}")`,
       severity: 'high',
       context: { decision_id_1: c.id1, decision_id_2: c.id2, decision_type: c.type1 },
     });

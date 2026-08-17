@@ -68,6 +68,23 @@ function isPrivateIp(ip: string): boolean {
 export interface SsrfOptions {
   /** Allow http://localhost and 127.0.0.1 (dev MCP servers). Default false. */
   allowLoopback?: boolean;
+  /**
+   * How to resolve a hostname. Production uses the system resolver; a test
+   * supplies a stub.
+   *
+   * This exists because the rebinding defence was UNTESTABLE and therefore
+   * untested. The resolution step was skipped outright when `process.env.VITEST`
+   * was set — for a good reason, since hermetic tests must not depend on a live
+   * resolver — and the one test that claimed to cover it looked up a real
+   * domain and then asserted something about a literal IP, which takes the
+   * `net.isIP` branch and never reaches the resolver loop. The comment saying
+   * the defence "is exercised by the dedicated ssrf-guard suite" was false.
+   *
+   * Injecting the resolver keeps tests hermetic AND lets them drive the exact
+   * case that matters: a perfectly public hostname that answers with a private
+   * address.
+   */
+  resolver?: (host: string) => Promise<Array<{ address: string }>>;
 }
 
 /** Throw SSRFBlockedError unless the URL is a public http(s) endpoint. The
@@ -95,16 +112,17 @@ export async function assertUrlSafe(url: string, opts: SsrfOptions = {}): Promis
     return parsed;
   }
 
-  // Under vitest, skip the live DNS step (hermetic tests must not depend on a
-  // resolver). Every literal-IP and scheme check above still runs; the
-  // DNS-rebinding defense is a production concern and is exercised by the
-  // dedicated ssrf-guard suite's live-resolution case.
-  if (process.env.VITEST) return parsed;
+  // A test that supplies a resolver gets the real code path. A test that does
+  // not stays hermetic — it must not depend on a live resolver — and production
+  // always resolves.
+  const resolve = opts.resolver
+    ?? (process.env.VITEST ? null : (h: string) => lookup(h, { all: true }));
+  if (!resolve) return parsed;
 
-  // Otherwise resolve and re-check every answer (rebinding defense).
+  // Resolve and re-check every answer (rebinding defense).
   let records: Array<{ address: string }>;
   try {
-    records = await lookup(host, { all: true });
+    records = await resolve(host);
   } catch {
     throw new SSRFBlockedError(`could not resolve ${host}`);
   }
@@ -113,4 +131,52 @@ export async function assertUrlSafe(url: string, opts: SsrfOptions = {}): Promis
     if (isPrivateIp(r.address)) throw new SSRFBlockedError(`${host} resolves to private address ${r.address}`);
   }
   return parsed;
+}
+
+/**
+ * Fetch a URL nobody at Foundry chose, revalidating every hop.
+ *
+ * THE GAP THIS CLOSES. `assertUrlSafe` screens the URL it is given, and then
+ * the caller hands that URL to `fetch`, which follows redirects by default and
+ * screens nothing. So a founder could register `https://harmless.example/x`,
+ * pass every check, and be redirected to `http://169.254.169.254/` — the exact
+ * destination the guard exists to refuse. Checking the first URL and then
+ * following wherever it points is not a boundary; it is a formality.
+ *
+ * Redirects are taken manually and each Location is screened as a fresh
+ * untrusted URL, because it is one: it was chosen by the server at the other
+ * end, not by the founder and certainly not by us.
+ *
+ * Deliberately small. This is not a network security platform — it is the
+ * existing boundary made total, which is the whole of what is needed.
+ */
+export async function safeFetch(
+  url: string,
+  init: RequestInit = {},
+  opts: SsrfOptions & { maxRedirects?: number } = {},
+): Promise<Response> {
+  const maxRedirects = opts.maxRedirects ?? 3;
+  let target = (await assertUrlSafe(url, opts)).toString();
+
+  for (let hop = 0; hop <= maxRedirects; hop += 1) {
+    const response = await fetch(target, { ...init, redirect: 'manual' });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+
+    const location = response.headers.get('location');
+    if (!location) return response; // a redirect with nowhere to go is the answer
+    // Relative locations resolve against the hop we are on.
+    const next = new URL(location, target).toString();
+    // Screened as a fresh untrusted URL, because the server at the other end
+    // chose it. A redirect chain is exactly how a public host reaches a private
+    // address without ever appearing to.
+    target = (await assertUrlSafe(next, opts)).toString();
+
+    // 303 and a 302 on POST become GET, per the specification and per what
+    // every real client does; carrying the body onward would be a different
+    // request than the one the caller authorised.
+    if (response.status === 303 || (response.status === 302 && init.method && init.method !== 'GET')) {
+      init = { ...init, method: 'GET', body: undefined };
+    }
+  }
+  throw new SSRFBlockedError(`too many redirects from ${url}`);
 }

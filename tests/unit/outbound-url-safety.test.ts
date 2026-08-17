@@ -67,7 +67,9 @@ describe('posting to a URL somebody else chose', () => {
     // fetching a host Foundry itself chose.
     const unguarded = senders
       .filter((rel) => !(rel in FOUNDRY_CHOSEN))
-      .filter((rel) => !/assertUrlSafe\s*\(/.test(executable(resolve(ROOT, rel))));
+      // Either form counts: `safeFetch` IS the guard, and it does strictly
+      // more than `assertUrlSafe` — it re-screens every redirect hop too.
+      .filter((rel) => !/(assertUrlSafe|safeFetch)\s*\(/.test(executable(resolve(ROOT, rel))));
     expect(unguarded,
       'This module fetches a URL it did not choose and never checks it. Call '
       + 'assertUrlSafe first, or record here why the destination is not '
@@ -90,8 +92,39 @@ describe('posting to a URL somebody else chose', () => {
       'src/services/distribution/outbound-webhooks.ts',
       'src/services/integration/posthog.ts',
       'src/services/integrations/posthog.ts',
+      'src/services/outbound/ssrf.ts',
       'src/services/scp/actions/executor.ts',
     ]);
+  });
+
+  it('routes what it can through the one guarded path, not around it', () => {
+    // §8's totality: untrusted URL → canonical guarded fetch → network.
+    //
+    // Every sender used to call `assertUrlSafe` and then `fetch` separately,
+    // which screens the URL and then follows wherever it points. None of them
+    // revalidated a redirect, so a host that passed every check could hand back
+    // a 302 to a cloud metadata endpoint. `safeFetch` does both, and the ones
+    // that can use it now do.
+    //
+    // Two remain on the split form for real reasons rather than convenience,
+    // and each is recorded here so the exception has to be argued rather than
+    // inherited.
+    const SPLIT_FORM: Record<string, string> = {
+      'src/lib/webhooks.ts':
+        'records a per-attempt delivery receipt around the call and needs the raw response object',
+      'src/services/distribution/outbound-webhooks.ts':
+        'wraps the call in its own retry/timeout policy and crosses the outbound gateway',
+      'src/services/scp/actions/executor.ts':
+        'records an effect receipt with provider certainty around the call',
+    };
+    for (const rel of dynamicUrlSenders()) {
+      if (rel in FOUNDRY_CHOSEN || rel === 'src/services/outbound/ssrf.ts') continue;
+      const source = executable(resolve(ROOT, rel));
+      if (/safeFetch\(/.test(source)) continue;
+      expect(SPLIT_FORM[rel],
+        `${rel} calls assertUrlSafe and fetch separately, so it does not revalidate `
+        + 'redirects. Use safeFetch, or record why it cannot.').toBeTruthy();
+    }
   });
 
   it('checks at call time, not only when the URL was saved', () => {
@@ -99,6 +132,9 @@ describe('posting to a URL somebody else chose', () => {
     // re-resolves. Each of these must assert inside the function that fetches.
     for (const rel of dynamicUrlSenders().filter((r) => !(r in FOUNDRY_CHOSEN))) {
       const source = executable(resolve(ROOT, rel));
+      // `safeFetch` guards and fetches in one call, so ordering is structural
+      // rather than textual for those; only the split form needs the check.
+      if (/safeFetch\s*\(/.test(source)) continue;
       const guardAt = source.indexOf('assertUrlSafe(');
       const fetchAt = source.search(/fetch\(\s*(?!['"`])[\w.]*\b(url|endpoint|webhook_url|target)\b/i);
       expect(guardAt, `${rel} must assert URL safety`).toBeGreaterThan(-1);

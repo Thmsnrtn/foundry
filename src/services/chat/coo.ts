@@ -220,9 +220,10 @@ export async function sendProactiveMessage(
         // A founder-configured destination, so it is checked at call time —
         // `services/outbound/ssrf.ts` states the rule its own header sets:
         // every outbound call to a founder-supplied URL passes this first.
-        const { assertUrlSafe } = await import('../outbound/ssrf.js');
-        await assertUrlSafe(wh.webhook_url);
-        await fetch(wh.webhook_url, {
+        // Through the canonical guarded path: it screens the URL AND
+        // re-screens every redirect hop, because the far end chooses those.
+        const { safeFetch } = await import('../outbound/ssrf.js');
+        await safeFetch(wh.webhook_url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: message, channel: 'foundry-coo' }),

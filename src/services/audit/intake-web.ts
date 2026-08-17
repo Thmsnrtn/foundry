@@ -76,10 +76,11 @@ export async function runWebAudit(url: string, productId: string, ownerId: strin
   // an API route and the server fetches it. Checked before the request, with
   // DNS re-resolution, so a public hostname that now points at loopback or a
   // cloud metadata endpoint is refused.
-  const { assertUrlSafe } = await import('../outbound/ssrf.js');
-  await assertUrlSafe(url);
+  // Through the canonical guarded path: it screens the URL AND re-screens
+  // every redirect hop, because the server at the far end chooses those.
+  const { safeFetch } = await import('../outbound/ssrf.js');
   try {
-    const response = await fetch(url, {
+    const response = await safeFetch(url, {
       headers: { 'User-Agent': 'Foundry-Audit-Bot/1.0' },
       redirect: 'follow',
     });

@@ -55,12 +55,19 @@ async function setupSchema(): Promise<void> {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(product_id, snapshot_date)
     );
-    CREATE TABLE IF NOT EXISTS ai_cost_log (
+    -- The real AI cost ledger. This fixture used to create ai_cost_log, a
+    -- table no migration has ever created, with a cost_usd column and a
+    -- timestamp clock — so the feature passed against a schema that existed
+    -- only inside this file, while the query threw on every real call.
+    CREATE TABLE IF NOT EXISTS ai_usage_log (
       id TEXT PRIMARY KEY,
       product_id TEXT,
       model TEXT,
-      cost_usd REAL,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      call_type TEXT,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      cost_cents INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS decisions (
       id TEXT PRIMARY KEY,
@@ -133,7 +140,7 @@ beforeEach(async () => {
     [productId, 'Test', founderId]
   );
   await executeRaw('DELETE FROM decision_patterns');
-  await executeRaw('DELETE FROM ai_cost_log');
+  await executeRaw('DELETE FROM ai_usage_log');
   await executeRaw('DELETE FROM metric_snapshots');
   await executeRaw('DELETE FROM referral_links');
   await executeRaw('DELETE FROM referral_conversions');
@@ -238,8 +245,8 @@ describe('financial-snapshot', () => {
     );
     // Insert AI cost: $20 in last 30 days
     await query(
-      `INSERT INTO ai_cost_log (id, product_id, model, cost_usd, timestamp)
-       VALUES (?, ?, 'claude-sonnet', 20, datetime('now', '-5 days'))`,
+      `INSERT INTO ai_usage_log (id, product_id, model, cost_cents, created_at)
+       VALUES (?, ?, 'claude-sonnet', 2000, datetime('now', '-5 days'))`,
       [nanoid(), productId]
     );
 

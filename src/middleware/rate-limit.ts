@@ -92,6 +92,43 @@ export const aiRateLimit = rateLimit(30, 60 * 60 * 1000, (c) => {
  * (you audit a product once, occasionally re-run) while stopping a stranger
  * from cost-bombing us by hammering run-audit. Keys on founder id, IP fallback.
  */
+/**
+ * The public API, limited by the CREDENTIAL rather than by the source address.
+ *
+ * `/api/*` already carries an IP-keyed flood guard, and that is the right shape
+ * for an unauthenticated request. It is the wrong shape once a request carries
+ * a credential: a single key rotating source addresses was unlimited, while
+ * many customers behind one NAT shared a single budget. The limit that matters
+ * on an authenticated surface is per key, and it belongs after authentication —
+ * which is why it is applied inside the v1 router rather than beside the flood
+ * guard in the composition root.
+ *
+ * The AI and audit limits have always keyed by founder. This is the same rule
+ * reaching the surface the owner has just made live.
+ */
+export const apiKeyRateLimit = rateLimit(600, 60 * 60 * 1000, (c) => {
+  const productId = c.get('productId' as never) as string | undefined;
+  const userId = c.get('userId' as never) as string | undefined;
+  if (productId) return `apikey:product:${productId}`;
+  if (userId) return `apikey:user:${userId}`;
+  // Unreachable behind apiKeyAuth, and fail-closed rather than unlimited if it
+  // ever is: an unattributable request shares one bucket with every other.
+  return 'apikey:unattributed';
+});
+
+/**
+ * A tighter budget for the calls that spend money.
+ *
+ * The MCP transport reaches tools that call a model — `foundry_red_team` runs
+ * Sonnet. Under the ordinary API allowance those were 600 model calls an hour
+ * per key, guarded only by the global AI spend ceiling, which is a blunt
+ * instrument that stops everyone at once when one caller is expensive.
+ */
+export const apiModelRateLimit = rateLimit(60, 60 * 60 * 1000, (c) => {
+  const productId = c.get('productId' as never) as string | undefined;
+  return `apimodel:${productId ?? 'unattributed'}`;
+});
+
 export const auditRateLimit = rateLimit(6, 60 * 60 * 1000, (c) => {
   const founder = c.get('founder' as never) as { id?: string } | undefined;
   if (founder?.id) return `audit:founder:${founder.id}`;
