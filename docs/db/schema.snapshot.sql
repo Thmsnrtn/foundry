@@ -1049,6 +1049,7 @@
   ON data_classifications(product_id, surface);
   ON data_quality_alerts(product_id, resolved_at, created_at);
   ON data_quality_alerts(product_id, severity)
+  ON decision_patterns(market_category, product_lifecycle_stage, contributor_hash);
   ON envelope_usage(product_id, scope, week_starting);
   ON experiment_holdouts(product_id, is_active);
   ON experiment_results_timeline(experiment_id, checkpoint_date);
@@ -4573,11 +4574,11 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
 , confidence_score REAL DEFAULT 0);
+, contributor_hash TEXT);
 , deleted_at DATETIME, platform_dependency_risk REAL, incumbent_response_probability REAL, moat_erosion_rate REAL);
 , disposition TEXT NOT NULL DEFAULT 'active'
 , disposition TEXT, disposition_evidence_json TEXT);
@@ -4852,6 +4853,7 @@ CREATE INDEX idx_deal_rooms_token ON deal_rooms(access_token);
 CREATE INDEX idx_debate_sessions_product ON debate_sessions(product_id, briefing_date);
 CREATE INDEX idx_decision_outcomes_agent ON decision_outcomes(product_id, agent_name);
 CREATE INDEX idx_decision_outcomes_product ON decision_outcomes(product_id);
+CREATE INDEX idx_decision_patterns_contributor
 CREATE INDEX idx_decision_snooze_until ON decision_snooze_log(product_id, snoozed_until);
 CREATE INDEX idx_decision_votes_decision ON decision_votes(decision_id);
 CREATE INDEX idx_decision_votes_founder ON decision_votes(founder_id);

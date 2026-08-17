@@ -25,13 +25,18 @@ export async function generatePatternFromOutcome(input: {
   if (!(await hasConsent(input.productId, 'cross_company_patterns'))) return null;
 
   const id = nanoid();
+  // The contributor hash, not the product id. It lets the aggregation require k
+  // distinct companies without the table being able to say who any of them are
+  // — see migration 144 for why a fully anonymous row could not carry its own
+  // privacy guarantee.
+  const { contributorHash } = await import('../wisdom/network.js');
   await query(
-    `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage, risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction, outcome_magnitude, outcome_timeframe_days, market_category, contributing_factors, scenario_accuracy_score)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage, risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction, outcome_magnitude, outcome_timeframe_days, market_category, contributing_factors, scenario_accuracy_score, contributor_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, input.decisionType, input.lifecycleStage, input.riskState, JSON.stringify(input.metricsContext),
      input.optionChosen, input.outcomeDirection, input.outcomeMagnitude, input.outcomeTimeframeDays,
      input.marketCategory, input.contributingFactors ? JSON.stringify(input.contributingFactors) : null,
-     input.scenarioAccuracyScore]
+     input.scenarioAccuracyScore, contributorHash(input.productId)]
   );
   return id;
 }
