@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **139**. Schema snapshot current.
-- **Validation:** `npm run check` green — **191 files / 1,556 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **192 files / 1,563 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -131,6 +131,7 @@ Newest first. Trimmed as it ages — git history is the diary.
 - The public API made live on owner decision: scoped, expiring, revocable keys issued from settings; three write routes moved off a read scope; the MCP transport gains a per-tool scope check it never had.
 - Call-transcript analysis bounded — the model's answer cannot put a hundred fabricated competitors into the competitive signal.
 - One authenticator for one credential; a permissive unmounted duplicate deleted and a backwards audit row corrected.
+- Whisper transcription brought under the spend ceilings; the effects detector taught to read templated URLs, surfacing seven previously invisible calls.
 - The support vertical made reachable by a person: message surface, channel creation, the intake URL, revocation.
 - Disagreement shown — `conflicting` named who said what, instead of asking for judgment while withholding the evidence.
 - Notices written and not sent stop vanishing; the reachability gate gains a READ chain.
@@ -187,7 +188,7 @@ Next, in order:
    Still: prefer a source a real responsibility already demands over a vendor
    checklist, and remember that every new intake needs a purpose in migration
    139's closed set, which is a migration and a review by design.
-2. **Keep reassessing — eight reads, nine real defects.** The intakes (one
+2. **Keep reassessing — nine reads, seven of them found a real defect.** The intakes (one
    credential, three consequences), the authority surfaces (two
    authenticators, one weaker, an audit doc naming them backwards), the
    founder-facing writes (CSRF complete but unenforced — gated), the scheduler
@@ -200,7 +201,13 @@ Next, in order:
    four surfaces unreachable by a human being, and a reachability gate that
    checked every WRITE link while all four were dark. It now checks READS too,
    and a reader only counts when a route calls it.
-   **Not yet read side-by-side:** the AI spend path. Stop when the yield drops.
+   The AI spend path closed the list: one paid provider call reserved nothing,
+   and the reason nobody had noticed was that the effects detector could not
+   read a templated URL — teaching it surfaced seven more calls and a whole
+   uninventoried module.
+   **The list is exhausted and the method is not.** Unread: credential storage
+   and encryption, the tenancy layer, onboarding, billing, webhook delivery.
+   Stop when a read stops finding anything.
 3. **Executive cognition remains the genuine frontier** and remains gated on a
    consumed task with a real baseline. It must not be started by sprinkling
    model calls.

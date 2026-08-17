@@ -1332,6 +1332,28 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **Evidence maturity:** E2. `api_keys` and the webhook secrets were checked in
   the same pass and are not of this shape.
 
+## Completed slices: nine side-by-side reads
+
+The method that produced almost everything after the second unfamiliar-company
+package. Instead of extending a subsystem, read its surfaces beside each other
+and ask what one of them assumes about another. Seven of nine found a real
+defect; the two that did not produced a gate for the margin that made them safe.
+
+| Read | Result |
+|---|---|
+| The four intakes | One product-wide secret authenticated posting numbers, raising work, AND declaring an effect succeeded. Migration 139: credentials carry their purpose. |
+| Authority surfaces | Two API-key authenticators with the same exported name; the unmounted one was weaker (no expiry, no scopes, full founder identity), and a stale audit doc named it as the live one. Deleted. |
+| Founder-facing writes | No hole — CSRF coverage was complete. Made checked rather than remembered, with each exemption naming the credential that authenticates it instead. |
+| The scheduler | 79 jobs, none consuming the outcome loop. `reconcile_after` was written since the day it was built and read by nobody. An hourly reconciliation pass now lands the external half. |
+| The claims layer | No defect — the guard is one of the strongest in the schema. The database admits by allow-list and the service denies by list; equivalent only because the column CHECK permits exactly five statuses. That margin is now gated. |
+| The integrations fabric | Four findings had sat `unresolved` — untraced — for a long time. Three were reads; the fourth was an `issueCreate` into a customer's workspace, outside the gateway, with no callers. Deleted; audit ratcheted to zero untraced. |
+| The validation paths | CI's check job had been hand-assembled from the pieces `npm run check` happened to contain, and stopped tracking it. Four audit gates ran only on a laptop. |
+| The rendering layer | Highest yield of all. Hunting an escaping defect in customer content found the customer content never reached a page: messages stored and never rendered, channels that could not be created, `conflicting` outcomes that withheld the disagreement, vanishing notices. The reachability gate checked every WRITE link and was green throughout; it now checks READS, and a reader only counts when a route calls it. |
+| The AI spend path | One paid provider call reserved nothing. Invisible because the effects detector matches a quoted literal URL and that call templates one — teaching it surfaced seven more calls and an uninventoried APNs module with no importer. |
+
+**Evidence maturity:** E2 throughout. These are structural and behavioural
+findings against local runtime; none of them is production evidence.
+
 ## Working rules that mattered most
 
 - **Audit the writers, not just the modules.** Five sessions running, the biggest finding was something built and never called.
@@ -1360,3 +1382,8 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **Gate on reach, not on rendering.** "No secret is printed" passes right up until somebody prints one. A row that never arrives has nothing to print.
 - **Commit before mutation-testing.** A `git checkout` to revert a mutant silently reverted real edits in the same file, and left mutants standing in the untracked ones. Second time this has happened; the fix is to commit first, not to be more careful.
 - **A word boundary is not a boundary once you fold case.** `heatingHint` lowercases to `heatinghint`, and `\bheating\b` cannot see it. Two gates read as if they checked something they did not.
+- **Read a subsystem's surfaces beside each other; do not extend it.** Nine reads, seven real defects, and none of them would have surfaced by building the next feature. Two more unfamiliar companies through the ladder confirmed the generalization and found nothing.
+- **Ask what one surface assumes about another.** Every finding was an assumption that used to be true: one credential meant one consequence, CI's job matched `npm run check`, a detector saw every consequential call, a write chain implied someone could see the result.
+- **A detector's blind spot is a claim you are making without evidence.** "0 direct effects" was true of what the regex could see and false of the codebase. The inventory read as reassurance for as long as nobody checked what it could not match.
+- **A write chain is half a chain.** Four surfaces were unreachable by a human being while every write link had a production caller. Data moving is not a person seeing.
+- **`unresolved` becomes permanent unless something makes it fail.** Four untraced consequential effects sat for a long time because the audit counted them instead of refusing them.
