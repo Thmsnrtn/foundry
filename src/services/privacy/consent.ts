@@ -385,7 +385,11 @@ export async function processScheduledDeletions(): Promise<number> {
     const productId = r.product_id as string;
     const metadata = JSON.parse((r.metadata_json as string) || '{}');
     const scheduledAt = new Date(metadata.scheduled_at || 0);
-    const deleteAfterDays = metadata.delete_after_days || 30;
+    // `??`, not `||`. A founder who asks for erasure with no waiting period
+    // records `delete_after_days: 0`, which is falsy — so `|| 30` silently
+    // turned "delete now" into "delete in a month", for exactly the request
+    // most likely to be urgent.
+    const deleteAfterDays = metadata.delete_after_days ?? 30;
     const deletionDate = new Date(scheduledAt.getTime() + deleteAfterDays * 24 * 60 * 60 * 1000);
 
     if (new Date() < deletionDate) continue; // Not yet time

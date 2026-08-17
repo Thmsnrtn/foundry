@@ -106,15 +106,20 @@ describe('the completion record cannot outrun the deletion', () => {
       `INSERT INTO products (id, name, owner_id, status) VALUES ('er_p','Erase Me','er_f','active')`);
     await scheduleDataDeletion('er_p', 0);
 
-    // One of the tables the erasure must clear is unavailable.
-    await query('ALTER TABLE decisions RENAME TO decisions_hidden');
+    // One of the tables the erasure must clear refuses to be cleared. A trigger
+    // rather than a rename: the table list is derived from the live schema, so
+    // a renamed table is simply not in it and nothing would fail.
+    await query(`INSERT INTO decisions (id, product_id, gate, what, why_now, status)
+                 VALUES ('er_d','er_p',3,'something','because','approved')`);
+    await query(`CREATE TRIGGER er_block BEFORE DELETE ON decisions
+                 BEGIN SELECT RAISE(ABORT,'erasure_test:blocked'); END`);
     try {
       await processScheduledDeletions();
     } catch {
-      // The caller's own catch may surface it; either way, what matters is the
+      // Surfacing the failure to the caller is the point; what matters is the
       // record below.
     } finally {
-      await query('ALTER TABLE decisions_hidden RENAME TO decisions');
+      await query('DROP TRIGGER er_block');
     }
 
     const completed = await query(
@@ -127,6 +132,31 @@ describe('the completion record cannot outrun the deletion', () => {
     // other subsystem that this company is finished with.
     const product = await query(`SELECT status FROM products WHERE id = 'er_p'`);
     expect((product.rows[0] as Record<string, string>).status).toBe('active');
+  });
+
+  it('honours a zero-day erasure instead of waiting a month', async () => {
+    // `metadata.delete_after_days || 30`. A founder asking for erasure with no
+    // waiting period records 0, which is falsy, so the request most likely to
+    // be urgent was silently rescheduled thirty days out. Found because a
+    // mutation-test fixture used 0 and nothing happened.
+    const { processScheduledDeletions, scheduleDataDeletion } = await import(
+      '../../src/services/privacy/consent.js');
+    await query(
+      `INSERT INTO founders (id, clerk_user_id, email) VALUES ('er_f2','er_c2','er2@example.com')`);
+    await query(
+      `INSERT INTO products (id, name, owner_id, status) VALUES ('er_p2','Now Please','er_f2','active')`);
+    await query(`INSERT INTO metric_snapshots (id, product_id, snapshot_date)
+                 VALUES ('er_m2','er_p2','2026-01-01')`);
+    await scheduleDataDeletion('er_p2', 0);
+
+    await processScheduledDeletions();
+
+    const left = await query(`SELECT id FROM metric_snapshots WHERE product_id = 'er_p2'`);
+    expect(left.rows.length, 'zero days means now, not next month').toBe(0);
+    const completed = await query(
+      `SELECT id FROM agent_audit_log
+        WHERE event_type = 'data_deletion_completed' AND target_id = 'er_p2'`);
+    expect(completed.rows.length).toBe(1);
   });
 
   it('still ends the operating relationship as well as the record', () => {
