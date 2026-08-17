@@ -77,6 +77,8 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 30 network contributor independence | 1 | 1 | high | 1 | 1 | 0 | 0 | 1 |
 | 31 retention disposition (§9–§11) | 2 | 3 | 1 high, 2 med | 2 | 2 | 0 | 2 | 4 |
 | 32 requester + actor identity | 2 | 2 | 2 high | 1 | 2 | 0 | 0 | 12 |
+| 33 consent expiry ↔ act gate | 1 | 1 | high | 0 | 1 | 0 | 0 | 1 |
+| 34 credential lifetime ↔ erasure | 2 | 1 | high | 1 | 1 | 0 | 0 | 2 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -374,13 +376,21 @@ a denominator that was itself a guess. Both are derived from the live schema
 now. **When one half of a right is enforced against a hand-written list, check
 the other half before believing it.**
 
+Two more instances closed the batch. **An expired consent still licensed
+autonomous action**: `autonomy_consents.expires_at` was honoured by
+`activeResponsibilityAuthority` and ignored by `activeConsent`, which is the one
+behind the autopilot's Consent Ledger gate. And **a write credential outlived
+the company it belonged to**: erasure cleared the GitHub token but not
+`ingest_token` or `share_token`, so a monitoring script kept posting metrics
+into a deleted company.
+
 **What the lens is good for next.** Every one of these was found by asking two
 questions of a rule rather than one: *what does it think its subject is*, and
-*what subject does the implementation actually bind*. Places that have NOT been
-read that way yet: onboarding (who is provisioning for whom), integration
-lifecycle (whose credential is being refreshed), scheduled work (which company a
-job believes it is acting for when it fans out), and the responsibility ladder
-itself (which actor a demotion applies to).
+*what subject does the implementation actually bind*. Read and clean this batch: onboarding provisioning (binds the created product
+to its creator), the job lock (binds the process, not the machine), integration
+sync writers (all product-scoped). Still unread: the responsibility ladder's
+demotion path (which actor a demotion applies to), the department/capability
+mode resolution, and inbound webhook handlers other than Stripe.
 
 **Debt with a number on it:** 34 SELECT column-drift baseline entries
 (`docs/db/select-column-baseline.txt`), down from 36 at the start of this
