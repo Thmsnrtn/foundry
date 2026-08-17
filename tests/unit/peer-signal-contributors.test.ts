@@ -82,9 +82,12 @@ describe('a peer signal counts companies', () => {
     expect(await getPeerSignal({ decisionType: TYPE, lifecycleStage: STAGE })).toBeNull();
   });
 
-  it('ignores rows that name no contributor', async () => {
-    // Written before migration 144. They cannot be attributed to a company, so
-    // they cannot support a claim about companies.
+  it('does not let unattributed rows make up the numbers', async () => {
+    // Four real companies, one short of the threshold, plus nine rows written
+    // before migration 144 that name nobody. Treating those as a contributor —
+    // even as one — would tip the count over and produce a claim about five
+    // companies from four.
+    for (let i = 0; i < 4; i++) await pattern(`real_${i}`, 'raise', 'positive');
     for (let i = 0; i < 9; i++) {
       await query(
         `INSERT INTO decision_patterns
@@ -94,7 +97,15 @@ describe('a peer signal counts companies', () => {
          VALUES (?, ?, ?, 'green', '{}', 'raise', 'positive', 'significant', 'peer_market')`,
         [`ps_legacy_${i}`, TYPE, STAGE]);
     }
-    expect(await getPeerSignal({ decisionType: TYPE, lifecycleStage: STAGE })).toBeNull();
+    expect(await getPeerSignal({ decisionType: TYPE, lifecycleStage: STAGE }),
+      'nine anonymous rows are not a fifth company').toBeNull();
+
+    // And with a genuine fifth company the same query does speak, so the
+    // abstention above is about the anonymous rows rather than about the
+    // threshold being unreachable.
+    await pattern('real_5', 'raise', 'positive');
+    const signal = await getPeerSignal({ decisionType: TYPE, lifecycleStage: STAGE });
+    expect(signal!.dominantOptionCount).toBe(5);
   });
 
   it('reports the positive rate across companies, not across rows', async () => {
