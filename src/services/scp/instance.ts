@@ -23,6 +23,7 @@ import type {
   ALL_AGENTS,
 } from './types.js';
 import {
+  isLoadableAgentName,
   AGENT_DISPLAY_NAMES,
   AGENT_ROLES,
   AGENT_HEALTH_WEIGHTS as WEIGHTS,
@@ -131,6 +132,13 @@ export class SCPInstance {
   // ─── Run single agent ─────────────────────────────────────────────────────
 
   async runAgent(agentName: AgentName): Promise<AgentSessionOutput> {
+    // The type says AgentName, but callers include a row read from
+    // `agent_instances`, where a cast is a promise rather than a check. The
+    // specifier is built from this value, so it is validated here — at the one
+    // place every caller passes through — rather than at each call site.
+    if (!isLoadableAgentName(agentName)) {
+      throw new Error(`unknown agent: refusing to load a module for an unrecognised name`);
+    }
     const module = await import(`./agents/${agentName}.js`);
     // Agent modules export a default class
     const AgentClass = module.default ?? module[Object.keys(module)[0]];

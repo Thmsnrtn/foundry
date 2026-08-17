@@ -39,52 +39,6 @@ export interface ConfigHistoryEntry {
   gate_scores: Record<string, number> | null;
 }
 
-// ─── 12 SCP Agents ───────────────────────────────────────────────────────────
-
-const AGENT_NAMES = [
-  'Atlas',       // CTO — code quality, architecture, security, dependencies, deployments
-  'Meridian',    // CPO — product strategy, roadmap, feature prioritization
-  'Beacon',      // CMO — marketing strategy, positioning, content
-  'Forge',       // COO — operations, processes, efficiency
-  'Nexus',       // CFO — financial modeling, pricing, revenue optimization
-  'Catalyst',    // CRO — sales, conversion, revenue growth
-  'Compass',     // CHRO — culture, hiring, team dynamics
-  'Oracle',      // Chief Data Officer — analytics, metrics, insights
-  'Sentinel',    // Chief Security Officer — security, compliance, risk
-  'Vanguard',    // Chief Strategy Officer — competitive analysis, market positioning
-  'Echo',        // Chief Customer Officer — support, success, retention
-  'Prism',       // Chief Design Officer — UX, design, accessibility
-];
-
-// ─── Starter content generators ───────────────────────────────────────────────
-
-function getStarterContent(agentName: string, configType: ConfigType): string {
-  const role = getAgentRole(agentName);
-
-  switch (configType) {
-    case 'persona':
-      return `${agentName} is the ${role} of this company. ${agentName} is analytical, direct, and focused on high-impact decisions. ${agentName} provides actionable recommendations backed by data and clear reasoning.`;
-
-    case 'domain_knowledge':
-      return getDomainKnowledge(agentName, role);
-
-    case 'task_patterns':
-      return `${agentName} prioritizes tasks by business impact. ${agentName} breaks complex problems into actionable steps. ${agentName} escalates decisions with high uncertainty to human review.`;
-
-    case 'tool_preferences':
-      return `${agentName} prefers structured data formats for analysis. ${agentName} uses concise summaries for communication. ${agentName} documents reasoning for all significant decisions.`;
-
-    case 'error_recovery':
-      return `When ${agentName} encounters ambiguous data, it requests clarification before proceeding. When ${agentName} hits a failure, it logs the error, applies the most conservative fallback, and flags for human review.`;
-
-    case 'shared_knowledge':
-      return `${agentName} shares relevant findings with other agents through structured summaries. ${agentName} avoids duplicating analysis already performed by peer agents.`;
-
-    default:
-      return '';
-  }
-}
-
 function getAgentRole(agentName: string): string {
   const roles: Record<string, string> = {
     Atlas: 'CTO',
@@ -271,44 +225,6 @@ export async function getConfigHistory(
       gate_scores: r.gate_scores ? JSON.parse(r.gate_scores as string) as Record<string, number> : null,
     };
   });
-}
-
-/**
- * Seed initial config stubs for all 12 agents for a product
- */
-export async function seedAgentConfigs(productId: string): Promise<void> {
-  const now = new Date().toISOString();
-
-  for (const agentName of AGENT_NAMES) {
-    for (const configType of CONFIG_TYPES) {
-      // Check if already exists
-      const existing = await query(
-        'SELECT id FROM agent_configs WHERE product_id = ? AND agent_name = ? AND config_type = ?',
-        [productId, agentName, configType]
-      );
-
-      if (existing.rows.length > 0) continue;
-
-      const content = getStarterContent(agentName, configType);
-      const lineCount = content.split('\n').filter(l => l.trim().length > 0).length;
-      const wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
-      const configId = nanoid();
-
-      // Insert initial config
-      await query(
-        `INSERT INTO agent_configs (id, product_id, agent_name, config_type, content, version, parent_version, line_count, word_count, updated_at, updated_by)
-         VALUES (?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, 'system')`,
-        [configId, productId, agentName, configType, content, lineCount, wordCount, now]
-      );
-
-      // Write to history as version 1
-      await query(
-        `INSERT INTO agent_config_history (id, product_id, agent_name, config_type, version, content, changed_at, changed_by, rationale, session_id, gate_scores)
-         VALUES (?, ?, ?, ?, 1, ?, ?, 'system', 'Initial seed', NULL, NULL)`,
-        [nanoid(), productId, agentName, configType, content, now]
-      );
-    }
-  }
 }
 
 /**

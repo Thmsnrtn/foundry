@@ -7,6 +7,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { logger } from '../../logger.js';
+import { isLoadableAgentName } from '../types.js';
 
 // Maps event types to the agents best positioned to analyze them
 const EVENT_AGENT_MAP: Record<string, string[]> = {
@@ -107,7 +108,12 @@ export async function processSignalEvent(eventId: string): Promise<void> {
 
   let relevantAgents: string[] = [];
   try {
-    relevantAgents = JSON.parse((row.relevant_agents_json as string) ?? '[]') as string[];
+    // Narrowed to the closed vocabulary before any of it reaches `import()`.
+    // These names were written by EVENT_AGENT_MAP, but they arrive here from a
+    // database column, and a module specifier resolves paths — an unvalidated
+    // stored string is a directory traversal waiting for a bad write.
+    relevantAgents = (JSON.parse((row.relevant_agents_json as string) ?? '[]') as unknown[])
+      .filter(isLoadableAgentName);
   } catch {
     relevantAgents = [];
   }

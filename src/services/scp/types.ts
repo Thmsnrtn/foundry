@@ -71,6 +71,25 @@ export const ALL_AGENTS: AgentName[] = [
   'harbor', 'sentinel', 'ledger', 'shield', 'oracle', 'crucible',
 ];
 
+/**
+ * The closed vocabulary a dynamic loader may act on.
+ *
+ * Three places load an agent module by name through `import()`. Their names
+ * arrive from three different sources: a static event map that round-trips
+ * through `signal_events.relevant_agents_json`, an `agent_instances` row, and
+ * an HTTP path parameter. Only the HTTP one validated — which meant a stored
+ * string reached a module specifier, and a specifier is not an identifier: it
+ * resolves paths, so `../` in a name is a directory traversal rather than a
+ * missing agent.
+ *
+ * Every loader now narrows through here first. A name outside the vocabulary
+ * is skipped rather than imported, so what can be loaded is bounded by this
+ * list and not by whatever happens to be in a column.
+ */
+export function isLoadableAgentName(name: unknown): name is AgentName {
+  return typeof name === 'string' && (ALL_AGENTS as string[]).includes(name);
+}
+
 // ─── Authority Levels ─────────────────────────────────────────────────────────
 
 /**
