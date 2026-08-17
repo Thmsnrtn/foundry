@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { encryptToken, decryptToken, isEncryptedToken, getPlaintextToken } from './crypto.js';
+import { encryptToken, decryptToken, isEncryptedToken, getPlaintextToken } from '../../src/lib/crypto.js';
 
 describe('token encryption', () => {
   beforeAll(() => {

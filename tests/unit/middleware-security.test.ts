@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
-import { requestIdMiddleware, securityHeaders } from './security.js';
+import { requestIdMiddleware, securityHeaders } from '../../src/middleware/security.js';
 
 describe('securityHeaders', () => {
   const app = new Hono();

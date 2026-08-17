@@ -15,7 +15,7 @@ import {
   preferencesSchema,
   failureLogSchema,
   validate,
-} from './validation.js';
+} from '../../src/lib/validation.js';
 
 describe('reportMetricsSchema', () => {
   it('accepts valid metrics', () => {
@@ -104,11 +104,18 @@ describe('selectRepoSchema', () => {
     })).toThrow();
   });
 
-  it('rejects missing access_token', () => {
-    expect(() => validate(selectRepoSchema, {
-      repo_owner: 'org',
-      repo_name: 'app',
-    })).toThrow();
+  it('does not accept a GitHub token in the request body at all', () => {
+    // This assertion used to require an `access_token` field and expect a
+    // missing one to be rejected. The field was deliberately removed (SEC-10):
+    // the token is read from an httpOnly cookie and never from the form body or
+    // the DOM. Because this file lived under src/ where no runner included it,
+    // the stale expectation never failed and the security improvement was never
+    // covered. This asserts the property that replaced it.
+    const parsed = validate(selectRepoSchema, {
+      repo_owner: 'org', repo_name: 'app', access_token: 'ghp_should_be_ignored',
+    }) as Record<string, unknown>;
+    expect(parsed.access_token).toBeUndefined();
+    expect(parsed).toMatchObject({ repo_owner: 'org', repo_name: 'app' });
   });
 });
 
