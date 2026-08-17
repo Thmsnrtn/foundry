@@ -134,6 +134,6 @@ Active stressors: ${stressors.length > 0 ? stressors.map((s) => s.name).join(', 
 
   prompt += '\nBe direct and specific. What happened and what it means.';
 
-  const response = await model(systemInstruction, prompt, 512);
+  const response = await model(systemInstruction, prompt, 512, productId);
   return response.content;
 }

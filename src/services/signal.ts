@@ -190,7 +190,7 @@ async function getOrGenerateProse(
   return prose;
 }
 
-async function generateProse(score: number, ctx: ProseContext, productId?: string): Promise<string> {
+async function generateProse(score: number, ctx: ProseContext, productId: string): Promise<string> {
   const { riskState, currentPrompt, stressors, metrics, decisions, critical, elevated, watch } = ctx;
 
   // Use loose != null so BOTH null and undefined are treated as "no data".

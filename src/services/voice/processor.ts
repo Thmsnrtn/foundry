@@ -175,6 +175,12 @@ ${transcript.slice(0, 5000)}`;
     'SELECT product_id FROM voice_sessions WHERE id = ?', [voiceSessionId]);
   const sessionProductId =
     (sessionRow.rows[0] as Record<string, string> | undefined)?.product_id;
+  if (!sessionProductId) {
+    // No company to charge and no institutional purpose: a session that has
+    // lost its product is a bug, and spending on it under the global ceiling
+    // would hide that.
+    throw new Error(`voice session ${voiceSessionId} has no product to attribute spend to`);
+  }
 
   const response = await callSonnet(
     'Extract structured data from a conversation transcript.', prompt, 1024, sessionProductId);

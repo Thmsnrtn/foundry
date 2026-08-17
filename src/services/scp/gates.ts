@@ -59,7 +59,7 @@ async function runConstitutionGate(
   proposedContent: string,
   agentName: string,
   rationale: string,
-  productId?: string
+  productId: string
 ): Promise<GateResult> {
   // First: check regex patterns for obvious violations
   for (const pattern of CONSTITUTION_VIOLATION_PATTERNS) {
@@ -131,7 +131,7 @@ async function runRegressionGate(
   proposedContent: string,
   agentName: string,
   goldenLessons: string[],
-  productId?: string
+  productId: string
 ): Promise<GateResult> {
   if (goldenLessons.length === 0) {
     return {
@@ -323,7 +323,7 @@ async function runSafetyGate(
   proposedContent: string,
   agentName: string,
   rationale: string,
-  productId?: string
+  productId: string
 ): Promise<GateResult> {
   // Regex check first — reject immediately if any pattern found
   for (const pattern of SAFETY_VIOLATION_PATTERNS) {

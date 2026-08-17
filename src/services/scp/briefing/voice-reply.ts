@@ -151,7 +151,7 @@ interface IntentResult {
   summary: string;
 }
 
-async function classifyIntent(transcript: string, context: string, productId?: string): Promise<IntentResult> {
+async function classifyIntent(transcript: string, context: string, productId: string): Promise<IntentResult> {
   const systemPrompt = `You classify founder voice notes into one of four action types:
 - "decision": Founder is making or recording a strategic decision ("I've decided to...", "We're going to...", "My call is...")
 - "approval": Founder is approving a proposed action ("Yes, do it", "Approved", "Go ahead with...")

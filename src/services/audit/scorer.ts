@@ -42,8 +42,8 @@ Respond in JSON format only:
 
 export async function scoreAudit(
   request: AuditScoringRequest,
+  productId: string,
   wisdomContext?: WisdomContext,
-  productId?: string
 ): Promise<ScoringOutput> {
   const userPrompt = buildScoringPrompt(request);
   let systemPrompt = SCORING_SYSTEM_PROMPT;

@@ -115,6 +115,39 @@ export function computeCostCents(model: AIModel | string, inputTokens: number, o
   return inputCostCents + outputCostCents;
 }
 
+/**
+ * WHO IS THIS CALL FOR?
+ *
+ * A model call is either work for one company or work for the institution
+ * itself. There is no third case, and there is no "we did not say".
+ *
+ * `productId` used to be the fourth, optional argument, so omitting it meant
+ * BOTH "this is institutional" and "somebody forgot" — fifty-five of a hundred
+ * and four call sites had forgotten, and the resulting spend was bounded only
+ * by the global ceiling. Omission cannot be allowed to carry meaning when the
+ * two meanings differ by an unbounded amount of money.
+ *
+ * The subject is now required at the type boundary, and institutional calls say
+ * so out loud with a reason a reader can check.
+ */
+export interface InstitutionSpend {
+  readonly institutionReason: string;
+}
+
+/** Declare a model call as the institution's own, with the reason it has no
+ * company to charge. The reason is not decoration: it is what a reviewer reads
+ * to decide whether this really is institutional or just unattributed. */
+export function institutionSpend(reason: string): InstitutionSpend {
+  return { institutionReason: reason };
+}
+
+/** A company id, or an explicit institutional declaration. Never undefined. */
+export type SpendSubject = string | InstitutionSpend;
+
+function subjectProductId(subject: SpendSubject): string | undefined {
+  return typeof subject === 'string' ? subject : undefined;
+}
+
 /** Refuse before anything is reserved or dispatched. */
 async function refuseIfNotEntitled(productId: string | undefined): Promise<void> {
   if (!productId) return;
@@ -288,16 +321,19 @@ function buildSystemMessageContent(
 /**
  * Make an LLM call via OpenRouter with cost ceiling, timeout, and retry.
  */
-export async function callClaude(config: AICallConfig & { productId?: string }): Promise<AIResponse> {
+export async function callClaude(
+  config: AICallConfig & { subject: SpendSubject },
+): Promise<AIResponse> {
+  const productId = subjectProductId(config.subject);
   // BEFORE the key and before the reservation. Refusing to spend must not
   // depend on whether a provider is configured, and a reservation taken and
   // then abandoned by a later throw sits as 'reserved' until it expires at the
   // full authorized amount.
-  await refuseIfNotEntitled(config.productId);
+  await refuseIfNotEntitled(productId);
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const reservation = await authorizeSpend(
-    config.productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
+    productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
   );
   const startedAt = Date.now();
   let lastError: Error | null = null;
@@ -349,7 +385,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
 
       log.info('ai_call.complete', {
         model: config.model,
-        productId: config.productId,
+        productId,
         attempt,
         durationMs: Date.now() - startedAt,
         inputTokens: data.usage?.prompt_tokens ?? 0,
@@ -374,10 +410,10 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
         await finishReservation(reservation, { kind: 'released' });
         log.error('ai_call.failed_non_retryable', lastError, {
           model: config.model,
-          productId: config.productId,
+          productId,
           status,
         });
-        reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { status } });
+        reportError(lastError, { source: 'ai_client', productId, meta: { status } });
         throw lastError;
       }
 
@@ -413,9 +449,9 @@ export async function callOpus(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 8192,
-  productId?: string,
+  subject: SpendSubject,
 ): Promise<AIResponse> {
-  return callClaude({ model: MODELS.OPUS, maxTokens, systemPrompt, userPrompt, productId });
+  return callClaude({ model: MODELS.OPUS, maxTokens, systemPrompt, userPrompt, subject });
 }
 
 /**
@@ -425,9 +461,9 @@ export async function callSonnet(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 4096,
-  productId?: string,
+  subject: SpendSubject,
 ): Promise<AIResponse> {
-  return callClaude({ model: MODELS.SONNET, maxTokens, systemPrompt, userPrompt, productId });
+  return callClaude({ model: MODELS.SONNET, maxTokens, systemPrompt, userPrompt, subject });
 }
 
 /**
@@ -438,9 +474,9 @@ export async function callHaiku(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 1024,
-  productId?: string,
+  subject: SpendSubject,
 ): Promise<AIResponse> {
-  return callClaude({ model: MODELS.HAIKU, maxTokens, systemPrompt, userPrompt, productId });
+  return callClaude({ model: MODELS.HAIKU, maxTokens, systemPrompt, userPrompt, subject });
 }
 
 /**

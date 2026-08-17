@@ -485,7 +485,7 @@ async function generateNarrativeSection(
   context: string,
   _section: string,
   instruction: string,
-  productId?: string,
+  productId: string,
 ): Promise<string> {
   try {
     const r = await callOpus(systemPrompt, `Business data:\n${context}\n\nInstruction: ${instruction}`, 512, productId);

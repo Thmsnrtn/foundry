@@ -93,6 +93,10 @@ export async function askAboutDecision(
       maxTokens: 1024,
       systemPrompt,
       userPrompt,
+      // This call was invisible to the attribution gate, which only knew the
+      // three helper functions — so it reached a model with no company to
+      // charge and only the global ceiling applying.
+      subject: productId,
     });
 
     const parsed = parseJSONResponse<ClaudeArchaeologyResponse>(response.content);

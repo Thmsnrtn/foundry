@@ -107,7 +107,7 @@ export async function sendMessage(
   const model = isStrategic ? callOpus : callSonnet;
   const maxTokens = isStrategic ? 4096 : 2048;
 
-  const response = await model(systemPrompt, userPrompt, maxTokens);
+  const response = await model(systemPrompt, userPrompt, maxTokens, productId);
 
   // Parse any action proposals from the response
   const actions = extractActionProposals(response.content);

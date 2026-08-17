@@ -76,7 +76,7 @@ apiAskRoutes.post('/api/ask', validateBody(askSchema), async (c) => {
   const maxTokens = classified.intent === 'scenario' ? 1024 : 512;
 
   try {
-    const response = await callFn(systemPrompt, userPrompt, maxTokens);
+    const response = await callFn(systemPrompt, userPrompt, maxTokens, body.product_id);
 
     // Build data points for UI
     const dataPoints: Array<{ label: string; value: string }> = [];
@@ -372,7 +372,7 @@ async function processMessage(
   } catch {
     // Fall back to single-turn
     try {
-      const r = await callFn(fullSystem, message, maxTokens);
+      const r = await callFn(fullSystem, message, maxTokens, productId);
       content = r.content.trim();
       modelUsed = r.model;
       tokensUsed = r.usage.output_tokens;

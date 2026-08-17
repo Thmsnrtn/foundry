@@ -29,13 +29,18 @@ const ROOT = resolve(import.meta.dirname, '..');
 const HELPERS = new Set(['callOpus', 'callSonnet', 'callHaiku']);
 const PRODUCT_ARG_INDEX = 3;
 
-// A call that genuinely has no company to charge, with the reason. An entry
-// here is an argument, not a suppression: each one must be a call ABOUT more
-// than one company, where naming a single product would be a lie about who
-// incurred the cost.
-const UNATTRIBUTABLE = {
-  'src/services/wisdom/network.ts': 'aggregates opted-in patterns ACROSS products; there is no single company to charge',
-};
+// `callClaude` takes its subject as a named property rather than positionally.
+// It was invisible to this gate until the type system made the subject
+// required: one caller reached a model with no company to charge, and the gate
+// that claimed to cover model spend had never looked at it.
+const CONFIG_CALLERS = new Set(['callClaude']);
+
+// There is no exemption list any more, and that is the point. A call with no
+// company to charge now says so in the source — `institutionSpend('<reason>')`
+// in the subject position — so the declaration lives next to the call instead
+// of in a file somebody has to remember to keep true. What this gate checks is
+// that the declaration exists and carries a reason worth reading.
+const MIN_REASON = 20;
 
 function walk(dir) {
   return readdirSync(dir).flatMap((e) => {
@@ -46,7 +51,7 @@ function walk(dir) {
 
 const offenders = [];
 let total = 0;
-const exemptSeen = new Set();
+let institutional = 0;
 
 for (const file of walk(join(ROOT, 'src'))) {
   if (file.endsWith('/ai/client.ts')) continue;          // where the helpers live
@@ -54,12 +59,33 @@ for (const file of walk(join(ROOT, 'src'))) {
   const sf = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.ES2022, true);
   const visit = (node) => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+        && CONFIG_CALLERS.has(node.expression.text)) {
+      total++;
+      const arg = node.arguments[0];
+      const named = arg && ts.isObjectLiteralExpression(arg)
+        && arg.properties.some((prop) => prop.name?.getText(sf) === 'subject');
+      if (!named) {
+        const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+        offenders.push(`${rel}:${line + 1} → callClaude with no subject`);
+      }
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
         && HELPERS.has(node.expression.text)) {
       total++;
       if (node.arguments.length <= PRODUCT_ARG_INDEX) {
         const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
-        if (rel in UNATTRIBUTABLE) exemptSeen.add(rel);
-        else offenders.push(`${rel}:${line + 1} → ${node.expression.text} with no productId`);
+        offenders.push(`${rel}:${line + 1} → ${node.expression.text} with no spend subject`);
+      }
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+        && node.expression.text === 'institutionSpend') {
+      institutional++;
+      const arg = node.arguments[0];
+      const literal = arg && ts.isStringLiteral(arg) ? arg.text : '';
+      if (literal.length < MIN_REASON) {
+        const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+        offenders.push(
+          `${rel}:${line + 1} → institutionSpend needs a written reason, not a label`);
       }
     }
     ts.forEachChild(node, visit);
@@ -69,20 +95,19 @@ for (const file of walk(join(ROOT, 'src'))) {
 
 if (offenders.length) {
   console.error(
-    'Model calls charged to nobody:\n' + offenders.sort().join('\n')
-    + '\n\nPass the productId as the fourth argument. Only the GLOBAL ceiling '
+    'Model calls with no declared subject:\n' + offenders.sort().join('\n')
+    + '\n\nPass the company id as the fourth argument. Only the GLOBAL ceiling '
     + 'applies to a call without one, so one company can exhaust the budget for '
-    + 'all of them. If the call genuinely spans companies, record it in '
-    + 'UNATTRIBUTABLE with the reason.');
+    + 'all of them. If the call genuinely belongs to no company, say so: '
+    + "institutionSpend('why this has no company to charge').");
   process.exit(1);
 }
 
-const stale = Object.keys(UNATTRIBUTABLE).filter((f) => !exemptSeen.has(f));
-if (stale.length) {
-  console.error(
-    'These are recorded as unattributable but no longer have an unattributed '
-    + 'call. Remove them, so the list keeps meaning what it says:\n' + stale.join('\n'));
-  process.exit(1);
-}
-
-console.log(`✓ every model call is charged to a company (${total} call sites, ${exemptSeen.size} recorded exception)`);
+// Indirect callers are the gate's remaining blind spot, and the type system is
+// what closes it: `const fn = x ? callOpus : callSonnet; await fn(a, b, c)` is
+// invisible to any AST match on the callee's name. Five such calls existed and
+// were found only when `SpendSubject` became a required parameter. This gate is
+// defence in depth; the required argument is the enforcement.
+console.log(
+  `✓ every model call declares its subject (${total} direct call sites, `
+  + `${institutional} declared institutional)`);

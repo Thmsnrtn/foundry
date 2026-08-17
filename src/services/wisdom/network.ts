@@ -7,7 +7,7 @@
 import { createHmac } from 'crypto';
 
 import { query } from '../../db/client.js';
-import { callOpus, parseJSONResponse } from '../ai/client.js';
+import { callOpus, institutionSpend, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 
 export interface CrossProductInsight {
@@ -124,7 +124,12 @@ Return empty array if no significant patterns emerge.`;
     const response = await callOpus(
       'You are a cross-product pattern analyst. Only surface statistically significant insights.',
       prompt,
-      2048
+      2048,
+      // Institutional, and declared rather than omitted. Naming any single
+      // contributor here would be a lie about who incurred the cost, and
+      // leaving the argument off would make this indistinguishable from the
+      // fifty-five call sites that had simply forgotten.
+      institutionSpend('cross-company pattern aggregation: the cost belongs to no single contributor'),
     );
 
     const insights = parseJSONResponse<Array<{

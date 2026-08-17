@@ -220,3 +220,26 @@ describe('the pause reaches model spend', () => {
       .rejects.not.toThrow(NotEntitledError);
   });
 });
+
+// §4: a model call is either work for one company or work for the institution.
+// There is no third case and no "we did not say" — omission used to mean both
+// "institutional" and "somebody forgot", and the two differ by an unbounded
+// amount of money.
+describe('a model call names its subject', () => {
+  it('charges an institutional call to nobody, deliberately and with a reason', async () => {
+    const { institutionSpend } = await import('../../src/services/ai/client.js');
+    const declared = institutionSpend('cross-company aggregation has no single payer');
+    expect(declared.institutionReason.length).toBeGreaterThan(20);
+  });
+
+  it('does not refuse an institutional call on entitlement grounds', async () => {
+    // There is no company whose billing could stop it, so the entitlement
+    // check must not invent one.
+    await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [productId]);
+    const { callSonnet, institutionSpend, NotEntitledError } = await import(
+      '../../src/services/ai/client.js');
+    await expect(callSonnet('sys', 'user', 16,
+      institutionSpend('platform-wide work with no company to charge')))
+      .rejects.not.toThrow(NotEntitledError);
+  });
+});

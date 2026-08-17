@@ -60,7 +60,7 @@ export async function classifyIntent(
   /** The company the message is about. Optional only because one caller
    * classifies before a thread exists; when it is known, the model call is
    * charged to that company and falls under its ceiling. */
-  productId?: string,
+  productId: string,
 ): Promise<ClassifiedIntent> {
   const systemPrompt = `You are a business message intent classifier for a SaaS analytics platform.
 Classify the message into exactly one intent category.

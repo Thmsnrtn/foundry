@@ -98,7 +98,7 @@ export async function runAudit(
     analysis_results: pipelineOutput,
     prior_audit: priorAudit,
     key_file_excerpts: keyFileExcerpts,
-  }, wisdomContext);
+  }, product.id, wisdomContext);
 
   // Persist
   await report(7, 'Finalizing audit & queuing fixes');

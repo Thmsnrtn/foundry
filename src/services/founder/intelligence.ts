@@ -365,7 +365,12 @@ Format each bullet with an emoji:
   // own company instead of to nobody: Foundry is a company in this system, and
   // an unattributed model call is one no per-product ceiling can reach.
   const { resolveFoundryProductId } = await import('../system-identity.js');
-  const ownProductId = (await resolveFoundryProductId()) ?? undefined;
+  const { institutionSpend } = await import('../ai/client.js');
+  // Foundry's own company when that identity exists; otherwise the institution,
+  // said out loud. Before this, the fallback was `undefined`, which is the same
+  // value a forgotten argument produces.
+  const ownProductId = (await resolveFoundryProductId())
+    ?? institutionSpend('platform-wide briefing before the Foundry company identity exists');
 
   const response = await callSonnet(
     'You are a COO writing a 30-second morning briefing for the CEO. Be specific, use numbers.',
