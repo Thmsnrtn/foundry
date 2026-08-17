@@ -46,15 +46,63 @@ setInterval(() => {
  */
 export function clientIp(c: { req: { header: (name: string) => string | undefined } }): string {
   const fly = c.req.header('fly-client-ip');
-  if (fly) return fly.trim();
+  if (fly) return normalizeIp(fly);
   const cf = c.req.header('cf-connecting-ip');
-  if (cf) return cf.trim();
+  if (cf) return normalizeIp(cf);
   const xff = c.req.header('x-forwarded-for');
   if (xff) {
     const hops = xff.split(',').map((h) => h.trim()).filter(Boolean);
-    if (hops.length) return hops[hops.length - 1]!;
+    if (hops.length) return normalizeIp(hops[hops.length - 1]!);
   }
   return 'unknown';
+}
+
+/**
+ * One caller, one bucket, however they spell their address.
+ *
+ * An address is a string until something turns it into an identity, and a
+ * limiter keyed on the string gives a fresh allowance to anyone who can write
+ * theirs a different way. `2001:db8::1`, `2001:0DB8:0000:...:0001` and
+ * `[2001:db8::1]:443` are the same machine and were three budgets.
+ *
+ * IPv6 is bucketed by its /64. A residential IPv6 allocation is a /64 or
+ * larger, so the caller chooses the low 64 bits freely — keying on the full
+ * address is keying on something they control, which is the same defect as
+ * trusting X-Forwarded-For, one layer down. A /64 is the smallest unit that is
+ * assigned rather than chosen.
+ */
+export function normalizeIp(raw: string): string {
+  let ip = raw.trim().toLowerCase();
+
+  // `[v6]:port` and `v4:port` — a proxy may include the source port.
+  const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(ip);
+  if (bracketed) ip = bracketed[1]!;
+  else if (/^\d{1,3}(\.\d{1,3}){3}:\d+$/.test(ip)) ip = ip.slice(0, ip.lastIndexOf(':'));
+
+  // IPv4-mapped IPv6: the same machine as the bare IPv4 address.
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(ip);
+  if (mapped) return mapped[1]!;
+
+  if (!ip.includes(':')) return ip;                      // IPv4, or something odd
+
+  const groups = expandIpv6(ip);
+  if (!groups) return ip;                                // unparseable: key on it as-is
+  return `${groups.slice(0, 4).join(':')}::/64`;
+}
+
+/** IPv6 to eight zero-padded groups, or null when it is not an address. */
+function expandIpv6(ip: string): string[] | null {
+  const halves = ip.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0]!.split(':').filter(Boolean) : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1]!.split(':').filter(Boolean) : [];
+  if (halves.length === 1 && head.length !== 8) return null;
+  const fill = 8 - head.length - tail.length;
+  if (fill < 0) return null;
+  const groups = [...head, ...Array(halves.length === 2 ? fill : 0).fill('0'), ...tail];
+  if (groups.length !== 8) return null;
+  if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.map((g) => g.replace(/^0+(?=.)/, ''));
 }
 
 /**

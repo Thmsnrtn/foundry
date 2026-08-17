@@ -151,3 +151,67 @@ describe('nothing else reads the raw header', () => {
       .toEqual([]);
   });
 });
+
+// =============================================================================
+// §5: one caller, many spellings. An address is a string until something makes
+// it an identity — and a limiter keyed on the string hands a fresh allowance to
+// anyone who can write their own address a different way.
+// =============================================================================
+
+describe('an address is normalised before it becomes a bucket', () => {
+  it('treats the same IPv6 address written differently as one caller', () => {
+    const long = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '2001:0DB8:0000:0000:0000:0000:0000:0001' : undefined) } } as never);
+    const short = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '2001:db8::1' : undefined) } } as never);
+    expect(long).toBe(short);
+  });
+
+  it('strips the brackets and port a proxy may add', () => {
+    const bracketed = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '[2001:db8::1]:443' : undefined) } } as never);
+    const bare = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '2001:db8::1' : undefined) } } as never);
+    expect(bracketed).toBe(bare);
+
+    const v4port = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '203.0.113.9:51234' : undefined) } } as never);
+    expect(v4port).toBe('203.0.113.9');
+  });
+
+  it('treats an IPv4-mapped IPv6 address as the IPv4 address', () => {
+    const mapped = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '::ffff:203.0.113.9' : undefined) } } as never);
+    expect(mapped).toBe('203.0.113.9');
+  });
+
+  it('buckets IPv6 by its /64, because a client owns the rest of it', async () => {
+    // A residential IPv6 allocation is a /64 or larger: the caller chooses the
+    // low 64 bits freely, so keying on the full address is keying on something
+    // they control. Two addresses in one /64 are one caller.
+    const a = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '2001:db8:1:2:aaaa:bbbb:cccc:dddd' : undefined) } } as never);
+    const b = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '2001:db8:1:2:1111:2222:3333:4444' : undefined) } } as never);
+    expect(a).toBe(b);
+
+    // A different /64 is a different caller.
+    const other = clientIp({ req: { header: (n: string) =>
+      (n === 'fly-client-ip' ? '2001:db8:1:3:aaaa:bbbb:cccc:dddd' : undefined) } } as never);
+    expect(other).not.toBe(a);
+  });
+
+  it('cannot be multiplied by walking the low bits', async () => {
+    const a = app(authRateLimit);
+    let blocked = 0;
+    const prefix = `2001:db8:${Math.floor(Math.random() * 60000).toString(16)}:1`;
+    for (let i = 0; i < 14; i++) {
+      const res = await a.request('/x', {
+        headers: { 'fly-client-ip': `${prefix}:0:0:0:${(i + 1).toString(16)}` },
+      });
+      if (res.status === 429) blocked++;
+    }
+    expect(blocked, 'ten requests from one /64 are ten requests from one caller')
+      .toBeGreaterThan(0);
+  });
+});
