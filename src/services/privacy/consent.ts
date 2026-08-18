@@ -961,6 +961,11 @@ export async function eraseFounderAccount(founderId: string): Promise<{
   // shell with the person's health history still hanging off it.
   await runFounderScopedErasure(founderId);
 
+  // AND THE COMPANIES THEY DO NOT OWN. Everything above is scoped to products
+  // this founder owns; a member of somebody else's company leaves their id,
+  // their email and their words behind in it.
+  await erasePersonAcrossCompanies(founderId);
+
   await query(
     // DRIVEN BY THE STATED FIELD LIST, not by a hand-written column list that
     // drifts from it. `email` and `clerk_user_id` are markers rather than
@@ -974,6 +979,167 @@ export async function eraseFounderAccount(founderId: string): Promise<{
        ${founderRedactionSql()}
      WHERE id = ?`, [founderId]);
   return { productsErased, failed, founderRedacted: true };
+}
+
+/**
+ * ERASING A PERSON IN COMPANIES THEY DO NOT OWN.
+ *
+ * `eraseFounderAccount` starts from `SELECT id FROM products WHERE owner_id = ?`
+ * and everything after that is scoped to those companies. Team membership is
+ * not vestigial — `getVisibleProducts` unions owned products with
+ * `team_members`, so a member works inside a company somebody else owns, and
+ * everything they do there carries their founder id.
+ *
+ * So an account erasure left the person's id, their email, their written words
+ * and their conversations sitting in other people's companies. The end-to-end
+ * sweep could not see it: every row it seeds belongs to a product the erased
+ * founder owns, which is the one case the by-product plan already handles.
+ *
+ * Forty tables carry an actor-shaped column beside a `product_id`. They fall
+ * into three kinds, and only two of them can be settled here:
+ *
+ *   DELETE  the row is wholly the person's own activity inside that company —
+ *           their conversations, their journal, their notifications, their
+ *           consents. The company authored none of it and loses nothing.
+ *   SEVER   the row is the COMPANY'S record that happens to name a person —
+ *           its audit trail, its decisions, who invited whom. The record stays
+ *           and stops naming them. Only possible where the column is nullable.
+ *   OWNER   the row is a company asset the company still depends on, on a NOT
+ *           NULL column: an API key, an MCP grant, a webhook the departing
+ *           member configured. Deleting it takes a working capability away
+ *           from a company that did nothing wrong; keeping it keeps the
+ *           person. That is a product decision, not an engineering one, and it
+ *           is queued rather than guessed.
+ */
+type PersonInOthersCompany =
+  | { op: 'delete'; columns: string[]; reason: string; byEmail?: string[] }
+  | { op: 'sever'; columns: string[]; reason: string }
+  | { op: 'owner_decision'; columns: string[]; reason: string };
+
+const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
+  // ── theirs, wholly ────────────────────────────────────────────────────────
+  chat_sessions: { op: 'delete', columns: ['founder_id'], reason: 'conversations they had inside this company' },
+  conversation_threads: { op: 'delete', columns: ['founder_id'], reason: 'threads they opened inside this company' },
+  founder_journal_entries: { op: 'delete', columns: ['founder_id'], reason: 'their own journal entries' },
+  founder_feedback: { op: 'delete', columns: ['founder_id'], reason: 'feedback they wrote themselves' },
+  founder_psychology_insights: { op: 'delete', columns: ['founder_id'], reason: 'inferences about them' },
+  voice_memos: { op: 'delete', columns: ['founder_id'], reason: 'voice recordings of the person' },
+  voice_sessions: { op: 'delete', columns: ['founder_id'], reason: 'voice sessions the person held' },
+  notifications: { op: 'delete', columns: ['founder_id'], reason: 'messages addressed to them' },
+  notification_preferences: { op: 'delete', columns: ['founder_id'], reason: 'how they wanted to be reached' },
+  push_log: { op: 'delete', columns: ['founder_id'], reason: 'what was pushed to their devices' },
+  onboarding_checklist: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
+  onboarding_sessions: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
+  onboarding_tour: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
+  saved_insights: { op: 'delete', columns: ['founder_id'], reason: 'insights this person bookmarked' },
+  operator_attention: { op: 'delete', columns: ['founder_id'], reason: 'what was competing for their attention' },
+  rejection_streaks: { op: 'delete', columns: ['founder_id'], reason: 'a behavioural counter about them' },
+  cofounder_dna_responses: { op: 'delete', columns: ['founder_id'], reason: 'their own questionnaire answers' },
+  cofounder_profiles: { op: 'delete', columns: ['founder_id'], reason: 'their own co-founder profile' },
+  privacy_consents: { op: 'delete', columns: ['founder_id'], reason: 'consents that can no longer be given or withdrawn' },
+  autonomy_consents: { op: 'delete', columns: ['founder_id'], reason: 'authority they granted, which must not outlive them' },
+  oauth_states: { op: 'delete', columns: ['founder_id'], reason: 'in-flight authorisation for a person who is gone' },
+  briefing_shares: { op: 'delete', columns: ['founder_id'], reason: 'share links this person created' },
+  briefing_decision_links: { op: 'delete', columns: ['founder_id'], reason: 'what they read before deciding' },
+  portfolio_memberships: { op: 'delete', columns: ['founder_id'], reason: 'their own portfolio membership' },
+  team_members: { op: 'delete', columns: ['founder_id'], reason: 'their access to a live company, which must not survive them' },
+  execution_queue: { op: 'delete', columns: ['founder_id'], reason: 'work queued for them personally' },
+  funnel_events: { op: 'delete', columns: ['founder_id'], reason: 'product analytics about this person' },
+  milestone_events: { op: 'delete', columns: ['founder_id'], reason: 'milestones recorded against the person' },
+  runway_models: { op: 'delete', columns: ['founder_id'], reason: 'runway models this person built' },
+
+  // ── the company's, naming a person ────────────────────────────────────────
+  agent_audit_log: { op: 'sever', columns: ['actor_id'], reason: 'the company\'s audit trail; the entry stays and stops naming them' },
+  integration_events: { op: 'sever', columns: ['actor_id'], reason: 'the company\'s integration history' },
+  decisions: { op: 'sever', columns: ['decided_by_founder_id'], reason: 'the company\'s decision; that it was made is the company\'s record' },
+  lifecycle_rules: { op: 'sever', columns: ['created_by'], reason: 'a rule the company still runs on' },
+  ai_spend_reservations: { op: 'sever', columns: ['founder_id'], reason: 'accounting that does not need to say whose it was' },
+  team_invitations: {
+    op: 'delete',
+    columns: ['invited_by'],
+    // THE PERSON IS NAMED HERE BY ADDRESS, NOT BY ID. An invitation identifies
+    // its recipient by `email` — they may not even have had an account when it
+    // was sent — so matching on founder ids alone leaves their email address
+    // sitting verbatim in a company they never joined or have since left.
+    byEmail: ['email'],
+    reason: 'carries a person\'s email verbatim; a spent invitation is nobody\'s asset',
+  },
+
+  // ── genuinely the owner's call ────────────────────────────────────────────
+  api_keys: { op: 'owner_decision', columns: ['founder_id', 'created_by'], reason: 'a credential the company may be running on' },
+  mcp_grants: { op: 'owner_decision', columns: ['created_by'], reason: 'an authority grant the company may depend on' },
+  webhooks: { op: 'owner_decision', columns: ['founder_id', 'created_by'], reason: 'an integration the company may depend on' },
+  deal_rooms: { op: 'owner_decision', columns: ['created_by'], reason: 'a shared artefact other people are using' },
+  decision_votes: { op: 'owner_decision', columns: ['founder_id'], reason: 'part of the company\'s decision record, on a NOT NULL column, with the person\'s own words in it' },
+};
+
+/** Exported so a test can prove the map is TOTAL against the live schema. */
+export const PERSON_ACROSS_COMPANIES_DISPOSITIONS = PERSON_ACROSS_COMPANIES;
+
+/**
+ * Run those dispositions for every company — including the ones this founder
+ * does not own, which is the whole point.
+ */
+async function erasePersonAcrossCompanies(founderId: string): Promise<void> {
+  // Their address, read before the founders row is redacted — after that it is
+  // `erased+<id>@invalid` and matches nothing.
+  const who = (await query('SELECT email FROM founders WHERE id = ?', [founderId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const email = who?.email == null ? null : String(who.email);
+
+  for (const [table, d] of Object.entries(PERSON_ACROSS_COMPANIES)) {
+    if (d.op === 'owner_decision') continue;          // queued, not guessed
+    for (const column of d.columns) {
+      if (d.op === 'sever') {
+        await query(`UPDATE ${table} SET ${column} = NULL WHERE ${column} = ?`, [founderId]);
+        continue;
+      }
+      // CHILDREN FIRST, for the same reason the by-product plan orders itself:
+      // foreign keys are ON, and deleting a chat session whose messages still
+      // reference it raises — which would abort the erasure rather than leave
+      // a little behind. Descending here rather than hand-listing the children
+      // means a table added later is carried without anyone remembering to.
+      for (const child of await childrenOf(table)) {
+        await query(
+          `DELETE FROM ${child.table} WHERE ${child.column} IN`
+          + ` (SELECT ${child.parentColumn} FROM ${table} WHERE ${column} = ?)`,
+          [founderId]);
+      }
+      await query(`DELETE FROM ${table} WHERE ${column} = ?`, [founderId]);
+    }
+    if (d.op === 'delete' && d.byEmail && email !== null) {
+      for (const column of d.byEmail) {
+        await query(`DELETE FROM ${table} WHERE ${column} = ?`, [email]);
+      }
+    }
+  }
+}
+
+/** Tables with a foreign key into `parent`, so they can be cleared first. */
+async function childrenOf(
+  parent: string,
+): Promise<Array<{ table: string; column: string; parentColumn: string }>> {
+  const all = (await query(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`, []))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const out: Array<{ table: string; column: string; parentColumn: string }> = [];
+  for (const row of all) {
+    const table = String(row.name);
+    if (table === parent) continue;
+    const fks = (await query(
+      `SELECT "table" AS p, "from" AS col, "to" AS pcol FROM pragma_foreign_key_list(?)`,
+      [table])).rows as unknown as Array<Record<string, unknown>>;
+    for (const fk of fks) {
+      if (String(fk.p) !== parent) continue;
+      out.push({
+        table,
+        column: String(fk.col),
+        // A foreign key with no explicit target references the parent's key.
+        parentColumn: fk.pcol == null ? 'id' : String(fk.pcol),
+      });
+    }
+  }
+  return out;
 }
 
 /** The `founders` clears, as SQL, minus the two that carry unique markers

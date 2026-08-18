@@ -12,12 +12,13 @@ around each item.
 
 ---
 
-# EIGHT ANSWERED, ONE NEWLY PENDING
+# EIGHT ANSWERED, TWO PENDING
 
 The owner answered the first eight queued decisions; those are recorded below as
-settled, with the record of what was asked and why in git history. One new item
-is pending at the end of this file — it needs counsel rather than the owner
-alone, and nothing about it blocks the campaign.
+settled, with the record of what was asked and why in git history. Two items are
+pending at the end of this file. Neither blocks the campaign: §9 needs counsel
+rather than the owner alone, and §10 has a recommended answer and a stated live
+gap while it waits.
 
 ---
 
@@ -225,3 +226,57 @@ what was decided.
 **Not asked here:** whether to retain more. The campaign's answer to every
 "could we keep this" has been no unless a stated purpose needs it, and that is
 an engineering decision already made.
+
+---
+
+## PENDING 10 — When a member erases their account, what happens to the company assets they configured?
+
+**The situation.** A person can be a member of a company they do not own.
+Erasing their account now reaches those companies: their conversations,
+journal, notifications, consents and membership are deleted, and the company's
+own records — its audit trail, its decisions, its integration history — are
+severed so they stay and stop naming the person.
+
+Five tables cannot be settled that way, because the row is a **company asset
+the company is still running on**, on a NOT NULL column:
+
+| Table | What it is |
+|---|---|
+| `api_keys` | a credential the company may currently be authenticating with |
+| `mcp_grants` | an authority grant the company may depend on |
+| `webhooks` | an integration that may be delivering right now |
+| `deal_rooms` | a shared artefact other people are using |
+| `decision_votes` | part of the company's decision record — and the person's own written rationale is inside it |
+
+**The tension, plainly.** Deleting these takes a working capability away from a
+company that did nothing wrong — a webhook stops delivering, an API key stops
+authenticating, a decision loses a vote that was genuinely cast. Keeping them
+keeps the erased person's identity in a live company, which is the thing an
+erasure exists to remove. The columns are NOT NULL, so severing to nothing is
+not available without a schema change and a marker value.
+
+**Three legitimate readings, all defensible:**
+
+1. **The person wins.** Delete. An erasure means erasure; a company that relied
+   on a departing member's credential should re-establish it. Cost: silent
+   breakage in a company with no warning.
+2. **The company wins.** Keep the row, transfer ownership to the company owner,
+   and record the transfer. Cost: the erased person's id survives until the
+   transfer runs, and somebody must decide who inherits.
+3. **Split by kind.** Revoke the credentials (`api_keys`, `mcp_grants`) because
+   an authority held by a person who no longer exists should not act, and
+   transfer or anonymise the artefacts (`webhooks`, `deal_rooms`,
+   `decision_votes`) because they are the company's work.
+
+**Recommendation: 3.** It is the only one that distinguishes *authority* from
+*artefact*, which is a distinction the constitution already makes everywhere
+else — authority held by a principal that no longer exists should not survive
+the principal, while a record the company authored should. It needs a schema
+change to make the artefact columns nullable, or a company-owned marker
+principal, which is why it is not simply done.
+
+**Until it is answered.** These five tables are marked `owner_decision` in
+`PERSON_ACROSS_COMPANIES` and are deliberately NOT touched by the erasure. A
+test asserts every table in that surface carries a disposition, so the deferral
+is visible rather than an omission — but it IS a live gap: an erased person's
+id remains in those five tables in companies they did not own.
