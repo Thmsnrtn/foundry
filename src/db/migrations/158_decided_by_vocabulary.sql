@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS decisions_new (
 -- Any historical row carrying a value outside the set becomes NULL rather than
 -- blocking the migration. NULL means "not recorded", which is the truth about a
 -- row whose marker names a decider that never existed.
+--
+-- The CASE is untestable in the suite — a fresh database has no pre-migration
+-- rows to convert — and it is deliberately the FAIL-LOUD side of that gap:
+-- without it, a row outside the set would violate the new CHECK and abort the
+-- migration rather than corrupt anything. The conversion buys a clean upgrade,
+-- not safety; the safety is that the alternative stops.
 INSERT INTO decisions_new
 SELECT id, product_id, category, gate, what, why_now, context, options,
        recommendation, impact, scenario_model, deadline, status, chosen_option,

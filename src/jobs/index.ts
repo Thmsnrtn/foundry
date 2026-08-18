@@ -1377,6 +1377,40 @@ async function scpDecisionRetrospectives(): Promise<void> {
   }
 }
 
+// ─── Decision expiry — with the retrospective sweep ─────────────────────────
+//
+// `decisions.status` has permitted 'expired' since migration 001, the type
+// declares it, and the WEEKLY OUTCOME REPORT TELLS THE FOUNDER HOW MANY
+// DECISIONS EXPIRED UNACTED THIS WEEK. Nothing ever wrote the value. So that
+// number was structurally zero — "you let nothing lapse" — however many
+// decisions had sat past their deadline, and those decisions stayed pending in
+// the queue forever, indistinguishable from ones still worth making.
+//
+// The deadline column is real and is set. This is the producing half that was
+// never built, and its absence made a report say something false rather than
+// merely doing nothing.
+//
+// Only decisions that carry a deadline expire. A decision with no deadline is
+// not late; it is unscheduled, and sweeping those up would silently clear the
+// queue of everything the founder has not got to yet.
+async function scpExpireOverdueDecisions(): Promise<void> {
+  logger.info('scp_expire_overdue_decisions starting', { jobName: 'scp_expire_overdue_decisions' });
+  try {
+    const { query: dbQuery } = await import('../db/client.js');
+    const result = await dbQuery(
+      `UPDATE decisions SET status = 'expired'
+        WHERE status = 'pending'
+          AND deadline IS NOT NULL
+          AND datetime(deadline) < datetime('now')
+          AND deleted_at IS NULL`,
+      []);
+    logger.info(`scp_expire_overdue_decisions: Expired ${result.rowsAffected ?? 0} overdue decisions`,
+      { jobName: 'scp_expire_overdue_decisions' });
+  } catch (err) {
+    logger.error('scp_expire_overdue_decisions: Error:', { jobName: 'scp_expire_overdue_decisions', error: String(err) });
+  }
+}
+
 // ─── SCP v4: Wellbeing Focus Cleanup — Daily midnight ────────────────────────
 
 async function scpWellbeingFocusCleanup(): Promise<void> {
@@ -2255,6 +2289,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_playbook_eval: { fn: scpExecutionPlaybookEval, schedule: '0 * * * *', description: 'Evaluate execution playbook conditions for all active products (hourly)' },
   scp_benchmark_refresh: { fn: scpBenchmarkRefresh, schedule: '0 3 * * 0', description: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
   scp_decision_retrospectives: { fn: scpDecisionRetrospectives, schedule: '0 9 * * 1', description: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
+  scp_expire_overdue_decisions: { fn: scpExpireOverdueDecisions, schedule: '5 0 * * *', description: 'Mark pending decisions past their deadline as expired (daily)' },
   scp_wellbeing_focus_cleanup: { fn: scpWellbeingFocusCleanup, schedule: '0 0 * * *', description: 'Clear expired focus areas and vacation modes (daily midnight)' },
   scp_webhook_delivery_cleanup: { fn: scpWebhookDeliveryCleanup, schedule: '0 4 * * 0', description: 'Clean up old webhook delivery records (Sunday 4:00 UTC)' },
   // SCP v7: Event bus, ROI, founder intelligence, priority queue
