@@ -5,6 +5,12 @@ import { globSync } from 'glob';
 
 const root = resolve(import.meta.dirname, '..');
 const files = globSync('src/**/*.ts', { cwd: root, absolute: true }).sort();
+
+/** Comments describe effects; they are not effects. Blanked rather than removed
+ *  so reported line numbers still point at the real line. */
+const strip = (s) => s
+  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
 const rules = [
   { id: 'external_post', re: /fetch\(\s*(['"`])https:\/\/(?!api\.openrouter\.ai)([^'"`]+)\1\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
   // A URL assembled from a template was invisible to the detector above, which
@@ -199,6 +205,41 @@ if (process.argv.includes('--write')) {
       + '\n\nA mention is not a call: an `import type` is erased at compile time, and'
       + '\nan aliased import cannot be followed by a name match. Call the guard by its'
       + '\nown name, or correct the classification.');
+    process.exit(1);
+  }
+
+  // THE DETECTOR'S OWN BLIND SPOT, MADE LOUD.
+  //
+  // Every rule above reads a bounded window after `fetch(` looking for a
+  // mutating method. A fetch whose options object is longer than that window,
+  // or whose URL takes a shape no rule anticipated, is not reported as
+  // uncovered — it is simply absent, and an inventory with a silent hole reads
+  // exactly like a complete one. That is the failure mode this whole campaign
+  // is about, and an instrument is not exempt from it.
+  //
+  // So: find every fetch that carries a mutating method by ANY route, and
+  // require each one to be either matched by a rule or plainly a call to
+  // Foundry's own relative paths (the browser-side fetches embedded in
+  // dashboard HTML, which leave nothing).
+  const uncovered = [];
+  for (const file of files) {
+    const src = strip(readFileSync(file, 'utf8'));
+    const rel = relative(root, file);
+    const covered = new Set();
+    for (const { re } of rules) for (const m of src.matchAll(new RegExp(re.source, re.flags))) covered.add(m.index);
+    for (const m of src.matchAll(/fetch\(/g)) {
+      const tail = src.slice(m.index, m.index + 2000);
+      if (!/method:\s*['"](POST|PUT|PATCH|DELETE)['"]/.test(tail)) continue;
+      if (covered.has(m.index)) continue;
+      // A relative path is this application talking to itself.
+      if (/^fetch\(\s*['"`]\//.test(tail)) continue;
+      uncovered.push(`${rel}:${src.slice(0, m.index).split('\n').length}  ${tail.slice(0, 80).replace(/\s+/g, ' ')}`);
+    }
+  }
+  if (uncovered.length) {
+    console.error('Outward calls the inventory rules cannot see:\n');
+    for (const u of uncovered) console.error('  ' + u);
+    console.error('\nAdd a rule that matches it, or the effect is uninventoried.');
     process.exit(1);
   }
 

@@ -28,6 +28,15 @@
 // is one of them or is not. `check-select-columns` proves the COLUMN exists;
 // this proves the VALUE is one the column will accept.
 //
+// A NOTE ON THE SCAN WINDOWS, because they were a blind spot rather than a
+// limitation. Each scan used to stop after a few hundred characters, so a long
+// statement was read in part and the rest was invisible — 80 of the 4,481
+// statements in the codebase, concentrated in exactly the long compliance SQL
+// (jobs/gdpr.ts) where a wrong literal would be worst. The window is now wide
+// enough for every statement here, and anything that still overruns it is
+// REPORTED rather than silently skipped: a gate that reads a fragment of what
+// it claims to read is the defect class it exists to catch.
+//
 // What it deliberately does not cover, rather than covering badly:
 //   • values built at runtime (`status = ?`, template interpolation) — the
 //     string in the file is not the string that runs;
@@ -83,7 +92,14 @@ function splitTuple(text) {
   return out;
 }
 
+// Wide enough for every statement in this codebase (the longest is ~1.7k), and
+// overruns are reported below rather than skipped.
+const WINDOW = 4000;
+
+const vocabTables = new Set([...vocab.keys()].map((k) => k.split('.')[0]));
+
 const offenders = [];
+const overruns = [];
 const at = (src, index) => src.slice(0, index).split('\n').length;
 
 for (const dir of ['src', 'tests']) {
@@ -96,7 +112,7 @@ for (const dir of ['src', 'tests']) {
     const rel = relative(ROOT, file);
 
     // UPDATE t SET col = 'literal'
-    for (const m of src.matchAll(/UPDATE\s+(\w+)\s+SET\s+([\s\S]{0,600}?)(?:WHERE|`)/gi)) {
+    for (const m of src.matchAll(new RegExp(`UPDATE\\s+(\\w+)\\s+SET\\s+([\\s\\S]{0,${WINDOW}}?)(?:WHERE|\`)`, 'gi'))) {
       for (const a of m[2].matchAll(/(\w+)\s*=\s*'([^']*)'/g)) {
         const key = `${m[1]}.${a[1]}`;
         const values = vocab.get(key);
@@ -115,7 +131,7 @@ for (const dir of ['src', 'tests']) {
     // approve" made a permanently inert feature look like an idle one. A value
     // that cannot be written is a value that cannot be found.
     for (const m of src.matchAll(
-      /\b(?:FROM|UPDATE|INTO)\s+(\w+)\b([\s\S]{0,700}?)(?:`|;)/gi)) {
+      new RegExp(`\\b(?:FROM|UPDATE|INTO)\\s+(\\w+)\\b([\\s\\S]{0,${WINDOW}}?)(?:\`|;)`, 'gi'))) {
       const table = m[1];
       const rest = m[2];
       // One table only. A join makes an unqualified column ambiguous, and
@@ -144,9 +160,21 @@ for (const dir of ['src', 'tests']) {
       }
     }
 
+    // Anything the window could not reach. Not a defect, but a place this gate
+    // is not looking, and one it must not be silent about.
+    for (const m of src.matchAll(/\b(?:FROM|UPDATE|INTO)\s+(\w+)\b/gi)) {
+      // Only tables with a closed vocabulary matter here. `FROM` also appears
+      // in prose and in tool descriptions, and reporting those would be the
+      // other way to make a gate useless.
+      if (!vocabTables.has(m[1])) continue;
+      const rest = src.slice(m.index + m[0].length);
+      const stop = rest.search(/`|;/);
+      if (stop > WINDOW) overruns.push(`${rel}:${at(src, m.index)} → ${m[1]} statement is ${stop} chars`);
+    }
+
     // INSERT INTO t (cols) VALUES (literals)
     for (const m of src.matchAll(
-      /INSERT(?:\s+OR\s+\w+)?\s+INTO\s+(\w+)\s*\(([^)]*)\)\s*VALUES\s*([\s\S]{0,1200}?)(?:`|ON\s+CONFLICT|;)/gi)) {
+      new RegExp(`INSERT(?:\\s+OR\\s+\\w+)?\\s+INTO\\s+(\\w+)\\s*\\(([^)]*)\\)\\s*VALUES\\s*([\\s\\S]{0,${WINDOW}}?)(?:\`|ON\\s+CONFLICT|;)`, 'gi'))) {
       const table = m[1];
       const cols = m[2].split(',').map((c) => c.trim().replace(/["'`]/g, ''));
       if (!cols.some((c) => vocab.has(`${table}.${c}`))) continue;
@@ -186,6 +214,13 @@ for (const dir of ['src', 'tests']) {
 }
 
 const real = [...new Set(offenders)].filter((o) => !allowed.has(o.split(' → ')[0]));
+
+if (overruns.length) {
+  console.error(`${overruns.length} statement(s) are longer than the ${WINDOW}-char scan window:`);
+  for (const o of overruns.slice(0, 10)) console.error('  ' + o);
+  console.error('Raise WINDOW in this script — an unread statement is an unchecked one.');
+  process.exit(1);
+}
 
 if (real.length) {
   console.error('A literal value is written to a column whose CHECK does not permit it.');
