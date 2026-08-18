@@ -19,14 +19,23 @@ const rules = [
 ];
 
 const classifications = new Map(Object.entries({
-  'src/lib/webhooks.ts|dynamic_webhook_post': ['control_path', 'product-scoped customer webhook credential and receipt owner'],
+  // The customer-facing webhook fan-out. Classified control_path on the
+  // strength of owning its credential and receipts — which it does — while
+  // reaching none of the checks that decide whether Foundry may act for the
+  // company at all. There are two webhook paths in this system and only the
+  // other one went through the gateway. Now kill-switch checked before
+  // dispatch, which is what governed means.
+  'src/lib/webhooks.ts|dynamic_webhook_post': ['governed', 'customer webhook fan-out — kill-switch checked before dispatch, per-delivery receipt after'],
   'src/routes/dashboard/onboarding.ts|external_post': ['control_path', 'GitHub OAuth credential exchange'],
   'src/services/distribution/outbound-webhooks.ts|dynamic_webhook_post': ['governed', 'post_webhook capability handler'],
   'src/services/integration/resend.ts|external_post': ['governed', 'send_email capability handler'],
   'src/services/integration/stripe-gateway.ts|external_post': ['governed', 'Stripe capability handlers'],
   'src/services/integration/github-gateway.ts|external_post': ['governed', 'GitHub capability handlers'],
   'src/services/integration/mcp-client.ts|dynamic_webhook_post': ['governed', 'MCP capability handler'],
-  'src/services/integration/slack.ts|external_post': ['control_path', 'Slack credential owner with effect receipts'],
+  // Both callers now check the kill switch before reaching this sender: the
+  // approved-action executor and the daily-briefing push. The sender itself
+  // stays the single place transport and receipt semantics live.
+  'src/services/integration/slack.ts|external_post': ['governed', 'Slack sender — every caller kill-switch checked before dispatch, effect receipts after'],
   // Traced, not assumed. Both files POST to a GraphQL endpoint, which is what
   // the detector sees; every remaining operation is a QUERY. `read_only` is a
   // real classification and deliberately not `governed` — a read does not need

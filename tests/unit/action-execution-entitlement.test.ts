@@ -137,3 +137,50 @@ describe('an approved action still asks whether the company may act', () => {
     expect(slackSpy).not.toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// The same door, twice more.
+//
+// `checkKillSwitch` had one caller. Finding the second outward path made the
+// question worth asking of every other one, and two more turned up:
+//
+//   • `lib/webhooks.ts` — the CUSTOMER-facing webhook fan-out, fired on
+//     risk-state changes, metric syncs and decision resolutions. There are two
+//     webhook paths in this system and only the other one went through the
+//     gateway.
+//   • the Slack daily-briefing push in `scp/scheduler.ts`. A briefing is
+//     product work, not account mail, so the narrow deliverable-while-paused
+//     exemption does not reach it.
+// =============================================================================
+
+describe('the other outward paths ask the same question', () => {
+  it('does not fire customer webhooks for a company that is paused', async () => {
+    const { dispatchWebhook } = await import('../../src/lib/webhooks.js');
+    const fetchSpy = vi.fn(async () => new Response('', { status: 202 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const { encrypt } = await import('../../src/services/encryption.js');
+    await query(
+      `INSERT OR REPLACE INTO webhooks (id, founder_id, product_id, url, events, secret)
+       VALUES ('ae_w1', ?, ?, 'https://example.com/hook', '["risk_state.changed"]', ?)`,
+      [F, P, encrypt('whsec_x')]);
+
+    await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
+    const receipts = await dispatchWebhook(P, F, 'risk_state.changed', { x: 1 });
+
+    expect(receipts, 'nothing was delivered').toEqual([]);
+    expect(fetchSpy, 'and nothing was attempted').not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('fires them for a company that is operating', async () => {
+    const { dispatchWebhook } = await import('../../src/lib/webhooks.js');
+    const fetchSpy = vi.fn(async () => new Response('', { status: 202 }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const receipts = await dispatchWebhook(P, F, 'risk_state.changed', { x: 1 });
+    expect(receipts.length, 'a guard that refuses the legitimate case is broken')
+      .toBe(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+});

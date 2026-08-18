@@ -3,10 +3,10 @@
   "findings": [
     {
       "file": "src/lib/webhooks.ts",
-      "line": 101,
+      "line": 120,
       "detector": "dynamic_webhook_post",
-      "status": "control_path",
-      "capability": "product-scoped customer webhook credential and receipt owner"
+      "status": "governed",
+      "capability": "customer webhook fan-out — kill-switch checked before dispatch, per-delivery receipt after"
     },
     {
       "file": "src/routes/dashboard/onboarding.ts",
@@ -117,8 +117,8 @@
       "file": "src/services/integration/slack.ts",
       "line": 132,
       "detector": "external_post",
-      "status": "control_path",
-      "capability": "Slack credential owner with effect receipts"
+      "status": "governed",
+      "capability": "Slack sender — every caller kill-switch checked before dispatch, effect receipts after"
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",

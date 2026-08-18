@@ -38,6 +38,25 @@ export async function dispatchWebhook(
   event: WebhookEvent,
   payload: Record<string, unknown>,
 ): Promise<WebhookDeliveryReceipt[]> {
+  // MAY FOUNDRY ACT FOR THIS COMPANY AT ALL?
+  //
+  // There are two webhook paths. `services/distribution/outbound-webhooks.ts`
+  // goes through the outbound gateway and inherits the kill switch, the
+  // entitlement pause and the audit trail. This one — the customer-facing
+  // webhook fan-out, fired on risk-state changes, metric syncs and decision
+  // resolutions — reached none of that, so a company whose subscription had
+  // lapsed, whose founder had paused it, or whose data had just been erased
+  // kept POSTing to its own endpoints.
+  //
+  // The owner's decision is that an unpaid account is read-only: no spend, no
+  // outward effects. A webhook is an outward effect.
+  const { checkKillSwitch } = await import('../services/outbound/kill-switch.js');
+  const gate = await checkKillSwitch(productId, 'post_webhook');
+  if (gate.blocked) {
+    log.warn('webhook.refused', { productId, event, reason: gate.reason });
+    return [];
+  }
+
   const result = await query(
     "SELECT * FROM webhooks WHERE product_id = ? AND founder_id = ? AND active = 1 AND failure_count < 10",
     [productId, founderId]

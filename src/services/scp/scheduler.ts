@@ -160,6 +160,17 @@ async function _sendBriefingToSlack(productId: string): Promise<void> {
     const connected = await isSlackConnected(productId);
     if (!connected) return;
 
+    // A daily briefing is product work, not account mail. A company that is
+    // paused, unentitled or erased is one Foundry is not acting for, and this
+    // push went straight to the Slack sender without asking — the same second
+    // door the approved-action path had.
+    const { checkKillSwitch } = await import('../outbound/kill-switch.js');
+    const gate = await checkKillSwitch(productId, 'post_slack');
+    if (gate.blocked) {
+      logger.info(`slack briefing not sent: ${gate.reason}`, { productId });
+      return;
+    }
+
     // Load today's briefing
     const { query: dbQuery } = await import('../../db/client.js');
     const today = new Date().toISOString().slice(0, 10);
