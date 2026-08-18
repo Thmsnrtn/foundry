@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **149**. Schema snapshot current.
-- **Validation:** `npm run check` green — **220 files / 1,863 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **224 files / 1,880 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -89,6 +89,9 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 42 SELECT drift paid to zero | 34 | 34 | 12 high, 22 med | 0 | 34 | 0 | 0 | 9 |
 | 43 runtime SQL preparation | 18 | 18 | 6 high, 12 med | 1 | 18 | 0 | 0 | 8 |
 | 44 fabricated test schemas | 105 | 2 | 2 high | 1 | 2 | 0 | 0 | 2 |
+| 45 CHECK vocabulary (writes) | 3 | 1 | high | 1 | 1 | 0 | 0 | 1 |
+| 46 silent catches around writes | 18 | 3 | 2 high, 1 med | 1 | 3 | 0 | 0 | 3 |
+| 47 CHECK vocabulary (reads) | 4 | 5 | 2 high, 3 med | 1 | 5 | 0 | 0 | 5 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -496,3 +499,55 @@ only against the fake.
 code against the test's beliefs. The one thing it can never catch is the two
 being wrong together — which is the commonest way this fails, because whoever
 writes the fixture reads the query to decide what columns to create.
+
+---
+
+## Batches 45–47: a value the column cannot hold
+
+**Three defects of one shape arrived together**, and all three were decidable
+without running anything: `outbound_actions.status = 'refused'`,
+`push_log.status = 'not_configured'`, and `board_packets.status = 'reviewed'`.
+Each raised at runtime; each sat inside a catch that treated the failure as
+unremarkable; what a founder saw was a button that did nothing, a receipt that
+never appeared, an action stuck at `executing`. The third had a further cause
+worth naming: `board_packets` was created by migration 011 with one vocabulary
+and *redefined* by migration 039's `CREATE TABLE IF NOT EXISTS` with another,
+which was a silent no-op — and the code was written against the version that
+never ran.
+
+**Then the same lens on reads, which is where it got expensive.** A value that
+cannot be written is a value that cannot be found, and a `WHERE` clause looking
+for one does not raise — it matches nothing, quietly, forever:
+
+- the voice-approval path looked for `action_executions.status =
+  'pending_approval'`, which is `outbound_actions`' spelling. It has never
+  approved anything. And the first time it worked it would have approved the
+  wrong effect, because it took the most recent pending action and never read
+  the `context` naming what the founder was replying to.
+- founder-pattern synthesis counted `decisions.status = 'resolved'`, a value
+  that vocabulary has never had, so it has never run for anybody.
+- Compass read `company_okrs WHERE status='active'`, so its view of the
+  company's objectives has always been empty — and an agent with no OKRs in
+  context reasons as though the company has none.
+- the rapid-override signal counted `IN ('cancelled','rejected')` on a table
+  with no `rejected`, so it counted half of what it is named for.
+
+**`action_executions` and `outbound_actions` are the trap.** Two tables with
+similar purposes and different status vocabularies — `pending` versus
+`pending_approval`, `completed` versus `executed`, `rejected` on one and not
+the other. Four of this stretch's defects are that confusion. The gate now
+holds the line on all three positions a literal can take: written, compared,
+and listed in an `IN`.
+
+**Found by surveying the eighteen places where a write sits inside a catch that
+does nothing.** Every defect in this stretch hid behind one. Two more came out
+of that survey directly: an automation rule whose action type nothing
+implements counted itself as having fired and incremented the number a founder
+reads to decide it is working; and the institution chat told a founder it had
+recorded a decision it had not, because the model writes "I've recorded that"
+before the ledger write it describes.
+
+**Where the lens stops.** A follow-on detector — values a query looks for that
+nothing anywhere writes, without a `CHECK` to check against — returns 24
+candidates and all of them are noise: schema defaults and parameterised writes
+look identical to absent ones from the outside. Recorded as tried, not built.
