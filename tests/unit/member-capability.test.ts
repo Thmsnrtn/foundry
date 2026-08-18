@@ -125,3 +125,60 @@ describe('membership and permission stay different questions', () => {
     expect(read.slice(0, 1200)).toMatch(/memberMay\([^)]*'can_view_decisions'/);
   });
 });
+
+// =============================================================================
+// TWO ROLE SYSTEMS, NO EDGE BETWEEN THEM.
+//
+// `account_roles` holds the ladder `requireRole` reads — viewer / analyst /
+// admin / owner — and `assignRole` is the only thing that writes it. Nothing
+// calls `assignRole`. So no row is ever created, `getUserRole` always returns
+// null, and `requireRole('admin')` reduces to the explicit owner check above
+// it: in practice, requireOwner.
+//
+// `team_members` holds the other one — co_founder / advisor /
+// investor_observer, with the capability flags this file is about — and the
+// invite flow writes it. Nothing bridges the two.
+//
+// The consequence is not a security hole; it is the opposite, and §13 is
+// explicit that this counts: a guard that refuses the legitimate principal is
+// not extra secure, it is broken. A founder invites a co-founder, the
+// invitation is accepted, and that person sees no companies at all
+// (`getProductsByOwner` is owner-only), holds no role, and can reach exactly
+// the two endpoints tested above.
+//
+// What a co-founder, an advisor and an investor observer should each be able
+// to see and do is a product decision, and widening authorization is the
+// direction where guessing is dangerous. These tests pin what is true now so
+// the answer changes deliberately rather than by drift.
+// =============================================================================
+
+describe('what membership does not grant, today', () => {
+  it('does not put the member on the role ladder', async () => {
+    const { getUserRole } = await import('../../src/services/rbac/permissions.js');
+    expect(await getUserRole(P, COFOUNDER),
+      'nothing calls assignRole, so account_roles is never populated').toBeNull();
+  });
+
+  it('leaves requireRole answering only for the owner', async () => {
+    const { getUserRole } = await import('../../src/services/rbac/permissions.js');
+    expect(await getUserRole(P, OWNER),
+      'even the owner holds no account_roles row — the owner check is separate')
+      .toBeNull();
+  });
+
+  it('does not show the member the company', async () => {
+    const { getProductsByOwner } = await import('../../src/db/client.js');
+    const mine = await getProductsByOwner(COFOUNDER);
+    expect(mine.rows.length,
+      'the dashboard lists products by owner, so an invited member sees none')
+      .toBe(0);
+    expect((await getProductsByOwner(OWNER)).rows.length).toBe(1);
+  });
+
+  it('and membership is still real where it is asked', async () => {
+    // The two facts must not be confused: the member exists and is trusted for
+    // what their row says. They just cannot reach most of the product.
+    expect(await hasProductAccess(P, COFOUNDER)).toBe(true);
+    expect(await memberMay(P, COFOUNDER, 'can_vote_decisions')).toBe(true);
+  });
+});

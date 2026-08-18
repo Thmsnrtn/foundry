@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **150**. Schema snapshot current.
-- **Validation:** `npm run check` green — **227 files / 1,916 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **228 files / 1,930 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -95,6 +95,7 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 48 the second outward door | 4 | 3 | 3 high | 1 | 3 | 0 | 0 | 3 |
 | 49 sender of record ↔ live send | 3 | 1 | high | 2 | 1 | 0 | 0 | 1 |
 | 50 refusal ≠ ambiguity | 1 | 1 | med | 1 | 1 | 0 | 0 | 1 |
+| 51 member permission flags | 3 | 1 | high | 1 | 1 | 0 | 0 | 2 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -554,6 +555,27 @@ one caller where there are two doors, a rule with no mechanism to satisfy it, a
 classification recording a property nobody checked. **Ask of every stated rule:
 what is the path from here to the thing that would break it, and does anything
 actually traverse it?**
+
+**Batch 51 is the same lens, applied to a schema instead of a function.**
+`team_members` has carried five permission columns since migration 010 —
+`can_view_decisions`, `can_vote_decisions`, `can_view_financials`,
+`can_view_audit`, `can_trigger_actions` — written by the invite flow and read
+by nothing. An `investor_observer` could vote on a company decision, and those
+votes feed the co-founder alignment score. The columns were not decoration:
+`can_trigger_actions` defaults FALSE while the others default TRUE, which is a
+considered position written into the schema and then never asked.
+
+**And it surfaced a reachability gap that needs an owner, not a fix.** There are
+two role systems with no edge between them. `account_roles` is what
+`requireRole` reads, and `assignRole` — its only writer — has no callers, so no
+row is ever created and `requireRole('admin')` reduces to the owner check above
+it. `team_members` is what the invite flow writes. Nothing bridges them, and
+the dashboard lists companies by `owner_id`, so a founder can invite a
+co-founder, have the invitation accepted, and that person sees no companies at
+all and can reach exactly two endpoints. Per §13 that counts as broken rather
+than secure — but what each role should see and do is a product decision, and
+widening authorization is the direction where guessing is dangerous. Pinned in
+tests so the answer changes deliberately rather than by drift.
 
 ---
 
