@@ -860,3 +860,50 @@ recent decisions." for every company in every quarter.
    panic, pause, disconnect, revoke, undo, attention telemetry — is asserted in
    tests, because making the brake harder to reach than the accelerator is the
    same defect wearing a safety label.
+
+---
+
+## Batches 73–79: a rule with nothing on one side of it
+
+By this point the campaign's characteristic finding has a name. It is not a
+broken rule. It is a rule with nothing on ONE SIDE of it — a reader with no
+writer, an enforcement with no control, a control with no enforcement, a
+recording nothing acts on. Four probes, one per side:
+
+**Read but never written (tables).** Eight, and none harmless: `agent_decisions`
+(an inbox tab, a public endpoint returning `{"data": []}` forever, and the
+investor board packet); `deletion_requests` and `data_export_requests` (a second
+Article 17 erasure deleting ~25 tables of ~266 and then writing
+`status='completed'`, beside a live and correct one); `cofounder_profiles`
+(which made EVERY founder read as solo, so the product told founders with
+co-founders they were building alone); `customer_notes`, `chat_webhooks`,
+`decision_snooze_log`, `daily_actions`, `ai_usage_log`. All closed, and
+`check-writerless-tables.mjs` holds the baseline at zero.
+
+**Read but never written (columns).** `experiments.learnings` was the outcome
+column both investor documents read; concluding an experiment writes `winner`,
+`results_json` and `early_stop_reason`, never that. `products.cadence_mode` was
+the reverse — weekend mode had an enforcement in the scheduler and no way for a
+founder to turn it on. The column-level probe returns two dozen false positives
+(runtime-assembled column lists, columns maintained by migration triggers) and
+was deliberately NOT made a gate: a check that noisy teaches people to ignore
+it, which is exactly how two gates came to be trusted while broken.
+
+**Written but never read.** Surveyed, 23 candidates, and recorded rather than
+acted on. The class is weaker: an unread recording wastes work but does not lie
+to anybody. The one that is a real gap — peer reviews a founder submits that the
+reviewee can never see — is an owner disposition, not a defect. `auto_execution_log`
+turned out to be a redundant second log beside `action_drafts`, which is read.
+
+**Not named at all.** `check-notnull-inserts.mjs`: a column an INSERT does not
+name and the table will not accept as absent. Five instances, three of which
+make a paid model call FIRST — so board packets, investor updates and growth
+experiments have never produced anything for anybody, and the founder saw a
+button that did nothing after the money had gone.
+
+**Three claims to a person, from a source that could not support them**, all in
+this stretch: the board packet telling investors the company decided nothing;
+the investor documents showing experiments with no outcome; and the insight
+telling a founder with three co-founders that they were building alone. The
+first two under-report to a third party. The third tells someone something false
+about their own life, at the moment it is designed to land hardest.
