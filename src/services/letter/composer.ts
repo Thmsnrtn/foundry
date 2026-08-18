@@ -39,9 +39,18 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
       [productId],
     ),
     query(
+      // 'system_gate_0' used to be in this list. Migration 001's comment on
+      // the column named it as a vocabulary value — "founder, system_gate_0,
+      // system_gate_1" — and nothing has ever written either system marker. So
+      // half of "what Foundry handled for you" asked for a term that cannot
+      // match. Nothing was lost, because the autopilot resolves gate-<=1
+      // decisions as 'second_self' and that half works; but the query carried a
+      // dead term for as long as it has existed, and it survived review because
+      // the schema said it was real. Migration 158 makes the vocabulary a CHECK,
+      // so the next one fails the build instead.
       `SELECT what, decided_by FROM decisions
        WHERE product_id = ? AND datetime(decided_at) >= datetime('now', '-1 day')
-         AND decided_by IN ('system_gate_0', 'second_self') LIMIT 10`,
+         AND decided_by = 'second_self' LIMIT 10`,
       [productId],
     ),
     query(

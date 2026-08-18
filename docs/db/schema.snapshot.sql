@@ -1556,6 +1556,7 @@
   approved_at TEXT,
   approved_by TEXT,           -- 'auto' or 'ceo'
   approved_by TEXT, -- user id
+  architecture_class INTEGER DEFAULT 0,
   archived BOOLEAN DEFAULT FALSE,
   archived_at TEXT,
   arpu REAL,
@@ -1596,6 +1597,7 @@
   authorized_agents TEXT DEFAULT '["all"]',
   auto_executable INTEGER DEFAULT 0,
   auto_execute INTEGER NOT NULL DEFAULT 0, -- 0=require approval, 1=auto-execute
+  autopilot_counted INTEGER NOT NULL DEFAULT 0,
   avg_activation_minutes REAL,
   avg_cac REAL,
   avg_cogs_per_customer REAL,
@@ -1813,7 +1815,7 @@
   content_digest        TEXT NOT NULL,
   context TEXT DEFAULT '{}',
   context TEXT NOT NULL,     -- 2–3 sentence elaboration
-  context TEXT, -- JSON: array of data points
+  context TEXT,
   context_json TEXT  -- what triggered the detection
   context_json TEXT DEFAULT '{}',
   context_json TEXT,                        -- JSON: { decisionId, agentName, ... } where applicable
@@ -2084,7 +2086,8 @@
   deadline_hours INTEGER,           -- how many hours until this becomes more urgent
   debate_session_id TEXT NOT NULL REFERENCES debate_sessions(id),
   decided_at DATETIME,
-  decided_by TEXT -- founder, system_gate_0, system_gate_1
+  decided_by TEXT CHECK(decided_by IN ('founder', 'second_self')),
+  decided_by_founder_id TEXT
   decision TEXT NOT NULL CHECK(decision IN ('promoted','rejected','superseded','reconsidered')),
   decision_acted_at TEXT,                   -- null until an action lands
   decision_category       TEXT CHECK (decision_category IN (
@@ -2119,6 +2122,7 @@
   dedup_key TEXT NOT NULL,                        -- caller-supplied idempotency key
   default_event_type     TEXT NOT NULL DEFAULT 'custom_event',
   delete_agent_logs_after_days INTEGER NOT NULL DEFAULT 90,
+  deleted_at DATETIME,
   delivered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   delivered_at DATETIME,
   delta_instructions TEXT NOT NULL, -- additional instructions to append to base prompt
@@ -2373,6 +2377,7 @@
   fix_summary TEXT,
   focus_area            TEXT,                   -- e.g. 'retention','acquisition','fundraising'
   focus_ends_at         TEXT,                   -- NULL = no expiry
+  follow_up_at DATETIME,
   forbidden_classes TEXT,                         -- JSON array: ['pii_strict','financial_secret']
   formality_level INTEGER DEFAULT 5, -- 1-10 (1=very casual, 10=very formal)
   formula TEXT,
@@ -2436,6 +2441,7 @@
   from_name    TEXT,
   from_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
   from_state TEXT NOT NULL,
+  frozen_at TEXT,
   full_briefing TEXT NOT NULL,         -- Complete briefing markdown
   full_synthesis TEXT NOT NULL,          -- Complete synthesis markdown
   fund_vintage TEXT,
@@ -3117,7 +3123,7 @@
   option_chosen TEXT NOT NULL,
   option_chosen_category TEXT NOT NULL,
   option_label TEXT NOT NULL,
-  options TEXT, -- JSON: array of {label, description, trade_offs}
+  options TEXT,
   organization_type TEXT NOT NULL,
   our_advantages TEXT DEFAULT '[]',      -- JSON: string[]
   our_equivalent   TEXT NOT NULL DEFAULT 'unknown'
@@ -3152,6 +3158,7 @@
   outcome_result TEXT CHECK(outcome_result IN ('positive', 'negative', 'neutral', 'pending')),
   outcome_status        TEXT CHECK (outcome_status IN ('verified_success','verified_failure','unresolved')),
   outcome_timeframe_days INTEGER,
+  outcome_valence INTEGER,
   output TEXT,
   output TEXT, -- JSON
   output_id TEXT,
@@ -3659,6 +3666,7 @@
   requires_unanimous INTEGER DEFAULT 0,
   reserved_cents REAL NOT NULL CHECK (reserved_cents > 0),
   resolution_notes TEXT,
+  resolution_reasoning TEXT,
   resolved_at         DATETIME,
   resolved_at       TEXT
   resolved_at    TEXT,   -- NULL = still open
@@ -3757,7 +3765,7 @@
   sample_size INTEGER,
   scenario_accuracy_score REAL,
   scenario_id TEXT REFERENCES forecast_scenarios(id),
-  scenario_model TEXT, -- JSON: for Gate 3 decisions
+  scenario_model TEXT,
   scenario_model_id TEXT REFERENCES scenario_models(id),
   scenario_name TEXT NOT NULL,
   scenario_name TEXT NOT NULL, -- 'current', 'series_a', 'acquisition_50m', etc.
@@ -4268,6 +4276,7 @@
   window_start  INTEGER NOT NULL,          -- epoch ms, floored to the window
   winner TEXT CHECK(winner IN ('control','treatment','inconclusive')),
   wisdom_context_pct INTEGER,
+  wisdom_context_used TEXT,
   wisdom_failures_used INTEGER DEFAULT 0,
   wisdom_network_consent_date TEXT,
   wisdom_network_opted_in INTEGER NOT NULL DEFAULT 1,
@@ -4285,6 +4294,7 @@
  evidence_refs_json TEXT NOT NULL, economic_result_json TEXT NOT NULL, learned_claim_id TEXT REFERENCES reconstruction_claims(id),
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
+);
 );
 );
 );
@@ -4541,7 +4551,6 @@
 , progress REAL);
 , provenance_json TEXT, observed_through TEXT);
 , provider TEXT, sync_type TEXT, errors TEXT, duration_ms INTEGER);
-, resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT, autopilot_counted INTEGER NOT NULL DEFAULT 0, decided_by_founder_id TEXT);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), allowed_scope_json TEXT, consequence_boundary TEXT, expires_at TEXT, repository_ref TEXT, allowed_path_prefixes_json TEXT, allowed_change_class TEXT, required_verification_json TEXT);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), authority_consent_id TEXT REFERENCES autonomy_consents(id), authority_scope TEXT, effect_id TEXT, effect_certainty TEXT, provider_receipt_json TEXT, reconcile_after TEXT, outcome_status TEXT, outcome_evidence_ref TEXT, learned_claim_id TEXT REFERENCES reconstruction_claims(id), inbound_message_id TEXT REFERENCES inbound_customer_messages(id), reply_proposal_id TEXT REFERENCES signal_events(id));
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), capability TEXT);
@@ -5018,6 +5027,7 @@ CREATE INDEX idx_wiki_reads_agent    ON agent_wiki_reads(agent_name);
 CREATE INDEX idx_wiki_reads_entry    ON agent_wiki_reads(entry_id);
 CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
 CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
+CREATE TABLE IF NOT EXISTS "decisions" (
 CREATE TABLE IF NOT EXISTS "founders" (
 CREATE TABLE IF NOT EXISTS "hypotheses" (
 CREATE TABLE IF NOT EXISTS "integrations" (
@@ -5111,7 +5121,6 @@ CREATE TABLE decision_patterns (
 CREATE TABLE decision_premises (
 CREATE TABLE decision_quality_scores (
 CREATE TABLE decision_votes (
-CREATE TABLE decisions (
 CREATE TABLE development_change_plans (
 CREATE TABLE dimension_hints (
 CREATE TABLE envelope_usage (

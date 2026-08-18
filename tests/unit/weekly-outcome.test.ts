@@ -105,8 +105,11 @@ describe('computeWeeklyOutcome: acted_on count', () => {
   it('counts only decisions explicitly approved or rejected by the founder this week', async () => {
     await insertDecision({ gate: 1, status: 'approved', decidedBy: 'founder', createdDaysAgo: 4, decidedDaysAgo: 2 });
     await insertDecision({ gate: 2, status: 'rejected', decidedBy: 'founder', createdDaysAgo: 5, decidedDaysAgo: 1 });
-    // System-decided: NOT counted
-    await insertDecision({ gate: 0, status: 'executed', decidedBy: 'system_gate_0', createdDaysAgo: 1, decidedDaysAgo: 1 });
+    // System-decided: NOT counted. The marker used to be 'system_gate_0', a
+    // value migration 001's column comment named and nothing has ever written.
+    // `second_self` is what the autopilot actually writes, and migration 158
+    // made that a CHECK — so the fixture now uses a decider that can exist.
+    await insertDecision({ gate: 0, status: 'executed', decidedBy: 'second_self', createdDaysAgo: 1, decidedDaysAgo: 1 });
     // Outside window
     await insertDecision({ gate: 1, status: 'approved', decidedBy: 'founder', createdDaysAgo: 12, decidedDaysAgo: 10 });
 

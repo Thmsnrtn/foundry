@@ -192,3 +192,53 @@ describe('the autopilot door stays a kind with no person behind it', () => {
     expect(row.decided_by_founder_id).toBeNull();
   });
 });
+
+// ── the vocabulary the schema comment got wrong ─────────────────────────────
+
+describe('decided_by holds only values something writes', () => {
+  it('refuses a decider that has never existed', async () => {
+    // Migration 001's comment named the vocabulary as "founder, system_gate_0,
+    // system_gate_1". Two of those three have never been written by anything —
+    // and the comment was not inert: the Letter asked for `decided_by IN
+    // ('system_gate_0','second_self')`, so half of "what Foundry handled for
+    // you" was a term that cannot match. It survived review because the schema
+    // said it was real. A comment is not a vocabulary.
+    const id = await pendingDecision();
+    // check-vocabulary:expected-refusal
+    await expect(query(
+      `UPDATE decisions SET decided_by = 'system_gate_0' WHERE id = ?`, [id]))
+      .rejects.toThrow(/CHECK/i);
+  });
+
+  it('accepts both values that are written', async () => {
+    const a = await pendingDecision();
+    const b = await pendingDecision();
+    const { resolveDecision } = await import('../../src/services/decisions/queue.js');
+    await resolveDecision(a, P, 'Ship', 'founder', OWNER);
+    await resolveDecision(b, P, 'Ship', 'second_self');
+    expect((await decisionRow(a)).decided_by).toBe('founder');
+    expect((await decisionRow(b)).decided_by).toBe('second_self');
+  });
+
+  it('leaves a pending decision undecided rather than inventing a decider', async () => {
+    // NULL is permitted on purpose: a pending decision has not been decided by
+    // anybody, and an undo sets it back to NULL deliberately.
+    const id = await pendingDecision();
+    expect((await decisionRow(id)).decided_by).toBeNull();
+  });
+
+  it('is not read anywhere with a value nothing writes', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('fs');
+    const { join } = await import('path');
+    const walk = (d: string): string[] => readdirSync(d).flatMap((e) => {
+      const p = join(d, e);
+      return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
+    });
+    for (const file of walk('src')) {
+      const src = readFileSync(file, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+      expect(src, file).not.toMatch(/system_gate_[01]/);
+    }
+  });
+});
