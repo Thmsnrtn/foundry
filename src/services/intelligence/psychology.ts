@@ -169,12 +169,28 @@ export async function detectEmpathyScopeCreep(productId: string, founderId: stri
  * Detect isolation drift (solo founders): declining engagement signals.
  */
 export async function detectIsolationDrift(founderId: string, productId: string): Promise<PsychologyInsight | null> {
-  // Check if solo founder (no co-founders)
+  // IS THIS FOUNDER ACTUALLY ALONE?
+  //
+  // This counted `cofounder_profiles`, a table nothing anywhere writes — no
+  // INSERT in the codebase, no trigger, no migration seed. So the count was
+  // always zero and EVERY founder read as solo, including one running a company
+  // with three co-founders. The insight below then told them "As a solo
+  // founder, your engagement has been declining", which is a false statement
+  // about their own company delivered at the moment they are least able to
+  // shrug it off.
+  //
+  // The real record of who is in a company is `team_members` — the canonical
+  // membership model, the one the invite flow writes and every permission
+  // check reads. `co_founder` is the role label the invite form offers for a
+  // second founder; advisors and investor observers are not co-founders and
+  // are deliberately not counted, because the thing being detected is building
+  // ALONE, not having nobody to talk to.
   const cofounders = await query(
-    'SELECT COUNT(*) as c FROM cofounder_profiles WHERE product_id = ?',
+    `SELECT COUNT(*) AS c FROM team_members
+      WHERE product_id = ? AND status = 'active' AND role = 'co_founder'`,
     [productId]
   );
-  const cofounderCount = (cofounders.rows[0] as Record<string, number>)?.c ?? 0;
+  const cofounderCount = Number((cofounders.rows[0] as Record<string, unknown>)?.c ?? 0);
   if (cofounderCount > 0) return null; // Not solo
 
   // Check engagement trend from founder health
