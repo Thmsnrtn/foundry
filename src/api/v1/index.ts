@@ -4,6 +4,7 @@
 
 import { Hono } from 'hono';
 import { apiKeyAuth } from '../middleware/auth.js';
+import { requireOperatingForWrites } from '../middleware/entitlement.js';
 import { apiKeyRateLimit, apiModelRateLimit } from '../../middleware/rate-limit.js';
 import { agentsApi } from './agents.js';
 import { customersApi } from './customers.js';
@@ -30,6 +31,14 @@ apiV1.use('*', apiKeyAuth);
 // while many customers behind one NAT shared a budget. This runs after auth
 // because that is where the tenant is known.
 apiV1.use('*', apiKeyRateLimit);
+
+// Then ask whether Foundry may act for this company at all. The API checked the
+// credential, its scopes and its rate, and never asked — so a company whose
+// subscription had lapsed or whose founder had paused it could still write
+// customers, metrics and experiments through it. Spend and outward effects were
+// already refused two layers down; ordinary writes were not, and the owner's
+// decision is that an unpaid account is read-only.
+apiV1.use('*', requireOperatingForWrites);
 
 // Mount sub-routers
 apiV1.route('/agents', agentsApi);
