@@ -24,6 +24,7 @@ import {
 import { handleStripeWebhook } from '../../services/integration/stripe.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentIntegrationRoutes = new Hono<AuthEnv>();
 
@@ -514,7 +515,11 @@ agentIntegrationRoutes.get('/agents/integrations/actions', async (c) => {
 
 // ─── POST /agents/integrations/actions/:id/approve ───────────────────────────
 
-agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve', async (c) => {
+// A second approval surface for outward integration actions. The actions
+// page asks can_trigger_actions; this one did not. Same consequence, same
+// question.
+agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const actionId = c.req.param('id');
 
@@ -538,7 +543,8 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve', async (c
 
 // ─── POST /agents/integrations/actions/:id/reject ────────────────────────────
 
-agentIntegrationRoutes.post('/agents/integrations/actions/:id/reject', async (c) => {
+agentIntegrationRoutes.post('/agents/integrations/actions/:id/reject',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const actionId = c.req.param('id');
 

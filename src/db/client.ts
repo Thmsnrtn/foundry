@@ -127,7 +127,8 @@ export async function getVisibleProducts(founderId: string): Promise<ResultSet> 
       UNION
      SELECT p.* FROM products p
        JOIN team_members t ON t.product_id = p.id
-      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'`,
+      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'
+     ORDER BY 1`,
     [founderId, founderId]);
 }
 

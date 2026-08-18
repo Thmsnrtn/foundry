@@ -23,6 +23,7 @@ const adviceStrip = (f: Parameters<typeof adviceFooter>[0]) => _html`
     ${adviceFooter(f)}
   </p>`;
 import { connectionRoutes } from './connections.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const letterRoutes = new Hono<AuthEnv>();
 
@@ -943,7 +944,13 @@ letterRoutes.get('/autopilot', async (c) => {
   return c.html(dashboardLayout(ctx, content));
 });
 
-letterRoutes.post('/autopilot/policy', async (c) => {
+// THIS IS THE DIAL, AND RAISING IT TO 'act' RECORDS A CONSENT IN THE
+// FOUNDER'S NAME. It is the single grant the whole autonomy stack reads,
+// and it was reachable by anyone who could select the company. Lowering it
+// is not separately gated — see /autopilot/panic below, which only ever
+// reduces autonomy and must stay reachable by everyone who can see it.
+letterRoutes.post('/autopilot/policy',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');
@@ -1330,7 +1337,10 @@ letterRoutes.post('/letter/facts/confirm', async (c) => {
 //
 // Granting does not send anything. It makes admission possible; the database
 // still requires real shadow evidence before the responsibility moves.
-letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/grant', async (c) => {
+// Granting assisting authority for a period of days. The revoke route below
+// deliberately stays open: withdrawal only ever lowers what Foundry may do.
+letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/grant',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1349,7 +1359,8 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/grant',
 
 // Withdrawal is immediate and needs no reason. Authority is re-read at
 // execution time, so a revoked grant stops authorising the next action.
-letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/revoke', async (c) => {
+letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/revoke',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1395,7 +1406,10 @@ letterRoutes.post('/letter/replies/:proposalId/plan', async (c) => {
 
 // The only consequential step. Authority is revalidated immediately before
 // dispatch, so a permission withdrawn since planning stops the send here.
-letterRoutes.post('/letter/replies/:actionId/send', async (c) => {
+// Sends. The one-off approval on the actions page asks can_trigger_actions;
+// this door reached the same kind of consequence and asked nothing.
+letterRoutes.post('/letter/replies/:actionId/send',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);

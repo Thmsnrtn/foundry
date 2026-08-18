@@ -13,6 +13,7 @@ import { nanoid } from 'nanoid';
 import type { IntegrationType } from '../../types/index.js';
 import { requireTier } from '../../middleware/tier-gate.js';
 import { encryptCredentialPayload } from '../../services/encryption.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const integrationsRoutes = new Hono<AuthEnv>();
 
@@ -234,7 +235,10 @@ integrationsRoutes.get('/integrations/:type/connect', async (c) => {
 
 // ─── POST /integrations/:type/connect ────────────────────────────────────────
 
-integrationsRoutes.post('/integrations/:type/connect', async (c) => {
+// Stores a third-party credential against the company. Disconnect stays
+// open: it only removes reach.
+integrationsRoutes.post('/integrations/:type/connect',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const type = c.req.param('type') as IntegrationType;
   const meta = INTEGRATION_META[type];

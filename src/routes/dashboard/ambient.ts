@@ -12,6 +12,7 @@ import { getLayoutContext } from './_shared.js';
 import { getOrGenerateAudioScript, generateAudioBriefScript } from '../../services/scp/briefing/audio.js';
 import { generateWeeklyEmailDigest, sendEmailDigest, getEmailDigestHistory } from '../../services/scp/briefing/email-digest.js';
 import { processVoiceReply } from '../../services/scp/briefing/voice-reply.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const ambientRoutes = new Hono<AuthEnv>();
 
@@ -270,7 +271,10 @@ ambientRoutes.post('/ambient/email/generate', async (c) => {
 
 // ─── POST /ambient/email/send ──────────────────────────────────────────────────
 
-ambientRoutes.post('/ambient/email/send', async (c) => {
+// Sends the company's digest to an address in the request body. Outward
+// effect and company financials in one call, previously ungated.
+ambientRoutes.post('/ambient/email/send',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'ambient', 'Email Digest', undefined, c);
   if (!ctx.productId) return c.redirect('/ambient');

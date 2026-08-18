@@ -368,7 +368,10 @@ agentsActions.get('/agents/actions/templates', async (c) => {
 
 // ─── POST /agents/actions/templates ───────────────────────────────────────────
 
-agentsActions.post('/agents/actions/templates', async (c) => {
+// Authors the body of what gets sent. Not a dispatch, but the same
+// permission decides who may put words in the company's outbound mail.
+agentsActions.post('/agents/actions/templates',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Action Templates', undefined, c);
 

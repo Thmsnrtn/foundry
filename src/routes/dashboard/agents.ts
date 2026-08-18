@@ -21,6 +21,7 @@ import {
   type GoldenSuiteEntry,
   type EvolutionVersion,
 } from '../../services/scp/types.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentRoutes = new Hono<AuthEnv>();
 
@@ -483,7 +484,11 @@ agentRoutes.post('/:name/run', async (c) => {
 
 // ─── POST /agents/:name/authority — Change Authority Level ────────────────────
 
-agentRoutes.post('/:name/authority', async (c) => {
+// SETTING AN AGENT'S AUTHORITY LEVEL IS GRANTING AUTHORITY. It decides how
+// far the company's agents may act without a human, and it asked nothing:
+// any member who could select the company could raise it.
+agentRoutes.post('/:name/authority',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const name = c.req.param('name');
 

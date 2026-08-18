@@ -20,6 +20,7 @@ import {
   type ConsentType,
 } from '../../services/privacy/consent.js';
 import { getProductsByOwner } from '../../db/client.js';
+import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
 
 export const privacySettings = new Hono<AuthEnv>();
 
@@ -370,7 +371,8 @@ privacySettings.get('/privacy', async (c) => {
 
 // ─── POST /privacy/consent ─────────────────────────────────────────────────────
 
-privacySettings.post('/privacy/consent', async (c) => {
+privacySettings.post('/privacy/consent',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Privacy & Data', undefined, c);
 
@@ -403,7 +405,8 @@ privacySettings.post('/privacy/consent', async (c) => {
 
 // ─── POST /privacy/residency ───────────────────────────────────────────────────
 
-privacySettings.post('/privacy/residency', async (c) => {
+privacySettings.post('/privacy/residency',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Privacy & Data', undefined, c);
 
@@ -571,7 +574,10 @@ privacySettings.get('/settings/export-all', async (c) => {
 
 // ─── POST /privacy/delete ──────────────────────────────────────────────────────
 
-privacySettings.post('/privacy/delete', async (c) => {
+// SCHEDULES ERASURE OF THE SELECTED COMPANY. Not a capability anything
+// grants — the exceptional boundary, like ending the subscription.
+privacySettings.post('/privacy/delete',
+  requireOwner(), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Privacy & Data', undefined, c);
 

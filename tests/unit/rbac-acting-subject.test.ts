@@ -112,8 +112,15 @@ describe('and the check still refuses everyone it should', () => {
   it('refuses a stranger who names the company in a cookie', async () => {
     // The cookie is a SELECTION, not an authorisation. Forging it names a
     // company; it does not confer a role on one.
+    //
+    // The refusal is now 'no company' rather than 'not permitted', because the
+    // subject resolves the acting company exactly as the handler does — an id
+    // the caller cannot see is ignored, and a stranger has none of their own to
+    // fall back to. Both are refusals; this one additionally declines to
+    // confirm that the company they named exists.
     const res = await dashboardApp(STRANGER, requireOwner()).request('/x', withCompany);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
+    expect(await res.json()).not.toMatchObject({ error: expect.stringContaining('owner') });
   });
 
   it('refuses a member a capability their membership does not carry', async () => {
@@ -149,11 +156,23 @@ describe('and the check still refuses everyone it should', () => {
     expect(res.status).toBe(401);
   });
 
-  it('says so plainly when no company is selected', async () => {
+  it('says so plainly when there is no company to act on', async () => {
     // Distinguishable from "not signed in": the caller is known, the company is
     // not. Returning 401 for both is what hid the original defect.
-    const res = await dashboardApp(OWNER, requireOwner()).request('/x', { method: 'POST' });
+    //
+    // A MISSING COOKIE IS NOT A MISSING COMPANY. `getLayoutContext` resolves
+    // the acting company as override, then cookie, then the first company the
+    // person can see, and the guard stopping at the cookie meant a founder with
+    // no selection set was refused on routes whose handlers would have worked.
+    // So this is the case where there genuinely is nothing: a signed-in person
+    // who belongs to no company at all.
+    const res = await dashboardApp(STRANGER, requireOwner()).request('/x', { method: 'POST' });
     expect(res.status).toBe(400);
+  });
+
+  it('does not refuse an owner merely because no selection cookie was sent', async () => {
+    const res = await dashboardApp(OWNER, requireOwner()).request('/x', { method: 'POST' });
+    expect(res.status, 'their only company is the company they mean').toBe(200);
   });
 });
 

@@ -46,12 +46,44 @@ export async function actingSubject(c: any): Promise<{ userId?: string; productI
   // conflating them is how a transport became an authority.
   if (!principal || principal.kind !== 'human_session') return {};
 
+  // A ROUTE THAT NAMES A COMPANY IN ITS PATH IS NAMING THE COMPANY THE HANDLER
+  // WILL SERVE. `getLayoutContext` treats that param as the highest-priority
+  // override, and this read did not look at it at all — so on `/products/:id/
+  // revenue` the guard asked about whichever company the cookie happened to
+  // hold while the handler served `:id`. Reading it here is what makes the two
+  // agree. An id the caller cannot see is passed through unchanged rather than
+  // replaced by a fallback: the capability check then fails on it, which is
+  // both the right answer and one that reveals nothing.
+  const routeNamed = (c.req.param('productId') as string | undefined)
+    ?? (typeof c.req.routePath === 'string' && c.req.routePath.includes('/products/:id')
+      ? (c.req.param('id') as string | undefined)
+      : undefined);
+
   const product = c.get('product') as { id?: string } | undefined;
   const { getCookie } = await import('hono/cookie');
-  return {
-    userId: principal.founderId,
-    productId: principal.productId ?? product?.id ?? getCookie(c, 'foundry_product'),
-  };
+  const named = principal.productId ?? product?.id ?? getCookie(c, 'foundry_product');
+
+  // THE GUARD AND THE HANDLER MUST NAME THE SAME COMPANY.
+  //
+  // `getLayoutContext` resolves the acting company as: explicit override, then
+  // the cookie, then THE FIRST COMPANY THIS PERSON CAN SEE — and it falls back
+  // to the first when the cookie names a company they cannot see. This read
+  // stopped at the cookie, so a founder whose browser had not set one yet (a
+  // fresh session, a client that drops it, a direct POST) got "No company
+  // selected" from the guard on a route whose handler would have worked
+  // perfectly. That is a guard refusing the legitimate principal, which is not
+  // extra secure.
+  //
+  // Falling back the same way is not a widening: the fallback only ever names
+  // a company this person is already a member of, and the capability check
+  // still has to pass on it. A forged cookie still buys nothing — it can only
+  // name a company they must prove a permission on, or be ignored.
+  const { visibleProductIds } = await import('../services/team/members.js');
+  const visible = await visibleProductIds(principal.founderId);
+  const productId = routeNamed
+    ?? (named && visible.includes(named) ? named : visible[0]);
+
+  return { userId: principal.founderId, productId };
 }
 
 /**

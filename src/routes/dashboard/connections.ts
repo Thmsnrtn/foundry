@@ -20,6 +20,7 @@ import { encryptToken } from '../../lib/crypto.js';
 import { issueGrant, revokeGrant } from '../../services/integration/mcp-client.js';
 import { getCap, getUsage, setCap } from '../../services/outbound/envelopes.js';
 import { getFluency, explain } from '../../services/ux/fluency.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const connectionRoutes = new Hono<AuthEnv>();
 
@@ -203,7 +204,10 @@ connectionRoutes.get('/connections', async (c) => {
   return c.html(dashboardLayout(ctx, content));
 });
 
-connectionRoutes.post('/connections/add', async (c) => {
+// Stores a credential for the company. Revoking and disconnecting stay open
+// — those only ever remove reach.
+connectionRoutes.post('/connections/add',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');
@@ -236,7 +240,9 @@ connectionRoutes.post('/connections/add', async (c) => {
   return c.redirect('/connections');
 });
 
-connectionRoutes.post('/connections/grant', async (c) => {
+// Grants a connection the right to be used. Authority, not configuration.
+connectionRoutes.post('/connections/grant',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');

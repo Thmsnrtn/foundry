@@ -113,11 +113,21 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
 export async function grantAssistingAuthority(input: {
   productId: string; responsibilityId: string; founderId: string; durationDays?: number;
 }): Promise<{ consentId: string; responsibility: Responsibility | null; admitted: boolean } | null> {
+  // WHO MAY GRANT FOUNDRY AUTHORITY. This used to be `p.owner_id = ?`, which
+  // made granting owner-only by accident of an SQL scope rather than by
+  // decision — the same shape the campaign found on action approval, playbook
+  // toggles and company discovery. Company membership is canonical through
+  // `team_members`; `can_manage_company` is the permission that says who may
+  // configure how the company operates, and the owner passes it by virtue of
+  // being the owner. A stranger holds nothing and is still refused, which is
+  // what the scope was really doing.
+  const { memberMay } = await import('../team/members.js');
+  if (!(await memberMay(input.productId, input.founderId, 'can_manage_company'))) return null;
+
   const owned = (await query(
     `SELECT r.capability, r.state FROM institutional_responsibilities r
-       JOIN products p ON p.id=r.product_id
-      WHERE r.id=? AND r.product_id=? AND p.owner_id=? AND r.disposition='active'`,
-    [input.responsibilityId, input.productId, input.founderId],
+      WHERE r.id=? AND r.product_id=? AND r.disposition='active'`,
+    [input.responsibilityId, input.productId],
   )).rows[0] as Record<string, unknown> | undefined;
   if (!owned) return null;
   const capability = String(owned.capability);
@@ -186,10 +196,16 @@ export async function grantAssistingAuthority(input: {
 export async function revokeAssistingAuthority(input: {
   productId: string; responsibilityId: string; founderId: string;
 }): Promise<boolean> {
+  // Withdrawal answers to the same permission as the grant: taking authority
+  // back is still authority management. The universal brake is the panic
+  // switch, which is deliberately reachable by anyone who can see the company.
+  const { memberMay } = await import('../team/members.js');
+  if (!(await memberMay(input.productId, input.founderId, 'can_manage_company'))) return false;
+
   const owned = await query(
-    `SELECT 1 FROM institutional_responsibilities r JOIN products p ON p.id=r.product_id
-      WHERE r.id=? AND r.product_id=? AND p.owner_id=?`,
-    [input.responsibilityId, input.productId, input.founderId],
+    `SELECT 1 FROM institutional_responsibilities r
+      WHERE r.id=? AND r.product_id=?`,
+    [input.responsibilityId, input.productId],
   );
   if (!owned.rows.length) return false;
   const result = await query(

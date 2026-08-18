@@ -336,7 +336,8 @@ export async function visibleProductIds(founderId: string): Promise<string[]> {
       UNION
      SELECT p.id FROM products p
        JOIN team_members t ON t.product_id = p.id
-      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'`,
+      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'
+     ORDER BY 1`,
     [founderId, founderId]);
   return (res.rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.id));
 }
