@@ -154,10 +154,23 @@ if (process.argv.includes('--write')) {
       'src/services/scp/scheduler.ts',
     ],
   };
-  // Two ways a file proves it: it calls the kill switch itself, or it is a
-  // capability handler registered with the outbound gateway, which runs the
-  // kill switch before it dispatches to any handler.
-  const GUARD = /checkKillSwitch|outbound\/gateway\.js/;
+  // Two ways a file proves it: it CALLS the kill switch itself, or it registers
+  // a capability handler with the outbound gateway, which runs the kill switch
+  // before dispatching to any handler.
+  //
+  // A CALL, not a mention. The first version of this matched the string
+  // `outbound/gateway.js`, and mutation testing walked straight through it:
+  // delete the guard, add `import type { GatewayRequest } from
+  // '../../outbound/gateway.js'`, and the file still "proved" it was governed
+  // while checking nothing. A type import is erased at compile time — it
+  // cannot be evidence that anything runs.
+  //
+  // CALLED BY ITS OWN NAME. Aliasing the import — `{ checkKillSwitch: gate }`
+  // — fails this, which is deliberate: a name match cannot follow an alias
+  // without real analysis, and a gate that guesses is worse than one with a
+  // stated house rule. The rule is that a guard on a consequential effect is
+  // called by the name it has, so that reading the file tells you.
+  const GUARD = /\bcheckKillSwitch\s*\(|\bregisterToolHandler\s*\(/;
   const ungoverned = [];
   for (const file of new Set(findings.filter((f) => f.status === 'governed').map((f) => f.file))) {
     const holders = GUARD_IN_CALLERS[file] ?? [file];
@@ -169,15 +182,23 @@ if (process.argv.includes('--write')) {
         // describing why the check is there.
         src = readFileSync(resolve(root, holder), 'utf8')
           .replace(/\/\*[\s\S]*?\*\//g, ' ')
-          .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+          .split('\n')
+          .map((l) => l.replace(/^\s*\/\/.*$/, ''))
+          // `import type` is erased at compile time. Whatever it names, it
+          // does not run.
+          .filter((l) => !/^\s*import\s+type\b/.test(l))
+          .join('\n');
       } catch { /* reported below */ }
       if (!GUARD.test(src)) ungoverned.push(`${file} → guard expected in ${holder}`);
     }
   }
   if (ungoverned.length) {
     console.error(
-      'Classified `governed`, but nothing in the file or its named callers checks '
-      + 'the kill switch or goes through the outbound gateway:\n' + ungoverned.join('\n'));
+      'Classified `governed`, but nothing in the file or its named callers CALLS '
+      + 'checkKillSwitch() or registerToolHandler():\n' + ungoverned.join('\n')
+      + '\n\nA mention is not a call: an `import type` is erased at compile time, and'
+      + '\nan aliased import cannot be followed by a name match. Call the guard by its'
+      + '\nown name, or correct the classification.');
     process.exit(1);
   }
 
