@@ -18,6 +18,20 @@ export interface VoiceReplyInput {
   mime_type: 'audio/webm' | 'audio/mp4' | 'audio/wav' | string;
   context: string; // what briefing item this is replying to
   briefing_date: string;
+  /** WHO is speaking.
+   *
+   * An approval is an authority decision, and this path recorded the approver
+   * as the literal string 'voice:founder' — a label naming no one. The click
+   * path asks `can_trigger_actions` before approving one action; this path
+   * asked nothing, so a member whose access to the company deliberately
+   * excludes executing effects could dispatch one by saying "yes, go ahead".
+   * The same consequence reached through a second door that did not ask.
+   *
+   * Only the approval branch consults it. Refusing the whole route to a member
+   * without that capability would refuse them note-taking and questions, which
+   * they may do — a guard that refuses the legitimate principal is not extra
+   * secure, it is broken. */
+  founder_id: string;
   /** WHICH action the founder is approving.
    *
    * Approval used to bind to nothing: `routeApproval` took the most recently
@@ -236,11 +250,14 @@ async function routeDecision(
  * have approved the wrong thing. Both halves are fixed here: the status is the
  * one the table has, and the action is the one the founder named.
  *
+ * A third half, found later: setting the status was never enough. See the body.
+ *
  * An approval is authority over ONE effect. Binding it to "the latest" is not
  * a loose match; it is a different decision.
  */
 async function routeApproval(
   productId: string,
+  founderId: string,
   transcript: string,
   context: string,
   actionExecutionId?: string,
@@ -251,20 +268,56 @@ async function routeApproval(
     return routeNote(productId, transcript, context, 'approval_unbound');
   }
 
-  // Scoped to the product AND to the pending state: a caller may not approve
-  // another company's action, nor re-approve one already decided.
-  const res = await query(
-    `UPDATE action_executions
-        SET status = 'approved', approved_at = datetime('now'),
-            approved_by = 'voice:founder', approval_note = ?
-      WHERE id = ? AND product_id = ? AND status = 'pending'`,
-    [transcript, actionExecutionId, productId],
-  );
-  if ((res.rowsAffected ?? 0) === 0) {
+  // WHOSE APPROVAL? The click path asks `can_trigger_actions` in middleware
+  // before it reaches the executor. Saying it out loud reached the same effect
+  // with no question asked at all, and recorded the approver as the constant
+  // 'voice:founder' — which is not a principal, it is a category.
+  const { memberMay } = await import('../../team/members.js');
+  if (!(await memberMay(productId, founderId, 'can_trigger_actions'))) {
+    return routeNote(productId, transcript, context, 'approval_not_permitted');
+  }
+
+  // AN APPROVAL THAT ONLY MOVES A STATUS IS NOT AN APPROVAL.
+  //
+  // This used to write `status = 'approved'` itself and stop there. Nothing in
+  // the system ever picks an approved execution up again — the only transition
+  // out of 'approved' lives inside `approveAndExecute`, two lines after its own
+  // claim. So the founder said "yes, go ahead", the row stopped being pending,
+  // the effect never happened, and the action left the pending queue, which is
+  // the only place the dashboard would have let them approve it properly. The
+  // voice approval did not merely fail to act; it stranded the action out of
+  // reach of the path that works.
+  //
+  // It also stepped around the kill switch. `approveAndExecute` asks whether
+  // this is still a company Foundry may act for before it claims anything; a
+  // direct UPDATE asks nothing, so a voice reply dispatched — or here, silently
+  // half-dispatched — for a company whose subscription had lapsed or whose
+  // founder had paused it.
+  //
+  // Going through the door means the atomic pending-claim, the kill switch, the
+  // dispatch and the effect receipt all happen exactly as they do for a click.
+  const { approveAndExecute } = await import('../actions/executor.js');
+  const result = await approveAndExecute(actionExecutionId, `voice:${founderId}`, {
+    scopeProductId: productId,
+  });
+
+  if (!result.success && /^refused:/.test(result.error ?? '')) {
+    // Not a mis-binding: the company is not one Foundry may act for right now.
+    // Named separately so the founder's record says which of the two happened.
+    return routeNote(productId, transcript, context, 'approval_refused');
+  }
+  if (!result.success && /not found|not pending/i.test(result.error ?? '')) {
     // The id names nothing pending for this company. Refused, and said so,
     // rather than falling through to approving something else.
     return routeNote(productId, transcript, context, 'approval_unmatched');
   }
+
+  // A provider failure is still an approval that was given and acted on: the
+  // execution row carries the error, and the founder's words belong on it.
+  await query(
+    `UPDATE action_executions SET approval_note = ? WHERE id = ? AND product_id = ?`,
+    [transcript, actionExecutionId, productId],
+  );
   return `action_executions:${actionExecutionId}`;
 }
 
@@ -320,7 +373,9 @@ export async function processVoiceReply(
   // 1. Transcribe
   // Attributed, so the spend lands against this company's ceiling rather than
   // only the global one.
-  const transcript = await transcribeAudio(data.audio_base64, data.mime_type, { productId });
+  const transcript = await transcribeAudio(data.audio_base64, data.mime_type, {
+    productId, founderId: data.founder_id,
+  });
 
   // 2. Classify intent
   const intent = await classifyIntent(transcript, data.context, productId);
@@ -333,7 +388,8 @@ export async function processVoiceReply(
       routedTo = await routeDecision(productId, transcript, data.context, data.briefing_date);
       break;
     case 'approval':
-      routedTo = await routeApproval(productId, transcript, data.context, data.action_execution_id);
+      routedTo = await routeApproval(
+        productId, data.founder_id, transcript, data.context, data.action_execution_id);
       break;
     case 'question':
       routedTo = await routeQuestion(productId, transcript, data.context);

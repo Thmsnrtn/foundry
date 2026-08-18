@@ -497,6 +497,9 @@ ambientRoutes.post('/ambient/voice/process', async (c) => {
 
   try {
     const result = await processVoiceReply(ctx.productId, {
+      // The speaker, not the category. Only the approval branch consults it,
+      // and it decides whether this person may execute an effect at all.
+      founder_id: founder.id,
       audio_base64: body.audio_base64,
       mime_type: body.mime_type,
       context: body.context ?? '',
