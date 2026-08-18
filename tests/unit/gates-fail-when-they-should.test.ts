@@ -130,6 +130,47 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('/zz-gate-fixture');
   });
 
+  it('check-migration-order fails on a number that already exists', () => {
+    // The case that reorders production: a fresh database applies this in
+    // lexical position, an existing one applies it last. No other test in the
+    // repository can tell the difference, because they all build fresh.
+    plant('src/db/migrations/100_gate_fixture_reuse.sql', 'SELECT 1;\n');
+    const r = run('check-migration-order.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('New duplicated migration numbers');
+  });
+
+  it('check-migration-order fails on a width that breaks lexical ordering', () => {
+    // `1000_` sorts before `999_`. The migrator's comment says "001 < 002 etc"
+    // and it stops being true silently the day somebody writes four digits.
+    plant('src/db/migrations/1000_gate_fixture_wide.sql', 'SELECT 1;\n');
+    const r = run('check-migration-order.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toMatch(/three digits|Lexical order/);
+  });
+
+  it('check-migration-order fails on a short number that still sorts plausibly', () => {
+    // Mutation testing found this gap. `1000_` is caught by the ORDERING
+    // invariant — lexically first, numerically last — so relaxing the
+    // three-digit rule to `\\d+` still failed that case, and the width rule
+    // looked redundant. It is not: `12_thing.sql` sorts before `164_` AND is
+    // numerically smaller, so lexical and numeric order agree and only the
+    // fixed-width rule objects. Three digits is what keeps the two orders the
+    // same forever rather than by coincidence.
+    plant('src/db/migrations/12_gate_fixture_short.sql', 'SELECT 1;\n');
+    const r = run('check-migration-order.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('three digits');
+  });
+
+  it('check-migration-order accepts the next number in sequence', () => {
+    // The gate must not refuse the legitimate act. A guard that blocks the
+    // ordinary case is the other defect.
+    plant('src/db/migrations/900_gate_fixture_next.sql', 'SELECT 1;\n');
+    const r = run('check-migration-order.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-route-guards sees the API surface it used to be blind to', () => {
     // THE GATE SCANNED `src/routes/dashboard` AND NOTHING ELSE, and printed
     // its count as though it described the system. `src/routes/api` held

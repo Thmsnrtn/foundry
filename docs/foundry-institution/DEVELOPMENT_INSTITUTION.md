@@ -209,6 +209,12 @@ Two standards this institution holds itself to, both learned the hard way:
   mutating — `git checkout` discards uncommitted work. Report the real tally,
   including survivors; a mutation that survives is either a missing test or an
   honest note in the code saying what the guard does not carry.
+- **Verify the mutation applied.** A find-and-replace that silently matched
+  nothing produces a passing suite that looks exactly like a surviving
+  mutation, and the conclusion drawn from it — "this guard is weak" — is
+  false in the safest-sounding direction. Assert the file changed. This is the
+  same unknown-masquerading-as-a-result failure the product keeps having,
+  committed by the process that exists to catch it.
 
 For consequential work, review with a perspective that did not design the
 change. Its job is to **falsify**, not to praise: recreate the forbidden
