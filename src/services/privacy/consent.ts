@@ -765,22 +765,88 @@ export const RETAINED_ON_ERASURE_REASONS = RETAINED_ON_ERASURE;
  */
 export async function scheduleDataDeletion(
   productId: string,
-  deleteAfterDays: number
+  deleteAfterDays: number,
+  requestedBy?: string,
 ): Promise<void> {
   await query(
     `INSERT INTO agent_audit_log
        (id, product_id, event_type, actor_type, actor_id, target_type, target_id,
         description, metadata_json, created_at)
-     VALUES (?, ?, 'data_deletion_scheduled', 'system', 'system', 'product', ?,
+     VALUES (?, ?, 'data_deletion_scheduled', ?, ?, 'product', ?,
              ?, ?, datetime('now'))`,
     [
       nanoid(),
       productId,
+      // A person asked for this, and until now the record said 'system'. The
+      // erasure trail is the one place where "who asked" is the whole point.
+      requestedBy ? 'founder' : 'system',
+      requestedBy ?? 'system',
       productId,
       `Data deletion scheduled. Product data will be deleted after ${deleteAfterDays} days.`,
       JSON.stringify({ delete_after_days: deleteAfterDays, scheduled_at: new Date().toISOString() }),
     ]
   );
+}
+
+/** What is pending for this company, or null. The privacy page had no way to
+ *  show it: a founder who clicked Delete saw a banner once and then nothing,
+ *  for thirty days, with no sign anything was coming. */
+export async function pendingDeletion(productId: string): Promise<{
+  scheduledAt: string; deleteAfterDays: number; deletesOn: string; requestedBy: string | null;
+} | null> {
+  const res = await query(
+    `SELECT metadata_json, actor_id, actor_type, created_at FROM agent_audit_log
+      WHERE event_type = 'data_deletion_scheduled' AND target_id = ?
+      ORDER BY created_at DESC LIMIT 1`, [productId]);
+  const row = res.rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+
+  const cancelled = await query(
+    `SELECT 1 FROM agent_audit_log
+      WHERE event_type = 'data_deletion_cancelled' AND target_id = ?
+        AND created_at >= ? LIMIT 1`, [productId, String(row.created_at)]);
+  if (cancelled.rows.length > 0) return null;
+
+  const done = await query(
+    `SELECT 1 FROM agent_audit_log
+      WHERE event_type = 'data_deletion_completed' AND target_id = ? LIMIT 1`, [productId]);
+  if (done.rows.length > 0) return null;
+
+  const metadata = JSON.parse(String(row.metadata_json ?? '{}')) as Record<string, unknown>;
+  const scheduledAt = String(metadata.scheduled_at ?? row.created_at);
+  const days = Number(metadata.delete_after_days ?? 30);
+  return {
+    scheduledAt,
+    deleteAfterDays: days,
+    deletesOn: new Date(new Date(scheduledAt).getTime() + days * 86_400_000).toISOString(),
+    requestedBy: row.actor_type === 'founder' ? String(row.actor_id) : null,
+  };
+}
+
+/**
+ * Change your mind, within the window the product promises you.
+ *
+ * THE WINDOW EXISTED AND HAD NO DOOR. The page says "data will be removed after
+ * 30 days", which is a promise that those thirty days mean something — and
+ * there was no way to use them. A founder who clicked by accident, or whose
+ * co-founder clicked, could do nothing but watch, and nothing on the page even
+ * told them it was coming. A grace period nobody can act in is a countdown.
+ *
+ * Recorded as an event rather than by deleting the schedule row: the request
+ * happened, and an erasure trail that erases its own history is not a trail.
+ */
+export async function cancelDataDeletion(
+  productId: string, cancelledBy: string,
+): Promise<boolean> {
+  if (!(await pendingDeletion(productId))) return false;
+  await query(
+    `INSERT INTO agent_audit_log
+       (id, product_id, event_type, actor_type, actor_id, target_type, target_id,
+        description, metadata_json, created_at)
+     VALUES (?, ?, 'data_deletion_cancelled', 'founder', ?, 'product', ?,
+             'Scheduled data deletion cancelled.', '{}', datetime('now'))`,
+    [nanoid(), productId, cancelledBy, productId]);
+  return true;
 }
 
 /**
@@ -798,22 +864,38 @@ export async function processScheduledDeletions(): Promise<ErasureRunOutcome> {
   // forever, with no error anywhere. The column is nullable and this is a
   // compliance path with a legal clock on it; a silent total stop is the worst
   // failure it has.
+  //
+  // NOT EXISTS rather than NOT IN, which sidesteps that trap by construction
+  // instead of by remembering to guard it — and it has to be a correlated test
+  // now anyway, because a cancellation only annuls the schedule it FOLLOWS. A
+  // founder who cancels and later schedules again means it, and a blanket
+  // "has ever cancelled" exclusion would ignore the second request forever.
   const pending = await query(
-    `SELECT DISTINCT target_id as product_id, metadata_json FROM agent_audit_log
-     WHERE event_type = 'data_deletion_scheduled'
-       AND target_id IS NOT NULL
-       AND target_id NOT IN (
-         SELECT target_id FROM agent_audit_log
-          WHERE event_type = 'data_deletion_completed' AND target_id IS NOT NULL
-       )`,
+    `SELECT s.target_id AS product_id, s.metadata_json, s.created_at
+       FROM agent_audit_log s
+      WHERE s.event_type = 'data_deletion_scheduled'
+        AND s.target_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_audit_log d
+           WHERE d.event_type = 'data_deletion_completed' AND d.target_id = s.target_id)
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_audit_log x
+           WHERE x.event_type = 'data_deletion_cancelled' AND x.target_id = s.target_id
+             AND x.created_at >= s.created_at)
+      ORDER BY s.created_at DESC`,
     []
   );
 
   const result: ErasureRunOutcome = { completed: 0, failed: [] };
 
+  // One company, one live request: the rows are newest-first, so the first one
+  // seen for a product is the request that stands.
+  const seen = new Set<string>();
   for (const row of pending.rows) {
     const r = row as Record<string, unknown>;
     const productId = r.product_id as string;
+    if (seen.has(productId)) continue;
+    seen.add(productId);
     const metadata = JSON.parse((r.metadata_json as string) || '{}');
     const scheduledAt = new Date(metadata.scheduled_at || 0);
     // `??`, not `||`. A founder who asks for erasure with no waiting period

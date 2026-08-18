@@ -17,6 +17,8 @@ import {
   updateDataResidencySettings,
   exportProductData,
   scheduleDataDeletion,
+  pendingDeletion,
+  cancelDataDeletion,
   type ConsentType,
 } from '../../services/privacy/consent.js';
 import { getProductsByOwner } from '../../db/client.js';
@@ -93,10 +95,32 @@ privacySettings.get('/privacy', async (c) => {
   const successBannerText = successMsg === 'all_deletion_scheduled'
     ? `Deletion scheduled for all ${ctx.allProducts.length} product${ctx.allProducts.length !== 1 ? 's' : ''}. Data will be removed after 30 days.`
     : successMsg === 'deletion_scheduled'
-    ? 'Deletion scheduled. Product data will be removed after 30 days.'
+    ? 'Deletion scheduled. Product data will be removed after 30 days — you can still stop it until then.'
+    : successMsg === 'deletion_cancelled'
+    ? 'Deletion cancelled. Nothing will be removed.'
+    : successMsg === 'nothing_pending'
+    ? 'There was no deletion scheduled for this product.'
     : successMsg
     ? 'Settings saved successfully.'
     : null;
+
+  // A COUNTDOWN NOBODY CAN SEE IS NOT A GRACE PERIOD. After clicking Delete the
+  // page showed a banner once and then looked exactly as it had before, for
+  // thirty days.
+  const pending = await pendingDeletion(productId);
+  const pendingBanner = pending
+    ? html`<div style="background:#ff6b6b22;border:1px solid #ff6b6b66;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;">
+        <div style="color:#ff6b6b;font-weight:600;font-size:0.9rem;margin-bottom:0.35rem;">Deletion scheduled</div>
+        <div style="color:var(--text-dim);font-size:0.82rem;line-height:1.5;">
+          All data for ${ctx.productName} is scheduled to be permanently deleted on
+          <strong>${pending.deletesOn.slice(0, 10)}</strong>${pending.requestedBy ? '' : ''}.
+          Until then you can stop it.
+        </div>
+        <form method="POST" action="/privacy/delete/cancel" style="margin-top:0.75rem;">
+          <button type="submit" class="btn btn-ghost" style="font-size:0.8rem;">Stop the deletion</button>
+        </form>
+      </div>`
+    : '';
 
   const successBanner = successBannerText
     ? html`<div style="background:${successMsg?.includes('deletion') ? '#ff6b6b22' : '#4ecca322'};border:1px solid ${successMsg?.includes('deletion') ? '#ff6b6b44' : '#4ecca344'};border-radius:8px;padding:0.75rem 1.25rem;margin-bottom:1.5rem;color:${successMsg?.includes('deletion') ? '#ff6b6b' : '#4ecca3'};font-size:0.875rem;font-weight:500;">
@@ -195,6 +219,7 @@ privacySettings.get('/privacy', async (c) => {
   ).join('');
 
   const content = html`
+    ${pendingBanner}
     ${successBanner}
 
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.75rem;flex-wrap:wrap;gap:0.5rem;">
@@ -300,7 +325,7 @@ privacySettings.get('/privacy', async (c) => {
         <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.875rem;font-weight:600;color:#ff6b6b;margin-bottom:0.25rem;">Request Product Deletion</div>
-            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Permanently delete this product and all associated data. This action cannot be undone. Please export your data first.</p>
+            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Permanently delete this product and all associated data, after a 30-day grace period. You can stop it during those 30 days; once it runs it cannot be undone. Please export your data first.</p>
           </div>
           <button
             type="button"
@@ -339,7 +364,7 @@ privacySettings.get('/privacy', async (c) => {
         <h2 style="margin:0 0 0.75rem;color:#ff6b6b;font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>
         <p style="margin:0 0 1rem;font-size:0.875rem;color:var(--text-dim);line-height:1.55;">
           This will permanently schedule deletion of all data for <strong>${ctx.productName}</strong> including metrics, briefings, decisions, and agent logs.
-          This cannot be undone.
+          You have 30 days to stop it. After that it cannot be undone.
         </p>
         <p style="margin:0 0 1.5rem;font-size:0.8rem;color:var(--text-muted);">
           We recommend <a href="/privacy/export" style="color:var(--accent);">exporting your data</a> before proceeding.
@@ -583,10 +608,23 @@ privacySettings.post('/privacy/delete',
 
   if (!ctx.productId) return c.redirect('/privacy');
 
-  await scheduleDataDeletion(ctx.productId, 30);
+  await scheduleDataDeletion(ctx.productId, 30, founder.id);
 
   return c.redirect('/privacy?success=deletion_scheduled');
 });
+
+// ─── POST /privacy/delete/cancel ──────────────────────────────────────────────
+//
+// The window the page promises, with a door in it. Owner-only, like scheduling:
+// the two halves of one decision answer to the same boundary.
+privacySettings.post('/privacy/delete/cancel',
+  requireOwner(), async (c) => {
+    const founder = c.get('founder');
+    const ctx = await getLayoutContext(founder, 'settings', 'Privacy & Data', undefined, c);
+    if (!ctx.productId) return c.redirect('/privacy');
+    const cancelled = await cancelDataDeletion(ctx.productId, founder.id);
+    return c.redirect(`/privacy?success=${cancelled ? 'deletion_cancelled' : 'nothing_pending'}`);
+  });
 
 // ─── GET /settings/delete-all-products — Fleet-wide deletion confirmation (F-063-A) ──
 
@@ -609,7 +647,8 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
       <h1 style="color:#ff6b6b;margin:0 0 0.5rem;">Delete All Products</h1>
       <p style="color:var(--text-dim);margin:0 0 1.5rem;font-size:0.875rem;line-height:1.55;">
         This will schedule deletion for <strong>all ${productList.length} product${productList.length > 1 ? 's' : ''}</strong>
-        and their associated data. Deletion occurs after a 30-day grace period. This action cannot be undone.
+        and their associated data. Deletion occurs after a 30-day grace period, and can be stopped
+        from each product's Privacy page until then. Once it runs it cannot be undone.
       </p>
 
       <div class="card" style="margin-bottom:1.5rem;padding:0;overflow:hidden;">
@@ -655,7 +694,7 @@ privacySettings.post('/settings/delete-all-products', async (c) => {
 
   for (const row of products.rows) {
     const p = row as Record<string, unknown>;
-    await scheduleDataDeletion(p.id as string, 30);
+    await scheduleDataDeletion(p.id as string, 30, founder.id);
   }
 
   return c.redirect('/privacy?success=all_deletion_scheduled');
