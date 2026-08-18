@@ -1,7 +1,7 @@
 {
   "name": "foundry",
   "version": "0.1.0",
-  "description": "Autonomous business intelligence platform for SaaS founders",
+  "description": "Adaptive company institution — discovers, understands and progressively operates unfamiliar companies",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
