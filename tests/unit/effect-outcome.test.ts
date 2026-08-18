@@ -9,6 +9,7 @@ import {
   getEffectOutcomeReports, getUnresolvedEffects, reportEffectOutcome,
 } from '../../src/services/institution/effect-outcome.js';
 import { reconcileAssistedSupportEmail } from '../../src/services/institution/responsibility-assisted-email.js';
+import { moveResponsibilityTo } from '../fixtures/responsibility-state.js';
 
 // =============================================================================
 // The last link of the loop finally has a supply.
@@ -59,9 +60,8 @@ beforeAll(async () => {
         responsibility_id,allowed_scope_json,consequence_boundary,expires_at)
      VALUES ('eo_consent',?,?,'operations','suggest','act','v1',?,?, 'low',datetime('now','+1 day'))`,
     [OWNER, P, RESP, JSON.stringify(['send_email:responsibility_notice'])]);
-  await query(
-    "UPDATE institutional_responsibilities SET state='assisting',authority_ref='autonomy_consent:eo_consent' WHERE id=?",
-    [RESP]);
+  await moveResponsibilityTo(RESP, 'assisting',
+    { productId: P, authorityRef: 'autonomy_consent:eo_consent' });
   await executedEffect('eo_effect_1', 'eo_action_1');
 });
 

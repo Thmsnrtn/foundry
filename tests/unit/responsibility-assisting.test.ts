@@ -16,7 +16,13 @@ async function seedResponsibility(id:string,productId='assist_product') {
   await query(`INSERT INTO responsibility_shadow_expectations
     (id,responsibility_id,product_id,expected_event_type,expectation_evidence_ref,observation_source_evidence_ref)
     VALUES (?,?,?,'support_restored',?,'signal_event:assist_signal')`,[expectation,id,productId,`reconstruction_claim:${claim}`]);
-  await query("UPDATE institutional_responsibilities SET state='shadowing' WHERE id=?",[id]);
+  // The comparison guard insists the responsibility is already Shadowing, and
+  // migration 159 insists a state only moves through a transition. Both are the
+  // point: the fixture now proves the rung it used to assume.
+  await query(`INSERT INTO responsibility_transitions
+    (id,responsibility_id,from_state,to_state,evidence_ref,reason,actor_ref)
+    VALUES (?,?,'understood','shadowing','signal_event:assist_signal','watching','test')`,
+    [`to_shadow_${id}`,id]);
   await query(`INSERT INTO responsibility_shadow_comparisons
     (id,expectation_id,product_id,observation_ref,classification)
     VALUES (?,?,?,'signal_event:assist_actual','matched')`,[comparison,expectation,productId]);

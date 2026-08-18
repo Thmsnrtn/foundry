@@ -11,6 +11,7 @@ beforeAll(async()=>{
   await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state) VALUES
     ('authority_resp','authority_product','Send bounded support update','customer_support','shadowing'),
     ('authority_other','authority_product','Other support work','customer_support','shadowing'),
+    ('authority_not_shadowing','authority_product','Not yet watched','customer_support','understood'),
     ('authority_foreign_resp','authority_foreign_product','Foreign support work','customer_support','shadowing')`,[]);
 });
 
@@ -32,8 +33,12 @@ describe('responsibility-bound authority',()=>{
     await expect(recordConsent({...base,responsibilityId:'authority_foreign_resp'})).rejects.toThrow();
     await expect(recordConsent({...base,expiresAt:new Date('2020-01-01')})).rejects.toThrow();
     await expect(recordConsent({...base,allowedScope:[]})).rejects.toThrow();
-    await query("UPDATE institutional_responsibilities SET state='assisting' WHERE id='authority_other'");
-    await expect(recordConsent({...base,responsibilityId:'authority_other'})).rejects.toThrow();
+    // A responsibility that is not Shadowing cannot be granted authority. This
+    // used to be arranged by writing `state='assisting'` onto a shadowing row;
+    // migration 159 closed that door, and the fixture no longer needs it — a
+    // row born 'understood' has never been watched, which is the actual reason
+    // the grant is refused.
+    await expect(recordConsent({...base,responsibilityId:'authority_not_shadowing'})).rejects.toThrow();
   });
 
   it('fails closed after revocation and legacy capability consent cannot authorize a responsibility',async()=>{

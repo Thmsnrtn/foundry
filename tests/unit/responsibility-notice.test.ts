@@ -9,6 +9,7 @@ import {
 import {
   RESPONSIBILITY_NOTICE_SCOPE, executeAssistedSupportEmail,
 } from '../../src/services/institution/responsibility-assisted-email.js';
+import { moveResponsibilityTo } from '../fixtures/responsibility-state.js';
 
 // =============================================================================
 // A dance school tells a teacher their class needs cover.
@@ -44,9 +45,8 @@ beforeAll(async () => {
         responsibility_id,allowed_scope_json,consequence_boundary,expires_at)
      VALUES ('rn_consent',?,?,'operations','suggest','act','v1',?,?, 'low',datetime('now','+1 day'))`,
     [OWNER, P, RESP, JSON.stringify([RESPONSIBILITY_NOTICE_SCOPE])]);
-  await query(
-    "UPDATE institutional_responsibilities SET state='assisting',authority_ref='autonomy_consent:rn_consent' WHERE id=?",
-    [RESP]);
+  await moveResponsibilityTo(RESP, 'assisting',
+    { productId: P, authorityRef: 'autonomy_consent:rn_consent' });
 });
 
 describe('founder-authored responsibility notices', () => {

@@ -6,6 +6,7 @@ import { query } from '../../src/db/client.js';
 import {
   ASSISTED_EMAIL_SCOPE, RESPONSIBILITY_NOTICE_SCOPE, planAssistedSupportEmail,
 } from '../../src/services/institution/responsibility-assisted-email.js';
+import { moveResponsibilityTo } from '../fixtures/responsibility-state.js';
 
 // =============================================================================
 // The governed effect boundary stops being support-only.
@@ -45,8 +46,8 @@ async function assisting(
         responsibility_id,allowed_scope_json,consequence_boundary,expires_at)
      VALUES (?,?,?,?,'suggest','act','v1',?,?,?,datetime('now','+1 day'))`,
     [consentId, OWNER, P, capability, id, JSON.stringify(scopes), boundary]);
-  await query("UPDATE institutional_responsibilities SET state='assisting',authority_ref=? WHERE id=?",
-    [`autonomy_consent:${consentId}`, id]);
+  await moveResponsibilityTo(id, 'assisting',
+    { productId: P, authorityRef: `autonomy_consent:${consentId}` });
   return consentId;
 }
 

@@ -188,6 +188,8 @@
        AND a.capability=r.capability AND a.to_mode='act' AND a.revoked_at IS NULL
        AND c.epistemic_status IN ('known','inferred') AND json_array_length(c.evidence_refs_json)>0
        AND c.product_id=r.product_id
+       AND from_state = OLD.state
+       AND to_state = NEW.state
        AND x.status='completed' AND x.verify_status='passed'
       'activation_event','active_user_event','team_id','host','account_id',
       'activation_event','active_user_event','team_id','host','account_id',
@@ -311,6 +313,7 @@
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=r.product_id
      WHERE NEW.outcome_ref='action_execution:' || x.id AND x.product_id=r.product_id
      WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
+     WHERE responsibility_id = NEW.id
     'activation_playbook',     -- How we improve activation
     'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
     'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
@@ -573,6 +576,7 @@
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x JOIN institutional_responsibilities r ON r.id=x.responsibility_id
     SELECT 1 FROM responsibility_shadow_expectations x, signal_events e
+    SELECT 1 FROM responsibility_transitions
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
@@ -714,6 +718,7 @@
   )),
   )),
   )),
+  );
   );
   );
   );
@@ -1142,6 +1147,8 @@
   SELECT RAISE(ABORT, 'responsibility_reference:authority_invalid')
   SELECT RAISE(ABORT, 'responsibility_reference:evidence_invalid')
   SELECT RAISE(ABORT, 'responsibility_reference:outcome_invalid')
+  SELECT RAISE(ABORT, 'responsibility_state:no_transition') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT, 'responsibility_state:not_a_birth_state');
   SELECT RAISE(ABORT, 'responsibility_transition:authority_not_applicable') WHERE NEW.to_state IN ('unknown','visible','understood','shadowing') AND NEW.authority_ref IS NOT NULL;
   SELECT RAISE(ABORT, 'responsibility_transition:authority_required') WHERE NEW.to_state IN ('assisting','operating','mature','exception_owned') AND NEW.authority_ref IS NULL;
   SELECT RAISE(ABORT, 'responsibility_transition:cannot_skip') WHERE
@@ -4579,6 +4586,7 @@ BEFORE INSERT ON governed_effect_kinds
 BEFORE INSERT ON inbound_customer_messages
 BEFORE INSERT ON ingest_credentials
 BEFORE INSERT ON institutional_judgment_dispositions
+BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON integrations
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
@@ -4612,6 +4620,7 @@ BEFORE INSERT ON system_identities
 BEFORE UPDATE OF config_json ON integrations
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
 BEFORE UPDATE OF revoked_at ON autonomy_consents
+BEFORE UPDATE OF state ON institutional_responsibilities
 BEFORE UPDATE ON company_observation_channels
 BEFORE UPDATE ON cost_events
 BEFORE UPDATE ON development_change_plans
@@ -4621,6 +4630,8 @@ BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5338,6 +5349,7 @@ CREATE TRIGGER reconstruction_claim_guard
 CREATE TRIGGER responsibility_assisting_entry_guard
 CREATE TRIGGER responsibility_authority_guard
 CREATE TRIGGER responsibility_authority_revocation_is_permanent
+CREATE TRIGGER responsibility_birth_state_freeze
 CREATE TRIGGER responsibility_candidate_guard BEFORE INSERT ON responsibility_candidates BEGIN
 CREATE TRIGGER responsibility_candidate_lifecycle_apply
 CREATE TRIGGER responsibility_candidate_lifecycle_guard
@@ -5350,6 +5362,7 @@ CREATE TRIGGER responsibility_operating_promotion_freeze
 CREATE TRIGGER responsibility_reference_guard
 CREATE TRIGGER responsibility_shadow_comparison_guard
 CREATE TRIGGER responsibility_shadow_expectation_guard
+CREATE TRIGGER responsibility_state_requires_transition
 CREATE TRIGGER responsibility_transition_apply
 CREATE TRIGGER responsibility_transition_guard
 CREATE TRIGGER support_channel_guard
@@ -5457,6 +5470,8 @@ END;
 END;
 END;
 END;
+END;
+END;
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
@@ -5466,4 +5481,6 @@ WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
+WHEN NEW.state <> OLD.state
+WHEN NEW.state IN ('operating', 'mature', 'exception_owned')
 WHEN OLD.status IN ('reserved','ambiguous') AND NEW.status IN ('settled','released','expired')

@@ -31,7 +31,11 @@ beforeAll(async()=>{
     ('exe_r_service','exe_service','Restore shift coverage','operations','visible'),
     ('exe_r_commerce','exe_commerce','Investigate failed orders','commerce_operations','visible'),
     ('exe_r_portfolio','exe_portfolio_a','Reconcile shared support','customer_support','visible'),
-    ('exe_r_foreign','exe_foreign','Foreign responsibility','operations','operating')`,[]);
+    -- The state used to be 'operating', which migration 115 froze and migration
+    -- 159 now refuses at birth too. This fixture is about TENANCY, not about the
+    -- rung: the only place in the codebase a responsibility was ever Operating
+    -- was a test that did not need it to be.
+    ('exe_r_foreign','exe_foreign','Foreign responsibility','operations','assisting')`,[]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
     ('exe_delayed','exe_commerce','warehouse','support_spike','high','{}','Fulfillment delayed'),
     ('exe_normal','exe_commerce','manual','support_spike','medium','{}','Team reports normal')`,[]);

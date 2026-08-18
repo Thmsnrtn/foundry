@@ -11,6 +11,8 @@ import { SEND_EMAIL_POLICY } from '../../src/services/integration/resend.js';
 import {
   executeAssistedSupportEmail, planAssistedSupportEmail,
 } from '../../src/services/institution/responsibility-assisted-email.js';
+import { nanoid } from 'nanoid';
+import { moveResponsibilityTo, recordEvidence } from '../fixtures/responsibility-state.js';
 
 // =============================================================================
 // BILLING ↔ CAPABILITY ACCESS: the pause reached one layer and not the other.
@@ -76,9 +78,8 @@ beforeAll(async () => {
         responsibility_id,allowed_scope_json,consequence_boundary,expires_at)
      VALUES ('bca_consent',?,?,'operations','suggest','act','v1','bca_resp',?, 'low',datetime('now','+1 day'))`,
     [OWNER, P, JSON.stringify(['send_email:responsibility_notice'])]);
-  await query(
-    "UPDATE institutional_responsibilities SET state='assisting',authority_ref='autonomy_consent:bca_consent' WHERE id='bca_resp'",
-    []);
+  await moveResponsibilityTo('bca_resp', 'assisting',
+    { productId: P, authorityRef: 'autonomy_consent:bca_consent' });
 });
 
 describe('a governed effect and the subscription behind it', () => {
@@ -474,22 +475,24 @@ describe('temporal authority is revalidated at the last safe point', () => {
     await query(
       "UPDATE autonomy_consents SET expires_at=datetime('now','-1 minute') WHERE id='bca_consent'",
       []);
-    // The new grant is made from Shadowing, which is the path migration 133
-    // permits without fresh comparison evidence — a re-grant from Assisting
-    // needs that evidence, and demanding it here would make this a test about
-    // the ladder rather than about which grant a plan belongs to.
+    // The new grant is made from Shadowing. That used to be arranged by writing
+    // the state directly; migration 159 closed that door, so the step back down
+    // is now a real transition and the step back up brings its own fresh shadow
+    // proof. The fixture is longer and it is no longer asserting from a state
+    // the ladder might never have permitted.
     await query(
-      "UPDATE institutional_responsibilities SET state='shadowing',authority_ref=NULL WHERE id='bca_resp'",
-      []);
+      `INSERT INTO responsibility_transitions
+         (id, responsibility_id, from_state, to_state, evidence_ref, reason, actor_ref)
+       VALUES (?, 'bca_resp', 'assisting', 'shadowing', ?, 'grant expired', 'test')`,
+      [nanoid(), await recordEvidence(P, 'grant expired')]);
     await query(
       `INSERT INTO autonomy_consents
          (id,founder_id,product_id,capability,from_mode,to_mode,disclosure_version,
           responsibility_id,allowed_scope_json,consequence_boundary,expires_at)
        VALUES ('bca_consent_b',?,?,'operations','suggest','act','v1','bca_resp',?,'low',datetime('now','+1 day'))`,
       [OWNER, P, JSON.stringify(['send_email:responsibility_notice'])]);
-    await query(
-      "UPDATE institutional_responsibilities SET state='assisting',authority_ref='autonomy_consent:bca_consent_b' WHERE id='bca_resp'",
-      []);
+    await moveResponsibilityTo('bca_resp', 'assisting',
+      { productId: P, authorityRef: 'autonomy_consent:bca_consent_b' });
 
     const before = dispatched;
     expect(await executeAssistedSupportEmail(action))

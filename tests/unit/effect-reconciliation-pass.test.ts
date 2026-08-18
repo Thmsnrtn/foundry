@@ -5,6 +5,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { JOB_REGISTRY } from '../../src/jobs/index.js';
 import { reportEffectOutcome } from '../../src/services/institution/effect-outcome.js';
+import { moveResponsibilityTo } from '../fixtures/responsibility-state.js';
 
 // =============================================================================
 // The outcome loop's external half had nowhere to land.
@@ -69,9 +70,8 @@ async function company(productId: string, founderId: string, clerk: string): Pro
      VALUES (?,?,?,'operations','suggest','act','v1',?,?,'low',datetime('now','+1 day'))`,
     [`${productId}_consent`, founderId, productId, `${productId}_resp`,
       JSON.stringify(['send_email:responsibility_notice'])]);
-  await query(
-    'UPDATE institutional_responsibilities SET state=?,authority_ref=? WHERE id=?',
-    ['assisting', `autonomy_consent:${productId}_consent`, `${productId}_resp`]);
+  await moveResponsibilityTo(`${productId}_resp`, 'assisting',
+    { productId, authorityRef: `autonomy_consent:${productId}_consent` });
 }
 
 async function outcomeOf(actionId: string): Promise<string> {
