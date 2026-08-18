@@ -267,7 +267,10 @@ connectionRoutes.post('/connections/grant',
   return c.redirect('/connections');
 });
 
-connectionRoutes.post('/connections/envelope', async (c) => {
+// The weekly cap on a connected server. Raising it raises how far Foundry
+// may reach through it, which is the same kind of decision as granting it.
+connectionRoutes.post('/connections/envelope',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');

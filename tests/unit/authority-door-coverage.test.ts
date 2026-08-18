@@ -90,12 +90,13 @@ beforeAll(async () => {
     `INSERT INTO agent_instances (id, product_id, agent_name, display_name, authority_level, version)
      VALUES (?, ?, 'atlas', 'Atlas', 0, 1)`, [nanoid(), P]);
 
-  const [{ agentRoutes }, { letterRoutes }, { ambientRoutes }, { privacySettings }] =
-    await Promise.all([
+  const [{ agentRoutes }, { letterRoutes }, { ambientRoutes }, { privacySettings },
+    { agentExperimentRoutes }] = await Promise.all([
       import('../../src/routes/dashboard/agents.js'),
       import('../../src/routes/dashboard/letter.js'),
       import('../../src/routes/dashboard/ambient.js'),
       import('../../src/routes/dashboard/privacy.js'),
+      import('../../src/routes/dashboard/agents-experiments.js'),
     ]);
 
   app = new Hono();
@@ -108,6 +109,7 @@ beforeAll(async () => {
   app.route('/', letterRoutes);
   app.route('/', ambientRoutes);
   app.route('/', privacySettings);
+  app.route('/', agentExperimentRoutes);
 });
 
 // A refusal is a 403 from the guard; anything else means the request reached
@@ -259,5 +261,25 @@ describe('the guard resolves the company the handler will act on', () => {
     expect(subject.productId,
       'the guard must ask about the company the handler will serve, not the cookie')
       .toBe('named_co');
+  });
+});
+
+describe('an experiment runs on real customers, so it asks too', () => {
+  it('refuses an observer starting one', async () => {
+    const res = await post(`/products/${P}/agents/experiments/exp_x/start`, OBSERVER);
+    expect(res.status).toBe(REFUSED);
+  });
+
+  it('admits a member who holds can_trigger_actions', async () => {
+    // And the guard reads the company from the PATH here, not the cookie —
+    // these handlers serve `:id`, so anything else would authorize one company
+    // and act on another.
+    const res = await post(`/products/${P}/agents/experiments/exp_x/start`, MANAGER);
+    expect(res.status).not.toBe(REFUSED);
+  });
+
+  it('refuses a member of a different company naming this one in the path', async () => {
+    const res = await post(`/products/${P}/agents/experiments/exp_x/start`, 'nobody_at_all');
+    expect(res.status).toBe(REFUSED);
   });
 });

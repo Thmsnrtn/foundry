@@ -236,7 +236,10 @@ agentRoutes.get('/', async (c) => {
 
 // ─── POST /agents/provision — Provision SCP ───────────────────────────────────
 
-agentRoutes.post('/provision', async (c) => {
+// Provisioning stands the company's agents up. Resuming a paused one puts it
+// back to work; pausing stays open, because it only ever stops something.
+agentRoutes.post('/provision',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Roster', undefined, c);
 
@@ -736,7 +739,8 @@ agentRoutes.post('/:name/pause', async (c) => {
 
 // ─── POST /agents/:name/resume — Resume Agent ────────────────────────────────
 
-agentRoutes.post('/:name/resume', async (c) => {
+agentRoutes.post('/:name/resume',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const name = c.req.param('name');
 
