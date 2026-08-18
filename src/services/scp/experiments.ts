@@ -114,7 +114,10 @@ export async function validateHypothesis(
     estimatedDurationDays: number;
     predictedRoi?: number;
   },
+  scopeProductId: string,
 ): Promise<void> {
+  // Scoped for the same reason as its siblings: a hypothesis id the caller
+  // does not own must be indistinguishable from one that does not exist.
   await query(
     `UPDATE hypotheses SET
        validated_by = ?,
@@ -124,7 +127,7 @@ export async function validateHypothesis(
        estimated_duration_days = ?,
        predicted_roi = ?,
        updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
+     WHERE id = ? AND product_id = ?`,
     [
       params.validatedBy,
       params.nullHypothesis,
@@ -133,6 +136,7 @@ export async function validateHypothesis(
       params.estimatedDurationDays,
       params.predictedRoi ?? null,
       hypothesisId,
+      scopeProductId,
     ],
   );
 }
@@ -167,8 +171,9 @@ export async function approveAndCreateExperiment(
 
   // Mark hypothesis as approved
   await query(
-    `UPDATE hypotheses SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [hypothesisId],
+    `UPDATE hypotheses SET status = 'approved', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND product_id = ?`,
+    [hypothesisId, scopeProductId],
   );
 
   // Create experiment
@@ -222,8 +227,9 @@ export async function startExperiment(experimentId: string, scopeProductId: stri
   if (expResult.rows.length > 0) {
     const hypothesisId = (expResult.rows[0] as Record<string, unknown>).hypothesis_id as string;
     await query(
-      `UPDATE hypotheses SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [hypothesisId],
+      `UPDATE hypotheses SET status = 'active', updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND product_id = ?`,
+      [hypothesisId, scopeProductId],
     );
   }
 }
@@ -241,7 +247,23 @@ export async function updateResults(
     significant: boolean;
     winner?: 'control' | 'treatment' | 'inconclusive';
   },
+  scopeProductId: string,
 ): Promise<void> {
+  // WHOSE EXPERIMENT. Every other mutator in this file takes the product the
+  // caller has already proved ownership of and scopes on it; this one wrote
+  // `WHERE id = ?` and, one level down, `UPDATE hypotheses ... WHERE id = ?`
+  // with no scope at all. It has no caller yet, which is the only reason that
+  // was not a cross-tenant write — and the only reason it would have shipped
+  // as one the day something called it.
+  const expResult = await query(
+    'SELECT hypothesis_id FROM experiments WHERE id = ? AND product_id = ?',
+    [experimentId, scopeProductId],
+  );
+  if (expResult.rows.length === 0) {
+    throw new Error(`Experiment ${experimentId} not found`);
+  }
+  const hypothesisId = (expResult.rows[0] as Record<string, unknown>).hypothesis_id as string;
+
   const winner = results.winner ?? (results.significant
     ? (results.treatment_mean > results.control_mean ? 'treatment' : 'control')
     : 'inconclusive');
@@ -253,23 +275,40 @@ export async function updateResults(
        status = 'completed',
        actual_end_at = CURRENT_TIMESTAMP,
        updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [JSON.stringify(results), winner, experimentId],
+     WHERE id = ? AND product_id = ?`,
+    [JSON.stringify(results), winner, experimentId, scopeProductId],
   );
 
-  // Update hypothesis status based on results
-  const expResult = await query(
-    'SELECT hypothesis_id FROM experiments WHERE id = ?',
-    [experimentId],
+  // WHAT THE EXPERIMENT ESTABLISHED, which is not always something.
+  //
+  // This used to be `results.significant ? 'completed' : 'disproven'`. Three
+  // outcomes were being squeezed into two names, and the one that lost was the
+  // commonest: an experiment whose arms did not separate says nothing about
+  // the statement, and calling that "disproven" tells the institution it has
+  // learned something it has not. Worse, it is the record the next agent reads
+  // before proposing again — so a hypothesis nobody had tested properly looked
+  // closed, and `disproven_evidence` sat NULL beside it because there was no
+  // evidence to put there.
+  //
+  // Migration 147 gives the third outcome its own name.
+  const newStatus = !results.significant
+    ? 'inconclusive'
+    : winner === 'control' ? 'disproven' : 'completed';
+
+  // A claim of contradiction now carries what contradicted it. The schema
+  // asked for this from the beginning ("If disproven, why") and nothing wrote
+  // it.
+  const evidence = newStatus === 'disproven'
+    ? `Control outperformed treatment: control ${results.control_mean}, `
+      + `treatment ${results.treatment_mean}, effect size ${results.effect_size}, `
+      + `p=${results.p_value} (experiment ${experimentId}).`
+    : null;
+
+  await query(
+    `UPDATE hypotheses SET status = ?, disproven_evidence = ?,
+       updated_at = CURRENT_TIMESTAMP WHERE id = ? AND product_id = ?`,
+    [newStatus, evidence, hypothesisId, scopeProductId],
   );
-  if (expResult.rows.length > 0) {
-    const hypothesisId = (expResult.rows[0] as Record<string, unknown>).hypothesis_id as string;
-    const newStatus = results.significant ? 'completed' : 'disproven';
-    await query(
-      `UPDATE hypotheses SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [newStatus, hypothesisId],
-    );
-  }
 }
 
 /**
