@@ -9,7 +9,6 @@ POST /agents/decisions/:id/outcome
 POST /agents/decisions/premise/:id/revisit
 POST /agents/evolve/:name/synthesize
 POST /agents/inbox/messages/:id/read
-POST /agents/integrations/:name/connect
 POST /agents/integrations/:name/disconnect
 POST /agents/intelligence/mutations/:id/activate
 POST /agents/intelligence/mutations/generate
@@ -23,7 +22,6 @@ POST /ambient/audio/generate
 POST /ambient/email/generate
 POST /ambient/voice/process
 POST /api/decisions/:id/reflect
-POST /api/decisions/:id/vote
 POST /autopilot/panic
 POST /beta/intake
 POST /brief/generate

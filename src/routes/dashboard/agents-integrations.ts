@@ -404,12 +404,20 @@ agentIntegrationRoutes.post('/agents/integrations/:name/connect', async (c) => {
 
   if (!productId) return c.redirect('/agents/integrations');
 
-  // Verify product ownership
-  const prodResult = await query(
-    'SELECT id FROM products WHERE id = ? AND owner_id = ?',
-    [productId, founder.id],
-  );
-  if (prodResult.rows.length === 0) return c.redirect('/agents/integrations');
+  // A THIRD DOOR ONTO "STORE A CREDENTIAL FOR THIS COMPANY". The other two —
+  // /integrations/:type/connect and /connections/add — now ask
+  // `can_manage_company`; this one asked whether you owned the company, which
+  // is a different question and refused every co-founder who had been invited
+  // to manage exactly this.
+  //
+  // Asked inline rather than in middleware because the company arrives in the
+  // REQUEST BODY here. A router guard resolves the company from the path or the
+  // selection, so it would have authorized one company while the handler wrote
+  // a credential into another. Same predicate, asked where the answer is known.
+  const { memberMay } = await import('../../services/team/members.js');
+  if (!(await memberMay(productId, founder.id, 'can_manage_company'))) {
+    return c.redirect('/agents/integrations');
+  }
 
   // Every submitted field used to go into `config_json` in the clear — api
   // keys, bot tokens and auth tokens included — while the sibling form at

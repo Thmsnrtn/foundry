@@ -17,11 +17,18 @@
 // route that leaves the list does so because somebody decided which capability
 // it needs, or decided it needs none and said why.
 //
-// WHAT COUNTS AS ASKING: `requireCompanyCapability`, `requireOwner`, or a
-// router-level `.use('*', …)` carrying one. Deliberately narrow — an inline
-// ownership scope inside the handler is what this campaign has been REMOVING,
-// because "the company you own" is a different question from "may you do
-// this", and answering the first was how the second went unasked.
+// WHAT COUNTS AS ASKING: `requireCompanyCapability`, `requireOwner`, a
+// router-level `.use('*', …)` carrying one, or a `memberMay(...)` call inside
+// the handler. The last is the same predicate without the middleware wrapper,
+// and some routes have to ask it there — a handler whose company arrives in the
+// REQUEST BODY cannot be guarded by middleware that resolves the company from
+// the path or the selection, or it would authorize one company and write to
+// another.
+//
+// What does NOT count is an inline ownership scope — `owner_id = ?`, or a
+// `getProductByOwner` call. That is what this campaign has been REMOVING:
+// "the company you own" is a different question from "may you do this", and
+// answering the first is how the second went unasked.
 //
 // Run: node scripts/check-route-guards.mjs [--write]
 // =============================================================================
@@ -46,7 +53,7 @@ function strip(src) {
     .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
 }
 
-const GUARD = /require(CompanyCapability|Owner)\s*\(/;
+const GUARD = /require(CompanyCapability|Owner)\s*\(|\bmemberMay\s*\(/;
 const found = [];
 
 for (const file of tsFiles(DIR)) {
@@ -56,14 +63,23 @@ for (const file of tsFiles(DIR)) {
   if (/\.use\(\s*'\*'\s*,[\s\S]{0,200}?require(CompanyCapability|Owner)\s*\(/.test(src)) continue;
 
   const lines = src.split('\n');
+  // Where each route declaration starts, so a handler's own body can be read
+  // to its end rather than guessed at by a fixed number of lines.
+  const starts = [];
   lines.forEach((line, i) => {
-    const m = line.match(/\.(post|put|patch|delete)\(\s*'([^']+)'/);
-    if (!m) return;
-    // The guard may sit on the same line or on the next two, depending on how
-    // the call is wrapped. Read the declaration, not one line of it.
-    const decl = lines.slice(i, i + 3).join(' ');
-    if (GUARD.test(decl)) return;
-    found.push(`${m[1].toUpperCase()} ${m[2]}`);
+    // Anchored to the start of the line: a route declaration is a top-level
+    // statement. Without the anchor `const founder = c.get('founder')` reads as
+    // a route named "founder" and truncates the handler above it to one line —
+    // which silently hid every inline check in this file.
+    const m = line.match(/^\s*[A-Za-z_$][\w$]*\.(post|put|patch|delete|get)\(\s*'([^']+)'/);
+    if (m) starts.push({ i, method: m[1], path: m[2] });
+  });
+
+  starts.forEach((r, n) => {
+    if (r.method === 'get') return;                       // reads are not this
+    const end = n + 1 < starts.length ? starts[n + 1].i : lines.length;
+    if (GUARD.test(lines.slice(r.i, end).join('\n'))) return;
+    found.push(`${r.method.toUpperCase()} ${r.path}`);
   });
 }
 
