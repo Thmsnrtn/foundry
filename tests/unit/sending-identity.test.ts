@@ -254,3 +254,56 @@ describe('the founder can reach the control', () => {
     expect(routes).toMatch(/sending_error/);
   });
 });
+
+// =============================================================================
+// A refusal is not an ambiguity.
+//
+// The gateway mapped every handler throw to phase 'execution', which callers
+// read as "the handler ran and we do not know what reached the outside world"
+// — `responsibility-assisted-email.ts` sets effect_certainty='ambiguous' on it
+// and books a reconciliation window. That is right for a socket that closed
+// mid-write. It is wrong for a message the handler refused to send before
+// touching the provider: nothing was attempted, and filing it as ambiguous
+// invents reconciliation work for an effect that does not exist and reports
+// the send as dispatched.
+// =============================================================================
+
+describe('a refusal before dispatch is definitive', () => {
+  it('is reported as refused, not as an execution failure', async () => {
+    const { invoke } = await import('../../src/services/outbound/gateway.js');
+    const { sendEmailHandler, SEND_EMAIL_POLICY } = await import(
+      '../../src/services/integration/resend.js');
+    const { registerToolHandler } = await import('../../src/services/outbound/gateway.js');
+    registerToolHandler('send_email', sendEmailHandler, SEND_EMAIL_POLICY);
+
+    const result = await invoke({
+      productId: P, tool: 'send_email', action: 'assisted notice',
+      params: { to: [CUSTOMER], subject: 'Hi', html: '<p>hi</p>' },
+      dedupKey: `refuse:${Math.random()}`, customerExternalId: CUSTOMER,
+      surface: 'email_outbound', dataClass: 'customer',
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.phase,
+      'ambiguous would book reconciliation for a message that never left')
+      .toBe('refused');
+    expect(result.reason).toMatch(/sending address/i);
+  });
+
+  it('and the assisted path treats only execution as ambiguous', () => {
+    // This is the one live third-party sender, and the reachable consequence
+    // of enforcing the rule. It must not claim the notice was dispatched.
+    // Read from the source: driving the full ladder here would prove less
+    // about this line than the line itself does.
+    const assisted = readFileSync(
+      resolve(__dirname, '../../src/services/institution/responsibility-assisted-email.ts'),
+      'utf8');
+    const decision = assisted.match(/const ambiguous\s*=\s*[^\n;]+/)?.[0] ?? '';
+    expect(decision, 'the ambiguity test must exist to be checked').not.toBe('');
+    expect(decision).toContain("'execution'");
+    expect(decision,
+      'a refusal before dispatch must not book a reconciliation window')
+      .not.toContain('refused');
+  });
+});

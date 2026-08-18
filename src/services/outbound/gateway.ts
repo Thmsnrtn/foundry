@@ -40,7 +40,16 @@ export type RefusalPhase =
   | 'budget'
   | 'in_flight'
   | 'no_handler'
-  | 'execution';
+  | 'execution'
+  // A handler refused before touching the provider. 'execution' means "the
+  // handler ran and we do not know what reached the outside world", which is
+  // why callers schedule reconciliation on it. A refusal decided inside the
+  // handler — the sender-of-record rule, a missing company sending identity —
+  // is the opposite: definitively nothing was attempted. Filing one under the
+  // other makes a message that never left the building look like one that
+  // might have, and books reconciliation work for an effect that does not
+  // exist.
+  | 'refused';
 
 export type GatewayResult =
   | {
@@ -277,6 +286,12 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     result = await handler(req);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
+    // A handler may declare that it refused before reaching the provider.
+    // Nothing more elaborate than a flag on the error: the alternative is a
+    // taxonomy of failure types nobody would keep accurate.
+    const definitivelyNotAttempted =
+      typeof err === 'object' && err !== null
+      && (err as { notAttempted?: unknown }).notAttempted === true;
     // Release the reservation: a failed attempt must not convert every
     // subsequent retry into a fake cached success for the TTL window.
     await releaseIfReserved();
@@ -287,12 +302,12 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
       tool: req.tool,
       action: req.action,
       outcome: 'failed',
-      reason: `execution: ${reason}`,
+      reason: `${definitivelyNotAttempted ? 'refused' : 'execution'}: ${reason}`,
     });
     return {
       ok: false,
       invocation_id: invocationId,
-      phase: 'execution',
+      phase: definitivelyNotAttempted ? 'refused' : 'execution',
       reason,
     };
   }
