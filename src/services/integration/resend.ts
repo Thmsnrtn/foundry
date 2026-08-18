@@ -10,6 +10,10 @@ import { nanoid } from 'nanoid';
 import { getIntegration } from './fabric.js';
 import { withRetry } from '../resilience.js';
 import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/gateway.js';
+import { assertSenderOfRecord, SenderOfRecordError } from '../outbound/sender-of-record.js';
+
+/** The one Foundry From, named once so the guard and both providers agree. */
+const DEFAULT_FOUNDRY_FROM = 'Foundry <noreply@foundry.app>';
 import { log } from '../../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -248,6 +252,86 @@ export async function executeEmailSend(
   return { success: true };
 }
 
+
+/**
+ * Is this message going to the founder, or to one of their customers?
+ *
+ * Decided from the database rather than from the request: `dataClass` and
+ * `surface` are what the CALLER says the message is, and the rule is about who
+ * is actually receiving it.
+ *
+ * A message addressed to the founder AND a customer is a message to a
+ * customer; the strictest recipient decides.
+ */
+async function recipientIsFounder(
+  productId: string, recipients: string[],
+): Promise<boolean> {
+  if (recipients.length === 0) return true;      // nothing addressed to anyone
+  const known = await query(
+    `SELECT lower(f.email) AS email
+       FROM products p JOIN founders f ON f.id = p.owner_id
+      WHERE p.id = ?
+      UNION
+     SELECT lower(f.email) AS email
+       FROM team_members t JOIN founders f ON f.id = t.founder_id
+      WHERE t.product_id = ? AND t.status = 'active'`,
+    [productId, productId]);
+  const inbox = new Set(
+    (known.rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.email)));
+  return recipients.every((r) => inbox.has(r));
+}
+
+/**
+ * Apply the sender-of-record rule at the send boundary.
+ *
+ * THE RULE EXISTED AND NOTHING CALLED IT. `services/outbound/sender-of-record.ts`
+ * says Foundry must never be the From on a message to a THIRD PARTY — a
+ * founder's customer. Those go out under the founder's own connected sender:
+ * their domain, their opt-out footer, their CAN-SPAM responsibility. Its header
+ * says "Department third-party paths must call it before dispatch" and adds
+ * "this lights the rule up BEFORE the live path exists, so it can never regress
+ * open". `assertSenderOfRecord` had ZERO callers anywhere in the system, and
+ * the live path — this handler — defaults `from` to a Foundry domain. It
+ * regressed open because the live path was built in a different file.
+ *
+ * WHY THIS RECORDS RATHER THAN REFUSES, FOR NOW. The rule presupposes a
+ * "founder's own connected sender". There is no such mechanism: every send in
+ * this system goes through Foundry's platform Resend key, so no caller CAN
+ * satisfy the rule today. Making it fatal would not restore the intended
+ * behaviour — it would silently stop the one live third-party path (the
+ * responsibility ladder's assisted notice) with no way for a founder to fix
+ * it. That is an owner decision about the product, not a bug fix, and it is
+ * recorded as an open decision rather than taken here.
+ *
+ * What changes today is that the violation stops being invisible: every
+ * third-party send under a Foundry domain is logged and counted against the
+ * product, so the liability has a number instead of a comment.
+ */
+async function applySenderOfRecord(
+  req: GatewayRequest, params: SendEmailParams,
+): Promise<void> {
+  const recipients = (params.to ?? []).map((r) => r.toLowerCase().trim()).filter(Boolean);
+  const from = params.from ?? DEFAULT_FOUNDRY_FROM;
+  try {
+    assertSenderOfRecord({
+      from,
+      recipientIsFounder: await recipientIsFounder(req.productId, recipients),
+    });
+  } catch (err) {
+    if (!(err instanceof SenderOfRecordError)) throw err;
+    log.warn('resend.sender_of_record.third_party_under_foundry_domain', {
+      productId: req.productId,
+      from,
+      recipientCount: recipients.length,
+      // The addresses themselves are the founder's customers; the count is
+      // what an operator needs and the identities are not.
+      surface: req.surface,
+      note: 'no founder-connected sender exists yet — see docs/design/LIABILITY-AUDIT.md',
+    });
+  }
+}
+
+
 // ─── send_email Handler (registered with the gateway) ────────────────────────
 
 /**
@@ -268,6 +352,27 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
   const apiKey = process.env.RESEND_API_KEY;
   const sendgridKey = process.env.SENDGRID_API_KEY;
 
+  // WHOSE NAME IS ON THIS MESSAGE?
+  //
+  // `services/outbound/sender-of-record.ts` states the rule: Foundry must never
+  // be the From on a message to a THIRD PARTY — a founder's customer. Those go
+  // out under the founder's own connected sender, their domain, their opt-out
+  // footer, their CAN-SPAM responsibility. Foundry's domain is the From only on
+  // mail to the FOUNDER.
+  //
+  // Its header says "Department third-party paths must call it before
+  // dispatch". Nothing called it. `assertSenderOfRecord` had zero callers
+  // anywhere in the system, while this handler — the live send path — defaults
+  // `from` to 'Foundry <noreply@foundry.app>' and the SendGrid fallback
+  // hard-codes 'briefings@foundry.app'. So every customer-facing send has gone
+  // out under a Foundry domain, against a rule written down, implemented, and
+  // never invoked.
+  //
+  // The comment in scp/actions/executor.ts predicted exactly this: "When live
+  // sending is wired, the send boundary MUST call assertSenderOfRecord". Live
+  // sending was wired somewhere else.
+  await applySenderOfRecord(req, params);
+
   if (!apiKey && !sendgridKey) {
     log.info('resend.send_email.logged_only', {
       productId: req.productId,
@@ -286,7 +391,11 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
       headers: { Authorization: `Bearer ${sendgridKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         personalizations: [{ to: params.to.map((email) => ({ email })) }],
-        from: { email: 'briefings@foundry.app', name: 'Foundry' },
+        // Same address the check above was applied to, so the fallback
+        // provider cannot send under a From the rule never saw.
+        from: params.from
+          ? { email: params.from.replace(/^.*<|>.*$/g, '') }
+          : { email: 'briefings@foundry.app', name: 'Foundry' },
         subject: params.subject,
         content: [
           ...(params.text ? [{ type: 'text/plain', value: params.text }] : []),
@@ -310,7 +419,7 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
             'Idempotency-Key': req.dedupKey!,
           },
           body: JSON.stringify({
-            from: params.from ?? 'Foundry <noreply@foundry.app>',
+            from: params.from ?? DEFAULT_FOUNDRY_FROM,
             to: params.to,
             subject: params.subject,
             html: params.html,
@@ -412,3 +521,8 @@ export async function getEmailMetrics(
 
   return { sent, delivered, opened, clicked, open_rate, click_rate };
 }
+
+/** Exposed for tests. The determination is the load-bearing half of the
+ * sender-of-record rule — the rule itself is four lines — and it reads the
+ * database, so testing it through a mocked provider would prove less. */
+export const __recipientIsFounderForTest = recipientIsFounder;
