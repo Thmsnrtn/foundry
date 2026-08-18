@@ -30,4 +30,15 @@ for (const file of walk('src')) {
   }
 }
 const seen=new Set(); const out=bad.filter(b=>{const k=b.split('  ')[1];if(seen.has(k))return false;seen.add(k);return true;});
-console.log(out.length?out.join('\n')+`\n\n${out.length} UPDATE-SET column mismatches`:'CLEAN — all UPDATE SET columns exist');
+// IT REPORTED AND PASSED. This found the mismatches perfectly well and then
+// exited 0 every time, and `lint:columns` chains its checks with `&&`, so an
+// `UPDATE products SET a_column_that_does_not_exist = 1` printed a line into a
+// CI log that nothing read and the build went green. A detector with no edge to
+// a consequence is exactly the defect class this campaign is about, and an
+// instrument is not exempt from it.
+if (out.length) {
+  console.error('UPDATE SET references a column the table does not have:\n' + out.join('\n'));
+  console.error('\nThese throw at runtime. On a route, that is a 500 for every caller.');
+  process.exit(1);
+}
+console.log('CLEAN — all UPDATE SET columns exist');

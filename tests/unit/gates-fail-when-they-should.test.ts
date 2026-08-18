@@ -1,0 +1,192 @@
+// =============================================================================
+// Tests: the instruments, turned on themselves
+//
+// This campaign's defect class is "a rule that exists, is believed, and has no
+// edge to the thing it governs." A CI gate is a rule. Two of them had exactly
+// that shape:
+//
+//   check-route-guards      its route-declaration pattern was unanchored, so
+//                           `const founder = c.get('founder')` matched as a
+//                           route and truncated every handler above it to one
+//                           line — hiding every inline check inside it.
+//   check-sql-columns       it found `UPDATE products SET a_column_that_does
+//                           _not_exist = 1` perfectly well, printed it, and
+//                           exited 0. Every time. `lint:columns` chains with
+//                           `&&`, so the line went into a log nobody read and
+//                           the build went green.
+//
+// A detector with no edge to a consequence is a detector nobody can rely on,
+// and neither of those was findable by reading the script — only by giving it
+// something it should refuse and watching what it did.
+//
+// So each gate gets a defect it is supposed to catch, and has to fail. This is
+// the same standard the campaign applies to every other load-bearing gate: a
+// guard is believed after it has been mutated, not after it has been read.
+// =============================================================================
+
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+
+import { afterEach, describe, expect, it } from 'vitest';
+import { execFileSync } from 'child_process';
+import { existsSync, rmSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
+
+const ROOT = resolve(__dirname, '../..');
+const planted: string[] = [];
+
+/** THIS FILE MUST NOT LOOK LIKE THE THING IT PLANTS. Several gates scan
+ *  `tests/` as well as `src/`, so a forbidden status literal or a fabricated
+ *  CREATE TABLE written out in full here would make them fail on a clean tree —
+ *  the test would be the defect. Every fixture is therefore assembled from
+ *  fragments that are harmless apart. */
+const j = (...parts: string[]): string => parts.join('');
+
+/** Write a file the gate under test should object to. Named so nothing else in
+ *  the suite collects it: the fabrication gate scans tests/ too. */
+function plant(relPath: string, contents: string): void {
+  const abs = resolve(ROOT, relPath);
+  writeFileSync(abs, contents);
+  planted.push(abs);
+}
+
+function run(script: string): { code: number; output: string } {
+  try {
+    const output = execFileSync('node', [resolve(ROOT, 'scripts', script)],
+      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return { code: 0, output };
+  } catch (err) {
+    const e = err as { status?: number; stdout?: string; stderr?: string };
+    return { code: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+  }
+}
+
+afterEach(() => {
+  for (const p of planted.splice(0)) if (existsSync(p)) rmSync(p);
+});
+
+describe('every gate refuses the defect it exists for', () => {
+  it('check-sql-columns fails on an UPDATE SET of a column that does not exist', () => {
+    // The one that reported and passed. Asserting the EXIT CODE, not the
+    // output, is the whole point — it always printed the right thing.
+    plant('src/services/_gate_fixture_a.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`UPDATE ', 'products SET ',
+        'zz_not_a_column = 1 WHERE id = ?`, []);\n'));
+    const r = run('check-sql-columns.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('zz_not_a_column');
+  });
+
+  it('check-select-columns fails on a SELECT of a column that does not exist', () => {
+    plant('src/services/_gate_fixture_b.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`SELECT ', 'zz_not_a_column FROM ',
+        'products WHERE id = ?`, []);\n'));
+    expect(run('check-select-columns.mjs').code).toBe(1);
+  });
+
+  it('check-insert-columns fails on an INSERT naming a column that does not exist', () => {
+    plant('src/services/_gate_fixture_c.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`INSERT ', 'INTO products ',
+        '(id, zz_not_a_column) VALUES (?, ?)`, []);\n'));
+    expect(run('check-insert-columns.mjs').code).toBe(1);
+  });
+
+  it('check-check-vocabularies fails on a status the column will not accept', () => {
+    plant('src/services/_gate_fixture_d.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`UPDATE ', 'push_log SET status',
+        " = 'zz_not", "_a_status' WHERE id = ?`, []);\n"));
+    const r = run('check-check-vocabularies.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('zz_not_a_status');
+  });
+
+  it('check-autonomous-approval fails on an approval that asks nothing', () => {
+    plant('src/services/_gate_fixture_e.ts',
+      'import { approveAndExecute } from "../scp/actions/executor.js";\n'
+      + 'export const go = (id: string) => approveAndExecute(id, "whoever");\n');
+    expect(run('check-autonomous-approval.mjs').code).toBe(1);
+  });
+
+  it('check-autonomous-approval fails on an execution status advanced outside the executor', () => {
+    plant('src/services/_gate_fixture_f.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`UPDATE ', 'action_executions SET ',
+        "status='approved' WHERE id=?`, []);\n"));
+    expect(run('check-autonomous-approval.mjs').code).toBe(1);
+  });
+
+  it('check-route-guards fails on a new mutating route that asks no capability', () => {
+    // The gate that was reading one line of each handler. A route planted in a
+    // file with no guards at all has to surface.
+    plant('src/routes/dashboard/_gate_fixture_g.ts',
+      "import { Hono } from 'hono';\n"
+      + "export const gateFixture = new Hono();\n"
+      + "gateFixture.post('/zz-gate-fixture', async (c) => c.text('x'));\n");
+    const r = run('check-route-guards.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('/zz-gate-fixture');
+  });
+
+  it('check-route-guards accepts a route that asks inline, not only in middleware', () => {
+    // A handler whose company arrives in the request body cannot be guarded by
+    // middleware that resolves the company from the path or the selection. The
+    // gate has to read the handler to see that.
+    plant('src/routes/dashboard/_gate_fixture_h.ts',
+      "import { Hono } from 'hono';\n"
+      + "import { memberMay } from '../../services/team/members.js';\n"
+      + "export const gateFixture = new Hono();\n"
+      + "gateFixture.post('/zz-gate-inline', async (c) => {\n"
+      + "  const founder = c.get('founder') as { id: string };\n"
+      + "  if (!(await memberMay('p', founder.id, 'can_manage_company'))) return c.text('no', 403);\n"
+      + "  return c.text('ok');\n"
+      + "});\n");
+    const r = run('check-route-guards.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
+  it('check-kernel-boundary fails when the kernel imports a pack', () => {
+    plant('src/services/memory/_gate_fixture_i.ts',
+      "import type { ActionType } from '../scp/actions/executor.js';\n"
+      + 'export type Y = ActionType;\n');
+    expect(run('check-kernel-boundary.mjs').code).toBe(1);
+  });
+
+  it('check-test-schema-fabrication fails when a test builds a table the migrations own', () => {
+    plant('tests/unit/_gate_fixture_j.ts',
+      'import { query } from "../../src/db/client.js";\n'
+      + j('export const x = () => query(`CREATE ', 'TABLE IF NOT EXISTS ',
+        'decisions (id TEXT PRIMARY KEY)`, []);\n'));
+    expect(run('check-test-schema-fabrication.mjs').code).toBe(1);
+  });
+
+  it('audit-consequential-effects fails on an outward call its rules cannot see', () => {
+    // The window blind spot: a POST to a URL held in a variable matched no rule
+    // and was therefore absent from the inventory rather than reported.
+    plant('src/services/_gate_fixture_k.ts',
+      'export async function sneak(endpoint: string): Promise<void> {\n'
+      + '  await fetch(endpoint, { headers: {}, body: "{}", method: "POST" });\n'
+      + '}\n');
+    const r = run('audit-consequential-effects.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_k');
+  });
+});
+
+describe('and passes on a clean tree', () => {
+  it('every gate is green with nothing planted', () => {
+    // The other half of the mutation: a gate that always fails is as useless as
+    // one that never does.
+    for (const script of [
+      'check-sql-columns.mjs', 'check-select-columns.mjs', 'check-insert-columns.mjs',
+      'check-check-vocabularies.mjs', 'check-autonomous-approval.mjs',
+      'check-route-guards.mjs', 'check-kernel-boundary.mjs',
+      'check-test-schema-fabrication.mjs', 'audit-consequential-effects.mjs',
+    ]) {
+      const r = run(script);
+      expect(r.code, `${script}: ${r.output}`).toBe(0);
+    }
+  });
+});
