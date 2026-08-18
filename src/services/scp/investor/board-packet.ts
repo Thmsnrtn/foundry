@@ -125,7 +125,7 @@ export async function generateBoardPacket(
   let stressorsText = 'None active.';
   try {
     const stressorsResult = await query(
-      `SELECT title, severity, description FROM stressor_history
+      `SELECT stressor_name AS title, severity, signal AS description FROM stressor_history
        WHERE product_id=? AND status='active'`,
       [productId]
     );
@@ -165,7 +165,7 @@ export async function generateBoardPacket(
   let experimentsText = 'No experiments this quarter.';
   try {
     const experimentsResult = await query(
-      `SELECT name, status, outcome_summary FROM experiments
+      `SELECT name, status, learnings AS outcome_summary FROM experiments
        WHERE product_id=? AND updated_at >= ? ORDER BY updated_at DESC LIMIT 10`,
       [productId, start]
     );

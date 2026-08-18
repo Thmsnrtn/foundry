@@ -55,25 +55,33 @@ export class ShieldAgent extends BaseAgent {
     const { productId, companyName } = context;
 
     // ── 1. Query products for company age and lifecycle state ─────────────────
+    // `lifecycle_state` has never been a column on `products`. The column is
+    // `company_lifecycle_state`, so this query raised SQLITE_ERROR on every
+    // run and Shield's session was marked failed before it read anything.
     const productResult = await db(
-      `SELECT created_at, lifecycle_state
+      `SELECT created_at, company_lifecycle_state AS lifecycle_state
        FROM products
        WHERE id = ?`,
       [productId]
     );
 
     // ── 2. Query founders for company details ──────────────────────────────────
+    // Four columns that do not exist, on a table that does not carry
+    // `product_id`. The founder is reached through `products.owner_id`, their
+    // name is `name`, and the company's name and URL live on the product —
+    // which is where they always were, because the company IS the product.
     const founderResult = await db(
-      `SELECT full_name, email, company_name, company_url
-       FROM founders
-       WHERE product_id = ?
+      `SELECT f.name AS founder_name, f.email,
+              p.name AS company_name, p.github_repo_url AS company_url
+       FROM products p JOIN founders f ON f.id = p.owner_id
+       WHERE p.id = ?
        LIMIT 1`,
       [productId]
     );
 
     // ── 3. Query integrations for credential expiry ───────────────────────────
     const integrationsResult = await db(
-      `SELECT source, last_synced_at,
+      `SELECT type AS source, last_synced_at,
               datetime(last_synced_at, '+90 days') as estimated_expiry
        FROM integrations
        WHERE product_id = ?
@@ -138,7 +146,7 @@ export class ShieldAgent extends BaseAgent {
       ? (founderResult.rows[0] as Record<string, unknown>)
       : null;
     const founderContext = founderRow
-      ? `Founder: ${founderRow.full_name as string ?? 'Unknown'}. Company URL: ${founderRow.company_url as string ?? 'Not set'}.`
+      ? `Founder: ${founderRow.founder_name as string ?? 'Unknown'}. Company URL: ${founderRow.company_url as string ?? 'Not set'}.`
       : 'No founder details available.';
 
     const integrationRows = integrationsResult.rows as Record<string, unknown>[];

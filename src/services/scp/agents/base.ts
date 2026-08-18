@@ -678,7 +678,8 @@ Rules:
     // Check for pending self-initiated actions from the initiative queue
     try {
       const result = await query(
-        `SELECT id, action_type, action_description, parameters_json
+        `SELECT id, initiative_type AS action_type, description AS action_description,
+                context AS parameters_json
          FROM agent_initiative_queue
          WHERE product_id=? AND agent_name=? AND status='pending'
          ORDER BY priority DESC, created_at ASC

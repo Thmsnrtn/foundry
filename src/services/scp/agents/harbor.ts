@@ -95,7 +95,8 @@ export class HarborAgent extends BaseAgent {
 
     // ── 4. Query existing customer_intelligence for context ───────────────────
     const atRiskResult = await db(
-      `SELECT external_id, name, email, stage, health_score, mrr_cents
+      `SELECT external_customer_id AS external_id, account_name AS name, email,
+              stage, health_score, mrr_cents
        FROM customer_intelligence
        WHERE product_id = ? AND stage IN ('at_risk', 'churned')
        ORDER BY health_score ASC

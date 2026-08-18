@@ -83,7 +83,8 @@ export class ForgeAgent extends BaseAgent {
 
     // ── 4. Query high-value customers from intelligence table ─────────────────
     const highValueResult = await db(
-      `SELECT external_id, name, email, mrr_cents, stage, health_score
+      `SELECT external_customer_id AS external_id, account_name AS name, email,
+              mrr_cents, stage, health_score
        FROM customer_intelligence
        WHERE product_id = ? AND mrr_cents > 0
        ORDER BY mrr_cents DESC

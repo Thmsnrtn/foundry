@@ -241,31 +241,65 @@ export async function assessMAReadiness(productId: string): Promise<MAReadinessS
   const customerCount = (metricsRow.customer_count as number) ?? 0;
 
   // ── 2. Load historical MRR growth for consistency check ──
+  // `mrr_growth_pct` is not a column and never has been. This query raised on
+  // every call and the catch swallowed it, so the growth-consistency check
+  // scored every company as having no history — silently, inside a readiness
+  // report a founder takes to an acquirer. Growth comes from consecutive
+  // snapshots, which is where it was always going to have to come from.
   const mrrGrowthHistory: number[] = [];
   try {
     const res = await query(
-      `SELECT mrr_growth_pct FROM metric_snapshots
-       WHERE product_id=? AND mrr_growth_pct IS NOT NULL
-       ORDER BY snapshot_date DESC LIMIT 6`,
+      `SELECT mrr_cents FROM metric_snapshots
+       WHERE product_id=? AND mrr_cents IS NOT NULL
+       ORDER BY snapshot_date DESC LIMIT 7`,
       [productId]
     );
-    for (const row of res.rows) {
-      mrrGrowthHistory.push((row as Record<string, unknown>).mrr_growth_pct as number);
+    const series = (res.rows as unknown as Array<Record<string, unknown>>)
+      .map((r) => Number(r.mrr_cents));
+    for (let i = 0; i + 1 < series.length; i++) {
+      const current = series[i];
+      const prior = series[i + 1];
+      // Growth from zero has no denominator. Skipping the period is honest;
+      // calling it 100% would put a number in an acquirer's hands.
+      if (prior > 0) mrrGrowthHistory.push(((current - prior) / prior) * 100);
     }
   } catch { /* ok */ }
 
-  // ── 3. Compute NRR proxy (use stored nrr if available, else derive) ──
+  // ── 3. Compute NRR proxy ──
+  //
+  // The comment here read "use stored nrr if available, else derive". There is
+  // no `nrr` column, so "available" was never true — and there was no `else`:
+  // the query raised, the catch swallowed it, and `nrr` stayed null. Net
+  // revenue retention contributes four of this report's points, and it scored
+  // zero for every company that has ever run it, in a document a founder takes
+  // to an acquirer.
+  //
+  // The components ARE recorded. NRR over a period is the revenue from
+  // existing customers at the end divided by what it was at the start:
+  // (start + expansion − contraction − churn) / start. `new_mrr_cents` is
+  // deliberately excluded — new customers are acquisition, not retention, and
+  // including them is how a company with heavy churn shows NRR above 100.
   let nrr: number | null = null;
   try {
     const res = await query(
-      `SELECT nrr FROM metric_snapshots
-       WHERE product_id=? AND nrr IS NOT NULL
-       ORDER BY snapshot_date DESC LIMIT 1`,
+      `SELECT mrr_cents, expansion_mrr_cents, contraction_mrr_cents, churned_mrr_cents
+         FROM metric_snapshots
+        WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 2`,
       [productId]
     );
-    if (res.rows.length > 0) {
-      nrr = (res.rows[0] as Record<string, unknown>).nrr as number;
+    const rows = res.rows as unknown as Array<Record<string, unknown>>;
+    const prior = rows[1];
+    const latest = rows[0];
+    const start = prior ? Number(prior.mrr_cents ?? 0) : 0;
+    if (latest && start > 0) {
+      const expansion = Number(latest.expansion_mrr_cents ?? 0);
+      const contraction = Number(latest.contraction_mrr_cents ?? 0);
+      const churned = Number(latest.churned_mrr_cents ?? 0);
+      nrr = ((start + expansion - contraction - churned) / start) * 100;
     }
+    // One snapshot, or a starting MRR of zero, leaves this null — which is
+    // what `scoreRevenueQuality` already treats as "not known", distinct from
+    // a company that genuinely retains nothing.
   } catch { /* ok */ }
 
   // ── 4. Company age (from products table) ──

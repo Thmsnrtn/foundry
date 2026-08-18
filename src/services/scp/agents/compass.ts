@@ -79,13 +79,15 @@ export class CompassAgent extends BaseAgent {
 
     // ── 4. Query active company OKRs ──────────────────────────────────────────
     const okrResult = await db(
-      `SELECT objective, status FROM company_okrs WHERE product_id=? AND status='active' LIMIT 5`,
+      `SELECT objective_text AS objective, status FROM company_okrs WHERE product_id=? AND status='active' LIMIT 5`,
       [productId]
     );
 
     // ── 5. Query recent strategic decisions log ───────────────────────────────
     const decisionsLogResult = await db(
-      `SELECT title, decision_made, outcome_rating FROM strategic_decisions_log WHERE product_id=? ORDER BY created_at DESC LIMIT 3`,
+      `SELECT decision_title AS title, decision_description AS decision_made,
+              retrospective_score AS outcome_rating
+         FROM strategic_decisions_log WHERE product_id=? ORDER BY made_at DESC LIMIT 3`,
       [productId]
     );
 

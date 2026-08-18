@@ -116,8 +116,8 @@ export async function generateDailyBriefing(
   let riskState: string | null = null;
   try {
     const signalResult = await query(
-      `SELECT signal_score, risk_state FROM signal_history
-       WHERE product_id=? ORDER BY computed_at DESC LIMIT 1`,
+      `SELECT score AS signal_score, risk_state FROM signal_history
+       WHERE product_id=? ORDER BY recorded_at DESC LIMIT 1`,
       [productId]
     );
     if (signalResult.rows.length > 0) {
@@ -133,15 +133,27 @@ export async function generateDailyBriefing(
   let mrrCents: number | null = null;
   let mrrGrowthPct: number | null = null;
   try {
+    // `mrr_growth_pct` has never been a column on `metric_snapshots`, so this
+    // query raised — and the catch below, written for a table that "may not
+    // exist yet", swallowed it. The founder's briefing has shown no signal
+    // score and no growth figure since the column was renamed, and said
+    // nothing about why. Growth is DERIVED from two snapshots, which is what
+    // it always was.
     const metricsResult = await query(
-      `SELECT mrr_cents, mrr_growth_pct FROM metric_snapshots
-       WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 1`,
+      `SELECT mrr_cents, snapshot_date FROM metric_snapshots
+       WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 2`,
       [productId]
     );
     if (metricsResult.rows.length > 0) {
       const mr = metricsResult.rows[0] as Record<string, unknown>;
       mrrCents = mr.mrr_cents as number | null;
-      mrrGrowthPct = mr.mrr_growth_pct as number | null;
+      const prior = metricsResult.rows[1] as Record<string, unknown> | undefined;
+      const priorMrr = prior ? (prior.mrr_cents as number | null) : null;
+      // One snapshot is not a growth rate, and neither is growth from zero.
+      // Reporting either as a percentage invents a denominator.
+      mrrGrowthPct = (mrrCents != null && priorMrr != null && priorMrr > 0)
+        ? Math.round(((mrrCents - priorMrr) / priorMrr) * 1000) / 10
+        : null;
     }
   } catch {
     // metric_snapshots columns may vary

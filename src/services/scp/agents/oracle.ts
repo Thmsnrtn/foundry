@@ -104,7 +104,7 @@ export class OracleAgent extends BaseAgent {
 
     // ── 5. Query running experiments for context ──────────────────────────────
     const experimentsResult = await db(
-      `SELECT title, hypothesis, success_metric, status, started_at
+      `SELECT name AS title, hypothesis, success_metric, status, started_at
        FROM experiments
        WHERE product_id = ? AND status IN ('running', 'completed')
        ORDER BY started_at DESC

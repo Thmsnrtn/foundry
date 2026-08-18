@@ -150,16 +150,21 @@ export async function measurePendingPredictions(
         if (expMatch) {
           const experimentId = expMatch[1];
           const expectedWinner = winnerMatch ? winnerMatch[1] : null;
+          // `hypotheses` has neither `winner_variant` nor `title`. Both live
+          // where the winner is decided — on `experiments`, which is also what
+          // `experiment_id=` in the criteria names. Querying the hypothesis for
+          // the experiment's result raised on every prediction of this kind, so
+          // none of them was ever scored.
           const result = await query(
-            `SELECT status, winner_variant FROM hypotheses
-             WHERE product_id = ? AND (id = ? OR title LIKE ?)
+            `SELECT status, winner FROM experiments
+             WHERE product_id = ? AND (id = ? OR name LIKE ?)
              LIMIT 1`,
             [productId, experimentId, `%${experimentId}%`]
           );
           if (result.rows.length > 0) {
             const expRow = result.rows[0] as Record<string, unknown>;
             const status = expRow.status as string;
-            const winner = expRow.winner_variant as string | null;
+            const winner = expRow.winner as string | null;
             if (status === 'concluded' || status === 'completed') {
               if (expectedWinner && winner) {
                 outcome = winner === expectedWinner ? 'correct' : 'incorrect';

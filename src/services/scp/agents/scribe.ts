@@ -84,7 +84,7 @@ export class ScribeAgent extends BaseAgent {
 
     // ── 4. Query recent wiki entries ──────────────────────────────────────────
     const wikiResult = await db(
-      `SELECT title, category FROM agent_wiki_entries WHERE product_id=? ORDER BY created_at DESC LIMIT 5`,
+      `SELECT title, section AS category FROM agent_wiki_entries WHERE product_id=? ORDER BY created_at DESC LIMIT 5`,
       [productId]
     );
 

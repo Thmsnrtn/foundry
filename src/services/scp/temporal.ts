@@ -56,13 +56,13 @@ export async function getSignalTimeline(
 ): Promise<SignalTimelineEntry[]> {
   // 1. Signal history for last N days
   const signalResult = await query(
-    `SELECT DATE(computed_at) as day,
-            AVG(signal_score) as signal_score,
+    `SELECT DATE(recorded_at) as day,
+            AVG(score) as signal_score,
             MAX(risk_state) as risk_state
      FROM signal_history
      WHERE product_id = ?
-       AND computed_at >= datetime('now', ? )
-     GROUP BY DATE(computed_at)
+       AND recorded_at >= datetime('now', ? )
+     GROUP BY DATE(recorded_at)
      ORDER BY day ASC`,
     [productId, `-${days} days`]
   );

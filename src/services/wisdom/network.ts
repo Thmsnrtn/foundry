@@ -164,8 +164,17 @@ export async function aggregateInsights(): Promise<number> {
         rows: Number(r.cnt),
       })),
       window: {
-        first_observed: patternRows.map((r) => String(r.first_observed ?? '')).sort()[0] ?? null,
-        last_observed: observedThrough,
+        // WHAT THIS CLOCK IS. `decision_patterns` carries one timestamp,
+        // `created_at`, and it is when the pattern row was WRITTEN — which for
+        // a decision outcome is when the outcome was scored, not when the
+        // decision was taken. So the freshness window bounds how long ago the
+        // institution learned this, not how long ago it happened. The
+        // difference is a scoring lag rather than years, but a window named
+        // for observation and measured on recording is the kind of thing that
+        // stops being close enough the moment somebody backfills.
+        measures: 'when the pattern was recorded, not when the decision was taken',
+        first_recorded: patternRows.map((r) => String(r.first_observed ?? '')).sort()[0] ?? null,
+        last_recorded: observedThrough,
       },
       excluded: [
         'patterns with no outcome direction',

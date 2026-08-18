@@ -188,7 +188,7 @@ export async function generateWeeklyEmailDigest(productId: string): Promise<Emai
   let stressorsContext = '';
   try {
     const res = await query(
-      `SELECT type, severity FROM stressor_history
+      `SELECT stressor_name AS type, severity FROM stressor_history
        WHERE product_id = ? AND status = 'active'
        ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'elevated' THEN 2 ELSE 3 END
        LIMIT 5`,
