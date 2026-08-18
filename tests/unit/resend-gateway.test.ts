@@ -68,6 +68,17 @@ beforeEach(async () => {
     'Test',
     founderId,
   ]);
+  // This file's sends go to 'cust@example.com' — a customer, not the founder —
+  // so the company needs a sender of its own. Before migration 150 these went
+  // out under 'Foundry <noreply@foundry.app>', which is the thing
+  // sender-of-record.ts has always forbidden. What follows exercises the
+  // gateway machinery; the sender rule itself is proved in
+  // sender-of-record-reach.test.ts.
+  const { setSendingIdentity } = await import('../../src/services/outbound/sending-identity.js');
+  await setSendingIdentity({
+    productId, provider: 'resend', credential: 're_company_key',
+    fromEmail: 'hello@testco.example', fromName: 'Test Co',
+  });
   // Reset cross-test state.
   await executeRaw(`DELETE FROM idempotency_keys`);
   await executeRaw(`DELETE FROM data_classifications`);
@@ -115,7 +126,12 @@ describe('executeEmailSend: logged-only mode (no API key)', () => {
     vi.stubEnv('RESEND_API_KEY', '');
     delete process.env.RESEND_API_KEY;
 
-    const actionId = await insertAction({});
+    // ADDRESSED TO THE FOUNDER. Logged-only is the dev path for FOUNDRY having
+    // no provider key — it is about Foundry's own mail. A message to a
+    // customer goes through the COMPANY's key, which is connected above, so
+    // "no key" is not a state that message can be in. Pointing this at a
+    // customer would have tested a scenario that cannot happen.
+    const actionId = await insertAction({ to: `${founderId}@test.local` });
     const r = await executeEmailSend(actionId);
     expect(r.success).toBe(true);
 
@@ -251,16 +267,26 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
 
 describe('send_email provider routing', () => {
   it('uses the server-owned SendGrid fallback without caller provider selection', async () => {
+    // ALSO FOUNDER MAIL. The SendGrid fallback is FOUNDRY's account, so it is
+    // deliberately unavailable to a company's own mail: falling back would put
+    // the founder's From through Foundry's provider, which is the exact
+    // substitution sender-of-record exists to prevent. The fallback is for
+    // Foundry's own messages, and that is what this proves.
     delete process.env.RESEND_API_KEY;
     vi.stubEnv('SENDGRID_API_KEY', 'sg_test');
     const fetchSpy = vi.fn(async () => new Response('', {
       status: 202, headers: { 'x-message-id': 'sg_1' },
     }));
     vi.stubGlobal('fetch', fetchSpy);
+    // The real product and the real founder. 'p1' names no company here, and
+    // a message to a company that does not exist has no founder to be
+    // addressed to — so it would be third-party mail with no sender, which is
+    // a different test than this one.
+    const founderEmail = `${founderId}@test.local`;
     const result = await sendEmailHandler({
-      productId: 'p1', agent: 'system', tool: 'send_email', action: 'digest',
-      params: { to: ['founder@example.com'], subject: 'Weekly', html: '<p>Hi</p>', text: 'Hi' },
-      dedupKey: 'weekly:p1:2026-08-14', customerExternalId: 'founder@example.com',
+      productId, agent: 'system', tool: 'send_email', action: 'digest',
+      params: { to: [founderEmail], subject: 'Weekly', html: '<p>Hi</p>', text: 'Hi' },
+      dedupKey: `weekly:${productId}:2026-08-14`, customerExternalId: founderEmail,
     });
     expect(result).toMatchObject({ message_id: 'sg_1' });
     expect(String(fetchSpy.mock.calls[0][0])).toContain('sendgrid.com');

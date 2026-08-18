@@ -11,6 +11,9 @@ import { getIntegration } from './fabric.js';
 import { withRetry } from '../resilience.js';
 import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/gateway.js';
 import { assertSenderOfRecord, SenderOfRecordError } from '../outbound/sender-of-record.js';
+import {
+  fromLine, getSendingIdentity, recordSendingIdentityAccepted,
+} from '../outbound/sending-identity.js';
 
 /** The one Foundry From, named once so the guard and both providers agree. */
 const DEFAULT_FOUNDRY_FROM = 'Foundry <noreply@foundry.app>';
@@ -282,7 +285,7 @@ async function recipientIsFounder(
 }
 
 /**
- * Apply the sender-of-record rule at the send boundary.
+ * Decide who this message goes out as, and refuse if the answer is nobody.
  *
  * THE RULE EXISTED AND NOTHING CALLED IT. `services/outbound/sender-of-record.ts`
  * says Foundry must never be the From on a message to a THIRD PARTY — a
@@ -291,44 +294,51 @@ async function recipientIsFounder(
  * says "Department third-party paths must call it before dispatch" and adds
  * "this lights the rule up BEFORE the live path exists, so it can never regress
  * open". `assertSenderOfRecord` had ZERO callers anywhere in the system, and
- * the live path — this handler — defaults `from` to a Foundry domain. It
- * regressed open because the live path was built in a different file.
+ * the live path — this handler — defaulted `from` to a Foundry domain.
  *
- * WHY THIS RECORDS RATHER THAN REFUSES, FOR NOW. The rule presupposes a
- * "founder's own connected sender". There is no such mechanism: every send in
- * this system goes through Foundry's platform Resend key, so no caller CAN
- * satisfy the rule today. Making it fatal would not restore the intended
- * behaviour — it would silently stop the one live third-party path (the
- * responsibility ladder's assisted notice) with no way for a founder to fix
- * it. That is an owner decision about the product, not a bug fix, and it is
- * recorded as an open decision rather than taken here.
+ * It could not have been enforced until now, because the "founder's own
+ * connected sender" it presupposes did not exist as a mechanism: every send
+ * went through Foundry's platform key. Migration 150 and
+ * `outbound/sending-identity.ts` are that mechanism, so the rule is now
+ * enforceable and enforced.
  *
- * What changes today is that the violation stops being invisible: every
- * third-party send under a Foundry domain is logged and counted against the
- * product, so the liability has a number instead of a comment.
+ * FOUNDER MAIL keeps Foundry's From and Foundry's key — welcome, digests,
+ * alerts, account notices. That is Foundry writing to its own customer and is
+ * exactly what the rule permits.
+ *
+ * THIRD-PARTY MAIL goes out under the company's own identity and through the
+ * company's own provider account. With no identity connected there is nothing
+ * to send as, and the send refuses with a reason a founder can act on rather
+ * than borrowing Foundry's domain.
  */
-async function applySenderOfRecord(
+async function resolveSender(
   req: GatewayRequest, params: SendEmailParams,
-): Promise<void> {
+): Promise<{ from: string; credential: string | null; identityUsed: boolean }> {
   const recipients = (params.to ?? []).map((r) => r.toLowerCase().trim()).filter(Boolean);
-  const from = params.from ?? DEFAULT_FOUNDRY_FROM;
-  try {
-    assertSenderOfRecord({
-      from,
-      recipientIsFounder: await recipientIsFounder(req.productId, recipients),
-    });
-  } catch (err) {
-    if (!(err instanceof SenderOfRecordError)) throw err;
-    log.warn('resend.sender_of_record.third_party_under_foundry_domain', {
-      productId: req.productId,
-      from,
-      recipientCount: recipients.length,
-      // The addresses themselves are the founder's customers; the count is
-      // what an operator needs and the identities are not.
-      surface: req.surface,
-      note: 'no founder-connected sender exists yet — see docs/design/LIABILITY-AUDIT.md',
-    });
+  const toFounder = await recipientIsFounder(req.productId, recipients);
+
+  if (toFounder) {
+    // Foundry writing to its own customer. An explicit `from` still has to
+    // pass the rule — a caller cannot opt into a worse position than the
+    // default by supplying one.
+    const from = params.from ?? DEFAULT_FOUNDRY_FROM;
+    assertSenderOfRecord({ from, recipientIsFounder: true });
+    return { from, credential: null, identityUsed: false };
   }
+
+  const identity = await getSendingIdentity(req.productId);
+  if (!identity) {
+    throw new SenderOfRecordError(
+      'This message is going to one of your customers, and your company has no '
+      + 'sending address of its own yet. Connect one in Settings → Sending — '
+      + 'mail to your customers goes out as you, on your domain, not as Foundry.');
+  }
+
+  const from = fromLine(identity);
+  // Belt as well as braces: an identity is refused at setup if it names a
+  // Foundry domain, and refused again here if one ever gets past that.
+  assertSenderOfRecord({ from, recipientIsFounder: false });
+  return { from, credential: identity.credential, identityUsed: true };
 }
 
 
@@ -349,29 +359,15 @@ async function applySenderOfRecord(
  */
 export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSuccess | { logged: true }> {
   const params = req.params as unknown as SendEmailParams;
-  const apiKey = process.env.RESEND_API_KEY;
   const sendgridKey = process.env.SENDGRID_API_KEY;
 
-  // WHOSE NAME IS ON THIS MESSAGE?
-  //
-  // `services/outbound/sender-of-record.ts` states the rule: Foundry must never
-  // be the From on a message to a THIRD PARTY — a founder's customer. Those go
-  // out under the founder's own connected sender, their domain, their opt-out
-  // footer, their CAN-SPAM responsibility. Foundry's domain is the From only on
-  // mail to the FOUNDER.
-  //
-  // Its header says "Department third-party paths must call it before
-  // dispatch". Nothing called it. `assertSenderOfRecord` had zero callers
-  // anywhere in the system, while this handler — the live send path — defaults
-  // `from` to 'Foundry <noreply@foundry.app>' and the SendGrid fallback
-  // hard-codes 'briefings@foundry.app'. So every customer-facing send has gone
-  // out under a Foundry domain, against a rule written down, implemented, and
-  // never invoked.
-  //
-  // The comment in scp/actions/executor.ts predicted exactly this: "When live
-  // sending is wired, the send boundary MUST call assertSenderOfRecord". Live
-  // sending was wired somewhere else.
-  await applySenderOfRecord(req, params);
+  const sender = await resolveSender(req, params);
+  // THE COMPANY'S OWN ACCOUNT SENDS THE COMPANY'S OWN MAIL. That is what makes
+  // the domain verification real — the provider refuses a From the account has
+  // not verified — and what puts the reputation and the bounce handling on the
+  // party that owns the domain, which is the substance of the rule rather than
+  // its cosmetics.
+  const apiKey = sender.credential ?? process.env.RESEND_API_KEY;
 
   if (!apiKey && !sendgridKey) {
     log.info('resend.send_email.logged_only', {
@@ -385,17 +381,29 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
 
   // SendGrid is the server-owned fallback mechanism for the same semantic
   // send_email capability. Callers do not select the provider.
-  if (!apiKey && sendgridKey) {
+  //
+  // IT IS FOUNDRY'S ACCOUNT, so it is not available to a company's own mail.
+  // Falling back would send the founder's From through Foundry's provider,
+  // which is the exact substitution the sender-of-record rule exists to
+  // prevent — the domain would be theirs and the reputation, bounce handling
+  // and compliance obligation would be ours.
+  //
+  // `!sender.identityUsed` cannot currently be false here: a connected
+  // identity always carries a credential, so `apiKey` is set whenever one is
+  // in use and this branch is already unreachable for company mail. Mutation
+  // testing says so — removing the condition changes no test. It stays as the
+  // structural statement of the rule, so that if a credential ever becomes
+  // optional the fallback does not quietly reopen. What actually protects the
+  // rule today is the line above: `apiKey` is the COMPANY's key.
+  if (!apiKey && sendgridKey && !sender.identityUsed) {
     const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${sendgridKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         personalizations: [{ to: params.to.map((email) => ({ email })) }],
-        // Same address the check above was applied to, so the fallback
-        // provider cannot send under a From the rule never saw.
-        from: params.from
-          ? { email: params.from.replace(/^.*<|>.*$/g, '') }
-          : { email: 'briefings@foundry.app', name: 'Foundry' },
+        // The From the rule was applied to, never a second one the check
+        // never saw. This used to hard-code 'briefings@foundry.app'.
+        from: { email: sender.from.replace(/^.*<|>.*$/g, '').trim() },
         subject: params.subject,
         content: [
           ...(params.text ? [{ type: 'text/plain', value: params.text }] : []),
@@ -419,7 +427,7 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
             'Idempotency-Key': req.dedupKey!,
           },
           body: JSON.stringify({
-            from: params.from ?? DEFAULT_FOUNDRY_FROM,
+            from: sender.from,
             to: params.to,
             subject: params.subject,
             html: params.html,
@@ -445,6 +453,10 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
       messageId,
       to: params.to,
     });
+    // "Connected" and "working" are different facts, and a settings page that
+    // cannot tell them apart tells a founder their sender is fine when it has
+    // never once been used.
+    if (sender.identityUsed) await recordSendingIdentityAccepted(req.productId);
     return { message_id: messageId, raw: responseData };
   } catch (err) {
     lastError = err;

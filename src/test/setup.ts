@@ -6,6 +6,13 @@
 // Set test environment variables before any module imports
 process.env.NODE_ENV = 'test';
 process.env.TURSO_DATABASE_URL = 'file::memory:';
+// Twelve test files set this line themselves, and the thirteenth found out by
+// failing: encryption sits on ordinary paths now (integration credentials, a
+// company's own sending identity), so a test that never mentions encryption
+// still reaches it. Set once here rather than remembered thirteen times.
+// `encryption.test.ts` deletes it deliberately to prove the unset case, which
+// is the one place that should be thinking about it.
+process.env.ENCRYPTION_KEY ??= '0'.repeat(64);
 process.env.CLERK_SECRET_KEY = 'sk_test_fake_key';
 process.env.CLERK_PUBLISHABLE_KEY = 'pk_test_fake_key';
 // Do not install a fake provider credential globally. Code paths that

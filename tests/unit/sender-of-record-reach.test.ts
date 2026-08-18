@@ -18,11 +18,11 @@
 // one the comment was written in — which is the whole shape of this defect
 // class: a rule, an implementation, and no edge between them.
 //
-// The rule now runs at the send boundary. It records rather than refuses,
-// because the "founder's own connected sender" it presupposes does not exist
-// — every send goes through Foundry's platform key — so no caller could
-// satisfy it today. That is an owner decision, and these tests pin the parts
-// that are not: who counts as the founder, and that the boundary is wired.
+// The rule now runs at the send boundary, and is enforceable because the thing
+// it presupposes finally exists: migration 150 gives every company its own
+// sending identity — its own From, through its own provider account — so a
+// third-party message has somebody to be sent as. With none connected the send
+// refuses, which is the owner's decision and the rule's plain meaning.
 // =============================================================================
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
@@ -124,7 +124,7 @@ describe('the boundary is wired', () => {
 
   it('the live send handler applies it', () => {
     const handler = source.slice(source.indexOf('export async function sendEmailHandler'));
-    expect(handler.slice(0, 4000)).toMatch(/applySenderOfRecord/);
+    expect(handler.slice(0, 4000)).toMatch(/resolveSender/);
   });
 
   it('both providers send under the From the rule was applied to', () => {
@@ -132,6 +132,6 @@ describe('the boundary is wired', () => {
     // could go out under a From the check never saw.
     expect(source).toMatch(/DEFAULT_FOUNDRY_FROM/);
     const sendgrid = source.slice(source.indexOf('api.sendgrid.com'));
-    expect(sendgrid.slice(0, 800)).toMatch(/params\.from/);
+    expect(sendgrid.slice(0, 800)).toMatch(/sender\.from/);
   });
 });

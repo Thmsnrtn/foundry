@@ -101,6 +101,11 @@
 
 
 
+
+
+
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -335,11 +340,13 @@
     'generating','pr_open','merged','rejected','failed','skipped'
     'golden_lesson', 'constraint_added', 'authority_change',
     'harbor','sentinel','ledger','shield','oracle','crucible'
+    'inconclusive'
     'lead_investor', 'angel', 'advisor', 'board_member', 'observer'
     'llm_tokens','integration_api','email_send','compute','experiment','other'
     'milestone', 'integration_connected',
     'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
     'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
+    'not_configured'
     'onboarding_kit',          -- First hire onboarding from DNA + history
     'operating_principles',    -- "The [Product] Way" — decision heuristics
     'pending_approval','approved','executing','executed','failed','rejected','cancelled'
@@ -348,7 +355,7 @@
     'pricing_framework',       -- How we think about and change pricing
     'product_improvement',     -- usage data for Foundry improvement
     'prompt_refinement', 'founder_correction', 'initial_provision'
-    'proposed','approved','active','completed','abandoned','disproven'
+    'proposed','approved','active','completed','abandoned','disproven',
     'purpose','desired_outcome','success_conditions','failure_conditions','operating_constraints',
     'recovery_protocol'        -- What we do in RED state
     'recurring_work','customer_commitment','exception','revenue_collection',
@@ -356,6 +363,7 @@
     'resource_demand'))
     'retention','messaging','feature','operations','other'
     'risk_state_change', 'lifecycle_gate',
+    'sent', 'delivered', 'failed', 'clicked',
     'signal_spike', 'signal_drop',
     'signups_7d','active_users','support_volume_7d','nps_score')
     'signups_7d','active_users','support_volume_7d','nps_score');
@@ -375,9 +383,13 @@
     );
     );
     );
+    -- Never attempted: the platform's credentials are not configured. Not a
+    -- Tested. The arms did not separate. Nothing was learned about the
     -- The action, the integration and the scope must be one DECLARED effect
+    -- failure, and not a delivery.
     -- kind, taken together. A caller cannot mix the action of one kind with the
     -- scope of another and land somewhere nobody authorised.
+    -- statement either way, and the institution must not be told otherwise.
     ;
     ;
     ;
@@ -701,6 +713,7 @@
   )),
   )),
   )),
+  )),
   );
   );
   );
@@ -813,6 +826,7 @@
   -- Meta
   -- Meta
   -- Meta
+  -- NULL means "connected but never used" — distinct from "connected and
   -- NULL never fires, which is how absent values have repeatedly slipped past
   -- NULL never fires, which is how missing values have repeatedly walked past
   -- NULL never fires, which is how missing values have repeatedly walked past
@@ -850,6 +864,7 @@
   -- State
   -- Status
   -- Structured output
+  -- The From this company's third-party mail goes out as. The provider refuses
   -- The KEY only. The value is deliberately not copied here: this table exists
   -- The assertion answers an OPEN question of this company. It cannot answer a
   -- The canonical evidence that the founder issued this, and to whom.
@@ -867,6 +882,7 @@
   -- The event type is derived from the report, so a later comparison matches on
   -- The event type is derived from the report, so what was claimed and what is
   -- The evidence row must be this company's own customer-message observation.
+  -- The founder's own API key for that provider, encrypted at rest exactly as
   -- The founder's own words for it, for founder-facing surfaces only.
   -- The founder's own words for which system holds this.
   -- The grounding must be this product's own current claims. A disposition
@@ -888,6 +904,8 @@
   -- What a founder is actually agreeing to when they grant this scope.
   -- What the agent decided
   -- What the agent saw
+  -- When a send through this identity was last accepted by the provider.
+  -- Which provider account the mail goes through. Closed vocabulary: adding a
   -- Widening the ring requires a new migration, which is itself inside the
   -- Writing a reply is not deciding what Foundry may do with it. A proposal
   -- `resource_demand` is responsibility-scoped and `resource_capacity` is
@@ -933,10 +951,13 @@
   -- guards in this schema.
   -- guards in this schema.
   -- guards in this schema.
+  -- here too.
   -- honours it; this is a list of intakes that exist, not of intakes anyone
   -- independence tests caught it. Widening a vocabulary must not become a way
   -- indistinguishable from a real one.
+  -- integration credentials are. This is what makes the send THEIRS.
   -- irrespective of later reality.
+  -- it unless the account has verified the domain, which is the verification.
   -- it, and ambiguity is refused rather than believed.
   -- judgment time; the owner cannot introduce an unrepresented direction here.
   -- just the plaintext column with a more reassuring name.
@@ -953,6 +974,7 @@
   -- or maturity is refused whole — every one of those is resolved server-side
   -- outcome for something that never happened is not an outcome; a plan that
   -- policy) are deliberately absent until something consumes them; adding a
+  -- provider is a code change in the send boundary, so it is a code change
   -- question that was never asked, another tenant's question, or one already
   -- re-grant; it is erasing that the founder ever said stop.
   -- reality a reading described. Mirrors OBSERVABLE_FIELDS; a test asserts the
@@ -1002,6 +1024,7 @@
   -- well-meaning integration.
   -- what was reported rather than on a label the caller chose.
   -- which is inside the constitutional ring, so an integration cannot introduce
+  -- working", and the two must not look the same on a settings page.
   -- would like. Widening it is a migration and a review, exactly as adding a
   -- wrote it, and neither the founder nor the institution could tell which
   -- { company_name, problem, solution, target_customer, revenue_model,
@@ -1780,6 +1803,7 @@
   config_type TEXT NOT NULL,
   confirmation_token TEXT
   confirmed_at DATETIME,
+  conflict_check_passed INTEGER NOT NULL DEFAULT 0
   conflict_points_json TEXT NOT NULL DEFAULT '[]',   -- things agents disagree on
   conflicts_json TEXT, -- JSON array of identified conflicts
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
@@ -1869,6 +1893,7 @@
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1939,7 +1964,7 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP, chat_session_id TEXT, extracted_decisions TEXT, extracted_actions TEXT, summary TEXT, audio_url TEXT, status TEXT DEFAULT 'active',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP, local_currency_mrr REAL, exchange_rate REAL DEFAULT 1.0, mrr_cents INTEGER, new_customers INTEGER, churned_customers INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP, local_currency_mrr REAL, exchange_rate REAL DEFAULT 1.0, mrr_cents INTEGER, new_customers INTEGER, churned_customers INTEGER, updated_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2026,6 +2051,7 @@
   created_by   TEXT NOT NULL,               -- founder id
   created_by TEXT DEFAULT 'system',
   created_by TEXT NOT NULL REFERENCES founders(id),
+  credential   TEXT NOT NULL,
   credentials TEXT,
   credentials_json TEXT,
   credits_earned INTEGER DEFAULT 1,
@@ -2065,7 +2091,7 @@
   d8_score INTEGER,
   d9_score INTEGER,
   data TEXT NOT NULL,
-  data TEXT,                           -- JSON: deep-link payload
+  data TEXT,
   data_density TEXT DEFAULT 'moderate',
   data_freshness_hours REAL,  -- how old is the most recent data
   data_inputs_used TEXT NOT NULL, -- JSON
@@ -2187,7 +2213,7 @@
   display_name TEXT,
   disposition          TEXT NOT NULL CHECK (disposition IN
   disposition TEXT NOT NULL CHECK(disposition IN ('active','deliberately_not_done')),
-  disproven_evidence TEXT,               -- If disproven, why
+  disproven_evidence TEXT,
   divergence_areas TEXT,              -- JSON: string[] of areas where views differ
   divergence_axis TEXT,
   dna_field TEXT NOT NULL,
@@ -2444,7 +2470,9 @@
   founder_rationale TEXT,
   founder_retention_pct REAL,
   from_agent TEXT NOT NULL,
+  from_email   TEXT NOT NULL,
   from_mode           TEXT NOT NULL,
+  from_name    TEXT,
   from_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
   from_state TEXT NOT NULL,
   full_briefing TEXT NOT NULL,         -- Complete briefing markdown
@@ -2883,6 +2911,7 @@
   label         TEXT NOT NULL,
   label TEXT NOT NULL,
   label TEXT NOT NULL,                       -- e.g. "Acquisition: 200 trial signups/mo"
+  last_accepted_at DATETIME,
   last_active_at DATETIME,
   last_active_at TEXT,
   last_calibration_prompt_at TEXT,         -- prevent re-prompting too aggressively
@@ -3301,12 +3330,13 @@
   post_money_valuation REAL NOT NULL,
   posted_at TEXT NOT NULL,
   pov TEXT,                                   -- 'we'|'you'|'i'|'mixed'
+  power_check_passed    INTEGER NOT NULL DEFAULT 0,
   ppp_factor REAL DEFAULT 1.0,
   pre_fix_dimension_score INTEGER,
   pre_money_valuation REAL NOT NULL,
   predicate         TEXT NOT NULL,
   predicate TEXT NOT NULL,
-  predicted_effect_size REAL,            -- e.g., 0.15 = 15% improvement
+  predicted_effect_size REAL,
   predicted_mrr_delta_pct REAL,
   predicted_outcome_direction TEXT,
   predicted_outcomes TEXT NOT NULL,
@@ -3401,6 +3431,7 @@
   product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
+  product_id   TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id   TEXT REFERENCES products(id),       -- NULL = org-level role
   product_id  TEXT NOT NULL DEFAULT '',
   product_id  TEXT NOT NULL,
@@ -3613,12 +3644,13 @@
   prompt_version INTEGER NOT NULL DEFAULT 1,
   properties TEXT,
   proposed_at TEXT DEFAULT (datetime('now')),
+  proposed_by TEXT NOT NULL,
   proposed_by TEXT NOT NULL,                  -- agent name or 'founder' or 'system'
-  proposed_by TEXT NOT NULL,             -- Agent name
   proposed_change TEXT NOT NULL,              -- human-readable description
   proposed_owner_ref TEXT,
   proposed_responsibility TEXT NOT NULL,
   proposer_founder_id TEXT,
+  provider     TEXT NOT NULL CHECK(provider IN ('resend')),
   provider TEXT,
   published BOOLEAN DEFAULT FALSE
   purposes_json TEXT NOT NULL,
@@ -3956,8 +3988,8 @@
   status          TEXT NOT NULL DEFAULT 'holding'
   status          TEXT NOT NULL DEFAULT 'on_track'
   status        TEXT NOT NULL DEFAULT 'running',
+  status TEXT CHECK(status IN (
   status TEXT CHECK(status IN ('running', 'success', 'partial', 'failed')),
-  status TEXT CHECK(status IN ('sent', 'delivered', 'failed', 'clicked')),
   status TEXT DEFAULT 'active'
   status TEXT DEFAULT 'active'
   status TEXT DEFAULT 'active'
@@ -4197,6 +4229,7 @@
   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at    TEXT    NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL
+  updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at  TEXT NOT NULL, reserved_cents REAL NOT NULL DEFAULT 0,
@@ -4208,7 +4241,7 @@
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -4257,7 +4290,7 @@
   valid_until TEXT,
   valid_until TEXT,
   valid_until TEXT,
-  validated_by TEXT,                     -- Usually 'oracle'
+  validated_by TEXT,
   validation_notes TEXT,               -- Why the change was accepted/rejected
   validation_score REAL,               -- 0-1: validation judge score
   value            REAL,
@@ -4577,6 +4610,8 @@
 );
 );
 );
+);
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4593,7 +4628,6 @@
 , origin TEXT NOT NULL DEFAULT 'founder', review_id TEXT, effective_at DATETIME);
 , paid_through TEXT);
 , payload_json TEXT, attempt_count INTEGER, failed_at DATETIME, effect_certainty TEXT, provider_acknowledged_at TEXT, reconcile_after TEXT);
-, power_check_passed          INTEGER NOT NULL DEFAULT 0, conflict_check_passed       INTEGER NOT NULL DEFAULT 0);
 , pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT, success_threshold REAL, outcome TEXT, winning_variant_id TEXT, concluded_at DATETIME);
 , product_id TEXT, created_by TEXT);
 , product_id TEXT, role TEXT, scopes TEXT, created_by TEXT, expires_at TEXT);
@@ -5091,9 +5125,11 @@ CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name
 CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
 CREATE TABLE IF NOT EXISTS "decision_snooze_log" (
 CREATE TABLE IF NOT EXISTS "founders" (
+CREATE TABLE IF NOT EXISTS "hypotheses" (
 CREATE TABLE IF NOT EXISTS "integrations" (
 CREATE TABLE IF NOT EXISTS "notifications" (
 CREATE TABLE IF NOT EXISTS "oauth_states" (
+CREATE TABLE IF NOT EXISTS "push_log" (
 CREATE TABLE account_roles (
 CREATE TABLE acquirer_signals (
 CREATE TABLE action_drafts (
@@ -5236,7 +5272,6 @@ CREATE TABLE golden_suite (
 CREATE TABLE governed_effect_kinds (
 CREATE TABLE graph_entities (
 CREATE TABLE graph_relationships (
-CREATE TABLE hypotheses (
 CREATE TABLE idea_validations (
 CREATE TABLE idempotency_keys (
 CREATE TABLE inbound_customer_messages (
@@ -5300,10 +5335,10 @@ CREATE TABLE predictions (
 CREATE TABLE priority_actions (
 CREATE TABLE privacy_consents (
 CREATE TABLE product_dna (
+CREATE TABLE product_sending_identities (
 CREATE TABLE product_voice_fingerprints (
 CREATE TABLE product_webhooks (
 CREATE TABLE products (
-CREATE TABLE push_log (
 CREATE TABLE push_subscriptions (
 CREATE TABLE rate_limit_counters (
 CREATE TABLE recommendation_outcomes (
