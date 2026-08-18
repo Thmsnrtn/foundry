@@ -317,9 +317,11 @@ export async function exportProductData(
  * conclusion: it says nothing about which FIELDS are kept, what may be done
  * with them while they are kept, or when the decision should be looked at
  * again. It also let two tables be "retained" that the erasure had never
- * touched — `stripe_webhook_events` and `ai_daily_spend` carry no `product_id`
- * at all, so retaining them was a decision about nothing, recorded as though it
- * were a decision about something.
+ * touched — `stripe_webhook_events` carries no `product_id` at all, so retaining
+ * it was a decision about nothing, recorded as though it were a decision about
+ * something. (`ai_daily_spend` was listed here for the same stated reason, and
+ * the reason was wrong: it carries both the company and the founder under
+ * `scope_id`. It is erased on both axes now.)
  *
  * A disposition says what is kept and why. Three shapes:
  *
@@ -478,7 +480,12 @@ export async function tablesToErase(): Promise<string[]> {
 /** Tables that identify the company under a column that is not `product_id`.
  * Each entry is a deliberate statement that this data belongs to the company
  * and goes when the company does. */
-const ERASE_BY_NAMED_KEY: Record<string, { column: string; subject: 'product_id' | 'contributor_hash' }> = {
+const ERASE_BY_NAMED_KEY: Record<string, {
+  column: string;
+  subject: 'product_id' | 'contributor_hash';
+  /** Narrows the delete when the column holds more than one kind of subject. */
+  where?: string;
+}> = {
   peer_reviews: { column: 'reviewee_product_id', subject: 'product_id' },
   // The whole point of this table is that it carries no product id — patterns
   // are pooled across companies. `contributor_hash` was added so distinct
@@ -488,28 +495,143 @@ const ERASE_BY_NAMED_KEY: Record<string, { column: string; subject: 'product_id'
   // anyone; they are already excluded from every aggregation for the same
   // reason.
   decision_patterns: { column: 'contributor_hash', subject: 'contributor_hash' },
+  // The daily spend rollup keys on `scope_id`, which is a product id when
+  // scope='product'. Nothing found it before because it has no `product_id`
+  // column: it was a derived summary, written by an AFTER INSERT trigger on
+  // `ai_spend_reservations`, carrying the company id under another name. The
+  // `where` is what keeps this from also deleting the founder rollup and the
+  // global one — the founder's goes with the founder, and the global row names
+  // nobody and must not shrink because a company left.
+  ai_daily_spend: { column: 'scope_id', subject: 'product_id', where: "scope = 'product'" },
 };
 
-/** Tables that belong to the FOUNDER, not to one of their products.
- * A founder with two companies who erases one must keep their own account,
- * their notification preferences and their usage counters. These go with the
- * founder's account, not with a product, and nothing here erases a founder. */
-const FOUNDER_SCOPED: Record<string, string> = {
-  founders: 'the account itself',
-  ai_output_feedback: 'the founder\'s ratings of outputs, across all their products',
-  cohort_memberships: 'peer-group membership, which is the founder\'s not a product\'s',
-  founder_ai_profile: 'how the founder likes to be written to',
-  founder_health: 'the founder\'s own circumstances',
-  founder_health_snapshots: 'the same, over time',
-  founder_voice: 'the founder\'s writing preferences',
-  gate_events: 'which features the founder hit a tier wall on',
-  introductions: 'introductions between founders, involving a second person who did not ask for anything',
-  network_profiles: 'the founder\'s own profile in the peer network',
-  push_subscriptions: 'the founder\'s devices',
-  referral_links: 'the founder\'s referral codes',
-  referral_conversions: 'and what those codes did',
-  slack_integrations: 'the founder\'s workspace connection',
-  usage_limits: 'the founder\'s plan counters',
+/**
+ * Tables that belong to the FOUNDER, not to one of their products — AND WHAT
+ * HAPPENS TO THEM WHEN THE FOUNDER GOES.
+ *
+ * This was a map from table name to one sentence, and the sentence answered
+ * only half the question. It said why the table survives erasing ONE OF TWO
+ * COMPANIES, which is right: a founder who closes a company keeps their
+ * account, their notification preferences and their usage counters.
+ *
+ * Nothing ever asked the other half. `eraseFounderAccount` erased every
+ * company the person owned, redacted the `founders` row, and stopped — so
+ * after Foundry reported an account erasure complete, the founder's health
+ * circumstances, their voice, their devices, their Slack workspace token,
+ * their peer-network profile and their referral history were all still there,
+ * still keyed to a founder id that still existed. Twelve tables. Being out of
+ * scope for a product erasure had been silently read as having been decided
+ * about.
+ *
+ * So each entry now carries the op that runs when the PERSON is erased:
+ *
+ *   DELETE  nothing survives the person; the rows were only ever about them
+ *   REDACT  the row survives cleared, because foreign keys resolve to it
+ *   SEVER   the row survives because it is ALSO SOMEBODY ELSE'S — an
+ *           introduction names two founders and a referral conversion is the
+ *           referrer's attribution. The erased person's link is cut and their
+ *           own contribution cleared; the other person keeps their record.
+ *           Deleting these would erase a second person who never asked for
+ *           anything.
+ */
+type AccountErasure =
+  | { op: 'delete'; by?: string; where?: string }
+  | { op: 'redact' }
+  | { op: 'sever'; marker: string | null; parties: Array<{ column: string; alsoClear?: string[] }> };
+
+const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: AccountErasure }> = {
+  founders: {
+    reason: 'the account itself',
+    // Redacted in place by `eraseFounderAccount`, not deleted: retained
+    // financial records reference it, and an id that can be reissued is worse
+    // than one that resolves to a cleared row.
+    onAccountErasure: { op: 'redact' },
+  },
+  ai_output_feedback: {
+    reason: 'the founder\'s ratings of outputs, across all their products',
+    onAccountErasure: { op: 'delete' },
+  },
+  cohort_memberships: {
+    reason: 'peer-group membership, which is the founder\'s not a product\'s',
+    onAccountErasure: { op: 'delete' },
+  },
+  founder_ai_profile: {
+    reason: 'how the founder likes to be written to',
+    onAccountErasure: { op: 'delete' },
+  },
+  founder_health: {
+    reason: 'the founder\'s own circumstances',
+    onAccountErasure: { op: 'delete' },
+  },
+  founder_health_snapshots: {
+    reason: 'the same, over time',
+    onAccountErasure: { op: 'delete' },
+  },
+  founder_voice: {
+    reason: 'the founder\'s writing preferences',
+    onAccountErasure: { op: 'delete' },
+  },
+  gate_events: {
+    reason: 'which features the founder hit a tier wall on',
+    onAccountErasure: { op: 'delete' },
+  },
+  introductions: {
+    reason: 'introductions between founders, involving a second person who did not ask for anything',
+    // The second person is the reason this is severed rather than deleted.
+    // `feedback_a` and `feedback_b` are each written by one of the two, so the
+    // erased party's own words go and the other party's stay.
+    onAccountErasure: {
+      op: 'sever',
+      marker: 'erased',
+      parties: [
+        { column: 'founder_a_id', alsoClear: ['feedback_a'] },
+        { column: 'founder_b_id', alsoClear: ['feedback_b'] },
+      ],
+    },
+  },
+  network_profiles: {
+    reason: 'the founder\'s own profile in the peer network',
+    onAccountErasure: { op: 'delete' },
+  },
+  push_subscriptions: {
+    reason: 'the founder\'s devices',
+    onAccountErasure: { op: 'delete' },
+  },
+  referral_links: {
+    reason: 'the founder\'s referral codes',
+    // Their own conversions go with them: `referral_conversions.referral_link_id`
+    // is ON DELETE CASCADE.
+    onAccountErasure: { op: 'delete' },
+  },
+  referral_conversions: {
+    reason: 'and what those codes did',
+    // Rows on SOMEBODY ELSE'S link, where this founder was the person invited.
+    // That the referrer brought in a paying company is the referrer's fact and
+    // may be owed to them; who it was is not part of it. The column is
+    // nullable, so the linkage severs cleanly to nothing.
+    onAccountErasure: { op: 'sever', marker: null, parties: [{ column: 'invited_founder_id' }] },
+  },
+  slack_integrations: {
+    reason: 'the founder\'s workspace connection',
+    onAccountErasure: { op: 'delete' },
+  },
+  usage_limits: {
+    reason: 'the founder\'s plan counters',
+    onAccountErasure: { op: 'delete' },
+  },
+  ai_daily_spend: {
+    reason: 'the founder\'s own daily spend rollup, keyed by scope rather than by a founder column',
+    // THE ROLLUP CARRIES THE PERSON UNDER A NAME NOTHING WAS LOOKING FOR.
+    // `scope_id` holds a product id when scope='product' and a founder id when
+    // scope='founder', so a classification that finds company data by looking
+    // for a `product_id` column could not see it, and this table sat in
+    // NOT_COMPANY_DATA under the reason "keyed by scope, not by company row" —
+    // a negative claim about a table that names both the company and the
+    // person. The product rows go with the product (ERASE_BY_NAMED_KEY); these
+    // go with the founder. The scope='global' row names nobody and stays, so
+    // the institution's own daily ceiling is not reduced by an erasure.
+    onAccountErasure: { op: 'delete', by: 'scope_id', where: "scope = 'founder'" },
+  },
 };
 
 /** Tables that are the institution's or nobody's: reference data, global
@@ -524,7 +646,6 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   // on the delete finding no rows.
   system_identities: 'names which product row is Foundry itself, not a customer\'s data',
   agent_wiki_reads: 'which internal agent read which internal wiki entry',
-  ai_daily_spend: 'daily spend totals keyed by scope, not by company row',
   audit_trail: 'created by migration 007 and never written or read by any code path',
   benchmark_percentiles: 'percentiles over a cohort, naming no member',
   cohort_groups: 'the groups themselves, not who is in them',
@@ -617,6 +738,10 @@ export interface ErasureStep {
  * has children RAISES — which is what an erasure did on any company that had
  * ever sent a chat message.
  */
+function namedKeyPredicate(key: { column: string; where?: string }): string {
+  return key.where ? `${key.column} = ? AND ${key.where}` : `${key.column} = ?`;
+}
+
 export async function erasurePlan(): Promise<ErasureStep[]> {
   const steps: ErasureStep[] = [];
 
@@ -624,7 +749,7 @@ export async function erasurePlan(): Promise<ErasureStep[]> {
     steps.push({ table, sql: `DELETE FROM ${table} WHERE product_id = ?`, depth: 0 });
   }
   for (const [table, key] of Object.entries(ERASE_BY_NAMED_KEY)) {
-    steps.push({ table, sql: `DELETE FROM ${table} WHERE ${key.column} = ?`, depth: 0 });
+    steps.push({ table, sql: `DELETE FROM ${table} WHERE ${namedKeyPredicate(key)}`, depth: 0 });
   }
 
   // A child is deleted through its parent's own predicate, nested as deep as
@@ -632,7 +757,7 @@ export async function erasurePlan(): Promise<ErasureStep[]> {
   // because children run first.
   const predicates = new Map<string, string>();
   for (const t of await tablesToErase()) predicates.set(t, 'product_id = ?');
-  for (const [t, k] of Object.entries(ERASE_BY_NAMED_KEY)) predicates.set(t, `${k.column} = ?`);
+  for (const [t, k] of Object.entries(ERASE_BY_NAMED_KEY)) predicates.set(t, namedKeyPredicate(k));
 
   const children = await childTablesOfErasure();
   const depthOf = new Map<string, number>();
@@ -678,7 +803,16 @@ export async function classifyTables(): Promise<Record<string, string>> {
 
 /** Exported for the gate: the two allow-lists that are written down rather
  * than derived, so their reasons can be read. */
-export const FOUNDER_SCOPED_REASONS = FOUNDER_SCOPED;
+/** Exported so the end-to-end sweep can derive which survivors are stated,
+ *  rather than keeping a second list of them that could drift. */
+export const RETAINED_ON_ERASURE_DISPOSITIONS = RETAINED_ON_ERASURE;
+
+export const FOUNDER_SCOPED_REASONS: Record<string, string> = Object.fromEntries(
+  Object.entries(FOUNDER_SCOPED).map(([t, d]) => [t, d.reason]));
+
+/** Exported so a test can prove every founder-scoped table has an op, and that
+ *  the op that runs is the op that was written down. */
+export const FOUNDER_SCOPED_DISPOSITIONS = FOUNDER_SCOPED;
 
 /**
  * Erase a founder's ACCOUNT — every company they own, then the person.
@@ -743,6 +877,19 @@ export async function eraseFounderAccount(founderId: string): Promise<{
   // while a company still names them is a company with no reachable owner.
   if (failed.length > 0) return { productsErased, failed, founderRedacted: false };
 
+  // THE PERSON'S OWN TABLES, WHICH NOTHING USED TO TOUCH.
+  //
+  // Every company is gone at this point, and this is the step that was simply
+  // missing: `FOUNDER_SCOPED` said these survive erasing a company, which is
+  // true, and that was read as though it also said what happens when the
+  // person goes. Nothing happened when the person went. Each entry now names
+  // its own op and this runs it.
+  //
+  // It runs BEFORE the founders row is cleared, so a failure here leaves an
+  // account that still resolves and can be retried, rather than a redacted
+  // shell with the person's health history still hanging off it.
+  await runFounderScopedErasure(founderId);
+
   await query(
     `UPDATE founders SET
        email = 'erased+' || id || '@invalid',
@@ -755,6 +902,40 @@ export async function eraseFounderAccount(founderId: string): Promise<{
        country_code = NULL
      WHERE id = ?`, [founderId]);
   return { productsErased, failed, founderRedacted: true };
+}
+
+/**
+ * Run each founder-scoped table's stated account-erasure op.
+ *
+ * Severs run before deletes: a sever touches rows on somebody else's parent
+ * row, and doing it first means a cascade cannot take a second person's record
+ * with it on the way past.
+ */
+async function runFounderScopedErasure(founderId: string): Promise<void> {
+  const entries = Object.entries(FOUNDER_SCOPED);
+  const order = (op: AccountErasure) => (op.op === 'sever' ? 0 : 1);
+  for (const [table, disposition] of entries
+    .sort((a, b) => order(a[1].onAccountErasure) - order(b[1].onAccountErasure))) {
+    const op = disposition.onAccountErasure;
+    // The founders row is redacted by the caller, which is the only op here
+    // that must leave a row behind.
+    if (op.op === 'redact') continue;
+
+    if (op.op === 'sever') {
+      for (const party of op.parties) {
+        const sets = [`${party.column} = ${op.marker === null ? 'NULL' : '?'}`,
+          ...(party.alsoClear ?? []).map((c) => `${c} = NULL`)];
+        const args = op.marker === null ? [founderId] : [op.marker, founderId];
+        await query(
+          `UPDATE ${table} SET ${sets.join(', ')} WHERE ${party.column} = ?`, args);
+      }
+      continue;
+    }
+
+    const column = op.by ?? 'founder_id';
+    const where = op.where ? `${column} = ? AND ${op.where}` : `${column} = ?`;
+    await query(`DELETE FROM ${table} WHERE ${where}`, [founderId]);
+  }
 }
 export const NOT_COMPANY_DATA_REASONS = NOT_COMPANY_DATA;
 export const ERASE_BY_NAMED_KEY_TABLES = ERASE_BY_NAMED_KEY;
