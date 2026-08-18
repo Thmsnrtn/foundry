@@ -28,7 +28,7 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
-import { existsSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const ROOT = resolve(__dirname, '../..');
@@ -128,6 +128,39 @@ describe('every gate refuses the defect it exists for', () => {
     const r = run('check-route-guards.mjs');
     expect(r.code, r.output).toBe(1);
     expect(r.output).toContain('/zz-gate-fixture');
+  });
+
+  it('check-route-guards sees the API surface it used to be blind to', () => {
+    // THE GATE SCANNED `src/routes/dashboard` AND NOTHING ELSE, and printed
+    // its count as though it described the system. `src/routes/api` held
+    // eighty-one more mutating routes on the same session-authenticated
+    // surface, and the gate's silence about them read as their absence. This
+    // plants OUTSIDE the old directory: it fails if the scan narrows back.
+    plant('src/routes/api/_gate_fixture_k.ts',
+      "import { Hono } from 'hono';\n"
+      + "export const gateFixture = new Hono();\n"
+      + "gateFixture.post('/zz-gate-api-fixture', async (c) => c.text('x'));\n");
+    const r = run('check-route-guards.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('/zz-gate-api-fixture');
+  });
+
+  it('check-route-guards leaves token surfaces out, and only those', () => {
+    // Ingest and webhooks authenticate a token, not a member, so "which
+    // capability does this member hold" is not a question that can be asked of
+    // them — padding the baseline with routes that can never leave it would
+    // make the number mean less. That exclusion is a decision, so it is
+    // testable: a route planted there is NOT a finding...
+    plant('src/routes/ingest/_gate_fixture_l.ts',
+      "import { Hono } from 'hono';\n"
+      + "export const gateFixture = new Hono();\n"
+      + "gateFixture.post('/zz-gate-ingest-fixture', async (c) => c.text('x'));\n");
+    const r = run('check-route-guards.mjs');
+    expect(r.code, r.output).toBe(0);
+    // ...and the exclusion is narrow: it is the named directories, not any
+    // path that happens to contain the word.
+    expect(readFileSync('scripts/check-route-guards.mjs', 'utf8'))
+      .toMatch(/rel\.startsWith\(d \+ '\/'\)/);
   });
 
   it('check-route-guards accepts a route that asks inline, not only in middleware', () => {

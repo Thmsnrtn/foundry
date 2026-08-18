@@ -22,7 +22,7 @@ import { generateActionDraft, approveDraft, rejectDraft, getPendingDrafts, gener
 import { generatePredictions, getActivePredictions, recordPredictionOutcome } from '../../services/intelligence/predictive.js';
 
 // Founder Network
-import { upsertNetworkProfile, findMatches, proposeIntroduction, respondToIntroduction, submitPeerReview, joinCohortGroup } from '../../services/network/matchmaking.js';
+import { upsertNetworkProfile, findMatches, proposeIntroduction, respondToIntroduction, joinCohortGroup } from '../../services/network/matchmaking.js';
 
 // AI Calibration
 import { getFounderAIProfile, updateAIProfile, recordOutputFeedback } from '../../services/ai/calibration.js';
@@ -294,19 +294,6 @@ superchargeApiRoutes.post('/api/network/introductions/:id/respond', async (c) =>
   const body = await c.req.json() as Record<string, unknown>;
   await respondToIntroduction(introId, founder.id, body.accept === true);
   return c.json({ status: body.accept ? 'accepted' : 'declined' });
-});
-
-superchargeApiRoutes.post('/api/network/peer-review', async (c) => {
-  const founder = c.get('founder');
-  const body = await c.req.json() as Record<string, unknown>;
-  const id = await submitPeerReview(
-    founder.id,
-    body.product_id as string,
-    body.review_type as string,
-    body.content as string,
-    body.rating as number
-  );
-  return c.json({ review_id: id });
 });
 
 superchargeApiRoutes.post('/api/network/cohort/join', async (c) => {

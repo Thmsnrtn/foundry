@@ -461,10 +461,12 @@ export async function tablesToErase(): Promise<string[]> {
 //     erasure could not complete at all. It was not that erasure left a little
 //     behind — on a real company it did not finish.
 //
-//   • Three name the subject under a different column. `peer_reviews` calls it
-//     `reviewee_product_id`; `decision_patterns` carries a `contributor_hash`
-//     and no id at all, which is how an erased company's decisions kept being
-//     aggregated into insights published to its competitors.
+//   • Some name the subject under a different column. `decision_patterns`
+//     carries a `contributor_hash` and no id at all, which is how an erased
+//     company's decisions kept being aggregated into insights published to its
+//     competitors; `ai_daily_spend` calls it `scope_id` and holds a founder
+//     there too. (`peer_reviews` was a third until migration 163 retired it —
+//     a live writer, no reader anywhere, and no contract to keep.)
 //
 //   • The rest are the founder's rather than the company's, or the
 //     institution's rather than anyone's. Those are stated below by name, with
@@ -495,7 +497,6 @@ const ERASE_BY_NAMED_KEY: Record<string, {
    */
   where?: string;
 }> = {
-  peer_reviews: { column: 'reviewee_product_id', subject: 'product_id' },
   // The whole point of this table is that it carries no product id — patterns
   // are pooled across companies. `contributor_hash` was added so distinct
   // companies could be COUNTED; it also makes them erasable, which is the only

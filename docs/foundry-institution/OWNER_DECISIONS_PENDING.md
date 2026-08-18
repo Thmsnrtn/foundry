@@ -12,10 +12,12 @@ around each item.
 
 ---
 
-# ALL EIGHT DECISIONS ANSWERED
+# EIGHT ANSWERED, ONE NEWLY PENDING
 
-The owner answered every queued decision. Nothing is pending. Recorded here as
-settled; the record of what was asked and why is in git history.
+The owner answered the first eight queued decisions; those are recorded below as
+settled, with the record of what was asked and why in git history. One new item
+is pending at the end of this file — it needs counsel rather than the owner
+alone, and nothing about it blocks the campaign.
 
 ---
 
@@ -174,3 +176,52 @@ the channel rather than remove the surface.
 - A push with no `productId` has no authority context and fails closed.
 - The notification type names a database COLUMN. It is resolved through a frozen
   map, never interpolated from an argument.
+
+---
+
+# NEWLY PENDING
+
+## PENDING 9 — Retention periods for what survives an erasure: **COUNSEL**
+
+Foundry now states, for every table that survives a company's erasure, what is
+kept, on what basis, what may be done with it while it is kept, and when the
+decision should be looked at again. Those `reviewAfterDays` values are
+ENGINEERING ESTIMATES. They are not legal conclusions and this campaign will
+not turn them into any:
+
+| what survives | basis recorded | review after |
+|---|---|---|
+| `ai_spend_reservations` | cost accounting; live ceilings | 365 days |
+| `idempotency_keys` | at-most-once records for effects already sent | 30 days |
+| `products` (redacted shell) | referential integrity; the id must not be reissued | never |
+| `founders` (redacted shell) | same, plus retained financial records reference it | never |
+| `agent_audit_log` (two event types) | the record that the erasure happened | never |
+
+**What is actually being asked.** Three things, and only counsel can answer
+them:
+
+1. **Are the periods right for the jurisdictions Foundry operates in?** A
+   financial record retained 365 days is a guess at the shortest defensible
+   period. Several regimes require longer for accounting records and shorter
+   for anything identifying a person, and those two pull in opposite directions
+   on the same row.
+2. **Is a redacted shell erasure?** `products` and `founders` survive with the
+   id and nothing else — every describing column cleared, the email replaced
+   with `erased+<id>@invalid`, the identity-provider handle severed. The
+   engineering claim is that what remains identifies nobody. Whether that
+   satisfies a deletion request is a legal question about the row, not an
+   engineering one about the columns.
+3. **Does keeping the erasure trail itself need its own basis?** Two
+   `agent_audit_log` event types are kept forever as evidence the erasure
+   happened. That is self-evidently useful and not self-evidently lawful.
+
+**Until it is answered.** The dispositions stand as written and the erasure
+runs on them — this is proof debt, not a blocker. Nothing in the code claims
+these periods are legally required; each says only what purpose it serves. If
+counsel changes a period, the change is one number in `RETAINED_ON_ERASURE`
+and the tests that pin the basis strings will catch anything that drifts from
+what was decided.
+
+**Not asked here:** whether to retain more. The campaign's answer to every
+"could we keep this" has been no unless a stated purpose needs it, and that is
+an engineering decision already made.

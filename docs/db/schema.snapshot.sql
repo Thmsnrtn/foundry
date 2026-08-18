@@ -1810,7 +1810,6 @@
   completed_at DATETIME,
   completed_at TEXT
   completed_at TEXT
-  completed_at TEXT
   completed_at TEXT,
   completed_steps TEXT DEFAULT '[]',
   completion_pct INTEGER DEFAULT 0,
@@ -1869,7 +1868,6 @@
   content          TEXT NOT NULL,
   content      TEXT NOT NULL,
   content TEXT NOT NULL DEFAULT '',
-  content TEXT NOT NULL,
   content TEXT NOT NULL,
   content TEXT NOT NULL,
   content TEXT NOT NULL,
@@ -2049,7 +2047,6 @@
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
-  created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -2098,7 +2095,6 @@
   credential   TEXT NOT NULL,
   credentials TEXT,
   credentials_json TEXT,
-  credits_earned INTEGER DEFAULT 1,
   crisis_safety_score REAL,
   critical_findings_override TEXT,
   critique_pass_rate_pct REAL,                  -- 0-100
@@ -2624,7 +2620,6 @@
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -3670,7 +3665,6 @@
   rated_at TEXT NOT NULL DEFAULT (datetime('now')),
   rated_in_session_id TEXT                    -- groups ratings into calibration sessions
   rating INTEGER,
-  rating INTEGER,
   rating TEXT NOT NULL,                       -- 'feels_right'|'feels_off'|'missing_something'
   rating_dimensions TEXT,                     -- JSON: per-dimension flags (tone_off, claim_too_strong, etc.)
   rationale TEXT NOT NULL,
@@ -3778,13 +3772,10 @@
   revenue_model TEXT NOT NULL,
   revenue_quality_score REAL NOT NULL, -- MRR predictability, NRR, churn
   review_notes TEXT
-  review_type TEXT NOT NULL,
   reviewed BOOLEAN DEFAULT FALSE
   reviewed BOOLEAN DEFAULT FALSE,
   reviewed_at TEXT,
   reviewed_by TEXT,
-  reviewee_product_id TEXT NOT NULL,
-  reviewer_id TEXT NOT NULL,
   revoked_at          DATETIME                -- set when the capability drops below 'act'
   revoked_at         TEXT,
   revoked_at        TEXT
@@ -4007,7 +3998,6 @@
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected', 'executed', 'expired')),
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'done', 'failed')),
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'skipped')),
-  status TEXT DEFAULT 'pending',
   status TEXT DEFAULT 'pending',
   status TEXT DEFAULT 'proposed',
   status TEXT NOT NULL CHECK (status IN ('reserved','settled','released','ambiguous','expired')),
@@ -4361,7 +4351,6 @@
  evidence_refs_json TEXT NOT NULL, economic_result_json TEXT NOT NULL, learned_claim_id TEXT REFERENCES reconstruction_claims(id),
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
-);
 );
 );
 );
@@ -4993,7 +4982,6 @@ CREATE INDEX idx_patterns_market ON decision_patterns(market_category);
 CREATE INDEX idx_patterns_risk ON decision_patterns(risk_state_at_decision);
 CREATE INDEX idx_patterns_stage ON decision_patterns(product_lifecycle_stage);
 CREATE INDEX idx_patterns_type ON decision_patterns(decision_type);
-CREATE INDEX idx_peer_reviews_reviewer ON peer_reviews(reviewer_id);
 CREATE INDEX idx_phase_beta_freeze
 CREATE INDEX idx_phase_beta_product_status
 CREATE INDEX idx_playbook_exports_playbook ON playbook_exports(playbook_id);
@@ -5293,7 +5281,6 @@ CREATE TABLE outbound_webhooks (
 CREATE TABLE outcome_trees (
 CREATE TABLE outreach_suppressions (
 CREATE TABLE pattern_matches (
-CREATE TABLE peer_reviews (
 CREATE TABLE phase_beta_proposals (
 CREATE TABLE playbook_exports (
 CREATE TABLE playbook_trigger_log (

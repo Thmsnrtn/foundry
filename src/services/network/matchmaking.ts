@@ -159,24 +159,11 @@ export async function respondToIntroduction(
   }
 }
 
-/**
- * Submit a peer review.
- */
-export async function submitPeerReview(
-  reviewerId: string,
-  productId: string,
-  reviewType: string,
-  content: string,
-  rating?: number
-): Promise<string> {
-  const id = nanoid();
-  await query(
-    `INSERT INTO peer_reviews (id, reviewer_id, reviewee_product_id, review_type, content, rating, status, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'completed', datetime('now'))`,
-    [id, reviewerId, productId, reviewType, content, rating ?? null]
-  );
-  return id;
-}
+// `submitPeerReview` was here. It wrote into a table nothing has ever read,
+// through a route that took the reviewed company's id out of the request body
+// and asked nothing. Retired in migration 163 rather than given a reader — the
+// reader is what was ruled out, and a writer with no reader is not a feature
+// waiting for one.
 
 /**
  * Create or join a cohort group.

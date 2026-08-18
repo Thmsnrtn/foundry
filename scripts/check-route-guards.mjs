@@ -30,6 +30,34 @@
 // "the company you own" is a different question from "may you do this", and
 // answering the first is how the second went unasked.
 //
+// WHERE IT LOOKS, AND WHY THAT WAS WRONG.
+//
+// This scanned `src/routes/dashboard` and nothing else, and printed
+// "unguarded mutating routes: 34" — a statement about one directory, in the
+// voice of a statement about the system. `src/routes/api` holds EIGHTY-ONE
+// more, on the same surface, reached by the same session-authenticated
+// principal: `POST /api/network/peer-review` takes a `product_id` out of the
+// request body and writes a row against it with nothing asked at all. The gate
+// was silent about them, and silence read as absence — the same defect this
+// campaign has been finding in product copy, in a report that could not read
+// its own source, and in a table classified as naming nobody.
+//
+// So the population is now every founder-authenticated route surface, and the
+// baseline jumped accordingly. THAT IS NOT A RELAXATION. Nothing was permitted
+// that was refused before; a number that was measuring a quarter of the
+// surface has been corrected to measure the surface. The ratchet still only
+// falls.
+//
+// WHAT IS DELIBERATELY OUT OF SCOPE, and why each one:
+//   • `api/webhooks`, `ingest` — authenticated by a token or a provider
+//     signature, not by a member. "Which capability does this member hold" is
+//     not a question that can be asked of them, and padding the baseline with
+//     routes that can never leave it would make the number mean less.
+//   • `auth` — the identity provider's own callbacks, same reason.
+//   • `internal` — the institution talking to itself; no member is present.
+// Each of those surfaces has its own door and its own tests; this gate is
+// about the one where an accepted member reaches every page.
+//
 // Run: node scripts/check-route-guards.mjs [--write]
 // =============================================================================
 import { readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
@@ -37,7 +65,16 @@ import { join, relative, resolve } from 'path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const BASELINE = join(ROOT, 'docs/db/unguarded-route-baseline.txt');
-const DIR = join(ROOT, 'src/routes/dashboard');
+const DIR = join(ROOT, 'src/routes');
+
+/** Surfaces where no member is present, so member capability is not the
+ *  question. Reasoned in the header; listed here so a new one is a decision. */
+const NOT_A_MEMBER_SURFACE = [
+  'src/routes/api/webhooks',
+  'src/routes/ingest',
+  'src/routes/internal',
+  'src/routes/auth',
+];
 
 function tsFiles(dir) {
   return readdirSync(dir).flatMap((e) => {
@@ -57,8 +94,9 @@ const GUARD = /require(CompanyCapability|Owner)\s*\(|\bmemberMay\s*\(/;
 const found = [];
 
 for (const file of tsFiles(DIR)) {
+  const rel = relative(ROOT, file).split('\\').join('/');
+  if (NOT_A_MEMBER_SURFACE.some((d) => rel.startsWith(d + '/'))) continue;
   const src = strip(readFileSync(file, 'utf8'));
-  const rel = relative(ROOT, file);
   // A router-level guard covers every route in the file.
   if (/\.use\(\s*'\*'\s*,[\s\S]{0,200}?require(CompanyCapability|Owner)\s*\(/.test(src)) continue;
 

@@ -19,10 +19,11 @@
 // finish at all, and (until the run was made per-product) took every other
 // founder's erasure down with it.
 //
-// Two more name the subject under a different column. `peer_reviews` calls it
-// `reviewee_product_id`. `decision_patterns` carries only a `contributor_hash`
-// — which is how an erased company's decisions kept being aggregated into
-// insights published to its competitors, long after it asked to be forgotten.
+// Two more name the subject under a different column. `decision_patterns`
+// carries only a `contributor_hash` — which is how an erased company's
+// decisions kept being aggregated into insights published to its competitors,
+// long after it asked to be forgotten. `ai_daily_spend` calls it `scope_id`,
+// and holds a FOUNDER under the same column when the scope is a founder.
 //
 // The rest genuinely belong to the founder or to the institution. That is a
 // decision, so it is written down with a reason each: "nobody thought about

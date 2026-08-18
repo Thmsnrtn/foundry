@@ -1,0 +1,34 @@
+-- =============================================================================
+-- Migration 163: retire peer review
+--
+-- THE OWNER'S DECISION WAS NOT TO BUILD THE READER.
+--
+-- `peer_reviews` has a live writer — `POST /api/network/peer-review`, mounted
+-- and reachable — and no reader anywhere. Not a dashboard page, not an API
+-- response, not a model prompt, not a report: no code in this repository has
+-- ever executed a SELECT against it. A founder who submitted a review of
+-- another company wrote it into a table nobody has ever looked at, and Foundry
+-- returned them a review_id as though something had happened.
+--
+-- Asked of it in turn: no production reader, no persisted purpose, no public
+-- promise anywhere in the product, no durable company or founder
+-- responsibility it carries, and no semantics another surface lacks. So there
+-- is no contract to keep, and building a reader to justify the writer is the
+-- thing that was explicitly ruled out.
+--
+-- THE ROWS GO, AND NOT MERELY FOR TIDINESS. What is in them is one founder's
+-- written assessment of another founder's company — personal content about a
+-- third party, collected for a purpose that does not exist, retained where
+-- nobody can see it, correct it, or ask for it back. Keeping that is the
+-- defect, not the cleanup.
+--
+-- The write path is the other half of this: the route took a `product_id`
+-- straight out of the request body and wrote a row against it with no
+-- authority check of any kind, so any authenticated founder could file a
+-- review against any company in the system. That was survivable only because
+-- nothing read it — which is exactly the kind of harmless that stops being
+-- harmless the moment somebody builds the reader.
+-- =============================================================================
+
+DROP INDEX IF EXISTS idx_peer_reviews_reviewer;
+DROP TABLE IF EXISTS peer_reviews;
