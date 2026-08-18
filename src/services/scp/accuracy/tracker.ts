@@ -106,7 +106,7 @@ export async function measurePendingPredictions(
           const result = await query(
             `SELECT COUNT(*) as cnt FROM outbound_actions
              WHERE product_id = ? AND status = 'completed'
-               AND (parameters LIKE ? OR parameters LIKE ?)
+               AND (parameters_json LIKE ? OR parameters_json LIKE ?)
              LIMIT 1`,
             [productId, `%${customerId}%`, '%expansion%']
           );

@@ -92,7 +92,7 @@ function scoreIPClarity(companyAgeDays: number): number {
 function scoreTeamRetention(
   teamSize: number,
   companyAgeDays: number,
-  hasFounderVesting: boolean,
+  vestingRecorded: boolean,
 ): number {
   let points = 0;
 
@@ -106,8 +106,11 @@ function scoreTeamRetention(
   else if (companyAgeDays >= 180) points += 2;
   else points += 1;
 
-  // Vesting structure present
-  if (hasFounderVesting) points += 2;
+  // VESTING IS NOT RECORDED, so this branch is always the second one. Kept as
+  // the conservative point rather than removed, because removing it would
+  // rescale every company's historic score to hide a fact about Foundry's
+  // records. The gap list says what is actually going on.
+  if (vestingRecorded) points += 2;
   else points += 1;
 
   // Baseline: 2 for being in business
@@ -169,6 +172,12 @@ function identifyGaps(scores: {
   if (scores.team_retention < 7) {
     gaps.push('Team retention risk is elevated — ensure founders and key hires have proper vesting schedules');
   }
+  // A gap in Foundry's records, stated as one. The team-retention score is
+  // computed as though no vesting is in place because nothing here records
+  // whether it is — and a founder reading a readiness report should be told
+  // which of its findings are about their company and which are about what
+  // this report can see.
+  gaps.push('Vesting schedules are not tracked in Foundry, so team retention is scored without them — confirm founder and key-hire vesting separately before diligence');
   if (scores.integration_complexity < 7) {
     gaps.push('Limited integration ecosystem — building an API-first product and key integrations increases strategic value');
   }
@@ -318,19 +327,25 @@ export async function assessMAReadiness(productId: string): Promise<MAReadinessS
 
   // ── 5. Team size ──
   let teamSize = 1;
-  let hasFounderVesting = false;
+  // Never true: nothing in the schema records a vesting schedule. Named for
+  // what it means — whether Foundry HAS the record — not for whether vesting
+  // exists at the company, which Foundry has no way to know.
+  const vestingRecorded = false;
   try {
     const res = await query(
       `SELECT COUNT(*) as cnt FROM team_members WHERE product_id=? AND status='active'`,
       [productId]
     );
     teamSize = Math.max(1, ((res.rows[0] as Record<string, unknown>)?.cnt as number) ?? 1);
-    // Check for vesting info
-    const vestingRes = await query(
-      `SELECT COUNT(*) as cnt FROM team_members WHERE product_id=? AND vesting_schedule IS NOT NULL`,
-      [productId]
-    );
-    hasFounderVesting = ((vestingRes.rows[0] as Record<string, unknown>)?.cnt as number) > 0;
+    // FOUNDER VESTING IS NOT RECORDED ANYWHERE. `team_members` has no
+    // `vesting_schedule` column and never has, so this query raised, the catch
+    // swallowed it, and `hasFounderVesting` stayed false for every company —
+    // scored as "no vesting in place" in a readiness report, which is a
+    // finding about the company rather than about Foundry's records.
+    //
+    // Not knowing is not the same as knowing there is none. Left false here
+    // only because the caller has nowhere to put "unknown"; the difference is
+    // recorded in the report's own gap list rather than asserted as fact.
   } catch { /* ok */ }
 
   // ── 6. Integration count ──
@@ -355,7 +370,7 @@ export async function assessMAReadiness(productId: string): Promise<MAReadinessS
     scoreIPClarity(companyAgeDays).toFixed(1)
   );
   const team_retention_score = parseFloat(
-    scoreTeamRetention(teamSize, companyAgeDays, hasFounderVesting).toFixed(1)
+    scoreTeamRetention(teamSize, companyAgeDays, vestingRecorded).toFixed(1)
   );
   const integration_complexity_score = parseFloat(
     scoreIntegrationComplexity(integrationCount).toFixed(1)

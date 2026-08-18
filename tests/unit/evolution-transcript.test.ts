@@ -6,21 +6,23 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { buildRecentSessionsTranscript } from '../../src/services/scp/evolution.js';
 
 beforeAll(async () => {
+  // The migrations are the schema. Anything this file used to create by hand
+  // is already here, in the shape the product actually has — a fixture that
+  // disagrees with the schema proves nothing about the product.
+  await runMigrations();
+  // The real schema has foreign keys. The hand-written stand-in did not, so a
+  // session could name a company that does not exist and nothing objected.
+  await query(
+    `INSERT OR IGNORE INTO founders (id, clerk_user_id, email) VALUES ('f1','clerk_f1','f1@test.local')`);
+  for (const p of ['p1', 'p2']) {
+    await query(`INSERT OR IGNORE INTO products (id, name, owner_id) VALUES (?, ?, 'f1')`,
+      [p, `Company ${p}`]);
+  }
   await executeRaw(`
-    CREATE TABLE IF NOT EXISTS agent_sessions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT,
-      agent_name TEXT,
-      status TEXT,
-      observations TEXT,
-      actions_taken TEXT,
-      pending_decisions TEXT,
-      briefing_contribution TEXT,
-      completed_at TEXT
-    );
   `);
 });
 
@@ -34,8 +36,8 @@ async function insertSession(id: string, opts: Partial<{
   briefing_contribution: string; completed_at: string;
 }>): Promise<void> {
   await query(
-    `INSERT INTO agent_sessions (id, product_id, agent_name, status, observations, actions_taken, pending_decisions, briefing_contribution, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO agent_sessions (id, product_id, agent_name, agent_version, status, observations, actions_taken, pending_decisions, briefing_contribution, completed_at)
+     VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
     [
       id, opts.product_id ?? 'p1', opts.agent_name ?? 'atlas', opts.status ?? 'completed',
       opts.observations ?? '[]', opts.actions_taken ?? '[]', opts.pending_decisions ?? '[]',

@@ -181,7 +181,7 @@ async function safeCritiqueStats(
       `SELECT COUNT(*) AS c FROM agent_messages
        WHERE product_id = ?
          AND created_at >= ? AND created_at < ?
-         AND message_type IN ('alert','request')`,
+         AND type IN ('alert','request')`,
       [productId, start, end]
     );
     const totalCount = Number((total.rows[0] as Record<string, unknown> | undefined)?.c ?? 0);
@@ -335,8 +335,8 @@ async function safeAccuracyStats(
       `SELECT AVG(accuracy_score) AS avg_accuracy
        FROM agent_predictions
        WHERE product_id = ?
-         AND measured_at IS NOT NULL
-         AND measured_at >= ? AND measured_at < ?`,
+         AND outcome_measured_at IS NOT NULL
+         AND outcome_measured_at >= ? AND outcome_measured_at < ?`,
       [productId, start, end]
     );
     const avg = (result.rows[0] as Record<string, unknown> | undefined)?.avg_accuracy;

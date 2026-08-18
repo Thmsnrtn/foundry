@@ -74,8 +74,8 @@ export async function detectBehavioralSignals(productId: string): Promise<Behavi
     `SELECT COUNT(*) as cnt FROM action_executions
      WHERE product_id = ?
        AND status = 'approved'
-       AND updated_at IS NOT NULL
-       AND (julianday(updated_at) - julianday(created_at)) * 86400 < 10
+       AND approved_at IS NOT NULL
+       AND (julianday(approved_at) - julianday(created_at)) * 86400 < 10
        AND created_at >= datetime('now', '-72 hours')`,
     [productId]
   );

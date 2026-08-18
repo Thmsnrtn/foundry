@@ -228,7 +228,7 @@ dashboardRoutes.get('/dashboard', async (c) => {
         ),
         query(
           `SELECT COUNT(*) as cnt FROM stressor_history
-           WHERE product_id = ? AND created_at >= ?`,
+           WHERE product_id = ? AND identified_at >= ?`,
           [productId, lastSeenAt]
         ),
         query(

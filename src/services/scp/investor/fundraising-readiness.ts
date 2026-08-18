@@ -229,9 +229,13 @@ export async function assessFundraisingReadiness(
   // Load CAC tracking
   let hasCACTracked = false;
   try {
+    // `cac_cents` is not on `metric_snapshots` and never was — CAC is recorded
+    // on `unit_economics_snapshots.cac`. This query raised, the catch swallowed
+    // it, and every company was reported to an investor-readiness score as not
+    // tracking customer acquisition cost, including the ones that do.
     const cacResult = await query(
-      `SELECT COUNT(*) as cnt FROM metric_snapshots
-       WHERE product_id=? AND cac_cents IS NOT NULL LIMIT 1`,
+      `SELECT COUNT(*) as cnt FROM unit_economics_snapshots
+       WHERE product_id=? AND cac IS NOT NULL LIMIT 1`,
       [productId]
     );
     hasCACTracked = ((cacResult.rows[0] as Record<string, unknown>)?.cnt as number) > 0;

@@ -101,7 +101,7 @@ agentTemporalRoutes.get('/agents/temporal', requireTier('temporal'), async (c) =
   }
 
   const topAgents: AgentName[] = ['oracle', 'harbor', 'atlas', 'ledger'];
-  const agentPerfMap: Record<string, Array<{ date: string; sessions_count: number; success_rate: number; avg_health_score: number; decisions_proposed: number; evolution_events: number }>> = {};
+  const agentPerfMap: Record<string, Array<{ date: string; sessions_count: number; success_rate: number; avg_health_score: number | null; decisions_proposed: number; evolution_events: number }>> = {};
   for (const agentName of topAgents) {
     try {
       agentPerfMap[agentName] = await getAgentPerformanceOverTime(productId, agentName, 30);
@@ -226,8 +226,16 @@ agentTemporalRoutes.get('/agents/temporal', requireTier('temporal'), async (c) =
         const perf = agentPerfMap[agentName] ?? [];
         const totalSessions = perf.reduce((s, p) => s + p.sessions_count, 0);
         const avgSuccess = perf.length > 0 ? perf.reduce((s, p) => s + p.success_rate, 0) / perf.length : 0;
-        const avgHealth = perf.length > 0 ? perf.reduce((s, p) => s + p.avg_health_score, 0) / perf.length : 50;
-        const healthColor = avgHealth >= 70 ? '#4ecca3' : avgHealth >= 40 ? '#ffb347' : '#ff6b6b';
+        // No per-session health score is recorded, so most days have none.
+        // Averaging nulls as zero would paint every agent red; defaulting the
+        // whole card to 50 would paint a number nobody measured. Days that
+        // have a score are averaged; when none do, the card says so.
+        const scored = perf.map((p) => p.avg_health_score).filter((v): v is number => v != null);
+        const avgHealth = scored.length > 0
+          ? scored.reduce((s, v) => s + v, 0) / scored.length
+          : null;
+        const healthColor = avgHealth == null ? 'var(--text-muted)'
+          : avgHealth >= 70 ? '#4ecca3' : avgHealth >= 40 ? '#ffb347' : '#ff6b6b';
 
         return html`
         <div style="padding:0.85rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
@@ -236,7 +244,7 @@ agentTemporalRoutes.get('/agents/temporal', requireTier('temporal'), async (c) =
             <div style="font-size:0.7rem;color:var(--text-muted);">${AGENT_ROLES[agentName]}</div>
           </div>
           <div style="text-align:center;">
-            <div style="font-size:1rem;font-weight:700;color:${healthColor};">${Math.round(avgHealth)}</div>
+            <div style="font-size:1rem;font-weight:700;color:${healthColor};">${avgHealth == null ? '—' : Math.round(avgHealth)}</div>
             <div style="font-size:0.62rem;color:var(--text-muted);">health</div>
           </div>
           <div style="text-align:center;">

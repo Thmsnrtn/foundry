@@ -89,8 +89,12 @@ export class LedgerAgent extends BaseAgent {
 
     // ── 4. Query outbound_actions executed in last 30 days ────────────────────
     const executedActionsResult = await db(
+      // `estimated_value_usd` is not a column on `outbound_actions` — the
+      // money it records is `cost_usd`, what the action COST, not what it was
+      // guessed to be worth. Ledger's whole reason for reading this table is
+      // spend, so the sum is spend, and it is named for what it is.
       `SELECT agent_name, COUNT(*) as executed_count,
-              SUM(estimated_value_usd) as total_estimated_value_usd
+              SUM(COALESCE(cost_usd, 0)) as total_cost_usd
        FROM outbound_actions
        WHERE product_id = ?
          AND status = 'executed'
@@ -162,7 +166,7 @@ export class LedgerAgent extends BaseAgent {
     const executedRows = executedActionsResult.rows as Record<string, unknown>[];
     const executedContext = executedRows.length > 0
       ? executedRows.map(r =>
-          `${r.agent_name as string}: ${r.executed_count as number} actions, est. value $${(Number(r.total_estimated_value_usd) || 0).toFixed(2)}`
+          `${r.agent_name as string}: ${r.executed_count as number} actions, cost $${(Number(r.total_cost_usd) || 0).toFixed(2)}`
         ).join(', ')
       : 'No executed actions in 30d';
 

@@ -163,15 +163,22 @@ async function _sendBriefingToSlack(productId: string): Promise<void> {
     // Load today's briefing
     const { query: dbQuery } = await import('../../db/client.js');
     const today = new Date().toISOString().slice(0, 10);
+    // The table is `scp_briefings`, and its date column is `briefing_date`;
+    // there is no `briefings` table and no `generated_at`. So the Slack
+    // briefing push raised every time it ran and no briefing was ever posted —
+    // to a workspace the founder had connected for exactly this.
     const result = await dbQuery(
-      `SELECT * FROM briefings WHERE product_id=? AND DATE(generated_at)=? ORDER BY generated_at DESC LIMIT 1`,
+      `SELECT * FROM scp_briefings WHERE product_id=? AND DATE(briefing_date)=?
+        ORDER BY briefing_date DESC LIMIT 1`,
       [productId, today]
     );
     if (result.rows.length === 0) return;
 
     const row = result.rows[0] as Record<string, unknown>;
     const headline = (row.headline as string) ?? 'Daily briefing ready';
-    const healthScore = Number(row.overall_health_score ?? 70);
+    // The column is `health_score`. `overall_health_score` resolved to
+    // undefined and every Slack briefing would have reported 70.
+    const healthScore = Number(row.health_score ?? 70);
 
     // Extract top 3 insights from agent contributions
     let keyPoints: string[] = [];

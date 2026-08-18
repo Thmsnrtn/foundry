@@ -13,17 +13,17 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { resolve, join } from 'path';
 
+import { RUNTIME_CREATED_TABLES } from '../fixtures/runtime-created-tables.js';
+
 const ROOT = resolve(__dirname, '../..');
 
 // Tables created at runtime by application code (CREATE TABLE IF NOT EXISTS at
 // service boot), or referenced only inside a try/catch that intentionally
 // tolerates their absence. Each is a deliberate exception, not a bug.
-const ALLOWLIST = new Set([
-  'audio_brief_scripts', // created in src/services/scp/briefing/audio.ts
-  'email_digests',       // created in src/services/scp/briefing/email-digest.ts
-  'company_memory',      // voice-reply.ts: try/catch with fallback to decisions
-  'daily_briefings',     // debate/orchestrator.ts: guarded synthesis-append (unbuilt)
-]);
+// Shared with tests/unit/sql-prepares-against-schema.test.ts, which needs the
+// same exceptions for the same reasons. Two copies of this list is how one
+// gate ends up permitting what the other refuses.
+const ALLOWLIST = new Set(Object.keys(RUNTIME_CREATED_TABLES));
 
 function schemaTables(): Set<string> {
   const snap = readFileSync(resolve(ROOT, 'docs/db/schema.snapshot.sql'), 'utf8');

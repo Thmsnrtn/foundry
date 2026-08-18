@@ -468,7 +468,7 @@ export async function dnaCompletionNudge(): Promise<void> {
     try {
       // Max 1 nudge per week: check audit_log
       const recent = await query(
-        `SELECT id FROM audit_log WHERE product_id = ? AND action = 'dna_completion_nudge' AND created_at > datetime('now', '-7 days')`,
+        `SELECT id FROM audit_log WHERE product_id = ? AND action_type = 'dna_completion_nudge' AND created_at > datetime('now', '-7 days')`,
         [p.id]
       );
       if (recent.rows.length > 0) continue;
@@ -1400,7 +1400,8 @@ async function scpWebhookDeliveryCleanup(): Promise<void> {
     const { query: dbQuery } = await import('../db/client.js');
     // Keep last 30 days of delivery records, delete older ones
     const result = await dbQuery(
-      `DELETE FROM webhook_deliveries WHERE created_at < datetime('now', '-30 days')`
+      `DELETE FROM webhook_deliveries
+         WHERE COALESCE(delivered_at, failed_at) < datetime('now', '-30 days')`
     );
     logger.info(`scp_webhook_delivery_cleanup: Cleaned up old webhook delivery records`, { jobName: 'scp_webhook_delivery_cleanup' });
   } catch (err) {
