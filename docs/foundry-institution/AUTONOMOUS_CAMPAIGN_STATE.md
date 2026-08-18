@@ -695,3 +695,94 @@ before the ledger write it describes.
 nothing anywhere writes, without a `CHECK` to check against — returns 24
 candidates and all of them are noise: schema defaults and parameterised writes
 look identical to absent ones from the outside. Recorded as tried, not built.
+
+---
+
+## Batches 60–62: four doors, one consequence
+
+The lens that produced batches 53–59 — *where is the edge between the rule and
+the thing it governs?* — turned out to have a sharper form: **how many doors
+reach this consequence, and do all of them ask the same question?**
+
+**A standing order was autonomy with a different name.**
+`execution_playbooks.auto_execute` is a checkbox labelled "no approval
+required", and it meant that literally: the evaluator created an
+`action_execution` and approved it in the same breath, under the approver id
+`system:playbook`. It reached none of the machinery that governs every other
+autonomous act — not the trust ladder, not the platform cap, and not the
+consent ledger whose own doc comment reads *"the gate: no autonomous 'act'
+without this."* So every lever that stops Foundry acting on its own — turning
+the dial down, revoking consent, letting a time-boxed grant lapse, a demotion
+after a bad outcome — left a standing order sending exactly as before. A rule
+believed by three call sites and unknown to a fourth is not a rule.
+
+The gate reuses the existing categories rather than inventing a permission of
+its own: an action that leaves the founder's connected tools is *outreach* and
+answers to the outreach dial and cap; everything else answers to a `playbooks`
+dial that becomes visible in Controls the moment a playbook exists. A refused
+auto-execute leaves the action **pending** rather than cancelling it — the
+founder still gets the action, in the queue, where the human eye the refusal
+was protecting actually is.
+
+Worth stating because it is a real product consequence rather than a bug fix:
+the platform holds outreach at *suggest*, so an auto-executing `send_email`
+playbook cannot fire on its own today. That is the rail `outreach.ts` already
+documents. Lifting the cap is an operator decision, not a checkbox on a form.
+
+**The gate written to stop that recurring found two more instances the first
+time it ran.** `check-autonomous-approval.mjs` fails when a caller of
+`approveAndExecute` asks none of the questions that count as asking, and when
+an execution status is advanced outside the executor — approval is a status
+transition, and a file that writes it has stepped around every check the
+executor makes.
+
+- **Voice approvals set a status and stopped there.** Nothing in the system
+  ever picks an approved execution up again: the only transition out of
+  `approved` lives inside `approveAndExecute`, two lines after its own claim.
+  The founder said "yes, go ahead", the row stopped being pending, the effect
+  never happened, and the action left the pending queue — the only place the
+  dashboard would have let them approve it properly. It did not merely fail to
+  act; it *stranded* the action out of reach of the path that works.
+- **Three doors reached that routing and one of them asked something.** The
+  click path runs through `can_trigger_actions`. The dashboard voice route
+  asked nothing. The mobile webhook — an API key, not a human session at all —
+  checked only that the key was live and scoped to the product, so a key issued
+  with `agents:read` could approve and send. The approver was recorded as the
+  constant `'voice:founder'`: not a principal, a category.
+
+A key acts as the person who issued it, bounded by its scopes; both halves
+matter and neither substitutes for the other. An empty `created_by` names
+nobody and holds nothing, so an approval through such a key becomes a note
+rather than an effect.
+
+**Then the same question across the whole dashboard.** 116 mutating routes had
+no capability check. Most are ordinary company work an active member should be
+able to do; these were not: the agent authority level, assisting-authority
+grants, connection grants, the autopilot dial (which raised to `act` records a
+consent in the acting founder's name), the digest send, the letter reply send,
+a second approval surface for integration actions, scheduling erasure of the
+selected company, and storing third-party credentials.
+
+Deliberately left open, and asserted so it stays open: every route that only
+**lowers** what Foundry may do — panic, disconnect, grant revocation. Making
+the brake harder to reach than the accelerator would be the same defect wearing
+a safety label.
+
+**And the guard was looking at a different company than the handler.**
+`getLayoutContext` resolves the acting company as: the company named in the
+path, then the cookie, then the first company the person can see. The guard's
+subject read stopped at the cookie, so a founder with no selection set was
+refused on routes whose handlers would have worked, and on `/products/:id/…`
+the guard asked about the cookie's company while the handler served `:id`. One
+resolution rule now, for both. An id the caller cannot see is passed through
+unchanged so the capability check fails on it, rather than being replaced by a
+fallback.
+
+**Proved, not fixed.** Two probes returned clean and are recorded rather than
+repeated: multi-company work selectors with no state filter (0 — the
+entitlement→work-selector edge is total), and the consent edge across the
+autonomous departments. Four of five department modules mention no consent
+predicate, which looked like the defect class; tracing it showed they consult
+`getEffectiveMode` and only *propose* — gate-2 and gate-3 decisions, or
+executions created `pending`. `success.ts` is the only one that acts, and it
+checks `activeConsent`. The grep was wrong, not the code.
