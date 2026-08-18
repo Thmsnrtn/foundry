@@ -153,12 +153,31 @@ export async function computeAlignmentScore(productId: string): Promise<Alignmen
   const members = await getTeamMembers(productId);
   if (members.length < 2) return null;
 
-  // Get recent decision votes to measure priority consensus
+  // Recent decision votes, FROM PRINCIPALS ENTITLED TO CAST THEM.
+  //
+  // `can_vote_decisions` existed and nothing read it, so an investor_observer
+  // could vote and their vote fed this score. Refusing new ones at the route
+  // stops the intake; it does not clean what the intake already accepted.
+  //
+  // The rows stay. What actually happened is evidence, and deleting it would
+  // be fabricating a history in which it did not. What changes is that the
+  // CURRENT canonical alignment is computed only from votes whose caster is
+  // entitled to vote today: the owner, and members whose membership carries
+  // the permission. A vote from somebody since removed, or since restricted,
+  // stops counting — which is the same rule read forwards.
   const recentVotes = await query(
-    `SELECT dv.decision_id, dv.vote, dv.preferred_option, f.id as founder_id
-     FROM decision_votes dv
-     JOIN founders f ON dv.founder_id = f.id
-     WHERE dv.product_id = ? AND dv.voted_at > date('now', '-30 days')`,
+    `SELECT dv.decision_id, dv.vote, dv.preferred_option, dv.founder_id
+       FROM decision_votes dv
+      WHERE dv.product_id = ? AND dv.voted_at > date('now', '-30 days')
+        AND (
+          EXISTS (SELECT 1 FROM products p
+                   WHERE p.id = dv.product_id AND p.owner_id = dv.founder_id)
+          OR EXISTS (SELECT 1 FROM team_members t
+                      WHERE t.product_id = dv.product_id
+                        AND t.founder_id = dv.founder_id
+                        AND t.status = 'active'
+                        AND t.can_vote_decisions = 1)
+        )`,
     [productId],
   );
 

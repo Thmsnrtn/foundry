@@ -243,3 +243,79 @@ describe('the duplicate model is gone', () => {
     }
   });
 });
+
+// =============================================================================
+// THE VOTES THAT WERE ALREADY CAST.
+//
+// Refusing new votes at the route stops the intake. It does not clean what the
+// intake already accepted, and `computeAlignmentScore` reads thirty days back.
+//
+// The rows stay. What happened is evidence, and deleting it would fabricate a
+// history in which it did not. What changes is that the CURRENT canonical
+// alignment counts only votes whose caster is entitled to vote today — which
+// is the same rule read forwards, and also handles a member since removed or
+// since restricted.
+// =============================================================================
+
+describe('alignment counts only votes their caster may cast', () => {
+  const DECISION = 'mc_decision';
+
+  beforeEach(async () => {
+    await query('DELETE FROM decision_votes');
+    await query('DELETE FROM decisions');
+    await query(
+      `INSERT INTO decisions (id, product_id, what, why_now, category, gate, status)
+       VALUES (?, ?, 'raise prices', 'now', 'strategic', 1, 'pending')`, [DECISION, P]);
+  });
+
+  async function vote(founderId: string, choice: 'approve' | 'reject'): Promise<void> {
+    await query(
+      `INSERT INTO decision_votes (id, decision_id, product_id, founder_id, vote, preferred_option)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [`v_${founderId}`, DECISION, P, founderId, choice, choice]);
+  }
+
+  it('counts the owner and a member who may vote', async () => {
+    const { computeAlignmentScore } = await import('../../src/services/team/members.js');
+    await vote(OWNER, 'approve');
+    await vote(COFOUNDER, 'approve');
+    const snapshot = await computeAlignmentScore(P);
+    expect(snapshot, 'two entitled voters agreeing is an alignment signal').not.toBeNull();
+  });
+
+  it('does not count a vote from a member who may not', async () => {
+    // The historical defect, cast directly into the table the way it happened.
+    const { computeAlignmentScore } = await import('../../src/services/team/members.js');
+    await vote(OWNER, 'approve');
+    await vote(OBSERVER, 'reject');
+
+    const snapshot = await computeAlignmentScore(P);
+    // One entitled vote is not a disagreement; the observer's 'b' must not
+    // create one.
+    expect(snapshot?.divergence_areas ?? [],
+      'an observer’s vote must not read as the team disagreeing').toEqual([]);
+  });
+
+  it('stops counting a member since removed', async () => {
+    const { computeAlignmentScore } = await import('../../src/services/team/members.js');
+    await vote(OWNER, 'approve');
+    await vote(COFOUNDER, 'reject');
+    const before = await computeAlignmentScore(P);
+    expect(before?.divergence_areas.length ?? 0).toBeGreaterThan(0);
+
+    await query(`UPDATE team_members SET status = 'removed' WHERE founder_id = ?`, [COFOUNDER]);
+    const after = await computeAlignmentScore(P);
+    expect(after?.divergence_areas ?? [],
+      'entitlement is read as of now, not as of the vote').toEqual([]);
+  });
+
+  it('leaves the row where it is', async () => {
+    // Evidence of what happened. Excluding it from a derived score is not the
+    // same as pretending it never occurred.
+    await vote(OBSERVER, 'reject');
+    const { computeAlignmentScore } = await import('../../src/services/team/members.js');
+    await computeAlignmentScore(P);
+    const rows = await query('SELECT COUNT(*) AS n FROM decision_votes WHERE founder_id = ?', [OBSERVER]);
+    expect(Number((rows.rows[0] as Record<string, unknown>).n)).toBe(1);
+  });
+});

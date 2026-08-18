@@ -48,7 +48,12 @@ function tsFiles(dir) {
 
 const found = [];
 for (const file of tsFiles(join(ROOT, 'tests'))) {
-  const src = readFileSync(file, 'utf8');
+  // A header explaining that a migration wrote `CREATE TABLE IF NOT EXISTS
+  // board_packets` is prose about the defect, not the defect. Blanked rather
+  // than removed so reported line numbers still point at the real line.
+  const src = readFileSync(file, 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
   for (const m of src.matchAll(/CREATE\s+TABLE\s+(?:IF NOT EXISTS\s+)?["'`]?(\w+)/gi)) {
     if (!real.has(m[1])) continue;                    // a throwaway table is fine
     const line = src.slice(0, m.index).split('\n').length;
