@@ -38,9 +38,16 @@ import { query } from '../../src/db/client.js';
 import { eraseFounderAccount, RETAINED_ON_ERASURE_DISPOSITIONS }
   from '../../src/services/privacy/consent.js';
 
-const F = 'trace_founder';
-const P = 'trace_product';
-const EMAIL = 'trace@example.com';
+// IDS CHOSEN SO NOTHING ELSE CAN CONTAIN THEM. The sweep matches by
+// containment, and the generic seeder fills text columns with `stub_<column>`.
+// With ids like `trace_product` and a column named `product_lifecycle_stage`,
+// the seeded value `trace_product_lifecycle_stage` contains the product id and
+// the sweep reports a leak that is entirely the fixture's own doing. This
+// repository has already lost time to one near-miss fixture collision; do not
+// make these ids readable at the cost of making them collidable.
+const F = 'ZZFOUNDERIDZZ';
+const P = 'ZZPRODUCTIDZZ';
+const EMAIL = 'ZZERASEDMAILZZ@example.com';
 
 let seeded: { ok: string[]; refused: string[] };
 
@@ -64,10 +71,10 @@ const DELIBERATE = new Set([
 beforeAll(async () => {
   await runMigrations();
   await query(`INSERT INTO founders (id, clerk_user_id, email, name) VALUES (?,?,?,?)`,
-    [F, 'clerk_trace', EMAIL, 'Trace Founder']);
+    [F, 'clerk_stub', EMAIL, 'A Founder']);
   await query(
     `INSERT INTO products (id, name, owner_id, status, scp_status)
-     VALUES (?, 'Trace Co', ?, 'active', 'active')`, [P, F]);
+     VALUES (?, 'Swept Co', ?, 'active', 'active')`, [P, F]);
 
   seeded = await seedEverySurface();
 });
@@ -108,10 +115,13 @@ async function seedEverySurface(): Promise<{ ok: string[]; refused: string[] }> 
     const cols = (await query(`SELECT * FROM pragma_table_info('${table}')`, []))
       .rows as unknown as Array<Record<string, unknown>>;
     const names = cols.map((c) => String(c.name));
-    // A company's tables and the FOUNDER'S OWN tables both. The founder-scoped
-    // ones deliberately survive erasing one of two companies; whether they
-    // survive erasing the person is the question this file exists to ask.
-    if (!names.includes('product_id') && !names.includes('founder_id')) continue;
+    // Tables with an id column are seeded generically. Tables WITHOUT one are
+    // seeded too, but with ordinary values — a seeder that writes the company
+    // id into every table is planting the defect rather than finding it. The
+    // tables that name the company inside a COMPOSITE key are seeded the way
+    // production actually writes them, by their real writers, below.
+    const hasIdColumn = names.includes('product_id') || names.includes('founder_id');
+    void hasIdColumn;
 
     const use: string[] = [];
     const vals: unknown[] = [];
@@ -141,7 +151,7 @@ async function seedEverySurface(): Promise<{ ok: string[]; refused: string[] }> 
 function valueFor(table: string, name: string, type: string, ddl: string): unknown {
   if (name === 'product_id') return P;
   if (name === 'founder_id' || name === 'owner_id') return F;
-  if (name === 'id') return `trace_${table}_${nanoid(6)}`;
+  if (name === 'id') return `stub_${table}_${nanoid(6)}`;
   const vocab = ddl.match(
     new RegExp(`\\b${name}\\b[^,)]*?CHECK\\s*\\(\\s*(?:"?${name}"?)\\s+IN\\s*\\(([^)]*)\\)`, 'i'))
     ?? ddl.match(new RegExp(`CHECK\\s*\\(\\s*"?${name}"?\\s+IN\\s*\\(([^)]*)\\)`, 'i'));
@@ -154,7 +164,7 @@ function valueFor(table: string, name: string, type: string, ddl: string): unkno
   if (t.includes('REAL') || t.includes('NUM') || t.includes('DEC')) return 1;
   if (name.endsWith('_json') || name.endsWith('_json_array')) return '[]';
   if (name.includes('_at') || name.includes('date')) return '2024-01-01T00:00:00Z';
-  return `trace_${name}`;
+  return `stub_${name}`;
 }
 
 /** Every (table, column) pair in the live schema. */
@@ -196,8 +206,11 @@ describe('after Foundry says the erasure completed', () => {
     // whether the company is actually gone, including from tables that carry
     // the id under a name nobody thought to classify.
     for (const { table, column } of await textColumns()) {
+      // CONTAINMENT, NOT EQUALITY. An id inside a composite primary key, a
+      // dedup key or a JSON blob is still the company. Exact matching reported
+      // clean on two tables whose keys are literally built from the id.
       const found = await query(
-        `SELECT COUNT(*) AS n FROM "${table}" WHERE "${column}" = ?`, [P]);
+        `SELECT COUNT(*) AS n FROM "${table}" WHERE "${column}" LIKE ?`, [`%${P}%`]);
       const n = Number((found.rows[0] as Record<string, unknown>).n);
       if (n > 0) hits.push(`${table}.${column} still holds the product id (${n} row(s))`);
     }
@@ -209,7 +222,7 @@ describe('after Foundry says the erasure completed', () => {
     for (const { table, column } of await textColumns()) {
       for (const value of [F, EMAIL]) {
         const found = await query(
-          `SELECT COUNT(*) AS n FROM "${table}" WHERE "${column}" = ?`, [value]);
+          `SELECT COUNT(*) AS n FROM "${table}" WHERE "${column}" LIKE ?`, [`%${value}%`]);
         const n = Number((found.rows[0] as Record<string, unknown>).n);
         if (n > 0) leaks.push(`${table}.${column} still holds ${value === F ? 'the founder id' : 'their email'} (${n} row(s))`);
       }
@@ -229,8 +242,75 @@ describe('after Foundry says the erasure completed', () => {
       'github_repo_url', 'github_repo_owner', 'github_repo_name',
       'github_access_token', 'ingest_token', 'share_token']) {
       expect(String(row[col] ?? ''), `products.${col} still describes the company`)
-        .not.toContain('Trace Co');
+        .not.toContain('Swept Co');
       if (col !== 'name') expect(row[col], `products.${col} survived the erasure`).toBeNull();
     }
+  });
+});
+
+// ── what the generic sweep still cannot see ────────────────────────────────
+//
+// An adversarial review found five structural exemptions in the sweep above.
+// Three are now closed (it seeds every table, matches by containment, and the
+// fixture ids cannot collide). Two cannot be closed generically, because they
+// depend on how PRODUCTION builds a value rather than on the schema:
+//
+//   • a table whose primary key is assembled from the company id by its writer;
+//   • data belonging to this founder inside a company they do NOT own.
+//
+// A generic seeder cannot produce either without planting the very thing it is
+// testing for. So they are named, and written the way production writes them.
+
+describe('a company named inside a key it does not have a column for', () => {
+  const OTHER = 'ZZOTHERFOUNDERZZ';
+  const THEIRS = 'ZZTHEIRPRODUCTZZ';
+
+  it('does not keep contributing to the benchmark pool after erasure', async () => {
+    // `network_contributions` has no product_id column, so nothing in the
+    // erasure plan reaches it — and its classification says "single metric
+    // values with no key of any kind". Its writer builds the primary key as
+    // `${productId}_week_${metric}`, so every row names the company that
+    // contributed it, and `recomputeBenchmarks` keeps folding erased companies
+    // into percentiles shown to other founders. This is the harm the
+    // `decision_patterns` contributor-hash work exists to prevent, in a table
+    // nobody classified correctly.
+    await query(
+      `INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
+      [OTHER, 'clerk_other', 'other@example.com']);
+    await query(
+      `INSERT INTO products (id, name, owner_id, status, scp_status)
+       VALUES (?, 'Pooled Co', ?, 'active', 'active')`, [THEIRS, OTHER]);
+    // The key shape is `contributeToNetwork`'s, written here directly because
+    // the writer needs a full week of metrics and the KEY is what is at issue.
+    await query(
+      `INSERT OR REPLACE INTO network_contributions (id, metric, market_category, lifecycle_stage, mrr_bracket, value)
+       VALUES (?, 'activation_rate', 'unknown', 'early', '0-1k', 0.4)`,
+      [`${THEIRS}_week_activation_rate`]);
+
+    const { eraseFounderAccount } = await import('../../src/services/privacy/consent.js');
+    await eraseFounderAccount(OTHER);
+
+    const left = await query(
+      `SELECT id FROM network_contributions WHERE id LIKE ?`, [`%${THEIRS}%`]);
+    expect(left.rows,
+      'an erased company is still in the pool its rows are averaged into')
+      .toHaveLength(0);
+  });
+
+  it('does not keep the founder in a rate-limit bucket keyed by their id', async () => {
+    // Classified as "request counters keyed by an opaque bucket". The buckets
+    // are `audit:founder:<id>` and `apimodel:<product_id>`.
+    const SOLO = 'ZZRATELIMITEDZZ';
+    await query(
+      `INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
+      [SOLO, 'clerk_rl', 'rl@example.com']);
+    await query(
+      `INSERT OR REPLACE INTO rate_limit_counters (key, window_start, window_ms, count)
+       VALUES (?, 0, 60000, 1)`, [`audit:founder:${SOLO}`]);
+    const { eraseFounderAccount } = await import('../../src/services/privacy/consent.js');
+    await eraseFounderAccount(SOLO);
+    const left = await query(
+      `SELECT key FROM rate_limit_counters WHERE key LIKE ?`, [`%${SOLO}%`]);
+    expect(left.rows, 'the bucket names the person it counts').toHaveLength(0);
   });
 });

@@ -486,6 +486,13 @@ const ERASE_BY_NAMED_KEY: Record<string, {
   column: string;
   subject: 'product_id' | 'contributor_hash';
   /**
+   * How the subject sits in the column. `exact` (the default) means the column
+   * IS the id. `prefix` means the id is the first component of a composite key
+   * the writer assembled — matched as `id || '%'` rather than by containment,
+   * so one company's id can never match another's row.
+   */
+  match?: 'exact' | 'prefix';
+  /**
    * Narrows the delete when the column holds more than one kind of subject.
    *
    * DEFENCE IN DEPTH, NOT THE MECHANISM. What actually keeps the scopes apart
@@ -514,6 +521,15 @@ const ERASE_BY_NAMED_KEY: Record<string, {
   // because a company left — though what enforces that today is that their
   // scope_ids cannot collide, not this clause. See the type above.
   ai_daily_spend: { column: 'scope_id', subject: 'product_id', where: "scope = 'product'" },
+  // THE COMPANY IS IN THE PRIMARY KEY, WHICH IS WHY NOTHING FOUND IT.
+  // `network_contributions` has no `product_id` column — its writer builds the
+  // key as `${productId}_week_${metric}` — so the by-product sweep could not
+  // see it and it sat in NOT_COMPANY_DATA under the reason "single metric
+  // values with no key of any kind". Every row named the company that
+  // contributed it, and `recomputeBenchmarks` kept folding erased companies
+  // into percentiles shown to other founders. That is the exact harm the
+  // `decision_patterns` contributor hash exists to prevent.
+  network_contributions: { column: 'id', subject: 'product_id', match: 'prefix' },
 };
 
 /**
@@ -546,17 +562,46 @@ const ERASE_BY_NAMED_KEY: Record<string, {
  *           anything.
  */
 type AccountErasure =
-  | { op: 'delete'; by?: string; where?: string }
-  | { op: 'redact' }
+  | { op: 'delete'; by?: string; where?: string; match?: 'exact' | 'suffix' }
+  | { op: 'redact'; clears: string[]; resets: Record<string, number> }
   | { op: 'sever'; marker: string | null; parties: Array<{ column: string; alsoClear?: string[] }> };
 
 const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: AccountErasure }> = {
   founders: {
     reason: 'the account itself',
-    // Redacted in place by `eraseFounderAccount`, not deleted: retained
-    // financial records reference it, and an id that can be reissued is worse
-    // than one that resolves to a cleared row.
-    onAccountErasure: { op: 'redact' },
+    // WHAT SURVIVES ON IT, NAMED. This said `{ op: 'redact' }` and nothing
+    // else, so the most personal row in the schema was the one row with no
+    // written statement of what is kept — while every table that survives a
+    // PRODUCT erasure has carried a field-level disposition for months.
+    //
+    // Clearing `country_code` and keeping `ppp_factor` and `local_currency`
+    // was the sharpest version of that: those two are functions of the country
+    // it deliberately removed, so the fact was erased and re-derivable from
+    // the same row. `referred_by_code` resolves through `referral_links` to
+    // the person who recruited them — the other side of the linkage
+    // `referral_conversions` goes to the trouble of severing.
+    // KEPT, AND WHY: `id` so foreign keys resolve and the id cannot be
+    // reissued; `tier`, `paid_through`, `trial_ends_at` because retained
+    // financial records reference the commercial relationship and say nothing
+    // about the person; `created_at` because an account that existed is a fact
+    // the erasure trail already records. Redacted rather than deleted for the
+    // same reason the product row is.
+    onAccountErasure: {
+      op: 'redact',
+      clears: [
+        'email', 'name', 'clerk_user_id', 'stripe_customer_id', 'preferences',
+        'country_code', 'local_currency', 'ppp_factor', 'referred_by_code',
+        'cohort_id', 'lifestyle_mode', 'lifestyle_target_mrr',
+        'wisdom_network_consent_date',
+        'last_seen_at', 'onboarding_completed_at',
+      ],
+      // NOT NULL, so they are RESET rather than cleared — and the value is not
+      // the column default. `wisdom_network_opted_in` defaults to 1; an erased
+      // account must not read as consenting to a cross-company pool it can no
+      // longer be asked about. Withdrawn is the only honest state for a
+      // consent flag on an account that no longer exists.
+      resets: { wisdom_network_opted_in: 0, network_opt_in: 0 },
+    },
   },
   ai_output_feedback: {
     reason: 'the founder\'s ratings of outputs, across all their products',
@@ -630,6 +675,15 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'the founder\'s plan counters',
     onAccountErasure: { op: 'delete' },
   },
+  rate_limit_counters: {
+    reason: 'request counters bucketed per founder and per product, keyed by a composite string rather than by a column',
+    // CLASSIFIED AS "AN OPAQUE BUCKET". The buckets are `audit:founder:<id>`
+    // and `apimodel:<product_id>` — the key names exactly who is being
+    // counted. The residue is short-lived (a sweep expires old windows) but
+    // the written reason was false, and a reason nobody can check is how
+    // `network_contributions` stayed misclassified too.
+    onAccountErasure: { op: 'delete', by: 'key', where: "key LIKE 'audit:founder:%'", match: 'suffix' },
+  },
   ai_daily_spend: {
     reason: 'the founder\'s own daily spend rollup, keyed by scope rather than by a founder column',
     // THE ROLLUP CARRIES THE PERSON UNDER A NAME NOTHING WAS LOOKING FOR.
@@ -668,10 +722,8 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   job_locks: 'scheduler leases',
   leading_indicators: 'indicator definitions per sector',
   network_benchmarks: 'benchmark aggregates, naming no contributor',
-  network_contributions: 'single metric values with no key of any kind — nothing in the row identifies who contributed it',
   portfolios: 'an investor organisation, not a founder\'s company',
   portfolio_snapshots: 'that organisation\'s own aggregates',
-  rate_limit_counters: 'request counters keyed by an opaque bucket',
   schema_migrations: 'which migrations have run',
   sector_remediation_templates: 'template text per sector',
   sector_scoring_overrides: 'scoring configuration per sector',
@@ -749,8 +801,16 @@ export interface ErasureStep {
  * has children RAISES — which is what an erasure did on any company that had
  * ever sent a chat message.
  */
-function namedKeyPredicate(key: { column: string; where?: string }): string {
-  return key.where ? `${key.column} = ? AND ${key.where}` : `${key.column} = ?`;
+function namedKeyPredicate(
+  key: { column: string; where?: string; match?: 'exact' | 'prefix' },
+): string {
+  // `prefix` anchors at the start deliberately. A bare LIKE '%id%' would let a
+  // company whose id is a substring of another's delete rows that are not
+  // theirs, which is a worse defect than the one it fixes.
+  const subject = key.match === 'prefix'
+    ? `${key.column} LIKE ? || '_%'`
+    : `${key.column} = ?`;
+  return key.where ? `${subject} AND ${key.where}` : subject;
 }
 
 export async function erasurePlan(): Promise<ErasureStep[]> {
@@ -902,17 +962,31 @@ export async function eraseFounderAccount(founderId: string): Promise<{
   await runFounderScopedErasure(founderId);
 
   await query(
+    // DRIVEN BY THE STATED FIELD LIST, not by a hand-written column list that
+    // drifts from it. `email` and `clerk_user_id` are markers rather than
+    // NULLs — both are unique, and a row of NULLs collides with the next
+    // erased account. Everything else in `clears` goes to NULL.
     `UPDATE founders SET
        email = 'erased+' || id || '@invalid',
-       name = NULL,
        -- The identity-provider handle is how this person could be recognised
        -- again. It is the one field that must not survive.
        clerk_user_id = 'erased:' || id,
-       stripe_customer_id = NULL,
-       preferences = NULL,
-       country_code = NULL
+       ${founderRedactionSql()}
      WHERE id = ?`, [founderId]);
   return { productsErased, failed, founderRedacted: true };
+}
+
+/** The `founders` clears, as SQL, minus the two that carry unique markers
+ *  rather than NULL. Derived from the disposition so the two cannot drift. */
+function founderRedactionSql(): string {
+  const d = FOUNDER_SCOPED.founders.onAccountErasure;
+  if (d.op !== 'redact') throw new Error('founders must be redacted, not deleted');
+  return [
+    ...d.clears
+      .filter((c) => c !== 'email' && c !== 'clerk_user_id')
+      .map((c) => `${c} = NULL`),
+    ...Object.entries(d.resets).map(([c, v]) => `${c} = ${v}`),
+  ].join(',\n       ');
 }
 
 /**
@@ -944,7 +1018,12 @@ async function runFounderScopedErasure(founderId: string): Promise<void> {
     }
 
     const column = op.by ?? 'founder_id';
-    const where = op.where ? `${column} = ? AND ${op.where}` : `${column} = ?`;
+    // `suffix` is for a composite key whose LAST component is the founder —
+    // `audit:founder:<id>`. Anchored at the end for the same reason the
+    // by-product prefix match is anchored at the start: an unanchored match
+    // would let one person's erasure delete another's rows.
+    const subject = op.match === 'suffix' ? `${column} LIKE '%:' || ?` : `${column} = ?`;
+    const where = op.where ? `${subject} AND ${op.where}` : subject;
     await query(`DELETE FROM ${table} WHERE ${where}`, [founderId]);
   }
 }

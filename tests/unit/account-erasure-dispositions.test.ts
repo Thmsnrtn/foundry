@@ -213,3 +213,55 @@ describe('the daily spend rollup carries the company and the person under one co
       .toBeDefined();
   });
 });
+
+// ── the shell the person leaves behind ─────────────────────────────────────
+
+describe('the founders row states what survives on it', () => {
+  it('accounts for every column, so nothing survives by omission', async () => {
+    // The disposition was `{ op: 'redact' }` and nothing else — the most
+    // personal row in the schema was the one with no written statement of what
+    // is kept, while every table surviving a PRODUCT erasure has carried a
+    // field-level disposition for months. This asserts the list is TOTAL
+    // against the live schema, so a column added next year is a decision
+    // rather than a silent survivor.
+    const d = FOUNDER_SCOPED_DISPOSITIONS.founders.onAccountErasure;
+    if (d.op !== 'redact') throw new Error('founders must be redacted');
+    const KEPT_DELIBERATELY = new Set([
+      'id',            // foreign keys resolve; the id must not be reissued
+      'created_at',    // that an account existed is already in the erasure trail
+      'tier', 'paid_through', 'trial_ends_at',  // the commercial relationship
+    ]);
+    const cols = ((await query(`SELECT name FROM pragma_table_info('founders')`, []))
+      .rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.name));
+    const accounted = new Set([...d.clears, ...Object.keys(d.resets), ...KEPT_DELIBERATELY]);
+    const unaccounted = cols.filter((c) => !accounted.has(c));
+    expect(unaccounted, `founders columns nobody decided about: ${unaccounted.join(', ')}`)
+      .toEqual([]);
+  });
+
+  it('does not keep a value the erased one can be re-derived from', async () => {
+    // The sharpest version of the omission: `country_code` was cleared as
+    // personal while `ppp_factor` and `local_currency` — both functions of it —
+    // stayed. A fact erased and re-derivable from the same row is not erased.
+    await query(
+      `UPDATE founders SET country_code='NG', local_currency='NGN', ppp_factor=0.35,
+              referred_by_code='WHOBROUGHTTHEM', lifestyle_target_mrr=9000
+        WHERE id = ?`, [GONE]);
+    await eraseFounderAccount(GONE);
+    const row = await one(`SELECT * FROM founders WHERE id = ?`, [GONE]);
+    for (const col of ['country_code', 'local_currency', 'ppp_factor',
+      'referred_by_code', 'lifestyle_target_mrr']) {
+      expect(row![col], `founders.${col} survived the erasure`).toBeNull();
+    }
+  });
+
+  it('leaves consent withdrawn rather than at its default', async () => {
+    // `wisdom_network_opted_in` is NOT NULL and defaults to 1. Resetting to the
+    // DEFAULT would leave an erased account reading as consenting to a
+    // cross-company pool it can no longer be asked about.
+    await eraseFounderAccount(GONE);
+    const row = await one(`SELECT * FROM founders WHERE id = ?`, [GONE]);
+    expect(Number(row!.wisdom_network_opted_in)).toBe(0);
+    expect(Number(row!.network_opt_in)).toBe(0);
+  });
+});
