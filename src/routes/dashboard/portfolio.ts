@@ -44,6 +44,8 @@ interface FleetItem {
 
 portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
   const founder = c.get('founder');
+  // DELIBERATELY OWNER-ONLY: a portfolio is the owner's view across the
+  // companies they own, not a company surface.
   const products = await getProductsByOwner(founder.id);
 
   if (products.rows.length === 0) return c.redirect('/onboarding');

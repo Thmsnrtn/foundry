@@ -3,7 +3,8 @@
 // Common data loader for layout context across all dashboard routes.
 // =============================================================================
 
-import { query, getProductsByOwner, getLifecycleState } from '../../db/client.js';
+import { query, getProductsByOwner,
+  getVisibleProducts, getLifecycleState } from '../../db/client.js';
 import type { LayoutOptions } from '../../views/layout.js';
 import type { RiskStateValue, NextAction, AppNotification, MilestoneEvent, OnboardingTour, NavBadges, Founder } from '../../types/index.js';
 import { getProductDNA } from '../../services/wisdom/dna.js';
@@ -64,7 +65,9 @@ export async function getLayoutContext(
 ): Promise<LayoutContext> {
   const founderName = founder.name ?? founder.email;
 
-  const products = await getProductsByOwner(founder.id);
+  // Every company this person may see — owned or accepted into. This used to
+  // be `getProductsByOwner`, so an invited co-founder saw nothing at all.
+  const products = await getVisibleProducts(founder.id);
   const allProducts = products.rows.map((p) => {
     const r = p as Record<string, unknown>;
     return { id: r.id as string, name: r.name as string };

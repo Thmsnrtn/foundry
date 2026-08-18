@@ -525,7 +525,6 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   portfolios: 'an investor organisation, not a founder\'s company',
   portfolio_snapshots: 'that organisation\'s own aggregates',
   rate_limit_counters: 'request counters keyed by an opaque bucket',
-  role_permissions: 'the permission model',
   schema_migrations: 'which migrations have run',
   sector_remediation_templates: 'template text per sector',
   sector_scoring_overrides: 'scoring configuration per sector',

@@ -32,7 +32,8 @@ import { Hono } from 'hono';
 
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { requirePermission, requireRole } from '../../src/middleware/rbac.js';
+import { requireCompanyCapability, requireOwner } from '../../src/middleware/rbac.js';
+
 
 const OWNER = 'rb_owner';
 const STRANGER = 'rb_stranger';
@@ -79,13 +80,16 @@ const withCompany = { headers: { cookie: `foundry_product=${PRODUCT}` }, method:
 
 describe('a founder can reach their own guarded routes', () => {
   it('lets the owner through on the dashboard surface', async () => {
-    const res = await dashboardApp(OWNER, requireRole('owner')).request('/x', withCompany);
+    const res = await dashboardApp(OWNER, requireOwner()).request('/x', withCompany);
     expect(res.status, 'the owner of the company was getting 401 from an owner check')
       .toBe(200);
   });
 
-  it('lets the owner through a permission check too', async () => {
-    const res = await dashboardApp(OWNER, requirePermission('experiments:manage'))
+  it('lets the owner through a capability check too', async () => {
+    // The owner holds every company capability by virtue of being the owner,
+    // not because they sit at the top of a ladder — they have no membership
+    // row at all.
+    const res = await dashboardApp(OWNER, requireCompanyCapability('can_manage_company'))
       .request('/x', withCompany);
     expect(res.status).toBe(200);
   });
@@ -97,7 +101,7 @@ describe('a founder can reach their own guarded routes', () => {
     //
     // A role is a property of a person. A key is not a person, even when the
     // same row names one.
-    const res = await apiApp(OWNER, PRODUCT, requireRole('owner')).request('/x', { method: 'POST' });
+    const res = await apiApp(OWNER, PRODUCT, requireOwner()).request('/x', { method: 'POST' });
     expect(res.status,
       'a machine credential must not inherit its creator\'s human authority')
       .toBe(401);
@@ -108,34 +112,47 @@ describe('and the check still refuses everyone it should', () => {
   it('refuses a stranger who names the company in a cookie', async () => {
     // The cookie is a SELECTION, not an authorisation. Forging it names a
     // company; it does not confer a role on one.
-    const res = await dashboardApp(STRANGER, requireRole('owner')).request('/x', withCompany);
+    const res = await dashboardApp(STRANGER, requireOwner()).request('/x', withCompany);
     expect(res.status).toBe(403);
   });
 
-  it('refuses a team member below the required role', async () => {
-    // Roles live in `account_roles`, which is what getUserRole reads —
-    // `team_members` carries a different vocabulary for a different purpose.
+  it('refuses a member a capability their membership does not carry', async () => {
+    // There is one company authorization model now. `account_roles` held a
+    // second one that nothing ever wrote to, so the guards were reading an
+    // always-empty table; membership in `team_members` is what the invite flow
+    // writes and what these now ask.
     await query(
-      `INSERT INTO account_roles (id, product_id, founder_id, role, granted_by)
-       VALUES ('rb_ar', ?, ?, 'viewer', ?)`, [PRODUCT, MEMBER, OWNER]);
-    const res = await dashboardApp(MEMBER, requireRole('admin')).request('/x', withCompany);
+      `INSERT INTO team_members
+         (id, product_id, founder_id, role, status, can_view_decisions, can_manage_company)
+       VALUES ('rb_tm', ?, ?, 'investor_observer', 'active', 1, 0)`, [PRODUCT, MEMBER]);
+    const res = await dashboardApp(MEMBER, requireCompanyCapability('can_manage_company'))
+      .request('/x', withCompany);
     expect(res.status).toBe(403);
   });
 
-  it('admits that team member to a role they do hold', async () => {
-    const res = await dashboardApp(MEMBER, requireRole('viewer')).request('/x', withCompany);
+  it('admits that member to a capability they do carry', async () => {
+    const res = await dashboardApp(MEMBER, requireCompanyCapability('can_view_decisions'))
+      .request('/x', withCompany);
     expect(res.status).toBe(200);
   });
 
+  it('refuses a member at the ownership boundary, whatever they carry', async () => {
+    // Ownership is not the top of the ladder. Nothing grants it.
+    await query(
+      `UPDATE team_members SET can_manage_company = 1 WHERE id = 'rb_tm'`);
+    const res = await dashboardApp(MEMBER, requireOwner()).request('/x', withCompany);
+    expect(res.status).toBe(403);
+  });
+
   it('refuses an unauthenticated request', async () => {
-    const res = await dashboardApp(null, requireRole('viewer')).request('/x', withCompany);
+    const res = await dashboardApp(null, requireCompanyCapability('can_view_decisions')).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 
   it('says so plainly when no company is selected', async () => {
     // Distinguishable from "not signed in": the caller is known, the company is
     // not. Returning 401 for both is what hid the original defect.
-    const res = await dashboardApp(OWNER, requireRole('owner')).request('/x', { method: 'POST' });
+    const res = await dashboardApp(OWNER, requireOwner()).request('/x', { method: 'POST' });
     expect(res.status).toBe(400);
   });
 });
@@ -160,7 +177,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
   it('refuses an ingest credential at a human role check', async () => {
     const res = await withPrincipal(
       { kind: 'ingest', credentialId: 'ic_1', productId: PRODUCT, purpose: 'metrics' },
-      requireRole('viewer')).request('/x', withCompany);
+      requireCompanyCapability('can_view_decisions')).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 
@@ -169,7 +186,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
     // its declared capability, checked where that is checked.
     const res = await withPrincipal(
       { kind: 'service', service: 'scp_scheduler', capability: 'run_agents', productId: PRODUCT },
-      requireRole('viewer')).request('/x', withCompany);
+      requireCompanyCapability('can_view_decisions')).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 
@@ -178,7 +195,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
     // wildcard scope must not become one.
     const res = await withPrincipal(
       { kind: 'api_key', keyOwnerId: OWNER, productId: PRODUCT, scopes: ['*'] },
-      requireRole('owner')).request('/x', withCompany);
+      requireOwner()).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 
@@ -190,7 +207,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
     // notices.
     const res = await withPrincipal(
       { kind: 'api_key', keyOwnerId: OWNER, founderId: OWNER, productId: PRODUCT, scopes: ['*'] },
-      requireRole('owner')).request('/x', withCompany);
+      requireOwner()).request('/x', withCompany);
     expect(res.status, 'the discriminant decides, not the presence of a field')
       .toBe(401);
   });
@@ -205,7 +222,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
       c.set('productId' as never, PRODUCT as never);
       await next();
     });
-    app.post('/x', requireRole('owner'), (c) => c.json({ ok: true }));
+    app.post('/x', requireOwner(), (c) => c.json({ ok: true }));
     const res = await app.request('/x', withCompany);
     expect(res.status, 'ambiguity fails closed').toBe(401);
   });
@@ -228,7 +245,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
   });
 
   it('fails closed on no principal at all', async () => {
-    const res = await withPrincipal(null, requireRole('viewer')).request('/x', withCompany);
+    const res = await withPrincipal(null, requireCompanyCapability('can_view_decisions')).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 });

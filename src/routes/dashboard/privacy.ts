@@ -507,6 +507,9 @@ privacySettings.get('/privacy/export', async (c) => {
 
 privacySettings.get('/settings/export-all', async (c) => {
   const founder = c.get('founder');
+  // DELIBERATELY OWNER-ONLY. Erasure and export are the data controller's
+  // rights over the company's records, not an ordinary company capability a
+  // colleague can be granted.
   const products = await getProductsByOwner(founder.id);
 
   if (products.rows.length === 0) {

@@ -4,7 +4,8 @@
 // =============================================================================
 
 import { createMiddleware } from 'hono/factory';
-import { hasPermission } from '../services/rbac/permissions.js';
+
+import type { MemberCapability } from '../services/team/members.js';
 
 /**
  * WHO IS ACTING, AS A HUMAN, AND ON WHICH COMPANY.
@@ -54,85 +55,75 @@ export async function actingSubject(c: any): Promise<{ userId?: string; productI
 }
 
 /**
- * Require a specific RBAC permission for a route.
- * Falls back to owner-level access (always allowed) if user is the product owner.
+ * ONE COMPANY AUTHORIZATION MODEL, NOT TWO.
  *
- * Usage in routes:
- *   router.use('*', requirePermission('experiments:manage'));
- *   router.get('/', requirePermission('briefings:view'), handler);
+ * There were two. `account_roles` held a viewer/analyst/admin/owner ladder that
+ * `requireRole` read, and `assignRole` — its only writer — had no callers
+ * anywhere, so no row was ever created. `getUserRole` always returned null and
+ * `requireRole('admin')` reduced to the owner check inside it: seventeen
+ * routes that read as "an admin may do this" were owner-only in practice, and
+ * an accepted co-founder could reach none of them. `requirePermission` and its
+ * eleven-permission map had no call sites at all.
+ *
+ * Meanwhile `team_members` — what the invite flow actually writes — carried the
+ * real permissions and nothing consulted them.
+ *
+ * The owner's decision is that company membership is canonical and ownership is
+ * a distinct, stronger property. So there are two questions and two guards:
+ *
+ *   requireOwner()              the exceptional boundary. Ending the
+ *                               subscription, pausing the company, archiving
+ *                               the product. Not a capability; nothing grants
+ *                               it.
+ *
+ *   requireCompanyCapability()  ordinary company work, resolved through the
+ *                               member's explicit permissions. The owner
+ *                               passes because they hold every capability by
+ *                               virtue of being the owner, not because they
+ *                               sit at the top of a ladder.
+ *
+ * A role label — co_founder, advisor, investor_observer — is product shorthand.
+ * It is what the permissions were backfilled from and what a settings page
+ * shows a human. It grants nothing by itself, and no guard reads it.
  */
-export function requirePermission(permission: string) {
+
+/** The exceptional boundary. */
+export function requireOwner() {
   return createMiddleware(async (c, next) => {
     const { userId, productId } = await actingSubject(c);
-
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
     if (!productId) return c.json({ error: 'No company selected' }, 400);
 
-    // Check if user is the product owner (owners always have all permissions)
-    const { query } = await import('../db/client.js');
-    const ownerCheck = await query(
-      `SELECT id FROM products WHERE id=? AND owner_id=?`,
-      [productId, userId]
-    );
-
-    if (ownerCheck.rows.length > 0) {
-      // Product owner — skip RBAC check
-      await next();
-      return;
+    const { isCompanyOwner } = await import('../services/team/members.js');
+    if (!(await isCompanyOwner(productId, userId))) {
+      return c.json({ error: 'Only the company owner can do this' }, 403);
     }
-
-    // Check RBAC permission
-    const allowed = await hasPermission(productId, userId, permission);
-    if (!allowed) {
-      // Return HTML forbidden page for browser requests, JSON for API requests
-      const acceptHeader = c.req.header('Accept') ?? '';
-      if (acceptHeader.includes('text/html')) {
-        return c.html(`
-          <!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:100px auto;text-align:center;">
-          <h2>Access Restricted</h2>
-          <p>You don't have permission to access this area. Required: <code>${permission}</code></p>
-          <a href="/dashboard">&#8592; Back to Dashboard</a>
-          </body></html>
-        `, 403);
-      }
-      return c.json({ error: `Insufficient permissions. Required: ${permission}` }, 403);
-    }
-
     await next();
   });
 }
 
-/**
- * Require a minimum role level.
- * Roles in order: viewer < analyst < admin < owner
- */
-export function requireRole(minimumRole: 'viewer' | 'analyst' | 'admin' | 'owner') {
-  const roleRank = { viewer: 1, analyst: 2, admin: 3, owner: 4 };
-
+/** Ordinary company work, gated on the member's explicit permission. */
+export function requireCompanyCapability(capability: MemberCapability) {
   return createMiddleware(async (c, next) => {
     const { userId, productId } = await actingSubject(c);
-
     if (!userId) return c.json({ error: 'Unauthorized' }, 401);
     if (!productId) return c.json({ error: 'No company selected' }, 400);
 
-    const { getUserRole } = await import('../services/rbac/permissions.js');
-    const { query } = await import('../db/client.js');
-
-    // Check if owner
-    const ownerCheck = await query(`SELECT id FROM products WHERE id=? AND owner_id=?`, [productId, userId]);
-    if (ownerCheck.rows.length > 0) {
-      await next();
-      return;
+    const { memberMay } = await import('../services/team/members.js');
+    if (!(await memberMay(productId, userId, capability))) {
+      // The same answer for "not a member" and "member without this
+      // permission": telling them apart tells a stranger who is on the team.
+      const acceptHeader = c.req.header('Accept') ?? '';
+      if (acceptHeader.includes('text/html')) {
+        return c.html(
+          '<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;'
+          + 'margin:100px auto;text-align:center;">'
+          + '<h2>Not available to you</h2>'
+          + '<p>Your access to this company does not include this.</p>'
+          + '<a href="/dashboard">&#8592; Back to Dashboard</a></body></html>', 403);
+      }
+      return c.json({ error: 'Not permitted for your access to this company' }, 403);
     }
-
-    const role = await getUserRole(productId, userId);
-    const userRank = role ? (roleRank[role as keyof typeof roleRank] ?? 0) : 0;
-    const requiredRank = roleRank[minimumRole];
-
-    if (userRank < requiredRank) {
-      return c.json({ error: `Requires ${minimumRole} role or higher` }, 403);
-    }
-
     await next();
   });
 }

@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import { setCookie, getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { query, getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
+import { query, getProductsByOwner, getVisibleProducts, getProductByOwner, getActiveStressors } from '../../db/client.js';
 import { computeSignal, getSignalHistory, getDailyInsight, getPreviousSignalScore } from '../../services/signal.js';
 import { computeWeeklyOutcome } from '../../services/intelligence/weekly-outcome.js';
 import { recordBriefingView, getBriefingOutcome } from '../../services/intelligence/briefing-telemetry.js';
@@ -128,7 +128,9 @@ dashboardRoutes.post('/switch-product', async (c) => {
 
 dashboardRoutes.get('/dashboard', async (c) => {
   const founder = c.get('founder');
-  const products = await getProductsByOwner(founder.id);
+  // Owned or accepted into. An invited co-founder used to land here and see
+  // an empty dashboard.
+  const products = await getVisibleProducts(founder.id);
 
   if (products.rows.length === 0) {
     return c.redirect('/onboarding');

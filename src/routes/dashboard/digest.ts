@@ -81,6 +81,8 @@ async function assembleDigestData(productId: string) {
 digestRoutes.get('/digest', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'digest', 'Digest', undefined, c);
+  // DELIBERATELY OWNER-ONLY for now: a digest is outbound mail, and who
+  // receives one is a product decision rather than a visibility question.
   const products = await getProductsByOwner(founder.id);
   if (products.rows.length === 0) {
     const content = html`<h1>Weekly Digest</h1>${digestView([])}`;

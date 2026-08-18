@@ -248,7 +248,19 @@ export type MemberCapability =
   | 'can_vote_decisions'
   | 'can_view_financials'
   | 'can_view_audit'
-  | 'can_trigger_actions';
+  | 'can_trigger_actions'
+  /** Ordinary company management: credentials, integrations, share links, the
+   * sending address, inviting colleagues. NOT ownership — cancelling the
+   * subscription, pausing the company and archiving the product stay behind an
+   * ownership check, because they are not capabilities anyone can be granted. */
+  | 'can_manage_company';
+
+/** Every capability, so a gate can iterate them rather than a list going stale
+ * beside the union. */
+export const MEMBER_CAPABILITIES: readonly MemberCapability[] = [
+  'can_view_decisions', 'can_vote_decisions', 'can_view_financials',
+  'can_view_audit', 'can_trigger_actions', 'can_manage_company',
+] as const;
 
 export async function memberMay(
   productId: string, founderId: string, capability: MemberCapability,
@@ -269,6 +281,45 @@ export async function memberMay(
   // saying which would tell a stranger whether somebody is on the team.
   if (!row) return false;
   return Number(row.allowed) === 1;
+}
+
+/**
+ * Is this person the owner of this company?
+ *
+ * OWNERSHIP IS NOT A PERMISSION. It is the exceptional boundary: the one
+ * person who can end the subscription, pause the company, archive the product
+ * and decide who pays. Nothing grants it and no membership row confers it,
+ * which is why it is asked separately rather than being the top rung of a
+ * ladder.
+ */
+export async function isCompanyOwner(productId: string, founderId: string): Promise<boolean> {
+  const res = await query(
+    `SELECT 1 FROM products WHERE id = ? AND owner_id = ?`, [productId, founderId]);
+  return res.rows.length > 0;
+}
+
+/**
+ * The companies this person may see: the ones they own, and the ones they have
+ * been accepted into.
+ *
+ * THE DASHBOARD USED TO LIST BY `owner_id` ALONE. A founder could invite a
+ * co-founder, have the invitation accepted, and that person would open the
+ * dashboard to nothing at all — no company, no pages, no way in. The invite
+ * flow existed, the membership row existed, and no query joined them to what
+ * anybody could see.
+ *
+ * Visibility is not capability. Being able to see the company is where the
+ * question starts, and every consequential route still asks its own.
+ */
+export async function visibleProductIds(founderId: string): Promise<string[]> {
+  const res = await query(
+    `SELECT id FROM products WHERE owner_id = ? AND status != 'archived'
+      UNION
+     SELECT p.id FROM products p
+       JOIN team_members t ON t.product_id = p.id
+      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'`,
+    [founderId, founderId]);
+  return (res.rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.id));
 }
 
 /**

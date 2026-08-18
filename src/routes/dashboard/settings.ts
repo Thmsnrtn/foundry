@@ -12,7 +12,7 @@ import { dashboardLayout } from '../../views/layout.js';
 import { settingsPage } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
 import { nanoid } from 'nanoid';
 import { randomBytes } from 'crypto';
 
@@ -20,7 +20,7 @@ export const settingsRoutes = new Hono<AuthEnv>();
 
 // ─── Checkout → Stripe ──────────────────────────────────────────────────────
 
-settingsRoutes.post('/checkout', requireRole('owner'), async (c) => {
+settingsRoutes.post('/checkout', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const tier = body.tier as 'solo' | 'growth' | 'investor_ready';
@@ -541,7 +541,7 @@ settingsRoutes.get('/checkout', async (c) => {
 
 // ─── Share Token Generation ───────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/generate-share', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/generate-share', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   // Use current product from cookie, not LIMIT 1 (FRICTION: settings targeting wrong product)
   const { getCookie } = await import('hono/cookie');
@@ -564,7 +564,7 @@ settingsRoutes.post('/settings/generate-share', requireRole('admin'), async (c) 
 
 // ─── Ingest Token Generation ──────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/generate-ingest', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/generate-ingest', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const products = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
   if (products.rows.length === 0) return c.redirect('/settings');
@@ -583,7 +583,7 @@ settingsRoutes.post('/settings/generate-ingest', requireRole('admin'), async (c)
 // widen one afterwards: a credential is withdrawn and a new one issued, so the
 // answer to "what was this secret ever allowed to do?" stays true.
 
-settingsRoutes.post('/settings/ingest-credentials', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/ingest-credentials', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
   if (!ctx.productId) return c.redirect('/settings');
@@ -614,7 +614,7 @@ settingsRoutes.post('/settings/ingest-credentials', requireRole('admin'), async 
 // handling. Foundry cannot verify domain ownership and does not pretend to;
 // the provider can, and refuses anything it has not verified.
 
-settingsRoutes.post('/settings/sending-identity', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/sending-identity', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
   if (!ctx.productId) return c.redirect('/settings');
@@ -639,7 +639,7 @@ settingsRoutes.post('/settings/sending-identity', requireRole('admin'), async (c
   return c.redirect('/settings?sending=connected');
 });
 
-settingsRoutes.post('/settings/sending-identity/disconnect', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/sending-identity/disconnect', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
   if (!ctx.productId) return c.redirect('/settings');
@@ -651,7 +651,7 @@ settingsRoutes.post('/settings/sending-identity/disconnect', requireRole('admin'
   return c.redirect(removed ? '/settings?sending=disconnected' : '/settings');
 });
 
-settingsRoutes.post('/settings/ingest-credentials/:id/revoke', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/ingest-credentials/:id/revoke', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
   if (!ctx.productId) return c.redirect('/settings');
@@ -674,7 +674,7 @@ settingsRoutes.post('/settings/ingest-credentials/:id/revoke', requireRole('admi
 // hash is stored and there is nothing to read back — and because a secret in a
 // URL lands in request logs, in history, and in a referrer.
 
-settingsRoutes.post('/settings/api-keys', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/api-keys', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
   if (!ctx.productId) return c.redirect('/settings');
@@ -722,7 +722,7 @@ settingsRoutes.post('/settings/api-keys', requireRole('admin'), async (c) => {
     </div>`));
 });
 
-settingsRoutes.post('/settings/api-keys/:id/revoke', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/api-keys/:id/revoke', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
   if (!ctx.productId) return c.redirect('/settings');
@@ -741,7 +741,7 @@ settingsRoutes.get('/settings/add-product', async (c) => {
 
 // ─── Subscription Management (Stripe Customer Portal) ───────────────────────
 
-settingsRoutes.post('/settings/manage-subscription', requireRole('owner'), async (c) => {
+settingsRoutes.post('/settings/manage-subscription', requireOwner(), async (c) => {
   const founder = c.get('founder');
   if (!founder.stripe_customer_id) return c.redirect('/settings?error=no_subscription');
 
@@ -760,7 +760,7 @@ settingsRoutes.post('/settings/manage-subscription', requireRole('owner'), async
 
 // ─── Wisdom Toggle ────────────────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/wisdom-toggle', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/wisdom-toggle', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const optedIn = body.opted_in === '1' ? 1 : 0;
@@ -775,7 +775,7 @@ settingsRoutes.post('/settings/wisdom-toggle', requireRole('admin'), async (c) =
 
 // ─── Company Pause / Resume ─────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/pause-company', requireRole('owner'), async (c) => {
+settingsRoutes.post('/settings/pause-company', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const { getCookie } = await import('hono/cookie');
   const cookieProductId = getCookie(c, 'foundry_product');
@@ -802,7 +802,7 @@ settingsRoutes.post('/settings/pause-company', requireRole('owner'), async (c) =
   return c.redirect('/settings?success=company_paused');
 });
 
-settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) => {
+settingsRoutes.post('/settings/resume-company', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const { getCookie } = await import('hono/cookie');
   const cookieProductId = getCookie(c, 'foundry_product');
@@ -829,7 +829,7 @@ settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) 
 
 // ─── Toggle Product Status (Pause/Resume from Manage Company UI) ─────────────
 
-settingsRoutes.post('/settings/toggle-product-status', requireRole('owner'), async (c) => {
+settingsRoutes.post('/settings/toggle-product-status', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const productId = body.product_id;

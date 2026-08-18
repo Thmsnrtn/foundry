@@ -1895,7 +1895,6 @@
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
-  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2005,7 +2004,6 @@
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -2417,7 +2415,6 @@
   founder_hypothesis TEXT,
   founder_id          TEXT NOT NULL,
   founder_id       TEXT NOT NULL,
-  founder_id   TEXT NOT NULL REFERENCES founders(id),
   founder_id  TEXT NOT NULL,
   founder_id  TEXT NOT NULL,
   founder_id TEXT NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
@@ -2509,9 +2506,7 @@
   global_cap_cents REAL NOT NULL,
   gmv REAL,
   granted INTEGER NOT NULL DEFAULT 0, -- 1=granted, 0=denied
-  granted_at   TEXT NOT NULL DEFAULT (datetime('now')),
   granted_at TEXT,
-  granted_by   TEXT,                                -- founder_id or 'system'
   gross_margin REAL,
   grounding_evidence_json TEXT NOT NULL,
   grounding_mechanism TEXT NOT NULL CHECK(grounding_mechanism IN ('deterministic','authenticated_owner')),
@@ -2589,12 +2584,10 @@
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
-  id           TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
-  id         TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -2882,7 +2875,7 @@
   job_title TEXT NOT NULL,
   job_type TEXT NOT NULL,
   job_url TEXT,
-  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  joined_at DATETIME DEFAULT CURRENT_TIMESTAMP, can_manage_company BOOLEAN DEFAULT FALSE,
   joined_at TEXT DEFAULT (datetime('now')),
   joined_at TEXT,
   judgment_id          TEXT NOT NULL REFERENCES strategic_decisions_log(id),
@@ -3302,7 +3295,6 @@
   period_start DATETIME NOT NULL,
   period_start TEXT NOT NULL,          -- YYYY-MM-DD
   period_start TEXT NOT NULL, -- ISO date, start of 30-day window
-  permission TEXT NOT NULL,
   personal_runway_months REAL,
   personal_runway_months REAL,
   personal_runway_months REAL,
@@ -3432,7 +3424,6 @@
   product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
   product_id   TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
-  product_id   TEXT REFERENCES products(id),       -- NULL = org-level role
   product_id  TEXT NOT NULL DEFAULT '',
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
@@ -3785,7 +3776,6 @@
   revoked_at        TEXT
   revoked_at    TEXT,
   revoked_at   DATETIME,
-  revoked_at   TEXT,                                -- NULL means currently active
   revoked_at DATETIME
   risk_alignment REAL,
   risk_assessment TEXT,
@@ -3803,8 +3793,6 @@
   risks TEXT,                            -- Sentinel + Shield analysis
   roi_multiple REAL,                          -- total_value / platform_cost
   roi_vs_predicted REAL,
-  role         TEXT NOT NULL CHECK (role IN ('owner','operator','investor','advisor','viewer')),
-  role       TEXT NOT NULL,
   role TEXT NOT NULL CHECK(role IN ('founder', 'coo', 'system')),
   role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
   role TEXT NOT NULL DEFAULT 'co_founder' CHECK(role IN (
@@ -4610,8 +4598,6 @@
 );
 );
 );
-);
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4768,8 +4754,6 @@ BEGIN
 BEGIN
 BEGIN
 BEGIN
-CREATE INDEX idx_account_roles_founder ON account_roles(founder_id);
-CREATE INDEX idx_account_roles_product ON account_roles(product_id);
 CREATE INDEX idx_accuracy_scores_product ON agent_accuracy_scores(product_id, agent_name);
 CREATE INDEX idx_acquirer_signals_product ON acquirer_signals(product_id, detected_at DESC);
 CREATE INDEX idx_action_drafts_decision ON action_drafts(decision_id);
@@ -5130,7 +5114,6 @@ CREATE TABLE IF NOT EXISTS "integrations" (
 CREATE TABLE IF NOT EXISTS "notifications" (
 CREATE TABLE IF NOT EXISTS "oauth_states" (
 CREATE TABLE IF NOT EXISTS "push_log" (
-CREATE TABLE account_roles (
 CREATE TABLE acquirer_signals (
 CREATE TABLE action_drafts (
 CREATE TABLE action_executions (
@@ -5358,7 +5341,6 @@ CREATE TABLE responsibility_shadow_expectations (
 CREATE TABLE responsibility_transitions (
 CREATE TABLE revenue_attributions (
 CREATE TABLE roi_monthly_summaries (
-CREATE TABLE role_permissions (
 CREATE TABLE runway_models (
 CREATE TABLE saved_insights (
 CREATE TABLE scenario_models (
@@ -5495,7 +5477,6 @@ CREATE UNIQUE INDEX idx_push_subscriptions_founder_token
 CREATE UNIQUE INDEX idx_rejection_streak_unique
 CREATE UNIQUE INDEX idx_responsibility_discovery_evidence
 CREATE UNIQUE INDEX idx_roi_monthly_product ON roi_monthly_summaries(product_id, month);
-CREATE UNIQUE INDEX idx_role_permissions_unique ON role_permissions(role, permission);
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique

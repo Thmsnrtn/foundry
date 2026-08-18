@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { query, getProductsByOwner, getProductByOwner, getLifecycleState } from '../../db/client.js';
+import { query, getProductsByOwner, getVisibleProducts, getProductByOwner, getLifecycleState } from '../../db/client.js';
 import { getProductDNA, upsertProductDNA, getDNACompletionStatus } from '../../services/wisdom/dna.js';
 import { logFailure, getAllFailures } from '../../services/wisdom/failures.js';
 import { getRelevantPatterns, invalidatePattern } from '../../services/wisdom/patterns.js';
@@ -26,7 +26,8 @@ export const productRoutes = new Hono<AuthEnv>();
 
 productRoutes.get('/products', async (c) => {
   const founder = c.get('founder');
-  const result = await getProductsByOwner(founder.id);
+  // Owned or accepted into.
+  const result = await getVisibleProducts(founder.id);
   return c.json({ products: result.rows });
 });
 

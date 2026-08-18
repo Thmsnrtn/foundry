@@ -99,7 +99,10 @@ describe('the flags are asked', () => {
   });
 
   it('refuses a member of another company', async () => {
-    await query(`INSERT INTO products (id, name, owner_id) VALUES ('mc_other','Other',?)`, [STRANGER]);
+    // Owned by nobody this file otherwise uses, so the "sees nothing" case
+    // below stays about a person with no companies at all.
+    await query(`INSERT INTO founders (id, clerk_user_id, email) VALUES ('mc_third','ck_third','third@test.local')`);
+    await query(`INSERT INTO products (id, name, owner_id) VALUES ('mc_other','Other','mc_third')`);
     expect(await memberMay('mc_other', COFOUNDER, 'can_vote_decisions'),
       'membership is of ONE company').toBe(false);
   });
@@ -127,58 +130,116 @@ describe('membership and permission stay different questions', () => {
 });
 
 // =============================================================================
-// TWO ROLE SYSTEMS, NO EDGE BETWEEN THEM.
+// THERE WAS A SECOND AUTHORIZATION SYSTEM. THERE ISN'T NOW.
 //
-// `account_roles` holds the ladder `requireRole` reads — viewer / analyst /
-// admin / owner — and `assignRole` is the only thing that writes it. Nothing
-// calls `assignRole`. So no row is ever created, `getUserRole` always returns
-// null, and `requireRole('admin')` reduces to the explicit owner check above
-// it: in practice, requireOwner.
+// `account_roles` held a viewer/analyst/admin/owner ladder that `requireRole`
+// read, and `assignRole` — its only writer — had no callers anywhere. No row
+// was ever created, so `getUserRole` always returned null and
+// `requireRole('admin')` reduced to the owner check inside it: seventeen routes
+// that read as "an admin may do this" were owner-only in practice, and an
+// accepted co-founder could reach none of them. Meanwhile `team_members` — what
+// the invite flow actually writes — carried the real permissions and nothing
+// consulted them. Two models, and the guards were reading the empty one.
 //
-// `team_members` holds the other one — co_founder / advisor /
-// investor_observer, with the capability flags this file is about — and the
-// invite flow writes it. Nothing bridges the two.
-//
-// The consequence is not a security hole; it is the opposite, and §13 is
-// explicit that this counts: a guard that refuses the legitimate principal is
-// not extra secure, it is broken. A founder invites a co-founder, the
-// invitation is accepted, and that person sees no companies at all
-// (`getProductsByOwner` is owner-only), holds no role, and can reach exactly
-// the two endpoints tested above.
-//
-// What a co-founder, an advisor and an investor observer should each be able
-// to see and do is a product decision, and widening authorization is the
-// direction where guessing is dangerous. These tests pin what is true now so
-// the answer changes deliberately rather than by drift.
+// Owner decision: company membership is canonical, ownership is a distinct and
+// stronger property, and a role label grants nothing by itself. Migration 152
+// drops both dead tables.
 // =============================================================================
 
-describe('what membership does not grant, today', () => {
-  it('does not put the member on the role ladder', async () => {
-    const { getUserRole } = await import('../../src/services/rbac/permissions.js');
-    expect(await getUserRole(P, COFOUNDER),
-      'nothing calls assignRole, so account_roles is never populated').toBeNull();
+describe('membership is the company authorization model', () => {
+  it('an accepted member can see the company', async () => {
+    const { getVisibleProducts } = await import('../../src/db/client.js');
+    const seen = (await getVisibleProducts(COFOUNDER)).rows
+      .map((r) => (r as Record<string, unknown>).id);
+    expect(seen, 'the dashboard listed by owner_id, so an invited member saw nothing')
+      .toContain(P);
   });
 
-  it('leaves requireRole answering only for the owner', async () => {
-    const { getUserRole } = await import('../../src/services/rbac/permissions.js');
-    expect(await getUserRole(P, OWNER),
-      'even the owner holds no account_roles row — the owner check is separate')
-      .toBeNull();
+  it('an observer can see the company too — visibility is not capability', async () => {
+    const { getVisibleProducts } = await import('../../src/db/client.js');
+    const seen = (await getVisibleProducts(OBSERVER)).rows
+      .map((r) => (r as Record<string, unknown>).id);
+    expect(seen).toContain(P);
+    expect(await memberMay(P, OBSERVER, 'can_vote_decisions'),
+      'seeing the company is where the question starts').toBe(false);
   });
 
-  it('does not show the member the company', async () => {
-    const { getProductsByOwner } = await import('../../src/db/client.js');
-    const mine = await getProductsByOwner(COFOUNDER);
-    expect(mine.rows.length,
-      'the dashboard lists products by owner, so an invited member sees none')
-      .toBe(0);
-    expect((await getProductsByOwner(OWNER)).rows.length).toBe(1);
+  it('the owner still sees their own company', async () => {
+    const { getVisibleProducts } = await import('../../src/db/client.js');
+    expect((await getVisibleProducts(OWNER)).rows.map((r) => (r as Record<string, unknown>).id))
+      .toContain(P);
   });
 
-  it('and membership is still real where it is asked', async () => {
-    // The two facts must not be confused: the member exists and is trusted for
-    // what their row says. They just cannot reach most of the product.
-    expect(await hasProductAccess(P, COFOUNDER)).toBe(true);
-    expect(await memberMay(P, COFOUNDER, 'can_vote_decisions')).toBe(true);
+  it('an unrelated person sees nothing', async () => {
+    const { getVisibleProducts } = await import('../../src/db/client.js');
+    expect((await getVisibleProducts(STRANGER)).rows.length).toBe(0);
+  });
+
+  it('a member of one company does not gain another', async () => {
+    // Owned by the OWNER, not the stranger — the stranger must stay a person
+    // with no companies at all, which the test above depends on.
+    await query(
+      `INSERT OR IGNORE INTO products (id, name, owner_id) VALUES ('mc_b','Company B',?)`,
+      [OWNER]);
+    const { getVisibleProducts } = await import('../../src/db/client.js');
+    const seen = (await getVisibleProducts(COFOUNDER)).rows
+      .map((r) => (r as Record<string, unknown>).id);
+    expect(seen).toContain(P);
+    expect(seen, 'membership is of ONE company').not.toContain('mc_b');
+  });
+
+  it('a removed member stops seeing it', async () => {
+    await query(`UPDATE team_members SET status = 'removed' WHERE founder_id = ?`, [COFOUNDER]);
+    const { getVisibleProducts } = await import('../../src/db/client.js');
+    expect((await getVisibleProducts(COFOUNDER)).rows.length).toBe(0);
+  });
+
+  it('an archived company disappears from everyone', async () => {
+    await query(`UPDATE products SET status = 'archived' WHERE id = ?`, [P]);
+    const { getVisibleProducts } = await import('../../src/db/client.js');
+    const ids = async (f: string) => (await getVisibleProducts(f)).rows
+      .map((r) => (r as Record<string, unknown>).id);
+    expect(await ids(OWNER), 'archived is gone for the owner too').not.toContain(P);
+    expect(await ids(COFOUNDER)).not.toContain(P);
+    await query(`UPDATE products SET status = 'active' WHERE id = ?`, [P]);
+  });
+});
+
+describe('ownership is not the top of the ladder', () => {
+  it('is a separate question with its own answer', async () => {
+    const { isCompanyOwner } = await import('../../src/services/team/members.js');
+    expect(await isCompanyOwner(P, OWNER)).toBe(true);
+    expect(await isCompanyOwner(P, COFOUNDER),
+      'a co-founder who may manage the company still does not own it').toBe(false);
+  });
+
+  it('is not conferred by any capability, however many a member holds', async () => {
+    const { isCompanyOwner } = await import('../../src/services/team/members.js');
+    await query(
+      `UPDATE team_members SET can_view_decisions=1, can_vote_decisions=1,
+         can_view_financials=1, can_view_audit=1, can_trigger_actions=1,
+         can_manage_company=1 WHERE founder_id = ?`, [COFOUNDER]);
+    expect(await memberMay(P, COFOUNDER, 'can_manage_company')).toBe(true);
+    expect(await isCompanyOwner(P, COFOUNDER)).toBe(false);
+  });
+});
+
+describe('the duplicate model is gone', () => {
+  it('has no table left to read', async () => {
+    await expect(query('SELECT 1 FROM account_roles LIMIT 1')).rejects.toThrow();
+    await expect(query('SELECT 1 FROM role_permissions LIMIT 1')).rejects.toThrow();
+  });
+
+  it('and no guard reads a role label', () => {
+    // The label is product shorthand. If a guard starts branching on it, this
+    // is two authorization models again.
+    const rbac = readFileSync(
+      resolve(__dirname, '../../src/middleware/rbac.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+    for (const label of ['co_founder', 'advisor', 'investor_observer', 'analyst', 'viewer']) {
+      expect(rbac, `a guard branching on '${label}' is a role granting authority`)
+        .not.toContain(label);
+    }
   });
 });

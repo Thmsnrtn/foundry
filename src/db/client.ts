@@ -106,6 +106,32 @@ export async function getProductsByOwner(founderId: string): Promise<ResultSet> 
 }
 
 /**
+ * The companies a person may SEE: the ones they own, and the ones they have
+ * been accepted into.
+ *
+ * THE DASHBOARD LISTED BY `owner_id` ALONE. A founder could invite a
+ * co-founder, have the invitation accepted, and that person would open the
+ * dashboard to nothing — no company, no pages, no way in. The invite flow
+ * existed, the membership row existed, and no query joined them to anything
+ * anybody could see. The team feature was a surface you could be let into and
+ * then not arrive.
+ *
+ * VISIBILITY IS NOT CAPABILITY. Seeing the company is where the question
+ * starts; every consequential route still asks its own, and the owner-only
+ * boundary is asked separately again.
+ */
+export async function getVisibleProducts(founderId: string): Promise<ResultSet> {
+  return query(
+    `SELECT p.* FROM products p
+      WHERE p.owner_id = ? AND p.status != 'archived'
+      UNION
+     SELECT p.* FROM products p
+       JOIN team_members t ON t.product_id = p.id
+      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'`,
+    [founderId, founderId]);
+}
+
+/**
  * Get a specific product, scoped to founder ownership.
  * Returns null row if not found (returns 404, not 403 — no info leak).
  */
