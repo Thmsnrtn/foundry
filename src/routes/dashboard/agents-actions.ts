@@ -17,6 +17,7 @@ import {
 import { getAllTemplates, createTemplate } from '../../services/scp/actions/templates.js';
 import { query } from '../../db/client.js';
 import type { ActionType } from '../../services/scp/actions/executor.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentsActions = new Hono<AuthEnv>();
 
@@ -244,21 +245,31 @@ agentsActions.get('/agents/actions', async (c) => {
 
 // ─── POST /agents/actions/:id/approve ─────────────────────────────────────────
 
-agentsActions.post('/agents/actions/:id/approve', async (c) => {
-  const founder = c.get('founder');
-  const id = c.req.param('id');
-  await approveAndExecute(id, founder.id, { ownerId: founder.id });
-  return c.redirect('/agents/actions?tab=history');
-});
+agentsActions.post('/agents/actions/:id/approve',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+    const founder = c.get('founder');
+    const id = c.req.param('id');
+    const ctx = await getLayoutContext(founder, 'agents', 'Actions', undefined, c);
+    if (!ctx.productId) return c.redirect('/agents/actions');
+    // Scoped to the company the guard above just authorized, not to ownership.
+    // The ownership scope was the only thing keeping a non-owner out, which
+    // made approving an outward effect owner-only by accident;
+    // `can_trigger_actions` exists to say who may.
+    await approveAndExecute(id, founder.id, { scopeProductId: ctx.productId });
+    return c.redirect('/agents/actions?tab=history');
+  });
 
 // ─── POST /agents/actions/:id/cancel ──────────────────────────────────────────
 
-agentsActions.post('/agents/actions/:id/cancel', async (c) => {
-  const founder = c.get('founder');
-  const id = c.req.param('id');
-  await cancelExecution(id, founder.id);
-  return c.redirect('/agents/actions?tab=pending');
-});
+agentsActions.post('/agents/actions/:id/cancel',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+    const founder = c.get('founder');
+    const id = c.req.param('id');
+    const ctx = await getLayoutContext(founder, 'agents', 'Actions', undefined, c);
+    if (!ctx.productId) return c.redirect('/agents/actions');
+    await cancelExecution(id, ctx.productId);
+    return c.redirect('/agents/actions?tab=pending');
+  });
 
 // ─── GET /agents/actions/templates ────────────────────────────────────────────
 

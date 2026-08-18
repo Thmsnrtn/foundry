@@ -9,8 +9,21 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const auditLog = new Hono<AuthEnv>();
+
+// EVERY ROUTE IN THIS ROUTER IS THE COMPANY’S AUDIT TRAIL.
+//
+// `team_members.can_view_audit` has existed since migration 010 and nothing read it.
+// That was survivable only because an invited member could not see the company
+// at all — the dashboard listed by `owner_id`. Now that membership makes the
+// company visible, this is the guard that was always supposed to be here.
+//
+// Router-level rather than per-route: a capability that has to be remembered
+// on each new handler is one that will be forgotten on one of them.
+auditLog.use('*', requireCompanyCapability('can_view_audit'));
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

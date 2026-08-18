@@ -125,6 +125,10 @@ describe('P2: investor tokens hashed at rest, dead links removed', () => {
     dash.use('*', async (c, next) => {
       c.set('founder' as never, { id: 'sc_f', email: 'sc@t.co', tier: 'investor_ready' } as never);
       c.set('csrfToken' as never, 't' as never);
+      // Investor material is financial, so the router asks
+      // `can_view_financials` — which needs to know WHICH company. sc_f owns
+      // sc_p, and an owner holds every company capability.
+      c.set('product' as never, { id: 'sc_p' } as never);
       await next();
     });
     dash.route('/', investorRoutes);

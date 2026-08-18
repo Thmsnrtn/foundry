@@ -109,17 +109,24 @@ export async function createExecution(
 export async function approveAndExecute(
   executionId: string,
   approverId: string,
-  opts: { ownerId?: string } = {}
+  opts: { scopeProductId?: string } = {}
 ): Promise<ExecutionResult> {
   const now = new Date().toISOString();
 
-  // Fetch the execution record. When an ownerId is supplied (any human-driven
-  // path), the row must belong to a product that founder owns.
-  const execResult = opts.ownerId
+  // Fetch the execution record, scoped to the company the caller has already
+  // been authorized on.
+  //
+  // THIS USED TO SCOPE ON OWNERSHIP: `product_id IN (SELECT id FROM products
+  // WHERE owner_id = ?)`. That was the only thing keeping a non-owner out,
+  // which made approving an action an owner-only act by accident rather than
+  // by decision — `team_members.can_trigger_actions` exists to say who may do
+  // it, and nothing asked. The route asks now, and passes the company it asked
+  // about, so this scope means "the company the caller was authorized for"
+  // rather than "a company the caller owns".
+  const execResult = opts.scopeProductId
     ? await query(
-        `SELECT * FROM action_executions
-         WHERE id = ? AND product_id IN (SELECT id FROM products WHERE owner_id = ?)`,
-        [executionId, opts.ownerId]
+        `SELECT * FROM action_executions WHERE id = ? AND product_id = ?`,
+        [executionId, opts.scopeProductId]
       )
     : await query(`SELECT * FROM action_executions WHERE id = ?`, [executionId]);
   if (execResult.rows.length === 0) {
@@ -209,15 +216,19 @@ export async function approveAndExecute(
 /**
  * Cancel a pending execution.
  */
-export async function cancelExecution(executionId: string, ownerId?: string): Promise<void> {
-  // Only not-yet-run executions can be cancelled, and (when ownerId is given)
-  // only by the founder who owns the product — a completed or foreign row is
-  // left untouched.
+export async function cancelExecution(
+  executionId: string, scopeProductId?: string,
+): Promise<void> {
+  // Only not-yet-run executions can be cancelled, and (when a scope is given)
+  // only within the company the caller was authorized on — a completed or
+  // foreign row is left untouched. The scope used to be ownership, which made
+  // cancelling owner-only by accident; who may is `can_trigger_actions`, asked
+  // by the route.
   await query(
     `UPDATE action_executions SET status='cancelled'
      WHERE id=? AND status IN ('pending','approved')
-       ${ownerId ? `AND product_id IN (SELECT id FROM products WHERE owner_id=?)` : ''}`,
-    ownerId ? [executionId, ownerId] : [executionId]
+       ${scopeProductId ? 'AND product_id = ?' : ''}`,
+    scopeProductId ? [executionId, scopeProductId] : [executionId]
   );
 }
 

@@ -11,8 +11,21 @@ import { dashboardLayout } from '../../views/layout.js';
 import { computeMonthlyROI, getROISummary, getROIBreakdown } from '../../services/scp/roi/calculator.js';
 import { recordOutcome, inferOutcomesFromData } from '../../services/scp/roi/outcome-tracker.js';
 import { query, getProductByOwner } from '../../db/client.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const roiDashboard = new Hono<AuthEnv>();
+
+// EVERY ROUTE IN THIS ROUTER IS THE COMPANY’S RETURN ON SPEND.
+//
+// `team_members.can_view_financials` has existed since migration 010 and nothing read it.
+// That was survivable only because an invited member could not see the company
+// at all — the dashboard listed by `owner_id`. Now that membership makes the
+// company visible, this is the guard that was always supposed to be here.
+//
+// Router-level rather than per-route: a capability that has to be remembered
+// on each new handler is one that will be forgotten on one of them.
+roiDashboard.use('*', requireCompanyCapability('can_view_financials'));
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

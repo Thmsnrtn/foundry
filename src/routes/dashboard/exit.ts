@@ -23,8 +23,21 @@ import {
 } from '../../services/scp/exit/cap-table.js';
 import { modelTermSheet, getTermSheetModels, compareToMarketTerms } from '../../services/scp/exit/term-sheet.js';
 import { requireTier } from '../../middleware/tier-gate.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const exitRoutes = new Hono<AuthEnv>();
+
+// EVERY ROUTE IN THIS ROUTER IS EXIT AND VALUATION MATERIAL.
+//
+// `team_members.can_view_financials` has existed since migration 010 and nothing read it.
+// That was survivable only because an invited member could not see the company
+// at all — the dashboard listed by `owner_id`. Now that membership makes the
+// company visible, this is the guard that was always supposed to be here.
+//
+// Router-level rather than per-route: a capability that has to be remembered
+// on each new handler is one that will be forgotten on one of them.
+exitRoutes.use('*', requireCompanyCapability('can_view_financials'));
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
