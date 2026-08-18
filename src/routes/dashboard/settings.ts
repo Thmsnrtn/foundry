@@ -84,6 +84,19 @@ settingsRoutes.get('/settings', async (c) => {
     [founder.id]
   );
   const wisdomOptIn = ((wisdomResult.rows[0] as Record<string, unknown>)?.wisdom_network_opted_in ?? 1) === 1;
+
+  // WEEKEND MODE HAD AN ENFORCEMENT AND NO DOOR. `products.cadence_mode` has
+  // existed since migration 070, whose comment describes the feature — "drops
+  // agent cadences for the side-project founder segment" — and the scheduler
+  // reads it and clamps every cadence to weekly when it is 'weekend'. Nothing
+  // anywhere set it: no toggle, no onboarding question, no API. The rule was
+  // written, enforced, and unreachable, which from the founder's side is
+  // indistinguishable from not existing.
+  const cadenceResult = productId
+    ? await query('SELECT cadence_mode FROM products WHERE id = ?', [productId])
+    : { rows: [] };
+  const weekendMode = String(
+    (cadenceResult.rows[0] as Record<string, unknown> | undefined)?.cadence_mode ?? '') === 'weekend';
   const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
 
   // Systems the owner has let report to them, and exactly what each may say.
@@ -240,6 +253,23 @@ settingsRoutes.get('/settings', async (c) => {
         names are ever shared — only aggregated shapes and outcomes. In return, your AI
         recommendations benefit from patterns across all contributing businesses.
       </p>
+      ${productId ? html`
+      <div class="wisdom-toggle-row">
+        <div>
+          <div class="wisdom-toggle-label">Weekend pace</div>
+          <div class="wisdom-toggle-desc">This is a side project — run the agents weekly, not daily</div>
+        </div>
+        <form method="POST" action="/settings/cadence-mode" style="display:flex;align-items:center;">
+          <input type="hidden" name="mode" value="${weekendMode ? 'standard' : 'weekend'}" />
+          <label class="toggle" title="${weekendMode ? 'Back to the standard pace' : 'Slow every agent to weekly'}">
+            <input type="checkbox" ${weekendMode ? 'checked' : ''}
+              onchange="this.closest('form').submit()" />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </form>
+      </div>` : ''}
+
       <div class="wisdom-toggle-row">
         <div>
           <div class="wisdom-toggle-label">Contribute anonymously</div>
@@ -772,6 +802,27 @@ settingsRoutes.post('/settings/wisdom-toggle', requireCompanyCapability('can_man
 
   return c.redirect('/settings');
 });
+
+// ─── Cadence mode ───────────────────────────────────────────────────────────
+//
+// The other half of migration 070's weekend mode. `can_manage_company` rather
+// than ownership: how fast the company's agents run is company configuration,
+// and a co-founder invited to manage it should be able to change it.
+settingsRoutes.post('/settings/cadence-mode',
+  requireCompanyCapability('can_manage_company'), async (c) => {
+    const founder = c.get('founder');
+    const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+    if (!ctx.productId) return c.redirect('/settings');
+    const body = await c.req.parseBody() as Record<string, string>;
+    // A closed vocabulary with one meaningful value; anything else is the
+    // standard pace. Writing NULL rather than 'standard' would make "never set"
+    // and "explicitly standard" the same fact, and the scheduler already treats
+    // both the same — but the settings page has to be able to tell them apart
+    // to render the toggle honestly.
+    const mode = body.mode === 'weekend' ? 'weekend' : 'standard';
+    await query('UPDATE products SET cadence_mode = ? WHERE id = ?', [mode, ctx.productId]);
+    return c.redirect('/settings');
+  });
 
 // ─── Company Pause / Resume ─────────────────────────────────────────────────
 

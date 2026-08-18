@@ -6,6 +6,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { callSonnet } from '../../ai/client.js';
+import { experimentOutcome } from './board-packet.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ export async function generateInvestorUpdate(
   let experimentsText = 'No experiments this month.';
   try {
     const expResult = await query(
-      `SELECT name, status, learnings AS outcome_summary FROM experiments
+      `SELECT name, status, winner, early_stop_reason FROM experiments
        WHERE product_id=? AND updated_at >= ? ORDER BY updated_at DESC LIMIT 5`,
       [productId, start]
     );
@@ -121,7 +122,7 @@ export async function generateInvestorUpdate(
       experimentsText = expResult.rows
         .map((r) => {
           const row = r as Record<string, unknown>;
-          return `${row.name as string} (${row.status as string})`;
+          return `${row.name as string} (${experimentOutcome(row)})`;
         })
         .join(', ');
     }

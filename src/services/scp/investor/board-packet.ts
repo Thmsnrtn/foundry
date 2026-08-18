@@ -62,6 +62,33 @@ function currentQuarter(): string {
   return `${now.getFullYear()}-Q${q}`;
 }
 
+/**
+ * What an experiment established, from the columns that are actually written.
+ *
+ * BOTH INVESTOR DOCUMENTS READ `experiments.learnings`, WHICH NOTHING WRITES.
+ * Concluding an experiment writes `winner`, `results_json` and
+ * `early_stop_reason`; stopping one early writes `early_stop_reason`. The
+ * `learnings` column has no writer anywhere — not in TypeScript, not in a
+ * trigger — so the Experiments section of a board packet and of an investor
+ * update has always listed names against a NULL outcome, and the model then
+ * wrote about a quarter of experiments that apparently concluded nothing.
+ *
+ * 'inconclusive' is a real winner value and is reported as itself: an
+ * experiment whose arms did not separate says nothing about the statement, and
+ * telling an investor it "won" or "lost" would be the same overclaim the
+ * hypothesis vocabulary was fixed to avoid.
+ */
+export function experimentOutcome(row: {
+  status?: unknown; winner?: unknown; early_stop_reason?: unknown;
+}): string {
+  const winner = row.winner == null ? null : String(row.winner);
+  const stopped = row.early_stop_reason == null ? null : String(row.early_stop_reason);
+  if (winner === 'inconclusive') return 'inconclusive — the arms did not separate';
+  if (winner) return `${winner} won`;
+  if (stopped) return `stopped early: ${stopped}`;
+  return String(row.status ?? 'pending');
+}
+
 // ─── generateBoardPacket ──────────────────────────────────────────────────────
 
 export async function generateBoardPacket(
@@ -180,7 +207,7 @@ export async function generateBoardPacket(
   let experimentsText = 'No experiments this quarter.';
   try {
     const experimentsResult = await query(
-      `SELECT name, status, learnings AS outcome_summary FROM experiments
+      `SELECT name, status, winner, early_stop_reason FROM experiments
        WHERE product_id=? AND updated_at >= ? ORDER BY updated_at DESC LIMIT 10`,
       [productId, start]
     );
@@ -188,7 +215,7 @@ export async function generateBoardPacket(
       experimentsText = experimentsResult.rows
         .map((r) => {
           const row = r as Record<string, unknown>;
-          return `[${row.status as string}] ${row.name as string}: ${row.outcome_summary as string ?? 'pending'}`;
+          return `[${row.status as string}] ${row.name as string}: ${experimentOutcome(row)}`;
         })
         .join('\n');
     }
