@@ -786,3 +786,77 @@ predicate, which looked like the defect class; tracing it showed they consult
 `getEffectiveMode` and only *propose* — gate-2 and gate-3 decisions, or
 executions created `pending`. `success.ts` is the only one that acts, and it
 checks `activeConsent`. The grep was wrong, not the code.
+
+---
+
+## Batches 63–72: the instruments, and the writes that never landed
+
+**Who has a say.** Resolving a decision is the institution's central act, and
+`can_vote_decisions` is the permission that exists to say who has a say in one.
+The two had never met: the dashboard door scoped on `p.owner_id`, so a
+co-founder holding the permission could not resolve, and the MCP door proved the
+key's scope and the company's entitlement but never asked whether the key's
+ISSUER may decide. Every human door also wrote the same four letters —
+`decided_by` is a KIND ('founder' / 'second_self') and has to stay one, because
+the shadow ledger and the demotion path read it — so a company with three
+founders recorded 'founder' for all of them. Migration 153 puts the identity
+beside the kind rather than inside it.
+
+**A ratchet instead of an audit.** The dashboard scan that found 116 mutating
+routes asking no capability became a baseline that may fall and never rise.
+Deliberately a ratchet rather than a wall: most of those routes are ordinary
+company work, and gating them all would be the other defect. Routes that only
+LOWER what Foundry may do belong on the list with a comment, not behind a guard.
+
+**Then the instruments turned on themselves**, and this is the part worth
+remembering. Two gates had this campaign's own defect class inside them:
+
+- `check-route-guards`'s route-declaration pattern was unanchored, so `const
+  founder = c.get('founder')` matched as a route and truncated every handler
+  above it to one line — hiding every inline check.
+- `check-sql-columns` found `UPDATE products SET a_column_that_does_not_exist`
+  perfectly well, printed it, and exited 0. Every time. `lint:columns` chains
+  with `&&`, so the line went into a log nobody read and the build went green.
+
+Neither was findable by reading the script. Both took giving it something it
+should refuse and watching what it did. Every static gate now has a planted
+defect it must catch, asserted on the EXIT CODE, plus the other half of the
+mutation — all of them green on a clean tree. The check-vocabulary gate's scan
+windows were widened (they stopped reading part-way through 80 statements) and
+overruns now fail rather than pass silently; the effects inventory now reports
+outward calls its rules cannot see rather than omitting them.
+
+**Writes that never landed.** `check-insert-columns` proves every column an
+INSERT names exists; it cannot see the opposite — a column the INSERT does NOT
+name, which the table declares NOT NULL with no default. Five instances, all
+from a later migration redefining a table with `CREATE TABLE IF NOT EXISTS` (a
+silent no-op) while the code was written against the definition that never took
+effect. Three of them make a PAID MODEL CALL FIRST, so the founder pressed
+Generate, the money went, the narrative was written, and then the write raised:
+board packets, investor updates and growth experiments have never produced
+anything for anybody. `check-notnull-inserts.mjs` closes the class.
+
+The board packet had a second defect on the same page: "Key Decisions This
+Quarter" read `agent_decisions`, a table with no INSERT anywhere in the
+codebase, inside a catch that made an empty result and a missing table produce
+the same sentence. A document founders send to their INVESTORS has said "No
+recent decisions." for every company in every quarter.
+
+**Four owner decisions.**
+
+1. *The outreach cap stays at suggest*, permanently and by decision rather than
+   pending a prerequisite. The sending identity makes a send SAFE, not
+   SUPERVISED — it puts the founder's domain and CAN-SPAM liability behind the
+   message, which is exactly why a human should decide it goes.
+2. *`agent_decisions` is deleted*, with the empty inbox tab and the public
+   endpoint that could only ever return `{"data": []}`. Same disposition
+   `account_roles` got, for the same reason.
+3. *A company on its way out stops acting.* A scheduled erasure is a third pause
+   axis in `operatingProduct()`, so it reaches all 34 call sites at once. One
+   stated exemption: the public API's write gate ignores it, because the window
+   exists so the founder can change their mind.
+4. *Spending the company's money is not watching.* ~54 routes reaching a paid
+   model call now ask `can_trigger_actions`. Baseline 87 → 34. What stays open —
+   panic, pause, disconnect, revoke, undo, attention telemetry — is asserted in
+   tests, because making the brake harder to reach than the accelerator is the
+   same defect wearing a safety label.
