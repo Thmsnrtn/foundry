@@ -34,6 +34,35 @@ import type { ApiAuthEnv } from './auth.js';
 import { operatingProduct, query } from '../../db/client.js';
 
 /**
+ * Is this company one Foundry may act for? Answered once, for both callers.
+ *
+ * Exported so the MCP transport can ask the same question per tool that this
+ * middleware asks per method — one predicate, two ways of deciding what counts
+ * as a write, rather than two predicates that can disagree.
+ */
+export async function companyMayBeChanged(
+  productId: string,
+): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+  const res = await query(
+    `SELECT CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating,
+            COALESCE(status,'active') AS status,
+            entitlement_paused_at
+       FROM products WHERE id = ?`, [productId]);
+  const row = res.rows[0] as Record<string, unknown> | undefined;
+  // An id naming no company is not this question — the credential resolved it,
+  // and inventing a refusal here would hide that.
+  if (!row || Number(row.operating) === 1) return { allowed: true };
+  return {
+    allowed: false,
+    reason: String(row.status) !== 'active'
+      ? 'this company has been archived'
+      : row.entitlement_paused_at != null
+        ? "this company's subscription is not active"
+        : 'this company is paused',
+  };
+}
+
+/**
  * Refuse a state-changing request for a company Foundry is not operating.
  *
  * Reads are deliberately allowed: the owner's decision is that an unpaid
@@ -44,37 +73,24 @@ export const requireOperatingForWrites = createMiddleware<ApiAuthEnv>(async (c, 
   if (c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.method === 'OPTIONS') {
     return next();
   }
+  // MCP IS ONE POST CARRYING TWENTY CONSEQUENCES, so the method says nothing
+  // about it: `tools/call` reads and writes through the same route, and
+  // refusing all of it would refuse the reads the owner decision permits. It
+  // asks per tool instead, using the same read/write vocabulary its scope
+  // check already uses — see `scopeForTool` in api/v1/mcp.ts.
+  if (c.req.path.includes('/mcp')) return next();
 
   const productId = c.get('productId');
   // No company on the request is a different failure, and auth has already
   // decided about it. Saying nothing here keeps one answer per question.
   if (!productId) return next();
 
-  // The canonical predicate, not a hand-copied piece of it. It has grown an
-  // axis twice, and both times every copy stopped seeing the case it was
-  // written for.
-  const res = await query(
-    `SELECT CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating,
-            COALESCE(status,'active') AS status,
-            COALESCE(scp_status,'active') AS scp_status,
-            entitlement_paused_at
-       FROM products WHERE id = ?`, [productId]);
-  const row = res.rows[0] as Record<string, unknown> | undefined;
-
-  // An id naming no company is not this middleware's question either — the
-  // key resolved it, and inventing a refusal here would hide that.
-  if (!row) return next();
-  if (Number(row.operating) === 1) return next();
-
-  const reason = String(row.status) !== 'active'
-    ? 'this company has been archived'
-    : row.entitlement_paused_at != null
-      ? 'this company\'s subscription is not active'
-      : 'this company is paused';
+  const verdict = await companyMayBeChanged(productId);
+  if (verdict.allowed) return next();
 
   return c.json({
     error: 'read_only',
-    message: `Foundry is not currently acting for this company — ${reason}. `
+    message: `Foundry is not currently acting for this company — ${verdict.reason}. `
       + 'Reads still work; anything that changes the company does not.',
   }, 403);
 });

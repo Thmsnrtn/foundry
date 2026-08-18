@@ -124,6 +124,23 @@ mcpApi.post('/', async (c) => {
         return c.json(rpcError(body.id, -32603, `Insufficient permissions. Required scope: ${required}`), 403);
       }
 
+      // AND MAY FOUNDRY ACT FOR THIS COMPANY AT ALL? The scope says what this
+      // credential is allowed to do; this says whether the company is one
+      // Foundry is operating. The API's method-based check cannot answer it
+      // here — `tools/call` is a single POST carrying both reads and writes,
+      // so refusing the method would refuse the reads the owner's read-only
+      // decision permits. The same read/write vocabulary decides: a writing
+      // tool is a write.
+      if (required === 'agents:write' && productId) {
+        const { companyMayBeChanged } = await import('../middleware/entitlement.js');
+        const verdict = await companyMayBeChanged(productId);
+        if (!verdict.allowed) {
+          return c.json(rpcError(body.id, -32603,
+            `Foundry is not currently acting for this company — ${verdict.reason}. `
+            + 'Read tools still work.'), 403);
+        }
+      }
+
       const result = LOOP_TOOL_NAMES.has(name)
         ? await executeLoopTool(name, args, { productId, founderId })
         : await executeTool(name, { ...args, product_id: productId } as Record<string, string>);

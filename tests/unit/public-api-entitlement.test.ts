@@ -165,3 +165,68 @@ describe('it is wired into the API, not merely written', () => {
       .toBeGreaterThan(index.indexOf("apiV1.use('*', apiKeyAuth)"));
   });
 });
+
+// =============================================================================
+// MCP IS ONE POST CARRYING TWENTY CONSEQUENCES.
+//
+// `tools/call` reads and writes through the same route, so the method says
+// nothing about it: refusing all of it for a paused company would refuse the
+// reads the owner's read-only decision permits, and allowing all of it would
+// let a writing tool through the door the REST routes just closed.
+//
+// It asks per tool, using the same read/write vocabulary its scope check
+// already uses — one predicate shared with the middleware, so the two cannot
+// disagree about what "may act" means.
+// =============================================================================
+
+describe('the MCP transport asks per tool, not per method', () => {
+  it('shares the predicate rather than reimplementing it', async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const mcp = readFileSync(resolve(__dirname, '../../src/api/v1/mcp.ts'), 'utf8');
+    expect(mcp, 'two predicates for one question is how they come to disagree')
+      .toMatch(/companyMayBeChanged/);
+    // Gated on the write vocabulary the scope check already computes, not a
+    // second list of tool names.
+    expect(mcp).toMatch(/required === 'agents:write'/);
+  });
+
+  it('is exempt from the blunt method rule, and says why', async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const mw = readFileSync(
+      resolve(__dirname, '../../src/api/middleware/entitlement.ts'), 'utf8');
+    expect(mw).toMatch(/mcp/);
+  });
+
+  it('the shared predicate answers the three states', async () => {
+    const { companyMayBeChanged } = await import(
+      '../../src/api/middleware/entitlement.js');
+    expect((await companyMayBeChanged(P)).allowed).toBe(true);
+
+    await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
+    const paused = await companyMayBeChanged(P);
+    expect(paused.allowed).toBe(false);
+    if (!paused.allowed) expect(paused.reason).toMatch(/paused/);
+
+    await query(
+      `UPDATE products SET scp_status='active', entitlement_paused_at=datetime('now')
+        WHERE id=?`, [P]);
+    const lapsed = await companyMayBeChanged(P);
+    expect(lapsed.allowed).toBe(false);
+    if (!lapsed.allowed) expect(lapsed.reason).toMatch(/subscription/);
+
+    await query(
+      `UPDATE products SET entitlement_paused_at=NULL, status='archived' WHERE id=?`, [P]);
+    const gone = await companyMayBeChanged(P);
+    expect(gone.allowed).toBe(false);
+    if (!gone.allowed) expect(gone.reason).toMatch(/archived/);
+  });
+
+  it('and an unknown company is not its question', async () => {
+    const { companyMayBeChanged } = await import(
+      '../../src/api/middleware/entitlement.js');
+    expect((await companyMayBeChanged('pae_nonexistent')).allowed,
+      'the credential resolved it; a refusal here would hide that').toBe(true);
+  });
+});
