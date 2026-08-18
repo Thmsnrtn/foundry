@@ -133,6 +133,54 @@ if (process.argv.includes('--write')) {
       + `writes, then classify it (governed / control_path / read_only / direct).`);
     process.exit(1);
   }
+  // GOVERNED MEANS A GUARD RAN, NOT THAT ONE EXISTS SOMEWHERE.
+  //
+  // `src/services/scp/actions/executor.ts` and `src/lib/webhooks.ts` were both
+  // classified `control_path` on the strength of owning their credential and
+  // writing a receipt — true, and beside the point. Neither asked whether
+  // Foundry may act for the company at all: `checkKillSwitch` had exactly ONE
+  // caller in the system, the outbound gateway. Two doors, one rule, one door
+  // checking it.
+  //
+  // So `governed` now has to be demonstrable. The guard is either in the file
+  // or in every caller of it, and when it is in the callers they are named
+  // here — because "the callers check" is a claim about other files, and a
+  // claim about other files is the kind that stops being true quietly.
+  const GUARD_IN_CALLERS = {
+    // One sender, transport and receipt semantics in one place; both callers
+    // check before they reach it.
+    'src/services/integration/slack.ts': [
+      'src/services/scp/actions/executor.ts',
+      'src/services/scp/scheduler.ts',
+    ],
+  };
+  // Two ways a file proves it: it calls the kill switch itself, or it is a
+  // capability handler registered with the outbound gateway, which runs the
+  // kill switch before it dispatches to any handler.
+  const GUARD = /checkKillSwitch|outbound\/gateway\.js/;
+  const ungoverned = [];
+  for (const file of new Set(findings.filter((f) => f.status === 'governed').map((f) => f.file))) {
+    const holders = GUARD_IN_CALLERS[file] ?? [file];
+    for (const holder of holders) {
+      let src = '';
+      try {
+        // Comments explaining the guard are not the guard. This audit found
+        // its own version of that: the first attempt matched the sentence
+        // describing why the check is there.
+        src = readFileSync(resolve(root, holder), 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//g, ' ')
+          .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+      } catch { /* reported below */ }
+      if (!GUARD.test(src)) ungoverned.push(`${file} → guard expected in ${holder}`);
+    }
+  }
+  if (ungoverned.length) {
+    console.error(
+      'Classified `governed`, but nothing in the file or its named callers checks '
+      + 'the kill switch or goes through the outbound gateway:\n' + ungoverned.join('\n'));
+    process.exit(1);
+  }
+
   const readOnly = findings.filter((f) => f.status === 'read_only').length;
   const direct = findings.filter((f) => f.status === 'direct').length;
   const unreachable = findings.filter((f) => f.status === 'unreachable').length;
