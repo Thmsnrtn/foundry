@@ -962,3 +962,56 @@ responsibility climb back without earning the rung again), the missing birth
 freeze, and `<>` instead of `IS NOT` — the last mattering precisely because the
 FIRST write to a NULL justification column is the one that invents a judgement
 nobody made.
+
+---
+
+## Batches 85–88: what can never be written at all
+
+The applied-columns gate asks *what can be written around a rule*. Turning the
+question over — *what can never be written at all* — found the sharpest defect of
+the campaign so far.
+
+**Six more doors beside the rules**, found by the gate on its first run.
+`responsibility_candidates.status` could be set to 'promoted' by a plain UPDATE,
+with no founder anywhere near a decision the lifecycle guard requires an
+authenticated owner for — a missing authorisation, not a missing audit trail. And
+the three reference columns on a responsibility — the proof behind its state —
+were checked on the transition ledger and nowhere else. Those are guarded
+differently on purpose: a re-grant legitimately replaces `authority_ref` without
+a state change, so what must hold is not "a ledger moved this" but "the thing it
+names is real and still valid".
+
+**And writing that guard broke every migration.** `splitSqlStatements` tracks
+BEGIN..END so semicolons inside a trigger body do not split it. A `CASE ... END`
+closes with the same keyword the body does, so the CASE's `END` cancelled the
+trigger's and SQLite reported "incomplete input" on a well-formed statement. The
+function's comment said it respected trigger bodies; it respected the ones nobody
+had written a CASE in yet.
+
+**A founder who had ever dispositioned a judgment could not be erased.** Two
+rules in direct contradiction: `institutional_judgment_dispositions` is
+append-only (migration 118), and the erasure plan classifies it
+`erase_by_product`. The trigger aborted, the failure was recorded rather than
+swallowed, and because the founder row is deliberately left intact when any
+company fails, NOTHING was erased and the person stayed. For as long as both
+rules have existed. Append-only means history is not rewritten; it does not mean
+a person's data outlives their right to have it removed. The delete guard now
+permits exactly one case — the company is marked for erasure — and editing stays
+absolutely refused.
+
+The other half was that the immediate erasure path set no marker at all, so an
+append-only ledger had no way to tell a genuine erasure from an attempt to
+rewrite history and refused both.
+
+**And NOT_COMPANY_DATA decided nothing for the one table that needed it.**
+`tablesToErase()` never consulted that list — it was only reachable for tables
+WITHOUT a `product_id` — and `classifyTables()` tested `byProduct` first, so it
+reported `erase_by_product` for a table its own list said was not company data.
+Declared in one place and contradicted in another, inside the erasure classifier
+built during this campaign. The immutability trigger on `system_identities` had
+been doing the work the classification should have done.
+
+Two properties now hold as tests: no table the erasure plan must clear may carry
+a trigger refusing every delete, and every table carrying a `product_id`
+accounts for itself in one of three ways with a written reason — erased,
+retained for a purpose, or not a customer's data.
