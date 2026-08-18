@@ -483,18 +483,27 @@ export async function scheduleDataDeletion(
  * Finds products with data_deletion_scheduled events older than their
  * delete_after_days threshold and actually deletes the data.
  */
-export async function processScheduledDeletions(): Promise<number> {
-  // Find scheduled deletions that are past their threshold
+export async function processScheduledDeletions(): Promise<ErasureRunOutcome> {
+  // Find scheduled deletions that are past their threshold.
+  //
+  // `target_id IS NOT NULL` inside the subquery is not decoration. `x NOT IN
+  // (a, NULL)` is NULL in SQLite, never true — so ONE completion row with a
+  // null target would make this select return nothing, for every founder,
+  // forever, with no error anywhere. The column is nullable and this is a
+  // compliance path with a legal clock on it; a silent total stop is the worst
+  // failure it has.
   const pending = await query(
     `SELECT DISTINCT target_id as product_id, metadata_json FROM agent_audit_log
      WHERE event_type = 'data_deletion_scheduled'
+       AND target_id IS NOT NULL
        AND target_id NOT IN (
-         SELECT target_id FROM agent_audit_log WHERE event_type = 'data_deletion_completed'
+         SELECT target_id FROM agent_audit_log
+          WHERE event_type = 'data_deletion_completed' AND target_id IS NOT NULL
        )`,
     []
   );
 
-  let deleted = 0;
+  const result: ErasureRunOutcome = { completed: 0, failed: [] };
 
   for (const row of pending.rows) {
     const r = row as Record<string, unknown>;
@@ -510,6 +519,64 @@ export async function processScheduledDeletions(): Promise<number> {
 
     if (new Date() < deletionDate) continue; // Not yet time
 
+    // ONE FOUNDER'S ERASURE MUST NOT BLOCK ANOTHER'S.
+    //
+    // The inner catch below rethrows, and its comment said the throw was
+    // "rethrown to the caller's per-product catch, which leaves the deletion
+    // pending and retries it on the next run". There was no per-product catch.
+    // The throw left this function entirely, so a single product whose erasure
+    // could not complete — a trigger refusing a delete, a foreign key, a
+    // corrupt row — aborted the whole batch and every founder queued behind it
+    // was skipped, every day, indefinitely. Their requests stayed pending and
+    // nothing said so.
+    //
+    // The retry semantics the comment described are the right ones. This is
+    // where they actually happen.
+    try {
+      await eraseOneProduct(productId);
+      result.completed++;
+    } catch (err) {
+      // No completion record was written — that happens only at the end of a
+      // successful erasure — so this product stays pending and is retried on
+      // the next run, which is the same behaviour it had, minus taking
+      // everybody else down with it.
+      result.failed.push({ productId, error: (err as Error).message });
+      await recordErasureFailure(productId, err as Error);
+    }
+  }
+
+  return result;
+}
+
+/** Why an erasure run ended the way it did. A count alone cannot distinguish
+ * "nothing was due" from "everything failed", and those are opposite facts. */
+export interface ErasureRunOutcome {
+  completed: number;
+  failed: Array<{ productId: string; error: string }>;
+}
+
+/** A failed erasure leaves evidence too. Without this the only record of a
+ * request that could not be honoured is its absence. */
+async function recordErasureFailure(productId: string, err: Error): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO agent_audit_log
+         (id, product_id, event_type, actor_type, actor_id, target_type, target_id,
+          description, metadata_json, created_at)
+       VALUES (?, ?, 'data_deletion_failed', 'system', 'system', 'product', ?,
+               ?, ?, datetime('now'))`,
+      [nanoid(), productId, productId,
+        'Erasure attempt did not complete; the request remains pending and will be retried.',
+        JSON.stringify({ error: err.message })]);
+  } catch {
+    // If even the failure record cannot be written there is nothing further
+    // this path can do, and throwing here would resurrect the bug above.
+  }
+}
+
+/** Erase one product, or throw leaving it pending. Extracted so a failure is
+ * one founder's failure rather than the batch's. */
+async function eraseOneProduct(productId: string): Promise<void> {
     // Actually delete the product's data across all tables.
     //
     // This was a hand-written list of thirteen table names. The schema has two
@@ -625,9 +692,4 @@ export async function processScheduledDeletions(): Promise<number> {
             }])),
         })]
     );
-
-    deleted++;
-  }
-
-  return deleted;
 }

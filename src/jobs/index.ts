@@ -2264,8 +2264,20 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   data_deletion_processor: {
     fn: async () => {
       const { processScheduledDeletions } = await import('../services/privacy/consent.js');
-      const deleted = await processScheduledDeletions();
-      if (deleted > 0) logger.info(`Processed ${deleted} scheduled deletions`, { jobName: 'data_deletion_processor' });
+      const outcome = await processScheduledDeletions();
+      if (outcome.completed > 0) {
+        logger.info(`Processed ${outcome.completed} scheduled deletions`, { jobName: 'data_deletion_processor' });
+      }
+      // A run that erased nothing because everything failed used to be
+      // indistinguishable from a run with nothing to do. An erasure request
+      // that cannot be honoured has a clock running on it and has to be
+      // visible, not merely retried in silence.
+      if (outcome.failed.length > 0) {
+        logger.error(`${outcome.failed.length} scheduled deletion(s) did not complete`, {
+          jobName: 'data_deletion_processor',
+          products: outcome.failed.map((f) => f.productId).join(','),
+        });
+      }
     },
     schedule: '0 3 * * *', // Daily at 3:00 UTC
     description: 'Process scheduled data deletions (30-day delay)',
