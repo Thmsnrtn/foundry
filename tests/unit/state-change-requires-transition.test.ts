@@ -245,6 +245,19 @@ describe('a disposition cannot be written around its ledger', () => {
     expect((await disposed(id)).disposition_reason).toBe('Customer already recovered');
   });
 
+  it('refuses inventing a justification on a row that was never disposed', async () => {
+    // The three-valued trap, and the case that matters most. These columns are
+    // NULL until the first disposition, `disposition` itself stays 'active',
+    // and `NULL <> 'x'` is NULL rather than true — so a guard written with `<>`
+    // would not even fire here. This is the FIRST write, the one that invents a
+    // judgement nobody made.
+    const id = await responsibility('unknown');
+    await expect(query(
+      `UPDATE institutional_responsibilities SET disposition_reason = 'We decided against it' WHERE id = ?`,
+      [id])).rejects.toThrow(/no_record/);
+    expect((await disposed(id)).disposition_reason).toBeNull();
+  });
+
   it('leaves an update that touches neither alone', async () => {
     const id = await responsibility('unknown');
     await query(
