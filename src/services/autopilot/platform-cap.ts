@@ -24,8 +24,21 @@ const byRank = (a: AutopilotMode, b: AutopilotMode): AutopilotMode => (RANK[a] <
 // Category → the loudest autonomy the platform permits, whatever the founder
 // sets. Absent → 'act' (no platform ceiling; the ladder alone governs).
 const PLATFORM_CAP: Record<string, AutopilotMode> = {
-  // Outreach reaches third parties — capped at Suggest until a sender-of-record
-  // + suppression posture is configured (a human eye on every send).
+  // Outreach reaches third parties — capped at Suggest, permanently by owner
+  // decision rather than pending a prerequisite.
+  //
+  // This used to read "until a sender-of-record + suppression posture is
+  // configured". Both now exist: a per-company verified sending identity, a
+  // suppression list, a per-customer weekly budget and a 30-day dedup. Asked
+  // whether the cap should therefore lift, the owner's answer was no, and the
+  // reasoning is worth keeping next to the value: THE SENDING IDENTITY MAKES A
+  // SEND SAFE, NOT SUPERVISED. It puts the founder's domain, reputation and
+  // CAN-SPAM liability behind the message — which is exactly why nobody but a
+  // human should decide that the message goes.
+  //
+  // The visible consequence, and it is deliberate: an auto-executing
+  // send_email playbook can never fire on its own, and the Playbooks page says
+  // so on the row rather than showing a badge that means nothing.
   outreach: 'suggest',
   // Any future money-touching capability caps here, permanently (immutable:
   // never auto-move money without explicit, recent, revocable consent).

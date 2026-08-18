@@ -1,0 +1,31 @@
+-- =============================================================================
+-- Migration 154: a decision ledger nothing ever wrote to
+--
+-- `agent_decisions` was created by migration 083, whose own comment says why
+-- and says what was missing: three surfaces queried a table that did not exist
+-- and 500'd, "(No writer yet — the tab renders empty until agents populate it
+-- — but it must not crash.)"
+--
+-- Nothing ever populated it. There has never been an INSERT into
+-- `agent_decisions` anywhere in the codebase — only two UPDATEs (approve,
+-- dismiss) that could never match a row, and three reads that could never
+-- return one. The consequences were not neutral:
+--
+--   • the /agents/inbox "Decisions" tab was a permanently empty list with an
+--     Approve button that could never appear;
+--   • GET /v1/agents/:agentName/decisions — a documented public endpoint —
+--     returned {"data": [], "total": 0} to every caller for every agent,
+--     always. An integrator believes that;
+--   • the investor board packet's "Key Decisions This Quarter" section read it,
+--     so a document founders send to investors said "No recent decisions." for
+--     every company in every quarter, while the real ledger sat one table away.
+--
+-- This is the disposition `account_roles` got, for the same reason: two ledgers
+-- for one word, one of them written and one of them not. The board packet now
+-- reads `decisions`; the tab and the endpoint are gone.
+--
+-- Deleting the table rather than leaving it empty is the point. An empty table
+-- invites the next reader to query it.
+-- =============================================================================
+
+DROP TABLE IF EXISTS agent_decisions;

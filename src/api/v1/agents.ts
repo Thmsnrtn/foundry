@@ -48,27 +48,19 @@ agentsApi.get('/:agentName/briefings', requireScope('agents:read'), async (c) =>
   }
 });
 
-// GET /:agentName/decisions — pending/recent decisions
-agentsApi.get('/:agentName/decisions', requireScope('agents:read'), async (c) => {
-  const productId = c.get('productId');
-  const agentName = c.req.param('agentName');
-  try {
-    const result = await query(
-      // Four of the eight columns this asked for do not exist. The table has
-      // `decision_title`, `rationale` and `reasoning`; it has no category, no
-      // impact estimate and no `updated_at`.
-      `SELECT id, title, decision_title, description, rationale, reasoning, priority, status, approved_at, created_at
-       FROM agent_decisions
-       WHERE product_id = ? AND agent_name = ?
-       ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, created_at DESC
-       LIMIT 50`,
-      [productId, agentName]
-    );
-    return c.json({ data: result.rows, meta: { agent: agentName, total: result.rows.length } });
-  } catch (err) {
-    return c.json({ error: 'Failed to fetch decisions' }, 500);
-  }
-});
+// GET /:agentName/decisions REMOVED.
+//
+// It read `agent_decisions`, a table with no INSERT anywhere in the codebase —
+// migration 083 created it so three surfaces would stop 500-ing, with the note
+// "no writer yet", and nothing ever wrote one. So this endpoint returned
+// `{"data": [], "total": 0}` to every caller, for every agent, always. A
+// documented API that can only ever say "this agent has decided nothing" is
+// worse than no API: an integrator believes it.
+//
+// The company's decisions are in `decisions` and are not attributed to an
+// agent, so there is no honest per-agent answer to give. Removed rather than
+// repointed, because changing what the path means while keeping the path is how
+// an integration breaks quietly.
 
 // POST /:agentName/run — queue an agent run
 agentsApi.post('/:agentName/run', requireScope('agents:run'), async (c) => {

@@ -55,7 +55,16 @@ agentsInbox.get('/agents/inbox', async (c) => {
   const productId = ctx.productId;
   const tab = (c.req.query('tab') as string) || 'messages';
 
-  const [messagesResult, decisionsResult, actionsResult] = await Promise.all([
+  // THE DECISIONS TAB IS GONE. `agent_decisions` had no INSERT anywhere in the
+  // codebase — migration 083 created it so three surfaces would stop 500-ing,
+  // with the note "no writer yet", and nothing ever wrote one. The tab was a
+  // permanently empty list with an Approve button that could never appear.
+  //
+  // The company's decisions live in `decisions` and have their own queue. Two
+  // ledgers for one word is what the membership canonicalization rejected in
+  // the authorization layer, and the answer is the same here: keep the one
+  // that is written.
+  const [messagesResult, actionsResult] = await Promise.all([
     query(
       `SELECT am.*, sender.display_name as from_display
        FROM agent_messages am
@@ -63,12 +72,6 @@ agentsInbox.get('/agents/inbox', async (c) => {
          ON sender.product_id = am.product_id AND sender.agent_name = am.from_agent
        WHERE am.product_id=? AND am.read_at IS NULL
        ORDER BY am.created_at DESC LIMIT 50`,
-      [productId]
-    ),
-    query(
-      `SELECT * FROM agent_decisions
-       WHERE product_id=? AND status='pending'
-       ORDER BY created_at DESC LIMIT 20`,
       [productId]
     ),
     query(
@@ -80,7 +83,6 @@ agentsInbox.get('/agents/inbox', async (c) => {
   ]);
 
   const messages = messagesResult.rows as Array<Record<string, unknown>>;
-  const decisions = decisionsResult.rows as Array<Record<string, unknown>>;
   const actions = actionsResult.rows as Array<Record<string, unknown>>;
 
   const tabStyle = (name: string) => name === tab
@@ -101,26 +103,6 @@ agentsInbox.get('/agents/inbox', async (c) => {
       <form method="POST" action="/agents/inbox/messages/${m.id}/read" style="flex-shrink:0;">
         <button type="submit" style="font-size:0.72rem;padding:4px 10px;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:transparent;color:var(--text-muted);cursor:pointer;">Mark read</button>
       </form>
-    </div>
-  `);
-
-  const decisionItems = decisions.map((d) => html`
-    <div style="padding:1.25rem;border-bottom:1px solid rgba(255,255,255,0.05);">
-      <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;flex-wrap:wrap;">
-        <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">${d.agent_name ?? d.agent_id ?? 'Agent'}</span>
-        <span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;${priorityBadge(d.priority as string)}">${priorityLabel(d.priority as string)}</span>
-        <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${timeAgo(d.created_at as string)}</span>
-      </div>
-      <div style="font-size:0.9rem;font-weight:600;color:var(--text-primary);margin-bottom:0.35rem;">${d.title ?? d.decision_title ?? '(untitled)'}</div>
-      <div style="font-size:0.83rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.875rem;">${d.description ?? d.rationale ?? ''}</div>
-      <div style="display:flex;gap:0.5rem;">
-        <form method="POST" action="/agents/inbox/decisions/${d.id}/approve" style="display:inline;">
-          <button type="submit" class="btn btn-primary" style="font-size:0.8rem;padding:0.35rem 0.9rem;">Approve</button>
-        </form>
-        <form method="POST" action="/agents/inbox/decisions/${d.id}/dismiss" style="display:inline;">
-          <button type="submit" class="btn btn-ghost" style="font-size:0.8rem;padding:0.35rem 0.9rem;color:#ff6b6b;border-color:#ff6b6b44;">Dismiss</button>
-        </form>
-      </div>
     </div>
   `);
 
@@ -148,7 +130,6 @@ agentsInbox.get('/agents/inbox', async (c) => {
       <h1 style="margin:0;">Agents Inbox</h1>
       <div style="display:flex;gap:0.5rem;font-size:0.8rem;color:var(--text-muted);">
         ${messages.length > 0 ? html`<span style="background:#ff6b6b22;color:#ff6b6b;padding:2px 8px;border-radius:99px;">${messages.length} unread</span>` : ''}
-        ${decisions.length > 0 ? html`<span style="background:#ffb34722;color:#ffb347;padding:2px 8px;border-radius:99px;">${decisions.length} pending</span>` : ''}
       </div>
     </div>
 
@@ -156,7 +137,6 @@ agentsInbox.get('/agents/inbox', async (c) => {
       <!-- Tabs -->
       <div style="display:flex;border-bottom:1px solid rgba(255,255,255,0.08);padding:0 0.25rem;">
         <a href="/agents/inbox?tab=messages" style="${tabStyle('messages')}">Messages${messages.length > 0 ? html` <span style="font-size:0.7rem;background:#ff6b6b;color:white;padding:1px 6px;border-radius:99px;margin-left:4px;">${messages.length}</span>` : ''}</a>
-        <a href="/agents/inbox?tab=decisions" style="${tabStyle('decisions')}">Decisions${decisions.length > 0 ? html` <span style="font-size:0.7rem;background:#ffb347;color:#1a1a2e;padding:1px 6px;border-radius:99px;margin-left:4px;">${decisions.length}</span>` : ''}</a>
         <a href="/agents/inbox?tab=actions" style="${tabStyle('actions')}">Actions${actions.length > 0 ? html` <span style="font-size:0.7rem;background:#4ecca3;color:#1a1a2e;padding:1px 6px;border-radius:99px;margin-left:4px;">${actions.length}</span>` : ''}</a>
       </div>
 
@@ -167,12 +147,6 @@ agentsInbox.get('/agents/inbox', async (c) => {
           : messageItems}
       ` : ''}
 
-      <!-- Decisions Tab -->
-      ${tab === 'decisions' ? html`
-        ${decisions.length === 0
-          ? html`<div style="padding:3rem;text-align:center;color:var(--text-muted);font-size:0.9rem;">No pending decisions awaiting approval.</div>`
-          : decisionItems}
-      ` : ''}
 
       <!-- Actions Tab -->
       ${tab === 'actions' ? html`
@@ -185,41 +159,6 @@ agentsInbox.get('/agents/inbox', async (c) => {
 
   return c.html(dashboardLayout(ctx, content));
 });
-
-// ─── POST /inbox/decisions/:id/approve ────────────────────────────────────────
-
-// A second decision ledger — `agent_decisions` — with the same two gaps the
-// main one had: scoped on ownership, so a co-founder with a say could not act
-// on it, and gated by nothing, so anyone who could select the company could.
-agentsInbox.post('/agents/inbox/decisions/:id/approve',
-  requireCompanyCapability('can_vote_decisions'), async (c) => {
-    const founder = c.get('founder');
-    const id = c.req.param('id');
-    const ctx = await getLayoutContext(founder, 'agents', 'Inbox', undefined, c);
-    if (!ctx.productId) return c.redirect('/agents/inbox?tab=decisions');
-    await query(
-      `UPDATE agent_decisions SET status='approved', approved_at=CURRENT_TIMESTAMP, approved_by=?
-       WHERE id=? AND status='pending' AND product_id=?`,
-      [founder.id, id, ctx.productId]
-    );
-    return c.redirect('/agents/inbox?tab=decisions');
-  });
-
-// ─── POST /inbox/decisions/:id/dismiss ────────────────────────────────────────
-
-agentsInbox.post('/agents/inbox/decisions/:id/dismiss',
-  requireCompanyCapability('can_vote_decisions'), async (c) => {
-    const founder = c.get('founder');
-    const id = c.req.param('id');
-    const ctx = await getLayoutContext(founder, 'agents', 'Inbox', undefined, c);
-    if (!ctx.productId) return c.redirect('/agents/inbox?tab=decisions');
-    await query(
-      `UPDATE agent_decisions SET status='dismissed'
-       WHERE id=? AND status='pending' AND product_id=?`,
-      [id, ctx.productId]
-    );
-    return c.redirect('/agents/inbox?tab=decisions');
-  });
 
 // ─── POST /inbox/messages/:id/read ────────────────────────────────────────────
 

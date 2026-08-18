@@ -1524,7 +1524,6 @@
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,                   -- e.g. 'beacon', 'scribe', 'harbor'
-  agent_name TEXT,
   agent_name TEXT,                          -- nullable: aggregate streak across all agents
   agent_name TEXT,                       -- NULL for platform-level
   agent_name TEXT,             -- NULL means cross-agent pattern
@@ -1557,10 +1556,8 @@
   applied_at            TEXT,
   applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   approved_at DATETIME,
-  approved_at DATETIME,
   approved_at TEXT,
   approved_at TEXT,
-  approved_by TEXT,
   approved_by TEXT,           -- 'auto' or 'ceo'
   approved_by TEXT, -- user id
   archived BOOLEAN DEFAULT FALSE,
@@ -1931,7 +1928,6 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2132,7 +2128,6 @@
   decision_speed TEXT DEFAULT 'thoughtful', -- 'fast', 'thoughtful', 'deliberate'
   decision_title          TEXT NOT NULL,
   decision_title TEXT NOT NULL,
-  decision_title TEXT,
   decision_track_record_score INTEGER, -- Outcome valence from decision history
   decision_type  TEXT NOT NULL DEFAULT 'outbound_action',
   decision_type TEXT NOT NULL,
@@ -2170,7 +2165,6 @@
   description TEXT NOT NULL,
   description TEXT NOT NULL,
   description TEXT NOT NULL,
-  description TEXT,
   description TEXT,
   description TEXT,
   description TEXT,
@@ -2589,7 +2583,6 @@
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -3373,7 +3366,6 @@
   priority INTEGER DEFAULT 5,    -- 1=critical, 10=low
   priority TEXT DEFAULT 'medium',
   priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high','critical')),
-  priority TEXT,
   priority_alignment REAL,
   priority_consensus BOOLEAN,
   priority_score REAL NOT NULL,     -- urgency * impact
@@ -3595,7 +3587,6 @@
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
-  product_id TEXT NOT NULL,
   product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT PRIMARY KEY REFERENCES products(id),
   product_id TEXT PRIMARY KEY REFERENCES products(id),
@@ -3658,7 +3649,6 @@
   rationale TEXT NOT NULL,    -- Why the agent proposes this action
   rationale TEXT,
   rationale TEXT,
-  rationale TEXT,
   rationale TEXT,              -- why they voted this way
   re_audit_completed_at DATETIME,
   re_audit_triggered_at DATETIME,
@@ -3675,7 +3665,6 @@
   reason TEXT NOT NULL,
   reasoning TEXT NOT NULL,
   reasoning TEXT NOT NULL, -- why this mutation was made
-  reasoning TEXT,
   received_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   recipients TEXT,
   recommendation TEXT NOT NULL,
@@ -4014,7 +4003,6 @@
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','rejected','superseded','promoted')),
   status TEXT NOT NULL DEFAULT 'pending',      -- CHECK dropped (app-validated)
-  status TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | dismissed
   status TEXT NOT NULL DEFAULT 'pending', -- pending | running | complete
   status TEXT NOT NULL DEFAULT 'pending_approval' CHECK(status IN (
   status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN (
@@ -4138,7 +4126,6 @@
   title TEXT NOT NULL,
   title TEXT NOT NULL,                 -- ≤120 chars
   title TEXT NOT NULL,              -- the one sentence action
-  title TEXT,
   title TEXT,
   title TEXT,                  -- auto-generated from first message
   to_agent TEXT NOT NULL,              -- Agent name or 'broadcast'
@@ -4597,7 +4584,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4620,7 +4606,7 @@
 , progress REAL);
 , provenance_json TEXT, observed_through TEXT);
 , provider TEXT, sync_type TEXT, errors TEXT, duration_ms INTEGER);
-, resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT, autopilot_counted INTEGER NOT NULL DEFAULT 0);
+, resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT, autopilot_counted INTEGER NOT NULL DEFAULT 0, decided_by_founder_id TEXT);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), allowed_scope_json TEXT, consequence_boundary TEXT, expires_at TEXT, repository_ref TEXT, allowed_path_prefixes_json TEXT, allowed_change_class TEXT, required_verification_json TEXT);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), authority_consent_id TEXT REFERENCES autonomy_consents(id), authority_scope TEXT, effect_id TEXT, effect_certainty TEXT, provider_receipt_json TEXT, reconcile_after TEXT, outcome_status TEXT, outcome_evidence_ref TEXT, learned_claim_id TEXT REFERENCES reconstruction_claims(id), inbound_message_id TEXT REFERENCES inbound_customer_messages(id), reply_proposal_id TEXT REFERENCES signal_events(id));
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), capability TEXT);
@@ -4765,7 +4751,6 @@ CREATE INDEX idx_agent_config_history_agent ON agent_config_history(product_id, 
 CREATE INDEX idx_agent_configs_product ON agent_configs(product_id, agent_name);
 CREATE INDEX idx_agent_cost_agent ON agent_cost_log(product_id, agent_name);
 CREATE INDEX idx_agent_cost_product ON agent_cost_log(product_id, logged_at DESC);
-CREATE INDEX idx_agent_decisions_product ON agent_decisions(product_id, status);
 CREATE INDEX idx_agent_evo_product ON agent_evolution_versions(product_id, agent_name);
 CREATE INDEX idx_agent_evo_promoted ON agent_evolution_versions(promoted_at);
 CREATE INDEX idx_agent_instances_next_run ON agent_instances(next_run_at, status);
@@ -5123,7 +5108,6 @@ CREATE TABLE agent_audit_log (
 CREATE TABLE agent_config_history (
 CREATE TABLE agent_configs (
 CREATE TABLE agent_cost_log (
-CREATE TABLE agent_decisions (
 CREATE TABLE agent_evolution_versions (
 CREATE TABLE agent_initiative_queue (
 CREATE TABLE agent_instances (
