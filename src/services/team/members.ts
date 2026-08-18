@@ -227,7 +227,57 @@ export async function computeAlignmentScore(productId: string): Promise<Alignmen
 }
 
 /**
+ * WHAT A MEMBER MAY DO, NOT MERELY THAT THEY ARE ONE.
+ *
+ * `team_members` has carried five permission columns since migration 010 —
+ * can_view_decisions, can_vote_decisions, can_view_financials, can_view_audit,
+ * can_trigger_actions — and the invite flow writes them. Nothing read any of
+ * them. The only guard was `hasProductAccess`, which asks whether somebody is
+ * on the team at all, so an `investor_observer` — a role whose name says they
+ * observe — could cast a vote on a company decision, and those votes feed the
+ * co-founder alignment score.
+ *
+ * The columns were not decoration: `can_trigger_actions` defaults to FALSE
+ * while the others default TRUE, which is a considered position about what an
+ * advisor should be able to do. It was written down and never asked.
+ *
+ * The owner is always allowed: they are not a member and have no row here.
+ */
+export type MemberCapability =
+  | 'can_view_decisions'
+  | 'can_vote_decisions'
+  | 'can_view_financials'
+  | 'can_view_audit'
+  | 'can_trigger_actions';
+
+export async function memberMay(
+  productId: string, founderId: string, capability: MemberCapability,
+): Promise<boolean> {
+  const owner = await query(
+    `SELECT 1 FROM products WHERE id = ? AND owner_id = ?`, [productId, founderId]);
+  if (owner.rows.length > 0) return true;
+
+  // The column name comes from the closed union above, never from a caller's
+  // string, so there is nothing here a request can reach.
+  const res = await query(
+    `SELECT ${capability} AS allowed FROM team_members
+      WHERE product_id = ? AND founder_id = ? AND status = 'active'`,
+    [productId, founderId]);
+  const row = res.rows[0] as Record<string, unknown> | undefined;
+  // Not a member at all, and a member whose flag is off, are both "no". They
+  // are different facts and the caller does not need to tell them apart —
+  // saying which would tell a stranger whether somebody is on the team.
+  if (!row) return false;
+  return Number(row.allowed) === 1;
+}
+
+/**
  * Check if a founder has access to a product (owner or active team member).
+ *
+ * MEMBERSHIP, NOT PERMISSION. Callers deciding whether somebody may DO
+ * something want `memberMay`; this only answers whether they belong here at
+ * all, and every route that admits a team member has to say which capability
+ * it requires.
  */
 export async function hasProductAccess(productId: string, founderId: string): Promise<boolean> {
   const result = await query(

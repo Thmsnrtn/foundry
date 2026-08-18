@@ -232,10 +232,13 @@ teamRoutes.post('/api/decisions/:id/vote', async (c) => {
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const productId = (result.rows[0] as Record<string, string>).product_id;
 
-  // Verify access (owner or team member)
-  const { hasProductAccess } = await import('../../services/team/members.js');
-  const hasAccess = await hasProductAccess(productId, founder.id);
-  if (!hasAccess) return c.json({ error: 'Not found' }, 404);
+  // MAY THIS PERSON VOTE, not merely are they on the team. `can_vote_decisions`
+  // has existed on `team_members` since migration 010 and nothing asked it, so
+  // an investor_observer could cast a vote that feeds the alignment score.
+  const { memberMay } = await import('../../services/team/members.js');
+  if (!(await memberMay(productId, founder.id, 'can_vote_decisions'))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
 
   await submitDecisionVote(
     decisionId,
@@ -260,8 +263,10 @@ teamRoutes.get('/api/decisions/:id/votes', async (c) => {
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const productId = (result.rows[0] as Record<string, string>).product_id;
 
-  const { hasProductAccess } = await import('../../services/team/members.js');
-  if (!(await hasProductAccess(productId, founder.id))) return c.json({ error: 'Not found' }, 404);
+  const { memberMay } = await import('../../services/team/members.js');
+  if (!(await memberMay(productId, founder.id, 'can_view_decisions'))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
 
   const votes = await getDecisionVotes(decisionId);
   return c.json({ votes });
