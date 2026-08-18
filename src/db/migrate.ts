@@ -65,8 +65,15 @@ export function splitSqlStatements(sql: string): string[] {
     if (ch === "'") { inSingle = true; current += ch; continue; }
 
     // Trigger body tracking so semicolons inside BEGIN..END don't split.
+    //
+    // CASE COUNTS TOO. A `CASE ... END` inside a trigger body closes with the
+    // same keyword as the body itself, so counting only BEGIN made the CASE's
+    // `END` cancel the trigger's — the body was then cut at its first internal
+    // semicolon and SQLite reported "incomplete input" on a statement that was
+    // perfectly well formed. This function's own comment says it respects
+    // trigger bodies; it respected the ones nobody had written a CASE in yet.
     if (isTriggerStmt()) {
-      if (wordEndsAt(i, 'begin')) { triggerDepth++; }
+      if (wordEndsAt(i, 'begin') || wordEndsAt(i, 'case')) { triggerDepth++; }
       else if (wordEndsAt(i, 'end')) { if (triggerDepth > 0) triggerDepth--; }
     }
 

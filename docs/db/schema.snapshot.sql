@@ -106,6 +106,8 @@
 
 
 
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -135,7 +137,10 @@
                  )),
                )),
                )),
+             ELSE d.decision
+             WHEN 'reconsidered' THEN 'pending'
             c.epistemic_status IN ('known','inferred') AND (c.valid_until IS NULL OR datetime(c.valid_until)>datetime('now'))
+           END
           ))
           AND (NEW.epistemic_status='unresolved' OR (
           AND a.id=json_extract(ref.value,'$.id') AND a.product_id=NEW.product_id
@@ -184,16 +189,24 @@
         instr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', '|' || NEW.from_state || '|')), '|', '')) + 1
         instr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', '|' || NEW.to_state || '|'))) -
         instr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', '|' || NEW.to_state || '|')), '|', ''))
+       AND (c.valid_until IS NULL OR datetime(c.valid_until) > datetime('now'))
        AND (c.valid_until IS NULL OR datetime(c.valid_until)>datetime('now'))
+       AND NEW.status = CASE d.decision
+       AND a.capability = NEW.capability AND a.to_mode = 'act' AND a.revoked_at IS NULL
        AND a.capability=r.capability AND a.to_mode='act' AND a.revoked_at IS NULL
+       AND c.epistemic_status IN ('known','inferred') AND json_array_length(c.evidence_refs_json) > 0
        AND c.epistemic_status IN ('known','inferred') AND json_array_length(c.evidence_refs_json)>0
        AND c.product_id=r.product_id
+       AND d.created_at = NEW.disposition_at
        AND d.disposition = NEW.disposition
        AND d.evidence_ref = NEW.disposition_evidence_ref
+       AND d.product_id = NEW.product_id
        AND d.product_id = NEW.product_id
        AND d.reason = NEW.disposition_reason
        AND from_state = OLD.state
        AND to_state = NEW.state
+       AND x.responsibility_id = NEW.id AND c.product_id = NEW.product_id
+       AND x.status = 'completed' AND x.verify_status = 'passed'
        AND x.status='completed' AND x.verify_status='passed'
       'activation_event','active_user_event','team_id','host','account_id',
       'activation_event','active_user_event','team_id','host','account_id',
@@ -270,6 +283,7 @@
       JOIN autonomy_consents a ON a.id=NEW.authority_consent_id
       JOIN governed_effect_kinds k ON k.scope_key=NEW.authority_scope
       JOIN institutional_responsibilities r ON r.id=x.responsibility_id
+      JOIN responsibility_shadow_expectations x ON x.id = c.expectation_id
       JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
       NEW.actor_ref!='institution:deterministic_candidate_grounder' OR NOT EXISTS (
       ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
@@ -310,12 +324,18 @@
      OR length(COALESCE(NEW.label,'')) > 80;
      OR length(COALESCE(NEW.unit,'')) > 24;
      WHERE COALESCE(json_each.value,'') NOT IN ('metrics','company_report','effect_outcome'));
+     WHERE NEW.authority_ref = 'autonomy_consent:' || a.id AND a.product_id = NEW.product_id
      WHERE NEW.authority_ref='autonomy_consent:' || a.id AND a.product_id=r.product_id
+     WHERE NEW.evidence_ref = 'reconstruction_claim:' || c.id AND c.product_id = NEW.product_id
+     WHERE NEW.evidence_ref = 'shadow_comparison:' || c.id
+     WHERE NEW.evidence_ref = 'signal_event:' || e.id AND e.product_id = NEW.product_id
      WHERE NEW.evidence_ref='reconstruction_claim:' || c.id AND c.product_id=r.product_id
      WHERE NEW.evidence_ref='shadow_comparison:' || c.id AND r.id=NEW.responsibility_id
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=NEW.product_id
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=r.product_id
+     WHERE NEW.outcome_ref = 'action_execution:' || x.id AND x.product_id = NEW.product_id
      WHERE NEW.outcome_ref='action_execution:' || x.id AND x.product_id=r.product_id
+     WHERE d.candidate_id = NEW.id
      WHERE d.responsibility_id = NEW.id
      WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
      WHERE responsibility_id = NEW.id
@@ -534,7 +554,9 @@
     SELECT 'product', NEW.product_id, NEW.date, 0, NEW.reserved_cents, NEW.updated_at WHERE NEW.product_id IS NOT NULL
     SELECT 1
     SELECT 1
+    SELECT 1 FROM action_executions x
     SELECT 1 FROM action_executions x JOIN institutional_responsibilities r ON r.id=NEW.responsibility_id
+    SELECT 1 FROM autonomy_consents a
     SELECT 1 FROM autonomy_consents a JOIN institutional_responsibilities r ON r.id=NEW.responsibility_id
     SELECT 1 FROM autonomy_consents a, json_each(a.allowed_path_prefixes_json) p
     SELECT 1 FROM company_observation_channels c
@@ -567,9 +589,11 @@
     SELECT 1 FROM products p
     SELECT 1 FROM products p WHERE p.id=NEW.product_id AND p.owner_id=NEW.owner_id);
     SELECT 1 FROM products p WHERE p.id=NEW.product_id);
+    SELECT 1 FROM reconstruction_claims c
     SELECT 1 FROM reconstruction_claims c JOIN institutional_responsibilities r ON r.id=NEW.responsibility_id
     SELECT 1 FROM reconstruction_claims c WHERE NEW.expectation_evidence_ref='reconstruction_claim:' || c.id
     SELECT 1 FROM reconstruction_claims c WHERE c.id=NEW.learned_claim_id AND c.product_id=NEW.product_id
+    SELECT 1 FROM responsibility_candidate_decisions d
     SELECT 1 FROM responsibility_candidates c WHERE c.id=NEW.candidate_id AND c.product_id=NEW.product_id
     SELECT 1 FROM responsibility_candidates c WHERE c.id=NEW.candidate_id AND c.product_id=NEW.product_id
     SELECT 1 FROM responsibility_candidates c WHERE c.id=NEW.candidate_id AND c.status IN ('rejected','superseded')
@@ -578,11 +602,13 @@
     SELECT 1 FROM responsibility_dispositions d
     SELECT 1 FROM responsibility_shadow_comparisons c
     SELECT 1 FROM responsibility_shadow_comparisons c
+    SELECT 1 FROM responsibility_shadow_comparisons c
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x JOIN institutional_responsibilities r ON r.id=x.responsibility_id
     SELECT 1 FROM responsibility_shadow_expectations x, signal_events e
     SELECT 1 FROM responsibility_transitions
+    SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
@@ -599,6 +625,8 @@
     SELECT 1 FROM support_channels c
     SELECT 1 FROM support_channels c
     SELECT 1 FROM system_identities s WHERE s.identity_key=NEW.identity_key);
+    UNION ALL
+    UNION ALL
     UNION ALL
     UNION ALL
     VALUES('global', '__global__', NEW.date, 0, NEW.reserved_cents, NEW.updated_at)
@@ -698,7 +726,10 @@
     || json_extract(NEW.payload_json,'$.verdict');
    SELECT 1 FROM signal_events s WHERE refs.value='signal_event:'||s.id AND s.product_id=NEW.product_id));
    WHERE NEW.authority_ref IS NOT NULL AND NOT EXISTS (
+   WHERE NEW.authority_ref IS NOT NULL AND NOT EXISTS (
    WHERE NEW.evidence_ref IS NOT NULL AND NOT EXISTS (
+   WHERE NEW.evidence_ref IS NOT NULL AND NOT EXISTS (
+   WHERE NEW.outcome_ref IS NOT NULL AND NOT EXISTS (
    WHERE NEW.outcome_ref IS NOT NULL AND NOT EXISTS (
   ) AND NOT EXISTS (
   ) AND NOT EXISTS (
@@ -724,6 +755,10 @@
   )),
   )),
   )),
+  );
+  );
+  );
+  );
   );
   );
   );
@@ -888,6 +923,7 @@
   -- The compressed content
   -- The consequence class a consent must have been granted at to use this. Not
   -- The constitutional ring. Ordinary development authority may not reach the
+  -- The decision and the status it produces are not the same word for one of
   -- The decision this premise underpins. decision_source disambiguates which
   -- The effect must be this company's own, and must have actually executed. An
   -- The event type is derived from the reading, so a comparison matches on what
@@ -974,6 +1010,7 @@
   -- judgment time; the owner cannot introduce an unrepresented direction here.
   -- just the plaintext column with a more reassuring name.
   -- justified by another tenant's evidence is not a justification.
+  -- mapping.
   -- means editing a migration, which is inside the constitutional ring — so a
   -- message cannot be planned against another, and one responsibility cannot
   -- missing, and a NULL condition never fires a RAISE.
@@ -988,11 +1025,13 @@
   -- policy) are deliberately absent until something consumes them; adding a
   -- provider is a code change in the send boundary, so it is a code change
   -- question that was never asked, another tenant's question, or one already
+  -- rather than assumed equal, because assuming it is how a guard ends up
   -- re-grant; it is erasing that the founder ever said stop.
   -- reality a reading described. Mirrors OBSERVABLE_FIELDS; a test asserts the
   -- recorded cannot disagree.
   -- reference is exactly this consent, and a consent that is currently valid,
   -- refused, and so is a broad prefix that would contain part of the ring.
+  -- refusing the legitimate path — the apply trigger below it does exactly this
   -- repository is not a bound scope.
   -- reproducing ALL of it: the first version of this migration recreated only
   -- requires real comparison evidence there, and it still does. Applying this
@@ -1020,6 +1059,7 @@
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
   -- the evidence must be this company's own — a credential justified by another
   -- the field quietly dropped.
+  -- the four: 'reconsidered' returns a candidate to 'pending'. Spelled out
   -- the message is being attributed to. Attribution is structural.
   -- the ratchets/audits are what make any of it binding.
   -- the two attribution axes can never disagree about the same row.
@@ -1136,8 +1176,11 @@
   OR COALESCE(OLD.product_id,'') <> COALESCE(NEW.product_id,'')
   OR COALESCE(OLD.purposes_json,'') <> COALESCE(NEW.purposes_json,'')
   OR COALESCE(OLD.secret,'')        <> COALESCE(NEW.secret,'')
+  OR NEW.authority_ref IS NOT OLD.authority_ref
+  OR NEW.disposition_at IS NOT OLD.disposition_at
   OR NEW.disposition_evidence_ref IS NOT OLD.disposition_evidence_ref
   OR NEW.disposition_reason IS NOT OLD.disposition_reason
+  OR NEW.outcome_ref IS NOT OLD.outcome_ref
   PRIMARY KEY (founder_id, product_id, item_key)
   PRIMARY KEY (key, window_start)
   PRIMARY KEY (product_id, prompt, condition_name)
@@ -1147,6 +1190,7 @@
   SELECT RAISE(ABORT, 'ai_spend_ceiling:founder') WHERE NEW.founder_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:global') WHERE COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:product') WHERE NEW.product_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
+  SELECT RAISE(ABORT, 'candidate_status:no_decision') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_invalid') WHERE NOT EXISTS (
@@ -1155,7 +1199,10 @@
   SELECT RAISE(ABORT, 'responsibility_disposition:not_found') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_disposition:reason_required') WHERE trim(NEW.reason)='';
   SELECT RAISE(ABORT, 'responsibility_reference:authority_invalid')
+  SELECT RAISE(ABORT, 'responsibility_reference:authority_invalid')
   SELECT RAISE(ABORT, 'responsibility_reference:evidence_invalid')
+  SELECT RAISE(ABORT, 'responsibility_reference:evidence_invalid')
+  SELECT RAISE(ABORT, 'responsibility_reference:outcome_invalid')
   SELECT RAISE(ABORT, 'responsibility_reference:outcome_invalid')
   SELECT RAISE(ABORT, 'responsibility_state:no_transition') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_state:not_a_birth_state');
@@ -4629,9 +4676,11 @@ BEFORE INSERT ON support_channels
 BEFORE INSERT ON system_identities
 BEFORE UPDATE OF config_json ON integrations
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
-BEFORE UPDATE OF disposition, disposition_reason, disposition_evidence_ref
+BEFORE UPDATE OF disposition, disposition_reason, disposition_evidence_ref, disposition_at
+BEFORE UPDATE OF evidence_ref, authority_ref, outcome_ref
 BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE OF state ON institutional_responsibilities
+BEFORE UPDATE OF status ON responsibility_candidates
 BEFORE UPDATE ON company_observation_channels
 BEFORE UPDATE ON cost_events
 BEFORE UPDATE ON development_change_plans
@@ -4641,6 +4690,8 @@ BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5367,11 +5418,13 @@ CREATE TRIGGER responsibility_candidate_lifecycle_apply
 CREATE TRIGGER responsibility_candidate_lifecycle_guard
 CREATE TRIGGER responsibility_candidate_promotion_apply
 CREATE TRIGGER responsibility_candidate_promotion_guard
+CREATE TRIGGER responsibility_candidate_status_requires_decision
 CREATE TRIGGER responsibility_disposition_apply
 CREATE TRIGGER responsibility_disposition_evidence_guard
 CREATE TRIGGER responsibility_disposition_guard
 CREATE TRIGGER responsibility_disposition_requires_record
 CREATE TRIGGER responsibility_operating_promotion_freeze
+CREATE TRIGGER responsibility_reference_columns_guard
 CREATE TRIGGER responsibility_reference_guard
 CREATE TRIGGER responsibility_shadow_comparison_guard
 CREATE TRIGGER responsibility_shadow_expectation_guard
@@ -5486,8 +5539,11 @@ END;
 END;
 END;
 END;
+END;
+END;
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
+ON institutional_responsibilities
 ON institutional_responsibilities
 WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
 WHEN COALESCE(OLD.product_id,'')    <> COALESCE(NEW.product_id,'')
@@ -5495,8 +5551,10 @@ WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN NEW.disposition IS NOT OLD.disposition
+WHEN NEW.evidence_ref IS NOT OLD.evidence_ref
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
 WHEN NEW.state <> OLD.state
 WHEN NEW.state IN ('operating', 'mature', 'exception_owned')
+WHEN NEW.status IS NOT OLD.status
 WHEN OLD.status IN ('reserved','ambiguous') AND NEW.status IN ('settled','released','expired')
