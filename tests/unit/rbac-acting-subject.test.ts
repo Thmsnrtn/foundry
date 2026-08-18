@@ -182,6 +182,19 @@ describe('one principal per request, and no borrowing between kinds', () => {
     expect(res.status).toBe(401);
   });
 
+  it('refuses a non-human principal even when it happens to carry a founder id', async () => {
+    // The kind is what the guard must read, not the shape. Today an
+    // ApiKeyPrincipal has no `founderId` field, so dropping the kind check
+    // still refuses — by accident. If a future field ever names a founder on a
+    // credential principal, that accident stops holding and this case is what
+    // notices.
+    const res = await withPrincipal(
+      { kind: 'api_key', keyOwnerId: OWNER, founderId: OWNER, productId: PRODUCT, scopes: ['*'] },
+      requireRole('owner')).request('/x', withCompany);
+    expect(res.status, 'the discriminant decides, not the presence of a field')
+      .toBe(401);
+  });
+
   it('refuses a request carrying two mechanisms at once', async () => {
     // Session cookie AND API key. Picking the stronger is how escalation by
     // header stuffing works; two principals is not a principal.
