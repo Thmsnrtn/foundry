@@ -1,7 +1,13 @@
 // =============================================================================
 // FOUNDRY — Cross-Product Wisdom Network
-// Aggregates anonymized insights from opted-in products.
-// Privacy guarantee: no individual product data surfaces. Min sample size = 10.
+// Aggregates anonymized patterns from opted-in products.
+//
+// Two floors, and they are not the same number. A sector/stage cohort must
+// hold MIN_SAMPLE_SIZE opted-in companies before it is aggregated at all; a
+// published pattern must stand on MIN_CONTRIBUTORS distinct companies. Both
+// are eligibility floors chosen so that no single company's decisions can be
+// shown to its competitors. Neither is a sample size drawn to support
+// inference, and nothing here may present them as one.
 // =============================================================================
 
 import { createHmac } from 'crypto';
@@ -10,16 +16,38 @@ import { query } from '../../db/client.js';
 import { callOpus, institutionSpend, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 
+/**
+ * A pattern observed across companies, and — separately — what a model made of
+ * it.
+ *
+ * The two halves used to be one flat bag of numbers whose names all read as
+ * measurements: `confidence`, `avg_impact`, `sample_size`. Only the last was
+ * counted. `confidence` and `avg_impact` are values the analysis model wrote
+ * into its JSON, and they were rendered to a founder as "80% confidence, avg
+ * impact +12%" — a statistic-shaped presentation of an estimate.
+ *
+ * So the fields say which they are, and the provenance that was already being
+ * recorded travels with them instead of stopping at the table.
+ */
 export interface CrossProductInsight {
   id: string;
   sector: string;
   growth_stage: string;
   insight_type: string;
   description: string;
-  sample_size: number;
-  confidence: number;
-  avg_impact: number;
+  /** DISTINCT contributing companies — the unit, named. Not rows, not cohort. */
+  contributing_companies: number;
+  /** The model's own stated confidence in its reading. Not a confidence
+   * interval, not a p-value, not derived from the sample at all. */
+  model_confidence: number;
+  /** The model's estimate of impact, in percent. Not a measured average. */
+  estimated_impact_pct: number;
   conditions: Record<string, unknown> | null;
+  /** How the aggregation was done, stamped at write time. Null for rows
+   * written before migration 146. */
+  provenance: Record<string, unknown> | null;
+  /** The last decision date behind the claim. What makes it current or stale. */
+  observed_through: string | null;
 }
 
 const MIN_SAMPLE_SIZE = 10;
@@ -155,18 +183,24 @@ ${(patterns.rows as unknown as Array<Record<string, unknown>>).map((p) =>
   `- ${p.decision_type} → chose ${p.option_chosen_category}: ${p.outcome_direction} (${p.outcome_magnitude}) × ${p.cnt}`
 ).join('\n')}
 
-Extract 1-3 statistically significant insights. Each insight must:
-1. Be derived from at least 3 data points
-2. Describe a pattern that would help a founder in this sector/stage
-3. Include estimated impact
+Describe 1-3 patterns these rows actually show. Each one must:
+1. Be supported by at least 3 of the rows above
+2. Describe something a founder in this sector/stage could act on
+3. Carry your own estimate of impact, and your own confidence in that estimate
+
+${contributorCount} companies is an eligibility floor, not a sample drawn to
+support inference. Do not describe anything below as statistically significant,
+proven, validated, a consensus, or what the market does — you have not been
+given the data to support any of those words, and a founder will act on this.
+Say what these companies did and what it looks like it was worth.
 
 Return JSON array:
 [{"insight_type": "retention_tactic|pricing_strategy|acquisition_channel|churn_reduction|onboarding_pattern", "description": "...", "confidence": 0.0-1.0, "avg_impact": percentage_improvement, "conditions": {"when": "..."}}]
 
-Return empty array if no significant patterns emerge.`;
+Return an empty array if the rows show no pattern worth describing.`;
 
     const response = await callOpus(
-      'You are a cross-product pattern analyst. Only surface statistically significant insights.',
+      'You are a cross-product pattern analyst reading a small number of anonymized companies. Report what they did. Do not claim significance, proof, or consensus.',
       prompt,
       2048,
       // Institutional, and declared rather than omitted. Naming any single
@@ -213,7 +247,9 @@ export async function getRelevantInsights(productId: string): Promise<CrossProdu
   if (!p) return [];
 
   const result = await query(
-    `SELECT * FROM cross_product_insights
+    `SELECT id, sector, growth_stage, insight_type, description, sample_size,
+            confidence, avg_impact, conditions, provenance_json, observed_through
+       FROM cross_product_insights
      WHERE sector = ? AND growth_stage = ? AND sample_size >= ?
        -- A row existing is not a claim being current. An insight drawn from
        -- decisions a year old describes a market that has moved, and injecting
@@ -235,10 +271,17 @@ export async function getRelevantInsights(productId: string): Promise<CrossProdu
     growth_stage: row.growth_stage as string,
     insight_type: row.insight_type as string,
     description: row.description as string,
-    sample_size: row.sample_size as number,
-    confidence: row.confidence as number,
-    avg_impact: row.avg_impact as number,
+    // The column names are the old ones; what they hold has not changed. What
+    // changed is that a reader can no longer take `confidence` for a statistic
+    // or `avg_impact` for a measurement, because neither word reaches them.
+    contributing_companies: Number(row.sample_size),
+    model_confidence: Number(row.confidence),
+    estimated_impact_pct: Number(row.avg_impact),
     conditions: row.conditions ? JSON.parse(row.conditions as string) : null,
+    provenance: row.provenance_json
+      ? JSON.parse(row.provenance_json as string) as Record<string, unknown>
+      : null,
+    observed_through: (row.observed_through as string | null) ?? null,
   }));
 }
 
@@ -249,21 +292,21 @@ export async function injectNetworkWisdom(context: string, productId: string): P
   const insights = await getRelevantInsights(productId);
   if (insights.length === 0) return context;
 
+  // WHAT THIS LINE USED TO SAY: "[Network insight, 3 contributing companies,
+  // 90% confidence]: ... (avg impact: +12%)". Every part of that framing was a
+  // promotion. "Network insight" is a finding; this is a pattern. "90%
+  // confidence" is a statistic; this is the analysis model's own number.
+  // "avg impact" is a measured mean; this is that model's estimate. The
+  // downstream model reads it as evidence and reasons about a founder's
+  // company from it, so the labels have to survive the trip.
   const wisdomSection = insights.map((i) =>
-    `[Network insight, ${i.sample_size} contributing companies, ${(i.confidence * 100).toFixed(0)}% confidence]: ${i.description} (avg impact: ${i.avg_impact > 0 ? '+' : ''}${i.avg_impact.toFixed(0)}%)`
+    `[Peer pattern — ${i.contributing_companies} contributing companies, an eligibility floor rather than a sample]: `
+    + `${i.description} (model's own confidence ${(i.model_confidence * 100).toFixed(0)}%; `
+    + `impact ESTIMATED at ${i.estimated_impact_pct > 0 ? '+' : ''}${i.estimated_impact_pct.toFixed(0)}%, not measured)`
   ).join('\n');
 
-  return context + '\n\n--- CROSS-PRODUCT WISDOM ---\n' + wisdomSection;
+  return context
+    + '\n\n--- PATTERNS FROM OTHER COMPANIES (not evidence about this one) ---\n'
+    + wisdomSection;
 }
 
-/**
- * Compute statistical confidence for an insight.
- */
-export function computeInsightConfidence(
-  sampleSize: number,
-  effectConsistency: number // 0-1: how consistent the effect is across products
-): number {
-  // Simple confidence model: sample size + consistency
-  const sizeFactor = Math.min(1, sampleSize / 50); // Max out at 50 products
-  return Math.round((sizeFactor * 0.5 + effectConsistency * 0.5) * 100) / 100;
-}
