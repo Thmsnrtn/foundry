@@ -11,7 +11,8 @@ import { query, getProductByOwner } from '../../db/client.js';
 import { upsertCustomer, recordCustomerEvent, refreshAllCustomerHealth, getAtRiskCustomers, getExpansionCandidates, generateCustomerInsights, detectRevenueConcentration } from '../../services/customers/intelligence.js';
 import { designExperiment, createExperiment, recordExperimentEvent, analyzeExperiment, getActiveExperiments, stopExperiment } from '../../services/experiments/engine.js';
 import { ingestEvent, createEventRule, getRecentEvents, getActiveAnomalies } from '../../services/events/bus.js';
-import { generateBoardDeck, assessFundraiseReadiness } from '../../services/investor/automation.js';
+import { generateBoardDeck } from '../../services/investor/automation.js';
+import { assessFundraisingReadiness } from '../../services/scp/investor/fundraising-readiness.js';
 // One writer per table — see migration 164. This route had its own, which
 // left `month` unset and made its updates invisible to the dashboard.
 import { generateInvestorUpdate } from '../../services/scp/investor/investor-update.js';
@@ -249,7 +250,18 @@ platformApiRoutes.post('/api/products/:id/fundraise-readiness', async (c) => {
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
   const body = await c.req.json() as Record<string, unknown>;
-  const readiness = await assessFundraiseReadiness(productId, founder.id, body.target_round as string);
+  // THE ROUND IS A CLOSED VOCABULARY AND THE CALLER IS OUTSIDE. The canonical
+  // assessment indexes a multiplier table by this value, so an unrecognised
+  // round produces `undefined` and every score downstream becomes NaN — a
+  // readiness report made of nothing, returned with a 200. Reject it here
+  // rather than compute it.
+  const ROUNDS = ['pre_seed', 'seed', 'series_a', 'series_b'] as const;
+  const round = String(body.target_round ?? 'seed');
+  if (!(ROUNDS as readonly string[]).includes(round)) {
+    return c.json({ error: `target_round must be one of ${ROUNDS.join(', ')}` }, 400);
+  }
+  const readiness = await assessFundraisingReadiness(
+    productId, round as (typeof ROUNDS)[number]);
   return c.json(readiness);
 });
 

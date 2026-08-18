@@ -1636,7 +1636,6 @@
   asked_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   asks TEXT,
   assessed_at TEXT DEFAULT (datetime('now'))
-  assessed_at TEXT DEFAULT (datetime('now'))
   assessed_at TEXT NOT NULL DEFAULT (datetime('now')),
   assessed_at TEXT NOT NULL DEFAULT (datetime('now')),
   assumptions TEXT,
@@ -2237,7 +2236,6 @@
   dimension TEXT NOT NULL,
   dimension TEXT NOT NULL,
   dimension TEXT NOT NULL,
-  dimension_scores TEXT,
   direction_correct BOOLEAN,           -- did we predict the direction right?
   directness_level TEXT DEFAULT 'moderate',
   disclosure_version  TEXT NOT NULL,          -- which disclosure text they accepted
@@ -2509,7 +2507,6 @@
   full_synthesis TEXT NOT NULL,          -- Complete synthesis markdown
   fund_vintage TEXT,
   gap_months REAL,
-  gaps TEXT,
   gaps_json TEXT NOT NULL DEFAULT '[]', -- array of { dimension, gap, recommendation }
   gate INTEGER CHECK(gate BETWEEN 0 AND 4),
   gate INTEGER NOT NULL,
@@ -2620,7 +2617,6 @@
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -3230,7 +3226,6 @@
   overall_ethics_score REAL,
   overall_score REAL NOT NULL, -- 0-10
   overall_score REAL NOT NULL, -- 0-10
-  overall_score REAL,
   overnight_actions TEXT,              -- JSON: AgentAction[] (already executed)
   override_rate_pct REAL,                       -- 0-100
   owner_agent     TEXT,                    -- agent name, or NULL for founder-owned
@@ -3240,7 +3235,6 @@
   owner_id TEXT NOT NULL REFERENCES founders(id),
   owner_id TEXT NOT NULL REFERENCES founders(id),
   owner_id TEXT NOT NULL REFERENCES founders(id),
-  owner_id TEXT NOT NULL,
   owner_id TEXT NOT NULL,
   owner_id TEXT NOT NULL,
   owner_id TEXT NOT NULL,
@@ -3609,7 +3603,6 @@
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
-  product_id TEXT NOT NULL,
   product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT PRIMARY KEY REFERENCES products(id),
   product_id TEXT PRIMARY KEY REFERENCES products(id),
@@ -3693,7 +3686,6 @@
   recommendation TEXT,  -- what to do about it
   recommendation_date TEXT NOT NULL DEFAULT (date('now')),
   recommendation_text TEXT NOT NULL,
-  recommendations TEXT,
   recommendations TEXT,
   recommendations TEXT,
   recommendations_acted_on INTEGER NOT NULL DEFAULT 0,
@@ -4082,7 +4074,6 @@
   target_id     TEXT,
   target_path           TEXT NOT NULL,
   target_round TEXT NOT NULL CHECK (target_round IN ('pre_seed','seed','series_a','series_b')),
-  target_round TEXT,
   target_type   TEXT,            -- 'customer','agent','experiment','integration','config',etc.
   target_value    REAL NOT NULL,
   target_value REAL,
@@ -4351,7 +4342,6 @@
  evidence_refs_json TEXT NOT NULL, economic_result_json TEXT NOT NULL, learned_claim_id TEXT REFERENCES reconstruction_claims(id),
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
-);
 );
 );
 );
@@ -4910,7 +4900,6 @@ CREATE INDEX idx_founders_tier ON founders(tier);
 CREATE INDEX idx_freeze_periods_product_active
 CREATE INDEX idx_freeze_periods_started
 CREATE INDEX idx_funding_readiness_product ON funding_readiness(product_id, created_at DESC);
-CREATE INDEX idx_fundraise ON fundraise_readiness(product_id);
 CREATE INDEX idx_fundraising_product ON fundraising_scores(product_id, target_round, generated_at);
 CREATE INDEX idx_funnel_events_step ON funnel_events(step, created_at);
 CREATE INDEX idx_gate_events_founder ON gate_events(founder_id);
@@ -5223,7 +5212,6 @@ CREATE TABLE founder_voice (
 CREATE TABLE founding_story_artifacts (
 CREATE TABLE freeze_periods (
 CREATE TABLE funding_readiness (
-CREATE TABLE fundraise_readiness (
 CREATE TABLE fundraising_scores (
 CREATE TABLE funnel_events (
 CREATE TABLE gate_events (

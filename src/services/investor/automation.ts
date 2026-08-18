@@ -58,69 +58,9 @@ Return JSON: {"slides": ["slide 1 content", "slide 2 content", ...]}`;
   return { id, slides: result.slides };
 }
 
-/**
- * Assess fundraise readiness against what investors look for.
- */
-export async function assessFundraiseReadiness(
-  productId: string,
-  ownerId: string,
-  targetRound: string = 'seed'
-): Promise<{
-  overall_score: number;
-  dimensions: Record<string, { score: number; gap: string }>;
-  recommendations: string[];
-}> {
-  const [product, metrics, economics] = await Promise.all([
-    query('SELECT name, sector_profile, growth_stage FROM products WHERE id = ?', [productId]),
-    query('SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1', [productId]),
-    query('SELECT * FROM unit_economics_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1', [productId]),
-  ]);
-
-  const p = product.rows[0] as Record<string, string> | undefined;
-  const m = metrics.rows[0] as Record<string, unknown> | undefined;
-  const e = economics.rows[0] as Record<string, unknown> | undefined;
-
-  const prompt = `Assess this product's readiness for a ${targetRound} fundraise.
-
-Product: ${p?.name ?? 'Unknown'} (${p?.sector_profile ?? 'SaaS'})
-Stage: ${p?.growth_stage ?? 'early'}
-Metrics: ${JSON.stringify(m ?? {})}
-Unit Economics: ${JSON.stringify(e ?? {})}
-
-Score 0-100 on each dimension, identify the gap, and provide specific recommendations.
-Dimensions: growth_rate, retention, market_size, team, unit_economics, product_market_fit, defensibility
-
-Return JSON:
-{
-  "overall_score": 0-100,
-  "dimensions": {"growth_rate": {"score": N, "gap": "..."}, ...},
-  "recommendations": ["specific actions to improve readiness"]
-}`;
-
-  const response = await callOpus(
-    'You are a fundraising readiness advisor. Score against real investor expectations.',
-    prompt,
-    2048,
-    productId
-  );
-
-  const result = parseJSONResponse<{
-    overall_score: number;
-    dimensions: Record<string, { score: number; gap: string }>;
-    recommendations: string[];
-  }>(response.content);
-
-  await query(
-    `INSERT INTO fundraise_readiness (id, product_id, owner_id, target_round, overall_score, dimension_scores, gaps, recommendations)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      nanoid(), productId, ownerId, targetRound,
-      result.overall_score,
-      JSON.stringify(result.dimensions),
-      JSON.stringify(Object.values(result.dimensions).map((d) => d.gap)),
-      JSON.stringify(result.recommendations),
-    ]
-  );
-
-  return result;
-}
+// `assessFundraiseReadiness` was here. It wrote into `fundraise_readiness`,
+// which nothing has ever read — no page, no response, no prompt, no job. The
+// API route that called it returns the assessment in its response body, so its
+// caller loses nothing; only the row was pointless. Retired in migration 165,
+// and the route now computes through the canonical round-based assessment in
+// services/scp/investor/fundraising-readiness.ts.
