@@ -907,3 +907,58 @@ the investor documents showing experiments with no outcome; and the insight
 telling a founder with three co-founders that they were building alone. The
 first two under-report to a third party. The third tells someone something false
 about their own life, at the moment it is designed to land hardest.
+
+---
+
+## Batches 80–84: the door beside the rule
+
+**A comment is not a vocabulary.** `decisions.decided_by` was created with its
+values in a comment — "founder, system_gate_0, system_gate_1" — and two of the
+three have never been written by anything. The comment was not inert: the
+Letter, the institution's daily statement to the founder about what it did for
+them, asked for `decided_by IN ('system_gate_0','second_self')`, so half of
+"what Foundry handled" was a term that could not match. It survived review
+because the schema said it was real. Now a CHECK, which makes the database
+refuse it AND brings the column under `check-check-vocabularies` — the
+difference between a rule that is documented and one that is enforced. Fourth
+instance of this exact class after pending_approval, reviewed and resolved.
+
+**The weekly report told the founder nothing had lapsed.** `decisions.status`
+has permitted 'expired' since migration 001 and nothing ever wrote it, so the
+number of decisions that expired unacted was structurally zero — and those
+decisions sat pending forever, indistinguishable from ones still worth making.
+A nightly sweep now expires the ones that carry a deadline. Registered in
+JOB_REGISTRY, not merely defined: the dead GDPR erasure deleted two batches
+earlier was a function nobody called and nothing scheduled.
+
+**The state machine had a door beside it.** Every rule about how a
+responsibility may move is enforced BEFORE INSERT on the transitions ledger —
+one rung at a time, evidence required, authority required from Assisting up,
+shadow proof to enter Assisting, and migration 115's frozen boundary refusing
+Operating outright. None of it was enforced on the responsibility row itself:
+`UPDATE institutional_responsibilities SET state = 'operating'` skipped all six.
+The constitutional invariant is *"Foundry may not silently redefine what Foundry
+is allowed to do"*, and a governed column writable directly is exactly that.
+Migration 159 requires a state change to be justified by the transition that
+recorded it, and refuses birth into the frozen boundary. 160 does the same for
+`disposition` — including the quieter attack, editing the REASON for a decision
+that was properly made.
+
+**And the fixtures had been going around it.** Seven test files set the state
+directly, so each was asserting behaviour in a state the machine might never
+have permitted — evidence fabrication at the fixture level, the same class as
+the deleted test that inserted rows into `ai_usage_log` to prove `ai_usage_log`
+worked. Building the honest helper is what showed how much they skipped:
+entering Assisting needs a reconstruction claim, an expectation written while
+Understood, a transition to Shadowing, and a comparison written while Shadowing.
+The old fixtures wrote `state='assisting'` with no shadow record at all. One
+fixture birthed a responsibility as 'operating' — the only place in the entire
+codebase a responsibility was ever in the frozen state was a test that did not
+need it to be.
+
+**Mutation testing found three gaps in these batches' own tests**, which is the
+point of running it: a destination-only justification (letting a demoted
+responsibility climb back without earning the rung again), the missing birth
+freeze, and `<>` instead of `IS NOT` — the last mattering precisely because the
+FIRST write to a NULL justification column is the one that invents a judgement
+nobody made.
