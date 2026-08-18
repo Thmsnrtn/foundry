@@ -1045,6 +1045,7 @@
   ON competitor_pricing_snapshots(product_id, competitor_name, snapshot_date);
   ON cost_events(product_id, capability, created_at);
   ON cost_events(product_id, responsibility_id, created_at);
+  ON cross_product_insights(sector, growth_stage, observed_through);
   ON custom_webhook_sources(product_id, is_active);
   ON data_classifications(product_id, surface);
   ON data_quality_alerts(product_id, resolved_at, created_at);
@@ -4576,7 +4577,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4598,6 +4598,7 @@
 , product_id TEXT, created_by TEXT);
 , product_id TEXT, role TEXT, scopes TEXT, created_by TEXT, expires_at TEXT);
 , progress REAL);
+, provenance_json TEXT, observed_through TEXT);
 , provider TEXT, sync_type TEXT, errors TEXT, duration_ms INTEGER);
 , resolution_reasoning TEXT, wisdom_context_used TEXT, follow_up_at DATETIME, outcome_valence INTEGER, deleted_at DATETIME, architecture_class INTEGER DEFAULT 0, frozen_at TEXT, autopilot_counted INTEGER NOT NULL DEFAULT 0);
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), allowed_scope_json TEXT, consequence_boundary TEXT, expires_at TEXT, repository_ref TEXT, allowed_path_prefixes_json TEXT, allowed_change_class TEXT, required_verification_json TEXT);
@@ -4841,6 +4842,7 @@ CREATE INDEX idx_counterfactuals_node ON decision_counterfactuals(memory_node_id
 CREATE INDEX idx_cpi_sector ON cross_product_insights(sector);
 CREATE INDEX idx_cpi_stage ON cross_product_insights(growth_stage);
 CREATE INDEX idx_cpi_type ON cross_product_insights(insight_type);
+CREATE INDEX idx_cross_product_insights_freshness
 CREATE INDEX idx_custom_webhook_sources_product
 CREATE INDEX idx_customer_events ON customer_events(customer_id, created_at);
 CREATE INDEX idx_customer_health_snap ON customer_health_snapshots(customer_id, snapshot_date);

@@ -37,6 +37,18 @@ const MIN_SAMPLE_SIZE = 10;
  */
 export const MIN_CONTRIBUTORS = 3;
 
+/** How the aggregation was done. Stamped on every insight so a row can be read
+ * against the method that produced it — the contributor count and the cohort
+ * count were the same field once, and nothing recorded which one a given row
+ * meant. */
+export const AGGREGATION_METHOD_VERSION = 'contributor-counted/v2';
+
+/** How old the underlying decisions may be and still be called a peer signal.
+ * A row existing is not the same as a claim being current, and an insight drawn
+ * from decisions two years old should not be injected into a prompt as though
+ * it described the market now. */
+export const INSIGHT_FRESHNESS_DAYS = 365;
+
 /**
  * A stable, non-reversible identity for a contributing company.
  *
@@ -84,7 +96,8 @@ export async function aggregateInsights(): Promise<number> {
     const patterns = await query(
       `SELECT dp.decision_type, dp.option_chosen_category, dp.outcome_direction,
               dp.outcome_magnitude, COUNT(*) as cnt,
-              COUNT(DISTINCT dp.contributor_hash) as contributors
+              COUNT(DISTINCT dp.contributor_hash) as contributors,
+              MIN(dp.created_at) as first_observed, MAX(dp.created_at) as last_observed
        FROM decision_patterns dp
        WHERE dp.market_category = ? AND dp.product_lifecycle_stage = ?
        AND dp.outcome_direction IS NOT NULL
@@ -99,9 +112,40 @@ export async function aggregateInsights(): Promise<number> {
     // that gets published and printed into other founders' prompts — see
     // `injectNetworkWisdom` — so it has to be the number that was measured, not
     // the size of the cohort the patterns were drawn from.
-    const contributorCount = Math.min(
-      ...(patterns.rows as unknown as Array<Record<string, unknown>>)
-        .map((r) => Number(r.contributors)));
+    const patternRows = patterns.rows as unknown as Array<Record<string, unknown>>;
+    const contributorCount = Math.min(...patternRows.map((r) => Number(r.contributors)));
+
+    // What a reader would need to reconstruct this claim. Recorded because the
+    // claim crosses a tenant boundary: it is derived from several companies and
+    // shown to another, and "12 contributing companies" was already wrong once
+    // — invisibly, because nothing on the row could be checked.
+    //
+    // No company identities: the hashes are counted, never listed.
+    const observedThrough = patternRows
+      .map((r) => String(r.last_observed ?? '')).sort().slice(-1)[0] ?? null;
+    const provenance = {
+      method: AGGREGATION_METHOD_VERSION,
+      population: { sector, stage, cohort_products: sampleSize },
+      unit: 'distinct contributing companies',
+      distinct_contributors: contributorCount,
+      supporting_rows: patternRows.reduce((n, r) => n + Number(r.cnt), 0),
+      options: patternRows.map((r) => ({
+        option: String(r.option_chosen_category),
+        direction: String(r.outcome_direction),
+        companies: Number(r.contributors),
+        rows: Number(r.cnt),
+      })),
+      window: {
+        first_observed: patternRows.map((r) => String(r.first_observed ?? '')).sort()[0] ?? null,
+        last_observed: observedThrough,
+      },
+      excluded: [
+        'patterns with no outcome direction',
+        'patterns with fewer than 3 rows or fewer than MIN_CONTRIBUTORS distinct companies',
+        'rows written before migration 144, which name no contributor',
+      ],
+      eligibility_floor_only: true,
+    };
 
     // Use Claude to extract insights from the aggregate data
     const prompt = `Analyze these anonymized decision patterns. They come from at least ${contributorCount} contributing companies in the ${sector} sector at ${stage} stage, drawn from a cohort of ${sampleSize}.
@@ -142,14 +186,15 @@ Return empty array if no significant patterns emerge.`;
 
     for (const insight of insights) {
       await query(
-        `INSERT INTO cross_product_insights (id, sector, growth_stage, insight_type, description, sample_size, confidence, avg_impact, conditions)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO cross_product_insights (id, sector, growth_stage, insight_type, description, sample_size, confidence, avg_impact, conditions, provenance_json, observed_through)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           nanoid(), sector, stage, insight.insight_type,
           // The contributing companies, not the cohort. What a founder is shown
           // has to be what was counted.
           insight.description, contributorCount, insight.confidence,
           insight.avg_impact, insight.conditions ? JSON.stringify(insight.conditions) : null,
+          JSON.stringify(provenance), observedThrough,
         ]
       );
       insightsGenerated++;
@@ -170,12 +215,18 @@ export async function getRelevantInsights(productId: string): Promise<CrossProdu
   const result = await query(
     `SELECT * FROM cross_product_insights
      WHERE sector = ? AND growth_stage = ? AND sample_size >= ?
+       -- A row existing is not a claim being current. An insight drawn from
+       -- decisions a year old describes a market that has moved, and injecting
+       -- it into a prompt as a peer signal presents age as evidence.
+       AND (observed_through IS NULL
+            OR datetime(observed_through) > datetime('now', ?))
      ORDER BY confidence DESC, avg_impact DESC
      LIMIT 5`,
     // `sample_size` now means contributing companies, so the floor is the
     // contributor threshold. Reading it against MIN_SAMPLE_SIZE would silently
     // hide every insight written after this change.
-    [p.sector_profile ?? 'b2b_saas', p.growth_stage ?? 'growth', MIN_CONTRIBUTORS]
+    [p.sector_profile ?? 'b2b_saas', p.growth_stage ?? 'growth', MIN_CONTRIBUTORS,
+      `-${INSIGHT_FRESHNESS_DAYS} days`]
   );
 
   return (result.rows as unknown as Array<Record<string, unknown>>).map((row) => ({

@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner, getScenarioModels, getRelevantPatterns } from '../../db/client.js';
-import { getPeerSignal } from '../../services/decisions/patterns.js';
+import { getPeerSignal, PEER_SIGNAL_MIN_SAMPLE } from '../../services/decisions/patterns.js';
 import { getDecisionQueue, resolveDecision, recordOutcome } from '../../services/decisions/queue.js';
 import { dashboardLayout, layout } from '../../views/layout.js';
 // chamberLayout = full-screen focused mode without sidebar
@@ -147,7 +147,10 @@ decisionRoutes.get('/decisions/:id', async (c, next) => {
       <div class="chamber-section-label">Peer signal · Intelligence Network</div>
       <p class="chamber-why" style="margin:0;">${peerSignal.summary}</p>
       <p class="text-muted" style="font-size:0.75rem;margin-top:0.35rem;">
-        Based on ${peerSignal.sampleSize} anonymized peer outcome${peerSignal.sampleSize === 1 ? '' : 's'} · abstains below ${5}.
+        Based on ${peerSignal.sampleSize} anonymized peer
+        ${peerSignal.sampleSize === 1 ? 'company' : 'companies'} · abstains below
+        ${PEER_SIGNAL_MIN_SAMPLE}. An eligibility floor, not a claim of
+        statistical significance.
       </p>
     </div>` : ''}
 
