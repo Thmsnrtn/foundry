@@ -184,13 +184,33 @@ authRoutes.post('/auth/webhook', async (c) => {
     const founderResult = await query('SELECT id FROM founders WHERE clerk_user_id = ?', [userId]);
     if (founderResult.rows.length > 0) {
       const founderId = (founderResult.rows[0] as Record<string, string>).id;
-      // Delete products (and all cascaded child rows) then the founder
-      const productsResult = await query('SELECT id FROM products WHERE owner_id = ?', [founderId]);
-      for (const row of productsResult.rows) {
-        const productId = (row as Record<string, string>).id;
-        await query('DELETE FROM products WHERE id = ?', [productId]);
+
+      // THIS USED TO DELETE BY HAND: `DELETE FROM products` per company, then
+      // `DELETE FROM founders`. It raises. Seven foreign keys into products'
+      // descendants are ON DELETE NO ACTION and this database runs with
+      // foreign_keys=ON, so deleting a company that has ever had a chat
+      // message fails outright — account deletion via the identity provider
+      // has never completed for a real company, and left no record of having
+      // been attempted.
+      //
+      // It also bypassed everything erasure knows: no ordering, no retention
+      // dispositions, no completion record. It would have deleted the evidence
+      // that the erasure happened, the financial records that must survive it,
+      // and the idempotency keys that stop a retry re-sending a real message.
+      //
+      // Same door as every other erasure now.
+      const { eraseFounderAccount } = await import('../../services/privacy/consent.js');
+      const outcome = await eraseFounderAccount(founderId);
+      if (outcome.failed.length > 0) {
+        // Clerk retries on a non-2xx, and a partial erasure must be retried
+        // rather than reported done. The per-product failure records are
+        // already written.
+        return c.json({
+          error: 'account erasure incomplete',
+          products_erased: outcome.productsErased.length,
+          products_failed: outcome.failed.length,
+        }, 500);
       }
-      await query('DELETE FROM founders WHERE id = ?', [founderId]);
     }
   }
 

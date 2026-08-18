@@ -665,6 +665,74 @@ export async function classifyTables(): Promise<Record<string, string>> {
 /** Exported for the gate: the two allow-lists that are written down rather
  * than derived, so their reasons can be read. */
 export const FOUNDER_SCOPED_REASONS = FOUNDER_SCOPED;
+
+/**
+ * Erase a founder's ACCOUNT — every company they own, then the person.
+ *
+ * THE ONLY PLACE THAT TRIED THIS DID IT BY HAND. The Clerk `user.deleted`
+ * webhook ran `DELETE FROM products WHERE id = ?` for each company and then
+ * `DELETE FROM founders`. Two things were wrong with that, and the first one
+ * meant the second never got a chance:
+ *
+ *   • it raises. Seven foreign keys into products' descendants are ON DELETE
+ *     NO ACTION and this database runs with foreign_keys=ON, so deleting a
+ *     company that has ever had a chat message fails outright. Account
+ *     deletion via the identity provider has never completed for a real
+ *     company, and left no record of having been attempted.
+ *
+ *   • it bypassed everything erasure knows. No ordering, no retention
+ *     dispositions, no completion record — it would have deleted the evidence
+ *     that the erasure happened, the financial records that must survive it,
+ *     and the idempotency keys that stop a retry re-sending a real message.
+ *
+ * So it goes through the same door as every other erasure, and the founder row
+ * is REDACTED rather than deleted, for the same reason the product row is:
+ * retained financial records reference it, and an id that can be reissued is
+ * worse than one that resolves to a cleared row. What leaves is the person —
+ * their email, their name, the identity-provider handle, the billing customer
+ * id. What stays is a shell that keeps foreign keys resolvable and says
+ * nothing about anybody.
+ */
+export async function eraseFounderAccount(founderId: string): Promise<{
+  productsErased: string[];
+  failed: Array<{ productId: string; error: string }>;
+  founderRedacted: boolean;
+}> {
+  const owned = await query('SELECT id FROM products WHERE owner_id = ?', [founderId]);
+  const productIds = (owned.rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => String(r.id));
+
+  const productsErased: string[] = [];
+  const failed: Array<{ productId: string; error: string }> = [];
+  for (const productId of productIds) {
+    try {
+      // `eraseOneProduct` writes the completion record itself, so an
+      // account erasure leaves the same audit trail as any other.
+      await eraseOneProduct(productId);
+      productsErased.push(productId);
+    } catch (err) {
+      failed.push({ productId, error: (err as Error).message });
+      await recordErasureFailure(productId, err as Error);
+    }
+  }
+
+  // The person only goes once their companies have. A founder row cleared
+  // while a company still names them is a company with no reachable owner.
+  if (failed.length > 0) return { productsErased, failed, founderRedacted: false };
+
+  await query(
+    `UPDATE founders SET
+       email = 'erased+' || id || '@invalid',
+       name = NULL,
+       -- The identity-provider handle is how this person could be recognised
+       -- again. It is the one field that must not survive.
+       clerk_user_id = 'erased:' || id,
+       stripe_customer_id = NULL,
+       preferences = NULL,
+       country_code = NULL
+     WHERE id = ?`, [founderId]);
+  return { productsErased, failed, founderRedacted: true };
+}
 export const NOT_COMPANY_DATA_REASONS = NOT_COMPANY_DATA;
 export const ERASE_BY_NAMED_KEY_TABLES = ERASE_BY_NAMED_KEY;
 
