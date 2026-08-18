@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { log } from '../../lib/logger.js';
 import { sendProactiveMessage } from '../chat/coo.js';
 import { nanoid } from 'nanoid';
 
@@ -18,9 +19,34 @@ export interface EventRule {
   name: string;
   trigger_event_type: string;
   condition?: string; // JSON expression
-  action_type: 'notify_coo' | 'create_stressor' | 'create_decision' | 'trigger_sync' | 'run_analysis';
+  action_type: RuleActionType;
   action_config: Record<string, unknown>;
 }
+
+/**
+ * The actions a rule can take — the ones that exist.
+ *
+ * This union used to read
+ *   'notify_coo' | 'create_stressor' | 'create_decision' | 'trigger_sync' | 'run_analysis'
+ * and the switch below implemented two of the five. The other three fell to
+ * `default: break`, which returns normally — so a rule set to create a
+ * decision, trigger a sync or run an analysis did nothing at all, was counted
+ * in `cascades_triggered` as having fired, and incremented `times_fired`. A
+ * founder watching that number would have seen their automation working.
+ *
+ * A type that names capabilities the code does not have is not documentation
+ * of an intention. It is the thing that stops anybody noticing the gap.
+ */
+export type RuleActionType = 'notify_coo' | 'create_stressor';
+
+/** What a rule trigger actually did. None of these values means "it helped" —
+ * only that the configured action ran, or did not. */
+export type RuleActionOutcome = 'carried_out' | 'unsupported_action' | 'failed';
+
+/** The runtime companion to `RuleActionType`, so creation can refuse what
+ * firing cannot do. */
+export const SUPPORTED_RULE_ACTIONS: ReadonlySet<string> =
+  new Set<RuleActionType>(['notify_coo', 'create_stressor']);
 
 /**
  * Ingest an event into the stream and process it through rules.
@@ -65,13 +91,34 @@ export async function ingestEvent(productId: string, event: Event): Promise<{
     const actionType = rule.action_type as string;
     const actionConfig = JSON.parse(rule.action_config as string) as Record<string, unknown>;
 
+    // `times_fired` is the number a founder reads to decide whether a rule is
+    // working. It used to increment for a rule that did nothing, and the catch
+    // below — "continue processing other rules" — meant a rule that threw was
+    // invisible to everybody: not in the cascades, not in the count, not in
+    // the log. Other rules should indeed still run. Silence was the mistake.
+    let outcome: RuleActionOutcome;
     try {
-      await executeRuleAction(productId, actionType, actionConfig, event);
-      cascades.push(`rule:${rule.id}:${actionType}`);
+      outcome = await executeRuleAction(productId, actionType, actionConfig, event);
+    } catch (err) {
+      outcome = 'failed';
+      log.error('event_rule.action_failed', {
+        productId, ruleId: String(rule.id), actionType, error: (err as Error).message,
+      });
+    }
 
-      // Update times_fired
+    if (outcome === 'carried_out') {
+      cascades.push(`rule:${rule.id}:${actionType}`);
       await query('UPDATE event_rules SET times_fired = times_fired + 1 WHERE id = ?', [rule.id]);
-    } catch { /* Continue processing other rules */ }
+    } else {
+      // Recorded on the event, so an operator reading what this event caused
+      // can see the rules that were supposed to act and did not.
+      cascades.push(`rule_not_carried_out:${rule.id}:${actionType}:${outcome}`);
+      if (outcome === 'unsupported_action') {
+        log.warn('event_rule.action_unsupported', {
+          productId, ruleId: String(rule.id), actionType,
+        });
+      }
+    }
   }
 
   // Critical events always notify COO
@@ -102,6 +149,12 @@ export async function createEventRule(
   ownerId: string,
   rule: EventRule
 ): Promise<string> {
+  // Fail closed at the door. A rule whose action has no implementation can
+  // only ever be a rule that does nothing, and the moment to say so is when
+  // somebody creates it — not silently, once per event, forever after.
+  if (!SUPPORTED_RULE_ACTIONS.has(rule.action_type)) {
+    throw new Error(`unsupported rule action: ${rule.action_type}`);
+  }
   const id = nanoid();
   await query(
     `INSERT INTO event_rules (id, product_id, owner_id, name, trigger_event_type, condition, action_type, action_config)
@@ -171,7 +224,7 @@ async function executeRuleAction(
   actionType: string,
   config: Record<string, unknown>,
   event: Event
-): Promise<void> {
+): Promise<RuleActionOutcome> {
   switch (actionType) {
     case 'notify_coo': {
       const product = await query('SELECT owner_id FROM products WHERE id = ?', [productId]);
@@ -181,8 +234,11 @@ async function executeRuleAction(
           .replace('{event_type}', event.event_type)
           .replace('{source}', event.source);
         await sendProactiveMessage(ownerId, productId, message);
+        return 'carried_out';
       }
-      break;
+      // No owner to message. Nothing was done, and saying otherwise would put
+      // this rule in the cascade list for an effect that never happened.
+      return 'unsupported_action';
     }
     case 'create_stressor': {
       await query(
@@ -197,10 +253,12 @@ async function executeRuleAction(
           event.severity === 'critical' ? 'critical' : 'elevated',
         ]
       );
-      break;
+      return 'carried_out';
     }
     default:
-      break;
+      // An action type with no implementation. This used to `break` and return
+      // normally, which is indistinguishable from having done the work.
+      return 'unsupported_action';
   }
 }
 
@@ -215,7 +273,13 @@ function evaluateCondition(condition: string, payload: Record<string, unknown>):
     }
     return true;
   } catch {
-    return true; // If condition parsing fails, allow the rule to fire
+    // FAIL CLOSED. This used to return true — "if condition parsing fails,
+    // allow the rule to fire" — so a rule whose condition was malformed fired
+    // on EVERY matching event instead of the narrow set it was written for.
+    // The condition is the whole reason the rule is not unconditional; losing
+    // it is the one outcome that must not follow from a broken one.
+    log.warn('event_rule.condition_unparseable', { condition: condition.slice(0, 200) });
+    return false;
   }
 }
 
