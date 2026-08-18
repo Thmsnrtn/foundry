@@ -9,7 +9,13 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { buildSharedContext } from './_shared.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { query } from '../../db/client.js';
-import { generateBoardPacket, computeFundingReadiness, getSCPBoardSection } from '../../services/investor/board_packet.js';
+import { computeFundingReadiness, getSCPBoardSection } from '../../services/investor/board_packet.js';
+// ONE WRITER PER TABLE. This surface used to generate through its own
+// board-packet writer, which filled a disjoint set of columns from the one
+// the navigation actually points at. Both wrote into `board_packets`, so each
+// rendered the other's rows as an empty document. It generates through the
+// canonical writer now; see migration 164.
+import { generateBoardPacket } from '../../services/scp/investor/board-packet.js';
 import { nanoid } from 'nanoid';
 import { requireTier } from '../../middleware/tier-gate.js';
 import { requireCompanyCapability } from '../../middleware/rbac.js';

@@ -11,7 +11,10 @@ import { query, getProductByOwner } from '../../db/client.js';
 import { upsertCustomer, recordCustomerEvent, refreshAllCustomerHealth, getAtRiskCustomers, getExpansionCandidates, generateCustomerInsights, detectRevenueConcentration } from '../../services/customers/intelligence.js';
 import { designExperiment, createExperiment, recordExperimentEvent, analyzeExperiment, getActiveExperiments, stopExperiment } from '../../services/experiments/engine.js';
 import { ingestEvent, createEventRule, getRecentEvents, getActiveAnomalies } from '../../services/events/bus.js';
-import { generateInvestorUpdate, generateBoardDeck, assessFundraiseReadiness } from '../../services/investor/automation.js';
+import { generateBoardDeck, assessFundraiseReadiness } from '../../services/investor/automation.js';
+// One writer per table — see migration 164. This route had its own, which
+// left `month` unset and made its updates invisible to the dashboard.
+import { generateInvestorUpdate } from '../../services/scp/investor/investor-update.js';
 import { processVoiceMemo, generateSpokenDigest, startVoiceSession, endVoiceSession } from '../../services/voice/processor.js';
 import { buildProductGraph, discoverCausalChains, queryNeighborhood } from '../../services/graph/engine.js';
 import { createPortfolio, addToPortfolio, getPortfolioOverview, benchmarkProduct, generatePortfolioSnapshot, authenticatePortfolioKey } from '../../services/portfolio/manager.js';
@@ -220,8 +223,13 @@ platformApiRoutes.post('/api/products/:id/investor-update', async (c) => {
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
   const body = await c.req.json() as Record<string, unknown>;
-  const update = await generateInvestorUpdate(productId, founder.id, body.highlight as string);
-  return c.json(update);
+  // The canonical writer keys on the month, which is the column every reader
+  // of this table uses. This route used to write through a second generator
+  // that left it null, so its updates were invisible to the dashboard that
+  // shows them and to the check that stops a duplicate being written.
+  const month = new Date().toISOString().slice(0, 7);
+  const update = await generateInvestorUpdate(productId, month, body.highlight as string | undefined);
+  return c.json({ investor_update_id: update });
 });
 
 platformApiRoutes.post('/api/products/:id/board-deck', async (c) => {

@@ -7,69 +7,18 @@ import { query } from '../../db/client.js';
 import { callOpus, callSonnet, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 
-/**
- * Generate a monthly investor update from product data.
- */
-export async function generateInvestorUpdate(
-  productId: string,
-  ownerId: string,
-  founderHighlight?: string
-): Promise<{ id: string; content: string }> {
-  const [product, metrics, stressors, decisions, competitive] = await Promise.all([
-    query('SELECT name, sector_profile, growth_stage FROM products WHERE id = ?', [productId]),
-    query('SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 4', [productId]),
-    query("SELECT stressor_name, severity FROM stressor_history WHERE product_id = ? AND status = 'active'", [productId]),
-    query("SELECT what, status, category FROM decisions WHERE product_id = ? AND decided_at > datetime('now', '-30 days')", [productId]),
-    query("SELECT competitor_name, signal_summary, significance FROM competitive_signals WHERE product_id = ? AND detected_at > datetime('now', '-30 days')", [productId]),
-  ]);
+// `generateInvestorUpdate` was here — the second writer into
+// `investor_updates`, and the one that never set `month`. Every dashboard read
+// keys on that column: `WHERE product_id=? AND month=?` for the duplicate
+// check, `ORDER BY month DESC` for the list. So an update created through the
+// API was invisible to the surface that shows updates AND invisible to the
+// check that stops a second one being written for the same month.
+//
+// The canonical writer is in services/scp/investor/investor-update.ts, and it
+// deliberately fills both generations of column names so every reader of
+// either sees the same update. Retired in migration 164, which backfills
+// `month` and `draft_text` for the rows this one left behind.
 
-  const p = product.rows[0] as Record<string, string> | undefined;
-  const m = metrics.rows as unknown as Array<Record<string, unknown>>;
-  const latestMRR = m[0] ? (((m[0].new_mrr_cents as number) ?? 0) + ((m[0].expansion_mrr_cents as number) ?? 0)) / 100 : 0;
-
-  const prompt = `Generate a professional monthly investor update email.
-
-Product: ${p?.name ?? 'Unknown'}
-Current MRR: $${latestMRR.toFixed(0)}
-Growth stage: ${p?.growth_stage ?? 'growth'}
-${founderHighlight ? `Founder highlight: ${founderHighlight}` : ''}
-
-Metrics (last 4 periods): ${JSON.stringify(m.map((r) => ({
-  date: r.snapshot_date, mrr: ((r.new_mrr_cents as number) ?? 0) / 100,
-  users: r.active_users, churn: r.churn_rate,
-})))}
-
-Active stressors: ${(stressors.rows as unknown as Array<Record<string, string>>).map((s) => s.stressor_name).join(', ') || 'None'}
-
-Key decisions: ${(decisions.rows as unknown as Array<Record<string, string>>).map((d) => `${d.what} (${d.status})`).join(', ') || 'None'}
-
-Competitive signals: ${(competitive.rows as unknown as Array<Record<string, string>>).map((c) => `${c.competitor_name}: ${c.signal_summary}`).join('; ') || 'None'}
-
-Format: Subject line, then structured update with: Highlights, Key Metrics, Challenges, Next Month Focus, Ask (if any).
-Be concise and professional. Investors want signal, not noise.`;
-
-  const response = await callOpus(
-    'You are writing a monthly investor update for a SaaS founder. Professional, data-driven, concise.',
-    prompt,
-    2048,
-    productId
-  );
-
-  const period = new Date().toISOString().slice(0, 7);
-  const id = nanoid();
-
-  await query(
-    `INSERT INTO investor_updates (id, product_id, owner_id, period, subject, content, metrics_snapshot, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'draft')`,
-    [id, productId, ownerId, period, `${p?.name} — ${period} Update`, response.content, JSON.stringify(m)]
-  );
-
-  return { id, content: response.content };
-}
-
-/**
- * Generate board deck slides from product data.
- */
 export async function generateBoardDeck(productId: string, ownerId: string): Promise<{ id: string; slides: string[] }> {
   const product = await query('SELECT name, sector_profile, growth_stage FROM products WHERE id = ?', [productId]);
   const p = product.rows[0] as Record<string, string> | undefined;

@@ -1015,3 +1015,162 @@ Two properties now hold as tests: no table the erasure plan must clear may carry
 a trigger refusing every delete, and every table carrying a `product_id`
 accounts for itself in one of three ways with a written reason — erased,
 retained for a purpose, or not a customer's data.
+
+---
+
+# BATCHES 89–92 — ABSENCE, COMPLETENESS, AND WHERE THE GATE WAS LOOKING
+
+The lens for this stretch: **the system has no observation of X, so the system
+asserts X does not exist.** It turned out to be one defect wearing five
+costumes, and one of them was a gate.
+
+## Erasure was not complete, and the classification could not have known
+
+The proof changed shape. Every earlier erasure test asks a question about the
+PLAN — is each table classified, is the plan ordered, does it converge. That
+cannot answer the only question a founder has, so a new test seeds a company
+into every table carrying a product id or a founder id, erases it, and then
+sweeps EVERY COLUMN OF EVERY TABLE for the product id, the founder id and the
+email. Hand-picking seven tables and sweeping two hundred proves almost
+nothing: an empty table passes for free, so a forgotten table looks exactly
+like a handled one. Seeding is asserted against a floor for the same reason.
+
+It found two things a classification structurally could not.
+
+**Twelve founder-scoped tables survived an account erasure untouched.**
+`eraseFounderAccount` erased every company the person owned, redacted the
+`founders` row, and stopped. `FOUNDER_SCOPED` listed these tables with a
+sentence each explaining why they survive erasing ONE OF TWO COMPANIES — which
+is right, and which is only half the question. Nobody had asked the other half.
+So after Foundry reported an account erasure complete, the founder's health
+circumstances, their voice, their devices, their Slack workspace token, their
+peer-network profile and their referral history were all still there, keyed to a
+founder id that still existed. Being out of scope for a product erasure had been
+read as having been decided about.
+
+Two of the fifteen ops are deliberately not deletes. An introduction names a
+SECOND founder and a referral conversion is the REFERRER's attribution; both
+sever the erased person's linkage and clear what they themselves wrote, leaving
+the other party's record whole. Deleting those would erase somebody who never
+asked for anything.
+
+**And the daily spend rollup carried both ids under another name.**
+`ai_daily_spend` keys on `scope_id` — a product id when scope='product', a
+founder id when scope='founder'. It sat in NOT_COMPANY_DATA under the reason
+*"keyed by scope, not by company row"*: a negative claim about a table that
+names both the company and the person, and one nothing could contradict, because
+the classification finds company data by looking for a `product_id` column. It
+is a derived summary written by an AFTER INSERT trigger, so a company's per-day
+activity trace outlived the company. Erased on both axes; the scope='global' row
+names nobody and stays, so an erasure cannot hand back budget that was spent.
+
+The sweep now derives its allowed survivors from the erasure's own retention
+dispositions rather than a list in the test file. A new table that quietly keeps
+a company id cannot be made green from inside the test.
+
+## Identity had been standing in for purpose
+
+`companyMayBeChanged` returned `allowed: true` for the whole API write surface
+whenever the only thing stopping a company was a pending erasure — because the
+thirty-day window exists so the founder can change their mind, and refusing
+their writes for a month punishes a reversible click.
+
+The reasoning is right and the exemption did not serve it. The write that
+changes their mind is `POST /privacy/delete/cancel` on the dashboard, and
+`requireOperatingForWrites` is mounted on the v1 API alone, so the reversal
+never passed through the gate opened for it. What the exemption actually reached
+was creating customers, recording metrics, opening experiments, running agents,
+and — through the voice webhook — APPROVING AN ACTION FOR EXECUTION.
+
+The verdict reports the axis now instead of waiving it, and the three reasons a
+company may be unwritable stay three. Permitted purposes are not empty:
+disconnecting an outbound webhook reduces what Foundry can do to the world, and
+a company being deleted should not wait thirty days for it. Anything not on that
+list is refused, so a route added later joins the refused set by default.
+
+## An unread source is not an empty one
+
+The morning audio brief's fallback segments — used whenever the model call did
+not return — said *"No significant signals detected in the last 24 hours"*,
+*"Your agents are running and monitoring your business"*, and *"No immediate
+action items require your attention right now"*, and the catch that produced
+them swallowed the error without a word. The one case in which Foundry had
+observed nothing at all was the case in which it told the founder, out loud,
+first thing in the morning, that there was nothing to see. The stated window
+made it worse rather than better: "in the last 24 hours" is the sound of a
+search that happened.
+
+Three situations were being described with one set of words. They get three now
+— nothing connected, could not be written, looked and reported — and only the
+third makes claims about what is there. No epistemic enum was created for this.
+
+The investor update and the board packet had the same shape with higher stakes:
+each section initialised to its own negative claim and wrapped in a catch that
+discarded the error, so a query that threw sent the confident sentence to an
+investor or a board. "No active risks" and "we could not read our risks" are
+materially different statements and only the first was ever sent.
+
+## A bounded queue that selects work it cannot do stops being a queue
+
+`redTeamSweep` took the five oldest uncontested gate-3 decisions with no filter
+on whether Foundry may act for the company. The pre-mortem spends money, so the
+AI client refuses it for a company that is paused, unpaid or being erased — and
+the `red_team_reviews` row marking a decision handled is written only after that
+call returns. The refusal left no trace, `NOT EXISTS` stayed true, and
+`ORDER BY created_at ASC LIMIT 5` picked the same five rows forever. Five old
+decisions belonging to companies Foundry may not act for were enough to occupy
+the whole window permanently. Each run logged five errors and reported itself
+complete, while "no gate-3+ decision sits uncontested" was false for every
+company at once. `scenarioAccuracy` had the same shape.
+
+The action verifier deliberately keeps no such filter and now says why: the
+effect has already gone out, nothing there spends, and a founder whose
+subscription lapsed the day after Foundry emailed their customer is owed the
+outcome more than anyone.
+
+## Peer review is retired, and the gate that should have caught it was blind
+
+`peer_reviews` had a live writer and no reader anywhere — no page, no API
+response, no prompt, no report. A founder who submitted a review wrote it into a
+table nobody has ever looked at, and got a `review_id` back as though something
+had happened. No reader, no promise, no responsibility, no unique semantics: no
+contract, and the reader was what the owner ruled out. The rows go because
+keeping them is the defect — one founder's written assessment of another
+founder's company, collected for a purpose that does not exist, held where
+nobody can see it or ask for it back.
+
+The route took a `product_id` out of the request body and wrote against it
+asking nothing at all, so any authenticated founder could file a review against
+any company. Survivable only because nothing read it.
+
+**And `check-route-guards` scanned `src/routes/dashboard` and nothing else.**
+It printed "unguarded mutating routes: 34" — a statement about one directory in
+the voice of a statement about the system. `src/routes/api` holds eighty-one
+more on the same session-authenticated surface. The gate's silence read as their
+absence: the same defect as the product copy, the report that could not read its
+source, and the table classified as naming nobody. The population is every
+founder-authenticated route surface now and the baseline is 114, which is a
+correction of measurement and not a relaxation — nothing is permitted that was
+refused before. Token surfaces stay out because "which capability does this
+member hold" cannot be asked where no member is present, and that exclusion is
+tested in both directions.
+
+## Yield
+
+Still high, and the highest-yield probe of the stretch was turning an instrument
+on itself — the route gate had been reporting a quarter of its own subject.
+
+Twelve mutations planted across the new guards, eleven caught. Counted: seven
+against the erasure dispositions (sever turned into delete, one party column
+dropped, the whole founder-scoped sweep skipped, the erased party's own words
+left in place, the named-key entry removed, the marker nulled, the scope
+narrowing dropped); one against the bounded-queue filter; two against the audio
+brief; two against the widened route gate.
+
+The single survivor is recorded in the code rather than papered over: the
+`where` narrowing `ai_daily_spend` by scope is defence in depth, not the
+mechanism, because what actually separates the scopes is that `__global__` is a
+literal no product or founder id can equal. Removing the clause changes no
+behaviour today and no test catches it. It stays so the scope a delete means is
+written down at the delete, and it becomes load-bearing the day a scope keys on
+something an id could equal.

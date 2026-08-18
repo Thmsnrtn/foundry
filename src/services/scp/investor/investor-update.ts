@@ -38,7 +38,15 @@ function monthToDateRange(month: string): { start: string; end: string } {
 
 export async function generateInvestorUpdate(
   productId: string,
-  month: string
+  month: string,
+  /**
+   * A line the founder wants the update built around. The public API route
+   * accepts one and the surface that replaced it did not, so consolidating the
+   * two writers would have meant silently discarding caller input — which is
+   * how a parameter comes to look supported and do nothing. One optional
+   * argument is cheaper than a second writer.
+   */
+  highlight?: string
 ): Promise<string> {
   // Check if update already exists
   const existing = await query(
@@ -174,7 +182,7 @@ Write in a direct, honest, founder voice. Be specific with numbers. Keep it conc
 Format as clean markdown with the exact sections requested.`;
 
   const userPrompt = `Write a monthly investor update for ${companyName} — ${month}.
-
+${highlight ? `\nThe founder asked that this update be built around: ${highlight}\n` : ''}
 Key Metrics:
 - MRR: ${mrrDisplay}${mrrGrowth !== null ? ` (${mrrGrowth >= 0 ? '+' : ''}${mrrGrowth.toFixed(1)}% MoM)` : ''}
 - Customers: ${customerCount ?? 'N/A'}
