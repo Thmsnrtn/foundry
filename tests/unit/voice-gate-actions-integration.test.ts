@@ -13,6 +13,7 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 
 // Mock the AI client. callSonnet is invoked twice in the wired flow:
 //   1. Action-draft generation — returns title/description/draft_content/execution_notes
@@ -68,73 +69,6 @@ let founderId: string;
 let productId: string;
 
 async function setupSchema(): Promise<void> {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      scp_status TEXT DEFAULT 'active',
-      entitlement_paused_at TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS decisions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      category TEXT,
-      gate INTEGER,
-      what TEXT NOT NULL,
-      why_now TEXT NOT NULL,
-      recommendation TEXT,
-      status TEXT DEFAULT 'pending',
-      decided_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS action_drafts (
-      id TEXT PRIMARY KEY,
-      decision_id TEXT,
-      product_id TEXT NOT NULL,
-      owner_id TEXT NOT NULL,
-      action_type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT,
-      draft_content TEXT NOT NULL,
-      artifact_type TEXT NOT NULL,
-      metadata TEXT,
-      gate INTEGER NOT NULL,
-      auto_executable INTEGER DEFAULT 0,
-      status TEXT DEFAULT 'draft',
-      approved_at TEXT,
-      executed_at TEXT,
-      execution_result TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS auto_execution_log (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      action_draft_id TEXT,
-      action_type TEXT NOT NULL,
-      trigger TEXT NOT NULL,
-      input_context TEXT,
-      output TEXT,
-      success INTEGER,
-      error TEXT,
-      executed_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS lifecycle_state (
-      product_id TEXT PRIMARY KEY,
-      wisdom_layer_active INTEGER DEFAULT 0,
-      dna_completion_pct INTEGER DEFAULT 0
-    );
-  `);
   await executeRaw(
     readFileSync(
       resolve(__dirname, '../../src/db/migrations/063_product_voice_fingerprints.sql'),
@@ -178,6 +112,10 @@ async function activateFp(productId: string) {
 }
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   await setupSchema();
 });
 

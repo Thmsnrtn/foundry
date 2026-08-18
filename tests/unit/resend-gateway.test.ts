@@ -14,6 +14,7 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 
 // Importing resend.ts has the side-effect of registering the gateway
 // handler at module load — that's what we're testing. The handler is
@@ -27,86 +28,6 @@ let founderId: string;
 let productId: string;
 
 async function setupSchema(): Promise<void> {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      -- The acting axis, distinct from the archive axis above. Present because
-      -- the real table has it and the kill-switch reads it: a fixture without
-      -- it would let a paused company pass every assertion in this file.
-      scp_status TEXT DEFAULT 'active'
-        CHECK(scp_status IN ('provisioning','active','paused','archived')),
-      entitlement_paused_at TEXT,
-      disabled_tools TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS agent_instances (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      agent_name TEXT NOT NULL,
-      status TEXT DEFAULT 'active'
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      action_type TEXT NOT NULL,
-      gate INTEGER NOT NULL,
-      trigger TEXT NOT NULL,
-      reasoning TEXT NOT NULL,
-      input_context TEXT,
-      output TEXT,
-      outcome TEXT,
-      confidence_score REAL,
-      risk_state_at_action TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS outbound_actions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      agent_name TEXT NOT NULL,
-      integration_name TEXT NOT NULL,
-      action_type TEXT NOT NULL,
-      authority_level INTEGER NOT NULL DEFAULT 2,
-      status TEXT NOT NULL DEFAULT 'pending_approval',
-      parameters_json TEXT,
-      preview_text TEXT,
-      rationale TEXT,
-      confidence REAL,
-      approved_by TEXT,
-      approved_at TEXT,
-      executed_at TEXT,
-      result_json TEXT,
-      expires_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS integrations (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      type TEXT,
-      status TEXT,
-      credentials_json TEXT,
-      config_json TEXT,
-      authorized_agents TEXT,
-      last_error TEXT,
-      total_outbound_actions INTEGER DEFAULT 0,
-      error_count_trailing_7d INTEGER DEFAULT 0,
-      cost_trailing_30d_usd REAL DEFAULT 0.0,
-      total_inbound_events INTEGER DEFAULT 0,
-      created_at TEXT,
-      updated_at TEXT
-    );
-  `);
   await executeRaw(
     readFileSync(
       resolve(__dirname, '../../src/db/migrations/065_idempotency_keys.sql'),
@@ -128,6 +49,10 @@ async function setupSchema(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   await setupSchema();
 });
 
@@ -266,7 +191,11 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
     vi.stubEnv('RESEND_API_KEY', 'test_key');
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    await query(`UPDATE products SET status = 'paused' WHERE id = ?`, [productId]);
+    // `scp_status`, not `status`. This used to set `status='paused'`, which the
+    // real schema forbids outright (migration 145's axis trigger) — so the
+    // test was proving the ARCHIVE branch of the kill-switch while its name
+    // claimed the pause branch, and the fabricated fixture hid the difference.
+    await query(`UPDATE products SET scp_status = 'paused' WHERE id = ?`, [productId]);
 
     const actionId = await insertAction({});
     const r = await executeEmailSend(actionId);
@@ -274,7 +203,10 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
 
     const row = await query('SELECT status FROM outbound_actions WHERE id = ?', [actionId]);
-    expect((row.rows[0] as Record<string, string>).status).toBe('refused');
+    // 'rejected' with effect_certainty 'not_attempted', not 'refused' —
+    // which the schema has never permitted. This assertion passed only
+    // because this file built its own outbound_actions with no CHECK.
+    expect((row.rows[0] as Record<string, string>).status).toBe('rejected');
   });
 
   it('refuses when send_email is in disabled_tools', async () => {
@@ -310,7 +242,10 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(3); // not re-called
 
     const row = await query('SELECT status FROM outbound_actions WHERE id = ?', [fourthId]);
-    expect((row.rows[0] as Record<string, string>).status).toBe('refused');
+    // 'rejected' with effect_certainty 'not_attempted', not 'refused' —
+    // which the schema has never permitted. This assertion passed only
+    // because this file built its own outbound_actions with no CHECK.
+    expect((row.rows[0] as Record<string, string>).status).toBe('rejected');
   });
 });
 

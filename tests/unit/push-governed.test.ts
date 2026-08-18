@@ -20,6 +20,7 @@ import { join, resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { invoke, registerToolHandler, clearToolHandlers } from '../../src/services/outbound/gateway.js';
 import { SEND_PUSH_POLICY, notifyFounder } from '../../src/services/notifications/push.js';
 
@@ -27,50 +28,10 @@ let founderId: string;
 let productId: string;
 
 beforeAll(async () => {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY, clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL, name TEXT, tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      scp_status TEXT DEFAULT 'active'
-        CHECK(scp_status IN ('provisioning','active','paused','archived')),
-      entitlement_paused_at TEXT,
-      disabled_tools TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS agent_instances (
-      id TEXT PRIMARY KEY, product_id TEXT NOT NULL,
-      agent_name TEXT NOT NULL, status TEXT DEFAULT 'active'
-    );
-    CREATE TABLE IF NOT EXISTS team_members (
-      id TEXT PRIMARY KEY, product_id TEXT NOT NULL, founder_id TEXT NOT NULL,
-      status TEXT DEFAULT 'active'
-    );
-    CREATE TABLE IF NOT EXISTS push_subscriptions (
-      id TEXT PRIMARY KEY, founder_id TEXT NOT NULL, platform TEXT,
-      endpoint TEXT, p256dh TEXT, auth TEXT,
-      apns_device_token TEXT, apns_bundle_id TEXT,
-      active INTEGER DEFAULT 1, failure_count INTEGER DEFAULT 0,
-      last_delivered_at DATETIME,
-      notify_risk_state_change INTEGER DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS push_log (
-      id TEXT PRIMARY KEY, founder_id TEXT, product_id TEXT, subscription_id TEXT,
-      notification_type TEXT, title TEXT, body TEXT, data TEXT, status TEXT,
-      sent_at DATETIME
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id TEXT PRIMARY KEY, product_id TEXT NOT NULL, action_type TEXT NOT NULL,
-      gate INTEGER NOT NULL, trigger TEXT NOT NULL, reasoning TEXT NOT NULL,
-      input_context TEXT, output TEXT, outcome TEXT, confidence_score REAL,
-      risk_state_at_action TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   for (const m of ['065_idempotency_keys', '066_data_classifications', '067_communication_budgets']) {
     await executeRaw(readFileSync(resolve(__dirname, `../../src/db/migrations/${m}.sql`), 'utf-8'));
   }

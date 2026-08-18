@@ -4,19 +4,14 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { recordFunnelStep, getFunnelReadout, FUNNEL_STEPS } from '../../src/services/telemetry/funnel.js';
 
 beforeAll(async () => {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS funnel_events (
-      id TEXT PRIMARY KEY,
-      founder_id TEXT NOT NULL,
-      product_id TEXT NOT NULL DEFAULT '',
-      step TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      UNIQUE(founder_id, product_id, step)
-    );
-  `);
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
 });
 
 beforeEach(async () => {

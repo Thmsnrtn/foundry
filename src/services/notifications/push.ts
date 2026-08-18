@@ -131,11 +131,16 @@ export async function deliverPushNotification(
           JSON.stringify(payload.data ?? {}), dispatched ? 'sent' : 'not_configured'],
       );
 
-      // Update last delivered
-      await query(
-        `UPDATE push_subscriptions SET last_delivered_at = CURRENT_TIMESTAMP, failure_count = 0 WHERE id = ?`,
-        [sub.id],
-      );
+      // Update last delivered — ONLY IF SOMETHING WAS DELIVERED. Stamping
+      // `last_delivered_at` after a push that was never dispatched is the same
+      // mistake as the log row above, in the column an operator reads to find
+      // subscriptions that have gone quiet.
+      if (dispatched) {
+        await query(
+          `UPDATE push_subscriptions SET last_delivered_at = CURRENT_TIMESTAMP, failure_count = 0 WHERE id = ?`,
+          [sub.id],
+        );
+      }
     } catch (err) {
       failed++;
       const errorMsg = err instanceof Error ? err.message : String(err);

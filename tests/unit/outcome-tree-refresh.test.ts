@@ -10,6 +10,7 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import {
   addBranch,
   getBranch,
@@ -20,43 +21,6 @@ let founderId: string;
 let productId: string;
 
 async function setupSchema(): Promise<void> {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      scp_status TEXT DEFAULT 'active',
-      entitlement_paused_at TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS customers (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      owner_id TEXT NOT NULL,
-      mrr_cents INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS metric_snapshots (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      snapshot_date DATE NOT NULL,
-      signups_7d INTEGER,
-      active_users INTEGER,
-      new_mrr_cents INTEGER,
-      churn_rate REAL,
-      activation_rate REAL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
   await executeRaw(
     readFileSync(
       resolve(__dirname, '../../src/db/migrations/060_north_stars_outcome_trees.sql'),
@@ -66,6 +30,10 @@ async function setupSchema(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   await setupSchema();
 });
 

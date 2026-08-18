@@ -172,9 +172,28 @@ export async function executeEmailSend(
   const gatewayResult = await invoke(req);
 
   if (!gatewayResult.ok) {
+    // 'refused' IS NOT IN THE VOCABULARY. `outbound_actions.status` permits
+    // pending_approval, approved, executing, executed, failed, rejected and
+    // cancelled — so this UPDATE raised on any real database. The email was
+    // correctly not sent and the row saying why was never written; the action
+    // stayed at 'executing', set moments earlier, which reads as an effect in
+    // flight rather than one that was stopped. Only a fabricated test schema
+    // with no CHECK on it made this look like it worked.
+    //
+    // 'rejected' is the term the institution's other refusal path already uses
+    // (responsibility-assisted-email, when authority is revoked mid-flight),
+    // and `effect_certainty='not_attempted'` is what says nothing left the
+    // building. WHO refused goes in result_json, because 'rejected' alone
+    // cannot distinguish a founder saying no from a guard stopping it.
     await query(
-      `UPDATE outbound_actions SET status = 'refused', result_json = ? WHERE id = ?`,
-      [JSON.stringify({ phase: gatewayResult.phase, reason: gatewayResult.reason }), actionId],
+      `UPDATE outbound_actions
+          SET status = 'rejected', effect_certainty = 'not_attempted', result_json = ?
+        WHERE id = ?`,
+      [JSON.stringify({
+        refused_by: 'outbound_gateway',
+        phase: gatewayResult.phase,
+        reason: gatewayResult.reason,
+      }), actionId],
     );
     log.warn('resend.send_email.refused', {
       productId,

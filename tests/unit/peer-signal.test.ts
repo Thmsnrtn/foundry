@@ -4,31 +4,15 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { getPeerSignal, PEER_SIGNAL_MIN_SAMPLE } from '../../src/services/decisions/patterns.js';
 import { nanoid } from 'nanoid';
 
 beforeAll(async () => {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS decision_patterns (
-      id TEXT PRIMARY KEY,
-      decision_type TEXT NOT NULL,
-      product_lifecycle_stage TEXT NOT NULL,
-      risk_state_at_decision TEXT NOT NULL DEFAULT 'green',
-      key_metrics_context TEXT NOT NULL DEFAULT '{}',
-      option_chosen_category TEXT NOT NULL,
-      outcome_direction TEXT,
-      outcome_magnitude TEXT,
-      outcome_timeframe_days INTEGER,
-      market_category TEXT,
-      -- Present because the real table has it and the reader counts it: a
-      -- fixture without it makes every row anonymous, and the reader is
-      -- required to abstain on rows that name no company.
-      contributor_hash TEXT,
-      contributing_factors TEXT,
-      scenario_accuracy_score REAL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
 });
 
 beforeEach(async () => {

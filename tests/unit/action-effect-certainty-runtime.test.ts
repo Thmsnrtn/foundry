@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeRaw, query } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 
 const { integration, urlGuard } = vi.hoisted(() => ({ integration: vi.fn(), urlGuard: vi.fn() }));
 vi.mock('../../src/services/integration/fabric.js', () => ({ getIntegration: integration }));
@@ -8,13 +9,10 @@ vi.mock('../../src/services/outbound/ssrf.js', () => ({ assertUrlSafe: urlGuard 
 import { approveAndExecute, createExecution, type ActionPayload } from '../../src/services/scp/actions/executor.js';
 
 beforeAll(async () => {
-  await executeRaw(`CREATE TABLE IF NOT EXISTS action_executions (
-    id TEXT PRIMARY KEY, product_id TEXT NOT NULL, outbound_action_id TEXT,
-    action_type TEXT NOT NULL, integration TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}',
-    status TEXT NOT NULL DEFAULT 'pending', approved_by TEXT, approved_at TEXT, executed_at TEXT,
-    result_json TEXT, error_message TEXT, effect_certainty TEXT,
-    provider_acknowledged_at DATETIME, reconcile_after DATETIME, created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  )`);
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
 });
 
 beforeEach(async () => {

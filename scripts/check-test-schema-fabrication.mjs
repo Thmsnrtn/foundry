@@ -58,7 +58,14 @@ for (const file of tsFiles(join(ROOT, 'tests'))) {
 found.sort();
 
 const baseline = new Set(
-  readFileSync(BASELINE, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean));
+  readFileSync(BASELINE, 'utf8').split('\n').map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#')));
+
+// Anything the baseline file explains about itself is preserved across a
+// --write, so the reason an entry is still there does not have to live in a
+// commit message nobody will find.
+const header = readFileSync(BASELINE, 'utf8').split('\n')
+  .filter((l) => l.trim().startsWith('#')).join('\n');
 
 // Line numbers move when a file is edited, so match on file+table rather than
 // on the exact line — otherwise every unrelated edit looks like new debt.
@@ -69,7 +76,8 @@ const foundKeys = new Set(found.map(key));
 const paid = [...baseline].filter((b) => !foundKeys.has(key(b)));
 
 if (process.argv.includes('--write')) {
-  writeFileSync(BASELINE, found.join('\n') + (found.length ? '\n' : ''));
+  writeFileSync(BASELINE,
+    (header ? header + '\n' : '') + found.join('\n') + (found.length ? '\n' : ''));
   console.log(`wrote ${found.length} baseline entries`);
   process.exit(0);
 }

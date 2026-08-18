@@ -8,6 +8,7 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import {
   computePeerSignal,
   decorateForDisplay,
@@ -30,93 +31,10 @@ let productId: string;
 
 async function setupSchema(): Promise<void> {
   await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      scp_status TEXT DEFAULT 'active',
-      entitlement_paused_at TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS metric_snapshots (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      snapshot_date DATE NOT NULL,
-      new_mrr_cents INTEGER,
-      expansion_mrr_cents INTEGER DEFAULT 0,
-      contraction_mrr_cents INTEGER DEFAULT 0,
-      churned_mrr_cents INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(product_id, snapshot_date)
-    );
     -- The real AI cost ledger. This fixture used to create ai_cost_log, a
     -- table no migration has ever created, with a cost_usd column and a
     -- timestamp clock — so the feature passed against a schema that existed
     -- only inside this file, while the query threw on every real call.
-    CREATE TABLE IF NOT EXISTS ai_usage_log (
-      id TEXT PRIMARY KEY,
-      product_id TEXT,
-      model TEXT,
-      call_type TEXT,
-      input_tokens INTEGER,
-      output_tokens INTEGER,
-      cost_cents INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS decisions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      gate INTEGER,
-      what TEXT NOT NULL,
-      why_now TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      decided_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS action_drafts (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      action_type TEXT,
-      title TEXT,
-      draft_content TEXT,
-      artifact_type TEXT,
-      gate INTEGER,
-      auto_executable INTEGER,
-      status TEXT,
-      executed_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS scp_briefings (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      briefing_date DATE NOT NULL,
-      signal_score INTEGER,
-      headline TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS decision_patterns (
-      id TEXT PRIMARY KEY,
-      decision_type TEXT NOT NULL,
-      product_lifecycle_stage TEXT NOT NULL,
-      risk_state_at_decision TEXT NOT NULL,
-      key_metrics_context TEXT NOT NULL,
-      option_chosen_category TEXT NOT NULL,
-      outcome_direction TEXT,
-      outcome_magnitude TEXT,
-      outcome_timeframe_days INTEGER,
-      market_category TEXT,
-      contributing_factors TEXT,
-      scenario_accuracy_score REAL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
   `);
   await executeRaw(
     readFileSync(
@@ -127,6 +45,10 @@ async function setupSchema(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   await setupSchema();
 });
 
@@ -247,8 +169,8 @@ describe('financial-snapshot', () => {
     );
     // Insert AI cost: $20 in last 30 days
     await query(
-      `INSERT INTO ai_usage_log (id, product_id, model, cost_cents, created_at)
-       VALUES (?, ?, 'claude-sonnet', 2000, datetime('now', '-5 days'))`,
+      `INSERT INTO ai_usage_log (id, product_id, model, call_type, cost_cents, created_at)
+       VALUES (?, ?, 'claude-sonnet', 'analysis', 2000, datetime('now', '-5 days'))`,
       [nanoid(), productId]
     );
 
@@ -318,8 +240,8 @@ describe('briefing-share', () => {
   it('creates share, resolves it, increments view_count', async () => {
     // Pre-insert briefing record for the FK-ish JOIN
     await query(
-      `INSERT INTO scp_briefings (id, product_id, briefing_date, signal_score, headline)
-       VALUES (?, ?, date('now'), 80, 'Test headline')`,
+      `INSERT INTO scp_briefings (id, product_id, briefing_date, signal_score, headline, full_briefing)
+       VALUES (?, ?, date('now'), 80, 'Test headline', 'The whole briefing.')`,
       ['briefing-1', productId]
     );
     const code = await createBriefingShare(founderId, productId, 'briefing-1');
@@ -334,8 +256,8 @@ describe('briefing-share', () => {
 
   it('revoke deletes only owner shares', async () => {
     await query(
-      `INSERT INTO scp_briefings (id, product_id, briefing_date, signal_score, headline)
-       VALUES (?, ?, date('now'), 80, 'Test')`,
+      `INSERT INTO scp_briefings (id, product_id, briefing_date, signal_score, headline, full_briefing)
+       VALUES (?, ?, date('now'), 80, 'Test', 'The whole briefing.')`,
       ['briefing-2', productId]
     );
     const code = await createBriefingShare(founderId, productId, 'briefing-2');

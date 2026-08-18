@@ -101,14 +101,14 @@
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 265,
+      "line": 284,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 286,
+      "line": 305,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
@@ -150,7 +150,7 @@
     },
     {
       "file": "src/services/notifications/push.ts",
-      "line": 352,
+      "line": 357,
       "detector": "templated_post",
       "status": "governed",
       "capability": "APNs/FCM device push, registered as the send_push gateway capability. It was classified unreachable — registration routes live, no sender anywhere — and the owner chose to wire it rather than remove the surface. Wiring it was the deliberate act this line asked for: it now inherits the kill-switch, the entitlement pause, dedup and audit from the same door as email, and the live caller is the risk-state transition"

@@ -29,6 +29,7 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw, getAllActiveProducts } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { invoke, registerToolHandler, clearToolHandlers } from '../../src/services/outbound/gateway.js';
 
 let founderId: string;
@@ -41,35 +42,12 @@ const TEST_POLICY = {
 } as const;
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   // The fixture carries `scp_status` because the real table does. A products
   // table without it would let every assertion below pass by accident.
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY, clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL, name TEXT, tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      scp_status TEXT DEFAULT 'provisioning'
-        CHECK(scp_status IN ('provisioning','active','paused','archived')),
-      entitlement_paused_at TEXT,
-      disabled_tools TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS agent_instances (
-      id TEXT PRIMARY KEY, product_id TEXT NOT NULL,
-      agent_name TEXT NOT NULL, status TEXT DEFAULT 'active'
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id TEXT PRIMARY KEY, product_id TEXT NOT NULL, action_type TEXT NOT NULL,
-      gate INTEGER NOT NULL, trigger TEXT NOT NULL, reasoning TEXT NOT NULL,
-      input_context TEXT, output TEXT, outcome TEXT, confidence_score REAL,
-      risk_state_at_action TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
   for (const m of ['065_idempotency_keys', '066_data_classifications', '067_communication_budgets']) {
     await executeRaw(readFileSync(resolve(__dirname, `../../src/db/migrations/${m}.sql`), 'utf-8'));
   }

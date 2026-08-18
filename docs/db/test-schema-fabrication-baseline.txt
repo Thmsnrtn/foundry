@@ -1,57 +1,21 @@
-tests/evals/voice-gate.eval.test.ts:52 → founders
-tests/evals/voice-gate.eval.test.ts:60 → products
+# Tests that build their own version of a table the migrations already create.
+# May only shrink. See scripts/check-test-schema-fabrication.mjs.
+#
+# The thirteen below are the deliberate ones, and they are together for one
+# reason: they drive the responsibility ledger through states the real triggers
+# forbid. Operating is frozen by migration 115 and the demotion cases need it,
+# so these files use stand-ins on purpose.
+#
+# That is a real exception and also a real cost: what they prove holds for a
+# database the product cannot be in. Closing it properly means a way to
+# exercise a frozen state without disabling the guard that freezes it, which is
+# a design question rather than a fixture question. Recorded rather than
+# quietly converted.
 tests/unit/absence-summary.test.ts:19 → products
 tests/unit/absence-summary.test.ts:20 → signal_events
 tests/unit/absence-summary.test.ts:21 → autonomy_consents
 tests/unit/absence-summary.test.ts:25 → outbound_actions
 tests/unit/absence-summary.test.ts:28 → action_executions
-tests/unit/account-notice-exemption.test.ts:34 → founders
-tests/unit/account-notice-exemption.test.ts:39 → products
-tests/unit/account-notice-exemption.test.ts:49 → agent_instances
-tests/unit/account-notice-exemption.test.ts:53 → audit_log
-tests/unit/action-effect-certainty-runtime.test.ts:11 → action_executions
-tests/unit/data-classification.test.ts:23 → founders
-tests/unit/data-classification.test.ts:31 → products
-tests/unit/destination.test.ts:61 → founders
-tests/unit/destination.test.ts:69 → products
-tests/unit/destination.test.ts:78 → customers
-tests/unit/destination.test.ts:85 → metric_snapshots
-tests/unit/discipline-freeze.test.ts:53 → founders
-tests/unit/discipline-freeze.test.ts:61 → products
-tests/unit/discipline-freeze.test.ts:70 → decisions
-tests/unit/entitlement-outbound-reach.test.ts:47 → founders
-tests/unit/entitlement-outbound-reach.test.ts:52 → products
-tests/unit/entitlement-outbound-reach.test.ts:62 → agent_instances
-tests/unit/entitlement-outbound-reach.test.ts:66 → audit_log
-tests/unit/fleet-observatory.test.ts:12 → products
-tests/unit/fleet-observatory.test.ts:13 → agent_instances
-tests/unit/fleet-observatory.test.ts:14 → decisions
-tests/unit/freeze-gate-integration.test.ts:29 → founders
-tests/unit/freeze-gate-integration.test.ts:37 → products
-tests/unit/freeze-gate-integration.test.ts:46 → decisions
-tests/unit/funnel.test.ts:11 → funnel_events
-tests/unit/gateway.test.ts:33 → founders
-tests/unit/gateway.test.ts:41 → products
-tests/unit/gateway.test.ts:55 → agent_instances
-tests/unit/gateway.test.ts:61 → audit_log
-tests/unit/outcome-tree-refresh.test.ts:24 → founders
-tests/unit/outcome-tree-refresh.test.ts:32 → products
-tests/unit/outcome-tree-refresh.test.ts:41 → customers
-tests/unit/outcome-tree-refresh.test.ts:48 → metric_snapshots
-tests/unit/peer-signal.test.ts:12 → decision_patterns
-tests/unit/push-governed.test.ts:31 → founders
-tests/unit/push-governed.test.ts:36 → products
-tests/unit/push-governed.test.ts:46 → agent_instances
-tests/unit/push-governed.test.ts:50 → team_members
-tests/unit/push-governed.test.ts:54 → push_subscriptions
-tests/unit/push-governed.test.ts:62 → push_log
-tests/unit/push-governed.test.ts:67 → audit_log
-tests/unit/resend-gateway.test.ts:31 → founders
-tests/unit/resend-gateway.test.ts:39 → products
-tests/unit/resend-gateway.test.ts:53 → agent_instances
-tests/unit/resend-gateway.test.ts:59 → audit_log
-tests/unit/resend-gateway.test.ts:73 → outbound_actions
-tests/unit/resend-gateway.test.ts:92 → integrations
 tests/unit/responsibility-discovery.test.ts:10 → products
 tests/unit/responsibility-discovery.test.ts:11 → signal_events
 tests/unit/responsibility-discovery.test.ts:12 → autonomy_consents
@@ -60,34 +24,3 @@ tests/unit/responsibility-transfer.test.ts:10 → products
 tests/unit/responsibility-transfer.test.ts:11 → signal_events
 tests/unit/responsibility-transfer.test.ts:12 → autonomy_consents
 tests/unit/responsibility-transfer.test.ts:13 → action_executions
-tests/unit/retention.test.ts:13 → agent_messages
-tests/unit/retention.test.ts:14 → audit_log
-tests/unit/retention.test.ts:59 → agent_messages
-tests/unit/voice-gate-actions-integration.test.ts:101 → action_drafts
-tests/unit/voice-gate-actions-integration.test.ts:120 → auto_execution_log
-tests/unit/voice-gate-actions-integration.test.ts:132 → lifecycle_state
-tests/unit/voice-gate-actions-integration.test.ts:72 → founders
-tests/unit/voice-gate-actions-integration.test.ts:80 → products
-tests/unit/voice-gate-actions-integration.test.ts:89 → decisions
-tests/unit/voice-gate.test.ts:54 → founders
-tests/unit/voice-gate.test.ts:62 → products
-tests/unit/wave-2.test.ts:46 → founders
-tests/unit/wave-2.test.ts:53 → products
-tests/unit/wave-2.test.ts:66 → product_dna
-tests/unit/wave-2.test.ts:72 → audit_scores
-tests/unit/wave-2.test.ts:79 → integrations
-tests/unit/wave-2.test.ts:84 → competitors
-tests/unit/wave-3.test.ts:105 → decision_patterns
-tests/unit/wave-3.test.ts:33 → founders
-tests/unit/wave-3.test.ts:40 → products
-tests/unit/wave-3.test.ts:49 → metric_snapshots
-tests/unit/wave-3.test.ts:64 → ai_usage_log
-tests/unit/wave-3.test.ts:74 → decisions
-tests/unit/wave-3.test.ts:84 → action_drafts
-tests/unit/wave-3.test.ts:97 → scp_briefings
-tests/unit/webhook-delivery-integrity.test.ts:14 → webhooks
-tests/unit/webhook-delivery-integrity.test.ts:20 → webhook_deliveries
-tests/unit/weekly-outcome.test.ts:15 → founders
-tests/unit/weekly-outcome.test.ts:23 → products
-tests/unit/weekly-outcome.test.ts:32 → decisions
-tests/unit/weekly-outcome.test.ts:44 → action_drafts

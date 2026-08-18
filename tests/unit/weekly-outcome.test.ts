@@ -5,59 +5,20 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { computeWeeklyOutcome } from '../../src/services/intelligence/weekly-outcome.js';
 
 let founderId: string;
 let productId: string;
 
 async function setupSchema(): Promise<void> {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      scp_status TEXT DEFAULT 'active',
-      entitlement_paused_at TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS decisions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      category TEXT,
-      gate INTEGER,
-      what TEXT NOT NULL,
-      why_now TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      decided_at DATETIME,
-      decided_by TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS action_drafts (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      action_type TEXT,
-      title TEXT,
-      draft_content TEXT,
-      artifact_type TEXT,
-      gate INTEGER,
-      auto_executable INTEGER,
-      status TEXT,
-      executed_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
 }
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   await setupSchema();
 });
 
@@ -106,8 +67,8 @@ async function insertActionDraft(opts: { status: string; executedDaysAgo?: numbe
     ? 'NULL'
     : `datetime('now', '-${opts.executedDaysAgo} days')`;
   await executeRaw(
-    `INSERT INTO action_drafts (id, product_id, action_type, title, draft_content, artifact_type, gate, auto_executable, status, executed_at)
-     VALUES ('${nextId('a')}', '${productId}', 'cat', 'Title', 'Content', 'email_draft', 0, 1, '${opts.status}', ${executed})`
+    `INSERT INTO action_drafts (id, product_id, owner_id, action_type, title, draft_content, artifact_type, gate, auto_executable, status, executed_at)
+     VALUES ('${nextId('a')}', '${productId}', '${founderId}', 'cat', 'Title', 'Content', 'email_draft', 0, 1, '${opts.status}', ${executed})`
   );
 }
 
