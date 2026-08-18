@@ -8,8 +8,8 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 ## Current frontier
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** through **150**. Schema snapshot current.
-- **Validation:** `npm run check` green — **229 files / 1,937 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Migrations:** through **152**. Schema snapshot current.
+- **Validation:** `npm run check` green — **233 files / 1,995 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -97,6 +97,13 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 50 refusal ≠ ambiguity | 1 | 1 | med | 1 | 1 | 0 | 0 | 1 |
 | 51 member permission flags | 3 | 1 | high | 1 | 1 | 0 | 0 | 2 |
 | 52 account deletion ↔ erasure | 2 | 1 | high | 1 | 1 | 0 | 0 | 1 |
+| 53 canonical membership (owner decision) | 5 | 2 | 2 high | 2 | 2 | 0 | 2 | 17 |
+| 54 permission enforcement edges | 6 | 4 | 3 high, 1 med | 1 | 4 | 0 | 0 | 6 |
+| 55 alignment repair | 1 | 1 | med | 1 | 1 | 0 | 0 | 0 |
+| 56 governed-ratchet bypass | 4 | 1 | med | 0 | 1 | 0 | 0 | 0 |
+| 57 temporal pause proofs | 3 | 0 | — | 0 | 0 | 0 | 0 | 0 |
+| 58 retention reader edge | 4 | 0 | — | 1 | 0 | 0 | 0 | 0 |
+| 59 public API entitlement | 3 | 2 | 2 high | 1 | 2 | 0 | 0 | 2 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -565,6 +572,53 @@ by nothing. An `investor_observer` could vote on a company decision, and those
 votes feed the co-founder alignment score. The columns were not decoration:
 `can_trigger_actions` defaults FALSE while the others default TRUE, which is a
 considered position written into the schema and then never asked.
+
+## Batches 53–59: where is the edge?
+
+**Two company authorization models, and the guards read the empty one.**
+`account_roles` held a viewer/analyst/admin/owner ladder; `assignRole`, its only
+writer, had no callers anywhere, so no row was ever created. `requireRole('admin')`
+reduced to the owner check inside it — seventeen routes that read as "an admin
+may do this" were owner-only in practice — while `team_members`, what the invite
+flow actually writes, carried the real permissions and nothing consulted them.
+Owner decision: membership is canonical, ownership is a distinct and stronger
+property, a role label grants nothing. Both dead tables dropped (152).
+
+**A member could not arrive.** The dashboard listed companies by `owner_id`, so
+a founder could invite a co-founder, have the invitation accepted, and that
+person would open the dashboard to nothing. The team feature was a surface you
+could be let into and then not reach. Fixing that made the permission columns
+urgent rather than decorative — an observer could now open financial pages, the
+audit trail and action approval — so all six now have router-level edges, with a
+gate that iterates the capabilities and fails on any that is stored, typed,
+written by the invite form and read by nothing.
+
+**The alignment score counted votes their caster was never entitled to cast.**
+Refusing new ones stops the intake; it does not clean what the intake accepted.
+The rows stay — what happened is evidence — and the canonical score now counts
+only votes whose caster is entitled *today*. `scripts/audit-unauthorized-votes.mjs`
+answers "did it happen" against a real database rather than assuming.
+
+**The governed ratchet let a type-only import through.** Mutation-testing found
+it: delete the guard, add `import type … from '…/gateway.js'`, and the file
+still proved it was governed. A mention is not a call. It requires
+`checkKillSwitch(` or `registerToolHandler(` now, with type imports stripped.
+
+**The public API never asked whether Foundry may act for the company** — no
+entitlement check anywhere in `/v1`. Spend and outward effects were refused two
+layers down, so an agent run failed in the middle rather than succeeding; but
+ordinary writes are neither, and `POST /v1/customers`, `/v1/metrics/snapshots`
+and `/v1/experiments` all worked for a lapsed or paused company. Read-only was
+true of two layers and false at the surface. MCP needed its own answer, because
+`tools/call` is one POST carrying twenty consequences.
+
+**Two things this run proved rather than fixed**, and they belong in the record
+as much as the defects: a pause reaches work that was already queued (planned
+while operating, executed after — no effect, in all three states), and
+reconciliation of an effect that already crossed the provider boundary is not a
+new authorization and still runs for a paused company.
+
+---
 
 **Batch 52 found the same shape once more, in the second erasure door.** The
 Clerk `user.deleted` webhook deleted by hand — `DELETE FROM products` per
