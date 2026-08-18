@@ -188,7 +188,6 @@ export async function sendProactiveMessage(
   founderId: string,
   productId: string,
   message: string,
-  channel?: string
 ): Promise<void> {
   // Find or create a session
   let sessionResult = await query(
@@ -208,29 +207,14 @@ export async function sendProactiveMessage(
     [nanoid(), sessionId, message]
   );
 
-  // Deliver via webhook if configured
-  if (channel) {
-    const webhook = await query(
-      `SELECT webhook_url, config FROM chat_webhooks WHERE founder_id = ? AND channel = ? AND active = 1`,
-      [founderId, channel]
-    );
-    const wh = webhook.rows[0] as Record<string, string> | undefined;
-    if (wh?.webhook_url) {
-      try {
-        // A founder-configured destination, so it is checked at call time —
-        // `services/outbound/ssrf.ts` states the rule its own header sets:
-        // every outbound call to a founder-supplied URL passes this first.
-        // Through the canonical guarded path: it screens the URL AND
-        // re-screens every redirect hop, because the far end chooses those.
-        const { safeFetch } = await import('../outbound/ssrf.js');
-        await safeFetch(wh.webhook_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: message, channel: 'foundry-coo' }),
-        });
-      } catch { /* Fire and forget */ }
-    }
-  }
+  // WEBHOOK DELIVERY REMOVED. This read `chat_webhooks` for a founder-configured
+  // destination and posted the COO's message to it. Nothing anywhere wrote a row
+  // into that table — there was no settings page, no API, no onboarding step —
+  // so the branch never once fired. The consuming half shipped and the
+  // producing half never did, which reads as a delivery channel and behaves as
+  // an absence. The message is still recorded in `chat_messages`, which is where
+  // the founder actually reads it.
+
 }
 
 // ─── Internal Helpers ───────────────────────────────────────────────────────

@@ -67,20 +67,12 @@ customersApi.get('/:customerId', requireScope('customers:read'), async (c) => {
 
     const customer = result.rows[0] as Record<string, unknown>;
 
-    // Fetch recent notes
-    const notesResult = await query(
-      `SELECT id, note, created_at FROM customer_notes
-       WHERE customer_id = ? AND product_id = ?
-       ORDER BY created_at DESC LIMIT 20`,
-      [customerId, productId]
-    );
-
-    return c.json({
-      data: {
-        ...customer,
-        recent_notes: notesResult.rows,
-      },
-    });
+    // `recent_notes` USED TO BE HERE AND WAS ALWAYS `[]`. `customer_notes` was
+    // created by migration 083 so this query would stop 500-ing, and nothing
+    // ever wrote a row into it — no route, no agent, no job. A documented API
+    // field that can only ever be empty is worse than an absent one: an
+    // integrator builds against it and concludes their customers have no notes.
+    return c.json({ data: customer });
   } catch (err) {
     return c.json({ error: 'Failed to fetch customer' }, 500);
   }

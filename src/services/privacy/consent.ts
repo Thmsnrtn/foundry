@@ -486,7 +486,6 @@ const ERASE_BY_NAMED_KEY: Record<string, { column: string; subject: 'product_id'
 const FOUNDER_SCOPED: Record<string, string> = {
   founders: 'the account itself',
   ai_output_feedback: 'the founder\'s ratings of outputs, across all their products',
-  chat_webhooks: 'the founder\'s own notification endpoints',
   cohort_memberships: 'peer-group membership, which is the founder\'s not a product\'s',
   founder_ai_profile: 'how the founder likes to be written to',
   founder_health: 'the founder\'s own circumstances',

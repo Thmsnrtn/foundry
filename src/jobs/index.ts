@@ -1391,11 +1391,11 @@ async function scpWellbeingFocusCleanup(): Promise<void> {
     await dbQuery(
       `UPDATE founder_focus_settings SET vacation_mode_until=NULL WHERE vacation_mode_until IS NOT NULL AND vacation_mode_until <= datetime('now')`
     );
-    // Clear expired decision snoozes
-    await dbQuery(
-      `DELETE FROM decision_snooze_log WHERE snoozed_until <= datetime('now')`
-    );
-    logger.info('scp_wellbeing_focus_cleanup: Cleaned up expired focus and snooze records', { jobName: 'scp_wellbeing_focus_cleanup' });
+    // The expired-snooze sweep that used to sit here deleted from
+    // `decision_snooze_log`, which nothing ever wrote a row into: there was no
+    // snooze button, no route and no API. A nightly job clearing an
+    // always-empty table is a moving part that describes a feature nobody has.
+    logger.info('scp_wellbeing_focus_cleanup: Cleaned up expired focus records', { jobName: 'scp_wellbeing_focus_cleanup' });
   } catch (err) {
     logger.error('scp_wellbeing_focus_cleanup: Error:', { jobName: 'scp_wellbeing_focus_cleanup', error: String(err) });
   }

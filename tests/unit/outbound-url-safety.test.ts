@@ -124,7 +124,6 @@ describe('posting to a URL somebody else chose', () => {
     expect(guarded).toEqual([
       'src/lib/webhooks.ts',
       'src/services/audit/intake-web.ts',
-      'src/services/chat/coo.ts',
       'src/services/distribution/outbound-webhooks.ts',
       'src/services/integration/mcp-client.ts',
       'src/services/integration/posthog.ts',

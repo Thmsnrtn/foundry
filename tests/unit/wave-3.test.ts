@@ -14,7 +14,6 @@ import {
   decorateForDisplay,
   topPeerValidatedDecisionTypes,
 } from '../../src/services/intelligence/peer-signal.js';
-import { computeFinancialSnapshot } from '../../src/services/intelligence/financial-snapshot.js';
 import {
   getOrCreateReferralLink,
   resolveReferralCode,
@@ -64,7 +63,6 @@ beforeEach(async () => {
     [productId, 'Test', founderId]
   );
   await executeRaw('DELETE FROM decision_patterns');
-  await executeRaw('DELETE FROM ai_usage_log');
   await executeRaw('DELETE FROM metric_snapshots');
   await executeRaw('DELETE FROM referral_links');
   await executeRaw('DELETE FROM referral_conversions');
@@ -151,40 +149,13 @@ describe('peer-signal', () => {
 
 // ─── Financial snapshot ──────────────────────────────────────────────────────
 
-describe('financial-snapshot', () => {
-  it('returns null mrr when no snapshots', async () => {
-    const r = await computeFinancialSnapshot(productId);
-    expect(r.mrr_cents).toBeNull();
-    expect(r.arr_cents).toBeNull();
-    expect(r.ai_cost_30d_usd).toBe(0);
-  });
-
-  it('computes net MRR + ARR + AI cost + operating margin', async () => {
-    // Insert a snapshot: $5000 new, $200 expansion, $100 contraction, $50 churn
-    await query(
-      `INSERT INTO metric_snapshots
-         (id, product_id, snapshot_date, new_mrr_cents, expansion_mrr_cents, contraction_mrr_cents, churned_mrr_cents)
-       VALUES (?, ?, date('now'), 500000, 20000, 10000, 5000)`,
-      [nanoid(), productId]
-    );
-    // Insert AI cost: $20 in last 30 days
-    await query(
-      `INSERT INTO ai_usage_log (id, product_id, model, call_type, cost_cents, created_at)
-       VALUES (?, ?, 'claude-sonnet', 'analysis', 2000, datetime('now', '-5 days'))`,
-      [nanoid(), productId]
-    );
-
-    const r = await computeFinancialSnapshot(productId);
-    // Net MRR = 500000 + 20000 - 10000 - 5000 = 505000 cents = $5050
-    expect(r.mrr_cents).toBe(505000);
-    expect(r.arr_cents).toBe(505000 * 12);
-    expect(r.ai_cost_30d_usd).toBe(20);
-    // Operating margin: 5050 - 20 = 5030
-    expect(r.operating_margin_30d_usd).toBeCloseTo(5030, 1);
-    // Margin pct: 5030 / 5050 ≈ 0.996
-    expect(r.margin_pct_30d).toBeCloseTo(0.996, 2);
-  });
-});
+// `financial-snapshot` was deleted in this batch. It had no callers anywhere,
+// and its AI-cost figure came from `ai_usage_log`, a table nothing in
+// production ever wrote to — so the case removed from here INSERTED rows into
+// that table itself to make the assertion pass. A test that manufactures the
+// evidence for its own subject proves the function computes, not that the
+// company's operating margin was ever known. The real per-company AI cost is
+// in `ai_daily_spend`, which the spend ceiling maintains.
 
 // ─── Referrals ───────────────────────────────────────────────────────────────
 
