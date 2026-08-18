@@ -483,7 +483,16 @@ export async function tablesToErase(): Promise<string[]> {
 const ERASE_BY_NAMED_KEY: Record<string, {
   column: string;
   subject: 'product_id' | 'contributor_hash';
-  /** Narrows the delete when the column holds more than one kind of subject. */
+  /**
+   * Narrows the delete when the column holds more than one kind of subject.
+   *
+   * DEFENCE IN DEPTH, NOT THE MECHANISM. What actually keeps the scopes apart
+   * is that their ids cannot collide — `__global__` is a literal no product or
+   * founder id can equal — so removing this clause changes no behaviour today
+   * and no test catches its removal. It is here so that the scope a delete
+   * means is written down at the delete, and it becomes load-bearing the day
+   * a scope keys on something an id could equal.
+   */
   where?: string;
 }> = {
   peer_reviews: { column: 'reviewee_product_id', subject: 'product_id' },
@@ -499,9 +508,10 @@ const ERASE_BY_NAMED_KEY: Record<string, {
   // scope='product'. Nothing found it before because it has no `product_id`
   // column: it was a derived summary, written by an AFTER INSERT trigger on
   // `ai_spend_reservations`, carrying the company id under another name. The
-  // `where` is what keeps this from also deleting the founder rollup and the
-  // global one — the founder's goes with the founder, and the global row names
-  // nobody and must not shrink because a company left.
+  // `where` states which rollup this delete means. The founder's rollup goes
+  // with the founder and the global row names nobody and must not shrink
+  // because a company left — though what enforces that today is that their
+  // scope_ids cannot collide, not this clause. See the type above.
   ai_daily_spend: { column: 'scope_id', subject: 'product_id', where: "scope = 'product'" },
 };
 

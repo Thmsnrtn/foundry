@@ -25,6 +25,8 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+
 import { nanoid } from 'nanoid';
 
 import { runMigrations } from '../../src/db/migrate.js';
@@ -186,22 +188,68 @@ describe('a company on its way out stops acting', () => {
     expect(gate.blocked).toBe(true);
   });
 
-  it('does not lock the founder out of writing to their own account', async () => {
-    // The window exists so they can change their mind. Refusing their API
-    // writes for a month is a punishment for a reversible click.
+  it('refuses the API write surface, and names the erasure as the reason', async () => {
+    // THIS TEST USED TO ASSERT THE OPPOSITE, on the reasoning that the window
+    // exists so the founder can change their mind and refusing their writes
+    // for a month punishes a reversible click. The reasoning is right; the
+    // exemption did not serve it. The write that changes their mind is
+    // `POST /privacy/delete/cancel` on the dashboard, which this middleware
+    // never sees — see the test below. What the exemption reached was the v1
+    // surface: new customers, new metrics, new experiments, agent runs, and
+    // approving an action for execution through the voice webhook. None of
+    // those reverse an erasure and all of them add to a company being deleted.
     const { companyMayBeChanged } = await import('../../src/api/middleware/entitlement.js');
     await scheduleDataDeletion(P, 30, OWNER);
-    expect((await companyMayBeChanged(P)).allowed).toBe(true);
+    const verdict = await companyMayBeChanged(P);
+    expect(verdict.allowed).toBe(false);
+    // §7: three different facts, three different answers. A caller that has to
+    // tell the founder why cannot do it from a collapsed status.
+    expect(verdict.allowed === false && verdict.axis).toBe('erasure');
+  });
+
+  it('leaves changing your mind on a surface this never guards', async () => {
+    // The claim above is only honest if the cancel route really is out of
+    // reach of this middleware. `requireOperatingForWrites` is mounted on the
+    // v1 API alone; the reversal is a dashboard POST behind `requireOwner()`.
+    const dashboard = readFileSync('src/routes/dashboard/privacy.ts', 'utf8');
+    expect(dashboard).toContain("privacySettings.post('/privacy/delete/cancel'");
+    expect(dashboard, 'the reversal must not be behind the gate that refuses erasing companies')
+      .not.toContain('requireOperatingForWrites');
+    const mounted = readFileSync('src/api/v1/index.ts', 'utf8');
+    expect(mounted).toContain('requireOperatingForWrites');
+  });
+
+  it('keeps a reduction available all the way to the end', async () => {
+    // §8's permitted purposes are not empty. Disconnecting an outbound webhook
+    // reduces what Foundry can do to the outside world, and a company being
+    // deleted should never be made to wait thirty days for it.
+    const { ERASURE_PERMITTED_REDUCTIONS } = await import(
+      '../../src/api/middleware/entitlement.js');
+    const webhook = ERASURE_PERMITTED_REDUCTIONS.find(
+      (r) => r.method === 'DELETE' && r.path.test('/v1/webhooks/wh_123'));
+    expect(webhook, 'disconnecting must stay reachable while an erasure is pending')
+      .toBeDefined();
+    // And the door is narrow: it is not open to writes that ADD.
+    for (const r of ERASURE_PERMITTED_REDUCTIONS) {
+      expect(r.method, 'a permitted purpose that creates data is not a reduction')
+        .not.toBe('POST');
+      expect(r.purpose.length, `${r.method} ${r.path} must say why it is permitted`)
+        .toBeGreaterThan(20);
+    }
+    expect(ERASURE_PERMITTED_REDUCTIONS.some((r) => r.path.test('/v1/customers')),
+      'creating a customer is not a reduction').toBe(false);
   });
 
   it('still refuses writes when something ELSE is also wrong', async () => {
-    // The exemption is for the erasure axis alone. A company that is also
-    // unpaid stays read-only, exactly as before.
+    // A company that is also unpaid answers on the entitlement axis, not the
+    // erasure one — the axes stay distinguishable when they overlap.
     const { companyMayBeChanged } = await import('../../src/api/middleware/entitlement.js');
     await scheduleDataDeletion(P, 30, OWNER);
     await query(
       `UPDATE products SET entitlement_paused_at = datetime('now') WHERE id = ?`, [P]);
-    expect((await companyMayBeChanged(P)).allowed).toBe(false);
+    const verdict = await companyMayBeChanged(P);
+    expect(verdict.allowed).toBe(false);
+    expect(verdict.allowed === false && verdict.axis).toBe('entitlement');
     await query(`UPDATE products SET entitlement_paused_at = NULL WHERE id = ?`, [P]);
   });
 

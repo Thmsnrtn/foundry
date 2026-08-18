@@ -40,9 +40,11 @@ import { operatingProduct, query } from '../../db/client.js';
  * middleware asks per method — one predicate, two ways of deciding what counts
  * as a write, rather than two predicates that can disagree.
  */
-export async function companyMayBeChanged(
-  productId: string,
-): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+export type ChangeVerdict =
+  | { allowed: true }
+  | { allowed: false; reason: string; axis: 'archived' | 'entitlement' | 'paused' | 'erasure' };
+
+export async function companyMayBeChanged(productId: string): Promise<ChangeVerdict> {
   // `operating_ignoring_erasure` is the same predicate without the third axis.
   // Spelled out rather than composed, because the whole point is that this one
   // question deliberately differs from the canonical one — hiding that behind a
@@ -62,24 +64,79 @@ export async function companyMayBeChanged(
   // and inventing a refusal here would hide that.
   if (!row || Number(row.operating) === 1) return { allowed: true };
 
-  // A SCHEDULED ERASURE STOPS FOUNDRY ACTING; IT DOES NOT LOCK THE FOUNDER OUT
-  // OF THEIR OWN ACCOUNT. `operatingProduct()` answers "may Foundry act on its
-  // own for this company", and a deletion on its way is a no. This middleware
-  // answers something narrower — "may this company still be written to" — and
-  // the thirty-day window exists precisely so the founder can change their
-  // mind. Refusing their writes for a month would be a punishment for clicking
-  // a button that is still reversible.
+  // A SCHEDULED ERASURE IS ITS OWN AXIS, AND IT SAYS SO.
+  //
+  // This used to return `allowed: true` for the whole write surface whenever
+  // the only thing stopping the company was a pending erasure, on the grounds
+  // that the thirty-day window exists so the founder can change their mind and
+  // refusing their writes for a month would punish a reversible click.
+  //
+  // The reasoning was sound and the exemption did not serve it. THE WRITE THAT
+  // CHANGES THEIR MIND IS `POST /privacy/delete/cancel` ON THE DASHBOARD, which
+  // is behind `requireOwner()` and never passes through here. What this
+  // exemption actually permitted was every route it does guard: creating
+  // customers, recording metrics, opening experiments, running agents, and —
+  // through the voice-reply webhook — APPROVING AN ACTION FOR EXECUTION. New
+  // third-party personal data flowing into a company scheduled for deletion,
+  // and outward effects dispatched on its behalf. An identity ("this is still
+  // their account") had been allowed to stand in for a purpose ("this write
+  // completes or reverses the erasure").
+  //
+  // So the axis is REPORTED rather than waived. Callers know their own request
+  // and decide against it: the middleware permits the reductions below and
+  // nothing else, and anything new defaults to refused, which is the direction
+  // that is safe to be wrong in.
+  //
+  // Kept as a distinct axis, not folded into 'paused': a founder who scheduled
+  // an erasure, a founder who paused the company, and a lapsed subscription are
+  // three different facts, and a caller that needs to tell them apart — to say
+  // something true to the person reading the error — cannot do it from one
+  // collapsed status.
   if (row.erasure_scheduled_at != null && Number(row.operating_ignoring_erasure) === 1) {
-    return { allowed: true };
+    return {
+      allowed: false,
+      axis: 'erasure',
+      reason: 'this company is scheduled for erasure',
+    };
   }
-  return {
-    allowed: false,
-    reason: String(row.status) !== 'active'
-      ? 'this company has been archived'
-      : row.entitlement_paused_at != null
-        ? "this company's subscription is not active"
-        : 'this company is paused',
-  };
+  return String(row.status) !== 'active'
+    ? { allowed: false, axis: 'archived', reason: 'this company has been archived' }
+    : row.entitlement_paused_at != null
+      ? { allowed: false, axis: 'entitlement', reason: "this company's subscription is not active" }
+      : { allowed: false, axis: 'paused', reason: 'this company is paused' };
+}
+
+/**
+ * The writes that stay permitted while an erasure is pending, and why each one
+ * is permitted.
+ *
+ * PURPOSE, NOT IDENTITY. The test is not "is this the founder" — it is always
+ * the founder, that is what an API key means, and if that were enough the whole
+ * surface would be open again. It is "does this write REDUCE what Foundry can
+ * do to the outside world". Disconnecting an outbound webhook is something a
+ * company on its way out must always be able to do; nothing else on this
+ * surface completes the erasure, reverses it, or makes anything safer.
+ *
+ * A route not named here is refused during the window. That is the point: an
+ * endpoint added next year joins the refused set by default rather than the
+ * permitted one.
+ */
+const REDUCTIONS_PERMITTED_WHILE_ERASING: Array<{
+  method: string; path: RegExp; purpose: string;
+}> = [
+  {
+    method: 'DELETE',
+    path: /^\/v1\/webhooks\/[^/]+\/?$/,
+    purpose: 'removing an outbound effect path — a reduction, and one a company being deleted should never be made to wait thirty days for',
+  },
+];
+
+/** Exported so a test can read the purposes rather than re-deriving them. */
+export const ERASURE_PERMITTED_REDUCTIONS = REDUCTIONS_PERMITTED_WHILE_ERASING;
+
+function isPermittedReduction(method: string, path: string): boolean {
+  return REDUCTIONS_PERMITTED_WHILE_ERASING.some(
+    (r) => r.method === method.toUpperCase() && r.path.test(path));
 }
 
 /**
@@ -107,6 +164,12 @@ export const requireOperatingForWrites = createMiddleware<ApiAuthEnv>(async (c, 
 
   const verdict = await companyMayBeChanged(productId);
   if (verdict.allowed) return next();
+  // The erasure axis is the only one with a permitted-purpose door, because it
+  // is the only one where the company is on its way out rather than merely
+  // stopped: a reduction stays available all the way to the end.
+  if (verdict.axis === 'erasure' && isPermittedReduction(c.req.method, c.req.path)) {
+    return next();
+  }
 
   return c.json({
     error: 'read_only',
