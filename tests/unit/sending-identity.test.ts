@@ -307,3 +307,81 @@ describe('a refusal before dispatch is definitive', () => {
       .not.toContain('refused');
   });
 });
+
+// =============================================================================
+// A SENDER IS NOT AN AUTHORITY.
+//
+// Connecting a sending address establishes WHO a message comes from. It
+// establishes nothing about whether the message may be sent: not the
+// institution's permission to act for this company, not the recipient's
+// consent, not the budget, not the classification. A credential that quietly
+// became an authority shortcut would be the same defect as an API key
+// satisfying a human role check, one layer down.
+//
+// The sender is resolved INSIDE the gateway's handler, so the ordinary chain
+// runs first and these prove it still does.
+// =============================================================================
+
+describe('a configured sender does not authorise the send', () => {
+  async function connect(): Promise<void> {
+    await setSendingIdentity({
+      productId: P, provider: 'resend', credential: 're_founder_key',
+      fromEmail: 'hello@company.example', fromName: 'Ada',
+    });
+  }
+
+  function invoked(to: string) {
+    return {
+      productId: P, tool: 'send_email', action: 'customer notice',
+      params: { to: [to], subject: 'Hi', html: '<p>hi</p>' },
+      dedupKey: `auth:${to}:${Math.random()}`, customerExternalId: to,
+      surface: 'email_outbound', dataClass: 'customer',
+    };
+  }
+
+  it('is still refused when the founder has paused the company', async () => {
+    await connect();
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ id: 'm' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
+    try {
+      const { invoke, registerToolHandler } = await import('../../src/services/outbound/gateway.js');
+      const { sendEmailHandler, SEND_EMAIL_POLICY } = await import(
+        '../../src/services/integration/resend.js');
+      registerToolHandler('send_email', sendEmailHandler, SEND_EMAIL_POLICY);
+
+      const result = await invoke(invoked(CUSTOMER) as never);
+      expect(result.ok, 'having a sender is not having permission to use it').toBe(false);
+      if (!result.ok) expect(result.phase).toBe('kill_switch');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      await query(`UPDATE products SET scp_status='active' WHERE id=?`, [P]);
+    }
+  });
+
+  it('is still refused when the subscription has lapsed', async () => {
+    await connect();
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ id: 'm' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    await query(`UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?`, [P]);
+    try {
+      const { invoke } = await import('../../src/services/outbound/gateway.js');
+      const result = await invoke(invoked(CUSTOMER) as never);
+      expect(result.ok).toBe(false);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      await query(`UPDATE products SET entitlement_paused_at=NULL WHERE id=?`, [P]);
+    }
+  });
+
+  it('goes out when the company may act AND has a sender', async () => {
+    // Both are required, and neither substitutes for the other.
+    await connect();
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ id: 'm' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const { invoke } = await import('../../src/services/outbound/gateway.js');
+    const result = await invoke(invoked(CUSTOMER) as never);
+    expect(result.ok).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});

@@ -235,3 +235,40 @@ describe('the exemption is account administration and nothing else', () => {
     expect(r.ok).toBe(false);
   });
 });
+
+// =============================================================================
+// WHERE THE ACCOUNT-MAIL EXEMPTION MEETS THE SENDER-OF-RECORD RULE.
+//
+// Two rules that could have collided. Account mail is the one capability that
+// survives a company pause — a founder whose card was declined still needs to
+// hear it. Sender-of-record says customer-facing mail must go out under the
+// company's own connected sender, and refuses when there is none.
+//
+// If those had been resolved in the wrong order, a paused company with no
+// sending identity would stop receiving the notice explaining why it is
+// paused. They do not collide, because an account notice is addressed to the
+// FOUNDER — the server resolves the recipient, it is never caller-chosen — and
+// mail to the founder is exactly what Foundry's own domain is for.
+// =============================================================================
+
+describe('an account notice still reaches a paused founder', () => {
+  it('goes out under Foundry’s address, with no company sender connected', async () => {
+    const { query } = await import('../../src/db/client.js');
+    const owner = (await query(
+      `SELECT f.email FROM products p JOIN founders f ON f.id = p.owner_id WHERE p.id = ?`,
+      [productId])).rows[0] as Record<string, unknown> | undefined;
+    expect(owner?.email, 'the fixture needs an owner to notify').toBeTruthy();
+
+    const none = await query(
+      'SELECT COUNT(*) AS n FROM product_sending_identities WHERE product_id = ?',
+      [productId]);
+    expect(Number((none.rows[0] as Record<string, unknown>).n),
+      'the point of the test is that there is no company sender').toBe(0);
+
+    const { __recipientIsFounderForTest } = await import(
+      '../../src/services/integration/resend.js');
+    expect(await __recipientIsFounderForTest(productId, [String(owner!.email).toLowerCase()]),
+      'account mail is mail to the founder, which is what Foundry’s domain is for')
+      .toBe(true);
+  });
+});
