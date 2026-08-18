@@ -141,14 +141,19 @@ export async function runSync(integrationId: string): Promise<SyncResult> {
 
   // Log sync
   await query(
-    `INSERT INTO integration_sync_log (id, integration_id, product_id, provider, sync_type, records_processed, metrics_updated, errors, duration_ms, completed_at)
-     VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, datetime('now'))`,
+    // `started_at` is NOT NULL with no default and was never supplied, so every
+    // sync log write raised — inside a path whose failures are treated as
+    // unremarkable, which is why a log that has never recorded anything looked
+    // like a quiet system. The value was already in hand: `start`.
+    `INSERT INTO integration_sync_log (id, integration_id, product_id, provider, sync_type, records_processed, metrics_updated, errors, duration_ms, started_at, completed_at)
+     VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, datetime('now'))`,
     [
       nanoid(), integrationId, productId, provider,
       result.records_processed,
       JSON.stringify(result.metrics_updated),
       result.errors.length > 0 ? JSON.stringify(result.errors) : null,
       result.duration_ms,
+      new Date(start).toISOString(),
     ]
   );
 

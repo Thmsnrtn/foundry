@@ -15,7 +15,7 @@
     "test:ci": "vitest --run",
     "test:evals": "vitest --run tests/evals",
     "ratchet": "node scripts/ratchet.mjs",
-    "lint:columns": "node scripts/check-insert-columns.mjs && node scripts/check-sql-columns.mjs && node scripts/check-select-columns.mjs && node scripts/check-test-schema-fabrication.mjs && node scripts/check-check-vocabularies.mjs && node scripts/audit-unauthorized-votes.mjs && node scripts/check-autonomous-approval.mjs && node scripts/check-route-guards.mjs",
+    "lint:columns": "node scripts/check-insert-columns.mjs && node scripts/check-sql-columns.mjs && node scripts/check-select-columns.mjs && node scripts/check-test-schema-fabrication.mjs && node scripts/check-check-vocabularies.mjs && node scripts/audit-unauthorized-votes.mjs && node scripts/check-autonomous-approval.mjs && node scripts/check-route-guards.mjs && node scripts/check-notnull-inserts.mjs",
     "lint:ai-attribution": "node scripts/check-ai-attribution.mjs",
     "check": "npm run typecheck && npm run ratchet && npm run kernel:boundary && npm run guards:nullsafe && npm run truth:audit && npm run effects:audit && npm run test:ci",
     "kernel:boundary": "node scripts/check-kernel-boundary.mjs",

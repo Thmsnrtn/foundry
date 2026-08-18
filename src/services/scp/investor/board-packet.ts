@@ -142,23 +142,38 @@ export async function generateBoardPacket(
   }
 
   // Load recent decisions
+  //
+  // THIS READ `agent_decisions`, WHICH NOTHING HAS EVER WRITTEN. Migration 083
+  // created the table because three surfaces queried a table that did not
+  // exist, and said so plainly: "No writer yet — the tab renders empty until
+  // agents populate it." Nothing ever did. So the decisions section of a
+  // document founders send to their INVESTORS has said "No recent decisions."
+  // for every company in every quarter, however many decisions the company
+  // actually made, while the real ledger sat one table away. The catch made the
+  // two indistinguishable: an empty result and a missing table produced the
+  // same sentence.
+  //
+  // `decisions` is the canonical ledger — the queue the founder resolves, the
+  // rows the shadow ledger and the autopilot read, the thing the word means
+  // everywhere else in the system. Under-reporting to investors is not a
+  // neutral failure, so this now says what is true, and says nothing when it
+  // has nothing.
   let decisionsText = 'No recent decisions.';
-  try {
-    const decisionsResult = await query(
-      `SELECT title, status, reasoning FROM agent_decisions
-       WHERE product_id=? AND created_at >= ? ORDER BY created_at DESC LIMIT 20`,
-      [productId, start]
-    );
-    if (decisionsResult.rows.length > 0) {
-      decisionsText = decisionsResult.rows
-        .map((r) => {
-          const row = r as Record<string, unknown>;
-          return `[${row.status as string}] ${row.title as string}`;
-        })
-        .join('\n');
-    }
-  } catch {
-    // agent_decisions may not exist
+  const decisionsResult = await query(
+    `SELECT what, status, chosen_option FROM decisions
+      WHERE product_id = ? AND created_at >= ? AND deleted_at IS NULL
+      ORDER BY created_at DESC LIMIT 20`,
+    [productId, start]
+  );
+  if (decisionsResult.rows.length > 0) {
+    decisionsText = (decisionsResult.rows as unknown as Array<Record<string, unknown>>)
+      .map((row) => {
+        // A resolved decision is worth more to a reader than its status word:
+        // what was chosen is the thing an investor is being told.
+        const chosen = row.chosen_option == null ? '' : ` → ${String(row.chosen_option)}`;
+        return `[${String(row.status)}] ${String(row.what)}${chosen}`;
+      })
+      .join('\n');
   }
 
   // Load experiment outcomes
@@ -231,14 +246,29 @@ Return a JSON object with this exact structure:
   const narrative = parseJSONResponse<BoardPacketNarrative>(response.content);
 
   // 8. INSERT into board_packets
+  //
+  // `period_start` and `period_end` are NOT NULL with no default, and this
+  // INSERT never supplied them — so every board packet this system has ever
+  // tried to generate raised at the last step. The AI call happens FIRST, so
+  // the money was spent, the narrative was written, and then the write threw
+  // and the founder saw nothing. The two values were computed at the top of
+  // this function and simply not passed down.
+  //
+  // A column check that only asks "does this column exist" cannot see this:
+  // every column named here is real. What was missing is a column that is not
+  // named and cannot be absent.
   const id = nanoid();
   await query(
-    `INSERT INTO board_packets (id, product_id, quarter, narrative_json, metrics_snapshot_json, status)
-     VALUES (?, ?, ?, ?, ?, 'draft')`,
+    `INSERT INTO board_packets
+       (id, product_id, quarter, period_start, period_end,
+        narrative_json, metrics_snapshot_json, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'draft')`,
     [
       id,
       productId,
       quarter,
+      start,
+      end,
       JSON.stringify(narrative),
       JSON.stringify(metricsSnapshot),
     ]

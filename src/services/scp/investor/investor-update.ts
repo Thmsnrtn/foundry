@@ -191,11 +191,29 @@ Write the update in this exact markdown format:
   const draftText = response.content.trim();
 
   // INSERT into investor_updates
+  //
+  // `owner_id`, `period`, `subject` and `content` are NOT NULL with no default
+  // and none of them was supplied, so this raised every time — AFTER the model
+  // call that wrote the update had been made and paid for. The founder pressed
+  // Generate, the money went, the draft was written, the write threw, and
+  // nothing appeared. The investor-update feature has never produced an update.
+  //
+  // The table carries two generations of column names for the same facts
+  // (`month`/`period`, `draft_text`/`content`) because a later migration
+  // redefined it with `CREATE TABLE IF NOT EXISTS` and was a silent no-op.
+  // Both are written rather than one, so every reader of either sees the same
+  // update instead of half of them seeing none.
+  const ownerRow = (await query('SELECT owner_id FROM products WHERE id = ?', [productId]))
+    .rows[0] as Record<string, unknown> | undefined;
   const id = nanoid();
   await query(
-    `INSERT INTO investor_updates (id, product_id, month, draft_text, key_metrics_json, status)
-     VALUES (?, ?, ?, ?, ?, 'draft')`,
-    [id, productId, month, draftText, JSON.stringify(keyMetrics)]
+    `INSERT INTO investor_updates
+       (id, product_id, owner_id, period, subject, content,
+        month, draft_text, key_metrics_json, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+    [id, productId, String(ownerRow?.owner_id ?? ''), month,
+      `${companyName} — ${month} Investor Update`, draftText,
+      month, draftText, JSON.stringify(keyMetrics)]
   );
 
   return id;

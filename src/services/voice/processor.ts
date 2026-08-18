@@ -146,8 +146,11 @@ export async function startVoiceSession(
   const chatSessionId = await startSession(founderId, productId, 'Voice session');
   const voiceSessionId = nanoid();
 
+  // `session_date` is NOT NULL with no default and was never supplied, so
+  // starting a voice session raised every time — before a word was recorded.
   await query(
-    `INSERT INTO voice_sessions (id, founder_id, product_id, chat_session_id) VALUES (?, ?, ?, ?)`,
+    `INSERT INTO voice_sessions (id, founder_id, product_id, chat_session_id, session_date)
+     VALUES (?, ?, ?, ?, date('now'))`,
     [voiceSessionId, founderId, productId, chatSessionId]
   );
 
