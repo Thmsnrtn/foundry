@@ -188,6 +188,10 @@
        AND a.capability=r.capability AND a.to_mode='act' AND a.revoked_at IS NULL
        AND c.epistemic_status IN ('known','inferred') AND json_array_length(c.evidence_refs_json)>0
        AND c.product_id=r.product_id
+       AND d.disposition = NEW.disposition
+       AND d.evidence_ref = NEW.disposition_evidence_ref
+       AND d.product_id = NEW.product_id
+       AND d.reason = NEW.disposition_reason
        AND from_state = OLD.state
        AND to_state = NEW.state
        AND x.status='completed' AND x.verify_status='passed'
@@ -312,6 +316,7 @@
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=NEW.product_id
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=r.product_id
      WHERE NEW.outcome_ref='action_execution:' || x.id AND x.product_id=r.product_id
+     WHERE d.responsibility_id = NEW.id
      WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
      WHERE responsibility_id = NEW.id
     'activation_playbook',     -- How we improve activation
@@ -570,6 +575,7 @@
     SELECT 1 FROM responsibility_candidates c WHERE c.id=NEW.candidate_id AND c.status IN ('rejected','superseded')
     SELECT 1 FROM responsibility_candidates c WHERE c.id=NEW.candidate_id AND c.status='pending'
     SELECT 1 FROM responsibility_candidates old
+    SELECT 1 FROM responsibility_dispositions d
     SELECT 1 FROM responsibility_shadow_comparisons c
     SELECT 1 FROM responsibility_shadow_comparisons c
     SELECT 1 FROM responsibility_shadow_expectations x
@@ -718,6 +724,7 @@
   )),
   )),
   )),
+  );
   );
   );
   );
@@ -1129,6 +1136,8 @@
   OR COALESCE(OLD.product_id,'') <> COALESCE(NEW.product_id,'')
   OR COALESCE(OLD.purposes_json,'') <> COALESCE(NEW.purposes_json,'')
   OR COALESCE(OLD.secret,'')        <> COALESCE(NEW.secret,'')
+  OR NEW.disposition_evidence_ref IS NOT OLD.disposition_evidence_ref
+  OR NEW.disposition_reason IS NOT OLD.disposition_reason
   PRIMARY KEY (founder_id, product_id, item_key)
   PRIMARY KEY (key, window_start)
   PRIMARY KEY (product_id, prompt, condition_name)
@@ -1142,6 +1151,7 @@
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_required') WHERE trim(NEW.evidence_ref)='';
+  SELECT RAISE(ABORT, 'responsibility_disposition:no_record') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_disposition:not_found') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_disposition:reason_required') WHERE trim(NEW.reason)='';
   SELECT RAISE(ABORT, 'responsibility_reference:authority_invalid')
@@ -4619,6 +4629,7 @@ BEFORE INSERT ON support_channels
 BEFORE INSERT ON system_identities
 BEFORE UPDATE OF config_json ON integrations
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
+BEFORE UPDATE OF disposition, disposition_reason, disposition_evidence_ref
 BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE OF state ON institutional_responsibilities
 BEFORE UPDATE ON company_observation_channels
@@ -4630,6 +4641,7 @@ BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5358,6 +5370,7 @@ CREATE TRIGGER responsibility_candidate_promotion_guard
 CREATE TRIGGER responsibility_disposition_apply
 CREATE TRIGGER responsibility_disposition_evidence_guard
 CREATE TRIGGER responsibility_disposition_guard
+CREATE TRIGGER responsibility_disposition_requires_record
 CREATE TRIGGER responsibility_operating_promotion_freeze
 CREATE TRIGGER responsibility_reference_guard
 CREATE TRIGGER responsibility_shadow_comparison_guard
@@ -5472,13 +5485,16 @@ END;
 END;
 END;
 END;
+END;
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
+ON institutional_responsibilities
 WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
 WHEN COALESCE(OLD.product_id,'')    <> COALESCE(NEW.product_id,'')
 WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
+WHEN NEW.disposition IS NOT OLD.disposition
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
 WHEN NEW.state <> OLD.state

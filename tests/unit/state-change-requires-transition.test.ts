@@ -61,7 +61,11 @@ beforeAll(async () => {
 let evidenceRef = '';
 
 beforeEach(async () => {
+  // Children before parents: both tables carry a foreign key back to the
+  // responsibility, so deleting it first is what the erasure plan calls a
+  // parent-first delete and the database calls an error.
   await query('DELETE FROM responsibility_transitions', []);
+  await query('DELETE FROM responsibility_dispositions WHERE product_id = ?', [P]);
   await query('DELETE FROM institutional_responsibilities WHERE product_id = ?', [P]);
   await query('DELETE FROM signal_events WHERE product_id = ?', [P]);
   const signalId = nanoid();
@@ -188,5 +192,63 @@ describe('nothing is born into the frozen boundary', () => {
     // about the constitution.
     const id = await responsibility('shadowing');
     expect(await stateOf(id)).toBe('shadowing');
+  });
+});
+
+// ── the same door, on the other governed column ─────────────────────────────
+
+describe('a disposition cannot be written around its ledger', () => {
+  async function disposed(id: string): Promise<Record<string, unknown>> {
+    return (await query(
+      `SELECT disposition, disposition_reason, disposition_evidence_ref
+         FROM institutional_responsibilities WHERE id = ?`, [id]))
+      .rows[0] as Record<string, unknown>;
+  }
+
+  it('refuses a direct "deliberately not done"', async () => {
+    // This is the institution's record that the founder LOOKED and chose not to
+    // act — what the seven-day absence summary reports, and the only thing that
+    // lets it tell neglect from a decision. Writing it directly satisfies none
+    // of the three guards on the ledger: owner, reason, evidence.
+    const id = await responsibility('unknown');
+    await expect(query(
+      `UPDATE institutional_responsibilities SET disposition = 'deliberately_not_done' WHERE id = ?`,
+      [id])).rejects.toThrow(/no_record/);
+    expect((await disposed(id)).disposition).toBe('active');
+  });
+
+  it('accepts the one the ledger justifies', async () => {
+    const id = await responsibility('unknown');
+    await query(
+      `INSERT INTO responsibility_dispositions
+         (id, responsibility_id, product_id, disposition, reason, evidence_ref, owner_id)
+       VALUES (?, ?, ?, 'deliberately_not_done', 'Customer already recovered', ?, ?)`,
+      [nanoid(), id, P, evidenceRef, OWNER]);
+    const row = await disposed(id);
+    expect(row.disposition).toBe('deliberately_not_done');
+    expect(row.disposition_reason).toBe('Customer already recovered');
+  });
+
+  it('refuses a quiet rewrite of the justification afterwards', async () => {
+    // The more interesting attack: the decision was properly made, and the
+    // REASON for it is edited later. The ledger still says what really happened.
+    const id = await responsibility('unknown');
+    await query(
+      `INSERT INTO responsibility_dispositions
+         (id, responsibility_id, product_id, disposition, reason, evidence_ref, owner_id)
+       VALUES (?, ?, ?, 'deliberately_not_done', 'Customer already recovered', ?, ?)`,
+      [nanoid(), id, P, evidenceRef, OWNER]);
+
+    await expect(query(
+      `UPDATE institutional_responsibilities SET disposition_reason = 'It was never our job' WHERE id = ?`,
+      [id])).rejects.toThrow(/no_record/);
+    expect((await disposed(id)).disposition_reason).toBe('Customer already recovered');
+  });
+
+  it('leaves an update that touches neither alone', async () => {
+    const id = await responsibility('unknown');
+    await query(
+      `UPDATE institutional_responsibilities SET title = 'Renamed' WHERE id = ?`, [id]);
+    expect((await disposed(id)).disposition).toBe('active');
   });
 });
