@@ -338,6 +338,7 @@
      WHERE d.candidate_id = NEW.id
      WHERE d.responsibility_id = NEW.id
      WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
+     WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL
      WHERE responsibility_id = NEW.id
     'activation_playbook',     -- How we improve activation
     'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
@@ -587,6 +588,7 @@
     SELECT 1 FROM products p
     SELECT 1 FROM products p
     SELECT 1 FROM products p
+    SELECT 1 FROM products p
     SELECT 1 FROM products p WHERE p.id=NEW.product_id AND p.owner_id=NEW.owner_id);
     SELECT 1 FROM products p WHERE p.id=NEW.product_id);
     SELECT 1 FROM reconstruction_claims c
@@ -755,6 +757,7 @@
   )),
   )),
   )),
+  );
   );
   );
   );
@@ -1191,6 +1194,7 @@
   SELECT RAISE(ABORT, 'ai_spend_ceiling:global') WHERE COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:product') WHERE NEW.product_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'candidate_status:no_decision') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT, 'judgment_disposition:append_only') WHERE EXISTS (
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_invalid') WHERE NOT EXISTS (
@@ -1305,7 +1309,6 @@
   SELECT RAISE(ABORT,'integration_config:secret_in_plaintext') WHERE EXISTS (
   SELECT RAISE(ABORT,'integration_config:secret_in_plaintext') WHERE EXISTS (
   SELECT RAISE(ABORT,'judgment_disposition:alternative_invalid') WHERE
-  SELECT RAISE(ABORT,'judgment_disposition:append_only');
   SELECT RAISE(ABORT,'judgment_disposition:append_only');
   SELECT RAISE(ABORT,'judgment_disposition:judgment_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'judgment_disposition:owner_invalid') WHERE NOT EXISTS (

@@ -505,6 +505,13 @@ const FOUNDER_SCOPED: Record<string, string> = {
  * counters, cross-company aggregates that name no company. Stated by name so
  * that a table landing here is a decision rather than an omission. */
 const NOT_COMPANY_DATA: Record<string, string> = {
+  // WHICH PRODUCT ROW *IS* FOUNDRY. A platform fact that happens to carry a
+  // product_id, which is the only reason the by-product sweep ever picked it
+  // up. Erasing a customer company never matches it; the one case it would
+  // match is Foundry's own product being erased, which its immutability trigger
+  // refuses and should. Naming it here says that on purpose rather than relying
+  // on the delete finding no rows.
+  system_identities: 'names which product row is Foundry itself, not a customer\'s data',
   agent_wiki_reads: 'which internal agent read which internal wiki entry',
   ai_daily_spend: 'daily spend totals keyed by scope, not by company row',
   audit_trail: 'created by migration 007 and never written or read by any code path',
@@ -702,6 +709,15 @@ export async function eraseFounderAccount(founderId: string): Promise<{
   const failed: Array<{ productId: string; error: string }> = [];
   for (const productId of productIds) {
     try {
+      // MARK IT BEFORE TOUCHING IT. The scheduled path sets this thirty days
+      // earlier; the immediate path — an account deletion, the identity
+      // provider's webhook — used to set nothing, so an append-only ledger had
+      // no way to tell a genuine erasure from an attempt to rewrite history and
+      // refused both. It is also what stops the company acting while this runs,
+      // which is the truth about it either way.
+      await query(
+        `UPDATE products SET erasure_scheduled_at = COALESCE(erasure_scheduled_at, datetime('now'))
+          WHERE id = ?`, [productId]);
       // `eraseOneProduct` writes the completion record itself, so an
       // account erasure leaves the same audit trail as any other.
       await eraseOneProduct(productId);
