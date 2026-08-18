@@ -1747,8 +1747,6 @@
   completed_at DATETIME,
   completed_at DATETIME,
   completed_at DATETIME,
-  completed_at DATETIME,
-  completed_at DATETIME,
   completed_at TEXT
   completed_at TEXT
   completed_at TEXT
@@ -1798,8 +1796,6 @@
   config_json TEXT,                      -- JSON: full agent config blob
   config_type TEXT NOT NULL CHECK(config_type IN (
   config_type TEXT NOT NULL,
-  confirmation_token TEXT
-  confirmed_at DATETIME,
   conflict_check_passed INTEGER NOT NULL DEFAULT 0
   conflict_points_json TEXT NOT NULL DEFAULT '[]',   -- things agents disagree on
   conflicts_json TEXT, -- JSON array of identified conflicts
@@ -2214,7 +2210,6 @@
   do_not_contact_until DATETIME,        -- Rate limiting
   domain_health_score INTEGER DEFAULT 50, -- 0-100, agent's domain health
   domain_health_score INTEGER,
-  download_url TEXT,
   draft_content TEXT NOT NULL,
   draft_content TEXT,
   draft_id TEXT,                            -- action_drafts.id once approved/rejected
@@ -2348,7 +2343,6 @@
   experiments_running TEXT,            -- JSON: Experiment[]
   expertise_areas TEXT,
   expires_at   DATETIME NOT NULL,
-  expires_at DATETIME
   expires_at DATETIME NOT NULL
   expires_at DATETIME NOT NULL
   expires_at DATETIME NOT NULL,
@@ -2412,8 +2406,6 @@
   founder_id  TEXT NOT NULL,
   founder_id  TEXT NOT NULL,
   founder_id TEXT NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
-  founder_id TEXT NOT NULL REFERENCES founders(id),
-  founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -2583,8 +2575,6 @@
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -3701,8 +3691,6 @@
   repository_ref        TEXT NOT NULL,
   request_id TEXT,
   requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   required_sample_size INTEGER,
   requires_approval INTEGER DEFAULT 0,
   requires_response INTEGER DEFAULT 0,  -- BOOLEAN
@@ -3998,8 +3986,6 @@
   status TEXT NOT NULL DEFAULT 'in_progress'
   status TEXT NOT NULL DEFAULT 'open',
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','executing','completed','failed','cancelled')),
-  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'confirmed', 'completed')),
-  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'failed')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
   status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','rejected','superseded','promoted')),
   status TEXT NOT NULL DEFAULT 'pending',      -- CHECK dropped (app-validated)
@@ -4343,8 +4329,6 @@
  evidence_refs_json TEXT NOT NULL, economic_result_json TEXT NOT NULL, learned_claim_id TEXT REFERENCES reconstruction_claims(id),
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
-);
-);
 );
 );
 );
@@ -5180,7 +5164,6 @@ CREATE TABLE customers (
 CREATE TABLE daily_actions (
 CREATE TABLE daily_insights (
 CREATE TABLE data_classifications (
-CREATE TABLE data_export_requests (
 CREATE TABLE data_quality_alerts (
 CREATE TABLE data_residency_settings (
 CREATE TABLE deal_rooms (
@@ -5192,7 +5175,6 @@ CREATE TABLE decision_premises (
 CREATE TABLE decision_quality_scores (
 CREATE TABLE decision_votes (
 CREATE TABLE decisions (
-CREATE TABLE deletion_requests (
 CREATE TABLE development_change_plans (
 CREATE TABLE dimension_hints (
 CREATE TABLE envelope_usage (

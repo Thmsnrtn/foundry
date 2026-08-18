@@ -211,3 +211,45 @@ describe('an erased company leaves the cross-company pool', () => {
       .toBe(1);
   });
 });
+
+// ── one erasure, not two ────────────────────────────────────────────────────
+
+describe('there is only one implementation of erasure', () => {
+  it('has no second deletion queue', async () => {
+    // `src/jobs/gdpr.ts` held processAccountDeletions: unreachable, unscheduled,
+    // reading a queue nothing wrote — and deleting from a HAND-WRITTEN list of
+    // about twenty-five tables out of the ~266 this schema has, then writing
+    // `status = 'completed'` on the request. A partial erasure that reports
+    // success is worse than one that fails: the founder is told their data is
+    // gone, the record says the obligation was met, and most of it is still
+    // there. Dead code is survivable; a landmine is not.
+    const { readdirSync, readFileSync, statSync } = await import('fs');
+    const { join } = await import('path');
+    const walk = (d: string): string[] => readdirSync(d).flatMap((e) => {
+      const p = join(d, e);
+      return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
+    });
+    const offenders = walk('src').filter((f) => {
+      const src = readFileSync(f, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+      return /FROM\s+deletion_requests|FROM\s+data_export_requests/i.test(src);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('erases through the canonical plan, which classifies every table', async () => {
+    // The property the hand-written list could not have: nothing is forgotten,
+    // because every table is named in one of the four dispositions and the
+    // classification test fails when a new one appears unclassified.
+    const { runMigrations } = await import('../../src/db/migrate.js');
+    await runMigrations();
+    const { classifyTables } = await import('../../src/services/privacy/consent.js');
+    const classified = await classifyTables();
+    const unclassified = Object.entries(classified)
+      .filter(([, disposition]) => disposition === 'UNCLASSIFIED')
+      .map(([table]) => table);
+    expect(unclassified,
+      'a table nobody classified is a table erasure would silently skip').toEqual([]);
+  });
+});

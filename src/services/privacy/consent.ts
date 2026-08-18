@@ -488,8 +488,6 @@ const FOUNDER_SCOPED: Record<string, string> = {
   ai_output_feedback: 'the founder\'s ratings of outputs, across all their products',
   chat_webhooks: 'the founder\'s own notification endpoints',
   cohort_memberships: 'peer-group membership, which is the founder\'s not a product\'s',
-  data_export_requests: 'the founder\'s export history',
-  deletion_requests: 'the founder\'s erasure requests — deleting these would delete the request',
   founder_ai_profile: 'how the founder likes to be written to',
   founder_health: 'the founder\'s own circumstances',
   founder_health_snapshots: 'the same, over time',
