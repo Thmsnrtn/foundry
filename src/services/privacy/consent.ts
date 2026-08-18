@@ -429,6 +429,245 @@ export async function tablesToErase(): Promise<string[]> {
   return (await tablesWithProductId()).filter((t) => !(t in RETAINED_ON_ERASURE));
 }
 
+// =============================================================================
+// THE TABLES THAT DO NOT SAY WHOSE THEY ARE
+//
+// `tablesWithProductId()` finds the tables an erasure can key on directly.
+// Fifty-five tables in this schema do not carry the column, and treating that
+// as "not company data" was wrong for three quarters of them:
+//
+//   • Eleven are CHILDREN of a table that is erased — chat_messages hangs off
+//     chat_sessions, webhook_deliveries off webhooks, key_results off
+//     company_okrs, and so on down two levels. Their parents were deleted and
+//     they were not, so a founder's chat history, their webhook payloads and
+//     their OKR record all survived an erasure as orphans.
+//
+//     Worse than surviving: seven of those foreign keys are ON DELETE NO
+//     ACTION, and this database runs with foreign_keys=ON. So on any company
+//     with a single chat message, `DELETE FROM chat_sessions` RAISES, and the
+//     erasure could not complete at all. It was not that erasure left a little
+//     behind — on a real company it did not finish.
+//
+//   • Three name the subject under a different column. `peer_reviews` calls it
+//     `reviewee_product_id`; `decision_patterns` carries a `contributor_hash`
+//     and no id at all, which is how an erased company's decisions kept being
+//     aggregated into insights published to its competitors.
+//
+//   • The rest are the founder's rather than the company's, or the
+//     institution's rather than anyone's. Those are stated below by name, with
+//     a reason each, because "we did not think about it" and "we thought about
+//     it and it stays" must not look the same from outside.
+//
+// And because FK order matters, the plan is TOPOLOGICALLY SORTED: children are
+// deleted before parents. The old list was alphabetical, which happened to
+// work for `experiments` before `hypotheses` and would have stopped working
+// the first time somebody added a table whose name sorted the other way.
+// =============================================================================
+
+/** Tables that identify the company under a column that is not `product_id`.
+ * Each entry is a deliberate statement that this data belongs to the company
+ * and goes when the company does. */
+const ERASE_BY_NAMED_KEY: Record<string, { column: string; subject: 'product_id' | 'contributor_hash' }> = {
+  peer_reviews: { column: 'reviewee_product_id', subject: 'product_id' },
+  // The whole point of this table is that it carries no product id — patterns
+  // are pooled across companies. `contributor_hash` was added so distinct
+  // companies could be COUNTED; it also makes them erasable, which is the only
+  // reason an erased company's decisions can be taken back out of the pool.
+  // Rows written before migration 144 have no hash and cannot be attributed to
+  // anyone; they are already excluded from every aggregation for the same
+  // reason.
+  decision_patterns: { column: 'contributor_hash', subject: 'contributor_hash' },
+};
+
+/** Tables that belong to the FOUNDER, not to one of their products.
+ * A founder with two companies who erases one must keep their own account,
+ * their notification preferences and their usage counters. These go with the
+ * founder's account, not with a product, and nothing here erases a founder. */
+const FOUNDER_SCOPED: Record<string, string> = {
+  founders: 'the account itself',
+  ai_output_feedback: 'the founder\'s ratings of outputs, across all their products',
+  chat_webhooks: 'the founder\'s own notification endpoints',
+  cohort_memberships: 'peer-group membership, which is the founder\'s not a product\'s',
+  data_export_requests: 'the founder\'s export history',
+  deletion_requests: 'the founder\'s erasure requests — deleting these would delete the request',
+  founder_ai_profile: 'how the founder likes to be written to',
+  founder_health: 'the founder\'s own circumstances',
+  founder_health_snapshots: 'the same, over time',
+  founder_voice: 'the founder\'s writing preferences',
+  gate_events: 'which features the founder hit a tier wall on',
+  introductions: 'introductions between founders, involving a second person who did not ask for anything',
+  network_profiles: 'the founder\'s own profile in the peer network',
+  push_subscriptions: 'the founder\'s devices',
+  referral_links: 'the founder\'s referral codes',
+  referral_conversions: 'and what those codes did',
+  slack_integrations: 'the founder\'s workspace connection',
+  usage_limits: 'the founder\'s plan counters',
+};
+
+/** Tables that are the institution's or nobody's: reference data, global
+ * counters, cross-company aggregates that name no company. Stated by name so
+ * that a table landing here is a decision rather than an omission. */
+const NOT_COMPANY_DATA: Record<string, string> = {
+  agent_wiki_reads: 'which internal agent read which internal wiki entry',
+  ai_daily_spend: 'daily spend totals keyed by scope, not by company row',
+  audit_trail: 'created by migration 007 and never written or read by any code path',
+  benchmark_percentiles: 'percentiles over a cohort, naming no member',
+  cohort_groups: 'the groups themselves, not who is in them',
+  cohort_patterns: 'patterns across a cohort, naming no member',
+  cross_product_insights: 'aggregate claims that name no contributor; the rows behind them are erased via decision_patterns',
+  failure_patterns: 'a library of known failure shapes, written by the institution',
+  governed_effect_kinds: 'the effect vocabulary',
+  intelligence_benchmarks: 'benchmarks over a cohort, naming no member',
+  job_locks: 'scheduler leases',
+  leading_indicators: 'indicator definitions per sector',
+  network_benchmarks: 'benchmark aggregates, naming no contributor',
+  network_contributions: 'single metric values with no key of any kind — nothing in the row identifies who contributed it',
+  portfolios: 'an investor organisation, not a founder\'s company',
+  portfolio_snapshots: 'that organisation\'s own aggregates',
+  rate_limit_counters: 'request counters keyed by an opaque bucket',
+  role_permissions: 'the permission model',
+  schema_migrations: 'which migrations have run',
+  sector_remediation_templates: 'template text per sector',
+  sector_scoring_overrides: 'scoring configuration per sector',
+  stripe_webhook_events: 'processed-event ids for at-most-once billing handling, carrying no company reference',
+};
+
+interface TableRelation { table: string; column: string; parent: string; parentColumn: string }
+
+/** Children whose relationship the schema never declared. `experiment_variants`
+ * carries an `experiment_id` and no foreign key, so no amount of reading the
+ * schema finds it — it has to be written down, and being written down is what
+ * makes it visible when it changes. */
+const UNDECLARED_PARENTS: TableRelation[] = [
+  { table: 'experiment_variants', column: 'experiment_id', parent: 'experiments', parentColumn: 'id' },
+];
+
+/** Child tables — no `product_id`, but a foreign key into something erased. */
+async function childTablesOfErasure(): Promise<TableRelation[]> {
+  const withProduct = new Set(await tablesWithProductId());
+  const all = (await query(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'
+      ORDER BY name`, [])).rows as unknown as Array<Record<string, unknown>>;
+
+  const found: TableRelation[] = [];
+  // Erasable-by-descent grows as the walk goes deeper: okr_progress_updates
+  // reaches a product only through key_results, which reaches it through
+  // company_okrs. One pass per level, until a pass adds nothing.
+  const reachable = new Set([...withProduct, ...Object.keys(ERASE_BY_NAMED_KEY)]);
+  for (const rel of UNDECLARED_PARENTS) {
+    if (reachable.has(rel.table) || !reachable.has(rel.parent)) continue;
+    found.push(rel);
+    reachable.add(rel.table);
+  }
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const row of all) {
+      const table = String(row.name);
+      if (reachable.has(table)) continue;
+      const fks = (await query(
+        `SELECT "table" AS parent, "from" AS col, "to" AS parentCol
+           FROM pragma_foreign_key_list(?)`, [table])).rows as unknown as
+        Array<Record<string, unknown>>;
+      const link = fks.find((f) => reachable.has(String(f.parent)));
+      if (!link) continue;
+      found.push({
+        table,
+        column: String(link.col),
+        parent: String(link.parent),
+        // A foreign key with no explicit target column references the parent's
+        // primary key, which pragma reports as NULL rather than 'id'.
+        parentColumn: link.parentCol == null ? 'id' : String(link.parentCol),
+      });
+      reachable.add(table);
+      grew = true;
+    }
+  }
+  return found;
+}
+
+/** One deletion, and the order it must happen in. */
+export interface ErasureStep {
+  table: string;
+  sql: string;
+  /** 0 for a table keyed directly on the company; deeper for each level of
+   * descent. Higher runs first, so children go before their parents. */
+  depth: number;
+}
+
+/**
+ * Every deletion an erasure performs, ordered children-first.
+ *
+ * Order is not cosmetic here. These foreign keys are ON DELETE NO ACTION and
+ * the connection runs with foreign_keys=ON, so deleting a parent that still
+ * has children RAISES — which is what an erasure did on any company that had
+ * ever sent a chat message.
+ */
+export async function erasurePlan(): Promise<ErasureStep[]> {
+  const steps: ErasureStep[] = [];
+
+  for (const table of await tablesToErase()) {
+    steps.push({ table, sql: `DELETE FROM ${table} WHERE product_id = ?`, depth: 0 });
+  }
+  for (const [table, key] of Object.entries(ERASE_BY_NAMED_KEY)) {
+    steps.push({ table, sql: `DELETE FROM ${table} WHERE ${key.column} = ?`, depth: 0 });
+  }
+
+  // A child is deleted through its parent's own predicate, nested as deep as
+  // the descent goes. The parent rows still exist at this point precisely
+  // because children run first.
+  const predicates = new Map<string, string>();
+  for (const t of await tablesToErase()) predicates.set(t, 'product_id = ?');
+  for (const [t, k] of Object.entries(ERASE_BY_NAMED_KEY)) predicates.set(t, `${k.column} = ?`);
+
+  const children = await childTablesOfErasure();
+  const depthOf = new Map<string, number>();
+  for (const c of children) {
+    const parentPredicate = predicates.get(c.parent);
+    if (!parentPredicate) continue;                       // parent is retained, not erased
+    const predicate =
+      `${c.column} IN (SELECT ${c.parentColumn} FROM ${c.parent} WHERE ${parentPredicate})`;
+    predicates.set(c.table, predicate);
+    const depth = (depthOf.get(c.parent) ?? 0) + 1;
+    depthOf.set(c.table, depth);
+    steps.push({ table: c.table, sql: `DELETE FROM ${c.table} WHERE ${predicate}`, depth });
+  }
+
+  return steps.sort((a, b) => b.depth - a.depth);
+}
+
+/** Every table the live schema holds, and which bucket it falls in. Exported
+ * so the gate can prove the classification is TOTAL: a table in none of them
+ * is a table nobody has decided about, and the erasure would step around it in
+ * silence. */
+export async function classifyTables(): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const all = (await query(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'
+      ORDER BY name`, [])).rows as unknown as Array<Record<string, unknown>>;
+  const byProduct = new Set(await tablesToErase());
+  const byParent = new Set((await childTablesOfErasure()).map((c) => c.table));
+
+  for (const row of all) {
+    const t = String(row.name);
+    out[t] =
+      t in RETAINED_ON_ERASURE ? 'retained'
+      : byProduct.has(t) ? 'erase_by_product'
+      : t in ERASE_BY_NAMED_KEY ? 'erase_by_named_key'
+      : byParent.has(t) ? 'erase_by_parent'
+      : t in FOUNDER_SCOPED ? 'founder_scoped'
+      : t in NOT_COMPANY_DATA ? 'not_company_data'
+      : 'UNCLASSIFIED';
+  }
+  return out;
+}
+
+/** Exported for the gate: the two allow-lists that are written down rather
+ * than derived, so their reasons can be read. */
+export const FOUNDER_SCOPED_REASONS = FOUNDER_SCOPED;
+export const NOT_COMPANY_DATA_REASONS = NOT_COMPANY_DATA;
+export const ERASE_BY_NAMED_KEY_TABLES = ERASE_BY_NAMED_KEY;
+
 /** The SET clause for a disposition's redaction, or '' when it redacts nothing.
  * Column names come from the disposition map in this file — never from a
  * caller — so there is nothing here a request can reach. */
@@ -592,15 +831,24 @@ async function eraseOneProduct(productId: string): Promise<void> {
     // deleted by default rather than quietly retained forever.
     const outcome: ErasureOutcome = { deleted: [], redacted: [], retained: [], failed: [] };
 
-    for (const table of await tablesToErase()) {
+    // Ordered children-first, and including the tables that carry no
+    // `product_id` — the ones that used to make this throw.
+    for (const step of await erasurePlan()) {
       try {
-        await query(`DELETE FROM ${table} WHERE product_id = ?`, [productId]);
-        outcome.deleted.push(table);
+        // `decision_patterns` names its subject by contributor hash, not id.
+        // Everything else is keyed on the product itself.
+        const subject = step.table === 'decision_patterns'
+          ? (await import('../wisdom/network.js')).contributorHash(productId)
+          : productId;
+        await query(step.sql, [subject]);
+        outcome.deleted.push(step.table);
       } catch (err) {
+        const table = step.table;
         // A table that cannot be cleared must not be silently skipped: the
         // completion record below would then be false. Recorded and rethrown to
-        // the caller's per-product catch, which leaves the deletion pending and
-        // retries it on the next run.
+        // the per-product catch in the caller, which leaves this deletion
+        // pending, retries it on the next run, and lets the rest of the batch
+        // through.
         outcome.failed.push(table);
         throw new Error(`data deletion incomplete: ${table}: ${String(err)}`);
       }

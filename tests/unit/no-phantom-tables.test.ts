@@ -39,7 +39,12 @@ function schemaTables(): Set<string> {
     // Also a table-valued function, not a Foundry table: the erasure path uses
     // it to derive which tables carry a product_id, rather than trusting a list
     // written by hand against a schema that has grown by two hundred tables.
-    'pragma_table_info']);
+    'pragma_table_info',
+    // Same reason: the erasure path reads the declared foreign keys to find the
+    // tables that carry company data without carrying a `product_id` — the
+    // chat messages hanging off a chat session, the OKR results hanging off an
+    // OKR. A hand-written list of those would be the thing that goes stale.
+    'pragma_foreign_key_list']);
   const re = /CREATE\s+(?:TABLE|VIEW)\s+(?:IF NOT EXISTS\s+)?["'`]?([a-zA-Z0-9_]+)["'`]?/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(snap)) !== null) tables.add(m[1].toLowerCase());
