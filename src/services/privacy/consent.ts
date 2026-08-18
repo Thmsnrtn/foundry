@@ -786,6 +786,13 @@ export async function scheduleDataDeletion(
       JSON.stringify({ delete_after_days: deleteAfterDays, scheduled_at: new Date().toISOString() }),
     ]
   );
+  // A company on its way out stops acting: no outward effects, no spend, no
+  // autonomous work. `operatingProduct()` and the kill switch both read this,
+  // so the pause lands everywhere at once rather than in the dozen selectors
+  // that would otherwise each have to remember. The event log stays the record
+  // of what was asked for; this column is what the hot paths read.
+  await query(
+    `UPDATE products SET erasure_scheduled_at = datetime('now') WHERE id = ?`, [productId]);
 }
 
 /** What is pending for this company, or null. The privacy page had no way to
@@ -846,6 +853,11 @@ export async function cancelDataDeletion(
      VALUES (?, ?, 'data_deletion_cancelled', 'founder', ?, 'product', ?,
              'Scheduled data deletion cancelled.', '{}', datetime('now'))`,
     [nanoid(), productId, cancelledBy, productId]);
+  // Cancelling restores everything. It does not reach the founder's OWN pause
+  // or an unpaid subscription — those are different axes and each is cleared
+  // by whatever set it.
+  await query(
+    `UPDATE products SET erasure_scheduled_at = NULL WHERE id = ?`, [productId]);
   return true;
 }
 

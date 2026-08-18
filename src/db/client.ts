@@ -429,7 +429,15 @@ export function operatingProduct(alias = ''): string {
   const p = alias ? `${alias}.` : '';
   return `${p}status = 'active'`
     + ` AND COALESCE(${p}scp_status,'active') NOT IN ('paused','archived')`
-    + ` AND ${p}entitlement_paused_at IS NULL`;
+    + ` AND ${p}entitlement_paused_at IS NULL`
+    // THE THIRD PAUSE AXIS. A company with a deletion scheduled is on its way
+    // out, and for the thirty days of the grace window Foundry used to keep
+    // running its agents, mailing its customers and spending its AI budget on
+    // data it was about to delete. The owner's decision is that a scheduled
+    // erasure stops the institution acting. It does NOT stop the founder using
+    // their own account — see `companyMayBeChanged`, which asks a different
+    // question and says so.
+    + ` AND ${p}erasure_scheduled_at IS NULL`;
 }
 
 /**

@@ -43,15 +43,35 @@ import { operatingProduct, query } from '../../db/client.js';
 export async function companyMayBeChanged(
   productId: string,
 ): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+  // `operating_ignoring_erasure` is the same predicate without the third axis.
+  // Spelled out rather than composed, because the whole point is that this one
+  // question deliberately differs from the canonical one — hiding that behind a
+  // shared builder is how the difference stops being visible.
   const res = await query(
     `SELECT CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating,
             COALESCE(status,'active') AS status,
-            entitlement_paused_at
+            entitlement_paused_at,
+            erasure_scheduled_at,
+            CASE WHEN status = 'active'
+                   AND COALESCE(scp_status,'active') NOT IN ('paused','archived')
+                   AND entitlement_paused_at IS NULL
+                 THEN 1 ELSE 0 END AS operating_ignoring_erasure
        FROM products WHERE id = ?`, [productId]);
   const row = res.rows[0] as Record<string, unknown> | undefined;
   // An id naming no company is not this question — the credential resolved it,
   // and inventing a refusal here would hide that.
   if (!row || Number(row.operating) === 1) return { allowed: true };
+
+  // A SCHEDULED ERASURE STOPS FOUNDRY ACTING; IT DOES NOT LOCK THE FOUNDER OUT
+  // OF THEIR OWN ACCOUNT. `operatingProduct()` answers "may Foundry act on its
+  // own for this company", and a deletion on its way is a no. This middleware
+  // answers something narrower — "may this company still be written to" — and
+  // the thirty-day window exists precisely so the founder can change their
+  // mind. Refusing their writes for a month would be a punishment for clicking
+  // a button that is still reversible.
+  if (row.erasure_scheduled_at != null && Number(row.operating_ignoring_erasure) === 1) {
+    return { allowed: true };
+  }
   return {
     allowed: false,
     reason: String(row.status) !== 'active'

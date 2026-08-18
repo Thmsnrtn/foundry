@@ -190,12 +190,14 @@ async function companyMayIncurCost(productId: string): Promise<string | null> {
       `SELECT COALESCE(status,'active') AS s,
               COALESCE(scp_status,'active') AS scp,
               entitlement_paused_at AS billing_paused,
+              erasure_scheduled_at AS erasing,
               CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating
          FROM products WHERE id = ?`, [productId]);
     const row = res.rows[0] as Record<string, unknown> | undefined;
     if (!row) return null;
     if (Number(row.operating) === 1) return null;
     if (String(row.s) !== 'active') return `archived (${String(row.s)})`;
+    if (row.erasing != null) return 'scheduled for deletion';
     if (row.billing_paused != null) return 'unentitled';
     return String(row.scp);
   } catch (err) {

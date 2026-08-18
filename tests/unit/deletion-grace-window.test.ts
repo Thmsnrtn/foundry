@@ -149,3 +149,75 @@ describe('a cancellation annuls the schedule it follows, and no other', () => {
     expect(await events()).toContain('data_deletion_completed');
   });
 });
+
+// ── the window is a wind-down, not just a countdown ─────────────────────────
+
+describe('a company on its way out stops acting', () => {
+  it('is not an operating company while a deletion is scheduled', async () => {
+    const { operatingProduct } = await import('../../src/db/client.js');
+    const operating = async (): Promise<boolean> => Number(((await query(
+      `SELECT CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS ok
+         FROM products WHERE id = ?`, [P])).rows[0] as Record<string, unknown>).ok) === 1;
+
+    expect(await operating()).toBe(true);
+    await scheduleDataDeletion(P, 30, OWNER);
+    expect(await operating(),
+      'agents, mail and AI spend all hang off this one predicate').toBe(false);
+    await cancelDataDeletion(P, OWNER);
+    expect(await operating(), 'cancelling restores everything').toBe(true);
+  });
+
+  it('refuses an outward effect, and says which pause it is', async () => {
+    const { checkKillSwitch } = await import('../../src/services/outbound/kill-switch.js');
+    expect((await checkKillSwitch(P, 'send_email')).blocked).toBe(false);
+    await scheduleDataDeletion(P, 30, OWNER);
+    const gate = await checkKillSwitch(P, 'send_email');
+    expect(gate.blocked).toBe(true);
+    expect(gate.reason).toContain('scheduled for deletion');
+  });
+
+  it('does not exempt even the capabilities a paused company still delivers', async () => {
+    // Account mail is exempt from the billing pause, because a founder whose
+    // card was declined needs to hear it. A company being deleted is different:
+    // there is no case for continuing to reach anybody on its behalf.
+    const { checkKillSwitch } = await import('../../src/services/outbound/kill-switch.js');
+    await scheduleDataDeletion(P, 30, OWNER);
+    const gate = await checkKillSwitch(P, 'send_email', null, { deliverableWhilePaused: true });
+    expect(gate.blocked).toBe(true);
+  });
+
+  it('does not lock the founder out of writing to their own account', async () => {
+    // The window exists so they can change their mind. Refusing their API
+    // writes for a month is a punishment for a reversible click.
+    const { companyMayBeChanged } = await import('../../src/api/middleware/entitlement.js');
+    await scheduleDataDeletion(P, 30, OWNER);
+    expect((await companyMayBeChanged(P)).allowed).toBe(true);
+  });
+
+  it('still refuses writes when something ELSE is also wrong', async () => {
+    // The exemption is for the erasure axis alone. A company that is also
+    // unpaid stays read-only, exactly as before.
+    const { companyMayBeChanged } = await import('../../src/api/middleware/entitlement.js');
+    await scheduleDataDeletion(P, 30, OWNER);
+    await query(
+      `UPDATE products SET entitlement_paused_at = datetime('now') WHERE id = ?`, [P]);
+    expect((await companyMayBeChanged(P)).allowed).toBe(false);
+    await query(`UPDATE products SET entitlement_paused_at = NULL WHERE id = ?`, [P]);
+  });
+
+  it('keeps the column and the ledger telling the same story', async () => {
+    // Two records of one fact is a drift risk taken deliberately: the hot paths
+    // read a column, the audit trail keeps the events. They must not disagree.
+    const columnSet = async (): Promise<boolean> => ((await query(
+      `SELECT erasure_scheduled_at FROM products WHERE id = ?`, [P]))
+      .rows[0] as Record<string, unknown>).erasure_scheduled_at != null;
+
+    expect(columnSet()).resolves.toBe(await pendingDeletion(P) != null);
+    await scheduleDataDeletion(P, 30, OWNER);
+    expect(await columnSet()).toBe(true);
+    expect(await pendingDeletion(P)).not.toBeNull();
+    await cancelDataDeletion(P, OWNER);
+    expect(await columnSet()).toBe(false);
+    expect(await pendingDeletion(P)).toBeNull();
+  });
+});

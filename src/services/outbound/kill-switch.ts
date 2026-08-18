@@ -60,7 +60,7 @@ export async function checkKillSwitch(
   capability?: { deliverableWhilePaused?: boolean },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
-    `SELECT status, scp_status, entitlement_paused_at, disabled_tools
+    `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools
        FROM products WHERE id = ?`,
     [productId]
   );
@@ -87,12 +87,21 @@ export async function checkKillSwitch(
   //
   // 'archived' is exempt from nothing: that record is gone and there is no
   // relationship left to write to.
+  //
+  // A THIRD AXIS: a scheduled erasure. For the thirty days of the grace window
+  // this company kept mailing its customers on the way out. Unlike the other
+  // two it exempts nothing — not even account mail. There is a difference
+  // between telling a founder their card was declined, which they need, and
+  // continuing to reach their customers on behalf of a company being deleted.
   const scpStatus = String(productRow.scp_status ?? '');
   const entitlementPaused = productRow.entitlement_paused_at != null;
+  const erasureScheduled = productRow.erasure_scheduled_at != null;
   const pausedReason = NOT_ACTING.has(scpStatus) ? scpStatus
+    : erasureScheduled ? 'scheduled for deletion'
     : entitlementPaused ? 'unentitled' : null;
   if (pausedReason) {
-    const exempt = capability?.deliverableWhilePaused === true && pausedReason !== 'archived';
+    const exempt = capability?.deliverableWhilePaused === true
+      && pausedReason !== 'archived' && pausedReason !== 'scheduled for deletion';
     if (!exempt) {
       return {
         blocked: true,
