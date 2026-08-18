@@ -29,7 +29,7 @@ import { resolve } from 'path';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
-  EXCLUDED_FROM_EXPORT_REASONS, RETAINED_ON_ERASURE_REASONS,
+  EXCLUDED_FROM_EXPORT_REASONS, NOT_COMPANY_DATA_REASONS, RETAINED_ON_ERASURE_REASONS,
   exportProductData, tablesToErase, tablesWithProductId,
 } from '../../src/services/privacy/consent.js';
 
@@ -41,8 +41,16 @@ describe('every table holding a company is erased or explains itself', () => {
   it('covers the whole schema, not a list written once', async () => {
     const all = await tablesWithProductId();
     const erased = new Set(await tablesToErase());
+    // Three ways a table may account for itself, and all three carry a written
+    // reason: it is erased, it is retained for a stated purpose, or it is not a
+    // customer's data at all. The third is one table — `system_identities`,
+    // which names WHICH PRODUCT ROW IS FOUNDRY — and it needs saying here
+    // because it carries a `product_id` like everything else and would
+    // otherwise read as an omission.
     const unaccounted = all.filter(
-      (t) => !erased.has(t) && !(t in RETAINED_ON_ERASURE_REASONS));
+      (t) => !erased.has(t)
+        && !(t in RETAINED_ON_ERASURE_REASONS)
+        && !(t in NOT_COMPANY_DATA_REASONS));
     expect(unaccounted,
       'these hold company data and neither get erased nor say why not')
       .toEqual([]);

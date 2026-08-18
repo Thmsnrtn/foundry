@@ -253,3 +253,42 @@ describe('there is only one implementation of erasure', () => {
       'a table nobody classified is a table erasure would silently skip').toEqual([]);
   });
 });
+
+// ── a table erasure must clear, that refuses to be cleared ──────────────────
+
+describe('nothing in the erasure plan refuses to be erased', () => {
+  it('has no table that must go and cannot', async () => {
+    // The contradiction this exists for: `institutional_judgment_dispositions`
+    // was append-only AND classified erase_by_product, so a founder who had ever
+    // dispositioned one institutional judgment could not be erased at all — the
+    // trigger aborted, the failure was recorded rather than swallowed, and the
+    // founder row is deliberately left intact when any company fails.
+    //
+    // Append-only means history is not rewritten. It does not mean a person's
+    // data outlives their right to have it removed. Any future trigger that
+    // refuses a delete has to say which of the two it means, and this is where
+    // it gets asked.
+    const { classifyTables } = await import('../../src/services/privacy/consent.js');
+    const classified = await classifyTables();
+
+    const triggers = (await query(
+      `SELECT name, tbl_name, sql FROM sqlite_master WHERE type = 'trigger'`, []))
+      .rows as unknown as Array<Record<string, string>>;
+
+    const mustGo = new Set(['erase_by_product', 'erase_by_parent', 'erase_by_named_key']);
+    const offenders: string[] = [];
+    for (const t of triggers) {
+      if (!/BEFORE\s+DELETE/i.test(t.sql)) continue;
+      if (!mustGo.has(classified[t.tbl_name] ?? '')) continue;
+      // A guard with no WHERE refuses every delete, erasure included.
+      const body = t.sql.slice(t.sql.search(/BEGIN/i));
+      const unconditional = /RAISE\s*\(\s*ABORT[^)]*\)\s*;/i.test(body);
+      if (unconditional) {
+        offenders.push(`${t.tbl_name} is ${classified[t.tbl_name]} but ${t.name} refuses every delete`);
+      }
+    }
+    expect(offenders,
+      'erasure cannot complete while a table it must clear refuses to be cleared')
+      .toEqual([]);
+  });
+});

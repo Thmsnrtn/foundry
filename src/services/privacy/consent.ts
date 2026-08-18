@@ -426,7 +426,18 @@ export async function tablesWithProductId(): Promise<string[]> {
 
 /** Those tables minus the ones an erasure deliberately keeps. */
 export async function tablesToErase(): Promise<string[]> {
-  return (await tablesWithProductId()).filter((t) => !(t in RETAINED_ON_ERASURE));
+  return (await tablesWithProductId())
+    .filter((t) => !(t in RETAINED_ON_ERASURE))
+    // NOT_COMPANY_DATA WAS ONLY CONSULTED FOR TABLES WITHOUT A product_id.
+    // A table that carries the column but is not a customer's data — the one
+    // instance is `system_identities`, which names WHICH PRODUCT ROW IS FOUNDRY
+    // — was swept in anyway, so its entry in that list decided nothing. The
+    // classifier's own precedence hid it: `byProduct` was tested before
+    // NOT_COMPANY_DATA, so it reported erase_by_product for a table the list
+    // said was not company data at all. Declared in one place and contradicted
+    // in another is the shape this whole campaign is about, and the erasure
+    // classifier is not exempt from it.
+    .filter((t) => !(t in NOT_COMPANY_DATA));
 }
 
 // =============================================================================
