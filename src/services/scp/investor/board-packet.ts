@@ -129,7 +129,16 @@ export async function generateBoardPacket(
   }
 
   // 4. Load briefings from this quarter
-  let briefingsSummary = 'No briefings available for this quarter.';
+  //
+  // AN UNREAD SOURCE IS NOT AN EMPTY ONE. Each section below was initialised to
+  // its own negative claim and then wrapped in a catch that discarded the
+  // error, so a query that threw produced the confident sentence rather than
+  // the true one — in a document that goes to a BOARD. "No active risks" and
+  // "we could not read our risks" are materially different statements, and only
+  // the first was ever sent. The negative claims are still made, but only from
+  // the branch that actually looked. Same correction the decisions section
+  // below already carries, for the same reason.
+  let briefingsSummary = 'Briefings for this quarter could not be read.';
   try {
     const briefingsResult = await query(
       `SELECT headline, briefing_date, agent_contributions FROM scp_briefings
@@ -143,13 +152,15 @@ export async function generateBoardPacket(
         return `[${row.briefing_date as string}] ${row.headline as string}`;
       });
       briefingsSummary = lines.join('\n');
+    } else {
+      briefingsSummary = 'No briefings this quarter.';
     }
   } catch {
     // briefings table may not exist yet
   }
 
   // 5. Load active stressors
-  let stressorsText = 'None active.';
+  let stressorsText = 'Active risks could not be read for this quarter.';
   try {
     const stressorsResult = await query(
       `SELECT stressor_name AS title, severity, signal AS description FROM stressor_history
@@ -163,6 +174,8 @@ export async function generateBoardPacket(
           return `[${row.severity as string}] ${row.title as string}: ${row.description as string}`;
         })
         .join('\n');
+    } else {
+      stressorsText = 'None active.';
     }
   } catch {
     // stressor_history may not exist
@@ -204,7 +217,7 @@ export async function generateBoardPacket(
   }
 
   // Load experiment outcomes
-  let experimentsText = 'No experiments this quarter.';
+  let experimentsText = 'Experiments for this quarter could not be read.';
   try {
     const experimentsResult = await query(
       `SELECT name, status, winner, early_stop_reason FROM experiments
@@ -218,6 +231,8 @@ export async function generateBoardPacket(
           return `[${row.status as string}] ${row.name as string}: ${experimentOutcome(row)}`;
         })
         .join('\n');
+    } else {
+      experimentsText = 'No experiments this quarter.';
     }
   } catch {
     // experiments table may vary

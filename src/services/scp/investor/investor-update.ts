@@ -73,8 +73,25 @@ export async function generateInvestorUpdate(
     if (metricsResult.rows.length > 1) prevMetricsRow = metricsResult.rows[1] as Record<string, unknown>;
   } catch { /* ok */ }
 
+
+  // AN UNREAD SOURCE IS NOT AN EMPTY ONE.
+  //
+  // Each of the sections below was initialised to its own negative claim —
+  // "None active.", "No experiments this month.", "No briefings available." —
+  // and then wrapped in `try { ... } catch { /* ok */ }`. A query that threw
+  // therefore produced the confident sentence rather than the true one, and the
+  // confident sentence went to an INVESTOR: "no active risks" is a materially
+  // different statement from "we could not read our risks", and only one of them
+  // was ever sent.
+  //
+  // The negative claims are still made — an investor update that cannot say "no
+  // experiments this month" is useless — but only from the branch that actually
+  // looked. A failed read says it failed. There is no new vocabulary for this
+  // and no epistemic enum: the variable simply is not pre-loaded with the answer
+  // it is supposed to go and find out.
+
   // Load briefings this month
-  let briefingHeadlines = 'No briefings available.';
+  let briefingHeadlines = 'Briefings for this period could not be read.';
   try {
     const briefingsResult = await query(
       `SELECT headline, briefing_date FROM scp_briefings
@@ -89,11 +106,13 @@ export async function generateInvestorUpdate(
           return `- [${row.briefing_date as string}] ${row.headline as string}`;
         })
         .join('\n');
+    } else {
+      briefingHeadlines = 'No briefings this period.';
     }
   } catch { /* ok */ }
 
   // Load active stressors
-  let stressorsText = 'None active.';
+  let stressorsText = 'Active risks could not be read for this period.';
   try {
     const stressorsResult = await query(
       `SELECT stressor_name AS title, severity FROM stressor_history
@@ -107,11 +126,13 @@ export async function generateInvestorUpdate(
           return `[${row.severity as string}] ${row.title as string}`;
         })
         .join(', ');
+    } else {
+      stressorsText = 'None active.';
     }
   } catch { /* ok */ }
 
   // Load recent experiments
-  let experimentsText = 'No experiments this month.';
+  let experimentsText = 'Experiments for this period could not be read.';
   try {
     const expResult = await query(
       `SELECT name, status, winner, early_stop_reason FROM experiments
@@ -125,6 +146,8 @@ export async function generateInvestorUpdate(
           return `${row.name as string} (${experimentOutcome(row)})`;
         })
         .join(', ');
+    } else {
+      experimentsText = 'No experiments this month.';
     }
   } catch { /* ok */ }
 

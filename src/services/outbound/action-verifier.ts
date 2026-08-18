@@ -87,6 +87,12 @@ export async function verifyDueActions(): Promise<VerifySweepResult> {
        FROM action_executions
       WHERE verify_status = 'pending' AND verify_after <= datetime('now')
       LIMIT 100`,
+    // DELIBERATELY NOT NARROWED TO OPERATING COMPANIES, unlike the bounded
+    // queues that feed paid model calls. The effect has already gone out; what
+    // is left is finding out how it landed, and a founder whose subscription
+    // lapsed the day after Foundry emailed their customer is owed that answer
+    // more than anyone. Nothing here spends, so nothing here can be refused and
+    // silently re-queued.
     [],
   )).rows as unknown as DueExecution[];
 

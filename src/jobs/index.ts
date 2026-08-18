@@ -278,11 +278,17 @@ export async function coldStartCheck(): Promise<void> {
 export async function scenarioAccuracy(): Promise<void> {
   logger.info('scenario_accuracy starting', { jobName: 'scenario_accuracy' });
   // Find decisions with outcomes that have scenario models but no accuracy score
+  // Bounded, and it calls the model before it writes the score — so a company
+  // Foundry may not spend for leaves the row exactly as it found it, and the
+  // window fills with work that can never complete. Same shape as
+  // `pendingRedTeamWork`; same reason for the join.
   const decisions = await query(
-    `SELECT d.*, sm.id as scenario_id, sm.best_case, sm.base_case, sm.stress_case
+    `SELECT d.*, sm.id as scenario_id, sm.base_case, sm.best_case, sm.stress_case
      FROM decisions d
      JOIN scenario_models sm ON d.id = sm.decision_id
+     JOIN products p ON p.id = d.product_id
      WHERE d.outcome IS NOT NULL AND sm.outcome_accuracy IS NULL
+       AND ${operatingProduct('p')}
      LIMIT 20`, []);
 
   for (const row of decisions.rows) {
@@ -1986,15 +1992,44 @@ export async function memoryPremiseCheck(): Promise<void> {
 // No gate-3+ decision sits uncontested: any pending high-stakes decision without
 // a pre-mortem gets one. Cost-bounded (max 5 per run; the AI cost ceiling in
 // callClaude is the hard backstop).
-export async function redTeamSweep(): Promise<void> {
-  logger.info('red_team_sweep starting', { jobName: 'red_team_sweep' });
+/**
+ * The decisions this sweep can actually review.
+ *
+ * A BOUNDED QUEUE THAT SELECTS WORK IT CANNOT DO STOPS BEING A QUEUE.
+ *
+ * This asked for the five oldest uncontested gate-3 decisions and said nothing
+ * about whether Foundry may act for the company they belong to. `runPreMortem`
+ * spends money, so the AI client refuses it for a company that is paused,
+ * unpaid or being erased — and the `red_team_reviews` row that would mark the
+ * decision as handled is written only after that call returns. So the refusal
+ * left no trace: the decision stayed uncontested, `NOT EXISTS` stayed true, and
+ * `ORDER BY created_at ASC LIMIT 5` picked the same five rows on the next run,
+ * and every run after that.
+ *
+ * Five old decisions belonging to companies Foundry may not act for were enough
+ * to occupy the entire window permanently, and no operating company's decision
+ * would ever be red-teamed again. Nothing would have reported this: each run
+ * logged five per-decision errors and completed, and "no gate-3+ decision sits
+ * uncontested" would have been false for every company at once.
+ *
+ * Exported so this is provable against seeded rows rather than by reading SQL.
+ */
+export async function pendingRedTeamWork(): Promise<Array<{ id: string; product_id: string }>> {
   const pending = await query(
     `SELECT d.id, d.product_id FROM decisions d
+     JOIN products p ON p.id = d.product_id
      WHERE d.status = 'pending' AND d.gate >= 3
+       AND ${operatingProduct('p')}
        AND NOT EXISTS (SELECT 1 FROM red_team_reviews r WHERE r.decision_id = d.id)
      ORDER BY d.created_at ASC LIMIT 5`,
     [],
   );
+  return pending.rows as unknown as Array<{ id: string; product_id: string }>;
+}
+
+export async function redTeamSweep(): Promise<void> {
+  logger.info('red_team_sweep starting', { jobName: 'red_team_sweep' });
+  const pending = { rows: await pendingRedTeamWork() };
   let reviewed = 0;
   for (const row of pending.rows) {
     const d = row as Record<string, string>;
