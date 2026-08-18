@@ -162,6 +162,19 @@ describe('every gate refuses the defect it exists for', () => {
     expect(run('check-test-schema-fabrication.mjs').code).toBe(1);
   });
 
+  it('check-writerless-tables fails on a read of a table nothing writes', () => {
+    // The characteristic defect of this codebase is a rule with nothing on one
+    // side of it. `deal_rooms` is one of 25 tables in the schema that no code
+    // ever fills; reading one is how a surface comes to show permanent
+    // emptiness that an integrator builds against and a founder believes.
+    plant('src/services/_gate_fixture_l.ts',
+      j('import { query } from "../db/client.js";\n',
+        'export const q = () => query(`SELECT ', 'id FROM deal_rooms', ' WHERE id = ?`, []);\n'));
+    const r = run('check-writerless-tables.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('deal_rooms');
+  });
+
   it('audit-consequential-effects fails on an outward call its rules cannot see', () => {
     // The window blind spot: a POST to a URL held in a variable matched no rule
     // and was therefore absent from the inventory rather than reported.
@@ -184,6 +197,7 @@ describe('and passes on a clean tree', () => {
       'check-check-vocabularies.mjs', 'check-autonomous-approval.mjs',
       'check-route-guards.mjs', 'check-kernel-boundary.mjs',
       'check-test-schema-fabrication.mjs', 'audit-consequential-effects.mjs',
+      'check-writerless-tables.mjs', 'check-notnull-inserts.mjs',
     ]) {
       const r = run(script);
       expect(r.code, `${script}: ${r.output}`).toBe(0);
