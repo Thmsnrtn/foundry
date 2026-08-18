@@ -17,6 +17,7 @@ voiceReplyWebhook.post('/webhooks/voice-reply', async (c) => {
     mime_type: string;
     context: string;
     briefing_date: string;
+    action_execution_id?: string;
     api_key: string;
   };
 
@@ -62,6 +63,10 @@ voiceReplyWebhook.post('/webhooks/voice-reply', async (c) => {
       audio_base64: body.audio_base64,
       mime_type: body.mime_type,
       context: body.context ?? '',
+      // Names the action being approved. Absent, a voice approval approves
+      // nothing rather than approving whichever action happens to be newest.
+      action_execution_id: typeof body.action_execution_id === 'string'
+        ? body.action_execution_id : undefined,
       briefing_date: body.briefing_date ?? new Date().toISOString().slice(0, 10),
     });
 

@@ -435,7 +435,16 @@ export async function founderPatternSynthesis(): Promise<void> {
 
       // Check for 3+ resolved Gate 3 decisions with reasoning
       const decisions = await query(
-        `SELECT COUNT(*) as cnt FROM decisions WHERE product_id = ? AND gate = 3 AND status = 'resolved' AND resolution_reasoning IS NOT NULL`,
+        // `decisions.status` has never had a 'resolved' value — the
+        // vocabulary is pending / approved / rejected / executed / expired. So
+        // this count was always zero, `cnt < 3` always held, and
+        // founder-pattern synthesis has never run for anybody. A decision the
+        // founder settled is one they approved or rejected; both carry the
+        // reasoning this looks for.
+        `SELECT COUNT(*) as cnt FROM decisions
+          WHERE product_id = ? AND gate = 3
+            AND status IN ('approved','rejected','executed')
+            AND resolution_reasoning IS NOT NULL`,
         [p.id]
       );
       const cnt = (decisions.rows[0] as Record<string, number>)?.cnt ?? 0;

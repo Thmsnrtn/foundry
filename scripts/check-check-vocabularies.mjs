@@ -88,7 +88,11 @@ const at = (src, index) => src.slice(0, index).split('\n').length;
 
 for (const dir of ['src', 'tests']) {
   for (const file of tsFiles(join(ROOT, dir))) {
-    const src = readFileSync(file, 'utf8');
+    // Comments describe the defect; they are not the defect. Blanked rather
+    // than removed so reported line numbers still point at the real line.
+    const src = readFileSync(file, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+      .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
     const rel = relative(ROOT, file);
 
     // UPDATE t SET col = 'literal'
@@ -98,6 +102,32 @@ for (const dir of ['src', 'tests']) {
         const values = vocab.get(key);
         if (values && !values.has(a[2])) {
           offenders.push(`${rel}:${at(src, m.index)} → ${key} = '${a[2]}' (permitted: ${[...values].join(', ')})`);
+        }
+      }
+    }
+
+    // WHERE ... col = 'literal', on a statement naming exactly one table.
+    //
+    // This is where the fourth instance lived: the voice-approval path looked
+    // for `action_executions.status = 'pending_approval'`, which is
+    // `outbound_actions`'s spelling. The query raised nothing — it simply
+    // matched no rows, ever, and the caller's fall-through for "nothing to
+    // approve" made a permanently inert feature look like an idle one. A value
+    // that cannot be written is a value that cannot be found.
+    for (const m of src.matchAll(
+      /\b(?:FROM|UPDATE|INTO)\s+(\w+)\b([\s\S]{0,700}?)(?:`|;)/gi)) {
+      const table = m[1];
+      const rest = m[2];
+      // One table only. A join makes an unqualified column ambiguous, and
+      // guessing is how a gate earns a reputation for noise.
+      if (/\bJOIN\b/i.test(rest)) continue;
+      const where = rest.slice(rest.search(/\bWHERE\b/i));
+      if (!/\bWHERE\b/i.test(rest)) continue;
+      for (const a of where.matchAll(/\b(\w+)\s*(?:=|==)\s*'([^']*)'/g)) {
+        const key = `${table}.${a[1]}`;
+        const values = vocab.get(key);
+        if (values && !values.has(a[2])) {
+          offenders.push(`${rel}:${at(src, m.index)} → ${key} = '${a[2]}' in a WHERE clause (permitted: ${[...values].join(', ')})`);
         }
       }
     }

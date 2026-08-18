@@ -697,6 +697,7 @@ Rules:
         // Route into outbound executor for human approval
         const { proposeAction } = await import('../../outbound/executor.js');
         const actionDesc = row.action_description as string;
+        let proposed = false;
         await proposeAction({
           productId,
           agentName,
@@ -706,11 +707,21 @@ Rules:
           previewText: actionDesc.slice(0, 200),
           parameters: this._parseJSON<Record<string, unknown>>(row.parameters_json as string | null, {}),
           authorityLevel: 2, // All initiative queue items require approval
-        }).catch(() => {});
-        // Mark as completed (proposed into the outbound queue for approval)
+        }).then(
+          () => { proposed = true; },
+          (err: unknown) => {
+            // `.catch(() => {})` swallowed this, and the row was then marked
+            // 'completed' with a comment reading "proposed into the outbound
+            // queue for approval". So an initiative whose proposal failed was
+            // recorded as done, and nothing was queued for anybody to approve.
+            // The queue's own vocabulary already has a word for this.
+            logger.error(
+              `proposeAction failed for initiative ${String(row.id)}: ${String(err)}`,
+              { productId, agentName });
+          });
         await query(
-          `UPDATE agent_initiative_queue SET status='completed', processed_at=CURRENT_TIMESTAMP WHERE id=?`,
-          [row.id as string]
+          `UPDATE agent_initiative_queue SET status=?, processed_at=CURRENT_TIMESTAMP WHERE id=?`,
+          [proposed ? 'completed' : 'failed', row.id as string]
         );
       }
     } catch {

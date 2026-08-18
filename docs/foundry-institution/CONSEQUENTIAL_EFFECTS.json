@@ -171,7 +171,7 @@
     },
     {
       "file": "src/services/scp/briefing/voice-reply.ts",
-      "line": 117,
+      "line": 129,
       "detector": "templated_post",
       "status": "control_path",
       "capability": "Whisper transcription — reserves against the AI ceilings before dispatch, settles at a conservative bound, releases only on a definitive refusal"

@@ -104,8 +104,11 @@ export async function measurePendingPredictions(
         if (match) {
           const customerId = match[1];
           const result = await query(
+            // 'completed' is not in `outbound_actions.status`; the value
+            // for an action that ran is 'executed'. This matched nothing, so
+            // every prediction of this kind scored as unfulfilled.
             `SELECT COUNT(*) as cnt FROM outbound_actions
-             WHERE product_id = ? AND status = 'completed'
+             WHERE product_id = ? AND status = 'executed'
                AND (parameters_json LIKE ? OR parameters_json LIKE ?)
              LIMIT 1`,
             [productId, `%${customerId}%`, '%expansion%']

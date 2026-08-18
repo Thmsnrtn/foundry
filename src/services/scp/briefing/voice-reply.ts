@@ -18,6 +18,18 @@ export interface VoiceReplyInput {
   mime_type: 'audio/webm' | 'audio/mp4' | 'audio/wav' | string;
   context: string; // what briefing item this is replying to
   briefing_date: string;
+  /** WHICH action the founder is approving.
+   *
+   * Approval used to bind to nothing: `routeApproval` took the most recently
+   * created pending `action_execution` for the product and approved that one,
+   * whatever the founder had actually been replying to. `context` — "what
+   * briefing item this is replying to" — was never read, is caller-supplied
+   * free text, and defaults to the empty string, so there was no way to tell
+   * which action was meant and nothing tried.
+   *
+   * A voice approval is an authority decision about ONE outward effect. If the
+   * caller cannot name it, no approval happens. */
+  action_execution_id?: string;
 }
 
 export interface VoiceReplyResult {
@@ -202,36 +214,58 @@ async function routeDecision(
   return `strategic_decisions_log:${id}`;
 }
 
+/**
+ * Approve the action the founder named — and only that one.
+ *
+ * THE OLD BEHAVIOUR, in two layers.
+ *
+ * It selected the most recently created pending `action_execution` for the
+ * product and approved that one, ignoring `context` entirely — so a founder
+ * saying "yes, go ahead" in reply to briefing item A would have approved
+ * whichever action happened to be newest, which is not necessarily A.
+ *
+ * Except it never approved anything at all, because it looked for
+ * `status = 'pending_approval'` and `action_executions.status` permits
+ * pending / approved / executing / completed / failed / cancelled. That
+ * spelling belongs to `outbound_actions`, a different table. The query matched
+ * no rows, ever, and fell through to filing the founder's approval as a note —
+ * silently, because the fall-through is also what happens when there is
+ * genuinely nothing to approve.
+ *
+ * So the feature has never worked, and the first time it did work it would
+ * have approved the wrong thing. Both halves are fixed here: the status is the
+ * one the table has, and the action is the one the founder named.
+ *
+ * An approval is authority over ONE effect. Binding it to "the latest" is not
+ * a loose match; it is a different decision.
+ */
 async function routeApproval(
   productId: string,
   transcript: string,
   context: string,
+  actionExecutionId?: string,
 ): Promise<string> {
-  // Look for a pending action_execution referencing this context
-  try {
-    const pending = await query(
-      `SELECT id FROM action_executions
-       WHERE product_id = ? AND status = 'pending_approval'
-       ORDER BY created_at DESC LIMIT 1`,
-      [productId],
-    );
-
-    if (pending.rows.length > 0) {
-      const execId = (pending.rows[0] as Record<string, unknown>).id as string;
-      await query(
-        `UPDATE action_executions
-         SET status = 'approved', approved_at = datetime('now'), approval_note = ?
-         WHERE id = ?`,
-        [transcript, execId],
-      );
-      return `action_executions:${execId}`;
-    }
-  } catch {
-    // action_executions table may not exist or have different schema
+  if (!actionExecutionId) {
+    // Nothing to bind to. Recorded so the founder's words are not lost, and
+    // explicitly not an approval.
+    return routeNote(productId, transcript, context, 'approval_unbound');
   }
 
-  // Fall back to storing as a note
-  return routeNote(productId, transcript, context, 'approval');
+  // Scoped to the product AND to the pending state: a caller may not approve
+  // another company's action, nor re-approve one already decided.
+  const res = await query(
+    `UPDATE action_executions
+        SET status = 'approved', approved_at = datetime('now'),
+            approved_by = 'voice:founder', approval_note = ?
+      WHERE id = ? AND product_id = ? AND status = 'pending'`,
+    [transcript, actionExecutionId, productId],
+  );
+  if ((res.rowsAffected ?? 0) === 0) {
+    // The id names nothing pending for this company. Refused, and said so,
+    // rather than falling through to approving something else.
+    return routeNote(productId, transcript, context, 'approval_unmatched');
+  }
+  return `action_executions:${actionExecutionId}`;
 }
 
 async function routeQuestion(
@@ -299,7 +333,7 @@ export async function processVoiceReply(
       routedTo = await routeDecision(productId, transcript, data.context, data.briefing_date);
       break;
     case 'approval':
-      routedTo = await routeApproval(productId, transcript, data.context);
+      routedTo = await routeApproval(productId, transcript, data.context, data.action_execution_id);
       break;
     case 'question':
       routedTo = await routeQuestion(productId, transcript, data.context);
@@ -314,3 +348,8 @@ export async function processVoiceReply(
     routed_to: routedTo,
   };
 }
+
+/** Exposed for tests only. The reachable path runs through `processVoiceReply`,
+ * whose first step is a paid transcription call; testing the binding through a
+ * fake audio pipeline would prove less than testing the binding. */
+export const __routeApprovalForTest = routeApproval;

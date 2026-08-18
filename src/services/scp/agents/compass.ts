@@ -79,7 +79,12 @@ export class CompassAgent extends BaseAgent {
 
     // ── 4. Query active company OKRs ──────────────────────────────────────────
     const okrResult = await db(
-      `SELECT objective_text AS objective, status FROM company_okrs WHERE product_id=? AND status='active' LIMIT 5`,
+      // `company_okrs.status` is on_track / at_risk / off_track / completed /
+      // cancelled — there is no 'active'. Compass's view of the company's
+      // objectives has always been empty, and an agent with no OKRs in context
+      // reasons as though the company has none.
+      `SELECT objective_text AS objective, status FROM company_okrs
+        WHERE product_id=? AND status IN ('on_track','at_risk','off_track') LIMIT 5`,
       [productId]
     );
 
