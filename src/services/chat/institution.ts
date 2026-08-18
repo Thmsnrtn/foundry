@@ -17,6 +17,7 @@
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { query } from '../../db/client.js';
+import { log } from '../../lib/logger.js';
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
 import { getMemoryDigest, getExpiredBeliefs, recordPremise, CHECKABLE_METRIC_KEYS } from '../memory/kernel.js';
 import { getShadowStats } from '../autopilot/policy.js';
@@ -133,6 +134,7 @@ export async function handleUtterance(
 
   // Apply the capture — best-effort; a capture failure never eats the reply.
   let captured: ChatTurn['captured'] = null;
+  let captureFailed = false;
   if (parsed.capture) {
     try {
       const cap = parsed.capture;
@@ -158,17 +160,42 @@ export async function handleUtterance(
         premiseRecorded = true;
       }
       captured = { kind: cap.kind, decisionId, premiseRecorded };
-    } catch { /* ledger capture is best-effort */ }
+    } catch (err) {
+      // THE REPLY ALREADY SAYS IT WAS RECORDED.
+      //
+      // The system prompt above instructs: "Tell the founder what you
+      // captured, in one short sentence at the end of the reply" — and the
+      // model writes that sentence before any of this runs. So a capture that
+      // threw left the founder holding a message saying their decision had
+      // been written to the ledger, with nothing anywhere contradicting it.
+      // The page appends a small 📒 when `captured` is set; the absence of an
+      // icon is not a retraction.
+      //
+      // Best-effort is the right posture for the WRITE — a ledger failure
+      // should not eat the conversation. It is not the right posture for the
+      // CLAIM.
+      captureFailed = true;
+      log.error('institution_chat.capture_failed', {
+        productId, kind: parsed.capture.kind, error: (err as Error).message,
+      });
+    }
   }
+
+  // The correction goes into the stored message too, not just the response, so
+  // the thread a founder scrolls back through says the same thing they were
+  // told at the time.
+  const reply = captureFailed
+    ? `${parsed.reply}\n\n(I could not write that to the decision ledger just now, so it is not recorded — please try again in a moment.)`
+    : parsed.reply;
 
   await query(
     `INSERT INTO conversation_messages (id, thread_id, role, content, tokens_used) VALUES (?, ?, 'assistant', ?, ?)`,
-    [nanoid(), tid, parsed.reply, response.usage.input_tokens + response.usage.output_tokens],
+    [nanoid(), tid, reply, response.usage.input_tokens + response.usage.output_tokens],
   );
   await query(
     `UPDATE conversation_threads SET message_count = message_count + 2, last_message_at = CURRENT_TIMESTAMP WHERE id = ?`,
     [tid],
   );
 
-  return { threadId: tid, reply: parsed.reply, captured };
+  return { threadId: tid, reply, captured };
 }
