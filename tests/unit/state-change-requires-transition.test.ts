@@ -136,3 +136,57 @@ describe('a state cannot be reached around the transition ledger', () => {
     expect(await stateOf(id)).toBe('assisting');
   });
 });
+
+describe('the justification must be the move, not merely the destination', () => {
+  it('refuses a jump to a state this row reached from somewhere else', async () => {
+    // Walk up, then demote by a real transition. A transition INTO 'shadowing'
+    // now exists — but it came from 'understood', and the row is at 'visible'.
+    // A guard that only checked the destination would let this through, which is
+    // how a demoted responsibility climbs back without earning it again.
+    const id = await responsibility('unknown');
+    for (const [from, to] of [['unknown', 'visible'], ['visible', 'understood'],
+      ['understood', 'shadowing']]) {
+      await query(
+        `INSERT INTO responsibility_transitions
+           (id, responsibility_id, from_state, to_state, evidence_ref, reason, actor_ref)
+         VALUES (?, ?, ?, ?, ?, 'climbing', 'test')`,
+        [nanoid(), id, from, to, evidenceRef]);
+    }
+    await query(
+      `INSERT INTO responsibility_transitions
+         (id, responsibility_id, from_state, to_state, evidence_ref, reason, actor_ref)
+       VALUES (?, ?, 'shadowing', 'visible', ?, 'demoted', 'test')`,
+      [nanoid(), id, evidenceRef]);
+    expect(await stateOf(id)).toBe('visible');
+
+    await expect(query(
+      `UPDATE institutional_responsibilities SET state = 'shadowing' WHERE id = ?`, [id]))
+      .rejects.toThrow(/no_transition/);
+    expect(await stateOf(id)).toBe('visible');
+  });
+});
+
+describe('nothing is born into the frozen boundary', () => {
+  for (const state of ['operating', 'mature', 'exception_owned']) {
+    it(`refuses a responsibility created directly as ${state}`, async () => {
+      // Production never names `state` on insert — the create, the candidate
+      // promotion and the discovery path all take the default and transition
+      // from there — so nothing legitimate loses anything here. The only place
+      // in the codebase a responsibility was ever Operating was a test fixture
+      // that did not need it to be.
+      await expect(query(
+        `INSERT INTO institutional_responsibilities (id, product_id, title, state, capability)
+         VALUES (?, ?, 'Born too high', ?, 'customer_support')`,
+        [nanoid(), P, state])).rejects.toThrow(/not_a_birth_state/);
+    });
+  }
+
+  it('still allows the rungs a fixture legitimately starts from', async () => {
+    // Deliberately not the whole ladder: dozens of fixtures create a
+    // responsibility already Shadowing to set up the case they are about, and
+    // refusing those would make this a change about test ergonomics rather than
+    // about the constitution.
+    const id = await responsibility('shadowing');
+    expect(await stateOf(id)).toBe('shadowing');
+  });
+});
