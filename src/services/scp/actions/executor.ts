@@ -134,6 +134,33 @@ export async function approveAndExecute(
     return { success: false, error: 'Invalid payload JSON' };
   }
 
+  // THE COMPANY MUST STILL BE ONE FOUNDRY ACTS FOR.
+  //
+  // This path posts to Slack, files Linear tickets and calls customer
+  // webhooks, and it reached none of the checks that stop the OTHER outward
+  // path — `checkKillSwitch` had exactly one caller in the whole system, the
+  // outbound gateway. So an approval here dispatched an outward effect for a
+  // company whose subscription had lapsed, whose founder had paused it, or
+  // whose data had just been erased. The owner's decision is that an unpaid
+  // account is read-only: no spend, no outward effects. Two doors, one rule,
+  // and only one door was checking it.
+  //
+  // Checked before the claim, so a refused execution stays pending rather than
+  // being consumed.
+  const { checkKillSwitch } = await import('../../outbound/kill-switch.js');
+  const gate = await checkKillSwitch(
+    row.product_id as string,
+    payload.action_type ?? String(row.action_type ?? 'unknown'),
+  );
+  if (gate.blocked) {
+    await query(
+      `UPDATE action_executions
+          SET status='cancelled', error_message=?
+        WHERE id=? AND status='pending'`,
+      [`refused before dispatch: ${gate.reason}`, executionId]);
+    return { success: false, error: `refused: ${gate.reason}`, effect_certainty: 'not_attempted' };
+  }
+
   // Atomically claim the row: only a 'pending' execution can be approved.
   // A double-click, a concurrent autopilot sweep, or a replay of a completed
   // execution loses this claim and does NOT execute a second time.

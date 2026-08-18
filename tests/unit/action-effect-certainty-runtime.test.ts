@@ -13,6 +13,15 @@ beforeAll(async () => {
   // already here, in the shape the product actually has — including the NOT
   // NULL columns and foreign keys a hand-written stand-in leaves out.
   await runMigrations();
+  // A real company. The kill switch refuses an id that names no product, and
+  // this path now passes through it — which is the point: an outward effect
+  // for a company that does not exist is not a thing Foundry should do.
+  await query(
+    `INSERT OR IGNORE INTO founders (id, clerk_user_id, email)
+     VALUES ('f1','clerk_f1','f1@test.local')`);
+  await query(
+    `INSERT OR IGNORE INTO products (id, name, owner_id, status, scp_status)
+     VALUES ('p1','Effect Co','f1','active','active')`);
 });
 
 beforeEach(async () => {

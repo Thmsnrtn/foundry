@@ -157,17 +157,17 @@
     },
     {
       "file": "src/services/scp/actions/executor.ts",
-      "line": 429,
+      "line": 456,
       "detector": "external_post",
-      "status": "control_path",
-      "capability": "approved Linear action with durable receipt"
+      "status": "governed",
+      "capability": "approved Linear action — kill-switch checked before dispatch, durable receipt after"
     },
     {
       "file": "src/services/scp/actions/executor.ts",
-      "line": 501,
+      "line": 528,
       "detector": "dynamic_webhook_post",
-      "status": "control_path",
-      "capability": "approved custom webhook with SSRF guard and durable receipt"
+      "status": "governed",
+      "capability": "approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt"
     },
     {
       "file": "src/services/scp/briefing/voice-reply.ts",

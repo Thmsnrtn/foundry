@@ -46,8 +46,14 @@ const classifications = new Map(Object.entries({
   'src/services/integration/stripe-gateway.ts|templated_post': ['governed', 'Stripe capability handlers'],
   'src/services/notifications/push.ts|templated_post': ['governed', 'APNs/FCM device push, registered as the send_push gateway capability. It was classified unreachable — registration routes live, no sender anywhere — and the owner chose to wire it rather than remove the surface. Wiring it was the deliberate act this line asked for: it now inherits the kill-switch, the entitlement pause, dedup and audit from the same door as email, and the live caller is the risk-state transition'],
   'src/services/scp/briefing/email-digest.ts|external_post': ['direct', 'Resend/SendGrid weekly digest delivery'],
-  'src/services/scp/actions/executor.ts|external_post': ['control_path', 'approved Linear action with durable receipt'],
-  'src/services/scp/actions/executor.ts|dynamic_webhook_post': ['control_path', 'approved custom webhook with SSRF guard and durable receipt'],
+  // These two used to be classified `control_path` on the strength of owning
+  // their credential and writing a receipt. What they did not do was ask
+  // whether the company may act at all: `checkKillSwitch` had exactly one
+  // caller in the system, the outbound gateway, so this second outward door
+  // dispatched for companies that were paused, unentitled or erased. It now
+  // passes the same check before dispatch — which is what `governed` means.
+  'src/services/scp/actions/executor.ts|external_post': ['governed', 'approved Linear action — kill-switch checked before dispatch, durable receipt after'],
+  'src/services/scp/actions/executor.ts|dynamic_webhook_post': ['governed', 'approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt'],
   'src/services/billing/stripe.ts|stripe_sdk_mutation': ['control_path', 'Foundry SaaS billing credential owner'],
   'src/services/integrations/stripe-sync.ts|stripe_sdk_mutation': ['control_path', 'Stripe OAuth credential exchange'],
 }));
