@@ -8,8 +8,8 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 ## Current frontier
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** through **149**. Schema snapshot current.
-- **Validation:** `npm run check` green — **224 files / 1,880 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Migrations:** through **150**. Schema snapshot current.
+- **Validation:** `npm run check` green — **227 files / 1,916 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -92,6 +92,9 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 45 CHECK vocabulary (writes) | 3 | 1 | high | 1 | 1 | 0 | 0 | 1 |
 | 46 silent catches around writes | 18 | 3 | 2 high, 1 med | 1 | 3 | 0 | 0 | 3 |
 | 47 CHECK vocabulary (reads) | 4 | 5 | 2 high, 3 med | 1 | 5 | 0 | 0 | 5 |
+| 48 the second outward door | 4 | 3 | 3 high | 1 | 3 | 0 | 0 | 3 |
+| 49 sender of record ↔ live send | 3 | 1 | high | 2 | 1 | 0 | 0 | 1 |
+| 50 refusal ≠ ambiguity | 1 | 1 | med | 1 | 1 | 0 | 0 | 1 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -499,6 +502,58 @@ only against the fake.
 code against the test's beliefs. The one thing it can never catch is the two
 being wrong together — which is the commonest way this fails, because whoever
 writes the fixture reads the query to decide what columns to create.
+
+---
+
+## Batches 48–50: one rule, and the door that was built later
+
+**`checkKillSwitch` had exactly one caller.** Foundry has two paths that produce
+outward effects — `outbound_actions` through the gateway, and
+`action_executions` through the SCP executor — and only the first checked
+whether Foundry may act for the company at all. An approval on the second
+posted to Slack, filed Linear tickets and called customer webhooks for
+companies whose subscription had lapsed, whose founder had paused them, or
+whose data had just been erased. Asking the question of every other effect path
+found two more: the customer-facing webhook fan-out (there are two webhook
+paths and only the other one was governed) and the Slack daily-briefing push.
+
+The effects inventory had called two of them `control_path` — an honest
+description of what they owned (credential, receipts) and a poor description of
+what they checked. **`governed` now has to be demonstrable**: the audit proves
+the file calls the kill switch or is a gateway-registered capability, and where
+the guard genuinely lives in the callers they are named, because "the callers
+check" is a claim about other files and that is the kind that stops being true
+quietly.
+
+**A rule with an implementation and no edge to it.**
+`sender-of-record.ts` says Foundry must never be the From on mail to a
+founder's customer, and its own header says "this lights the rule up BEFORE the
+live path exists, so it can never regress open". It regressed open:
+`assertSenderOfRecord` had zero callers, and the live send handler defaulted to
+a Foundry domain. It could not have been enforced, because the "founder's own
+connected sender" it presupposes did not exist — every send went through
+Foundry's platform key, so no caller COULD satisfy it. **An unsatisfiable rule
+is an unenforced rule, and the gap does not show up as a failure.**
+
+Owner decision: build the missing half. Migration 150 gives each company its own
+sending identity — the founder's provider credential and the From their
+customers see — so third-party mail goes out as them, through their account,
+against a domain their provider verified. Foundry cannot verify domain
+ownership and does not pretend to; the party who can is the one who does.
+
+**And then the refusal had nowhere honest to land.** The gateway mapped every
+handler throw to `execution`, which callers read as "we do not know what
+reached the outside world" and answer with a reconciliation window. A message
+refused before the provider was touched is the opposite fact. Phase `refused`
+now exists, carried by a flag on the error rather than a taxonomy of failure
+types nobody would keep accurate.
+
+**What this run of batches has in common.** Every one is a rule that exists,
+is believed, and has no edge between it and the thing it governs — a guard with
+one caller where there are two doors, a rule with no mechanism to satisfy it, a
+classification recording a property nobody checked. **Ask of every stated rule:
+what is the path from here to the thing that would break it, and does anything
+actually traverse it?**
 
 ---
 
