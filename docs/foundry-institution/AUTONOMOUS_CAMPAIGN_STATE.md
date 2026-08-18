@@ -8,8 +8,8 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 ## Current frontier
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** through **147**. Schema snapshot current.
-- **Validation:** `npm run check` green — **219 files / 1,861 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Migrations:** through **149**. Schema snapshot current.
+- **Validation:** `npm run check` green — **220 files / 1,863 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -86,6 +86,9 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 39 experiment outcome + tenant scope | 2 | 2 | 1 high, 1 med | 1 | 2 | 0 | 0 | 2 |
 | 40 erasure batch isolation | 2 | 3 | 3 high | 1 | 3 | 0 | 0 | 1 |
 | 41 erasure classification totality | 3 | 3 | 3 high | 2 | 3 | 1 | 0 | 13 |
+| 42 SELECT drift paid to zero | 34 | 34 | 12 high, 22 med | 0 | 34 | 0 | 0 | 9 |
+| 43 runtime SQL preparation | 18 | 18 | 6 high, 12 med | 1 | 18 | 0 | 0 | 8 |
+| 44 fabricated test schemas | 105 | 2 | 2 high | 1 | 2 | 0 | 0 | 2 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -399,10 +402,10 @@ sync writers (all product-scoped). Still unread: the responsibility ladder's
 demotion path (which actor a demotion applies to), the department/capability
 mode resolution, and inbound webhook handlers other than Stripe.
 
-**Debt with a number on it:** 34 SELECT column-drift baseline entries
-(`docs/db/select-column-baseline.txt`), down from 36 at the start of this
-stretch. Each is a query that
-throws if it runs.
+**Debt with a number on it:** 0 SELECT column-drift baseline entries
+(`docs/db/select-column-baseline.txt`), down from 36. 13 fabricated test
+schemas (`docs/db/test-schema-fabrication-baseline.txt`), down from 105, and
+the remainder are deliberate with the reason recorded in the file.
 
 ---
 
@@ -448,9 +451,48 @@ did not exist, so one such company blocked every other founder's erasure, daily.
 table in the schema is now classified into exactly one bucket, with a gate that
 fails on `UNCLASSIFIED`.
 
-**What the lens is good for next.** Temporal semantics remain unread:
-`created_at` vs `occurred_at` vs `observed_at` vs `effective_at`, and which of
-them a freshness window is measured against. `updateResults` and
-`validateHypothesis` were unreachable when their tenant scope was fixed —
+**What the lens is good for next.** Temporal semantics were read and came back
+mostly clean — `memory_nodes` orders on `occurred_at`, the judgment observer
+deliberately uses record time — so the yield moved elsewhere. `updateResults`
+and `validateHypothesis` were unreachable when their tenant scope was fixed:
 **the unreachable half of a file is where the conventions of the reachable half
 quietly do not apply.**
+
+---
+
+## Batches 42–44: queries that raise, and the tests that agreed with them
+
+**The SELECT column-drift baseline is empty.** Thirty-four single-table queries
+selected columns that do not exist. Seven of the twelve company agents failed
+on their first data-gathering step and had never completed a run; the founder's
+daily briefing has shown no signal score and no MRR growth since the columns
+were renamed, inside a catch whose comment reads "signal_history may not exist
+yet"; the M&A report scored every company as having no growth history and no
+NRR, four of its points, because the comment said "use stored nrr if available,
+else derive" and there was no `nrr`, no `else`, and no derivation.
+
+**Then eighteen more that a parser could not see.** The static gate says what
+it skips — "anything with a JOIN or an alias" — which leaves the queries most
+likely to be wrong outside it. SQLite resolves what a parser cannot, so a gate
+now prepares every literal statement against the migrated schema. It found the
+public metrics endpoint 500ing on every correction to a submitted date, the
+Slack briefing push reading a table that does not exist, and the webhook
+cleanup job deleting on a column its table does not have. **A derived list is
+only undriftable along the dimension it derives on; a static gate only sees
+what its parser can resolve. Both need a runtime check behind them.**
+
+**And the reason none of it was caught.** A third of the test suite built its
+own schema. `team-health.test.ts` created eight tables "just enough to test the
+computation path", two of them wrong in exactly the way the service was wrong,
+and fourteen assertions passed green against a database that exists nowhere.
+Converting 22 files to `runMigrations()` surfaced what a stand-in leaves out
+every single time — NOT NULL columns, closed vocabularies, foreign keys,
+delete ordering — and found two live defects introduced by earlier fixes in
+this campaign: a gateway refusal and an unconfigured push each wrote a status
+value its table forbids, so both fixes were inert in production and correct
+only against the fake.
+
+**The rule this batch earns.** A test that constructs its own reality tests the
+code against the test's beliefs. The one thing it can never catch is the two
+being wrong together — which is the commonest way this fails, because whoever
+writes the fixture reads the query to decide what columns to create.
