@@ -542,7 +542,10 @@ agentRoutes.post('/:name/authority',
 
 // ─── POST /agents/decisions/:id/approve — Approve a Decision ─────────────────
 
-agentRoutes.post('/decisions/:id/approve', async (c) => {
+// Approving an agent-session decision. Same permission as the decision queue
+// it mirrors: `can_vote_decisions` is what says who has a say.
+agentRoutes.post('/decisions/:id/approve',
+  requireCompanyCapability('can_vote_decisions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
 
@@ -620,7 +623,8 @@ agentRoutes.post('/decisions/:id/approve', async (c) => {
 
 // ─── POST /agents/decisions/:id/deny — Deny a Decision ───────────────────────
 
-agentRoutes.post('/decisions/:id/deny', async (c) => {
+agentRoutes.post('/decisions/:id/deny',
+  requireCompanyCapability('can_vote_decisions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
 

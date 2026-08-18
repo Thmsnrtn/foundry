@@ -14,6 +14,7 @@ import { dashboardLayout, layout } from '../../views/layout.js';
 const chamberLayout = (opts: any, content: any) => layout({ ...opts, showNav: false }, content);
 import { decisionList, type DecisionData } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import { callSonnet } from '../../services/ai/client.js';
 import type { RiskStateValue } from '../../types/index.js';
@@ -453,16 +454,25 @@ decisionRoutes.post('/decisions/:id/redteam', async (c) => {
   return c.redirect(`/decisions/${decisionId}`);
 });
 
-decisionRoutes.post('/decisions/:id/resolve', async (c) => {
+// RESOLVING A DECISION IS THE INSTITUTION'S CENTRAL ACT, and this door asked
+// nothing about who was doing it. The scope was `p.owner_id = ?`, so a
+// co-founder holding `can_vote_decisions` — the permission that exists to say
+// who has a say in decisions — could not resolve one, while nothing stopped an
+// observer who happened to own a different company from reaching the route.
+// The permission answers the question; the scope was answering a different one.
+decisionRoutes.post('/decisions/:id/resolve',
+  requireCompanyCapability('can_vote_decisions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const body = await c.req.json().catch(() => null) as { chosen_option: string; resolution_reasoning?: string } | null;
   if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
+  const ctx = await getLayoutContext(founder, 'decisions', 'Decisions', undefined, c);
+  if (!ctx.productId) return c.json({ error: 'Not found' }, 404);
+  // Scoped to the company the guard just authorized, not to ownership.
   const result = await query(
     `SELECT d.product_id, d.gate FROM decisions d
-     JOIN products p ON d.product_id = p.id
-     WHERE d.id = ? AND p.owner_id = ?`,
-    [decisionId, founder.id]
+     WHERE d.id = ? AND d.product_id = ?`,
+    [decisionId, ctx.productId]
   );
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const row = result.rows[0] as Record<string, unknown>;
@@ -473,7 +483,7 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
     return c.json({ error: 'Gate 3 decisions require resolution_reasoning' }, 400);
   }
 
-  await resolveDecision(decisionId, productId, body.chosen_option, 'founder');
+  await resolveDecision(decisionId, productId, body.chosen_option, 'founder', founder.id);
 
   // Dissent Law: proceeding past unresolved Red Team objections converts each
   // falsifiable objection's inverse into a monitored premise, so the overruling

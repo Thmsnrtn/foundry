@@ -9,6 +9,7 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentsInbox = new Hono<AuthEnv>();
 
@@ -187,31 +188,38 @@ agentsInbox.get('/agents/inbox', async (c) => {
 
 // ─── POST /inbox/decisions/:id/approve ────────────────────────────────────────
 
-agentsInbox.post('/agents/inbox/decisions/:id/approve', async (c) => {
-  const founder = c.get('founder');
-  const id = c.req.param('id');
-  await query(
-    `UPDATE agent_decisions SET status='approved', approved_at=CURRENT_TIMESTAMP, approved_by=?
-     WHERE id=? AND status='pending'
-       AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
-    [founder.id, id, founder.id]
-  );
-  return c.redirect('/agents/inbox?tab=decisions');
-});
+// A second decision ledger — `agent_decisions` — with the same two gaps the
+// main one had: scoped on ownership, so a co-founder with a say could not act
+// on it, and gated by nothing, so anyone who could select the company could.
+agentsInbox.post('/agents/inbox/decisions/:id/approve',
+  requireCompanyCapability('can_vote_decisions'), async (c) => {
+    const founder = c.get('founder');
+    const id = c.req.param('id');
+    const ctx = await getLayoutContext(founder, 'agents', 'Inbox', undefined, c);
+    if (!ctx.productId) return c.redirect('/agents/inbox?tab=decisions');
+    await query(
+      `UPDATE agent_decisions SET status='approved', approved_at=CURRENT_TIMESTAMP, approved_by=?
+       WHERE id=? AND status='pending' AND product_id=?`,
+      [founder.id, id, ctx.productId]
+    );
+    return c.redirect('/agents/inbox?tab=decisions');
+  });
 
 // ─── POST /inbox/decisions/:id/dismiss ────────────────────────────────────────
 
-agentsInbox.post('/agents/inbox/decisions/:id/dismiss', async (c) => {
-  const founder = c.get('founder');
-  const id = c.req.param('id');
-  await query(
-    `UPDATE agent_decisions SET status='dismissed'
-     WHERE id=? AND status='pending'
-       AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
-    [id, founder.id]
-  );
-  return c.redirect('/agents/inbox?tab=decisions');
-});
+agentsInbox.post('/agents/inbox/decisions/:id/dismiss',
+  requireCompanyCapability('can_vote_decisions'), async (c) => {
+    const founder = c.get('founder');
+    const id = c.req.param('id');
+    const ctx = await getLayoutContext(founder, 'agents', 'Inbox', undefined, c);
+    if (!ctx.productId) return c.redirect('/agents/inbox?tab=decisions');
+    await query(
+      `UPDATE agent_decisions SET status='dismissed'
+       WHERE id=? AND status='pending' AND product_id=?`,
+      [id, ctx.productId]
+    );
+    return c.redirect('/agents/inbox?tab=decisions');
+  });
 
 // ─── POST /inbox/messages/:id/read ────────────────────────────────────────────
 

@@ -130,9 +130,13 @@ beforeAll(async () => {
   app = new Hono();
   app.use('*', async (c, next) => {
     if (currentFounder) {
+      // A dashboard request carries a human session and nothing else. Setting
+      // `userId`/`productId` too made this look like a session AND an API key
+      // at once, and `principalOf` fails closed on that ambiguity by design —
+      // two candidate principals is not a principal. The selected company
+      // travels as `product`, which is what the real dashboard middleware sets.
       c.set('founder' as never, currentFounder as never);
-      c.set('userId' as never, currentFounder.id as never);
-      if (currentProductId) c.set('productId' as never, currentProductId as never);
+      if (currentProductId) c.set('product' as never, { id: currentProductId } as never);
       c.set('csrfToken' as never, 'test' as never);
     }
     await next();

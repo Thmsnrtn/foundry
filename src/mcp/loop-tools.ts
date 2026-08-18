@@ -129,8 +129,17 @@ export async function executeLoopTool(
         if (Number(row.gate) >= 3 && !reasoning) {
           return text('Error: gate-3 decisions require reasoning. Consider foundry_red_team first.');
         }
+        // A KEY ACTS AS THE PERSON WHO ISSUED IT. The transport already proved
+        // the scope (`agents:write`) and that Foundry may act for this company;
+        // neither answers whether that person may decide for it. `ctx.founderId`
+        // is `api_keys.created_by`, and a founder who has left the team does not
+        // keep resolving decisions through a key they left behind.
+        const { memberMay } = await import('../services/team/members.js');
+        if (!(await memberMay(ctx.productId, ctx.founderId, 'can_vote_decisions'))) {
+          return text('Error: this key\'s issuer does not have a say in this company\'s decisions');
+        }
         const { resolveDecision } = await import('../services/decisions/queue.js');
-        await resolveDecision(decisionId, ctx.productId, chosen, 'founder');
+        await resolveDecision(decisionId, ctx.productId, chosen, 'founder', ctx.founderId);
         if (reasoning) {
           await query('UPDATE decisions SET resolution_reasoning = ? WHERE id = ?', [reasoning, decisionId]);
         }

@@ -1,0 +1,24 @@
+-- =============================================================================
+-- Migration 153: which human resolved the decision
+--
+-- `decisions.decided_by` holds 'founder' or 'second_self'. That is a KIND, and
+-- as a kind it is correct and load-bearing: `getShadowStats` measures agreement
+-- on rows decided by a founder, and `processOutcomeFeedback` demotes a category
+-- only when an outcome went badly on a row the autopilot decided. Both would
+-- break if a person's id were written into it.
+--
+-- What it cannot answer is WHO. Three doors resolve a decision — the dashboard,
+-- an MCP client acting through an API key, and the autopilot tick — and until
+-- now every human one of them wrote the same four letters. A company with a
+-- founder and two co-founders recorded 'founder' for all three, so the record
+-- of the most consequential act in the institution named a category rather than
+-- a person.
+--
+-- This is the same defect the voice-approval path had ('voice:founder') and the
+-- fix is the same: keep the discriminant, add the identity beside it. NULL is
+-- the honest value for a row the autopilot decided and for every row resolved
+-- before this migration — it means "not recorded", and nothing may read it as
+-- "the owner".
+-- =============================================================================
+
+ALTER TABLE decisions ADD COLUMN decided_by_founder_id TEXT;

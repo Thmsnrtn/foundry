@@ -60,19 +60,31 @@ export async function createDecision(input: {
   return id;
 }
 
+/**
+ * Resolve a decision.
+ *
+ * `decidedBy` is the KIND — 'founder' or 'second_self' — and stays one: the
+ * shadow ledger measures agreement on founder-decided rows, and the demotion
+ * path fires only on autopilot-decided ones. `resolvedByFounderId` is WHO, and
+ * is the thing that was missing: three doors reach this, every human one of
+ * them wrote the same four letters, and a company with three founders recorded
+ * 'founder' for all of them. NULL means not recorded — never "the owner".
+ */
 export async function resolveDecision(
   decisionId: string,
   productId: string,
   chosenOption: string,
-  decidedBy: string
+  decidedBy: string,
+  resolvedByFounderId?: string,
 ): Promise<void> {
   const now = new Date().toISOString();
   await query(
     `UPDATE decisions
      SET status = 'approved', chosen_option = ?, decided_at = ?, decided_by = ?,
+         decided_by_founder_id = ?,
          follow_up_at = datetime('now', '+30 days')
      WHERE id = ? AND product_id = ?`,
-    [chosenOption, now, decidedBy, decisionId, productId]
+    [chosenOption, now, decidedBy, resolvedByFounderId ?? null, decisionId, productId]
   );
 
   // Dispatch webhook
