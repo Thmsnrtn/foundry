@@ -12,7 +12,7 @@ import {
   generateBoardPacket,
   getBoardPacket,
   listBoardPackets,
-  markPacketReviewed,
+  markPacketFinalized,
 } from '../../services/scp/investor/board-packet.js';
 import {
   assessFundraisingReadiness,
@@ -42,14 +42,28 @@ function currentMonth(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// This renders two different vocabularies: board_packets is
+// draft/finalized/shared (migration 011) and investor_updates is draft/sent
+// (migration 039). It used to check for 'reviewed', which no table has ever
+// permitted, so every packet showed "Draft" whatever state it was in — and
+// anything unrecognised fell through to "Draft" too, which is how that stayed
+// invisible.
+const STATUS_LABELS: Record<string, { label: string; good: boolean }> = {
+  draft: { label: 'Draft', good: false },
+  finalized: { label: 'Ready to share', good: true },
+  shared: { label: 'Shared', good: true },
+  sent: { label: 'Sent', good: true },
+};
+
 function statusBadge(status: string): string {
-  if (status === 'reviewed') {
-    return '<span style="font-size:0.7rem;background:#4ecca322;color:#4ecca3;padding:2px 8px;border-radius:99px;font-weight:700;">Reviewed</span>';
+  const known = STATUS_LABELS[status];
+  // An unknown status is shown as itself rather than quietly relabelled
+  // 'Draft'. If a vocabulary drifts again, the page says so.
+  const label = known ? known.label : status;
+  if (known?.good) {
+    return `<span style="font-size:0.7rem;background:#4ecca322;color:#4ecca3;padding:2px 8px;border-radius:99px;font-weight:700;">${label}</span>`;
   }
-  if (status === 'sent') {
-    return '<span style="font-size:0.7rem;background:#4ecca322;color:#4ecca3;padding:2px 8px;border-radius:99px;font-weight:700;">Sent</span>';
-  }
-  return '<span style="font-size:0.7rem;background:rgba(255,255,255,0.08);color:var(--text-muted);padding:2px 8px;border-radius:99px;">Draft</span>';
+  return `<span style="font-size:0.7rem;background:rgba(255,255,255,0.08);color:var(--text-muted);padding:2px 8px;border-radius:99px;">${label}</span>`;
 }
 
 function urgencyBadge(urgency: 'high' | 'medium' | 'low'): string {
@@ -403,9 +417,9 @@ boardPacket.get('/packet/:id', async (c) => {
       <a href="/board" style="font-size:0.85rem;color:var(--text-dim);text-decoration:none;">← Investor Hub</a>
       <div style="display:flex;align-items:center;gap:0.75rem;">
         ${statusBadge(status)}
-        ${status !== 'reviewed' ? html`
+        ${status === 'draft' ? html`
           <form method="POST" action="/board/packet/${id}/reviewed">
-            <button type="submit" class="btn btn-primary" style="font-size:0.78rem;">Mark Reviewed</button>
+            <button type="submit" class="btn btn-primary" style="font-size:0.78rem;">Mark ready to share</button>
           </form>
         ` : ''}
       </div>
@@ -486,11 +500,12 @@ boardPacket.get('/packet/:id', async (c) => {
 boardPacket.post('/packet/:id/reviewed', async (c) => {
   const founder = c.get('founder');
   const id = c.req.param('id');
-  try {
-    await markPacketReviewed(id, founder.id);
-  } catch {
-    // Non-fatal
-  }
+  // The catch here used to be `// Non-fatal`, and it swallowed a CHECK
+  // violation on every single click — which is why a button that never worked
+  // never looked broken. A state change the founder asked for either happens
+  // or is reported; it is not quietly nothing.
+  const changed = await markPacketFinalized(id, founder.id);
+  if (!changed) return c.redirect(`/board/packet/${id}?error=not_updated`);
   return c.redirect(`/board/packet/${id}`);
 });
 

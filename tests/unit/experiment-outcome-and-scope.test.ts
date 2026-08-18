@@ -88,6 +88,7 @@ describe('the schema has a name for an inconclusive result', () => {
   it('and still refuses a status nobody defined', async () => {
     // The rebuild must not have dropped the constraint on the way past. A
     // CHECK quietly widened to "anything" is how vocabularies rot.
+    // check-vocabulary:expected-refusal
     await expect(query(
       `INSERT INTO hypotheses (id, product_id, proposed_by, statement, status)
        VALUES ('exo_bad', ?, 'oracle', 'x', 'probably_true')`, [MINE]))

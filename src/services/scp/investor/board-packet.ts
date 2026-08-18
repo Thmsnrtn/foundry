@@ -320,12 +320,33 @@ export async function listBoardPackets(
   });
 }
 
-// ─── markPacketReviewed ───────────────────────────────────────────────────────
+// ─── markPacketFinalized ──────────────────────────────────────────────────────
 
-export async function markPacketReviewed(packetId: string, ownerId: string): Promise<void> {
-  await query(
-    `UPDATE board_packets SET status='reviewed'
+/**
+ * The founder has been through the packet and it is ready to share.
+ *
+ * THIS USED TO WRITE status='reviewed'. `board_packets` was created by
+ * migration 011 with the vocabulary draft/finalized/shared. Migration 039 then
+ * wrote `CREATE TABLE IF NOT EXISTS board_packets` with draft/reviewed/
+ * published — and because the table already existed, that definition was a
+ * silent no-op. The code was written against the version that never took
+ * effect, so this UPDATE raised every time, the route caught it as
+ * "non-fatal", and the founder's Mark Reviewed button did nothing, forever,
+ * without saying so. The button never even disappeared, because the status it
+ * was waiting for could not be reached.
+ *
+ * `finalized` is the live value and, per migration 011's own comment on the
+ * column beside it, means exactly this: "when founder marks it ready to
+ * share". So the timestamp is set too, which nothing had ever done.
+ *
+ * Returns whether a row was actually changed, so a caller cannot report
+ * success for a packet that does not exist or is not theirs.
+ */
+export async function markPacketFinalized(packetId: string, ownerId: string): Promise<boolean> {
+  const res = await query(
+    `UPDATE board_packets SET status='finalized', finalized_at=datetime('now')
      WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
     [packetId, ownerId]
   );
+  return (res.rowsAffected ?? 0) > 0;
 }
