@@ -365,3 +365,155 @@ describe('entitlement to act', () => {
     expect(JOB_REGISTRY.entitlement_sweep.schedule).toMatch(/^\S+ \S+ \S+ \S+ \S+$/);
   });
 });
+
+// =============================================================================
+// §3 + §5: the axis the cancellation now writes, and the instant the authority
+// must be valid at.
+//
+// The test above cancels by writing `scp_status='paused'` — which is what
+// `customer.subscription.deleted` USED to write. Migration 145 gave commercial
+// entitlement its own field, so a cancellation now writes
+// `entitlement_paused_at` and leaves `scp_status` alone. This file kept
+// passing, because it was asserting against the old axis: the authority read
+// had stopped seeing the exact case it was written for and nothing noticed.
+//
+// That is the copied-fragment failure. `currentAuthority` had a hand-written
+// piece of the operating rule instead of the rule, and a fragment drifts the
+// moment the rule grows another axis.
+// =============================================================================
+
+describe('the authority read follows the canonical predicate', () => {
+  beforeEach(async () => {
+    await query(
+      `UPDATE products SET scp_status='active', entitlement_paused_at=NULL WHERE id=?`, [P]);
+  });
+
+  it('refuses when the billing axis is paused, which is where cancellation writes now', async () => {
+    await query(
+      "UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?", [P]);
+    const before = dispatched;
+    const action = await plan('bca_effect_entitlement');
+    expect(await executeAssistedSupportEmail(action))
+      .toEqual({ dispatched: false, certainty: 'not_attempted' });
+    expect(dispatched).toBe(before);
+
+    // WHICH refusal, not just that one happened. The outbound gateway would
+    // also refuse this send, so "nothing was dispatched" is true either way —
+    // a mutation restoring the old scp_status-only predicate passed an earlier
+    // version of this case for exactly that reason.
+    //
+    // The row says which: an authority refusal returns before the plan is
+    // claimed, leaving it 'approved'; a gateway refusal happens after the
+    // claim and marks it 'failed'.
+    const row = (await query('SELECT status FROM outbound_actions WHERE id=?', [action]))
+      .rows[0] as Record<string, string>;
+    expect(row.status, 'the authority read must refuse this, not the gateway')
+      .toBe('approved');
+  });
+
+  it('refuses when the founder pauses on the operating axis', async () => {
+    await query("UPDATE products SET scp_status='paused' WHERE id=?", [P]);
+    const action = await plan('bca_effect_operating');
+    expect(await executeAssistedSupportEmail(action))
+      .toEqual({ dispatched: false, certainty: 'not_attempted' });
+  });
+
+  it('refuses when the record is archived', async () => {
+    await query("UPDATE products SET status='archived' WHERE id=?", [P]);
+    const action = await plan('bca_effect_archived_axis');
+    expect(await executeAssistedSupportEmail(action))
+      .toEqual({ dispatched: false, certainty: 'not_attempted' });
+    await query("UPDATE products SET status='active' WHERE id=?", [P]);
+  });
+});
+
+describe('temporal authority is revalidated at the last safe point', () => {
+  beforeEach(async () => {
+    await query(
+      `UPDATE products SET scp_status='active', entitlement_paused_at=NULL, status='active' WHERE id=?`, [P]);
+    await query(
+      "UPDATE autonomy_consents SET revoked_at=NULL, expires_at=datetime('now','+1 day') WHERE id='bca_consent'",
+      []);
+  });
+
+  it('refuses a plan whose grant expired between planning and dispatch', async () => {
+    // The plan was legitimate when it was made. Authority is a fact about NOW,
+    // and a queued plan does not carry it forward.
+    const action = await plan('bca_effect_expired');
+    await query(
+      "UPDATE autonomy_consents SET expires_at=datetime('now','-1 minute') WHERE id='bca_consent'",
+      []);
+    const before = dispatched;
+    expect(await executeAssistedSupportEmail(action))
+      .toEqual({ dispatched: false, certainty: 'not_attempted' });
+    expect(dispatched, 'an expired grant licenses nothing').toBe(before);
+  });
+
+  it('refuses when the grant expires after the claim but before the send', async () => {
+    // The window between claiming the plan and crossing the provider boundary.
+    // Revalidating only before the claim would send under authority that ended
+    // while the row was being marked.
+    const action = await plan('bca_effect_expired_midflight');
+    const before = dispatched;
+    const result = await executeAssistedSupportEmail(action, {
+      afterClaim: async () => {
+        await query(
+          "UPDATE autonomy_consents SET expires_at=datetime('now','-1 minute') WHERE id='bca_consent'",
+          []);
+      },
+    });
+    expect(result).toEqual({ dispatched: false, certainty: 'not_attempted' });
+    expect(dispatched, 'nothing crosses the provider boundary').toBe(before);
+  });
+
+  it('leaves a plan dead when a NEW grant replaces the expired one', async () => {
+    // Grant A → Plan A → A expires → Grant B. Plan A references the grant that
+    // owned its authority; a later grant is a different fact and does not
+    // reanimate it.
+    const action = await plan('bca_effect_regrant');
+    await query(
+      "UPDATE autonomy_consents SET expires_at=datetime('now','-1 minute') WHERE id='bca_consent'",
+      []);
+    // The new grant is made from Shadowing, which is the path migration 133
+    // permits without fresh comparison evidence — a re-grant from Assisting
+    // needs that evidence, and demanding it here would make this a test about
+    // the ladder rather than about which grant a plan belongs to.
+    await query(
+      "UPDATE institutional_responsibilities SET state='shadowing',authority_ref=NULL WHERE id='bca_resp'",
+      []);
+    await query(
+      `INSERT INTO autonomy_consents
+         (id,founder_id,product_id,capability,from_mode,to_mode,disclosure_version,
+          responsibility_id,allowed_scope_json,consequence_boundary,expires_at)
+       VALUES ('bca_consent_b',?,?,'operations','suggest','act','v1','bca_resp',?,'low',datetime('now','+1 day'))`,
+      [OWNER, P, JSON.stringify(['send_email:responsibility_notice'])]);
+    await query(
+      "UPDATE institutional_responsibilities SET state='assisting',authority_ref='autonomy_consent:bca_consent_b' WHERE id='bca_resp'",
+      []);
+
+    const before = dispatched;
+    expect(await executeAssistedSupportEmail(action))
+      .toEqual({ dispatched: false, certainty: 'not_attempted' });
+    expect(dispatched, 'a new grant does not resurrect an old plan').toBe(before);
+
+    await query("DELETE FROM autonomy_consents WHERE id='bca_consent_b'", []);
+    await query(
+      "UPDATE institutional_responsibilities SET authority_ref='autonomy_consent:bca_consent' WHERE id='bca_resp'",
+      []);
+  });
+
+  it('does not re-dispatch on a retry after the grant expired', async () => {
+    // The first attempt succeeded; the grant then lapsed. A retry must find the
+    // plan already claimed and report what happened, not send again.
+    const action = await plan('bca_effect_retry');
+    expect(await executeAssistedSupportEmail(action))
+      .toEqual({ dispatched: true, certainty: 'provider_acknowledged' });
+    const after = dispatched;
+    await query(
+      "UPDATE autonomy_consents SET expires_at=datetime('now','-1 minute') WHERE id='bca_consent'",
+      []);
+    const replay = await executeAssistedSupportEmail(action);
+    expect(replay.dispatched, 'a retry is not a second authority').toBe(false);
+    expect(dispatched).toBe(after);
+  });
+});

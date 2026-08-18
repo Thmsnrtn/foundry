@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { operatingProduct, query } from '../../db/client.js';
 import { invoke } from '../outbound/gateway.js';
 import { recordReconstructionClaim } from './reconstruction.js';
 
@@ -41,15 +41,17 @@ async function currentAuthority(actionId:string):Promise<Record<string,unknown>|
       -- permission the founder already gave; it does not ask them to give it
       -- again, and a genuine revocation is still a revocation.
       --
-      -- ONLY scp_status is checked here. A first version also tested
-      -- status <> 'archived', which reads as load-bearing and is not: the
-      -- outbound gateway's kill switch already refuses any product whose
-      -- status is not 'active'. Mutation showed deleting that line changed
-      -- nothing, and a predicate that cannot fail is worse than no predicate,
-      -- because the next reader believes it. scp_status genuinely is
-      -- load-bearing: cancellation sets it and leaves status alone, so the
-      -- kill switch never sees a cancelled subscription at all.
-      AND COALESCE(p.scp_status,'') <> 'paused'
+      -- THE CANONICAL PREDICATE, not a hand-copied piece of it. This tested
+      -- scp_status alone, and that was right until migration 145 gave
+      -- commercial entitlement its own field: a cancelled subscription now
+      -- writes entitlement_paused_at and leaves scp_status alone, so this
+      -- predicate stopped seeing the exact case it was written for. A copied
+      -- fragment of a rule drifts the moment the rule grows another axis.
+      --
+      -- operatingProduct() answers "may the institution act for this company
+      -- now" across all three axes, and is the same predicate the gateway, the
+      -- job work-lists and the scheduler read.
+      AND ${operatingProduct('p')}
       AND r.state='assisting'
       AND r.authority_ref='autonomy_consent:' || a.id
       AND a.product_id=oa.product_id AND a.responsibility_id=r.id AND a.capability=r.capability
