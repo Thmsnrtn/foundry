@@ -8,6 +8,7 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import {
   generateCompressedWeeklyBrief,
   getLatestCompressedBrief,
@@ -220,7 +221,8 @@ weeklyBrief.get('/brief', async (c) => {
 
 // ─── POST /brief/generate ─────────────────────────────────────────────────────
 
-weeklyBrief.post('/brief/generate', async (c) => {
+weeklyBrief.post('/brief/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Generate Brief', undefined, c);
 

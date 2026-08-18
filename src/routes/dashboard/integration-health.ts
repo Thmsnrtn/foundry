@@ -8,6 +8,7 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import {
   getIntegrationHealth,
   getHealthSummary,
@@ -273,7 +274,8 @@ integrationHealth.get('/integrations/health/signals', async (c) => {
 
 // ─── POST /integrations/health/process — Manually trigger pending processing ──
 
-integrationHealth.post('/integrations/health/process', async (c) => {
+integrationHealth.post('/integrations/health/process',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'integrations', 'Integration Health', undefined, c);
 

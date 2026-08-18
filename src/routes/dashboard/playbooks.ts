@@ -12,6 +12,7 @@ import { generatePlaybook, getPlaybooks } from '../../services/playbook/generato
 import { getRemediationSummary } from '../../services/scp/remediation.js';
 import type { PlaybookType } from '../../types/index.js';
 import { requireTier } from '../../middleware/tier-gate.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const playbookRoutes = new Hono<AuthEnv>();
 
@@ -171,7 +172,8 @@ playbookRoutes.get('/playbooks/:type', async (c) => {
 
 // Markdown export of a generated playbook — the one export destination that
 // needs no external service.
-playbookRoutes.post('/playbooks/:type/export', async (c) => {
+playbookRoutes.post('/playbooks/:type/export',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const type = c.req.param('type') as PlaybookType;
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
@@ -202,7 +204,8 @@ playbookRoutes.post('/playbooks/:type/export', async (c) => {
   });
 });
 
-playbookRoutes.post('/playbooks/:type/generate', async (c) => {
+playbookRoutes.post('/playbooks/:type/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const type = c.req.param('type') as PlaybookType;
   const ctx = await buildSharedContext(c);
@@ -221,7 +224,8 @@ playbookRoutes.post('/playbooks/:type/generate', async (c) => {
 
 // ─── POST /playbooks/:type/regenerate ────────────────────────────────────────
 
-playbookRoutes.post('/playbooks/:type/regenerate', async (c) => {
+playbookRoutes.post('/playbooks/:type/regenerate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const type = c.req.param('type') as PlaybookType;
   const ctx = await buildSharedContext(c);

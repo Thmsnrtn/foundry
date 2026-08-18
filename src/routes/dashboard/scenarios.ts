@@ -14,6 +14,7 @@ import {
   getLatestScenarios,
 } from '../../services/scp/forecasting/runway.js';
 import { getActiveTargetForecasts } from '../../services/scp/forecasting/targets.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const scenarios = new Hono<AuthEnv>();
 
@@ -257,7 +258,8 @@ scenarios.get('/scenarios', async (c) => {
 
 // ─── POST /scenarios/regenerate — Trigger regeneration ────────────────────────
 
-scenarios.post('/scenarios/regenerate', async (c) => {
+scenarios.post('/scenarios/regenerate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'scenarios', 'Scenario Modeling', undefined, c);
 

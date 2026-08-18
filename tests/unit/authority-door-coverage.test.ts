@@ -91,12 +91,14 @@ beforeAll(async () => {
      VALUES (?, ?, 'atlas', 'Atlas', 0, 1)`, [nanoid(), P]);
 
   const [{ agentRoutes }, { letterRoutes }, { ambientRoutes }, { privacySettings },
-    { agentExperimentRoutes }] = await Promise.all([
+    { agentExperimentRoutes }, { memoryGraph }, { connectionRoutes }] = await Promise.all([
       import('../../src/routes/dashboard/agents.js'),
       import('../../src/routes/dashboard/letter.js'),
       import('../../src/routes/dashboard/ambient.js'),
       import('../../src/routes/dashboard/privacy.js'),
       import('../../src/routes/dashboard/agents-experiments.js'),
+      import('../../src/routes/dashboard/memory.js'),
+      import('../../src/routes/dashboard/connections.js'),
     ]);
 
   app = new Hono();
@@ -110,6 +112,8 @@ beforeAll(async () => {
   app.route('/', ambientRoutes);
   app.route('/', privacySettings);
   app.route('/', agentExperimentRoutes);
+  app.route('/', memoryGraph);
+  app.route('/', connectionRoutes);
 });
 
 // A refusal is a 403 from the guard; anything else means the request reached
@@ -282,4 +286,34 @@ describe('an experiment runs on real customers, so it asks too', () => {
     const res = await post(`/products/${P}/agents/experiments/exp_x/start`, 'nobody_at_all');
     expect(res.status).toBe(REFUSED);
   });
+});
+
+// ── spending the company's money is not watching ────────────────────────────
+
+describe('a paid model run asks who may spend', () => {
+  // ~54 mutating routes reached a paid model call with no capability check at
+  // all: every /synthesize, /generate, /scan, /assess, the institution chat,
+  // voice transcription, the weekly brief. Any active member — an investor
+  // observer included — could spend the company's AI budget by pressing a
+  // button. Three representative doors, one per shape.
+  for (const path of ['/memory/archaeology', '/memory/counterfactuals', '/ambient/audio/generate']) {
+    it(`refuses an observer at ${path}`, async () => {
+      expect((await post(path, OBSERVER)).status).toBe(REFUSED);
+    });
+
+    it(`admits a member who holds can_trigger_actions at ${path}`, async () => {
+      expect((await post(path, MANAGER)).status).not.toBe(REFUSED);
+    });
+  }
+});
+
+describe('and the brake stays easier to reach than the accelerator', () => {
+  // Every route that only LOWERS what Foundry may do stays open. Asserted so a
+  // future sweep does not quietly take them with it.
+  for (const path of ['/autopilot/panic', '/connections/mailer/disconnect',
+    '/connections/grants/nonexistent/revoke']) {
+    it(`leaves ${path} reachable by an observer`, async () => {
+      expect((await post(path, OBSERVER)).status).not.toBe(REFUSED);
+    });
+  }
 });

@@ -11,6 +11,7 @@ import { getLayoutContext } from './_shared.js';
 import { getPageHints, getDimensionHints, generateDimensionHints } from '../../services/ux/hints.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import type { AuditScore } from '../../types/index.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const auditRoutes = new Hono<AuthEnv>();
 
@@ -73,7 +74,8 @@ auditRoutes.get('/products/:id/audit', async (c) => {
   return c.html(dashboardLayout(ctx, content));
 });
 
-auditRoutes.post('/products/:id/audit/run', async (c) => {
+auditRoutes.post('/products/:id/audit/run',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);

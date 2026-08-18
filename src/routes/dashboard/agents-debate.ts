@@ -14,6 +14,7 @@ import {
   listDebateSessions,
 } from '../../services/scp/debate/orchestrator.js';
 import type { SynthesisOutput } from '../../services/scp/agents/synthesizer.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentsDebate = new Hono<AuthEnv>();
 
@@ -367,7 +368,8 @@ agentsDebate.get('/agents/debate/:date', async (c) => {
 
 // ─── POST /agents/debate/run — Trigger debate for today ──────────────────────
 
-agentsDebate.post('/agents/debate/run', async (c) => {
+agentsDebate.post('/agents/debate/run',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Debate & Synthesis', undefined, c);
 

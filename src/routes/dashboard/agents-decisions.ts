@@ -11,6 +11,7 @@ import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
 import { getFluency, explain, extractPremiseCondition, metricLabel, metricValue } from '../../services/ux/fluency.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentsDecisions = new Hono<AuthEnv>();
 
@@ -233,7 +234,8 @@ agentsDecisions.get('/agents/decisions', async (c) => {
 
 // ─── POST /strategic-decisions ────────────────────────────────────────────────
 
-agentsDecisions.post('/agents/decisions', async (c) => {
+agentsDecisions.post('/agents/decisions',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'strategic-decisions', 'Strategic Decisions', undefined, c);
   if (!ctx.productId) return c.redirect('/agents/decisions');
@@ -288,7 +290,8 @@ agentsDecisions.post('/agents/decisions', async (c) => {
 });
 
 // ─── POST /strategic-decisions/premise/:id/revisit (Memory Kernel) ────────────
-agentsDecisions.post('/agents/decisions/premise/:id/revisit', async (c) => {
+agentsDecisions.post('/agents/decisions/premise/:id/revisit',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'strategic-decisions', 'Strategic Decisions', undefined, c);
   if (!ctx.productId) return c.redirect('/agents/decisions');

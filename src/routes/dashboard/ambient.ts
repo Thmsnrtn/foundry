@@ -154,7 +154,8 @@ function segment(label: string, text: string): string {
 
 // ─── POST /ambient/audio/generate ─────────────────────────────────────────────
 
-ambientRoutes.post('/ambient/audio/generate', async (c) => {
+ambientRoutes.post('/ambient/audio/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'ambient', 'Audio Brief', undefined, c);
   if (!ctx.productId) return c.redirect('/ambient');
@@ -255,7 +256,8 @@ ambientRoutes.get('/ambient/email', async (c) => {
 
 // ─── POST /ambient/email/generate ─────────────────────────────────────────────
 
-ambientRoutes.post('/ambient/email/generate', async (c) => {
+ambientRoutes.post('/ambient/email/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'ambient', 'Email Digest', undefined, c);
   if (!ctx.productId) return c.redirect('/ambient');
@@ -476,7 +478,8 @@ ambientRoutes.get('/ambient/voice', async (c) => {
 
 // ─── POST /ambient/voice/process ──────────────────────────────────────────────
 
-ambientRoutes.post('/ambient/voice/process', async (c) => {
+ambientRoutes.post('/ambient/voice/process',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'ambient', 'Voice Reply', undefined, c);
   if (!ctx.productId) return c.json({ error: 'No product selected' }, 400);

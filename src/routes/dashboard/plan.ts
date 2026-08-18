@@ -10,6 +10,7 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const planRoutes = new Hono<AuthEnv>();
 
@@ -159,7 +160,8 @@ import { callOpus, parseJSONResponse } from '../../services/ai/client.js';
 import { computeSignal } from '../../services/signal.js';
 import { getActiveStressors, getLatestMetrics } from '../../db/client.js';
 
-planRoutes.post('/plan/generate', async (c) => {
+planRoutes.post('/plan/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const products = await query('SELECT id, name FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
   if (products.rows.length === 0) return c.redirect('/plan');

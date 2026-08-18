@@ -134,7 +134,35 @@ export function requireOwner() {
   });
 }
 
-/** Ordinary company work, gated on the member's explicit permission. */
+/**
+ * Ordinary company work, gated on the member's explicit permission.
+ *
+ * WHERE `can_trigger_actions` IS NOW APPLIED, and why it is one capability
+ * rather than a new one. It started as "who may approve an outward effect" —
+ * the actions queue. An audit of the dashboard then found ~54 mutating routes
+ * that reach a PAID MODEL CALL with no capability check at all: every
+ * `/synthesize`, `/generate`, `/scan`, `/assess`, the institution chat, voice
+ * transcription, the weekly brief, the strategy and wisdom syntheses. Any
+ * active member — an investor observer included — could spend the company's AI
+ * budget by pressing a button.
+ *
+ * The owner's decision is that spending the company's money is not watching,
+ * and that it is the same permission rather than a sixth column: the thing
+ * being asked in both cases is "may this person make Foundry do something that
+ * costs". Co-founders keep every one of these; advisors and observers lose
+ * them.
+ *
+ * What is deliberately NOT gated, and asserted so it stays that way: anything
+ * that only LOWERS what Foundry may do — the panic switch, pausing an agent,
+ * disconnecting an integration, revoking a grant or a channel, undoing an
+ * autopilot action — and attention telemetry, which spends nothing. Making the
+ * brake harder to reach than the accelerator would be the same defect wearing a
+ * safety label.
+ *
+ * Two routes ask this inline instead, because their company arrives in the
+ * REQUEST BODY: a guard resolving the company from the path or the selection
+ * would authorize one company while the handler acted on another.
+ */
 export function requireCompanyCapability(capability: MemberCapability) {
   return createMiddleware(async (c, next) => {
     const { userId, productId } = await actingSubject(c);

@@ -20,6 +20,7 @@ import {
   getAgentCostBreakdown,
 } from '../../services/financial/economics.js';
 import { getExperimentSummary } from '../../services/scp/experiments.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentStrategyRoutes = new Hono<AuthEnv>();
 
@@ -62,7 +63,8 @@ agentStrategyRoutes.get('/products/:id/agents/strategy', async (c) => {
 
 // ─── POST /products/:id/agents/strategy/synthesize ───────────────────────────
 
-agentStrategyRoutes.post('/products/:id/agents/strategy/synthesize', async (c) => {
+agentStrategyRoutes.post('/products/:id/agents/strategy/synthesize',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
 
@@ -331,7 +333,8 @@ agentStrategyRoutes.get('/agents/strategy', async (c) => {
   return c.redirect(`/products/${ctx.productId}/agents/strategy`);
 });
 
-agentStrategyRoutes.post('/agents/strategy/synthesize', async (c) => {
+agentStrategyRoutes.post('/agents/strategy/synthesize',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await import('./_shared.js').then(m => m.getLayoutContext(founder, 'agents-strategy', 'Strategy'));
   if (!ctx.productId) return c.redirect('/dashboard');

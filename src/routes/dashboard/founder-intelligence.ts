@@ -15,6 +15,7 @@ import {
   shouldWarnBeforeDecision,
 } from '../../services/scp/founder/decision-quality.js';
 import { getDecisionQualityTrends } from '../../services/scp/founder/decision-tracker.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const founderIntelligence = new Hono<AuthEnv>();
 
@@ -290,7 +291,8 @@ founderIntelligence.get('/founder/state', async (c) => {
 
 // ─── POST /founder/state/assess ───────────────────────────────────────────────
 
-founderIntelligence.post('/founder/state/assess', async (c) => {
+founderIntelligence.post('/founder/state/assess',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'founder', 'Founder Decision Intelligence', undefined, c);
 

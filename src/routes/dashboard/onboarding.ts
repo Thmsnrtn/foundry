@@ -31,6 +31,7 @@ import { generateDimensionHints } from '../../services/ux/hints.js';
 import { nanoid } from 'nanoid';
 import { encrypt, decrypt, isEncrypted } from '../../services/encryption.js';
 import { setCookie, getCookie, deleteCookie } from 'hono/cookie';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const onboardingRoutes = new Hono<AuthEnv>();
 
@@ -386,6 +387,10 @@ onboardingRoutes.get('/onboarding/audit', async (c) => {
 // step-by-step progress; when it (and the first briefing) finish, the poll
 // redirects to /dashboard?tour=1 — so the founder never lands on an empty
 // flagship card (Phase 1.1 + 1.2).
+// The audit is a paid model run, so it asks who may spend — but INLINE, because
+// the company arrives in the request body. A router guard resolves the company
+// from the path or the selection, so it would have authorized one company while
+// the handler audited another.
 onboardingRoutes.post('/onboarding/run-audit', async (c) => {
   const founder = c.get('founder');
   const body = await parseBody(c) as { product_id?: string };
@@ -396,7 +401,11 @@ onboardingRoutes.post('/onboarding/run-audit', async (c) => {
     return c.json({ error: 'product_id is required' }, 400);
   }
 
-  const prodResult = await query('SELECT * FROM products WHERE id = ? AND owner_id = ?', [body.product_id, founder.id]);
+  const { memberMay } = await import('../../services/team/members.js');
+  if (!(await memberMay(body.product_id, founder.id, 'can_trigger_actions'))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+  const prodResult = await query('SELECT * FROM products WHERE id = ?', [body.product_id]);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
   const product = prodResult.rows[0] as Record<string, unknown>;

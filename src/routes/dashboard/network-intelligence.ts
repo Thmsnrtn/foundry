@@ -9,6 +9,7 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import {
   getCohortPatterns,
   getCohortBenchmarks,
@@ -258,7 +259,8 @@ networkIntelligence.get('/network', async (c) => {
 
 // ─── POST /network/scan ───────────────────────────────────────────────────────
 
-networkIntelligence.post('/network/scan', async (c) => {
+networkIntelligence.post('/network/scan',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'network', 'Network Intelligence', undefined, c);
 

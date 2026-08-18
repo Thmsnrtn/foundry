@@ -101,7 +101,8 @@ productRoutes.post('/products/:id/dna', requireTier('wisdom'),
 // Draft the DNA fields from the founder's existing assets (README, metadata)
 // with one AI call. Only fills empty fields — never overwrites the founder's
 // own words (Phase 1.6).
-productRoutes.post('/products/:id/dna/autodraft', requireTier('wisdom'), async (c) => {
+productRoutes.post('/products/:id/dna/autodraft',
+  requireCompanyCapability('can_trigger_actions'), requireTier('wisdom'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);

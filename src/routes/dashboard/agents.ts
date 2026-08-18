@@ -464,7 +464,8 @@ agentRoutes.get('/:name', async (c) => {
 
 // ─── POST /agents/:name/run — Manual Trigger ──────────────────────────────────
 
-agentRoutes.post('/:name/run', async (c) => {
+agentRoutes.post('/:name/run',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const name = c.req.param('name');
 

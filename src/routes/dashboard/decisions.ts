@@ -419,7 +419,8 @@ decisionRoutes.post('/decisions/:id/undo-auto', async (c) => {
 });
 
 // ─── POST /decisions/:id/ghost — fork reality (Ghost Company simulation) ─────
-decisionRoutes.post('/decisions/:id/ghost', async (c) => {
+decisionRoutes.post('/decisions/:id/ghost',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const owned = await query(
@@ -437,7 +438,8 @@ decisionRoutes.post('/decisions/:id/ghost', async (c) => {
 });
 
 // ─── POST /decisions/:id/redteam — summon the adversarial pre-mortem ─────────
-decisionRoutes.post('/decisions/:id/redteam', async (c) => {
+decisionRoutes.post('/decisions/:id/redteam',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const owned = await query(
@@ -511,7 +513,8 @@ decisionRoutes.post('/decisions/:id/resolve',
 
 // ─── Record Outcome ───────────────────────────────────────────────────────────
 
-decisionRoutes.post('/decisions/:id/outcome', async (c) => {
+decisionRoutes.post('/decisions/:id/outcome',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const body = await c.req.json().catch(() => null) as { outcome: string; valence?: number } | null;
@@ -531,7 +534,8 @@ decisionRoutes.post('/decisions/:id/outcome', async (c) => {
 
 // ─── Reflect: AI Clarity on Uncertainty ──────────────────────────────────────
 
-decisionRoutes.post('/api/decisions/:id/reflect', async (c) => {
+decisionRoutes.post('/api/decisions/:id/reflect',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const body = await c.req.json().catch(() => null) as { uncertainty: string } | null;

@@ -833,6 +833,11 @@ letterRoutes.post('/letter/judgments/:judgmentId/disposition', async (c) => {
 // Attention memory capture — the founder's explicit reaction to a surfaced
 // item (Jarvis slice 1). Accepts form posts (Later button) and JSON beacons
 // (Decide click). Admission control lives in recordAttention.
+// Deliberately ungated: this records that the founder OPENED, acted on or
+// dismissed a letter item. It is attention telemetry, spends nothing and
+// changes nothing about the company — refusing an observer's "I read this"
+// would be over-guarding, and its company arrives in the body, where a guard
+// resolving the company from the path or the selection could not see it.
 letterRoutes.post('/letter/attention/:decisionId', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('decisionId');
@@ -1023,7 +1028,8 @@ letterRoutes.get('/talk', async (c) => {
   return c.html(dashboardLayout(ctx, content));
 });
 
-letterRoutes.post('/talk/message', async (c) => {
+letterRoutes.post('/talk/message',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'talk', 'Talk to the company', undefined, c);
   if (!ctx.productId) return c.json({ error: 'No product' }, 400);
@@ -1086,7 +1092,8 @@ letterRoutes.post('/letter/evidence/:requestId/defer', async (c) => {
 // never inferred from prose — so an ambiguous message stays a conversation
 // instead of quietly becoming company ontology. Reporting is not permission:
 // what it creates is a visible responsibility with everything still to learn.
-letterRoutes.post('/letter/company/report', async (c) => {
+letterRoutes.post('/letter/company/report',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1124,7 +1131,8 @@ letterRoutes.post('/letter/company/report', async (c) => {
 //
 // Foundry may not answer this question about itself. The database refuses any
 // report attributed to the institution.
-letterRoutes.post('/letter/effects/:effectId/outcome', async (c) => {
+letterRoutes.post('/letter/effects/:effectId/outcome',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1157,7 +1165,8 @@ letterRoutes.post('/letter/effects/:effectId/outcome', async (c) => {
 // it to exact current authority and revalidates again before dispatch. Merging
 // them would make authoring imply sending, which is the separation the whole
 // boundary exists to keep.
-letterRoutes.post('/letter/responsibilities/:responsibilityId/notice', async (c) => {
+letterRoutes.post('/letter/responsibilities/:responsibilityId/notice',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1184,7 +1193,8 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/notice', async (c)
   return c.redirect('/letter');
 });
 
-letterRoutes.post('/letter/company/observation-channel', async (c) => {
+letterRoutes.post('/letter/company/observation-channel',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1219,7 +1229,8 @@ letterRoutes.post('/letter/company/observation-channel', async (c) => {
 // two results — never parsed out of prose.
 //
 // Watching is not permission.
-letterRoutes.post('/letter/responsibilities/:responsibilityId/watch-check', async (c) => {
+letterRoutes.post('/letter/responsibilities/:responsibilityId/watch-check',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1239,7 +1250,8 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/watch-check', asyn
   return c.redirect('/letter');
 });
 
-letterRoutes.post('/letter/responsibilities/:responsibilityId/watch', async (c) => {
+letterRoutes.post('/letter/responsibilities/:responsibilityId/watch',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1261,7 +1273,8 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/watch', async (c) 
 // Stage one of the founder-initiated fact path: show, do not store. This route
 // writes nothing at all — it renders the exact sentence Foundry would remember
 // and asks the founder to confirm it. Cancelling is simply not confirming.
-letterRoutes.post('/letter/facts/preview', async (c) => {
+letterRoutes.post('/letter/facts/preview',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1310,7 +1323,8 @@ letterRoutes.post('/letter/facts/preview', async (c) => {
 // its scope are all re-resolved server-side against what the institution is
 // actually waiting on, so a replayed or hand-edited submission for a fact that
 // is already grounded resolves to nothing.
-letterRoutes.post('/letter/facts/confirm', async (c) => {
+letterRoutes.post('/letter/facts/confirm',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1376,7 +1390,8 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/revoke'
 // The founder writes the reply. Foundry carries it — nothing more. Recipient,
 // responsibility, capability, consent and scope are all resolved server-side
 // from the message and the channel that owns it, so the form has one field.
-letterRoutes.post('/letter/messages/:messageId/reply', async (c) => {
+letterRoutes.post('/letter/messages/:messageId/reply',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1392,7 +1407,8 @@ letterRoutes.post('/letter/messages/:messageId/reply', async (c) => {
 
 // Planning binds the reply to exact current authority. It sends nothing — the
 // send is a separate, separately revalidated step.
-letterRoutes.post('/letter/replies/:proposalId/plan', async (c) => {
+letterRoutes.post('/letter/replies/:proposalId/plan',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1433,7 +1449,8 @@ letterRoutes.post('/letter/replies/:actionId/send',
 // current authority. Planning re-resolves the grant from scratch and refuses
 // when it is absent, so a notice written before permission was given cannot be
 // carried by having been written.
-letterRoutes.post('/letter/notices/:noticeId/carry', async (c) => {
+letterRoutes.post('/letter/notices/:noticeId/carry',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);
@@ -1468,7 +1485,8 @@ letterRoutes.post('/letter/channels/:channelId/revoke', async (c) => {
 // The founder tells Foundry which way customers reach them about a
 // responsibility, and receives the key that channel authenticates with. The
 // binding is what lets a message be attributed without guessing from its text.
-letterRoutes.post('/letter/responsibilities/:responsibilityId/channel', async (c) => {
+letterRoutes.post('/letter/responsibilities/:responsibilityId/channel',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
   if (!ctx.productId) return c.text('No product', 400);

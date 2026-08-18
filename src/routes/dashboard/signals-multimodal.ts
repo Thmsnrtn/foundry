@@ -8,6 +8,7 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { getLayoutContext } from './_shared.js';
 import { dashboardLayout } from '../../views/layout.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import {
   ingestTranscript,
   analyzeTranscript,
@@ -252,7 +253,8 @@ multimodalSignals.get('/signals/multimodal/transcript/new', async (c) => {
 
 // ─── POST /signals/multimodal/transcript ──────────────────────────────────────
 
-multimodalSignals.post('/signals/multimodal/transcript', async (c) => {
+multimodalSignals.post('/signals/multimodal/transcript',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'signals-multimodal', 'Add Transcript', undefined, c);
   if (!ctx.productId) return c.redirect('/products');
@@ -418,7 +420,8 @@ multimodalSignals.get('/signals/multimodal/job-signal/new', async (c) => {
 
 // ─── POST /signals/multimodal/job-signal ──────────────────────────────────────
 
-multimodalSignals.post('/signals/multimodal/job-signal', async (c) => {
+multimodalSignals.post('/signals/multimodal/job-signal',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'signals-multimodal', 'Add Job Signal', undefined, c);
   if (!ctx.productId) return c.redirect('/products');
@@ -474,7 +477,8 @@ multimodalSignals.get('/signals/multimodal/calendar/new', async (c) => {
 
 // ─── POST /signals/multimodal/calendar ────────────────────────────────────────
 
-multimodalSignals.post('/signals/multimodal/calendar', async (c) => {
+multimodalSignals.post('/signals/multimodal/calendar',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'signals-multimodal', 'Log Week', undefined, c);
   if (!ctx.productId) return c.redirect('/products');
@@ -499,7 +503,8 @@ multimodalSignals.post('/signals/multimodal/calendar', async (c) => {
 
 // ─── POST /signals/multimodal/calendar/analyze ───────────────────────────────
 
-multimodalSignals.post('/signals/multimodal/calendar/analyze', async (c) => {
+multimodalSignals.post('/signals/multimodal/calendar/analyze',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'signals-multimodal', 'Time Analysis', undefined, c);
   if (!ctx.productId) return c.redirect('/products');
