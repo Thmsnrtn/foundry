@@ -123,11 +123,23 @@ for (const dir of ['src', 'tests']) {
       if (/\bJOIN\b/i.test(rest)) continue;
       const where = rest.slice(rest.search(/\bWHERE\b/i));
       if (!/\bWHERE\b/i.test(rest)) continue;
-      for (const a of where.matchAll(/\b(\w+)\s*(?:=|==)\s*'([^']*)'/g)) {
+      for (const a of where.matchAll(/\b(\w+)\s*(?:=|==|!=|<>)\s*'([^']*)'/g)) {
         const key = `${table}.${a[1]}`;
         const values = vocab.get(key);
         if (values && !values.has(a[2])) {
           offenders.push(`${rel}:${at(src, m.index)} → ${key} = '${a[2]}' in a WHERE clause (permitted: ${[...values].join(', ')})`);
+        }
+      }
+      // `col IN ('a','b')` — one phantom value in a list is the same defect,
+      // quieter: the other values still match, so the query returns something
+      // and only the missing case is silently absent.
+      for (const a of where.matchAll(/\b(\w+)\s+(?:NOT\s+)?IN\s*\(([^)]*)\)/gi)) {
+        const values = vocab.get(`${table}.${a[1]}`);
+        if (!values) continue;
+        for (const lit of a[2].matchAll(/'([^']*)'/g)) {
+          if (!values.has(lit[1])) {
+            offenders.push(`${rel}:${at(src, m.index)} → ${table}.${a[1]} IN (… '${lit[1]}' …) (permitted: ${[...values].join(', ')})`);
+          }
         }
       }
     }

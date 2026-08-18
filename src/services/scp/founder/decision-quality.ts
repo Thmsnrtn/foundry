@@ -36,7 +36,11 @@ export async function detectBehavioralSignals(productId: string): Promise<Behavi
   const overrideResult = await query(
     `SELECT COUNT(*) as cnt FROM action_executions
      WHERE product_id = ?
-       AND status IN ('cancelled', 'rejected')
+       -- action_executions has no 'rejected' status; that spelling belongs to
+       -- outbound_actions. Half of what this signal is named for was therefore
+       -- never counted, so the rapid-override signal fired only on
+       -- cancellations and under-reported the founder overriding their agents.
+       AND status IN ('cancelled', 'failed')
        AND created_at >= datetime('now', '-24 hours')`,
     [productId]
   );
