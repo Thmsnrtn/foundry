@@ -165,6 +165,12 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     };
 
     c.set('founder', founder);
+    // A human, in a session. No scopes: a person's authority comes from their
+    // role on a company, not from a credential's grant list.
+    const { PRINCIPAL_KEY } = await import('./principal.js');
+    c.set(PRINCIPAL_KEY as never, {
+      kind: 'human_session', founderId: founder.id,
+    } as never);
 
     // Update last_seen_at (fire-and-forget)
     query('UPDATE founders SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [founder.id]).catch((err) => { logger.error(`last_seen_at update failed: ${err}`); });

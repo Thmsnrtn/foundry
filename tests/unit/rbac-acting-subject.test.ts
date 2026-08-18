@@ -90,9 +90,17 @@ describe('a founder can reach their own guarded routes', () => {
     expect(res.status).toBe(200);
   });
 
-  it('still works on the API surface, where the identity comes from a key', async () => {
+  it('does NOT accept an API key in place of the person who minted it', async () => {
+    // `api_keys.created_by` names the founder who created the credential. Read
+    // as the acting user, a scoped, revocable, expiring key issued to post
+    // metrics would satisfy an owner check and could pause the company.
+    //
+    // A role is a property of a person. A key is not a person, even when the
+    // same row names one.
     const res = await apiApp(OWNER, PRODUCT, requireRole('owner')).request('/x', { method: 'POST' });
-    expect(res.status).toBe(200);
+    expect(res.status,
+      'a machine credential must not inherit its creator\'s human authority')
+      .toBe(401);
   });
 });
 
@@ -129,5 +137,85 @@ describe('and the check still refuses everyone it should', () => {
     // not. Returning 401 for both is what hid the original defect.
     const res = await dashboardApp(OWNER, requireRole('owner')).request('/x', { method: 'POST' });
     expect(res.status).toBe(400);
+  });
+});
+
+// =============================================================================
+// §2: transport, principal and authority are three things. These are the
+// adversarial cases — what must NOT be able to satisfy a human role check, and
+// what must not be granted by one.
+// =============================================================================
+
+describe('one principal per request, and no borrowing between kinds', () => {
+  function withPrincipal(principal: unknown, guard: Parameters<Hono['use']>[1]) {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      if (principal) c.set('principal' as never, principal as never);
+      await next();
+    });
+    app.post('/x', guard, (c) => c.json({ ok: true }));
+    return app;
+  }
+
+  it('refuses an ingest credential at a human role check', async () => {
+    const res = await withPrincipal(
+      { kind: 'ingest', credentialId: 'ic_1', productId: PRODUCT, purpose: 'metrics' },
+      requireRole('viewer')).request('/x', withCompany);
+    expect(res.status).toBe(401);
+  });
+
+  it('refuses a service principal at a human role check', async () => {
+    // A job acting for a company is not a person with a role. Its authority is
+    // its declared capability, checked where that is checked.
+    const res = await withPrincipal(
+      { kind: 'service', service: 'scp_scheduler', capability: 'run_agents', productId: PRODUCT },
+      requireRole('viewer')).request('/x', withCompany);
+    expect(res.status).toBe(401);
+  });
+
+  it('refuses an API-key principal even with every scope', async () => {
+    // Scope is authority over the API surface. It is not a human role, and a
+    // wildcard scope must not become one.
+    const res = await withPrincipal(
+      { kind: 'api_key', keyOwnerId: OWNER, productId: PRODUCT, scopes: ['*'] },
+      requireRole('owner')).request('/x', withCompany);
+    expect(res.status).toBe(401);
+  });
+
+  it('refuses a request carrying two mechanisms at once', async () => {
+    // Session cookie AND API key. Picking the stronger is how escalation by
+    // header stuffing works; two principals is not a principal.
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: OWNER } as never);
+      c.set('userId' as never, OWNER as never);
+      c.set('productId' as never, PRODUCT as never);
+      await next();
+    });
+    app.post('/x', requireRole('owner'), (c) => c.json({ ok: true }));
+    const res = await app.request('/x', withCompany);
+    expect(res.status, 'ambiguity fails closed').toBe(401);
+  });
+
+  it('gives a founder session no API scopes', async () => {
+    // The other direction: being the owner does not mint credentials. A human
+    // session carries no scopes at all, so a scope check cannot pass on one.
+    const { principalOf } = await import('../../src/middleware/principal.js');
+    const app = new Hono();
+    let seen: unknown = null;
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: OWNER } as never);
+      seen = principalOf(c);
+      await next();
+    });
+    app.post('/x', (c) => c.json({ ok: true }));
+    await app.request('/x', { method: 'POST' });
+    expect((seen as Record<string, unknown>).kind).toBe('human_session');
+    expect(seen).not.toHaveProperty('scopes');
+  });
+
+  it('fails closed on no principal at all', async () => {
+    const res = await withPrincipal(null, requireRole('viewer')).request('/x', withCompany);
+    expect(res.status).toBe(401);
   });
 });

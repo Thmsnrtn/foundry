@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { createMiddleware } from 'hono/factory';
+import { PRINCIPAL_KEY } from '../../middleware/principal.js';
 import { validateApiKey } from '../../services/rbac/permissions.js';
 
 export interface ApiAuthEnv {
@@ -29,6 +30,16 @@ export const apiKeyAuth = createMiddleware<ApiAuthEnv>(async (c, next) => {
   c.set('productId', result.productId);
   c.set('userId', result.userId);
   c.set('scopes', result.scopes);
+  // What was authenticated: a CREDENTIAL, for one company, with these scopes.
+  // `result.userId` is `api_keys.created_by` — who minted the key, not who is
+  // asking. Declaring the kind is what stops a human role check reading it as
+  // the founder and handing a metrics key the authority to pause the company.
+  c.set(PRINCIPAL_KEY as never, {
+    kind: 'api_key',
+    keyOwnerId: result.userId,
+    productId: result.productId,
+    scopes: result.scopes,
+  } as never);
   await next();
 });
 

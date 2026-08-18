@@ -7,7 +7,7 @@ import { createMiddleware } from 'hono/factory';
 import { hasPermission } from '../services/rbac/permissions.js';
 
 /**
- * WHO IS ACTING, AND ON WHICH COMPANY.
+ * WHO IS ACTING, AS A HUMAN, AND ON WHICH COMPANY.
  *
  * Both guards below read `c.get('productId')` and `c.get('userId')` — context
  * keys that ONLY the public API's key middleware sets. Every dashboard route
@@ -27,16 +27,29 @@ import { hasPermission } from '../services/rbac/permissions.js';
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function actingSubject(c: any): Promise<{ userId?: string; productId?: string }> {
-  const apiUserId = c.get('userId') as string | undefined;
-  const apiProductId = c.get('productId') as string | undefined;
-  if (apiUserId && apiProductId) return { userId: apiUserId, productId: apiProductId };
+  const { principalOf } = await import('./principal.js');
+  const principal = principalOf(c);
 
-  const founder = c.get('founder') as { id?: string } | undefined;
+  // A ROLE IS A PROPERTY OF A PERSON. `requireRole` and `requirePermission` ask
+  // whether the acting HUMAN holds a role on this company, so only a human
+  // session can answer them.
+  //
+  // An API key cannot: `api_keys.created_by` names the founder who minted it,
+  // and reading that as the acting user would let a scoped, revocable metrics
+  // credential pause the company it was issued for. An ingest credential and a
+  // service principal cannot either — neither is a person, and neither has a
+  // role to hold.
+  //
+  // Their own authority is real and checked elsewhere: `requireScope` for API
+  // keys, the intake purpose check for ingest. This guard is not the place, and
+  // conflating them is how a transport became an authority.
+  if (!principal || principal.kind !== 'human_session') return {};
+
   const product = c.get('product') as { id?: string } | undefined;
   const { getCookie } = await import('hono/cookie');
   return {
-    userId: apiUserId ?? founder?.id,
-    productId: apiProductId ?? product?.id ?? getCookie(c, 'foundry_product'),
+    userId: principal.founderId,
+    productId: principal.productId ?? product?.id ?? getCookie(c, 'foundry_product'),
   };
 }
 
