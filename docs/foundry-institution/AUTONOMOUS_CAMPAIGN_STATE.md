@@ -9,7 +9,7 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** through **150**. Schema snapshot current.
-- **Validation:** `npm run check` green — **228 files / 1,930 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Validation:** `npm run check` green — **229 files / 1,937 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -96,6 +96,7 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 49 sender of record ↔ live send | 3 | 1 | high | 2 | 1 | 0 | 0 | 1 |
 | 50 refusal ≠ ambiguity | 1 | 1 | med | 1 | 1 | 0 | 0 | 1 |
 | 51 member permission flags | 3 | 1 | high | 1 | 1 | 0 | 0 | 2 |
+| 52 account deletion ↔ erasure | 2 | 1 | high | 1 | 1 | 0 | 0 | 1 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -564,6 +565,18 @@ by nothing. An `investor_observer` could vote on a company decision, and those
 votes feed the co-founder alignment score. The columns were not decoration:
 `can_trigger_actions` defaults FALSE while the others default TRUE, which is a
 considered position written into the schema and then never asked.
+
+**Batch 52 found the same shape once more, in the second erasure door.** The
+Clerk `user.deleted` webhook deleted by hand — `DELETE FROM products` per
+company, then `DELETE FROM founders` — and raises, for the same reason the
+erasure path did before batch 41: seven foreign keys into products'
+descendants are `ON DELETE NO ACTION`. Account deletion via the identity
+provider has never completed for a company that ever had a chat message, and
+left no record of having been attempted. Had it succeeded it would have deleted
+the evidence that the erasure happened, the financial records that must survive
+it, and the idempotency keys that stop a retry re-sending a real message. **When
+a path is fixed, look for the other door onto the same room** — this campaign
+has now found three: the outward effect, the approval, and the erasure.
 
 **And it surfaced a reachability gap that needs an owner, not a fix.** There are
 two role systems with no edge between them. `account_roles` is what
