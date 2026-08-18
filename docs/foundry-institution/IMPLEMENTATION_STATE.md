@@ -16,19 +16,19 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `d777b05` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `18e0b78` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
-| Migrations | **164**, applied lexically at startup; schema snapshot current and gated. |
-| Validation | Full suite green: **250 files / 2,186 tests**. `npm run check` green. |
+| Migrations | **201 files**, highest number **165**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
+| Validation | Full suite green: **252 files / 2,207 tests**. `npm run check` green. |
 | Ratchets | Unguarded mutating routes **114** · fabricated test schemas **13** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
 | Public API | **Live.** Scoped, expiring, revocable keys issued from settings. Every v1 route needs a scope a founder can grant; the bidirectional gate enforces both directions. |
 | Consequential effects | Converge through `services/outbound/gateway.ts` — kill switch, classification, budget, idempotency, audit. Inventory in `CONSEQUENTIAL_EFFECTS.json`; untraced count ratcheted to zero. |
 | AI spend | Central OpenRouter client. Atomic reserve → dispatch → settle across global/product/founder scopes. Refuses spend for a company that is not operating, naming which axis stopped it. |
-| Erasure | One implementation. Every table classified with a written reason; an end-to-end sweep proves the ids are gone from every column of every table, allowing only survivors with stated retention dispositions. Account erasure covers the founder's own tables, severing rather than deleting where a second person is named. |
+| Erasure | One implementation. Every table classified with a written reason, on two axes: by product, and — since an adversarial review found the gap — by PERSON across companies they do not own. An end-to-end sweep seeds every table and matches by containment, so an id inside a composite key is visible; only survivors with stated retention dispositions are allowed. Deletes where the row is wholly the person's, severs where it is the company's record naming a person. **Five tables are deliberately untouched pending an owner decision** (`OWNER_DECISIONS_PENDING` §10) — company assets on NOT NULL columns — which is a live gap, not a footnote. |
 
 ## Reachability caveats that still hold
 

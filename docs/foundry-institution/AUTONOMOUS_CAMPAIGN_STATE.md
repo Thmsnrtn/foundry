@@ -25,8 +25,8 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** through **164**. Schema snapshot current.
-- **Validation:** full suite green — **250 files / 2,186 tests**. `npm run check`
+- **Migrations:** 201 files, highest **165**. Ordering now gated. Snapshot current.
+- **Validation:** full suite green — **252 files / 2,207 tests**. `npm run check`
   green; all ratchets hold.
 - **Ratchets:** unguarded mutating routes **114** (population corrected from a
   quarter of the surface — see below); fabricated test schemas **13**;
@@ -34,9 +34,36 @@ inherited list because it was inherited.
 
 ## Active work
 
-None in flight. Last tranche closed and pushed at `d777b05`.
+None in flight. Last tranche closed and pushed at `18e0b78`.
 
-## What the last tranche established
+## What the transition tranche established
+
+The development operating model is now on disk
+(`DEVELOPMENT_INSTITUTION.md`) and the bootstrap was **tested rather than
+asserted** — a reader with no context read the start-here set and reported what
+it could not learn. That found a false owner-queue claim, an unreproducible
+"169 invariants" figure, no way to run anything, no concept→code map, and the
+migration-count discrepancy that turned out to be a real ordering hazard. All
+repaired.
+
+**An adversarial reviewer was then given the erasure completeness claim and
+told to falsify it, and did.** Five structural exemptions in the sweep; three
+closed (containment matching, seeding every table, non-colliding fixture ids),
+and the two it could not close generically are now named tests. It found
+`network_contributions` keying its primary key as `<product_id>_week_<metric>`
+while classified as having "no key of any kind"; `rate_limit_counters` keyed on
+`audit:founder:<id>` while classified as "an opaque bucket"; a `founders`
+disposition with no field list at all, keeping `ppp_factor` and
+`local_currency` — both functions of the `country_code` it deliberately
+cleared; and the largest one, that erasure never reached companies the person
+did not own.
+
+**Method note worth keeping:** two mutations appeared to survive and had simply
+never applied. A find-and-replace that matches nothing produces a passing suite
+indistinguishable from a surviving mutation, and the false conclusion is the
+reassuring one. Assert the mutation applied.
+
+## What the previous tranche established
 
 The lens was *the system has no observation of X, so the system asserts X does
 not exist* — one defect in five places, one of them a gate.
@@ -66,23 +93,28 @@ not exist* — one defect in five places, one of them a gate.
 Provisional, recomputed each cycle, ranked by §4 of `DEVELOPMENT_INSTITUTION.md`.
 Not a backlog — if something better is found, this list loses.
 
-1. **114 unguarded mutating routes**, now visible for the first time. Most are
+1. **The five deferred erasure tables** (`OWNER_DECISIONS_PENDING` §10). A live
+   gap with a recommended answer waiting on the owner. Nothing else about
+   erasure is now unproven that could be proven locally.
+2. **114 unguarded mutating routes**, visible for the first time. Most are
    ordinary company work an active member should be able to do, and gating them
    all would be the opposite defect. The work is deciding, per route, which
    capability it needs or why it needs none — starting with the ones where the
    company arrives in the request body.
-2. **Adapters for the existing intakes.** The shape is proven; breadth is
+3. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing, and the owner's pilot decision gates on it. Prefer a source a real
    responsibility demands over a vendor checklist.
-3. **Three separate fundraising-readiness implementations** writing three
-   tables (`fundraise_readiness`, `fundraising_scores`, and a reader of
-   `funding_readiness`). Same duplicate-truth shape as the investor documents,
-   not yet resolved.
-4. **Seam-reading yield is still positive but narrowing** — the last tranche's
-   best finds came from turning instruments on themselves rather than from
-   reading further subsystem pairs. Watch for the mode change.
-5. More effect kinds, when a real responsibility demands one. Each is a
-   migration, deliberately.
+4. **Remaining findings from the erasure falsification**, ranked low because
+   each is bounded: the sever marker `'erased'` is a fake founder id in a
+   column readers treat as one; `idempotency_keys.dedup_key` embeds a product
+   id by construction; `introductions.feedback_a/b` have no writer anywhere, so
+   the sever's careful reasoning governs columns nothing populates; and
+   `eraseOneProduct` is not atomic, so a failure mid-plan leaves a company
+   paused with `cancelDataDeletion` returning `nothing_pending`.
+5. **Seam-reading yield is narrowing.** The last two tranches' best finds came
+   from turning instruments on themselves and from an independent falsifier —
+   not from reading further subsystem pairs. Treat adversarial review as the
+   higher-yield mode until that stops being true.
 
 ## Blocked — needs a design decision, not effort
 

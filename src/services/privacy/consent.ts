@@ -374,6 +374,17 @@ const RETAINED_ON_ERASURE: Record<string, RetentionDisposition> = {
     // company ever did, plus an IP address, forever.
     keepRows: "event_type IN ('data_deletion_scheduled','data_deletion_completed')",
     redactColumns: ['ip_address'],
+    // AND `actor_id` STOPS NAMING THE ERASED PERSON — not here, but in the
+    // cross-company sever, which nulls it wherever it holds this founder.
+    //
+    // That looks like it contradicts the grace-window rule that WHO ASKED is
+    // the entire point of this trail, and it does not: both are true at
+    // different times. During the thirty days the person still exists, the row
+    // is intact, and `pendingDeletion` reads `actor_id` to tell them who
+    // scheduled it. Once the erasure completes there is no person to name, and
+    // this trail's stated purpose is that the erasure HAPPENED — not who they
+    // were. A retention that keeps a personal identifier forever needs to say
+    // so; this one no longer keeps it.
   },
   products: {
     category: 'referential_integrity',
