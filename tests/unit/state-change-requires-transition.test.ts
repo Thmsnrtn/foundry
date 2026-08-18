@@ -265,3 +265,139 @@ describe('a disposition cannot be written around its ledger', () => {
     expect((await disposed(id)).disposition).toBe('active');
   });
 });
+
+// ── the six the gate found ──────────────────────────────────────────────────
+
+describe('a candidate cannot be promoted around its owner', () => {
+  async function candidate(): Promise<string> {
+    const id = nanoid();
+    await query(
+      `INSERT INTO responsibility_candidates
+         (id, product_id, convergence_key, proposed_responsibility, evidence_refs_json,
+          derivation_method, rationale, epistemic_status, observed_at)
+       VALUES (?, ?, ?, 'Answer support mail', ?, 'observation', 'seen twice', 'known', datetime('now'))`,
+      [id, P, id, JSON.stringify([{ kind: 'signal_event', id: evidenceRef.split(':')[1] }])]);
+    return id;
+  }
+
+  const statusOfCandidate = async (id: string): Promise<string> => String(((await query(
+    'SELECT status FROM responsibility_candidates WHERE id = ?', [id]))
+    .rows[0] as Record<string, unknown>).status);
+
+  it('refuses a direct promotion', async () => {
+    // Promotion turns a candidate into a real responsibility, and the lifecycle
+    // guard is where that means something: the decision must be grounded in an
+    // authenticated owner whose ref matches the company's actual owner. A plain
+    // UPDATE promotes it with no founder anywhere near the decision. That is not
+    // a missing audit trail — it is a missing authorisation.
+    const id = await candidate();
+    await expect(query(
+      `UPDATE responsibility_candidates SET status = 'promoted' WHERE id = ?`, [id]))
+      .rejects.toThrow(/no_decision/);
+    expect(await statusOfCandidate(id)).toBe('pending');
+  });
+
+  it('refuses a direct rejection too', async () => {
+    const id = await candidate();
+    await expect(query(
+      `UPDATE responsibility_candidates SET status = 'rejected' WHERE id = ?`, [id]))
+      .rejects.toThrow(/no_decision/);
+  });
+
+  it('accepts the move the decision ledger justifies', async () => {
+    const id = await candidate();
+    await query(
+      `INSERT INTO responsibility_candidate_decisions
+         (id, candidate_id, product_id, decision, actor_ref, grounding_mechanism, grounding_evidence_json)
+       VALUES (?, ?, ?, 'rejected', ?, 'authenticated_owner', '[]')`,
+      [nanoid(), id, P, `founder:${OWNER}`]);
+    expect(await statusOfCandidate(id)).toBe('rejected');
+  });
+
+  it('knows that reconsidering returns a candidate to pending', async () => {
+    // The decision and the status it produces are not the same word for one of
+    // the four. A guard that assumed they were would refuse the legitimate path.
+    const id = await candidate();
+    await query(
+      `INSERT INTO responsibility_candidate_decisions
+         (id, candidate_id, product_id, decision, actor_ref, grounding_mechanism, grounding_evidence_json)
+       VALUES (?, ?, ?, 'rejected', ?, 'authenticated_owner', '[]')`,
+      [nanoid(), id, P, `founder:${OWNER}`]);
+    await query(
+      `INSERT INTO responsibility_candidate_decisions
+         (id, candidate_id, product_id, decision, actor_ref, grounding_mechanism, grounding_evidence_json)
+       VALUES (?, ?, ?, 'reconsidered', ?, 'authenticated_owner', '[]')`,
+      [nanoid(), id, P, `founder:${OWNER}`]);
+    expect(await statusOfCandidate(id)).toBe('pending');
+  });
+});
+
+describe('the proof behind a state has to name something real', () => {
+  it('refuses an authority that names no consent', async () => {
+    const id = await responsibility('unknown');
+    await expect(query(
+      `UPDATE institutional_responsibilities SET authority_ref = 'autonomy_consent:invented' WHERE id = ?`,
+      [id])).rejects.toThrow(/authority_invalid/);
+  });
+
+  it('refuses evidence that names no observation', async () => {
+    const id = await responsibility('unknown');
+    await expect(query(
+      `UPDATE institutional_responsibilities SET evidence_ref = 'signal_event:invented' WHERE id = ?`,
+      [id])).rejects.toThrow(/evidence_invalid/);
+  });
+
+  it('refuses an outcome that names no completed execution', async () => {
+    const id = await responsibility('unknown');
+    await expect(query(
+      `UPDATE institutional_responsibilities SET outcome_ref = 'action_execution:invented' WHERE id = ?`,
+      [id])).rejects.toThrow(/outcome_invalid/);
+  });
+
+  it('allows a re-grant to point at the authority that is actually current', async () => {
+    // The legitimate direct write, and the reason these three columns are
+    // guarded differently from `state`: a responsibility already Assisting is
+    // not re-admitted when its permission is renewed, and the transition ledger
+    // would refuse an assisting->assisting move as a no-change.
+    const id = await responsibility('unknown');
+    const consentId = nanoid();
+    await query(
+      `INSERT INTO autonomy_consents
+         (id, founder_id, product_id, capability, from_mode, to_mode, disclosure_version)
+       VALUES (?, ?, ?, 'customer_support', 'suggest', 'act', 'test')`,
+      [consentId, OWNER, P]);
+    await query(
+      `UPDATE institutional_responsibilities SET authority_ref = ? WHERE id = ?`,
+      [`autonomy_consent:${consentId}`, id]);
+    const row = (await query(
+      'SELECT authority_ref FROM institutional_responsibilities WHERE id = ?', [id]))
+      .rows[0] as Record<string, unknown>;
+    expect(row.authority_ref).toBe(`autonomy_consent:${consentId}`);
+  });
+
+  it('refuses a consent for a different capability than the responsibility has', async () => {
+    const id = await responsibility('unknown');
+    const consentId = nanoid();
+    await query(
+      `INSERT INTO autonomy_consents
+         (id, founder_id, product_id, capability, from_mode, to_mode, disclosure_version)
+       VALUES (?, ?, ?, 'operations', 'suggest', 'act', 'test')`,
+      [consentId, OWNER, P]);
+    await expect(query(
+      `UPDATE institutional_responsibilities SET authority_ref = ? WHERE id = ?`,
+      [`autonomy_consent:${consentId}`, id])).rejects.toThrow(/authority_invalid/);
+  });
+
+  it('refuses a revoked consent', async () => {
+    const id = await responsibility('unknown');
+    const consentId = nanoid();
+    await query(
+      `INSERT INTO autonomy_consents
+         (id, founder_id, product_id, capability, from_mode, to_mode, disclosure_version, revoked_at)
+       VALUES (?, ?, ?, 'customer_support', 'suggest', 'act', 'test', datetime('now'))`,
+      [consentId, OWNER, P]);
+    await expect(query(
+      `UPDATE institutional_responsibilities SET authority_ref = ? WHERE id = ?`,
+      [`autonomy_consent:${consentId}`, id])).rejects.toThrow(/authority_invalid/);
+  });
+});
