@@ -85,6 +85,15 @@ describe('a decision past its deadline expires', () => {
   it('leaves one with no deadline at all', async () => {
     // Unscheduled is not late. Sweeping these would clear the queue of
     // everything the founder simply has not got to yet.
+    //
+    // Honest note on what this test can and cannot prove: removing the explicit
+    // `deadline IS NOT NULL` from the sweep does NOT make it fail, because
+    // `datetime(NULL) < datetime('now')` is NULL rather than true and SQLite's
+    // three-valued logic excludes the row anyway. The clause is kept as a
+    // statement of intent, not as the thing doing the work — this codebase has
+    // been bitten repeatedly by predicates that depended on NULL semantics
+    // nobody had written down. The test asserts the outcome, which is what
+    // matters to the founder either way.
     const id = await decision({ deadline: null });
     await sweep();
     expect(await statusOf(id)).toBe('pending');
