@@ -243,3 +243,25 @@ describe('a model call names its subject', () => {
       .rejects.not.toThrow(NotEntitledError);
   });
 });
+
+// The same fragment-drift as the institutional authority read, in the spend
+// gate: `companyMayIncurCost` read status and scp_status, and migration 145
+// moved the billing pause to a third field. A cancelled subscription stopped
+// being visible to the one check that enforces "no spend".
+describe('the spend gate reads all three axes', () => {
+  it('refuses model spend when the billing axis is paused', async () => {
+    await query(
+      `UPDATE products SET entitlement_paused_at = datetime('now') WHERE id=?`, [productId]);
+    const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
+    await expect(callSonnet('sys', 'user', 16, productId)).rejects.toThrow(NotEntitledError);
+  });
+
+  it('and allows it again once the account is entitled', async () => {
+    await query(`UPDATE products SET entitlement_paused_at = NULL WHERE id=?`, [productId]);
+    const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
+    // No API key in tests, so the provider call fails — what matters is that it
+    // got past the entitlement check to fail for that reason instead.
+    await expect(callSonnet('sys', 'user', 16, productId))
+      .rejects.not.toThrow(NotEntitledError);
+  });
+});

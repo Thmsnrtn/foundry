@@ -109,3 +109,55 @@ describe('the writers agree with the readers', () => {
       .toMatch(/scp_status\s*=\s*'archived'/);
   });
 });
+
+// =============================================================================
+// THE FRAGMENT-DRIFT GATE.
+//
+// Twice now a reader has carried a hand-copied piece of the operating rule —
+// `scp_status <> 'paused'` — with a comment explaining exactly why that was
+// complete. Both were complete when written. Migration 145 added a third axis,
+// and both silently stopped seeing the case they were written for: the
+// institutional authority read and the model-spend gate each kept working for a
+// cancelled subscription.
+//
+// A fragment is not a copy of the rule. It is a snapshot of the rule, and the
+// rule grows.
+// =============================================================================
+
+describe('nobody hand-writes a piece of the operating rule', () => {
+  const OFFENDERS: string[] = [];
+
+  for (const file of tsFiles(SRC)) {
+    if (file.endsWith('/db/client.ts')) continue;                 // the definition
+    if (file.endsWith('/outbound/kill-switch.ts')) continue;      // reads the row itself, tested directly
+    const source = code(file);
+    for (const m of source.matchAll(/[`'"][^`'"]*\bscp_status\s*(?:=|!=|<>|NOT\s+IN|IN)[^`'"]*[`'"]/gi)) {
+      const sql = m[0];
+      if (/operatingProduct/.test(sql)) continue;
+      // A writer setting the column is not a reader deciding on it.
+      if (/UPDATE\s+products\s+SET/i.test(sql)) continue;
+      if (!/\bFROM\s+products\b|\bproducts\b\s+p\b/i.test(sql)) continue;
+      OFFENDERS.push(`${relative(SRC, file)}:${source.slice(0, m.index).split('\n').length}`);
+    }
+  }
+
+  it('every decision about whether the institution may act uses operatingProduct()', () => {
+    expect(OFFENDERS,
+      'a hand-copied fragment goes stale the moment the rule grows an axis')
+      .toEqual([]);
+  });
+
+  it('and the readers that must know about entitlement do', async () => {
+    // The two that drifted, named. A regex gate can be argued with; these two
+    // are the concrete cases and they are asserted by name.
+    const { readFileSync } = await import('fs');
+    for (const rel of [
+      'services/institution/responsibility-assisted-email.ts',
+      'services/ai/client.ts',
+    ]) {
+      const src = readFileSync(`${SRC}/${rel}`, 'utf8');
+      expect(src, `${rel} decides whether Foundry may act for a company`)
+        .toMatch(/operatingProduct\(/);
+    }
+  });
+});

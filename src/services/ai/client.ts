@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
 import { log } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
-import { query } from '../../db/client.js';
+import { operatingProduct, query } from '../../db/client.js';
 import { finishReservation, reserveSpend, type SpendReservation } from './spend-ledger.js';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -180,14 +180,24 @@ export class NotEntitledError extends Error {
  */
 async function companyMayIncurCost(productId: string): Promise<string | null> {
   try {
+    // THE DECISION COMES FROM THE CANONICAL PREDICATE; the columns are read
+    // only to say WHY. This used to test status and scp_status directly, which
+    // was complete until migration 145 gave commercial entitlement its own
+    // field — and then the one check enforcing "an unpaid account spends
+    // nothing" stopped seeing a cancelled subscription. A hand-copied fragment
+    // of a rule goes stale the moment the rule grows another axis.
     const res = await query(
-      `SELECT COALESCE(status,'active') AS s, COALESCE(scp_status,'active') AS scp
+      `SELECT COALESCE(status,'active') AS s,
+              COALESCE(scp_status,'active') AS scp,
+              entitlement_paused_at AS billing_paused,
+              CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating
          FROM products WHERE id = ?`, [productId]);
-    const row = res.rows[0] as Record<string, string> | undefined;
+    const row = res.rows[0] as Record<string, unknown> | undefined;
     if (!row) return null;
-    if (row.s !== 'active') return `archived (${row.s})`;
-    if (row.scp === 'paused' || row.scp === 'archived') return row.scp;
-    return null;
+    if (Number(row.operating) === 1) return null;
+    if (String(row.s) !== 'active') return `archived (${String(row.s)})`;
+    if (row.billing_paused != null) return 'unentitled';
+    return String(row.scp);
   } catch (err) {
     // A ceiling that fails open on a DB error is the existing posture in this
     // file, and an entitlement check is not a safety boundary — the gateway is.
