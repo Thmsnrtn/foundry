@@ -8,8 +8,8 @@ not a diary — git history is the diary. Keep it short enough to stay true.
 ## Current frontier
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** through **141**. Schema snapshot current.
-- **Validation:** `npm run check` green — **197 files / 1,616 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
+- **Migrations:** through **147**. Schema snapshot current.
+- **Validation:** `npm run check` green — **219 files / 1,861 tests**, all 4 ratchets hold. CI now runs that composite, rather than a hand-copied subset that omitted four audit gates.
 - **Three companies now cross a governed effect,** not one, and between them
   they use both declared effect kinds and both directions of the outcome loop.
   A groundworks contractor is raised by its own system and reports ACHIEVED; a
@@ -79,6 +79,13 @@ wrong behaviour, a leak, or a false claim — not a tidy-up.
 | 32 requester + actor identity | 2 | 2 | 2 high | 1 | 2 | 0 | 0 | 12 |
 | 33 consent expiry ↔ act gate | 1 | 1 | high | 0 | 1 | 0 | 0 | 1 |
 | 34 credential lifetime ↔ erasure | 2 | 1 | high | 1 | 1 | 0 | 0 | 2 |
+| 35 auth principal ↔ authority | 3 | 1 | high | 1 | 1 | 1 | 0 | 5 |
+| 36 three product axes (fragment drift) | 4 | 2 | 2 high | 1 | 2 | 0 | 0 | 2 |
+| 37 rule-trigger success semantics | 1 | 1 | med | 1 | 1 | 0 | 0 | 1 |
+| 38 claim strength ↔ eligibility floor | 3 | 1 | high | 1 | 1 | 0 | 1 | 3 |
+| 39 experiment outcome + tenant scope | 2 | 2 | 1 high, 1 med | 1 | 2 | 0 | 0 | 2 |
+| 40 erasure batch isolation | 2 | 3 | 3 high | 1 | 3 | 0 | 0 | 1 |
+| 41 erasure classification totality | 3 | 3 | 3 high | 2 | 3 | 1 | 0 | 13 |
 
 **Reading it:** yield has not fallen. Batches 12, 15 and 16 each found a
 high-severity defect, and batch 15 repaired twelve production paths that had
@@ -396,3 +403,54 @@ mode resolution, and inbound webhook handlers other than Stripe.
 (`docs/db/select-column-baseline.txt`), down from 36 at the start of this
 stretch. Each is a query that
 throws if it runs.
+
+---
+
+## Batches 35–41: principal, axis, absence, unit, temporal validity
+
+**An API key satisfied a check for the human owner.** `actingSubject` read a bag
+of identity fields that three different authenticators wrote into, so
+"who is acting" was answered by whichever middleware had run. Four discriminated
+principal kinds now exist — human session, public API key, ingestion credential,
+internal service — and ambiguity between two of them fails closed rather than
+picking one.
+
+**A rule that grows an axis breaks every hand-copied piece of it.** Migration 145
+gave commercial entitlement its own column. Two readers carried
+`scp_status <> 'paused'` with a comment explaining why that was complete — and
+it had been, when written. Both stopped seeing a cancelled subscription: the
+institutional authority read, and the model-spend gate. A fragment is not a copy
+of a rule; it is a snapshot, and the rule grows. There is now a gate for it.
+
+**A three-company floor was published as statistical significance.** The owner's
+decision is explicit that `MIN_CONTRIBUTORS` and `PEER_SIGNAL_MIN_SAMPLE` are
+conservative eligibility floors. The dashboard card said so. The generator told
+the model the opposite, twice, and the confidence number the model invented was
+stored, used to rank, and rendered beside an "avg impact" that was its estimate
+rather than a measured mean. **The place a claim is made is not the place it is
+worded — check the prompt, the column name, the ranking key and the injected
+context separately.**
+
+**A rule that did nothing reported success every time it fired**, and
+**an experiment that could not tell recorded the hypothesis as disproven.** Two
+instances of one shape: a vocabulary with fewer names than there are outcomes,
+so the outcome nobody named got filed under a neighbour that reads as a result.
+Migration 147 added the missing name.
+
+**Erasure could not complete on any company that had ever used the product.** The
+erase list was derived from `product_id`, which made it undriftable for the 215
+tables that carry it. Fifty-five do not. Twelve are children of erased tables,
+seven of those foreign keys are `ON DELETE NO ACTION`, and the connection runs
+with `foreign_keys=ON` — so `DELETE FROM chat_sessions` raised for any company
+with a single chat message. And the per-product catch its own comment described
+did not exist, so one such company blocked every other founder's erasure, daily.
+**A derived list is only undriftable along the dimension it derives on.** Every
+table in the schema is now classified into exactly one bucket, with a gate that
+fails on `UNCLASSIFIED`.
+
+**What the lens is good for next.** Temporal semantics remain unread:
+`created_at` vs `occurred_at` vs `observed_at` vs `effective_at`, and which of
+them a freshness window is measured against. `updateResults` and
+`validateHypothesis` were unreachable when their tenant scope was fixed —
+**the unreachable half of a file is where the conventions of the reachable half
+quietly do not apply.**
