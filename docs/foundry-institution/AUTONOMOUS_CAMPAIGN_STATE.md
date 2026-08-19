@@ -94,13 +94,18 @@ found, this list loses.
    reconciles them, and `strategic_decisions_log` is a third founder-decision
    store. A page that answers its own central question twice, differently, is
    false institutional truth on the surface the founder reads first.
-2. **~4,000 LOC statically dead**, plus ~1,600 LOC of clientless API
-   (`founder-intelligence`, `mobile` serving an archived unbuildable client,
-   most of `tier1-4`). Deletion adds no capability but makes the ratchets and
-   the route count honest — the 114 figure includes pages no person can reach.
-3. **The reachability gate covers `src/services/institution` only** — 38 of 437
-   files. Two E2 claims survived precisely because they sat outside it.
-   Widening it is how that class stops recurring.
+2. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving
+   an archived unbuildable client, most of `tier1-4`). Deletion adds no
+   capability but makes the route count honest — the 114 figure includes pages
+   no person can reach. (~1,000 LOC of statically dead modules already gone;
+   `check-reachability` holds the rest at 30 and may only shrink.)
+3. **Readers whose writers can never run.** Deleting unreachable modules
+   turned `check-writerless-tables` red and surfaced this: `/agents/okr`
+   renders from `company_okrs`, and `src/api/v1/metrics.ts` — the PUBLIC API —
+   reads `data_quality_alerts`, and in both cases the only writer is a module
+   nothing can reach. The readers are mounted; the tables can never fill.
+   Whether to delete a live page or wire its writer is a product decision, and
+   it is recorded rather than made as a side effect of a deletion sweep.
 4. **The five deferred erasure tables** (`OWNER_DECISIONS_PENDING` §10) — a
    live gap with a recommended answer, waiting on the owner.
 5. **Adapters for the existing intakes.** The shape is proven; breadth is

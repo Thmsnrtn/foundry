@@ -130,6 +130,25 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('/zz-gate-fixture');
   });
 
+  it('check-reachability fails on a module nothing can reach', () => {
+    plant('src/services/_gate_fixture_orphan.ts',
+      "export const orphan = () => 'nothing imports this';\n");
+    const r = run('check-reachability.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_orphan');
+  });
+
+  it('check-reachability does not call a dynamically-loaded module dead', () => {
+    // The false positive that matters. A previous run of this class named
+    // ~160KB of live, dynamically-loaded agents as unreachable — the walker
+    // follows literal specifiers and the dispatcher builds its one by name.
+    // Planting a file INSIDE that declared directory must not be reported.
+    plant('src/services/scp/agents/_gate_fixture_agent.ts',
+      "export const run = () => 'loaded by computed name';\n");
+    const r = run('check-reachability.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-migration-order fails on a number that already exists', () => {
     // The case that reorders production: a fresh database applies this in
     // lexical position, an existing one applies it last. No other test in the
