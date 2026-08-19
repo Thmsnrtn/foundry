@@ -1,4 +1,4 @@
-import { query } from '../../db/client.js';
+import { liveActGrant, query } from '../../db/client.js';
 import type { ResponsibilityState } from './responsibility.js';
 
 export type AbsenceClassification = 'HANDLED' | 'CHANGED' | 'NEEDS_YOU' | 'DELIBERATELY_NOT_DONE' | 'STILL_OPEN';
@@ -42,7 +42,7 @@ export async function getSevenDayResponsibilitySummary(
         AND NOT EXISTS (
           SELECT 1 FROM autonomy_consents a
           WHERE a.responsibility_id=r.id AND a.product_id=r.product_id AND a.capability=r.capability
-            AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now'))`,
+            AND ${liveActGrant('a')})`,
     [productId],
   )).rows.map((row) => String((row as Record<string, unknown>).id)));
 

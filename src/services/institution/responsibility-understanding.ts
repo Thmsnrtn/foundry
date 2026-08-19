@@ -53,6 +53,12 @@ export async function projectResponsibilityUnderstanding(productId:string,respon
   //
   // It asks the ledger the same question the execution paths ask, so a
   // withdrawal reads as a withdrawal everywhere.
+  // Deliberately NOT `liveActGrant()`: that fragment compares against the
+  // database's own clock, and this projection takes the caller's, which the
+  // benchmarks use to reconstruct a moment. Same three conditions, one of them
+  // against a supplied time. If authority grows a fourth axis this is the copy
+  // that has to be updated by hand — which is exactly why the other five
+  // stopped being copies.
   const liveGrant=await query(
     `SELECT 1 FROM autonomy_consents a
       WHERE a.responsibility_id=? AND a.product_id=? AND a.capability=?

@@ -306,6 +306,20 @@ found, this list loses.
     counsel. `DATA_RETENTION_DAYS` survives as a CAP: a deployment that set it
     did so to keep less.
 
+18. **The live-grant predicate was hand-copied seven times and had drifted.**
+    ~~Open.~~ **Closed.** `reconstruction.ts` asked only for an unrevoked
+    act-grant for the same CAPABILITY: an expired grant reported as active
+    authority, and a grant bound to one responsibility made every other
+    responsibility of that capability report authority it did not have — while
+    execution requires a grant bound to the responsibility and still in date.
+
+    "A copied fragment of a rule drifts the moment the rule grows another axis"
+    was already written in this codebase, about `operatingProduct`. Authority
+    grew two axes — expiry and responsibility binding — and the copies did not
+    follow. There is a canonical `liveActGrant(alias)` in `db/client.ts` now,
+    and five of the six call sites use it. The sixth compares against a
+    caller-supplied clock and says at the line why it is still by hand.
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.

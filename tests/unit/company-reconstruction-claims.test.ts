@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { getReconstructionClaims, recordReconstructionClaim, reconstructCompany } from '../../src/services/institution/reconstruction.js';
+import { grantAuthority, moveResponsibilityTo } from '../fixtures/responsibility-state.js';
 
 beforeAll(async () => {
   await runMigrations();
@@ -94,5 +95,41 @@ describe('provenance-bearing reconstruction claims', () => {
     expect(reconstruction.unknowns).toContain('company_purpose');
     expect(JSON.stringify(reconstruction)).not.toContain('Foreign');
     expect((await reconstructCompany('missing')).identity).toBeNull();
+  });
+});
+
+describe('the reconstruction reports authority the way execution reads it', () => {
+  it('binds it to the responsibility and lets it expire', async () => {
+    // THE COPIED FRAGMENT THAT DRIFTED. This asked only for an unrevoked
+    // act-grant for the same CAPABILITY. Two things followed. An expired grant
+    // reported as active authority, because nothing checked the date. And a
+    // grant bound to ONE responsibility made every other responsibility of that
+    // capability report authority it did not have — while execution requires a
+    // grant bound to the responsibility itself.
+    //
+    // "A copied fragment of a rule drifts the moment the rule grows another
+    // axis" is already written in this codebase, about the operating predicate.
+    // Authority grew two axes and the copies did not follow, so there is a
+    // canonical `liveActGrant()` now.
+    await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability)
+      VALUES ('rc_granted','rc_product','Answer the inbox','customer_support'),
+             ('rc_ungranted','rc_product','Answer the other inbox','customer_support')`, []);
+    for (const id of ['rc_granted', 'rc_ungranted']) {
+      await moveResponsibilityTo(id, 'shadowing', { productId: 'rc_product' });
+    }
+    const ref = await grantAuthority('rc_product', 'rc_owner', 'customer_support', 'rc_granted');
+
+    const authority = async (id: string): Promise<boolean> =>
+      (await reconstructCompany('rc_product')).responsibilities
+        .find((r) => r.id === id)!.activeAuthority;
+
+    expect(await authority('rc_granted'), 'the granted one has authority').toBe(true);
+    expect(await authority('rc_ungranted'),
+      'a grant for one responsibility is not a grant for its neighbour').toBe(false);
+
+    // And it ends when it runs out, without anybody revoking anything.
+    await query("UPDATE autonomy_consents SET expires_at=datetime('now','-1 hour') WHERE id=?",
+      [ref.replace('autonomy_consent:', '')]);
+    expect(await authority('rc_granted'), 'an expired grant is not active authority').toBe(false);
   });
 });

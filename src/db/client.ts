@@ -501,6 +501,37 @@ export function operatingProduct(alias = ''): string {
 }
 
 /**
+ * A LIVE GRANT TO ACT, as a fragment, for the same reason `operatingProduct`
+ * is one.
+ *
+ * Seven files wrote this predicate by hand and they did not agree.
+ * `reconstruction.ts` checked `to_mode='act' AND revoked_at IS NULL` and
+ * nothing else, so an EXPIRED grant reported as active authority — and it
+ * matched any grant for the same capability rather than one bound to the
+ * responsibility, so a grant for one responsibility made every other
+ * responsibility of that capability report authority it did not have.
+ *
+ * "A copied fragment of a rule drifts the moment the rule grows another axis"
+ * is written in this codebase already, about the operating predicate. Authority
+ * grew two axes — expiry and responsibility binding — and the copies did not
+ * follow.
+ *
+ * `expires_at IS NULL` means "until revoked", which migration 112 forbids for a
+ * responsibility-bound grant and permits for a capability-level one. Both are
+ * covered here so the fragment is correct wherever it is used.
+ *
+ * The RESPONSIBILITY BINDING is deliberately not folded in: it needs the
+ * caller's own column and differs between a bound grant and a capability-level
+ * one. Callers add it, and the ones reporting a responsibility's authority must.
+ */
+export function liveActGrant(alias = ''): string {
+  const a = alias ? `${alias}.` : '';
+  return `${a}to_mode = 'act'`
+    + ` AND ${a}revoked_at IS NULL`
+    + ` AND (${a}expires_at IS NULL OR datetime(${a}expires_at) > datetime('now'))`;
+}
+
+/**
  * DOES THIS PRODUCT RECORD STILL EXIST?
  *
  * The administration predicate, and deliberately NOT the one above. A company

@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { operatingProduct, query } from '../../db/client.js';
+import { liveActGrant, operatingProduct, query } from '../../db/client.js';
 import { invoke } from '../outbound/gateway.js';
 import { recordReconstructionClaim } from './reconstruction.js';
 
@@ -55,7 +55,7 @@ async function currentAuthority(actionId:string):Promise<Record<string,unknown>|
       AND r.state='assisting'
       AND r.authority_ref='autonomy_consent:' || a.id
       AND a.product_id=oa.product_id AND a.responsibility_id=r.id AND a.capability=r.capability
-      AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
+      AND ${liveActGrant('a')}
       AND a.consequence_boundary=k.consequence_boundary
       AND instr(a.allowed_scope_json,json_quote(oa.authority_scope))>0`,[actionId]);
   return result.rows[0] as Record<string,unknown>|undefined ?? null;

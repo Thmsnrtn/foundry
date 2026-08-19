@@ -25,7 +25,7 @@
 // There is no generic "autopilot" permission here and no way to widen one.
 // =============================================================================
 
-import { query } from '../../db/client.js';
+import { liveActGrant, query } from '../../db/client.js';
 import { recordConsent } from '../autopilot/consent.js';
 import { enterResponsibilityAssisting } from './responsibility-assisting.js';
 import { getResponsibility, type Responsibility } from './responsibility.js';
@@ -136,7 +136,7 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
                 AND o.outcome_status='verified_failure') AS verified_failures,
             (SELECT a.expires_at FROM autonomy_consents a
               WHERE a.responsibility_id=r.id AND a.product_id=r.product_id AND a.capability=r.capability
-                AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
+                AND ${liveActGrant('a')}
               ORDER BY a.accepted_at DESC LIMIT 1) AS grant_expires_at
        FROM institutional_responsibilities r
       WHERE r.product_id=? AND r.state IN ('shadowing','assisting') AND r.disposition='active'

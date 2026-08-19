@@ -11,7 +11,7 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { liveActGrant, query } from '../../db/client.js';
 
 /**
  * The constitutional ring: code, migrations, documents, and enforcement
@@ -112,7 +112,7 @@ export async function getCurrentDevelopmentAuthority(
      JOIN institutional_responsibilities r ON r.id=a.responsibility_id
      WHERE a.product_id=? AND a.responsibility_id=? AND a.capability='development'
        AND r.product_id=a.product_id AND r.capability='development'
-       AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
+       AND ${liveActGrant('a')}
      ORDER BY a.accepted_at DESC,a.rowid DESC LIMIT 1`,
     [productId, responsibilityId],
   )).rows[0] as Record<string, unknown> | undefined;
