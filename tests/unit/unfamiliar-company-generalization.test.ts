@@ -172,11 +172,20 @@ describe('unfamiliar-company generalization', () => {
     ]) {
       expect(await discoverResponsibilityFromSignal(productId, signalId)).toBeNull();
     }
-    // And it abstained rather than doing nothing at all: no responsibility in
-    // this corpus carries a discovery evidence ref from the signal path.
+    // And it abstained rather than doing nothing at all: nothing in this corpus
+    // entered the ladder through the signal path.
+    //
+    // Asked by the ACTOR that path signs its transitions with, not by counting
+    // responsibilities carrying a discovery ref. The count answered this only
+    // while the signal path was the sole writer of that column; candidate
+    // promotion — an explicit owner decision, which is a different thing
+    // entirely — now records provenance too, and the proxy started counting it.
+    // A test that answers the right question by accident answers a different
+    // one the moment anything else fills the column in.
     expect((await query(
-      `SELECT COUNT(*) n FROM institutional_responsibilities
-        WHERE product_id LIKE 'ug_%' AND discovery_evidence_ref IS NOT NULL`, [])).rows[0])
+      `SELECT COUNT(*) n FROM responsibility_transitions t
+         JOIN institutional_responsibilities r ON r.id=t.responsibility_id
+        WHERE r.product_id LIKE 'ug_%' AND t.actor_ref LIKE 'intake:signal_event:%'`, [])).rows[0])
       .toMatchObject({ n: 0 });
   });
 
