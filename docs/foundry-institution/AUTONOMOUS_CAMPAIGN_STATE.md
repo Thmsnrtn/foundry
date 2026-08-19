@@ -190,9 +190,13 @@ found, this list loses.
       a run created hundreds of native handles and left every one to the
       garbage collector — including collection during the next file's queries,
       which is exactly the observed boundary. `closeDb()` now exists and the
-      suite closes after every file. **Whether this fixes the abort is NOT
-      established**; it needs runs, and a handful of clean ones would not settle
-      it at a 1-in-3 rate.
+      suite closes after every file.
+    - **Evidence so far: six consecutive clean full runs since `aa01e4d`** —
+      three from a deliberate repeat-run experiment on a frozen tree, three from
+      ordinary `npm run check` validations. Against the prior rate that is about
+      a 1-in-17 coincidence. **Suggestive, not settled.** Keep counting: every
+      `npm run check` is a sample, and the next abort — if it comes — eliminates
+      this hypothesis the way the last one eliminated the timer.
     - **Method note for whoever continues:** do not run the suite concurrently
       with another run. `gates-fail-when-they-should.test.ts` plants real files
       into `src/` and `tests/`, so two runs collide and produce failures that
