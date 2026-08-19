@@ -163,7 +163,7 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 |---|---|---|
 | Reconstruction / recognition / understanding / Shadowing / judgment / development | E3 | prior exercised synthetic dimensions only |
 | Assisting (support reply) | E3 | **prior synthetic dimensions only — unchanged for three sessions** |
-| Production reachability | E3 | four synthetic non-software companies |
+| Production reachability | E3 | four synthetic non-software companies, each now entering through the ONE intake production has — they used to be admitted by SaaS event types nothing emits, so the benchmark answered "can a normal company enter the ladder?" through a door the running system does not have. Better founded, same level: still synthetic. |
 | Everything wired through production-facing services | E2 | local runtime through production-facing services |
 | Recursive Foundry operation | **E1** | `recursive-institution-contract.ts` has **zero importers in `src/`** — only its test reaches it. It was recorded as E2, which means "local runtime through production-facing services", and there is no production-facing service. `recursive-institution-v1` reporting ordinary on thirteen dimensions is a benchmark result, not a runtime one. Never run by a real owner in production. Corrected on evidence, not re-measured upward. |
 | Institutional economics | **E1** | `institutional-economics.ts` also has zero importers in `src/`. Attribution is structural and the arithmetic is tested; nothing in production consumes it, so the same correction applies. Seven components remain named-unmeasured. |
@@ -197,16 +197,16 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 
 ## Master-audit reconciliation
 
-*Reconciled at the close of the seventh session, against the repository rather than against memory. Where a line says "verified", it was checked in this pass.*
+*Reconciled against the repository rather than against memory. Where a line says "verified", it was checked in that pass; where it states a count, it names the command so the next steward can re-run it rather than believe it. The trigger counts below were last re-run at `c1c0976`.*
 
 ### Proven — E3, or structurally enforced and mutation-verified
 
 | What | How it is proven |
 |---|---|
 | Reconstruction, recognition, understanding, Shadowing, Assisting, judgment, development | Executable benchmark gates, each with a running test. **Scope: the synthetic dimensions those corpora actually exercise — nothing wider.** |
-| Production reachability | `production-reachability-v1` across four synthetic non-software companies |
+| Production reachability | `production-reachability-v1` across four synthetic non-software companies, each admitted through the one intake production has |
 | Unfamiliar-company generalization | Independently generated corpus against the frozen recognition gate |
-| **Institutional invariants live in the database** | Not in application code, so a bug in a service cannot bypass them. Reproducible counts across `src/db/migrations/`: **82** `CREATE TRIGGER` statements carrying **70** distinct trigger names, and **214** `RAISE(ABORT, …)` guards. A previous figure of "169 … verified by count" appeared here with no stated method and cannot be reproduced by any obvious one; these numbers name their own command so the next steward can check them. |
+| **Institutional invariants live in the database** | Not in application code, so a bug in a service cannot bypass them. Reproducible counts across `src/db/migrations/`: **86** `CREATE TRIGGER` statements carrying **74** distinct trigger names, and **218** `RAISE(ABORT, …)` guards — re-counted at `c1c0976`, four migrations later than the previous figure, and they moved by exactly what those migrations added. A previous figure of "169 … verified by count" appeared here with no stated method and cannot be reproduced by any obvious one; these numbers name their own command so the next steward can check them. |
 | The scheduled pass has no epistemic privilege | Four-part audit: structural, behavioural (four refusals + one advancing control), provenance, idempotency |
 | Support-chain reachability | Sixteen named links, invocation-based, mutation-verified against a removed call |
 | Institutional cognition is deterministic | Gate test; no model reachable from the kernel |
