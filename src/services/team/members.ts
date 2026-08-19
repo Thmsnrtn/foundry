@@ -284,12 +284,27 @@ export const MEMBER_CAPABILITIES: readonly MemberCapability[] = [
 export async function memberMay(
   productId: string, founderId: string, capability: MemberCapability,
 ): Promise<boolean> {
+  // THE UNION IS A TYPE, AND TYPES ARE ERASED.
+  //
+  // The capability is interpolated into SQL as a column name. It was protected
+  // by every call site happening to pass a string literal — which is a property
+  // of the wiring, not of this function, and this function is one call site
+  // away from being reachable with a request-supplied string.
+  //
+  // `push.ts` carries the identical shape and was given a runtime lookup for
+  // exactly this reason. This is the AUTHORITY check, so it is the last place
+  // that should be relying on a type that does not exist at runtime.
+  //
+  // Fails CLOSED. An unrecognised capability is not "no such restriction", it
+  // is "I do not know what you are asking for", and the safe answer to that is
+  // no — checked before the ownership shortcut, so an unknown capability cannot
+  // be answered `true` for an owner either.
+  if (!MEMBER_CAPABILITIES.includes(capability)) return false;
+
   const owner = await query(
     `SELECT 1 FROM products WHERE id = ? AND owner_id = ?`, [productId, founderId]);
   if (owner.rows.length > 0) return true;
 
-  // The column name comes from the closed union above, never from a caller's
-  // string, so there is nothing here a request can reach.
   const res = await query(
     `SELECT ${capability} AS allowed FROM team_members
       WHERE product_id = ? AND founder_id = ? AND status = 'active'`,

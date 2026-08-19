@@ -273,6 +273,22 @@ found, this list loses.
     app; `delivered` means "a record exists" and `pushed` says whether the phone
     was reached, which were the same field.
 
+16. **`memberMay` interpolated a capability into SQL with no runtime check.**
+    ~~Open.~~ **Closed.** The capability is a column name, and the closed union
+    protecting it is a TYPE — erased at runtime. What actually protected it was
+    every call site happening to pass a string literal, which is a property of
+    the wiring rather than of the function, and the function is one call site
+    away from being reachable with a request-supplied string.
+
+    `push.ts` carries the identical shape and was hardened for exactly this
+    reason. This is the AUTHORITY check, so it was the last place that should
+    have been relying on a type that does not exist at runtime. It fails closed
+    now, and the check runs BEFORE the ownership shortcut so an unknown
+    capability cannot be answered `true` for an owner either.
+
+    Worth generalising: `grep` for a template literal placing a variable where a
+    column name goes. Two found so far, both by reading rather than by a gate.
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.

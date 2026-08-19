@@ -92,6 +92,28 @@ describe('the flags are asked', () => {
     expect(await memberMay(P, STRANGER, 'can_view_decisions')).toBe(false);
   });
 
+  it('fails closed on a capability it does not recognise, owner included', async () => {
+    // THE UNION IS A TYPE, AND TYPES ARE ERASED. The capability is interpolated
+    // into SQL as a column name, and it was protected only by every call site
+    // happening to pass a literal — a property of the wiring, not of the
+    // function, and the function is one call site away from being reachable
+    // with a request-supplied string. `push.ts` carries the identical shape and
+    // was given a runtime lookup for exactly this reason; this is the authority
+    // check, so it is the last place that should rely on a type.
+    for (const hostile of [
+      'can_view_decisions, (SELECT 1)', '*', '1', 'rowid',
+      "can_view_decisions' OR '1'='1", 'nonexistent_capability',
+    ] as unknown as Parameters<typeof memberMay>[2][]) {
+      expect(await memberMay(P, COFOUNDER, hostile), `${hostile} must be refused`).toBe(false);
+      // Checked BEFORE the ownership shortcut, so an unknown capability cannot
+      // be answered `true` just because the asker owns the company.
+      expect(await memberMay(P, OWNER, hostile), `${hostile} must be refused for the owner too`)
+        .toBe(false);
+    }
+    // And the real ones still work, so this is a narrowing and not a wall.
+    expect(await memberMay(P, OWNER, 'can_manage_company')).toBe(true);
+  });
+
   it('refuses a member whose access was withdrawn', async () => {
     await query(
       `UPDATE team_members SET status = 'removed' WHERE founder_id = ?`, [COFOUNDER]);
