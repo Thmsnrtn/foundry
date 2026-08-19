@@ -62,6 +62,15 @@ export interface AssistingCandidate {
   mayNot: string;
   /** Whether Foundry has actually watched this and has something to show. */
   comparisons: number;
+  /** How many of those comparisons Foundry got WRONG. Counted separately
+   *  because asking for permission on the strength of having watched five
+   *  times says nothing if it was wrong all five. */
+  deviations: number;
+  /** Assisted actions on this responsibility that were independently observed
+   *  to have failed. Recorded before this and read by nothing, so Foundry
+   *  could ask to keep helping with something its last action demonstrably
+   *  broke, and the founder was not told while deciding. */
+  verifiedFailures: number;
   granted: boolean;
   grantExpiresAt: string | null;
 }
@@ -78,6 +87,21 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
             (SELECT COUNT(*) FROM responsibility_shadow_comparisons c
                JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
               WHERE x.responsibility_id=r.id AND c.classification IN ('matched','deviated')) AS comparisons,
+            -- MATCHED AND DEVIATED ARE NOT THE SAME NUMBER. Both counted
+            -- equally toward "I have been watching this", so a responsibility
+            -- Foundry predicted wrong five times out of five asked for
+            -- permission in exactly the words as one it predicted right.
+            (SELECT COUNT(*) FROM responsibility_shadow_comparisons c
+               JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
+              WHERE x.responsibility_id=r.id AND c.classification='deviated') AS deviations,
+            -- AND WHAT HAPPENED LAST TIME IT ACTED. Nothing consulted this.
+            -- Outcomes were recorded — verified_failure written, read by
+            -- nothing — so Foundry could ask to keep helping with a
+            -- responsibility whose last assisted action demonstrably failed,
+            -- and the founder was never told at the moment they were deciding.
+            (SELECT COUNT(*) FROM outbound_actions o
+              WHERE o.responsibility_id=r.id AND o.product_id=r.product_id
+                AND o.outcome_status='verified_failure') AS verified_failures,
             (SELECT a.expires_at FROM autonomy_consents a
               WHERE a.responsibility_id=r.id AND a.product_id=r.product_id AND a.capability=r.capability
                 AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
@@ -96,6 +120,8 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
         may: GRANTABLE_CAPABILITIES[capability].may,
         mayNot: GRANTABLE_CAPABILITIES[capability].mayNot,
         comparisons: Number(r.comparisons),
+        deviations: Number(r.deviations),
+        verifiedFailures: Number(r.verified_failures),
         granted: r.grant_expires_at != null,
         grantExpiresAt: r.grant_expires_at == null ? null : String(r.grant_expires_at),
       };

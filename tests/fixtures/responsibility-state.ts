@@ -174,3 +174,58 @@ async function shadowProofFromShadowing(
     [nanoid(), responsibilityId, await recordEvidence(productId, 'stepping back')]);
   return shadowProof(responsibilityId, productId);
 }
+
+
+/**
+ * Put a responsibility into Shadowing with a stated set of comparison verdicts.
+ *
+ * The order matters and the guards enforce it: an expectation may only be
+ * written while the responsibility is UNDERSTOOD, and a comparison only once it
+ * is SHADOWING. So every expectation is created first, then the rung is
+ * climbed, then the verdicts are recorded. A fixture that tried to add a fourth
+ * comparison later would be refused, which is correct — Foundry cannot decide
+ * after the fact what it had expected.
+ */
+export async function shadowWithVerdicts(
+  responsibilityId: string,
+  productId: string,
+  classifications: Array<'matched' | 'deviated'>,
+): Promise<void> {
+  await moveResponsibilityTo(responsibilityId, 'understood', { productId });
+
+  const expectationIds: string[] = [];
+  for (const _ of classifications) {
+    const claimId = nanoid();
+    await query(
+      `INSERT INTO reconstruction_claims
+         (id, product_id, subject, predicate, value_json, epistemic_status, confidence,
+          evidence_refs_json, derivation_method, observed_at)
+       VALUES (?, ?, 'support', 'is_answered_within', ?, 'known', 0.9, ?, 'test fixture', datetime('now'))`,
+      [claimId, productId, JSON.stringify('1 day'),
+        JSON.stringify([{ kind: 'signal_event', id: await recordSignal(productId, 'claim basis') }])]);
+    const expectationId = nanoid();
+    await query(
+      `INSERT INTO responsibility_shadow_expectations
+         (id, responsibility_id, product_id, expected_event_type,
+          expectation_evidence_ref, observation_source_evidence_ref)
+       VALUES (?, ?, ?, 'support_restored', ?, ?)`,
+      [expectationId, responsibilityId, productId, `reconstruction_claim:${claimId}`,
+        await recordEvidence(productId, 'observation source')]);
+    expectationIds.push(expectationId);
+  }
+
+  await query(
+    `INSERT INTO responsibility_transitions
+       (id, responsibility_id, from_state, to_state, evidence_ref, reason, actor_ref)
+     VALUES (?, ?, 'understood', 'shadowing', ?, 'test fixture', 'test')`,
+    [nanoid(), responsibilityId, await recordEvidence(productId, 'reached shadowing')]);
+
+  for (let i = 0; i < classifications.length; i++) {
+    await query(
+      `INSERT INTO responsibility_shadow_comparisons
+         (id, expectation_id, product_id, observation_ref, classification)
+       VALUES (?, ?, ?, ?, ?)`,
+      [nanoid(), expectationIds[i], productId,
+        await recordEvidence(productId, 'what happened'), classifications[i]]);
+  }
+}
