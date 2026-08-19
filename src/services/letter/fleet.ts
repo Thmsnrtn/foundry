@@ -18,16 +18,45 @@ import { composeLetter, type Letter } from './composer.js';
 import type { Fluency } from '../ux/fluency.js';
 import { getSevenDayResponsibilitySummary, type AbsenceClassification, type AbsenceItem } from '../institution/absence-summary.js';
 
-export interface FleetNeedsYou {
-  decisionId: string;
-  productId: string;
-  productName: string;
-  what: string;
-  gate: number;
-  riskState: string;
-  deadline: string | null;
-  score: number;
-}
+/**
+ * ONE ITEM, TWO CANONICAL SOURCES.
+ *
+ * This used to be decisions only, and that was the fleet half of a defect the
+ * single-product letter had already fixed: `composer.ts` projects "the one
+ * thing" over BOTH the decision queue and the institution's own NEEDS_YOU, so
+ * an overdue responsibility, a withdrawn permission, or an unresolved outcome
+ * can be the thing on top. Across the fleet none of them could be, however
+ * overdue — a founder with two companies was ranked on one source.
+ *
+ * The two kinds are kept distinct rather than flattened into a common shape.
+ * They are verified differently, they are acted on differently, and a
+ * responsibility has no gate — inventing one to make the sort uniform would be
+ * manufacturing a fact to simplify a comparison.
+ */
+export type FleetNeedsYou =
+  | {
+    kind: 'decision';
+    decisionId: string;
+    productId: string;
+    productName: string;
+    what: string;
+    gate: number;
+    riskState: string;
+    deadline: string | null;
+    score: number;
+  }
+  | {
+    kind: 'responsibility';
+    responsibilityId: string;
+    productId: string;
+    productName: string;
+    what: string;
+    /** Why it needs them, from the institution's own vocabulary. */
+    because: NonNullable<AbsenceItem['needsYouBecause']>;
+    /** The date the COMPANY gave, when the reason is that it has passed. */
+    dueAt: string | null;
+    riskState: string;
+  };
 
 export interface FleetProductLetter {
   productId: string;
@@ -117,12 +146,13 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
   const adjustments = new Map<string, number>();
   for (const p of products) adjustments.set(p.id, await attentionAdjustment(founderId, p.id));
 
-  const needsYou: FleetNeedsYou[] = pending
+  const decisionItems: FleetNeedsYou[] = pending
     .map((d) => {
       const gate = Number(d.gate ?? 0);
       const risk = String(d.risk_state);
       const deadline = (d.deadline as string) ?? null;
       return {
+        kind: 'decision' as const,
         decisionId: String(d.id),
         productId: String(d.product_id),
         productName: String(d.product_name),
@@ -134,7 +164,34 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
           + (adjustments.get(String(d.product_id)) ?? 0),
       };
     })
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.score - a.score);
+
+  // THE SAME PRECEDENCE THE SINGLE-PRODUCT LETTER USES, widened to the fleet.
+  //
+  // `composer.ts` orders overdue > decision > every other ask, and the reason is
+  // not weighting: a date the COMPANY gave has passed, which the database will
+  // not let Foundry author, so it is the one ask that is late rather than
+  // merely open. Scoring it against a gate would require inventing a gate for
+  // it, and a fabricated comparable is worse than an explicit order.
+  const responsibilityAsks = letters.flatMap((product) =>
+    product.responsibilities.NEEDS_YOU.map((item): FleetNeedsYou => ({
+      kind: 'responsibility' as const,
+      responsibilityId: item.responsibilityId,
+      productId: product.productId,
+      productName: product.productName,
+      what: item.title,
+      because: item.needsYouBecause ?? 'watching',
+      dueAt: item.dueAt ?? null,
+      riskState: product.riskState,
+    })));
+  const overdue = responsibilityAsks
+    .filter((item) => item.kind === 'responsibility' && item.because === 'overdue')
+    .sort((a, b) => String((a as { dueAt: string | null }).dueAt ?? '')
+      .localeCompare(String((b as { dueAt: string | null }).dueAt ?? '')));
+  const otherAsks = responsibilityAsks.filter(
+    (item) => item.kind === 'responsibility' && item.because !== 'overdue');
+
+  const needsYou: FleetNeedsYou[] = [...overdue, ...decisionItems, ...otherAsks]
     .slice(0, MAX_NEEDS_YOU);
 
   // Operator pack: system-health lines join the operator's letter only.

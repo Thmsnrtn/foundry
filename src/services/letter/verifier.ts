@@ -2,14 +2,29 @@
 // FOUNDRY — Fleet Letter Verifier (Jarvis slice 1 — the reliability keystone)
 //
 // An INDEPENDENT pass between composition and delivery. The verifier trusts
-// nothing the composer said: for every ranked "needs you" item it re-fetches
-// the decision FRESH and checks explicit success criteria:
+// nothing the composer said: for every ranked "needs you" item it re-reads the
+// canonical source FRESH and checks explicit success criteria.
+//
+// For a DECISION:
 //   1. the decision exists,
 //   2. it is still pending (not resolved between compose and deliver),
 //   3. it belongs to the named product, and that product to this founder
 //      (tenant safety at the last line of defense),
-//   4. the stated gate matches the ledger,
-//   5. the letter is fresh (composed within the staleness window).
+//   4. the stated gate matches the ledger.
+//
+// For a RESPONSIBILITY — the second canonical source, added when the fleet
+// ranking stopped reading decisions alone. Deliberately as strict, because an
+// item class that ships less verified than its neighbour is how a verifier
+// stops being one:
+//   1. the responsibility exists and belongs to the named product,
+//   2. that product belongs to this founder,
+//   3. a FRESH seven-day read still classifies it NEEDS_YOU,
+//   4. the stated reason still matches the fresh one — "your permission ran
+//      out" must not be delivered for something now merely being watched,
+//   5. an overdue item's stated date matches the ledger and is still past.
+//
+// And for the letter as a whole:
+//   6. it is fresh (composed within the staleness window).
 // A line that fails is DROPPED and logged as a defect (audit_log,
 // action_type 'letter:verifier') — the founder never sees an unverified
 // claim, and every drop is queryable ("why didn't you show me X?").
@@ -30,6 +45,7 @@ export interface VerificationResult {
 }
 
 async function verifyNeedsYou(item: FleetNeedsYou, founderId: string): Promise<string | null> {
+  if (item.kind === 'responsibility') return verifyResponsibilityAsk(item, founderId);
   const fresh = (await query(
     `SELECT d.status, d.gate, d.product_id, p.owner_id
        FROM decisions d JOIN products p ON p.id = d.product_id
@@ -42,6 +58,39 @@ async function verifyNeedsYou(item: FleetNeedsYou, founderId: string): Promise<s
   if (String(fresh.product_id) !== item.productId) return `decision ${item.decisionId} product mismatch`;
   if (String(fresh.status) !== 'pending') return `decision ${item.decisionId} no longer pending (${fresh.status})`;
   if (Number(fresh.gate ?? 0) !== item.gate) return `decision ${item.decisionId} gate mismatch (letter says ${item.gate}, ledger says ${fresh.gate})`;
+  return null;
+}
+
+async function verifyResponsibilityAsk(
+  item: Extract<FleetNeedsYou, { kind: 'responsibility' }>, founderId: string,
+): Promise<string | null> {
+  const ref = `responsibility ${item.responsibilityId}`;
+  const owned = (await query(
+    `SELECT r.id, r.due_at, p.owner_id
+       FROM institutional_responsibilities r JOIN products p ON p.id = r.product_id
+      WHERE r.id = ? AND r.product_id = ?`,
+    [item.responsibilityId, item.productId],
+  )).rows[0] as Record<string, unknown> | undefined;
+
+  if (!owned) return `${ref} not found on product ${item.productId}`;
+  if (String(owned.owner_id) !== founderId) return `${ref} belongs to another tenant`;
+
+  // The classification is RECOMPUTED, never trusted. Between composition and
+  // delivery a founder may have re-granted the permission that made this an
+  // ask, and telling them it still needs them would be the letter asserting
+  // something the ledger no longer says.
+  const fresh = (await getSevenDayResponsibilitySummary(item.productId)).NEEDS_YOU
+    .find((candidate) => candidate.responsibilityId === item.responsibilityId);
+  if (!fresh) return `${ref} no longer needs the founder`;
+  if ((fresh.needsYouBecause ?? 'watching') !== item.because) {
+    return `${ref} reason changed (letter says ${item.because}, ledger says ${fresh.needsYouBecause ?? 'watching'})`;
+  }
+  if (item.because === 'overdue') {
+    if (!fresh.dueAt || fresh.dueAt !== item.dueAt) {
+      return `${ref} due date mismatch (letter says ${item.dueAt}, ledger says ${fresh.dueAt ?? 'none'})`;
+    }
+    if (new Date(fresh.dueAt).getTime() > Date.now()) return `${ref} is not overdue`;
+  }
   return null;
 }
 

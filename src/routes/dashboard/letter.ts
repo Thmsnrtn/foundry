@@ -562,15 +562,28 @@ letterRoutes.get('/letter', async (c) => {
             <span style="font-size:0.72rem;color:var(--text-muted);min-width:1.2rem;">${i + 1}.</span>
             <div style="flex:1;min-width:200px;">
               <div style="font-size:0.92rem;color:var(--text-primary);">${n.what}</div>
-              <div style="font-size:0.75rem;color:var(--text-muted);">${n.productName} · ${gateLabel(n.gate, fluency)}${n.deadline ? html` · due ${n.deadline}` : ''}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);">${n.kind === 'decision'
+    ? html`${n.productName} · ${gateLabel(n.gate, fluency)}${n.deadline ? html` · due ${n.deadline}` : ''}`
+    // A responsibility says why in the founder's language, from the same map
+    // the single-product letter uses. No ontology on screen either way.
+    : html`${n.productName} · ${NEEDS_YOU_REASON[n.because] ?? NEEDS_YOU_REASON.watching}${n.dueAt ? html` (${n.dueAt.slice(0, 10)})` : ''}`}</div>
             </div>
+            ${n.kind === 'decision' ? html`
             <a href="/decisions/${n.decisionId}" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;"
               onclick="fetch('/letter/attention/${n.decisionId}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product_id:'${n.productId}',reaction:'acted'})})">Decide</a>
             <form method="POST" action="/letter/attention/${n.decisionId}" style="margin:0;">
               <input type="hidden" name="product_id" value="${n.productId}" />
               <input type="hidden" name="reaction" value="dismissed" />
               <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;" title="Not now — teaches the ranking">Later</button>
-            </form>
+            </form>` : html`
+            <!-- Acting on a responsibility means being IN that company: its
+                 reason, its disposition form, its authority. So this switches
+                 the active company and comes back to the letter, where the
+                 full view below now renders it. -->
+            <form method="POST" action="/switch-product" style="margin:0;">
+              <input type="hidden" name="product_id" value="${n.productId}" />
+              <button type="submit" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;">Look at ${n.productName}</button>
+            </form>`}
           </div>`)}
         </div>` : ''}
 

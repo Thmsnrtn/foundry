@@ -2233,7 +2233,14 @@ export async function fleetLetterNotify(): Promise<void> {
       if (!anchorProduct) continue;
 
       const result = await deliver(founderId, anchorProduct, {
-        importance: top ? (top.gate >= 3 ? 'action_needed' : 'attention') : 'info',
+        // A responsibility has no gate, and a passed date the COMPANY gave is
+        // not "attention" — it is the one ask that is already late. Gate 3+
+        // decisions and overdue responsibilities are both action_needed; the
+        // rest is attention.
+        importance: top
+          ? ((top.kind === 'decision' ? top.gate >= 3 : top.because === 'overdue')
+            ? 'action_needed' : 'attention')
+          : 'info',
         title: top ? `Your letter: ${top.what} needs you` : 'Your letter is ready',
         body: top
           ? `Top of ${letter.needsYou.length} across ${letter.products.length} companies: ${top.what} (${top.productName}).`

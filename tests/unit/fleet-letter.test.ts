@@ -20,6 +20,12 @@ import { decideChannel, deliver } from '../../src/services/ux/interruption.js';
 let app: Hono;
 const founder = { id: 'jl_f', email: 'jl@t.co', preferences: { fluency: 'balanced' } };
 
+/** The ranked DECISIONS, in order. The fleet list holds two canonical kinds
+ *  now, so a test about decision ranking says so rather than indexing into a
+ *  mixed list and depending on nothing else being in it. */
+const decisionsOf = (fl: { needsYou: Array<Record<string, unknown>> }): string[] =>
+  fl.needsYou.filter((n) => n.kind === 'decision').map((n) => String(n.decisionId));
+
 beforeAll(async () => {
   await runMigrations();
   await query('PRAGMA foreign_keys=OFF', []);
@@ -46,6 +52,64 @@ describe('the fleet composer ranks, with provenance', () => {
   });
 });
 
+describe('the fleet ranks over BOTH canonical sources', () => {
+  it('puts a passed date the company gave above any pending decision', async () => {
+    // THE FLEET HALF OF A DEFECT THE SINGLE-PRODUCT LETTER HAD ALREADY FIXED.
+    // `composer.ts` projects "the one thing" over the decision queue AND the
+    // institution's own NEEDS_YOU, and orders overdue first. Across the fleet
+    // it read decisions alone, so a founder with two companies could not be
+    // told at the top that a date they themselves gave had passed.
+    //
+    // The date is stated BY THE FOUNDER — migration 166 refuses one Foundry
+    // authored — which is exactly why it outranks a gate: it is the one ask
+    // that is late rather than merely open.
+    await query(`INSERT INTO institutional_responsibilities
+      (id,product_id,title,capability,state,due_at,due_stated_by)
+      VALUES ('jl_late','jl_p1','Deliver the quarterly figures','operations','visible',
+              datetime('now','-2 days'),'jl_f')`, []);
+
+    const fl = await composeFleetLetter('jl_f');
+    expect(fl.needsYou[0]).toMatchObject({
+      kind: 'responsibility', responsibilityId: 'jl_late', because: 'overdue', productName: 'CalmCo',
+    });
+    // And it did not displace the decisions — it ranked above them.
+    expect(fl.needsYou.some((n) => n.kind === 'decision' && n.decisionId === 'jl_d2')).toBe(true);
+    // Still never another tenant.
+    expect(fl.needsYou.every((n) => n.productId !== 'jl_px')).toBe(true);
+  });
+
+  it('verifies a responsibility ask as strictly as a decision, and drops it when it stops being true', async () => {
+    // An item class that ships less verified than its neighbour is how a
+    // verifier stops being one. The classification is RECOMPUTED from the
+    // ledger, never trusted from the composer.
+    const fl = await composeFleetLetter('jl_f');
+    const ask = fl.needsYou.find((n) => n.kind === 'responsibility')!;
+    expect(ask).toBeTruthy();
+    expect((await verifyFleetLetter(fl)).letter.needsYou
+      .some((n) => n.kind === 'responsibility' && n.responsibilityId === 'jl_late')).toBe(true);
+
+    // A tampered reason is a claim the ledger does not make.
+    const tampered = await composeFleetLetter('jl_f');
+    const item = tampered.needsYou.find((n) => n.kind === 'responsibility') as { because: string };
+    item.because = 'permission_withdrawn';
+    const checked = await verifyFleetLetter(tampered);
+    expect(checked.letter.needsYou.some((n) => n.kind === 'responsibility')).toBe(false);
+    expect(checked.reasons.join(' ')).toContain('reason changed');
+
+    // And once the company is no longer late, it stops being delivered.
+    const still = await composeFleetLetter('jl_f');
+    await query(`UPDATE institutional_responsibilities
+      SET due_at=datetime('now','+30 days') WHERE id='jl_late'`, []);
+    const after = await verifyFleetLetter(still);
+    expect(after.letter.needsYou.some((n) => n.kind === 'responsibility')).toBe(false);
+    expect(after.reasons.join(' ')).toMatch(/no longer needs the founder|due date mismatch/);
+
+    // Put it back so later tests see the fleet as it was.
+    await query(`UPDATE institutional_responsibilities
+      SET due_at=datetime('now','-2 days') WHERE id='jl_late'`, []);
+  });
+});
+
 describe('the independent verifier — nothing unverified ships', () => {
   it('reconstructs product-scoped responsibility truth instead of trusting the composer', async () => {
     await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state)
@@ -68,7 +132,7 @@ describe('the independent verifier — nothing unverified ships', () => {
     await query("UPDATE decisions SET status='executed' WHERE id='jl_d2'", []); // world moved
     const res = await verifyFleetLetter(fl);
     expect(res.dropped).toBe(1);
-    expect(res.letter.needsYou.map((n) => n.decisionId)).toEqual(['jl_d1']);
+    expect(decisionsOf(res.letter)).toEqual(['jl_d1']);
     expect(res.reasons[0]).toContain('no longer pending');
     const defects = await query(
       "SELECT * FROM audit_log WHERE action_type='letter:verifier' AND outcome='refused'", [],
@@ -80,12 +144,15 @@ describe('the independent verifier — nothing unverified ships', () => {
   it('drops tampered items: cross-tenant injection and gate mismatch', async () => {
     const fl = await composeFleetLetter('jl_f');
     fl.needsYou.push({
-      decisionId: 'jl_dx', productId: 'jl_px', productName: 'OtherCo',
+      kind: 'decision', decisionId: 'jl_dx', productId: 'jl_px', productName: 'OtherCo',
       what: 'Other tenant decision', gate: 4, riskState: 'green', deadline: null, score: 99,
     });
-    fl.needsYou[0] = { ...fl.needsYou[0], gate: 0 }; // composer "lied" about stakes
+    // The lie has to be planted on a DECISION — the gate check is what is under
+    // test, and a responsibility has no gate to misstate.
+    const firstDecision = fl.needsYou.findIndex((n) => n.kind === 'decision');
+    fl.needsYou[firstDecision] = { ...fl.needsYou[firstDecision], gate: 0 } as typeof fl.needsYou[number];
     const res = await verifyFleetLetter(fl);
-    expect(res.letter.needsYou.every((n) => n.decisionId !== 'jl_dx')).toBe(true);
+    expect(decisionsOf(res.letter)).not.toContain('jl_dx');
     expect(res.reasons.join(' ')).toContain('another tenant');
     expect(res.reasons.join(' ')).toContain('gate mismatch');
   });
@@ -187,8 +254,7 @@ describe('operator attention memory — explicit, admission-controlled, ranking-
 
     const fl = await composeFleetLetter('jl_f');
     // Base scores: d2 = 35, d1 = 30. Attention: d2 −5, d1 +5 → d1 (35) > d2 (30).
-    expect(fl.needsYou[0].decisionId).toBe('jl_d1'); // taste learned, facts still visible
-    expect(fl.needsYou[1].decisionId).toBe('jl_d2');
+    expect(decisionsOf(fl)).toEqual(['jl_d1', 'jl_d2']); // taste learned, facts still visible
   });
 
   it('the /letter surface renders the fleet letter and captures reactions', async () => {
