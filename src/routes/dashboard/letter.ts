@@ -465,9 +465,18 @@ const observationChannelSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Something you count</div>
     ${existing.filter((c) => !c.revoked).map((c) => html`
-      <div style="font-size:0.82rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">
-        ${c.label}${c.unit ? html` <span style="color:var(--text-muted);">(${c.unit})</span>` : ''}
-        <span style="color:var(--text-muted);font-size:0.72rem;"> — post as <code>${c.channelKey}</code></span>
+      <div style="font-size:0.82rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+        <span style="flex:1;min-width:200px;">${c.label}${c.unit ? html` <span style="color:var(--text-muted);">(${c.unit})</span>` : ''}
+        <span style="color:var(--text-muted);font-size:0.72rem;"> — post as <code>${c.channelKey}</code></span></span>
+        <!-- A DOOR OUT. The revoke function existed, exported, with no route:
+             a founder could tell Foundry what to watch and had no way to tell
+             it to stop, while the identical support-channel revoke had been
+             there from the start. A withdrawal only ever lowers what Foundry
+             may do, so it is never the half to leave unbuilt. -->
+        <form method="POST" action="/letter/company/observation-channel/revoke" style="margin:0;">
+          <input type="hidden" name="channel_key" value="${c.channelKey}" />
+          <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Stop watching this</button>
+        </form>
       </div>`)}
     <form method="POST" action="/letter/company/observation-channel"
       style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;">
@@ -1404,6 +1413,33 @@ letterRoutes.post('/letter/company/observation-channel',
     productId: ctx.productId, founderId: founder.id as string, channelKey, label, unit,
   });
   if (!channel) return c.text('That name will not work — use lower-case letters, numbers and underscores', 400);
+  return c.redirect('/letter');
+});
+
+// AND THE WAY BACK OUT. `revokeObservationChannel` existed, exported, and had no
+// route — so a founder could tell Foundry what to watch and had no way to tell
+// it to stop, while the identical support-channel revoke had been there from
+// the start. A withdrawal only ever lowers what Foundry may do, which is why it
+// is never the half to leave unbuilt.
+//
+// Revoked rather than deleted: what was observed while the channel was live
+// stays observed, and `isAdmissibleObservationField` simply stops admitting new
+// readings for it.
+letterRoutes.post('/letter/company/observation-channel/revoke',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const { revokeObservationChannel } = await import(
+    '../../services/institution/company-observation.js');
+  const revoked = await revokeObservationChannel({
+    productId: ctx.productId, founderId: founder.id as string,
+    channelKey: String(body.channel_key ?? '').trim(),
+  });
+  // The same answer for an unknown channel and another tenant's: saying which
+  // would tell a stranger what a company counts.
+  if (!revoked) return c.text('Refused', 403);
   return c.redirect('/letter');
 });
 

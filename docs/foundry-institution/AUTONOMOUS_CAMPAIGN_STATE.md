@@ -120,6 +120,21 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
 6. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
 
+7. **32 of the institution's 126 exported functions have no caller anywhere in
+   `src/`.** Measured, not guessed. About half are the frozen benchmark scorers,
+   which are legitimately test-driven, and eight are the development-assisting
+   vertical already recorded as DARK. The rest are worth reading one at a time —
+   the two examined so far were both real: a founder question nobody compared
+   against reality, and an authority a founder could not withdraw.
+
+   **A gate for this is NOT trivial and should not be faked.** Reachability at
+   function granularity needs a real call graph: a first attempt that excluded a
+   function's own file called `evaluateInstitutionalJudgment` unreachable when a
+   production entry point in the same module calls it. The honest rule — no
+   caller anywhere in `src/`, including its own file — is what produced the 32,
+   and it still cannot tell a test-only benchmark from a defect. Read the list;
+   do not ratchet it until the instrument can be trusted.
+
 ## What keeps working, for whoever comes next
 
 Three lenses produced almost everything found in the last cycle. They are worth

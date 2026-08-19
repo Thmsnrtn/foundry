@@ -229,6 +229,11 @@ Two standards this institution holds itself to, both learned the hard way:
   self-tests plant real files into the working tree, so two runs produce
   failures that look like defects and cost an hour to disbelieve. Freeze the
   tree, run one at a time, and note the revision in the output.
+- **No backticks inside a template literal, including in its comments.** The
+  views are `html\`...\`` templates, and a backtick in an HTML comment or a SQL
+  `--` comment terminates the string — producing a parse error tens of lines
+  away from the cause. Twice in one session. Write the name without the
+  backticks, or put the note above the template.
 - **Read the environment notes before doing the thing they warn about.**
   IMPLEMENTATION_STATE already said not to run two suites at once. Having the
   document open is not having read it.

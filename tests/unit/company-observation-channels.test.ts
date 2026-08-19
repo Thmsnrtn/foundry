@@ -215,6 +215,51 @@ describe('company-defined observation channels', () => {
       productId: P, channelKey: CHANNEL, founderId: 'someone-else' })).toBe(false);
   });
 
+  it('gives the founder a door out, not just a function that could open one', async () => {
+    // THE HALF THAT WAS MISSING. `revokeObservationChannel` existed, exported,
+    // and had no route: a founder could tell Foundry what to watch and had no
+    // way to tell it to stop, while the identical support-channel revoke had
+    // been there from the start. A withdrawal only ever lowers what Foundry may
+    // do, so it is never the half to leave unbuilt.
+    //
+    // Asserted through the ROUTE, because the function was never the problem.
+    const { Hono } = await import('hono');
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: c.req.header('x-founder') ?? OWNER, email: 'o@example.com', preferences: {} } as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
+    });
+    app.route('/', letterRoutes);
+
+    const KEY = 'boats_hauled_out';
+    expect(await registerObservationChannel({
+      productId: P, founderId: OWNER, channelKey: KEY, label: 'Boats hauled out', unit: 'boats',
+    })).toBeTruthy();
+    // The page offers it, which is the part that did not exist.
+    expect(await (await app.request('/letter')).text()).toContain('Stop watching this');
+
+    const form = (founder: string) => app.request('/letter/company/observation-channel/revoke', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-founder': founder },
+      body: `channel_key=${KEY}`,
+    });
+
+    // A founder of ANOTHER company — given one of their own, so this exercises
+    // the tenancy refusal rather than the earlier "no company selected" branch.
+    // They get the same answer as an unknown channel would: saying which would
+    // tell them what this company counts.
+    await query(`INSERT INTO founders (id,clerk_user_id,email) VALUES ('obs_stranger','obs_s','s@example.com')`, []);
+    await query(`INSERT INTO products (id,name,owner_id) VALUES ('obs_stranger_co','Stranger Co','obs_stranger')`, []);
+    expect((await form('obs_stranger')).status).toBe(403);
+    expect(await isAdmissibleObservationField(P, KEY)).toBe(true);
+
+    expect((await form(OWNER)).status).toBe(302);
+    expect(await isAdmissibleObservationField(P, KEY)).toBe(false);
+    expect((await getObservationChannels(P)).find((c) => c.channelKey === KEY)?.revoked).toBe(true);
+  });
+
   it('keeps one company\'s channels out of another\'s', async () => {
     await query(`INSERT INTO founders (id,clerk_user_id,email) VALUES ('obs_other','obs_c2','x@example.com')`, []);
     await query(`INSERT INTO products (id,name,owner_id) VALUES ('obs_other_co','Other Co','obs_other')`, []);
