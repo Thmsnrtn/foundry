@@ -422,6 +422,42 @@ const noticeSection = (
   </div>`;
 };
 
+// What the owner would expect one of the company's own numbers to do.
+//
+// THE ROUTE EXISTED AND NO PAGE POINTED AT IT. `POST .../watch` has been live,
+// `getShadowableResponsibilities` was written to populate exactly this form, and
+// nothing rendered one — so the founder-facing path from Understood to
+// Shadowing existed for development checks and not for the company's own
+// numbers. Production reachable is not human reachable, and a rung of the
+// ladder nobody can climb is not a rung.
+//
+// Offered only where it can be honest: the responsibility is Understood, not
+// already being watched, and the channel has ALREADY produced a real reading.
+// `getShadowableResponsibilities` enforces all three, which is why this renders
+// whatever it returns and decides nothing itself.
+const metricWatchSection = (
+  items: Array<{ responsibilityId: string; title: string; channels: Array<{ field: string; label: string }> }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What would you expect to see?</div>
+    ${items.map((item) => html`
+      <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/watch"
+        style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+        <div style="font-size:0.9rem;color:var(--text-primary);width:100%;">${item.title}</div>
+        <span style="font-size:0.78rem;color:var(--text-muted);">If this is being handled, I'd expect</span>
+        <select name="field" style="font-size:0.78rem;">
+          ${item.channels.map((ch) => html`<option value="${ch.field}">${ch.label}</option>`)}
+        </select>
+        <select name="direction" style="font-size:0.78rem;">
+          <option value="fell">to go down</option>
+          <option value="rose">to go up</option>
+          <option value="held">to stay about the same</option>
+        </select>
+        <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Watch it</button>
+      </form>`)}
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll watch and tell you whether you were right. Watching doesn't let me change anything.</div>
+  </div>`;
+
 // What the owner would expect a development check to report.
 //
 // The twin of the metric watch. Offered only for development responsibilities
@@ -750,6 +786,8 @@ letterRoutes.get('/letter', async (c) => {
     responsibilityId: String((r as Record<string, unknown>).id),
     title: String((r as Record<string, unknown>).title),
   }));
+  const { getShadowableResponsibilities } = await import('../../services/institution/external-shadowing.js');
+  const shadowable = await getShadowableResponsibilities(ctx.productId);
   const { availableDevelopmentChecks } = await import('../../services/institution/development-shadowing.js');
   const developmentChecks = await availableDevelopmentChecks(ctx.productId);
   const understoodDevelopment = (await (await import('../../db/client.js')).query(
@@ -848,6 +886,7 @@ letterRoutes.get('/letter', async (c) => {
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${evidenceQuestionSection(evidenceQuestion)}
       ${permissionSection(assistingCandidates)}
+      ${metricWatchSection(shadowable)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
       ${supportChannelSection(channelCandidates, supportChannels,
         process.env.APP_URL ?? 'http://localhost:8080')}

@@ -121,6 +121,12 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    missing and the owner's pilot decision gates on it.
 
 7. **32 of the institution's 126 exported functions have no caller anywhere in
+   `src/`.** Three read so far, three real defects — see the closed work in git
+   history. The rest are worth reading one at a time.
+
+   Original text follows.
+
+   **32 of the institution's 126 exported functions have no caller anywhere in
    `src/`.** Measured, not guessed. About half are the frozen benchmark scorers,
    which are legitimately test-driven, and eight are the development-assisting
    vertical already recorded as DARK. The rest are worth reading one at a time —

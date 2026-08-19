@@ -164,13 +164,42 @@ describe('company-defined observation channels', () => {
     expect(shadowable[0].channels).toEqual(
       expect.arrayContaining([{ field: CHANNEL, label: 'Boats serviced this week (boats)' }]));
 
-    // And the rung is genuinely entered, on a channel that has real readings.
-    const shadowing = await beginExternalMetricShadowing({
-      productId: P, responsibilityId, founderId: OWNER, field: CHANNEL, direction: 'rose',
+    // ON THE PAGE, which is what "the founder surface offers" has to mean. This
+    // line used to assert a claim about a surface by calling a function: the
+    // route existed, `getShadowableResponsibilities` was written to populate
+    // exactly this form, and NOTHING RENDERED ONE. So the path from Understood
+    // to Shadowing existed for development checks and not for the company's own
+    // numbers, and no test could tell.
+    const { Hono } = await import('hono');
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: OWNER, email: 'o@example.com', preferences: {} } as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
     });
+    app.route('/', letterRoutes);
+
+    const rendered = await (await app.request('/letter')).text();
+    expect(rendered, 'the form must exist for a founder to submit')
+      .toContain(`/letter/responsibilities/${responsibilityId}/watch"`);
+    expect(rendered, "and offer the company's own words, not a field name")
+      .toContain('Boats serviced this week (boats)');
+
+    // And the rung is entered THROUGH IT, on a channel that has real readings.
+    const posted = await app.request(`/letter/responsibilities/${responsibilityId}/watch`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: `field=${CHANNEL}&direction=rose`,
+    });
+    expect(posted.status).toBe(302);
+
+    const shadowing = (await query(
+      'SELECT state,authority_ref FROM institutional_responsibilities WHERE id=?',
+      [responsibilityId])).rows[0];
     expect(shadowing).toMatchObject({ state: 'shadowing' });
     // Watching is not permission.
-    expect(shadowing!.authorityRef).toBeNull();
+    expect(shadowing).toMatchObject({ authority_ref: null });
   });
 
   it('resolves the expectation against real later readings, and never from silence', async () => {
