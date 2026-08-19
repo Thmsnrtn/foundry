@@ -75,9 +75,9 @@ beforeAll(async () => {
   await query(`INSERT INTO products (id,name,owner_id) VALUES
     (?,'Scheduled Co',?),(?,'Foreign Co','sp_other')`, [P, OWNER, FOREIGN]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    (?,?,'support','support_spike','medium','{}','Evidence'),
-    (?,?,'manual','support_spike','medium','{}','Second source'),
-    (?,?,'support','support_spike','medium','{}','Foreign evidence')`,
+    (?,?,'company_observation_baseline','company_observation_baseline:observed','low','{}','Evidence'),
+    (?,?,'company_observation_baseline','company_observation_baseline:second','low','{}','Second source'),
+    (?,?,'company_observation_baseline','company_observation_baseline:observed','low','{}','Foreign evidence')`,
   [`${P}_sig`, P, `${P}_sig2`, P, `${FOREIGN}_sig`, FOREIGN]);
 
   // Fully grounded — the control. If this does not advance, the refusals below

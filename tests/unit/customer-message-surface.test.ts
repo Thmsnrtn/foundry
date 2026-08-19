@@ -43,7 +43,8 @@ async function responsibility(
 ): Promise<void> {
   await query(
     `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-     VALUES (?,?,'support','support_spike','high','{}','seed')`, [`${id}_sig`, productId]);
+     VALUES (?,?,'company_observation_baseline','company_observation_baseline:observed','low','{}','seed')`,
+    [`${id}_sig`, productId]);
   await query(
     `INSERT INTO institutional_responsibilities (id,product_id,title,capability,state,discovery_evidence_ref)
      VALUES (?,?,'Answer people waiting on a quote','customer_support',?,?)`,

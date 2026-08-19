@@ -1,0 +1,9 @@
+tests/unit/company-reconstruction-claims.test.ts
+tests/unit/dynamic-agent-reachability.test.ts
+tests/unit/founder-evidence-bridge.test.ts
+tests/unit/judgment-production-loop.test.ts
+tests/unit/production-reachability-benchmark.test.ts
+tests/unit/reconstruction-executable-benchmark.test.ts
+tests/unit/responsibility-candidate.test.ts
+tests/unit/responsibility-understanding.test.ts
+tests/unit/unfamiliar-company-generalization.test.ts

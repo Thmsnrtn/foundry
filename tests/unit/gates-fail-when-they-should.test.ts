@@ -268,6 +268,19 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('deal_rooms');
   });
 
+  it('check-ladder-fixture-door fails on a new fixture entering through the dead door', () => {
+    // The ladder's first rung is supplied by exactly one intake in production —
+    // a company saying what it owes. `discovery.ts` also maps four SaaS event
+    // types onto responsibilities, and nothing emits any of them. A test that
+    // builds its state through that map is asserting against a state the
+    // running system cannot reach, which is a defect that reads as coverage.
+    plant('tests/unit/_gate_fixture_m.ts',
+      j('export const evidence = { event_type: "', 'support_', 'spike" };\n'));
+    const r = run('check-ladder-fixture-door.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_m');
+  });
+
   it('audit-consequential-effects fails on an outward call its rules cannot see', () => {
     // The window blind spot: a POST to a URL held in a variable matched no rule
     // and was therefore absent from the inventory rather than reported.
@@ -291,6 +304,7 @@ describe('and passes on a clean tree', () => {
       'check-route-guards.mjs', 'check-kernel-boundary.mjs',
       'check-test-schema-fabrication.mjs', 'audit-consequential-effects.mjs',
       'check-writerless-tables.mjs', 'check-notnull-inserts.mjs',
+      'check-ladder-fixture-door.mjs',
     ]) {
       const r = run(script);
       expect(r.code, `${script}: ${r.output}`).toBe(0);

@@ -5,9 +5,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { discoverResponsibilityFromSignal } from '../../src/services/institution/discovery.js';
 import { getSevenDayResponsibilitySummary } from '../../src/services/institution/absence-summary.js';
 import { proposeResponsibilityCandidate } from '../../src/services/institution/responsibility-candidate.js';
+import { reportedObligation } from '../fixtures/responsibility-state.js';
 
 let app: Hono;
 
@@ -15,11 +15,20 @@ beforeAll(async () => {
   await runMigrations();
   await query("INSERT INTO founders (id,clerk_user_id,email) VALUES ('owner','clerk_owner','owner@example.com'),('other','clerk_other','other@example.com')", []);
   await query("INSERT INTO products (id,name,owner_id) VALUES ('owned','Owned Co','owner'),('foreign','Foreign Co','other')", []);
+  // Each company reports what it owes, through the one intake production has.
+  // This used to insert a `payment_failed` signal and call discovery on it —
+  // an event type nothing in this system emits, so the two responsibilities the
+  // whole file asserts against were reached through a door that does not exist.
+  await reportedObligation('owned', 'owner');
+  await reportedObligation('foreign', 'other');
+
+  // Separate named evidence, cited by the dispositions and claims below. It is
+  // deliberately NOT the report that created the responsibility: a disposition
+  // has to name evidence of its own, and reusing the discovery evidence would
+  // have hidden whether the tenant check on that reference works.
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-    VALUES ('sig_owned','owned','stripe','payment_failed','medium','{}','Payment failed'),
-           ('sig_foreign','foreign','stripe','payment_failed','medium','{}','Payment failed')`, []);
-  await discoverResponsibilityFromSignal('owned', 'sig_owned');
-  await discoverResponsibilityFromSignal('foreign', 'sig_foreign');
+    VALUES ('sig_owned','owned','company_observation_baseline','company_observation_baseline:observed','low','{}','The company recorded something'),
+           ('sig_foreign','foreign','company_observation_baseline','company_observation_baseline:observed','low','{}','The other company recorded something')`, []);
 
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
   app = new Hono();

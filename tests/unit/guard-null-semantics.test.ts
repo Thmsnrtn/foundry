@@ -31,7 +31,7 @@ beforeAll(async () => {
   await query(`INSERT INTO products (id,name,owner_id) VALUES
     ('ns_co','Nullsafe Co',?),('ns_other','Other Co',?)`, [OWNER, OWNER]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-    VALUES ('ns_sig','ns_co','support','support_spike','medium','{}','Evidence')`, []);
+    VALUES ('ns_sig','ns_co','company_observation_baseline','company_observation_baseline:observed','low','{}','Evidence')`, []);
   await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state) VALUES
     ('ns_a','ns_co','A','customer_support','visible'),('ns_b','ns_co','B','development','visible')`, []);
 });

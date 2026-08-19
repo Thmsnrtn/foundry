@@ -71,7 +71,8 @@ beforeEach(async () => {
   const signalId = nanoid();
   await query(
     `INSERT INTO signal_events (id, product_id, source, event_type, severity, payload_json, summary)
-     VALUES (?, ?, 'stripe', 'payment_failed', 'medium', '{}', 'Payment failed')`,
+     VALUES (?, ?, 'company_observation_baseline', 'company_observation_baseline:observed',
+             'low', '{}', 'The company recorded something')`,
     [signalId, P]);
   evidenceRef = `signal_event:${signalId}`;
 });

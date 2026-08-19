@@ -29,14 +29,76 @@ export type ReachableState = typeof LADDER[number];
  *  it in different shapes: `evidence_ref` wants the `signal_event:<id>` string,
  *  and a reconstruction claim's evidence list wants `{kind, id}` objects, which
  *  its guard destructures with `json_extract(..., '$.kind')`. Handing the string
- *  form to the claim is what produces a bare "malformed JSON" from SQLite. */
+ *  form to the claim is what produces a bare "malformed JSON" from SQLite.
+ *
+ *  The source/event pair is one production actually writes
+ *  (`company-observation.ts`). It used to be `stripe`/`payment_failed`, which is
+ *  a pair NOTHING in this system emits — see `check-ladder-fixture-door.mjs`.
+ *  Nothing here depended on the SaaS words; the evidence only has to be
+ *  evidence, and evidence the running system could have produced is strictly
+ *  better than evidence it could not. */
 export async function recordSignal(productId: string, summary = 'Observed'): Promise<string> {
   const id = nanoid();
   await query(
     `INSERT INTO signal_events (id, product_id, source, event_type, severity, payload_json, summary)
-     VALUES (?, ?, 'stripe', 'payment_failed', 'medium', '{}', ?)`,
+     VALUES (?, ?, 'company_observation_baseline', 'company_observation_baseline:observed',
+             'low', '{}', ?)`,
     [id, productId, summary]);
   return id;
+}
+
+/**
+ * THE DOOR THE LADDER ACTUALLY HAS.
+ *
+ * Most of this suite created its first responsibility by emitting a
+ * `payment_failed` or `support_spike` signal, because `discovery.ts` maps four
+ * such SaaS event types onto responsibilities. Nothing in production emits any
+ * of them; three appear nowhere else in the repository at all. So the fixtures
+ * were entering the ladder through a door the running system does not have, and
+ * everything they went on to assert rested on a state production cannot reach.
+ *
+ * This goes through the one intake that exists: the company says what it owes,
+ * naming the kind from a closed generic vocabulary, and `reportCompanyObligation`
+ * — the real production function, not a re-implementation of it — records the
+ * evidence and runs discovery. If that path ever stops producing a
+ * responsibility, every fixture built on it fails here, which is the correct
+ * place to find out.
+ *
+ * The founder must own the product: migration 126 verifies it against
+ * `products.owner_id` and refuses the whole report otherwise.
+ */
+export async function reportedObligation(
+  productId: string,
+  founderId: string,
+  opts: {
+    /** One of migration 126's eight generic kinds. Defaults to the one whose
+     *  capability matches what `payment_failed` used to produce. */
+    kind?: 'recurring_work' | 'customer_commitment' | 'exception' | 'revenue_collection'
+      | 'delivery' | 'maintenance' | 'development' | 'operational_dependency';
+    /** The company's own words for what must be handled. */
+    what?: string;
+    /** A date the COMPANY stated. Never inferred, and a past date is refused. */
+    dueAt?: string;
+  } = {},
+): Promise<{ signalId: string; responsibilityId: string }> {
+  const { reportCompanyObligation } = await import('../../src/services/founder/company-report.js');
+  const reported = await reportCompanyObligation({
+    productId, founderId,
+    obligationKind: opts.kind ?? 'revenue_collection',
+    what: opts.what ?? 'Collect the payments customers still owe',
+    ...(opts.dueAt ? { dueAt: opts.dueAt } : {}),
+  });
+  if (!reported) {
+    throw new Error(
+      `reportedObligation: the report was refused for product ${productId}. `
+      + `The founder must own it — check the fixture created ${founderId} as products.owner_id.`);
+  }
+  if (!reported.responsibility) {
+    throw new Error(
+      'reportedObligation: the report was recorded but discovery produced no '
+      + 'responsibility. That is the intake breaking, not the fixture.');
+  }
+  return { signalId: reported.signalId, responsibilityId: reported.responsibility.id };
 }
 
 /** The same thing in the form a transition's `evidence_ref` takes. */

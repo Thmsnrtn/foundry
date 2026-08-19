@@ -25,8 +25,8 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** 202 files, highest **166**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **257 files / 2,252 tests**. `npm run check`
+- **Migrations:** 203 files, highest **167**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **259 files / 2,272 tests**. `npm run check`
   green, and it now runs every gate. CI runs on this branch for the first time.
 - **Ratchets:** unguarded mutating routes **114** (population corrected from a
   quarter of the surface — see below); fabricated test schemas **13**;
@@ -34,7 +34,8 @@ inherited list because it was inherited.
 
 ## Active work
 
-None in flight. Last tranche closed and pushed at `0f62fb8`.
+None in flight. Frontier item 6 is halfway across and gated; the remaining
+nine files are named in the baseline.
 
 ## What this tranche established
 
@@ -110,16 +111,27 @@ found, this list loses.
    live gap with a recommended answer, waiting on the owner.
 5. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
-6. **The ladder's tests enter through a door production does not have.**
-   `emitSignalEvent` is the only function that runs responsibility discovery
-   and has exactly one caller — the company-report path. `discovery.ts` also
-   maps four SaaS event types straight onto responsibilities, and **21 test
-   files build ladder state through that map**, which nothing in production can
-   trigger. Three of the four event types appear nowhere else in the repository
-   at all. The unreachability is now asserted rather than implied
-   (`discovery-is-not-reachable-from-integrations.test.ts`), but moving 47
-   fixture references onto the real door is a deliberate campaign, not a side
-   effect of a deletion — attempting it inside one turned 25 tests red at once.
+6. **The ladder's tests enter through a door production does not have —
+   halfway across.** `emitSignalEvent` is the only function that runs
+   responsibility discovery and has exactly one caller: the company-report path.
+   `discovery.ts` also maps four SaaS event types straight onto
+   responsibilities, and nothing in production can trigger any of them; three
+   appear nowhere else in the repository at all.
+
+   Twenty test files built ladder state through that map. **Ten do now**, held
+   by `check-ladder-fixture-door.mjs` (baseline 9 plus a named vocabulary
+   collision), which may only shrink. The shared fixture moved first, so every
+   file that depends on it now records evidence the running system could have
+   produced, and `reportedObligation()` in `tests/fixtures/responsibility-state.ts`
+   goes through the real intake by calling `reportCompanyObligation` itself
+   rather than re-implementing it.
+
+   The nine that remain are the harder half: the benchmarks, the reachability
+   tests, and the reconstruction suites, several of which assert against
+   specific signal ids. They are a campaign, not a sweep — deleting the map
+   outright turned 25 tests red across 7 files at once, which is how tests get
+   weakened under pressure rather than moved. When the baseline reaches zero the
+   map can be deleted and the gate with it.
 
 7. **The rest of the outcome loop.** Five more predicates are written and read
    by nothing (`shadow_expectation`, `later_reality_comparison`,

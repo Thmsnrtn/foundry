@@ -4,13 +4,13 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { registerToolHandler } from '../../src/services/outbound/gateway.js';
 import { SEND_EMAIL_POLICY } from '../../src/services/integration/resend.js';
-import { discoverResponsibilityFromSignal } from '../../src/services/institution/discovery.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
 import { earnResponsibilityUnderstanding,type UnderstandingFact } from '../../src/services/institution/responsibility-understanding.js';
 import { beginResponsibilityShadowing,compareShadowObservation } from '../../src/services/institution/responsibility-shadowing.js';
 import { recordConsent,revokeConsent } from '../../src/services/autopilot/consent.js';
 import { enterResponsibilityAssisting } from '../../src/services/institution/responsibility-assisting.js';
 import { executeAssistedSupportEmail,planAssistedSupportEmail,reconcileAssistedSupportEmail } from '../../src/services/institution/responsibility-assisted-email.js';
+import { reportedObligation } from '../fixtures/responsibility-state.js';
 
 let dispatches=0;
 beforeAll(async()=>{
@@ -24,12 +24,18 @@ beforeEach(()=>{
 });
 
 async function buildVertical(suffix:string) {
-  const signal=`spike_${suffix}`; const channel=`channel_${suffix}`; const actual=`actual_${suffix}`;
+  const channel=`channel_${suffix}`; const actual=`actual_${suffix}`;
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    (?,'ae_product','support','support_spike','high','{}','Queue needs a bounded reply'),
     (?,'ae_product','support','support_queue_observed','low','{}','Independent channel'),
-    (?,'ae_product','support','support_capacity_restored','low','{}','Capacity restored')`,[signal,channel,actual]);
-  const responsibility=(await discoverResponsibilityFromSignal('ae_product',signal))!;
+    (?,'ae_product','support','support_capacity_restored','low','{}','Capacity restored')`,[channel,actual]);
+  // THE WHOLE VERTICAL STARTS AT THE DOOR PRODUCTION HAS. This used to emit a
+  // SaaS-shaped signal and hand it to discovery — an event type nothing in this
+  // system produces — so the first governed assisted execution was demonstrated
+  // on a responsibility the running system could not have.
+  const reported=await reportedObligation('ae_product','ae_owner',
+    {kind:'customer_commitment',what:'Answer the people waiting in the support queue'});
+  const signal=reported.signalId;
+  const responsibility={id:reported.responsibilityId};
   const facts:Record<UnderstandingFact,unknown>={purpose:'Keep customers supported',desired_outcome:'Restore response capacity',
     success_conditions:['customer receives reply'],failure_conditions:[],operating_constraints:['one low-risk reply'],
     dependencies:['support inbox'],systems:[],current_carrier:null,commitments:[],authority_requirements:['explicit'],
