@@ -31,7 +31,7 @@ import { readFileSync } from 'node:fs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { getAssistingCandidates } from '../../src/services/institution/assisting-admission.js';
-import { shadowWithVerdicts } from '../fixtures/responsibility-state.js';
+import { grantAuthority, shadowWithVerdicts } from '../fixtures/responsibility-state.js';
 
 const F = 'oa_founder';
 const P = 'oa_product';
@@ -49,6 +49,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await query(`DELETE FROM outbound_actions WHERE product_id = ?`, [P]);
+  await query(`DELETE FROM autonomy_consents WHERE product_id = ?`, [P]);
   await query(`DELETE FROM responsibility_shadow_comparisons`);
   await query(`DELETE FROM responsibility_shadow_expectations`);
   await query(`DELETE FROM signal_events WHERE product_id = ?`, [P]);
@@ -153,5 +154,56 @@ describe('and the founder is shown it while deciding', () => {
     expect(body).toContain('item.verifiedFailures');
     expect(body, 'the founder decides; they get the record')
       .toMatch(/didn't work|failed/);
+  });
+});
+
+// ── failure is learned, not punished ───────────────────────────────────────
+
+describe('a verified failure does not revoke what the owner granted', () => {
+  it('leaves the grant standing, and records the failure instead', async () => {
+    // TRIED THE OTHER WAY AND IT WAS WRONG. `action-verifier.ts` demotes an
+    // autopilot category when an autopilot-approved action fails its criteria,
+    // and applies that only to `approved_by` starting `autopilot:` — so the
+    // institution's own assisting path appears to escape a cost the autopilot
+    // pays, and revoking its responsibility-bound grant looks like the
+    // symmetric fix.
+    //
+    // It is not. Reducing what Foundry may do is always permitted, but a grant
+    // is the OWNER'S decision, and cancelling it substitutes Foundry's
+    // judgement for theirs — the founder granted permission knowing things
+    // sometimes fail. The owner remains the only person who can withdraw it.
+    //
+    // The loop closes by making failure VISIBLE at the moment the founder
+    // decides whether to keep helping, which the tests above cover. This one
+    // pins the boundary so the appealing symmetric fix is not made twice.
+    const { reconcileAssistedSupportEmail } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+
+    await shadowWithVerdicts(R, P, ['matched']);
+    await grantAuthority(P, F, 'customer_support', R);
+    await query(
+      `INSERT INTO outbound_actions
+         (id, product_id, responsibility_id, status, effect_id, outcome_status,
+          agent_name, integration_name, action_type, rationale, approved_by)
+       VALUES ('oa_act', ?, ?, 'executed', 'eff_1', 'unresolved',
+               'institution:assisting','resend','send_email','fixture','institution:assisting')`,
+      [P, R]);
+    await query(
+      `INSERT INTO signal_events (id, product_id, source, event_type, severity, payload_json, summary)
+       VALUES ('oa_obs', ?, 'effect_outcome_report', 'effect_outcome:eff_1:failed', 'medium',
+               ?, 'reported failed')`,
+      [P, JSON.stringify({ effect_id: 'eff_1', verdict: 'failed', reporter: 'customer:acme' })]);
+
+    expect(await reconcileAssistedSupportEmail(P, 'oa_act')).toBe('verified_failure');
+
+    const live = await query(
+      `SELECT id FROM autonomy_consents
+        WHERE responsibility_id=? AND revoked_at IS NULL`, [R]);
+    expect(live.rows, 'Foundry withdrew a permission only the owner may withdraw')
+      .toHaveLength(1);
+
+    // And the founder is told, which is the part that had been missing.
+    const [candidate] = await getAssistingCandidates(P);
+    expect(candidate.verifiedFailures).toBe(1);
   });
 });

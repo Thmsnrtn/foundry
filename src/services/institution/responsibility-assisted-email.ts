@@ -152,6 +152,28 @@ export async function reconcileAssistedSupportEmail(productId:string,actionId:st
   await query(`UPDATE outbound_actions SET outcome_status=?,outcome_evidence_ref=?,learned_claim_id=?,reconcile_after=NULL WHERE id=?`,[
     outcome,observations.rows.length?observations.rows.map(row=>`signal_event:${(row as Record<string,unknown>).id}`).join(','):null,
     learnedClaimId??null,actionId]);
+
+  // WHY A VERIFIED FAILURE DOES NOT REVOKE THE GRANT.
+  //
+  // `action-verifier.ts` states a rule plainly — an autopilot-approved
+  // execution that fails its own criteria demotes the acting category one rung
+  // — and applies it only when `approved_by` starts with `autopilot:`. The
+  // institution's assisted path sets `institution:assisting`, so it looks at
+  // first glance as though the rule has the wrong subject and the institution
+  // escapes a cost the autopilot pays.
+  //
+  // Revoking the responsibility-bound grant here was tried and is wrong.
+  // Reducing what Foundry may do is always permitted, but a grant is the
+  // OWNER'S decision, and cancelling it substitutes Foundry's judgement for
+  // theirs: the founder granted permission knowing that things sometimes fail.
+  // FAILURE IS LEARNED, NOT PUNISHED — and the owner remains the only person
+  // who can withdraw permission.
+  //
+  // What failure does instead is become visible exactly where it matters: the
+  // permission card that asks to keep helping now counts verified failures on
+  // this responsibility and says so in plain words while the founder decides.
+  // That closes the loop without taking the decision.
+
   return outcome;
 }
 
