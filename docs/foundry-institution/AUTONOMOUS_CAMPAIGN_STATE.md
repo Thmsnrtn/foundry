@@ -125,11 +125,31 @@ found, this list loses.
    caller stays one, that no second domain-shaped contract reappears, and that
    `EVENT_AGENT_MAP` — the same defect one layer up — stays asserted.
 
-7. **The rest of the outcome loop.** Five more predicates are written and read
-   by nothing (`shadow_expectation`, `later_reality_comparison`,
-   `development_shadow_comparison`, `development_change_outcome`, and
-   `shadow_comparison` outside a frozen benchmark). The authority request is
-   closed; the others are not.
+7. **The rest of the outcome loop.** `development_change_outcome` is closed —
+   Foundry now reads back what it learned about its own changes and the founder
+   sees the track record. Three predicates remain written and read by nothing:
+   `shadow_expectation` and `shadow_comparison` (`external-shadowing.ts`) and
+   `development_shadow_comparison` (`development-shadowing.ts`).
+   `later_reality_comparison` is the fourth and the most valuable: it is
+   Foundry's own judgment track record — whether what it said about the company
+   was borne out — and nothing consults it. Note the earlier entry claiming
+   `shadow_comparison` was read "outside a frozen benchmark" was wrong; the
+   apparent reader is a same-named string in `READINESS_DIMENSIONS`.
+
+8. **A founder with two companies is shown a poorer institution than a founder
+   with one.** `/letter` routes anyone with `allProducts.length > 1` to the
+   fleet composition, which renders four things: ranked needs-you, system
+   lines, and per-product handled/learned/trust. The single-product letter
+   renders about twenty, and the ones the fleet path drops include every place
+   authority is granted or seen — what Foundry is permitted to change, what it
+   changed, the permission asks, the evidence question, support channels,
+   customer messages, judgments, and the report-obligation form.
+
+   **An authority a founder cannot see is one they cannot withdraw**, so this is
+   a governance gap and not only a UX one. It was found while proving the
+   development track record reaches a person, and it is the reason that test
+   uses a solo founder. Nothing recorded it before. Ranked high: it is a
+   composition problem with a known shape, not a design question.
 
 ## Blocked — needs a design decision, not effort
 

@@ -652,6 +652,15 @@ letterRoutes.get('/letter', async (c) => {
   // sat waiting for an answer. The quiet branch has always been overridden by
   // real institutional state; first-run needs the same override for the same
   // reason. Founder UX may not hide uncertainty, and it may not hide a person.
+  //
+  // FOUNDRY HAVING TOUCHED THEIR SYSTEMS IS REAL INSTITUTIONAL STATE, and it was
+  // one case short of that list. A company where Foundry had changed a file, or
+  // where a check on a change it made had failed, was shown "It's empty because
+  // there's no data yet". The two sections it hid are the two the founder most
+  // needs: what Foundry changed, and what it is currently permitted to change.
+  // An authority a founder cannot see is one they cannot withdraw.
+  const hasDevelopmentActivity = development.changes.length > 0
+    || development.permitted.length > 0 || development.record !== null;
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
     : null;
@@ -663,7 +672,7 @@ letterRoutes.get('/letter', async (c) => {
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}
 
     ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
-      && supportChannels.length === 0 ? html`
+      && supportChannels.length === 0 && !hasDevelopmentActivity ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
         <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
         <div style="font-size:0.88rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.55;">
@@ -673,7 +682,7 @@ letterRoutes.get('/letter', async (c) => {
           <a href="/connections" class="btn btn-primary" style="font-size:0.85rem;align-self:flex-start;">Connect your tools → so Foundry can see your real numbers</a>
           <a href="/decisions" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">Log your first decision → and the belief behind it, so Foundry can watch it</a>
         </div>
-      </div>` : letter.quiet && !hasResponsibilitySummary ? html`
+      </div>` : letter.quiet && !hasResponsibilitySummary && !hasDevelopmentActivity ? html`
       <div class="card" style="padding:1.5rem;text-align:center;">
         <div style="font-size:1rem;color:var(--text-primary);">Quiet day. Nothing needs you.</div>
         <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.4rem;">That's the goal. Go build — or rest.</div>

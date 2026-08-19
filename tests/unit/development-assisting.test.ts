@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
@@ -379,6 +380,48 @@ describe('what the founder is told about development', () => {
     // A company that has changed nothing is told nothing, rather than shown a
     // vacuous perfect record.
     expect((await getFounderDevelopmentActivity('as_revoke')).record).toBeNull();
+  });
+
+  it('puts the track record on the page, not just in a return value', async () => {
+    // PRODUCTION REACHABLE IS NOT HUMAN REACHABLE. A service that computes an
+    // honest track record and a page that never renders it are the same thing
+    // to a founder as not computing it at all.
+    //
+    // A SOLO FOUNDER, deliberately. `as_owner` holds five companies, and the
+    // letter routes anyone with more than one to the fleet composition — which
+    // has no development section at all. That is a real gap and it is recorded
+    // in the live frontier; it is not this test's subject, and writing the test
+    // against the fleet path would have quietly made it this test's subject.
+    await query(`INSERT INTO founders (id,clerk_user_id,email) VALUES
+      ('as_solo','as_solo_clerk','solo@example.com')`, []);
+    await query(`INSERT INTO products (id,name,owner_id) VALUES ('as_solo_co','Solo Co','as_solo')`, []);
+    const signalId = 'as_solo_sig';
+    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+      VALUES (?,'as_solo_co','development_observation','development_check_observed','low','{}','A check ran')`,
+    [signalId]);
+    await recordReconstructionClaim({
+      productId: 'as_solo_co', subject: 'responsibility:as_solo_resp',
+      predicate: 'development_change_outcome',
+      value: { changeId: 'chg_solo', path: TARGET, outcome: 'verified_success' },
+      epistemicStatus: 'known', evidenceRefs: [{ kind: 'signal_event', id: signalId }],
+      derivationMethod: 'bounded development change verification', observedAt: new Date(),
+    });
+
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: 'as_solo', email: 'solo@example.com', preferences: {} } as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
+    });
+    app.route('/', letterRoutes);
+
+    const page = await (await app.request('/letter')).text();
+    expect(page, 'the track record must reach the page').toContain('Across everything I have changed');
+    // Counts in the founder's language, with the word that says what each means.
+    expect(page).toContain('an independent check confirmed');
+    // And no rate, anywhere near it.
+    expect(page).not.toMatch(/\d+% (reliable|success|confirmed)/);
   });
 
   it('lets a stale verification fall out of the record rather than standing forever', async () => {
