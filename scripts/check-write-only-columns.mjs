@@ -22,7 +22,16 @@
 // WHAT IT CAN AND CANNOT SEE, stated because a gate that overstates its
 // coverage is the defect it exists to catch:
 //   • A column is WRITTEN if it appears in an `INSERT INTO <table> (...)` list
-//     or an `UPDATE <table> SET ...` clause in `src/`.
+//     or an `UPDATE <table> SET ...` clause in `src/`. `INSERT OR IGNORE` and
+//     `INSERT OR REPLACE` count — the first version of this gate missed both,
+//     so every column written only through a conflict-handling insert was
+//     invisible to it and could never be reported.
+//   • WRITTEN means "there is code that writes it", not "that code runs".
+//     `signal_events.processing_session_id` is on the list and is in fact
+//     written by a branch nothing can reach, so it is never written at all.
+//     That is a different defect wearing the same face, and
+//     `check-reachability.mjs` is the instrument for it. Neither gate should
+//     grow the other'"'"'s job; when an entry looks odd, ask both.
 //   • A column is READ if its name appears anywhere in `src/` outside every
 //     such write context, comments stripped.
 //   • It therefore MISSES a read that never names the column — `SELECT *`
@@ -110,7 +119,7 @@ let readable = code;
 for (const table of tables.keys()) {
   const contexts = [];
   for (const pattern of [
-    new RegExp(`INSERT\\s+INTO\\s+${table}\\s*\\(([^)]*)\\)`, 'gi'),
+    new RegExp(`INSERT\\s+(?:OR\\s+(?:IGNORE|REPLACE|ABORT|FAIL|ROLLBACK)\\s+)?INTO\\s+${table}\\s*\\(([^)]*)\\)`, 'gi'),
     new RegExp(`UPDATE\\s+${table}\\s+SET([\\s\\S]{0,600}?)(?=WHERE|\`)`, 'gi'),
   ]) for (const m of code.matchAll(pattern)) contexts.push(m[1]);
   if (contexts.length) writeContexts.set(table, contexts);

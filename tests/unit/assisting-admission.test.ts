@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
+import { shadowWithVerdicts } from '../fixtures/responsibility-state.js';
 import { reportCompanyObligation } from '../../src/services/founder/company-report.js';
 import {
   recordFounderEvidenceAnswer, selectFounderEvidenceQuestion,
@@ -196,7 +197,76 @@ describe('Shadowing to Assisting through production-facing paths', () => {
     await query('UPDATE reconstruction_claims SET valid_until=NULL WHERE id=?', [String(claim.id)]);
   });
 
+  it('does not hide a refusal from the person who just granted authority', async () => {
+    // THE CODEBASE'S OWN CONVENTION, AND ITS ONE EXCEPTION. The notice-carry
+    // route answers `Not carried: <reason>`; the disposition routes all surface
+    // refusals. `grantAssistingAuthority` caught the database's refusal with a
+    // bare `catch {}` and returned `admitted: false` — and the route ignored
+    // that and redirected. So the single place that grants AUTHORITY was the
+    // single place a refusal was invisible: the founder granted permission, saw
+    // no difference, and was left with a live consent Foundry could not use.
+    //
+    // The responsibility is walked up the ladder for real rather than having
+    // its state written — migration 159 refuses that, and the first draft of
+    // this test found out, which is the guard doing its job.
+    const shaky = 'aa_shaky';
+    await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability)
+      VALUES (?,?,'Answer the second inbox','customer_support')`, [shaky, PRODUCT]);
+    await shadowWithVerdicts(shaky, PRODUCT, ['matched']);
+
+    // Now break exactly what the ENTRY guard checks and the grant path does
+    // not: the claim the expectation rests on stops being current. This is the
+    // residual race the refusal handling exists for — the offer already filters
+    // on it, but the world can move between offer and grant.
+    const claim = (await query(
+      `SELECT claim.id FROM responsibility_shadow_expectations x
+         JOIN reconstruction_claims claim
+           ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
+        WHERE x.responsibility_id=? LIMIT 1`, [shaky])).rows[0] as Record<string, unknown>;
+    expect(claim, 'the fixture must have walked the ladder properly').toBeTruthy();
+    await query("UPDATE reconstruction_claims SET epistemic_status='unknown' WHERE id=?", [String(claim.id)]);
+
+    const before = Number(((await query(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=?', [PRODUCT]))
+      .rows[0] as Record<string, unknown>).n);
+    const result = await grantAssistingAuthority({
+      productId: PRODUCT, responsibilityId: shaky, founderId: OWNER, durationDays: 7,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.admitted, 'the guard refused, so nothing was admitted').toBe(false);
+    expect(result!.refusal, 'and the reason must survive the catch').toBeTruthy();
+    expect(result!.refusal).toMatch(/assisting|shadow|evidence/i);
+
+    // THE GRANT THE OWNER MADE STILL STANDS. Foundry declining to use authority
+    // is always permitted; Foundry deleting an owner's grant would be editing
+    // the owner's decision.
+    const after = Number(((await query(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=?', [PRODUCT]))
+      .rows[0] as Record<string, unknown>).n);
+    expect(after, 'the grant the owner made still stands').toBe(before + 1);
+    expect((await query('SELECT state FROM institutional_responsibilities WHERE id=?', [shaky]))
+      .rows[0]).toMatchObject({ state: 'shadowing' });
+
+    await query("UPDATE reconstruction_claims SET epistemic_status='known' WHERE id=?", [String(claim.id)]);
+
+    // AND THE CARD SAYS WHAT IS TRUE. `granted` means a live consent exists;
+    // it does not mean Foundry is helping. Those were the same field, so a
+    // refused admission read exactly like an accepted one — the founder
+    // allowed something, saw the same words back, and nothing was happening.
+    const card = (await getAssistingCandidates(PRODUCT))
+      .find((candidate) => candidate.responsibilityId === shaky);
+    expect(card, 'the offer returns once its evidence is current again').toBeTruthy();
+    expect(card).toMatchObject({ granted: true, assisting: false });
+  });
+
   it('refuses a stranger and another tenant', async () => {
+    // Measured as a DELTA, not as a whole-file total. This asserted that the
+    // product had zero live consents afterwards, which is a fact about every
+    // other test in the file rather than about the stranger — the moment one of
+    // them legitimately left a grant standing, this failed for a reason that
+    // had nothing to do with strangers.
+    const before = await countOf(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=? AND revoked_at IS NULL', [PRODUCT]);
     expect(await grantAssistingAuthority({
       productId: PRODUCT, responsibilityId, founderId: STRANGER,
     })).toBeNull();
@@ -204,7 +274,11 @@ describe('Shadowing to Assisting through production-facing paths', () => {
       productId: PRODUCT, responsibilityId, founderId: STRANGER,
     })).toBe(false);
     expect(await countOf(
-      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=? AND revoked_at IS NULL', [PRODUCT])).toBe(0);
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=? AND revoked_at IS NULL', [PRODUCT]),
+    'the stranger changed nothing').toBe(before);
+    // And nothing they touched belongs to them either way.
+    expect(await countOf(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE founder_id=?', [STRANGER])).toBe(0);
   });
 
   it('has real production callers for the authority writer and the admission', () => {

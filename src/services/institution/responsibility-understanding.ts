@@ -1,3 +1,4 @@
+import { query } from '../../db/client.js';
 import { getReconstructionClaims,type EpistemicStatus,type ReconstructionEvidenceRef } from './reconstruction.js';
 import { getResponsibility,transitionResponsibility,type Responsibility } from './responsibility.js';
 
@@ -39,8 +40,27 @@ export async function projectResponsibilityUnderstanding(productId:string,respon
   const unresolvedFacts=requiredFacts.filter((predicate)=>{
     const fact=current.get(predicate); return fact!=null && ['unknown','conflicting','stale'].includes(fact.epistemicStatus);
   });
+  // AUTHORITY IS REQUIRED UNTIL SOMETHING LIVE SAYS OTHERWISE.
+  //
+  // This was `responsibility.authorityRef===null`, and that column is not
+  // cleared when a founder withdraws permission — the consent it names gets a
+  // `revoked_at` and the pointer stays, because the transition ledger keeps the
+  // history and every execution path re-reads `revoked_at IS NULL` at the
+  // moment it acts. Correct behaviour, wrong reading here: the projection said
+  // authority was NO LONGER REQUIRED for a responsibility whose permission had
+  // just been taken away, which is the answer exactly inverted on the one
+  // question the founder had just acted on.
+  //
+  // It asks the ledger the same question the execution paths ask, so a
+  // withdrawal reads as a withdrawal everywhere.
+  const liveGrant=await query(
+    `SELECT 1 FROM autonomy_consents a
+      WHERE a.responsibility_id=? AND a.product_id=? AND a.capability=?
+        AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime(?)
+      LIMIT 1`,
+    [responsibilityId,productId,responsibility.capability,now.toISOString()]);
   return {responsibility,facts,requiredFacts,missingCriticalFacts:[...missingCriticalFacts],unresolvedFacts:[...unresolvedFacts],
-    authorityRequired:responsibility.authorityRef===null};
+    authorityRequired:liveGrant.rows.length===0};
 }
 
 export async function earnResponsibilityUnderstanding(productId:string,responsibilityId:string,now:Date=new Date()):Promise<Responsibility> {

@@ -198,6 +198,43 @@ found, this list loses.
       into `src/` and `tests/`, so two runs collide and produce failures that
       look like defects. One such collision cost an hour here.
 
+11. **A refusal the founder could not see, on the surface that grants
+    authority.** `grantAssistingAuthority` caught the database's refusal with a
+    bare `catch {}` and returned `admitted: false`, which the route ignored
+    before redirecting. So a founder granted permission, saw no difference, and
+    was left with a live consent Foundry could not use and no way to find out
+    why. The card compounded it: `granted` meant "a live consent exists", not
+    "Foundry is helping", so a refused admission read exactly like an accepted
+    one.
+
+    Notable because the codebase's own convention is the opposite — the
+    notice-carry route returns `Not carried: <reason>` and the disposition
+    routes all surface refusals. The single exception was the one route that
+    grants authority.
+
+    **Closed.** The reason is captured and logged, the card distinguishes a live
+    grant from actually assisting, and the grant is NOT destroyed: the owner
+    gave it, Foundry declining to use authority is always permitted, and Foundry
+    deleting an owner's grant would be editing the owner's decision.
+
+12. **`authorityRequired` said authority was no longer required after a
+    withdrawal.** ~~Open.~~ **Closed.** The understanding projection read
+    `authority_ref === null`, and that column is deliberately not cleared when a
+    founder withdraws permission — the ledger keeps the history and every
+    execution path re-reads `revoked_at IS NULL`. So the projection inverted the
+    answer on the one question the founder had just acted on. It asks the ledger
+    the same question the execution paths ask now. `absence-summary` had it
+    right all along, which is how it was found.
+
+13. **Three more write-only columns, previously invisible.** The gate matched
+    `INSERT INTO` but not `INSERT OR IGNORE INTO`, so every column written only
+    through a conflict-handling insert could never be reported. Fixed; baseline
+    93 → 96. Two of the three are a company's SEASONALITY
+    (`business_model_profile.seasonal_baseline_factor`, `seasonal_peak_months`)
+    — Foundry records the shape of a company's year and nothing reads it. Worth
+    a look: it is the sort of fact a marina or a dance school would expect to be
+    used.
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.

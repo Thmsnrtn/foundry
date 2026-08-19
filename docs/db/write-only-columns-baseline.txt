@@ -22,6 +22,8 @@ anomalies.expected_value
 auto_execution_log.action_draft_id
 autonomy_consents.from_mode
 board_packets.metrics_snapshot_json
+business_model_profile.seasonal_baseline_factor
+business_model_profile.seasonal_peak_months
 causal_chains.effect_entity_id
 causal_chains.root_cause_entity_id
 cofounder_alignment_scores.score_date
@@ -40,6 +42,7 @@ evolved_prompts.predictions_before
 execution_playbooks.last_evaluated_at
 expansion_analysis.strategic_fork_scenarios
 experiments.current_sample_size
+forecast_checkpoints.scenario_id
 forecast_checkpoints.variance_pct
 forecast_scenarios.generated_by
 founder_evidence_requests.answer_signal_id

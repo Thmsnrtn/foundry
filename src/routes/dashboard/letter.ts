@@ -527,6 +527,12 @@ const permissionSection = (
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I still may not ${item.mayNot}.</div>
         ${item.granted ? html`
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.35rem;">You've allowed this until ${new Date(item.grantExpiresAt as string).toDateString()}.</div>
+          <!-- A LIVE GRANT AND ACTUALLY HELPING ARE DIFFERENT FACTS. The card
+               showed only the first, so a grant the database refused to admit
+               read exactly like one it accepted: the founder allowed something,
+               saw the same words back, and Foundry was not helping. -->
+          ${item.assisting ? '' : html`
+          <div style="font-size:0.72rem;color:#ffb347;margin-top:0.2rem;">I have not been able to start on it yet, so your permission is recorded and unused. It stays yours — nothing here takes it back.</div>`}
           <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/permission/revoke" style="margin-top:0.35rem;">
             <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Stop allowing this</button>
           </form>` : html`
@@ -1510,6 +1516,18 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/permission/grant',
   });
   // Do not reveal whether another tenant's responsibility exists.
   if (!granted) return c.text('Refused', 403);
+  // A GRANT THAT COULD NOT BE USED IS NOT A SILENT SUCCESS. The refusal was
+  // swallowed and this redirected either way, so a founder granted authority,
+  // saw no difference, and was left with a live consent Foundry could not act
+  // on. The permission stands — it is theirs, and Foundry does not take back
+  // what an owner gave — but the page now says so instead of implying the
+  // opposite. The reason is logged rather than shown: it names an internal
+  // guard, and the founder needs the fact, not the vocabulary.
+  if (!granted.admitted && granted.refusal) {
+    const { log } = await import('../../lib/logger.js');
+    log.warn('assisting admission refused after grant',
+      { productId: ctx.productId, refusal: granted.refusal });
+  }
   return c.redirect('/letter');
 });
 

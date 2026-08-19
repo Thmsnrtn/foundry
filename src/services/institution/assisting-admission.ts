@@ -72,6 +72,12 @@ export interface AssistingCandidate {
    *  broke, and the founder was not told while deciding. */
   verifiedFailures: number;
   granted: boolean;
+  /**
+   * Whether Foundry is ACTUALLY helping. A live grant and a responsibility in
+   * Assisting are different facts, and the card showed only the first — so a
+   * grant the database refused to admit read exactly like one it had accepted.
+   */
+  assisting: boolean;
   grantExpiresAt: string | null;
 }
 
@@ -101,7 +107,7 @@ export interface AssistingCandidate {
  */
 export async function getAssistingCandidates(productId: string): Promise<AssistingCandidate[]> {
   const rows = await query(
-    `SELECT r.id, r.title, r.capability,
+    `SELECT r.id, r.title, r.capability, r.state,
             (SELECT COUNT(*) FROM responsibility_shadow_comparisons c
                JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
                JOIN reconstruction_claims claim
@@ -149,6 +155,7 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
         deviations: Number(r.deviations),
         verifiedFailures: Number(r.verified_failures),
         granted: r.grant_expires_at != null,
+        assisting: String(r.state) === 'assisting',
         grantExpiresAt: r.grant_expires_at == null ? null : String(r.grant_expires_at),
       };
     });
@@ -164,7 +171,16 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
  */
 export async function grantAssistingAuthority(input: {
   productId: string; responsibilityId: string; founderId: string; durationDays?: number;
-}): Promise<{ consentId: string; responsibility: Responsibility | null; admitted: boolean } | null> {
+}): Promise<{
+  consentId: string; responsibility: Responsibility | null; admitted: boolean;
+  /**
+   * WHY IT WAS NOT ADMITTED, when it was not. This was a bare `catch {}`, so
+   * the database's refusal — which names the guard that fired — was discarded
+   * at the exact moment somebody had just granted authority on the strength of
+   * being asked for it.
+   */
+  refusal: string | null;
+} | null> {
   // WHO MAY GRANT FOUNDRY AUTHORITY. This used to be `p.owner_id = ?`, which
   // made granting owner-only by accident of an SQL scope rather than by
   // decision — the same shape the campaign found on action approval, playbook
@@ -213,6 +229,7 @@ export async function grantAssistingAuthority(input: {
   // restores permission, it does not promote anything. Maturity and authority
   // are different things and move independently.
   let admitted = false;
+  let refusal: string | null = null;
   if (String(owned.state) === 'assisting') {
     // Already admitted. A re-grant restores permission and promotes nothing —
     // but the responsibility must now point at the authority that is actually
@@ -227,12 +244,23 @@ export async function grantAssistingAuthority(input: {
         shadowComparisonId: String(comparison.id), authorityConsentId: consentId,
       });
       admitted = true;
-    } catch {
-      admitted = false; // the guard refused; the grant stands, unused
+    } catch (error) {
+      // THE GRANT STANDS AND IS NOT DESTROYED. The owner granted it; Foundry
+      // declining to use authority is always permitted, and Foundry deleting
+      // an owner's grant is editing the owner's decision. So the consent stays
+      // and the responsibility does not move.
+      //
+      // What changes is that the refusal is no longer swallowed. It used to be
+      // a bare `catch {}` returning `admitted: false`, and nothing read that —
+      // the route redirected either way, so a founder granted permission, saw
+      // no difference, and was left with a live consent that could not be used
+      // and no way to find out why.
+      admitted = false;
+      refusal = error instanceof Error ? error.message : String(error);
     }
   }
   return {
-    consentId, admitted,
+    consentId, admitted, refusal,
     responsibility: await getResponsibility(input.productId, input.responsibilityId),
   };
 }
