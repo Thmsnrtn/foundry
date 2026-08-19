@@ -89,14 +89,22 @@ from `emailAddresses[0]`, neither necessarily primary nor verified.
 Provisional, recomputed each cycle. Not a backlog — if something better is
 found, this list loses.
 
-1. **Two disagreeing answers to "what needs you" — half closed.** The
-   single-product headline is now a projection over BOTH canonical sources
-   (`composer.ts`: an overdue responsibility outranks a pending decision, and
-   `ASK_WORDS` says why in the founder's language). Two things remain. The
-   cross-fleet ranking still reads `decisions` alone — see item 8. And
-   `strategic_decisions_log` is a third founder-decision store: material
-   judgments render in their own section and can never be the one thing,
-   however material.
+1. ~~Two disagreeing answers to "what needs you".~~ **Closed on both paths.**
+   The single-product headline projects over BOTH canonical sources
+   (`composer.ts`), and the cross-fleet ranking now does too (`fleet.ts`), with
+   the same precedence: a passed date the company itself gave outranks a pending
+   decision, because it is the one ask that is late rather than merely open. The
+   two kinds are a discriminated union rather than a flattened shape — a
+   responsibility has no gate, and inventing one to make the sort uniform would
+   be manufacturing a fact. The verifier checks a responsibility ask as strictly
+   as a decision: fresh ledger read, recomputed classification, dropped if the
+   reason changed or the date is no longer past.
+
+   **Still true and still open:** `strategic_decisions_log` is a third
+   founder-decision store. Material judgments render in their own section and
+   can never be the one thing, however material. That is the last third of this
+   item.
+
 2. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving
    an archived unbuildable client, most of `tier1-4`). Deletion adds no
    capability but makes the route count honest — the 114 figure includes pages
@@ -138,21 +146,14 @@ found, this list loses.
    `shadow_comparison` was read "outside a frozen benchmark" was wrong; the
    apparent reader is a same-named string in `READINESS_DIMENSIONS`.
 
-8. **A founder with two companies is shown a poorer institution than a founder
-   with one.** ~~Structural half fixed.~~ `/letter` routed anyone with
-   `allProducts.length > 1` to the fleet composition, which REPLACED the
-   single-product letter: a ranked needs-you list, system lines, and a bare
-   title per responsibility, with no way back — the product switcher did not
-   change which branch ran. Everything where authority is granted or seen was
-   gone. The fleet ranking is now a prefix and the ACTIVE company renders in
-   full beneath it: ranking across the fleet, action within one company.
-
-   **Still open, and it is frontier item 1 on the fleet path.** The cross-fleet
-   ranking in `fleet.ts` scores only `decisions` rows. The single-product letter
-   was taught to project over both canonical sources — so an overdue
-   responsibility, a withdrawn permission, or an unresolved outcome can be "the
-   one thing" there and can never be the top item across the fleet. The fix
-   applied to one path was never carried to the other.
+8. ~~A founder with two companies is shown a poorer institution than a founder
+   with one.~~ **Closed.** `/letter` routed anyone with more than one company to
+   a fleet composition that REPLACED the single-product letter — a ranked list,
+   system lines, and a bare title per responsibility, with no way back, because
+   the branch ran whatever the product switcher said. Every surface where
+   authority is granted or seen was gone. The ranking is now a prefix and the
+   ACTIVE company renders in full beneath it: ranking across the fleet, action
+   within one company.
 
 ## Blocked — needs a design decision, not effort
 
