@@ -386,4 +386,52 @@ describe('operator attention memory — explicit, admission-controlled, ranking-
       .not.toContain(card('CalmCo'));
     expect(page, 'the other companies still do').toContain(card('FireCo'));
   });
+
+  it('shows a portfolio founder every section a solo founder gets, derived rather than listed', async () => {
+    // The test above names a few surfaces it must not lose. This one does not
+    // name any: it renders the SAME company for a founder who owns one, then
+    // for a founder who owns two, and requires the second to contain every
+    // section heading the first had.
+    //
+    // Listed assertions go stale the moment somebody adds a section. A founder
+    // with two companies losing a surface added next year would pass the test
+    // above and fail this one, which is the right way round.
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app2 = (id: string) => {
+      const a = new Hono();
+      a.use('*', async (c, next) => {
+        c.set('founder' as never, { id, email: `${id}@t.co`, preferences: {} } as never);
+        c.set('csrfToken' as never, 't' as never);
+        await next();
+      });
+      a.route('/', letterRoutes);
+      return a;
+    };
+
+    // A founder with exactly one company, holding real institutional state.
+    await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('jl_solo','clk_solo','jl_solo@t.co')", []);
+    await query("INSERT INTO products (id, name, owner_id, status) VALUES ('jl_only','OnlyCo','jl_solo','active')", []);
+    await query(`INSERT INTO decisions (id, product_id, category, gate, what, why_now, status) VALUES
+      ('jl_solo_d','jl_only','strategic',3,'Decide the thing','pull','pending')`, []);
+    const solo = await (await app2('jl_solo').request('/letter')).text();
+
+    // The SECTION HEADINGS the single-product letter rendered for them.
+    const headings = [...solo.matchAll(/text-transform:uppercase;color:var\(--text-muted\);margin-bottom:0\.6rem;">([^<]+)</g)]
+      .map((m) => m[1].trim());
+    expect(headings.length, 'the solo letter must render sections to compare against')
+      .toBeGreaterThan(0);
+
+    // The same person gains a second company and must lose nothing.
+    await query("INSERT INTO products (id, name, owner_id, status) VALUES ('jl_second','SecondCo','jl_solo','active')", []);
+    const portfolio = await (await app2('jl_solo').request('/letter')).text();
+    for (const heading of headings) {
+      expect(portfolio, `a second company cost them the "${heading}" section`).toContain(heading);
+    }
+    // And they gained the fleet ranking rather than trading for it.
+    expect(portfolio).toContain('one letter, your whole fleet');
+
+    await query("DELETE FROM decisions WHERE product_id='jl_only'", []);
+    await query("DELETE FROM products WHERE owner_id='jl_solo'", []);
+    await query("DELETE FROM founders WHERE id='jl_solo'", []);
+  });
 });
