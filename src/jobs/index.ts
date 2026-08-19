@@ -277,39 +277,41 @@ export async function coldStartCheck(): Promise<void> {
 // ─── 9. Scenario Accuracy — Weekly after synthesis ────────────────────────────
 export async function scenarioAccuracy(): Promise<void> {
   logger.info('scenario_accuracy starting', { jobName: 'scenario_accuracy' });
-  // Find decisions with outcomes that have scenario models but no accuracy score
-  // Bounded, and it calls the model before it writes the score — so a company
-  // Foundry may not spend for leaves the row exactly as it found it, and the
-  // window fills with work that can never complete. Same shape as
-  // `pendingRedTeamWork`; same reason for the join.
+  // A PAID FRONTIER CALL THAT NOTHING READ, DUPLICATING A FREE DETERMINISTIC ONE.
+  //
+  // This asked Opus, once per decision and up to twenty per pass, to classify
+  // an outcome as positive/neutral/negative and score how close the base case
+  // had been. It then wrote that answer to `scenario_models.outcome_accuracy`
+  // — a column no SELECT in this repository reads. Every reader of
+  // `scenario_models` takes `id`, `option_label`, `base_case`, `best_case`,
+  // `stress_case`, and none of them takes the accuracy.
+  //
+  // Meanwhile the direction it was paying to infer is already a recorded fact:
+  // `decisions.outcome_valence`, which the prediction-accuracy job beside this
+  // one reads deterministically and writes to `prediction_accuracy`, a table
+  // that IS read. So the model was being asked for something the database
+  // already knew, and the answer was filed where nobody looks.
+  //
+  // Cognition pays rent or it goes. What this job is FOR — contributing the
+  // outcome to the cross-company pattern pool — is kept, computed from the
+  // valence the founder recorded. The scenario comparison it was scoring is
+  // not lost either: nothing consumed it, and if a consumer appears the
+  // deterministic comparison can be written then, without buying it.
   const decisions = await query(
-    `SELECT d.*, sm.id as scenario_id, sm.base_case, sm.best_case, sm.stress_case
+    `SELECT d.id, d.product_id, d.category, d.chosen_option, d.outcome_valence
      FROM decisions d
      JOIN scenario_models sm ON d.id = sm.decision_id
      JOIN products p ON p.id = d.product_id
-     WHERE d.outcome IS NOT NULL AND sm.outcome_accuracy IS NULL
+     WHERE d.outcome IS NOT NULL AND d.outcome_valence IS NOT NULL
        AND ${operatingProduct('p')}
      LIMIT 20`, []);
 
   for (const row of decisions.rows) {
     const d = row as Record<string, unknown>;
     try {
-      // Simple accuracy scoring: compare outcome direction
-      const outcome = d.outcome as string;
-      const baseCase = JSON.parse(d.base_case as string) as Record<string, unknown>;
+      const valence = Number(d.outcome_valence);
+      const outcomeDirection = valence === 1 ? 'positive' : valence === -1 ? 'negative' : 'neutral';
 
-      // Ask Claude to evaluate accuracy
-      const response = await callOpus(
-        'Evaluate scenario prediction accuracy. Return JSON: {"predicted_direction": "positive|neutral|negative", "actual_direction": "positive|neutral|negative", "accuracy_score": 0.0-1.0}',
-        `Base case prediction: ${JSON.stringify(baseCase)}\nActual outcome: ${outcome}`,
-        512, d.product_id as string
-      );
-      const accuracy = parseJSONResponse<Record<string, unknown>>(response.content);
-
-      await query('UPDATE scenario_models SET outcome_accuracy = ? WHERE id = ?',
-        [JSON.stringify(accuracy), d.scenario_id]);
-
-      // Feed into decision patterns
       const ls = await query('SELECT * FROM lifecycle_state WHERE product_id = ?', [d.product_id]);
       const lsRow = ls.rows[0] as Record<string, string> | undefined;
 
@@ -320,12 +322,16 @@ export async function scenarioAccuracy(): Promise<void> {
         riskState: (lsRow?.risk_state as RiskStateValue) ?? 'green',
         metricsContext: {},
         optionChosen: d.chosen_option as string,
-        outcomeDirection: accuracy.actual_direction as 'positive' | 'neutral' | 'negative',
+        outcomeDirection,
         outcomeMagnitude: 'moderate',
         outcomeTimeframeDays: 30,
         marketCategory: null,
         contributingFactors: null,
-        scenarioAccuracyScore: accuracy.accuracy_score as number,
+        // NOT A SCORE ANY MORE, AND NOT A FABRICATED ONE. The accuracy figure
+        // came from the model call that has gone; inventing a number here
+        // would be worse than the call was. The pool records the outcome
+        // without a scenario-accuracy claim.
+        scenarioAccuracyScore: null,
       });
     } catch (err) {
       logger.error(`scenario_accuracy error for decision ${d.id}:`, { jobName: 'scenario_accuracy', error: String(err) });
@@ -333,6 +339,7 @@ export async function scenarioAccuracy(): Promise<void> {
   }
   logger.info('scenario_accuracy complete', { jobName: 'scenario_accuracy' });
 }
+
 
 // ─── 10. Yellow Pulse — Thursday (for Yellow state products) ──────────────────
 export async function yellowPulse(): Promise<void> {
