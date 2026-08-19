@@ -268,6 +268,20 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('deal_rooms');
   });
 
+  it('check-write-only-columns fails on a column written with no reader', () => {
+    // The mirror of check-writerless-tables. `learned_claim_id` was written on
+    // four tables — every one of them recording what Foundry had learned — and
+    // read by none, so it was paying to think and filing the thought somewhere
+    // it never looked.
+    plant('src/services/_gate_fixture_n.ts',
+      j('import { query } from "../db/client.js";\n',
+        'export const w = () => query(`INSERT ', 'INTO webhook_deliveries',
+        ' (attempt_count) VALUES (?)`, []);\n'));
+    const r = run('check-write-only-columns.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('attempt_count');
+  });
+
   it('audit-consequential-effects fails on an outward call its rules cannot see', () => {
     // The window blind spot: a POST to a URL held in a variable matched no rule
     // and was therefore absent from the inventory rather than reported.
@@ -291,6 +305,7 @@ describe('and passes on a clean tree', () => {
       'check-route-guards.mjs', 'check-kernel-boundary.mjs',
       'check-test-schema-fabrication.mjs', 'audit-consequential-effects.mjs',
       'check-writerless-tables.mjs', 'check-notnull-inserts.mjs',
+      'check-write-only-columns.mjs',
     ]) {
       const r = run(script);
       expect(r.code, `${script}: ${r.output}`).toBe(0);

@@ -150,6 +150,25 @@ found, this list loses.
    retires a positive claim and never a negative one. Foundry may not improve
    its own record by waiting.
 
+9. **97 columns are written and never read.** New instrument:
+   `check-write-only-columns.mjs`, the mirror of `check-writerless-tables`. It
+   was built after finding the same defect by hand twice — `learned_claim_id` is
+   written on four tables, every write recording what Foundry had learned, and
+   nothing read any of them. Two now have readers and both became something the
+   founder can see.
+
+   A write-only column is not automatically a defect: provenance is a real
+   reason to record what no code consumes. But it is always a question, so the
+   count is a ratchet rather than a wall, and the baseline is the list of
+   questions nobody has answered yet. The gate states its own blind spot: it
+   cannot see a read that never names the column (`SELECT *` with generic row
+   iteration), and it ignores `tests/` on purpose — a test reading a column is
+   not the product consuming it.
+
+   Working through the 97 is a real seam. The two already done suggest the
+   shape: ask what the write was FOR, and either give it a reader a person can
+   reach or delete it.
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.
