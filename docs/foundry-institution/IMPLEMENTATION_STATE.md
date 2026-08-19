@@ -181,16 +181,26 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
   conflict still standing. Anything less is still `partially_observed`: an
   absent deadline is not a met one, and a conflict the owner has simply not
   got to yet has falsified nothing.
-- Development paths remain on the reachability gate's DARK list.
+- Of the development paths, only `development-benchmark.ts` is still on the reachability gate's DARK list, and it is a frozen benchmark. The rest are statically reachable; what is missing is a caller for the change-execution chain (`plan` → `execute` → `verify` → `rollback`), which is a different gap and is recorded on the frontier.
 - Executive cognition: no marginal-value comparison; the cognition gate forces one.
 - Economics: near-vacuous while the institution is model-free.
-- Duplicate founder reports still create duplicate responsibilities.
+- ~~Duplicate founder reports still create duplicate responsibilities~~ —
+  **CLOSED within a source.** Discovery converges a repeat of the same
+  obligation: same title, capability, stated deadline and reporting source, and
+  only onto an active responsibility. Both reports are kept as evidence; what
+  converges is the obligation. Still open across sources, deliberately: a
+  founder and one of their own systems reporting the same thing produce two
+  responsibilities, because a responsibility carries a single discovery
+  reference and merging would make the second witness invisible where today it
+  is visible as its own item. See `discovery.ts`.
 - NULL-safety gate does not analyse nullable **columns**; trigger tests are the backstop.
 - **The suite aborts intermittently and the cause is not known.** Roughly one
   run in three, a native libsql panic that takes the run with it rather than
   failing a test. Two candidates eliminated by measurement (a leaked query
   timeout; the old fixture collision), one live (nothing ever closed a database
-  connection — now fixed, effect unmeasured). Until this is settled, "full
+  connection — `closeDb()` landed and the suite now closes after every file;
+  over 30 consecutive clean runs since, against a prior rate near one in
+  three). Until this is settled, "full
   suite green" carries an unstated qualifier: *this time the process survived*.
   Recorded here rather than in a comment because it qualifies every other
   evidence claim in this document.

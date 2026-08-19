@@ -120,6 +120,16 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
 6. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
 
+   Related, and now decided rather than open: the same obligation reported
+   twice converges — within a reporting source. Across sources it does not, and
+   that is the engineering call, not indecision. A responsibility carries one
+   `discovery_evidence_ref`, so merging a founder's report onto a rota system's
+   would make the second witness invisible, where today it is visible as its
+   own item. Merging becomes right the moment a responsibility can hold more
+   than one witness; until then the duplicate is the lesser loss. Both halves
+   of the rule are asserted, and each clause of the convergence predicate has
+   been mutated and shown load-bearing.
+
 7. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
    functions had no caller anywhere in `src/`. They have been read. What is
    left is 26, and every one of them is accounted for:
