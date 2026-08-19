@@ -150,6 +150,52 @@ describe('Shadowing to Assisting through production-facing paths', () => {
     expect(candidates[0]).toMatchObject({ granted: false, grantExpiresAt: null });
   });
 
+  it('never offers a permission the database would then refuse to honour', async () => {
+    // WHAT THIS CLOSES. The offer counted every comparison. Migration 113's
+    // assisting-entry guard counts far fewer: the comparison's expectation must
+    // rest on a reconstruction claim that is `known` or `inferred` and has not
+    // expired. So a responsibility whose expectation rested on an expired claim
+    // was offered, the founder could grant the permission, and the transition
+    // into Assisting was then refused by the database.
+    //
+    // The founder paid for that. They were asked to decide, they decided, and
+    // the grant could not be used — an offer outrunning what the system allows,
+    // pointed at the person granting authority.
+    const claim = (await query(
+      `SELECT claim.id FROM responsibility_shadow_expectations x
+         JOIN reconstruction_claims claim
+           ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
+        WHERE x.product_id=? LIMIT 1`, [PRODUCT])).rows[0] as Record<string, unknown>;
+    expect(claim, 'the fixture must have a real expectation claim').toBeTruthy();
+
+    const offeredBefore = (await getAssistingCandidates(PRODUCT))
+      .filter((c) => c.responsibilityId === responsibilityId);
+    expect(offeredBefore).toHaveLength(1);
+
+    // Expire the claim the expectation rests on. Nothing else changes: the
+    // comparison row is untouched and still says Foundry watched.
+    await query("UPDATE reconstruction_claims SET valid_until=datetime('now','-1 day') WHERE id=?",
+      [String(claim.id)]);
+
+    const offeredAfter = (await getAssistingCandidates(PRODUCT))
+      .filter((c) => c.responsibilityId === responsibilityId);
+    expect(offeredAfter, 'a permission the guard would refuse must not be offered')
+      .toHaveLength(0);
+
+    // And the guard really would have refused it, which is the whole reason.
+    const comparison = String(((await query(
+      'SELECT c.id FROM responsibility_shadow_comparisons c WHERE c.product_id=? LIMIT 1', [PRODUCT]))
+      .rows[0] as Record<string, unknown>).id);
+    await expect(query(
+      `INSERT INTO responsibility_transitions
+         (id,responsibility_id,from_state,to_state,evidence_ref,authority_ref,reason,actor_ref)
+       VALUES ('aa_refused',?, 'shadowing','assisting',?,?, 'test','test')`,
+      [responsibilityId, `shadow_comparison:${comparison}`, 'autonomy_consent:does_not_exist'],
+    )).rejects.toThrow();
+
+    await query('UPDATE reconstruction_claims SET valid_until=NULL WHERE id=?', [String(claim.id)]);
+  });
+
   it('refuses a stranger and another tenant', async () => {
     expect(await grantAssistingAuthority({
       productId: PRODUCT, responsibilityId, founderId: STRANGER,

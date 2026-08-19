@@ -169,23 +169,34 @@ found, this list loses.
    shape: ask what the write was FOR, and either give it a reader a person can
    reach or delete it.
 
-10. **An intermittent native abort in the suite — one cause removed, watch the
-    next runs.** `npm run check` died twice in one session with a Rust panic out
-    of the libsql binding (`PendingException` where `Ok` was expected) and
-    SIGABRT. This is NOT the old intermittent, which was resolved as a 1-in-64
-    fixture collision; it is new and unrecorded.
+10. **An intermittent native abort in the suite — one cause eliminated, one
+    hypothesis live.** `npm run check` dies with a Rust panic out of the libsql
+    binding (`PendingException` where `Ok` was expected) and SIGABRT. Not the
+    old intermittent, which was resolved as a 1-in-64 fixture collision.
 
     An abort is worse than a failure: it takes the run with it, so "validation
-    green" becomes a claim that depends on the process surviving long enough to
+    green" becomes a claim about whether the process survived long enough to
     say so.
 
-    `query()` raced the database against a ten-second timeout and never cleared
-    the timer, so every query left a live timer holding a rejection closure —
-    25 queries, 25 timers, measured. At shutdown that is a queue of timers
-    keeping the event loop alive with a native database handle open beneath
-    them. **The leak is fixed and tested; whether it was the cause is not
-    established.** If the abort recurs, the leak is not it and the next
-    hypothesis needs its own evidence.
+    - **Rate:** roughly 1 run in 3 on this machine, measured over a deliberate
+      repeat-run experiment.
+    - **Locus:** both observed aborts landed at the same boundary — immediately
+      after `autopilot.test.ts` finished, as the next file started.
+    - **Eliminated:** the uncleared query-timeout timer. Fixed, and the abort
+      recurred with the fix in place. That settles it: the leak was real and
+      was not this.
+    - **Live hypothesis:** nothing ever closed a database connection. Each test
+      file gets its own module registry and therefore its own libsql client, so
+      a run created hundreds of native handles and left every one to the
+      garbage collector — including collection during the next file's queries,
+      which is exactly the observed boundary. `closeDb()` now exists and the
+      suite closes after every file. **Whether this fixes the abort is NOT
+      established**; it needs runs, and a handful of clean ones would not settle
+      it at a 1-in-3 rate.
+    - **Method note for whoever continues:** do not run the suite concurrently
+      with another run. `gates-fail-when-they-should.test.ts` plants real files
+      into `src/` and `tests/`, so two runs collide and produce failures that
+      look like defects. One such collision cost an hour here.
 
 ## Blocked — needs a design decision, not effort
 

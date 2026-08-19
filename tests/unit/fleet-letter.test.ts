@@ -371,5 +371,19 @@ describe('operator attention memory — explicit, admission-controlled, ranking-
     // Tenancy is unchanged by any of it.
     expect(page).not.toContain('Other tenant decision');
     expect(page).not.toContain('OtherCo');
+
+    // AND THE ACTIVE COMPANY IS NOT SHOWN TWICE. The fleet list renders a card
+    // per company; the active one renders in full below. Leaving it in both
+    // would make the page say the same thing twice, which is the defect this
+    // letter spent several commits removing from its own headline.
+    //
+    // Asserted on the CARD, not on how often the name appears: the product
+    // switcher names every company, and counting occurrences would have made
+    // this a test about the switcher.
+    const card = (name: string) =>
+      `<span style="font-weight:600;color:var(--text-primary);">${name}</span>`;
+    expect(page, 'the active company must not also have a fleet card')
+      .not.toContain(card('CalmCo'));
+    expect(page, 'the other companies still do').toContain(card('FireCo'));
   });
 });

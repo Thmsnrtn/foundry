@@ -629,7 +629,12 @@ letterRoutes.get('/letter', async (c) => {
           ${fleet.system.map((s) => html`<div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">${s}</div>`)}
         </div>` : ''}
 
-        ${fleet.products.map((p) => (p.letter.quiet && Object.values(p.responsibilities).every((items) => items.length === 0) ? '' : html`
+        <!-- The ACTIVE company is skipped here: it renders in full below, and
+             showing its handled/learned lines in both places would make the
+             page say the same thing twice — the defect this letter spent
+             several commits removing from its own headline. -->
+        ${fleet.products.filter((p) => p.productId !== ctx.productId)
+    .map((p) => (p.letter.quiet && Object.values(p.responsibilities).every((items) => items.length === 0) ? '' : html`
         <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;">
           <div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.5rem;">
             <span style="font-weight:600;color:var(--text-primary);">${p.productName}</span>

@@ -40,6 +40,44 @@ export function getDb(): Client {
   return _client;
 }
 
+/**
+ * CLOSE THE CONNECTION. Nothing ever did.
+ *
+ * `getDb()` creates a native libsql handle on first use and there was no way to
+ * release one. In a long-lived server that is fine — the process holds one for
+ * its life and exits with it. In this repository's own suite it is not: each
+ * test file gets its own module registry and therefore its own client, so a
+ * full run created hundreds of native handles and closed none of them, leaving
+ * every one for the garbage collector to finalise whenever it chose.
+ *
+ * The suite aborts intermittently with a Rust panic out of that binding —
+ * `PendingException` where `Ok` was expected — at the boundary between test
+ * files, which is exactly where an abandoned handle from the file just finished
+ * would be collected while the next file is calling into the same library. An
+ * abort is worse than a failure: it takes the run with it, so "validation
+ * green" becomes a claim about whether the process survived long enough to say
+ * so.
+ *
+ * That is a HYPOTHESIS, not a diagnosis, and the record says so. Closing a
+ * connection you opened is correct regardless of whether it is the cause, and
+ * it is the first thing this code should have done.
+ *
+ * Idempotent: closing twice is not an error, and neither is closing something
+ * that was never opened.
+ */
+export async function closeDb(): Promise<void> {
+  const client = _client;
+  _client = null;
+  _ready = null;
+  if (!client) return;
+  try {
+    client.close();
+  } catch {
+    // A close that fails has still released what it could, and throwing here
+    // would turn shutdown into a second failure on top of whatever caused it.
+  }
+}
+
 // Readiness is deliberately NOT exported. Every entry point below awaits it, so
 // no caller can forget to — and the tenancy gate scans exported client
 // functions for tenant scoping, which a connection-lifecycle helper would fail

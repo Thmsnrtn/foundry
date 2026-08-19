@@ -432,6 +432,25 @@ describe('All exported query functions are scoped', () => {
       if (INSERT_OPERATIONS.has(fnName)) continue;
 
       const fn = extractFunction(clientSource, fnName);
+
+      // A FUNCTION THAT TOUCHES NO DATABASE CANNOT LEAK A TENANT'S DATA.
+      //
+      // This required a WHERE clause of EVERY exported async function, so
+      // adding `closeDb` — which runs no SQL at all — failed a tenant-isolation
+      // gate. That is a false positive, and the damage a false positive does
+      // here is specific: the obvious way to make it green is to add a name to
+      // INTENTIONALLY_UNSCOPED, and an allowlist that grows for reasons that
+      // are not about tenancy stops meaning anything.
+      //
+      // Deliberately narrow, because this gate may only get stricter. It skips
+      // a function that makes no database call and contains no SQL keyword at
+      // all. Anything that calls `query`, `batch` or `execute`, or that holds a
+      // SELECT this extractor cannot parse, still fails loudly — an unreadable
+      // query is exactly when you want to be told.
+      const touchesDatabase = /\b(query|batch|execute|executeRaw)\s*\(/.test(fn)
+        || /\b(SELECT|INSERT|UPDATE|DELETE)\b/i.test(fn);
+      if (!touchesDatabase) continue;
+
       const sql = extractSQL(fn);
 
       // Every SELECT query must have a WHERE clause with a scoping parameter

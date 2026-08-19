@@ -73,3 +73,20 @@ afterEach(async (context) => {
 
 // Referenced so the import is never treated as unused by a future sweep.
 void expect;
+
+// ─── Connections are closed, not abandoned ────────────────────────────────────
+//
+// Each test file gets its own module registry and therefore its own libsql
+// client. Nothing closed them, so a full run created hundreds of native handles
+// and left every one for the garbage collector to finalise whenever it chose —
+// including in the middle of the next file's queries.
+//
+// The suite aborts intermittently with a Rust panic out of that binding at
+// exactly that boundary. Whether this is the cause is not established; closing
+// a connection you opened is right either way, and an abandoned handle is not
+// something to leave lying around while investigating one.
+const { afterAll } = await import('vitest');
+afterAll(async () => {
+  const { closeDb } = await import('../db/client.js');
+  await closeDb();
+});

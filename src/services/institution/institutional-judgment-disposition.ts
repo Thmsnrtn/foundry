@@ -167,7 +167,12 @@ export async function getMaterialJudgments(productId: string): Promise<MaterialJ
       selectedAlternative: (row.selected_alternative as string | null) ?? null,
       evaluationState: (row.evaluation_state as string | null) ?? null,
       authorityStillRequired: true,
+      // A malformed constraint is NOT a scarcity of NaN. Both numbers have to
+      // be real numbers or there is nothing here worth telling anyone, and
+      // "You have NaN work blocks" is worse than silence.
       limit: limitEntry && typeof limitEntry.resource === 'string'
+        && Number.isFinite(Number(limitEntry.available))
+        && Number.isFinite(Number(limitEntry.requested))
         ? {
           resource: String(limitEntry.resource),
           available: Number(limitEntry.available),

@@ -80,20 +80,46 @@ export interface AssistingCandidate {
  * with. A responsibility appears only when it is in Shadowing **and** at least
  * one real comparison exists — Foundry does not ask for permission on the
  * strength of having been told about something.
+ *
+ * AND ONLY COMPARISONS THE DATABASE WOULD ACCEPT AS ENTRY EVIDENCE.
+ *
+ * This counted every comparison. Migration 113's assisting-entry guard counts
+ * far fewer: the comparison's expectation must rest on a reconstruction claim
+ * that is `known` or `inferred` and has not expired. A responsibility whose
+ * expectation rested on an expired or unknown claim was therefore OFFERED to
+ * the founder, who could grant the permission, after which the transition into
+ * Assisting was refused by the database.
+ *
+ * The founder paid for that: they were asked to decide, they decided, and the
+ * grant could not be used. An offer that outruns what the system will allow is
+ * the public-claims defect pointed at the person granting authority, which is
+ * the worst place for it.
+ *
+ * No new threshold is invented here — that would be Foundry deciding how fresh
+ * is fresh. This applies the condition already in force at the boundary, so
+ * what is offered and what is permitted are the same set by construction.
  */
 export async function getAssistingCandidates(productId: string): Promise<AssistingCandidate[]> {
   const rows = await query(
     `SELECT r.id, r.title, r.capability,
             (SELECT COUNT(*) FROM responsibility_shadow_comparisons c
                JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
-              WHERE x.responsibility_id=r.id AND c.classification IN ('matched','deviated')) AS comparisons,
+               JOIN reconstruction_claims claim
+                 ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
+              WHERE x.responsibility_id=r.id AND c.classification IN ('matched','deviated')
+                AND claim.epistemic_status IN ('known','inferred')
+                AND (claim.valid_until IS NULL OR datetime(claim.valid_until)>datetime('now'))) AS comparisons,
             -- MATCHED AND DEVIATED ARE NOT THE SAME NUMBER. Both counted
             -- equally toward "I have been watching this", so a responsibility
             -- Foundry predicted wrong five times out of five asked for
             -- permission in exactly the words as one it predicted right.
             (SELECT COUNT(*) FROM responsibility_shadow_comparisons c
                JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
-              WHERE x.responsibility_id=r.id AND c.classification='deviated') AS deviations,
+               JOIN reconstruction_claims claim
+                 ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
+              WHERE x.responsibility_id=r.id AND c.classification='deviated'
+                AND claim.epistemic_status IN ('known','inferred')
+                AND (claim.valid_until IS NULL OR datetime(claim.valid_until)>datetime('now'))) AS deviations,
             -- AND WHAT HAPPENED LAST TIME IT ACTED. Nothing consulted this.
             -- Outcomes were recorded — verified_failure written, read by
             -- nothing — so Foundry could ask to keep helping with a
