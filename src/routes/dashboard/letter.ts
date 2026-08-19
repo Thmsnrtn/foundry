@@ -668,7 +668,7 @@ letterRoutes.get('/letter', async (c) => {
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--accent);">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:0.4rem;">The one thing that needs you</div>
         <div style="font-size:0.95rem;color:var(--text-primary);">${needsYou}</div>
-        <a href="/decisions" class="btn btn-primary" style="margin-top:0.75rem;font-size:0.82rem;display:inline-block;">Decide</a>
+        <a href="${letter.needsYouHref}" class="btn btn-primary" style="margin-top:0.75rem;font-size:0.82rem;display:inline-block;">${letter.needsYouHref === '/decisions' ? 'Decide' : 'Look at it'}</a>
       </div>` : ''}
       ${section('Actions handled', letter.handled)}
       ${section('What I learned', letter.learned)}

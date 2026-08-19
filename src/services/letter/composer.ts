@@ -18,7 +18,9 @@ import type { Fluency } from '../ux/fluency.js';
 
 export interface Letter {
   handled: string[];       // what ran without you (last 24h)
-  needsYou: string | null; // the ONE thing (highest-stakes pending decision)
+  needsYou: string | null; // the ONE thing, across BOTH canonical sources
+  /** Where the one thing actually is. It is not always the decision queue. */
+  needsYouHref: string;
   learned: string[];       // expired beliefs, vindications, radar warnings
   trust: string[];         // graduation proposals + dissent record
   quiet: boolean;          // true when there is genuinely nothing needing you
@@ -30,6 +32,16 @@ export interface Letter {
 
 // Fluency Law: the same Letter — identical facts, identical structure — in the
 // founder's voice. MCP/machine callers pass 'technical' for the terse form.
+/** Plain words for why a responsibility needs the founder. No ontology on
+ *  screen: the internal reason never appears, only what it means for them. */
+const ASK_WORDS: Record<string, string> = {
+  permission_withdrawn: 'you took my permission away, so I have stopped',
+  permission_expired: 'my permission ran out, so I have stopped',
+  outcome_unresolved: 'I did something here and nobody knows yet whether it worked',
+  watching: 'I have been watching this and could help if you let me',
+  overdue: 'the date you gave me has passed',
+};
+
 export async function composeLetter(productId: string, f: Fluency = 'balanced'): Promise<Letter> {
   const [executions, gate0, pending, expired, digest, radar, ledger, dissent] = await Promise.all([
     query(
@@ -83,10 +95,46 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
     ),
   ];
 
+  // ONE QUESTION, ONE ANSWER.
+  //
+  // This card says "the one thing that needs you" and read the highest-gate
+  // pending row of `decisions`. Meanwhile The Letter rendered the institution's
+  // own NEEDS_YOU list twenty-seven lines below, computed independently from
+  // `institutional_responsibilities`. Nothing reconciled them, so the page
+  // answered its own central question twice, differently — and the headline
+  // could say "Gate-2: pick a pricing page" while an obligation whose date had
+  // passed sat further down under a quieter heading.
+  //
+  // Both ledgers are canonical for what they hold: `decisions` is the decision
+  // queue, `institutional_responsibilities` is the responsibility ladder.
+  // Neither is copied and no third store is created — this is a projection
+  // over both, which is what the constitution permits and what the page was
+  // pretending to be already.
+  //
+  // Overdue wins, because a date the company stated has passed and that is a
+  // fact about the world rather than about where Foundry has got to. Then the
+  // other reasons a responsibility needs the founder, then the decision queue.
   const top = pending.rows[0] as Record<string, unknown> | undefined;
-  const needsYou = top
-    ? `Gate-${top.gate}: ${top.what}${top.deadline ? ` (deadline ${top.deadline})` : ''}`
+  const decisionAsk = top
+    ? { text: `Gate-${top.gate}: ${top.what}${top.deadline ? ` (deadline ${top.deadline})` : ''}`,
+        href: '/decisions' }
     : null;
+
+  const { getSevenDayResponsibilitySummary } = await import(
+    '../institution/absence-summary.js');
+  const institutional = await getSevenDayResponsibilitySummary(productId).catch(() => null);
+  const overdue = institutional?.NEEDS_YOU.find((i) => i.needsYouBecause === 'overdue');
+  const otherAsk = institutional?.NEEDS_YOU.find((i) => i.needsYouBecause !== 'overdue');
+
+  const chosen = overdue
+    ? { text: `${overdue.title} — you said this was due ${overdue.dueAt?.slice(0, 10) ?? 'earlier'}, and it has not been handled`,
+        href: '/letter' }
+    : decisionAsk ?? (otherAsk
+      ? { text: `${otherAsk.title} — ${ASK_WORDS[otherAsk.needsYouBecause ?? 'watching']}`,
+          href: '/letter' }
+      : null);
+  const needsYou = chosen?.text ?? null;
+  const needsYouHref = chosen?.href ?? '/decisions';
 
   const learned: string[] = [
     ...expired.slice(0, 3).map(
@@ -136,7 +184,7 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
   // or a decision is a NEW founder, not an established one on a quiet day.
   const firstRun = quiet && digest.holding === 0 && digest.falsified === 0
     && !(await hasAnyHistory(productId));
-  return { handled, needsYou, learned, trust, quiet, firstRun };
+  return { handled, needsYou, needsYouHref, learned, trust, quiet, firstRun };
 }
 
 /** Has this product ever produced a metric snapshot or a decision? Distinguishes
