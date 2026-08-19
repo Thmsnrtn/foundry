@@ -16,19 +16,36 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `f53e067`+ on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `0f62fb8` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
-| Migrations | **201 files**, highest number **165**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **252 files / 2,208 tests**. `npm run check` green. |
-| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **13** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0**. |
+| Migrations | **202 files**, highest number **166**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
+| Validation | Full suite green: **257 files / 2,252 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. |
+| CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
+| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** (was 13) · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
 | Public API | **Live.** Scoped, expiring, revocable keys issued from settings. Every v1 route needs a scope a founder can grant; the bidirectional gate enforces both directions. |
 | Consequential effects | Converge through `services/outbound/gateway.ts` — kill switch, classification, budget, idempotency, audit. Inventory in `CONSEQUENTIAL_EFFECTS.json`; untraced count ratcheted to zero. |
 | AI spend | Central OpenRouter client. Atomic reserve → dispatch → settle across global/product/founder scopes. Refuses spend for a company that is not operating, naming which axis stopped it. |
 | Erasure | One implementation. Every table classified with a written reason, on two axes: by product, and — since an adversarial review found the gap — by PERSON across companies they do not own. An end-to-end sweep seeds every table and matches by containment, so an id inside a composite key is visible; only survivors with stated retention dispositions are allowed. Deletes where the row is wholly the person's, severs where it is the company's record naming a person. **Five tables are deliberately untouched pending an owner decision** (`OWNER_DECISIONS_PENDING` §10) — company assets on NOT NULL columns — which is a live gap, not a footnote. |
+
+## The institution's senses
+
+- **Time.** A responsibility can carry a due date the COMPANY stated, with who
+  stated it; triggers refuse a date with no author and refuse one authored by
+  the owner of the product `system_identities` names as Foundry. `overdue` is
+  the first reason a responsibility needs the founder, and the only one that is
+  a fact about the company rather than about where Foundry has got to. Prose is
+  never turned into a date. Reachable from The Letter's report form.
+- **Outcomes now reach the authority request.** `getAssistingCandidates`
+  counted matched and deviated comparisons equally and ignored whether previous
+  assisted actions had failed. Both are separated and surfaced to the founder
+  at the moment they decide whether to grant more.
+- Everything else a company can tell Foundry arrives through the four ingest
+  routes, twelve integration adapters, two webhooks, and the founder typing
+  into The Letter.
 
 ## Reachability caveats that still hold
 

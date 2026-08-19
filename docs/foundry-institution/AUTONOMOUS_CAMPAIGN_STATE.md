@@ -25,96 +25,91 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** 201 files, highest **165**. Ordering now gated. Snapshot current.
-- **Validation:** full suite green — **252 files / 2,208 tests**. `npm run check`
-  green; all ratchets hold.
+- **Migrations:** 202 files, highest **166**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **257 files / 2,252 tests**. `npm run check`
+  green, and it now runs every gate. CI runs on this branch for the first time.
 - **Ratchets:** unguarded mutating routes **114** (population corrected from a
   quarter of the surface — see below); fabricated test schemas **13**;
-  writer-less tables **0**; SELECT drift **0**.
+  writer-less tables **0**; SELECT drift **0**; fabricated test schemas **4** (was 13).
 
 ## Active work
 
-None in flight. Last tranche closed and pushed at `18e0b78`.
+None in flight. Last tranche closed and pushed at `0f62fb8`.
 
-## What the transition tranche established
+## What this tranche established
 
-The development operating model is now on disk
-(`DEVELOPMENT_INSTITUTION.md`) and the bootstrap was **tested rather than
-asserted** — a reader with no context read the start-here set and reported what
-it could not learn. That found a false owner-queue claim, an unreproducible
-"169 invariants" figure, no way to run anything, no concept→code map, and the
-migration-count discrepancy that turned out to be a real ordering hazard. All
-repaired.
+An independent whole-system reassessment replaced the seam-reading mode, and
+it was the right change: the findings came from asking what Foundry can
+OBSERVE and what it does with what it learns, not from reading subsystem
+pairs.
 
-**An adversarial reviewer was then given the erasure completeness claim and
-told to falsify it, and did.** Five structural exemptions in the sweep; three
-closed (containment matching, seeding every table, non-colliding fixture ids),
-and the two it could not close generically are now named tests. It found
-`network_contributions` keying its primary key as `<product_id>_week_<metric>`
-while classified as having "no key of any kind"; `rate_limit_counters` keyed on
-`audit:founder:<id>` while classified as "an opaque bucket"; a `founders`
-disposition with no field list at all, keeping `ppp_factor` and
-`local_currency` — both functions of the `country_code` it deliberately
-cleared; and the largest one, that erasure never reached companies the person
-did not own.
+**No gate in this repository had ever run in CI.** The trigger named `master`
+and `main`; all development happens on a branch deliberately never merged,
+with no PR open. Every gate was enforced by somebody remembering. And `npm run
+check` — cited everywhere as THE composite and the evidence validation is
+green — omitted thirteen gates, including the one ensuring every model call
+names the company paying for it. A test derives the gate list from `scripts/`
+now, so a gate nobody wires up fails rather than sleeps.
 
-**Method note worth keeping:** two mutations appeared to survive and had simply
-never applied. A find-and-replace that matches nothing produces a passing suite
-indistinguishable from a surviving mutation, and the false conclusion is the
-reassuring one. Assert the mutation applied.
+**Two evidence levels were inflated and are corrected down.** Two modules
+carrying E2 claims have zero importers in `src/` — only their own tests reach
+them. E2 means local runtime through production-facing services and there is no
+production-facing service. Both are E1. An evidence level that only moves
+upward is not a ladder.
 
-## What the previous tranche established
+**THE INSTITUTION HAD NO SENSE OF TIME.** The vocabulary it offers the founder
+is date-shaped — "Something we owe someone by a date" — and the schema could
+not record one. The code said so twice, unprompted: every judgment emitted
+`deadline unknown` because `Demand.deadline` had no supply, and the judgment
+observer records that it can never report `contradicted` without an observer
+that can see a deadline pass. Time is also the only company fact Foundry can
+establish with no founder, provider or integration — a clock is all it needs —
+which makes it the first sense the institution supplies itself. The date comes
+from the company, never from Foundry, on the same constitutional line
+migration 137 draws for outcomes.
 
-The lens was *the system has no observation of X, so the system asserts X does
-not exist* — one defect in five places, one of them a gate.
+**Outcomes were recorded and read by nothing.** The sharpest instance was the
+moment Foundry asks for MORE AUTHORITY: it counted how many checks it had run,
+weighing `matched` and `deviated` equally, and never consulted whether its
+previous assisted actions had failed. The founder now sees both while deciding.
 
-- **Erasure was incomplete and the classification could not have known.** A
-  data-shaped proof replaced the plan-shaped one: seed every table carrying a
-  product or founder id, erase, then sweep every column of every table. Twelve
-  founder-scoped tables survived an *account* erasure untouched, because
-  `FOUNDER_SCOPED` explained why they survive erasing one of two companies and
-  nobody had asked the other half. `ai_daily_spend` carried both ids under
-  `scope_id` while classified as naming nobody.
-- **Identity had been standing in for purpose** in the erasure write exemption:
-  it opened the whole API surface on the reasoning that the founder must be
-  able to change their mind, but the write that changes their mind is on a
-  surface that middleware never guards.
-- **Two bounded queues selected work they could not do,** so five decisions
-  from non-operating companies occupied the red-team window permanently.
-- **`check-route-guards` scanned one directory of four** and printed its count
-  as a statement about the system. True figure 114, baseline corrected,
-  exclusions now tested in both directions.
-- **Two writers per investor document,** each rendering the other's rows as an
-  empty page. SCP is canonical — the navigation points at it and at the other
-  from nowhere.
+**A paid frontier call bought nothing** — Opus classifying an outcome the
+database already recorded as `outcome_valence`, filed in a column no SELECT
+reads. Deleted; the deterministic fact does the work.
+
+**An adversarial security review of twenty routes found no exploitable
+cross-tenant flaw** — a useful negative result — but did find that the
+platform-admin boundary was made of array order: `founders.email` decides who
+reaches an unscoped cross-tenant surface, and both provisioning paths wrote it
+from `emailAddresses[0]`, neither necessarily primary nor verified.
 
 ## Highest-value current opportunities
 
-Provisional, recomputed each cycle, ranked by §4 of `DEVELOPMENT_INSTITUTION.md`.
-Not a backlog — if something better is found, this list loses.
+Provisional, recomputed each cycle. Not a backlog — if something better is
+found, this list loses.
 
-1. **The five deferred erasure tables** (`OWNER_DECISIONS_PENDING` §10). A live
-   gap with a recommended answer waiting on the owner. Nothing else about
-   erasure is now unproven that could be proven locally.
-2. **114 unguarded mutating routes**, visible for the first time. Most are
-   ordinary company work an active member should be able to do, and gating them
-   all would be the opposite defect. The work is deciding, per route, which
-   capability it needs or why it needs none — starting with the ones where the
-   company arrives in the request body.
-3. **Adapters for the existing intakes.** The shape is proven; breadth is
-   missing, and the owner's pilot decision gates on it. Prefer a source a real
-   responsibility demands over a vendor checklist.
-4. **Remaining findings from the erasure falsification**, ranked low because
-   each is bounded: the sever marker `'erased'` is a fake founder id in a
-   column readers treat as one; `idempotency_keys.dedup_key` embeds a product
-   id by construction; and `introductions.feedback_a/b` have no writer
-   anywhere, so the sever's careful reasoning governs columns nothing
-   populates. (~~The frozen half-erased company~~ — **DONE**: the immediate
-   path records its intent, so the ordinary cancel reaches it.)
-5. **Seam-reading yield is narrowing.** The last two tranches' best finds came
-   from turning instruments on themselves and from an independent falsifier —
-   not from reading further subsystem pairs. Treat adversarial review as the
-   higher-yield mode until that stops being true.
+1. **Two disagreeing answers to "what needs you".** The Letter's headline card
+   reads the `decisions` table's highest-gate pending row; the institution's
+   own NEEDS_YOU list is computed independently and rendered below it. Nothing
+   reconciles them, and `strategic_decisions_log` is a third founder-decision
+   store. A page that answers its own central question twice, differently, is
+   false institutional truth on the surface the founder reads first.
+2. **~4,000 LOC statically dead**, plus ~1,600 LOC of clientless API
+   (`founder-intelligence`, `mobile` serving an archived unbuildable client,
+   most of `tier1-4`). Deletion adds no capability but makes the ratchets and
+   the route count honest — the 114 figure includes pages no person can reach.
+3. **The reachability gate covers `src/services/institution` only** — 38 of 437
+   files. Two E2 claims survived precisely because they sat outside it.
+   Widening it is how that class stops recurring.
+4. **The five deferred erasure tables** (`OWNER_DECISIONS_PENDING` §10) — a
+   live gap with a recommended answer, waiting on the owner.
+5. **Adapters for the existing intakes.** The shape is proven; breadth is
+   missing and the owner's pilot decision gates on it.
+6. **The rest of the outcome loop.** Five more predicates are written and read
+   by nothing (`shadow_expectation`, `later_reality_comparison`,
+   `development_shadow_comparison`, `development_change_outcome`, and
+   `shadow_comparison` outside a frozen benchmark). The authority request is
+   closed; the others are not.
 
 ## Blocked — needs a design decision, not effort
 
