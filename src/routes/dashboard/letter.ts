@@ -124,6 +124,19 @@ const judgmentSection = (
       <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${j.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${j.description}</div>
+        ${j.limit ? html`
+          <div style="font-size:0.78rem;color:var(--text-primary);margin-top:0.35rem;">You have ${j.limit.available} ${j.limit.resource.replaceAll('_', ' ')}${j.limit.available === 1 ? '' : 's'}; these need ${j.limit.requested}.</div>` : ''}
+        ${j.consequences.length ? html`
+          <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;">
+            ${j.consequences.map((c) => html`<div>If ${c.title} gives way: ${c.consequence}</div>`)}
+          </div>` : ''}
+        ${j.otherConstraints.length ? html`
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem;">Also weighed: ${j.otherConstraints.join('; ')}</div>` : ''}
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem;">${
+  j.economicOrdering === 'observed' ? 'I can order these on money, from figures I observed.'
+    : j.economicOrdering === 'inferred_estimate' ? 'I can order these on money, but from an estimate rather than observed figures.'
+      : j.economicOrdering === 'conflicting' ? 'I cannot tell you which costs more — the figures I have disagree.'
+        : 'I cannot tell you which costs more. Nothing I have establishes it.'}</div>
         ${j.uncertainties.length ? html`
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Still uncertain: ${j.uncertainties.join('; ')}</div>` : ''}
         ${j.evaluationState === 'contradicted' || j.evaluationState === 'conflicting' ? html`

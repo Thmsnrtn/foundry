@@ -196,6 +196,50 @@ describe('authenticated owner disposition on institutional judgments', () => {
   });
 });
 
+describe('the owner is shown what the judgment was computed from', () => {
+  it('gives them the numbers, the cost of each side, and whether Foundry can order them', async () => {
+    // The owner was asked "which way do you want to go?" while `constraints_json`,
+    // `consequences_json` and `expected_economic_effect_json` were written on
+    // every judgment and read by nothing. So the section withheld how much
+    // resource there is, how much is wanted, what each side loses, and whether
+    // Foundry could rank them at all — which is most of what the decision is.
+    const [judgment] = await getMaterialJudgments('jd_product');
+
+    // The actual scarcity, from the canonical capacity and demand claims.
+    expect(judgment.limit).toMatchObject({ resource: 'work_block', available: 2, requested: 3 });
+
+    // What each side loses, by TITLE. An id on screen is ontology leaking into
+    // the founder's language, and a consequence attached to nothing is worse
+    // than no consequence.
+    expect(judgment.consequences).toContainEqual({
+      title: 'Urgent support obligation', consequence: 'customer commitment at risk',
+    });
+    expect(JSON.stringify(judgment.consequences)).not.toContain('jd_support');
+
+    // AND WHETHER FOUNDRY CAN ORDER THEM ON MONEY, reported as itself. The
+    // fixture records no economic claim, so the honest answer is that it
+    // cannot — which is the single thing an owner most wants and the worst
+    // possible place to imply a confidence.
+    expect(judgment.economicOrdering).toBe('unknown');
+  });
+
+  it('puts all of it on the page, in the founder\'s words', async () => {
+    const page = await (await app.request('/letter', { headers: { 'x-founder': 'jd_owner' } })).text();
+    expect(page, 'the scarcity itself must be shown').toContain('You have 2 work blocks; these need 3');
+    expect(page).toContain('customer commitment at risk');
+    expect(page, 'not knowing the money must be said, not omitted')
+      .toContain('I cannot tell you which costs more');
+
+    // The consequence is attached to a NAME. Asserted on the sentence rather
+    // than by banning the id from the whole page: an id inside a form action is
+    // a correct identifier, and a blanket ban would have made this test about
+    // URL shapes instead of about founder language.
+    expect(page).toContain('If Urgent support obligation gives way: customer commitment at risk');
+    expect(page).not.toContain('If jd_support gives way');
+    expect(page).not.toContain('expected_economic_effect');
+  });
+});
+
 describe('Foundry reads back how its own judgment has held up', () => {
   it('counts what later reality did to the judgments it made, from the claim nothing read', async () => {
     // WHAT THIS CLOSES. `evaluateInstitutionalJudgment` wrote every later-reality
