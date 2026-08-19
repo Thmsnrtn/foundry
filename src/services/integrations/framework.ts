@@ -369,6 +369,23 @@ export async function processStripeWebhookEvent(
   eventType: string,
   data: Record<string, unknown>
 ): Promise<void> {
+  // THE COMPANY IS CHECKED HERE, NOT ONLY AT THE DOOR.
+  //
+  // This trusted `productId` outright: it inserted an event row for any
+  // company and could trigger `runSync` on that company's Stripe integration.
+  // It is safe today only because its single caller verifies a Stripe HMAC
+  // first — which means the guard is beside the door rather than in it, and
+  // the day a second caller appears without that signature check this becomes
+  // a cross-tenant write plus an outbound sync. An adversarial review named it
+  // as the one genuinely id-trusting service on this surface.
+  //
+  // A product that does not exist is not a tenant, and refusing is cheaper
+  // than trusting every future caller to remember.
+  const company = await query('SELECT id FROM products WHERE id = ?', [productId]);
+  if (company.rows.length === 0) {
+    throw new Error(`stripe_webhook: unknown product ${productId}`);
+  }
+
   // Deduplicate
   const existing = await query('SELECT id FROM stripe_events WHERE stripe_event_id = ?', [eventId]);
   if (existing.rows.length > 0) return;

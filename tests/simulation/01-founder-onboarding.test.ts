@@ -46,8 +46,18 @@ describe('Signup flow (Clerk webhook → founder record)', () => {
     expect(userCreatedBlock).toMatch(/INSERT INTO founders/i);
   });
 
-  it('extracts email from Clerk payload', () => {
-    expect(authRouteSource).toMatch(/email_addresses.*email_address/);
+  it('extracts the VERIFIED PRIMARY email from the Clerk payload', () => {
+    // This asserted `/email_addresses.*email_address/` — that the webhook read
+    // the address off the payload at all. It did, from `[0]`: the first entry
+    // in an array, neither necessarily primary nor necessarily verified. Since
+    // `founders.email` is what `isFounder` compares against to admit the
+    // platform-operator surface, that made an admin boundary out of array
+    // order. The webhook now resolves it through the shared helper, and the
+    // assertion moved with it: reading the payload is not the property worth
+    // pinning, reading the right address is.
+    expect(authRouteSource).toMatch(/email_addresses/);
+    expect(authRouteSource).toContain('verifiedPrimaryEmail(');
+    expect(authRouteSource).toContain('primary_email_address_id');
   });
 
   it('creates Stripe customer during signup', () => {

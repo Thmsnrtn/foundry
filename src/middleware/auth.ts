@@ -27,6 +27,38 @@ function isBrowserRequest(acceptHeader: string | undefined): boolean {
   return !!acceptHeader && acceptHeader.includes('text/html');
 }
 
+/**
+ * The identity provider's PRIMARY address, and only when it is verified.
+ *
+ * `founders.email` is not a contact field. `isFounder(founder.email)` compares
+ * against it to decide who reaches the platform-operator surface, which writes
+ * across every tenant. So this is an authorization input, and it must be an
+ * address the provider says belongs to this person — not whichever entry
+ * happened to sort first in an array.
+ *
+ * Returns null rather than a fallback. There is no safe default for "which
+ * human is this".
+ */
+export function verifiedPrimaryEmail(user: {
+  primaryEmailAddressId?: string | null;
+  emailAddresses?: Array<{
+    id?: string;
+    emailAddress?: string;
+    verification?: { status?: string | null } | null;
+  }>;
+}): string | null {
+  const addresses = user.emailAddresses ?? [];
+  const primary = user.primaryEmailAddressId
+    ? addresses.find((a) => a.id === user.primaryEmailAddressId)
+    : undefined;
+  // No primary declared is not licence to pick one. A provider that cannot say
+  // which address is primary cannot answer the question this is asking.
+  if (!primary) return null;
+  if (primary.verification?.status !== 'verified') return null;
+  const email = primary.emailAddress;
+  return email && email.includes('@') ? email : null;
+}
+
 export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   const secretKey = process.env.CLERK_SECRET_KEY;
   if (!secretKey) {
@@ -84,7 +116,32 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
       try {
         const clerk = ClerkBackend({ secretKey });
         const user = await clerk.users.getUser(clerkUserId);
-        const email = user.emailAddresses?.[0]?.emailAddress ?? '';
+        // THE PRIMARY ADDRESS, AND ONLY IF IT IS VERIFIED.
+        //
+        // This took `emailAddresses[0]` — the first entry in an array, which is
+        // neither necessarily the primary address nor necessarily verified —
+        // and wrote it to `founders.email`. That column is not merely a
+        // contact field: `isFounder(founder.email)` is a string comparison
+        // against it and is the ONLY thing standing between a session and the
+        // platform-operator surface, which performs deliberately unscoped
+        // writes across every tenant. So the whole admin boundary rested on
+        // whatever address happened to sort first, and on an assumption about
+        // the identity provider's verification policy rather than on anything
+        // checked here. AUTHENTICATION IS NOT AUTHORIZATION, and an
+        // unverified address is not even authentication.
+        //
+        // Failing closed is the right direction: the identity provider's
+        // webhook provisions the row once verification completes, so the cost
+        // of refusing here is a delay, and the cost of accepting is an
+        // impersonation path to cross-tenant writes.
+        // `result` stays empty, so the existing "Founder not found" branch
+        // below refuses the request — the same answer as any unprovisioned
+        // session, which is what this is.
+        const email = verifiedPrimaryEmail(user);
+        if (email === null) {
+          logger.warn('Auto-provision refused: no verified primary email', { clerkUserId });
+          throw new Error('unverified_primary_email');
+        }
         const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || null;
         const founderId = nanoid();
 

@@ -5,6 +5,8 @@
 import { Hono } from 'hono';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
+import { verifiedPrimaryEmail } from '../../middleware/auth.js';
+import { log } from '../../lib/logger.js';
 import { createCustomer } from '../../services/billing/stripe.js';
 
 export const authRoutes = new Hono();
@@ -216,7 +218,27 @@ authRoutes.post('/auth/webhook', async (c) => {
 
   if (payload.type === 'user.created') {
     const userId = payload.data.id as string;
-    const email = (payload.data.email_addresses as Array<{ email_address: string }>)?.[0]?.email_address ?? '';
+    // THE VERIFIED PRIMARY ADDRESS, for the same reason the session path uses
+    // one: `founders.email` decides who reaches the platform-operator surface,
+    // so it is an authorization input and `[0]` is not an answer to "who is
+    // this". The provider names the primary address and its verification
+    // status; both are required.
+    const email = verifiedPrimaryEmail({
+      primaryEmailAddressId: payload.data.primary_email_address_id as string | null,
+      emailAddresses: (payload.data.email_addresses as Array<{
+        id?: string; email_address?: string; verification?: { status?: string | null } | null;
+      }> | undefined)?.map((a) => ({
+        id: a.id,
+        emailAddress: a.email_address,
+        verification: a.verification,
+      })),
+    });
+    if (email === null) {
+      // Not an error: an unverified sign-up is a real state. Clerk re-delivers
+      // `user.updated` once the address is verified, and that path provisions.
+      log.info('clerk.user_created_without_verified_primary_email', { userId });
+      return c.json({ received: true, provisioned: false });
+    }
     const name = `${payload.data.first_name ?? ''} ${payload.data.last_name ?? ''}`.trim() || null;
 
     // Check if founder already exists
