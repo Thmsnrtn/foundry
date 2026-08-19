@@ -32,6 +32,11 @@ Measured at `f53e067`+ on `claude/foundry-autonomous-continuation-0gents`.
 
 ## Reachability caveats that still hold
 
+- **The reachability gate scans `src/services/institution` only** — 38 of 437
+  TypeScript files. Two modules carrying E2 claims sat outside it with no
+  importers at all, which is how those claims survived. Read any maturity level
+  for a module outside that directory as unverified by the gate.
+
 - **Nothing has met reality.** No real founder, outside tool, or provider.
 - Production reachability is proven against **synthetic** companies. A
   production-facing code path is not production evidence.
@@ -123,8 +128,8 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 | Assisting (support reply) | E3 | **prior synthetic dimensions only — unchanged for three sessions** |
 | Production reachability | E3 | four synthetic non-software companies |
 | Everything wired through production-facing services | E2 | local runtime through production-facing services |
-| Recursive Foundry operation | E2 | one responsibility carried end to end LOCALLY; `recursive-institution-v1` reports ordinary on all thirteen dimensions. Never run by a real owner in production. |
-| Institutional economics | E2 | attribution is structural; only model spend and recorded provider spend are measured, seven components named unmeasured |
+| Recursive Foundry operation | **E1** | `recursive-institution-contract.ts` has **zero importers in `src/`** — only its test reaches it. It was recorded as E2, which means "local runtime through production-facing services", and there is no production-facing service. `recursive-institution-v1` reporting ordinary on thirteen dimensions is a benchmark result, not a runtime one. Never run by a real owner in production. Corrected on evidence, not re-measured upward. |
+| Institutional economics | **E1** | `institutional-economics.ts` also has zero importers in `src/`. Attribution is structural and the arithmetic is tested; nothing in production consumes it, so the same correction applies. Seven components remain named-unmeasured. |
 | Assisting → Operating | frozen | migration 115; unchanged |
 | Real founders, providers, pilots, production | unproven | E4/E5/E6 |
 
