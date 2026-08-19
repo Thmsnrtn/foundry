@@ -37,6 +37,20 @@
 //   • It therefore MISSES a read that never names the column — `SELECT *`
 //     followed by generic row iteration. That is a false positive in the
 //     direction of asking a question, which is the safe direction.
+//   • IT ALSO MISSES A COLUMN MASKED BY THE SAME NAME ON ANOTHER TABLE, and
+//     that one is NOT the safe direction. Reads are matched against all of
+//     `src/` at once, so `outbound_actions.reconcile_after` counted as read
+//     because `webhook_deliveries.reconcile_after` is selected in
+//     `api/v1/webhooks.ts`. It was written by three paths and consumed by
+//     none, and the founder was told a reconciliation was coming that had no
+//     mechanism.
+//
+//     Closing this needs per-table read attribution and the instrument is not
+//     trustworthy yet: a prototype that grouped SQL statements by the tables
+//     they name produced 727 suspects, with `sqlite_master`, `your` and `a`
+//     among the tables. Do not ship that. Until it can be trusted, a column
+//     whose name is shared across tables is a place to LOOK, not a place this
+//     gate can answer.
 //   • It ignores `tests/` on purpose. A test reading a column is not the
 //     product consuming it, and counting it would hide exactly the defect this
 //     is for.

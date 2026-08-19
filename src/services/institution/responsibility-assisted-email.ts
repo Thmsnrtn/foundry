@@ -97,11 +97,19 @@ export async function executeAssistedSupportEmail(actionId:string, lifecycle:{af
   const result=await invoke({productId:String(row.product_id),tool:'send_email',action:`assisted ${row.authority_scope} ${row.effect_id}`,
     params:parameters,dedupKey:String(row.effect_id),customerExternalId:parameters.to[0],surface:'email_outbound',dataClass:'customer'});
   // NOTHING READS `reconcile_after`. It is written here, on the executed path
-  // below, and by the SCP executor, and no query anywhere in `src/` selects it;
-  // it stays off the write-only ratchet only because a `SELECT *` in the
-  // outbound executor masks it. So there is no scheduled reconciliation, and
-  // the founder-facing sentence for an ambiguous dispatch no longer says there
-  // is one.
+  // below, and by the SCP executor, and no query anywhere in `src/` selects it
+  // FROM `outbound_actions`. So there is no scheduled reconciliation, and the
+  // founder-facing sentence for an ambiguous dispatch no longer says there is
+  // one.
+  //
+  // Why the ratchet did not catch it: `check-write-only-columns.mjs` decides
+  // that a column is read if its name appears anywhere outside a write context,
+  // and `webhook_deliveries.reconcile_after` IS selected, in
+  // `api/v1/webhooks.ts`. A column of the same name on a different table masked
+  // this one. That blind spot is stated in the gate's header; closing it needs
+  // per-table read attribution, and the instrument for that is not yet
+  // trustworthy — a prototype produced 727 suspects with table names like
+  // `sqlite_master` and `your`.
   //
   // The timestamp is kept rather than dropped because the mechanism it is
   // waiting for is legitimate and missing, not wrong: asking the provider
