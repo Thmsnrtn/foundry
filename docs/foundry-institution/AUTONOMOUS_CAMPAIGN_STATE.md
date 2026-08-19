@@ -110,7 +110,18 @@ found, this list loses.
    live gap with a recommended answer, waiting on the owner.
 5. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
-6. **The rest of the outcome loop.** Five more predicates are written and read
+6. **The ladder's tests enter through a door production does not have.**
+   `emitSignalEvent` is the only function that runs responsibility discovery
+   and has exactly one caller — the company-report path. `discovery.ts` also
+   maps four SaaS event types straight onto responsibilities, and **21 test
+   files build ladder state through that map**, which nothing in production can
+   trigger. Three of the four event types appear nowhere else in the repository
+   at all. The unreachability is now asserted rather than implied
+   (`discovery-is-not-reachable-from-integrations.test.ts`), but moving 47
+   fixture references onto the real door is a deliberate campaign, not a side
+   effect of a deletion — attempting it inside one turned 25 tests red at once.
+
+7. **The rest of the outcome loop.** Five more predicates are written and read
    by nothing (`shadow_expectation`, `later_reality_comparison`,
    `development_shadow_comparison`, `development_change_outcome`, and
    `shadow_comparison` outside a frozen benchmark). The authority request is

@@ -2,6 +2,28 @@ import { nanoid } from 'nanoid';
 import { batch, query } from '../../db/client.js';
 import { getResponsibility, type Responsibility } from './responsibility.js';
 
+// NOTHING IN PRODUCTION CAN TRIGGER THESE FOUR.
+//
+// `emitSignalEvent` is the only function that runs discovery, and it has
+// exactly one caller: the founder-and-company report path. Three of these
+// event types appear nowhere else in the repository at all; `payment_failed`
+// appears in billing and customer-lifecycle code that writes its own rows and
+// never reaches the dispatcher. So this map has never produced a
+// responsibility in production and cannot as the system stands.
+//
+// It is kept rather than deleted, deliberately, and the reason is worth
+// stating. Twenty-one test files construct ladder state through it — which
+// means a large part of the institution's own suite enters through a door
+// production does not have. That is a real finding about the tests, not a
+// reason to sweep 47 references in the course of a deletion; it is recorded in
+// the live frontier and `discovery-is-not-reachable-from-integrations.test.ts`
+// asserts the unreachability so the impression cannot quietly return.
+//
+// These are also the SaaS shape migrations 135 and 136 spent their effort
+// removing: a ladder that recognises an obligation only when a marina's
+// reality happens to fit a software company's words. The generic vocabulary
+// below is the same semantic rule stated by the company, naming no industry,
+// and it is the one that actually runs.
 const SIGNAL_RESPONSIBILITIES: Record<string, { title: string; capability: string }> = {
   payment_failed: { title: 'Resolve failed customer payments', capability: 'billing_recovery' },
   churn_detected: { title: 'Respond to detected customer churn', capability: 'customer_success' },
