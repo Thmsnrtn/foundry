@@ -16,7 +16,7 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `0f62fb8` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `3099ea6`+ on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
@@ -39,6 +39,10 @@ Measured at `0f62fb8` on `claude/foundry-autonomous-continuation-0gents`.
   the first reason a responsibility needs the founder, and the only one that is
   a fact about the company rather than about where Foundry has got to. Prose is
   never turned into a date. Reachable from The Letter's report form.
+- **A passed deadline can falsify a judgment.** `contradicted` was recorded as
+  proof debt because "contradiction needs an observer that can see a deadline
+  pass". It has one now, and only that: a conflict still standing after a date
+  the company gave. An absent deadline is not a met one.
 - **Outcomes now reach the authority request.** `getAssistingCandidates`
   counted matched and deviated comparisons equally and ignored whether previous
   assisted actions had failed. Both are separated and surfaced to the founder
@@ -49,10 +53,11 @@ Measured at `0f62fb8` on `claude/foundry-autonomous-continuation-0gents`.
 
 ## Reachability caveats that still hold
 
-- **The reachability gate scans `src/services/institution` only** — 38 of 437
-  TypeScript files. Two modules carrying E2 claims sat outside it with no
-  importers at all, which is how those claims survived. Read any maturity level
-  for a module outside that directory as unverified by the gate.
+- ~~The reachability gate scans `src/services/institution` only~~ — **CLOSED.**
+  `check-reachability.mjs` walks all of `src/` from the real entry points as a
+  ratchet (29 unreachable, may only fall), declares modules reached by a
+  computed dynamic import with the mechanism that reaches them, and walks from
+  those too.
 
 - **Nothing has met reality.** No real founder, outside tool, or provider.
 - Production reachability is proven against **synthetic** companies. A
@@ -156,7 +161,11 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 - **Autonomous reply generation** is unbuilt and unclaimed; the founder-authored path is the baseline. Its contract is now frozen at E1 and nothing has ever been scored against it.
 - **Pilot readiness is green, and that is a smaller claim than it sounds.** `support-pilot-readiness-v1` says *ready to attempt a bounded pilot*. No pilot has occurred; the six named items of outstanding external proof are all still outstanding.
 - **Outcome (§12) remains untouched and must stay so:** provider acknowledgement, delivery, customer silence, and elapsed time are all *not* resolution. If a provider can emit an explicit case-status event, audit whether its contract genuinely establishes the outcome before believing it. Preserve `unresolved`.
-- Judgment observation still cannot report `contradicted`.
+- ~~Judgment observation cannot report `contradicted`~~ — **CLOSED.** It now
+  does, and only against a date the COMPANY stated that has passed with the
+  conflict still standing. Anything less is still `partially_observed`: an
+  absent deadline is not a met one, and a conflict the owner has simply not
+  got to yet has falsified nothing.
 - Development paths remain on the reachability gate's DARK list.
 - Executive cognition: no marginal-value comparison; the cognition gate forces one.
 - Economics: near-vacuous while the institution is model-free.
@@ -187,7 +196,7 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 
 ### Partially implemented
 
-- **Judgment observation cannot report `contradicted`** — only matched, deviated, unresolved.
+- ~~**Judgment observation cannot report `contradicted`**~~ — closed by migration 166's stated due dates; see above.
 - **Duplicate founder reports still create duplicate responsibilities.**
 - **The NULL-safety gate does not analyse nullable columns**, only guard predicates; trigger tests are the backstop.
 - **Reachability is per module, not per behaviour.** A module counts as reachable when production imports it at all — including read-only. Several institution modules are reachable that way while their write paths stay undriven.
@@ -227,11 +236,15 @@ Everything built in sessions four through seven: the founder evidence bridge, co
   model-driven and the institution is deliberately model-free, so cutting them
   over would LOSE capability rather than preserve it. Blocked on executive
   cognition, itself blocked on a consumed task with a real baseline.
-- **Judgment calibration — blocked on reality, not on effort.** Nothing in
-  production writes `judgment_expected_supported` /
-  `judgment_expected_contradicted`, so evaluation can only ever report
-  `not_yet_observable`. Manufacturing longitudinal examples to improve a
-  calibration metric would corrupt the one number that is supposed to be honest.
+- **Judgment calibration — still blocked on reality, but less so.** The
+  observation pass writes `judgment_expected_supported` when the company
+  resolves a conflict and `judgment_expected_contradicted` when a date the
+  company itself gave passes with the conflict still standing, so evaluation
+  can reach a real verdict rather than only `not_yet_observable`. What remains
+  blocked is CALIBRATION: whether Foundry's confidence tracks its accuracy
+  needs a run of real judgments against real later reality, and manufacturing
+  longitudinal examples to improve that number would corrupt the one number
+  that is supposed to be honest.
 - **Quality/cost comparator.** Deferred with a stated trigger — buildable when a
   second candidate method exists for a consumed capability.
 - **Architecture deletion.** Candidates remain, each needing per-module proof.

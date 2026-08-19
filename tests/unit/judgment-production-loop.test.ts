@@ -277,3 +277,98 @@ describe('institutional judgment in production', () => {
     expect(registry).toMatch(/runJudgmentObservationPass/);
   });
 });
+
+// ── the verdict that needed a clock ────────────────────────────────────────
+
+describe('a judgment can now be contradicted, and only honestly', () => {
+  /** A date the COMPANY gave, already passed. The database refuses one Foundry
+   *  authored, so this is the founder saying it. */
+  async function pastDue(prefix: string, responsibilityId: string): Promise<void> {
+    const soon = new Date(Date.now() + 86_400_000).toISOString();
+    await query(
+      `UPDATE institutional_responsibilities SET due_at=?, due_stated_by=? WHERE id=?`,
+      [soon, `${prefix}_f`, responsibilityId]);
+    await query(
+      `UPDATE institutional_responsibilities SET due_at=? WHERE id=?`,
+      [new Date(Date.now() - 2 * 86_400_000).toISOString(), responsibilityId]);
+  }
+
+  it('reports contradicted when a stated date passed and the conflict still stands', async () => {
+    // THE DISTINCTION THAT DID NOT EXIST. This observer could only ever say
+    // `partially_observed` for a standing conflict, and said why: the owner
+    // may simply not have acted yet. A date the company itself gave is what
+    // separates "not yet" from "too late" — and the judgment that said this
+    // would have to be allocated has been falsified by events, not opinion.
+    const p = 'jp_late';
+    await overSubscribedCompany(p);
+    const { judgmentId } = await runInstitutionalJudgmentPass(p);
+    await backdateJudgment(judgmentId!, 60);
+    await pastDue(p, `${p}_a`);
+
+    // New evidence exists, so the pass is entitled to speak; the conflict is
+    // untouched, so it still stands.
+    await claim(p, `responsibility:${p}_a`, 'resource_demand', { resource: 'engineering_days', amount: 4 });
+
+    expect(await runJudgmentObservationPass(p)).toEqual([{ judgmentId, observed: 'contradicted' }]);
+  });
+
+  it('still says partially_observed when no date was ever given', async () => {
+    // An absent deadline is not a met one. Without a date the company stated,
+    // a standing conflict is an owner who has not got to it.
+    const p = 'jp_nodate';
+    await overSubscribedCompany(p);
+    const { judgmentId } = await runInstitutionalJudgmentPass(p);
+    await backdateJudgment(judgmentId!, 60);
+    await claim(p, `responsibility:${p}_a`, 'resource_demand', { resource: 'engineering_days', amount: 4 });
+
+    expect(await runJudgmentObservationPass(p)).toEqual([{ judgmentId, observed: 'partially_observed' }]);
+  });
+
+  it('still says partially_observed when the date has not arrived', async () => {
+    const p = 'jp_future';
+    await overSubscribedCompany(p);
+    const { judgmentId } = await runInstitutionalJudgmentPass(p);
+    await backdateJudgment(judgmentId!, 60);
+    await query(
+      `UPDATE institutional_responsibilities SET due_at=?, due_stated_by=? WHERE id=?`,
+      [new Date(Date.now() + 30 * 86_400_000).toISOString(), `${p}_f`, `${p}_a`]);
+    await claim(p, `responsibility:${p}_a`, 'resource_demand', { resource: 'engineering_days', amount: 4 });
+
+    expect(await runJudgmentObservationPass(p)).toEqual([{ judgmentId, observed: 'partially_observed' }]);
+  });
+
+  it('prefers supported over contradicted when the company actually resolved it', async () => {
+    // A passed deadline does not overrule the conflict being gone. Being late
+    // to fix something you then fixed is not a falsified judgment.
+    const p = 'jp_latebutfixed';
+    await overSubscribedCompany(p);
+    const { judgmentId } = await runInstitutionalJudgmentPass(p);
+    await backdateJudgment(judgmentId!, 60);
+    await pastDue(p, `${p}_a`);
+    await claim(p, `product:${p}`, 'resource_capacity', { resource: 'engineering_days', amount: 12 });
+
+    expect(await runJudgmentObservationPass(p)).toEqual([{ judgmentId, observed: 'supported' }]);
+  });
+
+  it('carries the date into the observation, so the reason outlives the row', async () => {
+    const p = 'jp_reason';
+    await overSubscribedCompany(p);
+    const { judgmentId } = await runInstitutionalJudgmentPass(p);
+    await backdateJudgment(judgmentId!, 60);
+    await pastDue(p, `${p}_a`);
+    await claim(p, `responsibility:${p}_a`, 'resource_demand', { resource: 'engineering_days', amount: 4 });
+    await runJudgmentObservationPass(p);
+
+    const obs = (await query(
+      `SELECT payload_json,summary FROM signal_events
+        WHERE product_id=? AND event_type='judgment_expected_contradicted'`, [p]))
+      .rows[0] as Record<string, unknown>;
+    expect(obs, 'no contradiction observation was written').toBeTruthy();
+    const payload = JSON.parse(String(obs.payload_json)) as Record<string, unknown>;
+    expect(payload.overdue_responsibility_id).toBe(`${p}_a`);
+    expect(payload.overdue_due_at).toBeTruthy();
+    expect(String(obs.summary), 'the founder is told which thing passed its date')
+      .toContain('Answer customers');
+    void judgmentId;
+  });
+});

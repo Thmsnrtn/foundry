@@ -39,11 +39,14 @@ export async function evaluateInstitutionalJudgment(productId:string,judgmentId:
  *     rather than believed.
  *   • The observer recomputes with the SAME reading the producer used, so a
  *     disagreement is always about the company and never about the code.
- *   • It never reports `contradicted`. A conflict that still stands has not
- *     falsified anything — the owner may simply not have acted yet — so the
- *     honest report is `partially_observed`. Contradiction needs an observer
- *     that can see a deadline pass, which does not exist yet and is recorded
- *     as proof debt rather than faked here.
+ *   • It reports `contradicted` only against a passed deadline. A conflict that
+ *     still stands has not falsified anything — the owner may simply not have
+ *     acted yet — so the
+ *     honest report is `partially_observed` — UNLESS a date the company itself
+ *     gave has passed with the conflict still standing, which is the one case
+ *     where "not yet" and "too late" can be told apart. That observer did not
+ *     exist until migration 166 gave a responsibility a stated due date, and
+ *     the impossibility was carried as proof debt rather than faked.
  */
 export async function runJudgmentObservationPass(
   productId:string,
@@ -67,9 +70,37 @@ export async function runJudgmentObservationPass(
 
     const view=readCapacityView(await getReconstructionClaims(productId),productId,responsibilityIds);
     const resolved=findCapacityConflict(view)===null;
-    const eventType=resolved?'judgment_expected_supported':'judgment_partially_observed';
+
+    // THE DEADLINE THAT MAKES CONTRADICTION HONEST.
+    //
+    // This could never report `contradicted`, and said why: a conflict that
+    // still stands has not falsified anything, because the owner may simply
+    // not have acted yet. That was true for as long as the institution had no
+    // way to tell "not yet" from "too late" — recorded as proof debt rather
+    // than faked.
+    //
+    // Migration 166 gave a responsibility a due date the COMPANY stated, which
+    // the database refuses to let Foundry author. So the missing distinction
+    // now exists: a conflict still standing after a date the company itself
+    // gave is not an owner who has not got to it. The time they had ran out,
+    // and the judgment that said this would have to be allocated or resolved
+    // has been falsified by events rather than by opinion.
+    //
+    // Deliberately strict. It needs a date, the date must be past, and the
+    // conflict must still stand. Any of those missing and the honest report is
+    // still `partially_observed` — an absent deadline is not a met one.
+    const overdue=responsibilityIds.length?(await query(
+      `SELECT id,title,due_at FROM institutional_responsibilities
+        WHERE product_id=? AND id IN (${responsibilityIds.map(()=>'?').join(',')})
+          AND due_at IS NOT NULL AND datetime(due_at)<datetime('now')
+        ORDER BY due_at LIMIT 1`,[productId,...responsibilityIds])).rows[0] as Record<string,unknown>|undefined
+      :undefined;
+
+    const eventType=resolved?'judgment_expected_supported'
+      :overdue?'judgment_expected_contradicted':'judgment_partially_observed';
     const observationId='jobs_'+createHash('sha256')
-      .update([judgmentId,eventType,...evidenceClaimIds].join('\n')).digest('hex').slice(0,32);
+      .update([judgmentId,eventType,...evidenceClaimIds,
+        overdue?`due:${String(overdue.id)}:${String(overdue.due_at)}`:''].join('\n')).digest('hex').slice(0,32);
 
     // The same evidence re-read on a later tick is the same observation, not a
     // new one. Only genuinely new evidence appends to the judgment's history.
@@ -80,10 +111,15 @@ export async function runJudgmentObservationPass(
       `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
        VALUES (?,?,'institutional_judgment_observation',?,?,?,?)`,[
       observationId,productId,eventType,resolved?'low':'medium',
-      JSON.stringify({judgment_id:judgmentId,evidence_claim_ids:evidenceClaimIds,resolved}),
+      JSON.stringify({judgment_id:judgmentId,evidence_claim_ids:evidenceClaimIds,resolved,
+        // The date is carried on the observation, so the reason a judgment was
+        // contradicted survives longer than the row that was overdue.
+        ...(overdue?{overdue_responsibility_id:String(overdue.id),overdue_due_at:String(overdue.due_at)}:{})}),
       resolved
         ?'The resource conflict this judgment was about no longer stands'
-        :'The resource conflict this judgment was about still stands',
+        :overdue
+          ?`The conflict still stands, and ${String(overdue.title)} passed the date you gave for it`
+          :'The resource conflict this judgment was about still stands',
     ]);
     out.push({judgmentId,observed:await evaluateInstitutionalJudgment(productId,judgmentId)});
   }
