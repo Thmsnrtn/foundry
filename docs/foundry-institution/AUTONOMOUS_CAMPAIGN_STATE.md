@@ -101,12 +101,21 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    (`business_model_profile.seasonal_*`): Foundry records the shape of a
    company's year and nothing reads it.
 
-5. **Three unread outcome predicates.** `shadow_expectation` and
-   `shadow_comparison` (`external-shadowing.ts`), `development_shadow_comparison`
-   (`development-shadowing.ts`). Unlike the two closed ones, their table side IS
-   consumed — `assisting-admission` reads the comparison rows — so these are
-   redundant claims rather than lost learning. The resolution is to say so where
-   they are written, or stop writing them.
+5. **Two unread outcome predicates.** `shadow_expectation` and
+   `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —
+   `assisting-admission` reads the comparison rows — so these are redundant
+   claims rather than lost learning. The resolution is to say so where they are
+   written, or stop writing them.
+
+   `development_shadow_comparison` turned out to be something else entirely:
+   pulling on it found that **nothing in production ever resolved a development
+   shadow expectation**. The Letter lets a founder open one — Foundry asks what
+   they would expect a check to report and records their answer — and
+   `resolveDevelopmentShadowing` had no caller outside its own tests. The
+   institution asked a person a question and never compared the answer with what
+   the check said. Now resolved by the judgment tick, in the same loop as its
+   external-metric twin, because having them wired in two places is how one of
+   them came to be wired in none.
 
 6. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.

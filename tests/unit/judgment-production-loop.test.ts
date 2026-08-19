@@ -275,6 +275,13 @@ describe('institutional judgment in production', () => {
     expect(registry).toMatch(/institutional_judgment_tick/);
     expect(registry).toMatch(/runInstitutionalJudgmentPass/);
     expect(registry).toMatch(/runJudgmentObservationPass/);
+    // BOTH SHADOW RESOLVERS, not one. The external-metric expectation was
+    // resolved by this pass and the development one was resolved by nothing —
+    // so The Letter could ask a founder what they expect a check to report,
+    // record their answer, and never compare it against what the check said.
+    expect(registry).toMatch(/resolveExternalMetricShadowing/);
+    expect(registry, 'a founder-facing question with no consumer is not a loop')
+      .toMatch(/resolveDevelopmentShadowing/);
   });
 });
 

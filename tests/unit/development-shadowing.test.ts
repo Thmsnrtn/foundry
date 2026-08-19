@@ -353,3 +353,47 @@ describe('development as an ordinary shadowed responsibility', () => {
     }
   });
 });
+
+describe('the founder\'s answer is actually compared against reality', () => {
+  it('is resolved by the scheduled pass, not only by a test calling it', async () => {
+    // THE HALF-BUILT LOOP. The Letter lets a founder open a development
+    // expectation — Foundry asks what they would expect a check to report and
+    // records their answer — and `resolveDevelopmentShadowing` had no caller
+    // outside this file. So the institution asked a person a question and never
+    // compared the answer with what the check actually said.
+    //
+    // Its external-metric twin was resolved by the judgment tick. Both are now
+    // resolved in the same loop, deliberately: they are one thing, and having
+    // them wired in two places is how one of them came to be wired in none.
+    const P = 'dev_tick';
+    await query(`INSERT INTO products (id,name,owner_id) VALUES (?,'Ticked Co','dev_owner')`, [P]);
+    const responsibilityId = await seedDevelopmentResponsibility(P, 'devtick');
+    const { expectationId } = await beginDevelopmentShadowing({
+      productId: P, responsibilityId, expectedCheck: CHECK, expectedResult: 'failed',
+      expectationClaimId: await expectationClaim(P, 'devtick', 'failed'),
+      observationSourceSignalId: 'devtick_sig',
+    });
+    // The observation must genuinely follow the prediction it tests.
+    await elapseSinceExpectation(expectationId, 60);
+    await recordDevelopmentObservation({
+      productId: P, check: CHECK, result: 'failed', detail: 'an independent check said so',
+    });
+
+    // Nothing has compared them yet.
+    expect((await query(
+      'SELECT COUNT(*) n FROM responsibility_shadow_comparisons WHERE expectation_id=?',
+      [expectationId])).rows[0]).toMatchObject({ n: 0 });
+
+    // Through the REGISTRY, which is what the scheduler runs. Calling an
+    // exported helper would prove the helper works and not that anything calls
+    // it — the exact gap this test exists to close.
+    const { JOB_REGISTRY } = await import('../../src/jobs/index.js');
+    await JOB_REGISTRY.institutional_judgment_tick.fn();
+
+    expect((await query(
+      'SELECT classification FROM responsibility_shadow_comparisons WHERE expectation_id=?',
+      [expectationId])).rows[0],
+    'the scheduled pass must close the loop the founder opened')
+      .toMatchObject({ classification: 'matched' });
+  });
+});

@@ -2451,6 +2451,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const { resolveExternalMetricShadowing } = await import(
         '../services/institution/external-shadowing.js'
       );
+      const { resolveDevelopmentShadowing } = await import(
+        '../services/institution/development-shadowing.js'
+      );
       for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
         const productId = String(row.id);
         const visible = await query(
@@ -2473,6 +2476,34 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           } catch (err) {
             logger.error(
               `shadow resolution failed for ${String(x.id)}: ${err instanceof Error ? err.message : String(err)}`,
+              { jobName: 'institutional_judgment_tick', productId },
+            );
+          }
+        }
+
+        // THE DEVELOPMENT TWIN, WHICH NOTHING RESOLVED. The founder can open a
+        // development expectation from The Letter — Foundry asks what they
+        // would expect a check to report, and records their answer — and
+        // `resolveDevelopmentShadowing` had no caller outside its own tests. So
+        // the institution asked a person a question and never compared the
+        // answer against what the check actually said.
+        //
+        // Identical treatment to the metric twin above, and deliberately in the
+        // same loop: they are one thing, and having them wired in two places
+        // is how one of them came to be wired in none.
+        const openDevelopment = await query(
+          `SELECT x.id FROM responsibility_shadow_expectations x
+             JOIN institutional_responsibilities r ON r.id=x.responsibility_id
+            WHERE x.product_id=? AND r.state='shadowing' AND r.capability='development'
+              AND x.expected_event_type LIKE 'development_verified:%'`, [productId]);
+        for (const x of openDevelopment.rows as unknown as Array<Record<string, unknown>>) {
+          try {
+            const resolved = await resolveDevelopmentShadowing(
+              { productId, expectationId: String(x.id) });
+            if (resolved.verdict !== 'unresolved') compared++;
+          } catch (err) {
+            logger.error(
+              `development shadow resolution failed for ${String(x.id)}: ${err instanceof Error ? err.message : String(err)}`,
               { jobName: 'institutional_judgment_tick', productId },
             );
           }
