@@ -259,6 +259,20 @@ found, this list loses.
     a look: it is the sort of fact a marina or a dance school would expect to be
     used.
 
+15. **The interruption policy's top rung did what the rung below it does.**
+    ~~Open.~~ **Closed.** `deliver()`'s `push` branch wrote a notification row
+    and returned `delivered: true`, with a comment claiming a mobile poller
+    picked it up. No such poller exists — nothing turned a notification row into
+    a push — so `decideChannel` deciding an event warranted interrupting the
+    founder had exactly the same effect as deciding it did not. Meanwhile the
+    push capability the owner explicitly asked for sat built and governed with
+    one caller.
+
+    It has a second caller now. The record is still written, because a push is a
+    nudge and a founder who missed the buzz must still find the thing in the
+    app; `delivered` means "a record exists" and `pushed` says whether the phone
+    was reached, which were the same field.
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.

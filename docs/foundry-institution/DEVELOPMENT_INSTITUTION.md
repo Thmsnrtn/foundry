@@ -215,12 +215,14 @@ Two standards this institution holds itself to, both learned the hard way:
   false in the safest-sounding direction. Assert the file changed. This is the
   same unknown-masquerading-as-a-result failure the product keeps having,
   committed by the process that exists to catch it.
-- **Commit before mutating, and check what the revert took.** `git checkout --`
-  reverts the whole file, not the mutation. Uncommitted work in the same file
-  disappears with the mutant, silently, and the next thing you do is build on
-  code you no longer have. It has now happened three times; the fix is to
-  commit first, not to be more careful. Grep for what you expected to still be
-  there afterwards.
+- **Commit before mutating. Not "be careful" — commit.** `git checkout --`
+  reverts the whole file, not the mutation, so uncommitted work in that file
+  disappears with the mutant and the next thing you do is build on code you no
+  longer have. This lesson was WRITTEN INTO THIS FILE and then broken again in
+  the same session, which is the useful part: knowing the rule is not following
+  it. The rule is mechanical for a reason. Commit, then mutate, then revert
+  freely; and if you did mutate uncommitted work, grep for what you expected to
+  still be there before doing anything else.
 - **Do not contaminate your own experiment.** Repeat runs answering "does this
   still happen" are worthless if the tree changed underneath them, and worse
   than worthless if a second concurrent run collides with the first — the gate

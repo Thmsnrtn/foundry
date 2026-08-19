@@ -120,6 +120,63 @@ describe('push goes through the gateway', () => {
   });
 });
 
+describe('the interruption policy has a top rung that does something', () => {
+  it('sends a push when the policy chose one, and only then', async () => {
+    // `deliver()`'s push branch wrote a notification row and returned
+    // `delivered: true`, with a comment saying a mobile poller picked it up.
+    // No such poller exists. So `decideChannel` deciding an event warranted
+    // interrupting the founder produced exactly the same effect as deciding it
+    // did not, and the Attention Law's most urgent channel was decoration —
+    // while the push capability the owner asked for sat built, governed, and
+    // called from one place.
+    const handler = stubTransport();
+    await query(
+      `INSERT INTO push_subscriptions (id, founder_id, endpoint, p256dh, auth, platform)
+       VALUES (?,?,?,?,?,'web')`,
+      [nanoid(), founderId, `https://push.example/${founderId}`, 'k', 'a']);
+
+    const { deliver } = await import('../../src/services/ux/interruption.js');
+    const urgent = await deliver(founderId, productId, {
+      importance: 'critical', title: 'Something needs you now', body: 'It really does',
+      actionUrl: '/letter', actionLabel: 'Look',
+    });
+    expect(urgent.channel, 'critical must reach the top of the ladder').toBe('push');
+    expect(handler, 'the policy chose push, so a push must leave').toHaveBeenCalled();
+    expect(urgent.pushed).toBe(true);
+
+    // THE RECORD SURVIVES THE NUDGE. A push is a buzz; a founder who missed it
+    // must still find the thing in the app, so `delivered` still means "a
+    // record exists" and is not folded together with "the phone was reached".
+    expect(urgent.delivered).toBe(true);
+    expect(Number(((await query(
+      'SELECT COUNT(*) n FROM notifications WHERE founder_id=?', [founderId]))
+      .rows[0] as Record<string, unknown>).n)).toBe(1);
+
+    // And a quieter decision does NOT send one. The distinction is the point.
+    handler.mockClear();
+    const quiet = await deliver(founderId, productId, {
+      importance: 'info', title: 'Nothing urgent', body: 'Just so you know',
+    });
+    expect(quiet.channel).not.toBe('push');
+    expect(handler, 'a quiet event must not buzz anybody').not.toHaveBeenCalled();
+  });
+
+  it('keeps the record when the push cannot be sent', async () => {
+    // No transport registered: the gateway refuses. A push that could not be
+    // sent must never cost the founder the record of what happened.
+    clearToolHandlers();
+    const { deliver } = await import('../../src/services/ux/interruption.js');
+    const result = await deliver(founderId, productId, {
+      importance: 'critical', title: 'Still needs you', body: 'Even with no phone',
+    });
+    expect(result.delivered, 'the record landed').toBe(true);
+    expect(result.pushed, 'and it says plainly that the phone was not reached').toBe(false);
+    expect(Number(((await query(
+      'SELECT COUNT(*) n FROM notifications WHERE founder_id=?', [founderId]))
+      .rows[0] as Record<string, unknown>).n)).toBe(1);
+  });
+});
+
 describe('the channel is actually wired', () => {
   it('has a caller, so the registration routes stop promising nothing', () => {
     const walk = (dir: string): string[] => readdirSync(dir).flatMap((e) => {

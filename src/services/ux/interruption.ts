@@ -70,6 +70,13 @@ export interface DeliverableEvent {
 export interface DeliveryResult {
   channel: Channel;
   delivered: boolean;
+  /**
+   * Whether a push actually left for the provider. `delivered` says a record
+   * the founder can find exists; this says their phone was reached. They are
+   * different facts and were the same field, which is how the policy's top rung
+   * came to mean nothing.
+   */
+  pushed?: boolean;
 }
 
 /** Route one detected event through the policy. `productId` anchors the
@@ -90,11 +97,50 @@ export async function deliver(
   });
 
   switch (channel) {
-    case 'push':
-      // Push rides the notification row; the mobile poller/APNS layer picks
-      // it up. The distinction that matters here is intent + audit.
+    case 'push': {
+      // THE POLICY'S TOP RUNG USED TO DO WHAT THE ONE BELOW IT DOES.
+      //
+      // This wrote a notification row and returned `delivered: true`, with a
+      // comment saying "the mobile poller/APNS layer picks it up". No such
+      // poller exists: nothing anywhere turns a notification row into a push.
+      // So `decideChannel` deciding that an event warranted interrupting the
+      // founder produced exactly the same effect as deciding it did not, and
+      // the Attention Law's most urgent channel was decoration.
+      //
+      // The push capability itself was built — the owner asked for it
+      // explicitly, through the gateway, with the kill switch, the entitlement
+      // pause, dedup and audit. It had one caller. This is the second.
+      //
+      // The notification row is still written, because a push is a nudge and
+      // the record is the record: a founder who missed the buzz must still find
+      // it in the app. `delivered` therefore still means "a record exists",
+      // and whether the phone was actually reached is its own field rather
+      // than folded into that one.
       await createNotification(founderId, productId, 'system', event.title, event.body, event.actionUrl, event.actionLabel);
-      return { channel, delivered: true };
+      let pushed = false;
+      try {
+        const { notifyFounder } = await import('../notifications/push.js');
+        // `daily_briefing` rather than a new type: the type names a real
+        // preference COLUMN on `push_subscriptions`, so inventing one here
+        // would mean a migration and a preference the founder never chose.
+        const result = await notifyFounder({
+          productId, founderId, notificationType: 'daily_briefing',
+          payload: {
+            title: event.title, body: event.body,
+            // The action lives in `data`, which is where the payload carries
+            // anything that is not the two lines the phone shows.
+            ...(event.actionUrl ? { data: { url: event.actionUrl } } : {}),
+          },
+        });
+        pushed = result.sent > 0;
+      } catch (error) {
+        // A push that could not be sent must never cost the founder the record.
+        log.warn('interruption push failed', {
+          founderId, productId, error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return { channel, delivered: true, pushed };
+    }
     case 'notification':
       await createNotification(founderId, productId, 'system', event.title, event.body, event.actionUrl, event.actionLabel);
       return { channel, delivered: true };
