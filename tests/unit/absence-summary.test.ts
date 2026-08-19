@@ -88,8 +88,21 @@ async function grant(
   );
 }
 
+// One observation per responsibility. Migration 105 makes
+// (product_id, discovery_evidence_ref) unique, which is the point: one thing
+// observed yields one responsibility, not a fresh one on every pass.
+let observationSeq = 0;
+async function observed(): Promise<string> {
+  const id = `as_obs_${observationSeq += 1}`;
+  await query(
+    `INSERT OR IGNORE INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+     VALUES (?,'p1','external_observation','company_observation','medium','{}','s')`, [id]);
+  return `signal_event:${id}`;
+}
+
 async function advance(title: string, target: ResponsibilityState) {
-  let r = await createResponsibility({ productId:'p1', title, capability:'general' });
+  let r = await createResponsibility({
+    productId:'p1', title, capability:'general', discoveryEvidenceRef: await observed() });
   const states: ResponsibilityState[] = ['visible','understood','shadowing','assisting','operating','mature','exception_owned'];
   let from: ResponsibilityState = 'unknown';
   for (const to of states) {
@@ -118,7 +131,8 @@ describe('seven-day responsibility summary', () => {
 
   it('reports recent movement as CHANGED and stable unknown work as STILL_OPEN', async () => {
     await advance('Publish metrics', 'visible');
-    await createResponsibility({ productId:'p1', title:'Unknown operational owner', capability:'general' });
+    await createResponsibility({ productId:'p1', title:'Unknown operational owner', capability:'general',
+      discoveryEvidenceRef: await observed() });
     const summary = await getSevenDayResponsibilitySummary('p1');
     expect(summary.CHANGED.map((x) => x.title)).toContain('Publish metrics');
     expect(summary.STILL_OPEN.map((x) => x.title)).toContain('Unknown operational owner');
@@ -140,7 +154,8 @@ describe('seven-day responsibility summary', () => {
     expect(summary.STILL_OPEN).toEqual([]);
   });
   it('includes deliberate non-action only after an explicit product owner decision', async () => {
-    const r = await createResponsibility({ productId:'p1', title:'Launch paid campaign', capability:'general' });
+    const r = await createResponsibility({ productId:'p1', title:'Launch paid campaign', capability:'general',
+      discoveryEvidenceRef: await observed() });
     await expect(setResponsibilityDisposition({ productId:'p1', responsibilityId:r.id, ownerId:'attacker', disposition:'deliberately_not_done', reason:'no', evidenceRef:'signal_event:sig1' })).rejects.toThrow(/not_found/);
     await setResponsibilityDisposition({ productId:'p1', responsibilityId:r.id, ownerId:'f1', disposition:'deliberately_not_done', reason:'CAC evidence is insufficient', evidenceRef:'signal_event:sig1' });
     const summary = await getSevenDayResponsibilitySummary('p1');

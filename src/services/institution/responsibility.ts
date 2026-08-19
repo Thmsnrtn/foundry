@@ -12,17 +12,45 @@ export interface Responsibility {
   outcomeRef: string | null; updatedAt: string;
 }
 
+/**
+ * A responsibility, and the observation it was discovered from.
+ *
+ * THE EVIDENCE IS NOT OPTIONAL. This used to create a responsibility with no
+ * `discovery_evidence_ref` at all — an institutional obligation that appeared
+ * from nowhere, with nothing to point at when a founder asks why Foundry thinks
+ * their company owes this. `discovery.ts`, the path production actually runs,
+ * has always recorded it, and migration 105 puts a unique index on
+ * (product_id, discovery_evidence_ref) so one observation yields one
+ * responsibility rather than a new one on every pass.
+ *
+ * Verified against a real signal for this company rather than trusted as a
+ * string: a caller-supplied reference that names nothing is exactly the
+ * narrative-over-evidence this ladder exists to refuse, and a TypeScript
+ * parameter is erased at runtime.
+ */
 export async function createResponsibility(input: {
-  productId: string; title: string; capability: string; description?: string;
+  productId: string; title: string; capability: string;
+  /** `signal_event:<id>`, naming an event this company actually recorded. */
+  discoveryEvidenceRef: string;
+  description?: string;
 }): Promise<Responsibility> {
   const title = input.title.trim();
   if (!title) throw new Error('responsibility title is required');
   const capability = input.capability.trim();
   if (!capability) throw new Error('responsibility capability is required');
+
+  const evidenceRef = input.discoveryEvidenceRef?.trim() ?? '';
+  const signalId = evidenceRef.startsWith('signal_event:') ? evidenceRef.slice('signal_event:'.length) : '';
+  if (!signalId) throw new Error('responsibility discovery evidence must be a signal_event reference');
+  const observed = await query(
+    'SELECT 1 FROM signal_events WHERE id=? AND product_id=?', [signalId, input.productId]);
+  if (!observed.rows.length) throw new Error('responsibility discovery evidence names no signal of this company');
+
   const id = nanoid();
   await query(
-    `INSERT INTO institutional_responsibilities (id,product_id,title,capability,description)
-     VALUES (?,?,?,?,?)`, [id, input.productId, title, capability, input.description?.trim() || null],
+    `INSERT INTO institutional_responsibilities (id,product_id,title,capability,description,discovery_evidence_ref)
+     VALUES (?,?,?,?,?,?)`,
+    [id, input.productId, title, capability, input.description?.trim() || null, evidenceRef],
   );
   return getResponsibility(input.productId, id) as Promise<Responsibility>;
 }
