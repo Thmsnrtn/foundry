@@ -31,6 +31,20 @@ export const letterRoutes = new Hono<AuthEnv>();
 // Connections are one door (Attention Law: mounts may only shrink).
 letterRoutes.route('/', connectionRoutes);
 
+/** The three counts in one sentence of the founder's language. Written out
+ *  rather than templated from a list so each number arrives with the word that
+ *  says what it means — "2 unconfirmed" alone reads as a failure. */
+const developmentRecordLine = (
+  record: { confirmed: number; failed: number; unconfirmed: number },
+): string => {
+  const parts: string[] = [];
+  if (record.confirmed) parts.push(`${record.confirmed} an independent check confirmed`);
+  if (record.failed) parts.push(`${record.failed} where the check then failed`);
+  if (record.unconfirmed) parts.push(`${record.unconfirmed} nothing has confirmed either way`);
+  const total = record.confirmed + record.failed + record.unconfirmed;
+  return `Across everything I have changed and recorded — ${total} in all — ${parts.join(', ')}.`;
+};
+
 const section = (label: string, items: string[]) => items.length === 0 ? '' : html`
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">${label}</div>
@@ -706,7 +720,18 @@ letterRoutes.get('/letter', async (c) => {
       </details>
       ${tellMeSection(factOpportunities)}
       ${judgmentSection(materialJudgments)}
-      ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
+      ${section('Changes I made to your systems', [
+    ...development.changes.map((c) => `${c.what} — ${c.detail}`),
+    // HOW THIS HAS HELD UP, not how well. The counts come from what Foundry
+    // recorded about its own changes and had never once read back; a founder
+    // deciding whether to keep letting it touch their systems is deciding on a
+    // track record, not on one week of individual lines.
+    //
+    // Stated as three numbers because that is what the evidence is. A rate
+    // would invite "75% reliable" from four observations, and unconfirmed is
+    // neither a success nor a failure — it is nobody having checked.
+    ...(development.record ? [developmentRecordLine(development.record)] : []),
+  ])}
       ${development.permitted.length ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What I'm allowed to change right now</div>

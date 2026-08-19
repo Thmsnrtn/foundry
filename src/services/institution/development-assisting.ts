@@ -17,7 +17,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { recordReconstructionClaim } from './reconstruction.js';
+import { getReconstructionClaims, recordReconstructionClaim } from './reconstruction.js';
 import { enterResponsibilityAssisting } from './responsibility-assisting.js';
 import { getCurrentDevelopmentAuthority, isPathWithinAuthority } from './development-authority.js';
 import { decideDevelopmentDisposition } from './development-disposition.js';
@@ -358,6 +358,57 @@ export interface FounderDevelopmentActivity {
   permitted: Array<{ what: string; where: string[]; until: string }>;
   /** Only changes with a material state — quiet successes stay quiet. */
   changes: Array<{ what: string; detail: string }>;
+  /** How Foundry's changes have held up over everything it has recorded, or
+   *  null when it has recorded nothing. Never a rate, never a score. */
+  record: { confirmed: number; failed: number; unconfirmed: number } | null;
+}
+
+/**
+ * THE TRACK RECORD, FROM THE CLAIMS RATHER THAN THE PLANS.
+ *
+ * `recordDevelopmentOutcome` wrote every outcome twice: once to
+ * `development_change_plans.outcome_status`, and once as a
+ * `development_change_outcome` reconstruction claim with the verification
+ * evidence attached. The column was read; the claim was read by nothing. That
+ * is a permanent dual-write with a dead side — Foundry paying to record what it
+ * learned about its own changes and never once consulting it.
+ *
+ * The two sides get different jobs rather than one getting deleted. The plans
+ * answer "what happened to this change", which needs a path and a status. The
+ * claims answer "how has this held up", which needs provenance and staleness —
+ * and staleness matters here, because a verification from four months ago is not
+ * current evidence that Foundry's changes hold. `getReconstructionClaims`
+ * applies that; the column cannot.
+ *
+ * Counts, not a rate. Three verified successes out of four is not "75%
+ * reliable", and a percentage invites exactly the reading the evidence cannot
+ * support. `unresolved` is carried as its own number rather than folded into
+ * either side, because "nobody checked" is not a failure and is not a success.
+ *
+ * STALENESS IS ASYMMETRIC, deliberately. `getReconstructionClaims` exists, in
+ * its own words, so "an old positive claim" does not "silently remain current":
+ * a check that passed before its evidence expired is no longer current evidence
+ * that Foundry's change holds, so it falls back to unconfirmed. A check that
+ * FAILED is not retired the same way — a failure is a thing that happened, and
+ * letting time turn it into "nobody knows" would be Foundry improving its own
+ * record by waiting. The asymmetry only ever runs against Foundry.
+ */
+async function developmentRecord(
+  productId: string, now: Date,
+): Promise<FounderDevelopmentActivity['record']> {
+  const claims = (await getReconstructionClaims(productId, now))
+    .filter((claim) => claim.predicate === 'development_change_outcome');
+  if (!claims.length) return null;
+
+  const tally = { confirmed: 0, failed: 0, unconfirmed: 0 };
+  for (const claim of claims) {
+    const outcome = (claim.value as { outcome?: unknown } | null)?.outcome;
+    const current = claim.epistemicStatus === 'known' || claim.epistemicStatus === 'inferred';
+    if (outcome === 'verified_failure') tally.failed++;
+    else if (outcome === 'verified_success' && current) tally.confirmed++;
+    else tally.unconfirmed++;
+  }
+  return tally;
 }
 
 /**
@@ -366,7 +417,9 @@ export interface FounderDevelopmentActivity {
  * even when nothing happened, because permission is not something to discover
  * after the fact.
  */
-export async function getFounderDevelopmentActivity(productId: string): Promise<FounderDevelopmentActivity> {
+export async function getFounderDevelopmentActivity(
+  productId: string, now: Date = new Date(),
+): Promise<FounderDevelopmentActivity> {
   const grants = (await query(
     `SELECT a.allowed_change_class,a.allowed_path_prefixes_json,a.expires_at,r.title
      FROM autonomy_consents a JOIN institutional_responsibilities r ON r.id=a.responsibility_id
@@ -390,7 +443,10 @@ export async function getFounderDevelopmentActivity(productId: string): Promise<
     documentation: 'update documentation',
   };
 
+  const record = await developmentRecord(productId, now);
+
   return {
+    record,
     permitted: grants.map((grant) => ({
       what: CHANGE_CLASS_LABELS[String(grant.allowed_change_class)] ?? String(grant.allowed_change_class),
       where: JSON.parse(String(grant.allowed_path_prefixes_json)) as string[],
