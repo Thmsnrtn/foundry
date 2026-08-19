@@ -53,12 +53,34 @@ export function getDb(): Client {
 export async function query(sql: string, args: unknown[] = []): Promise<ResultSet> {
   const db = getDb();
   await _ready;
-  return Promise.race([
-    db.execute({ sql, args: args as InArgs }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`DB query timeout after ${QUERY_TIMEOUT_MS}ms`)), QUERY_TIMEOUT_MS)
-    ),
-  ]);
+  // THE TIMER IS CLEARED WHEN THE QUERY SETTLES, which it was not.
+  //
+  // `Promise.race` abandons the loser but does not cancel it, so every query
+  // this process ever ran left a live ten-second timer holding a rejection
+  // closure. Under load that is a retained closure per query for ten seconds
+  // after it finished, and at shutdown it is a queue of timers keeping the
+  // event loop alive with a native database handle still open beneath them —
+  // which is the shape of the intermittent native abort this suite shows.
+  //
+  // `unref()` as well as `clearTimeout`, and they do different jobs: clearing
+  // handles the ordinary path, and unref means that even a query still in
+  // flight cannot be the reason a process refuses to exit. A timeout is a
+  // safety net for a hung query; it is not a reason to stay alive.
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      db.execute({ sql, args: args as InArgs }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`DB query timeout after ${QUERY_TIMEOUT_MS}ms`)),
+          QUERY_TIMEOUT_MS,
+        );
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**

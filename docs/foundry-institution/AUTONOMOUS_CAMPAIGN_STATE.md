@@ -169,6 +169,24 @@ found, this list loses.
    shape: ask what the write was FOR, and either give it a reader a person can
    reach or delete it.
 
+10. **An intermittent native abort in the suite — one cause removed, watch the
+    next runs.** `npm run check` died twice in one session with a Rust panic out
+    of the libsql binding (`PendingException` where `Ok` was expected) and
+    SIGABRT. This is NOT the old intermittent, which was resolved as a 1-in-64
+    fixture collision; it is new and unrecorded.
+
+    An abort is worse than a failure: it takes the run with it, so "validation
+    green" becomes a claim that depends on the process surviving long enough to
+    say so.
+
+    `query()` raced the database against a ten-second timeout and never cleared
+    the timer, so every query left a live timer holding a rejection closure —
+    25 queries, 25 timers, measured. At shutdown that is a queue of timers
+    keeping the event loop alive with a native database handle open beneath
+    them. **The leak is fixed and tested; whether it was the cause is not
+    established.** If the abort recurs, the leak is not it and the next
+    hypothesis needs its own evidence.
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.

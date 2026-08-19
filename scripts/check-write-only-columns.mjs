@@ -31,6 +31,12 @@
 //   • It ignores `tests/` on purpose. A test reading a column is not the
 //     product consuming it, and counting it would hide exactly the defect this
 //     is for.
+//   • It ignores DATABASE TRIGGERS, and that is a distinction rather than an
+//     omission. Migration 111 reads `learned_claim_id` to refuse a reference to
+//     a claim that does not exist — which makes the column VALIDATED, not
+//     consumed. A trigger checking that what you recorded is well-formed is not
+//     anything reading what you recorded. That was true of all four
+//     `learned_claim_id` columns, and the learning still went nowhere.
 //
 // Run: node scripts/check-write-only-columns.mjs [--write]
 // =============================================================================
@@ -145,6 +151,10 @@ if (added.length > 0) {
     + '\n\nEither give it a reader, or delete it. If it is provenance — recorded\n'
     + 'for a person or an audit rather than for code — say so where it is\n'
     + 'written and add it to the baseline deliberately.\n\n'
+    + 'Two things that are NOT readers, before you conclude it has one:\n'
+    + '  • a database trigger validating the column checks that what you wrote\n'
+    + '    is well-formed; it does not consume what you wrote.\n'
+    + '  • a test asserting the column is not the product using it.\n\n'
     + 'A read this cannot see is a `SELECT *` with generic row iteration; name\n'
     + 'the column somewhere and it will be found.\n');
   process.exit(1);
