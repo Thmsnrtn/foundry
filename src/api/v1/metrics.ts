@@ -101,7 +101,14 @@ metricsApi.post('/snapshots', requireScope('metrics:write'), async (c) => {
   }
 });
 
-// GET /health — current data quality score and alerts
+// GET /health — how fresh this company's reported numbers are.
+//
+// This said "current data quality score and alerts" and returned neither. No
+// score was computed, and `active_alerts` could only ever be empty: the
+// validator that writes alerts had no caller, and the rules it would check
+// against had no way to be created. Four dead layers under one live promise
+// to API consumers. Retired in migration 167; what is left is what this
+// endpoint can actually observe.
 metricsApi.get('/health', requireScope('agents:read'), async (c) => {
   const productId = c.get('productId');
 
@@ -114,23 +121,15 @@ metricsApi.get('/health', requireScope('agents:read'), async (c) => {
       [productId]
     );
 
-    // Active data quality alerts
-    const alertsResult = await query(
-      // The column is `description`; there is no `message`.
-      `SELECT id, alert_type, severity, description, created_at FROM data_quality_alerts
-       WHERE product_id = ? AND resolved_at IS NULL
-       ORDER BY created_at DESC`,
-      [productId]
-    );
-
     const latestSnapshot = snapshotResult.rows[0] ?? null;
-    const alerts = alertsResult.rows;
 
     return c.json({
       data: {
         latest_snapshot: latestSnapshot,
-        active_alerts: alerts,
-        alert_count: alerts.length,
+        // `snapshot_date` is the whole answer to "is this current?", which is
+        // the only data-quality question this endpoint has ever been able to
+        // answer.
+        is_stale: latestSnapshot == null,
       },
     });
   } catch (err) {

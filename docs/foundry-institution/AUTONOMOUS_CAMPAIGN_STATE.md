@@ -99,13 +99,13 @@ found, this list loses.
    capability but makes the route count honest — the 114 figure includes pages
    no person can reach. (~1,000 LOC of statically dead modules already gone;
    `check-reachability` holds the rest at 30 and may only shrink.)
-3. **Readers whose writers can never run.** Deleting unreachable modules
-   turned `check-writerless-tables` red and surfaced this: `/agents/okr`
-   renders from `company_okrs`, and `src/api/v1/metrics.ts` — the PUBLIC API —
-   reads `data_quality_alerts`, and in both cases the only writer is a module
-   nothing can reach. The readers are mounted; the tables can never fill.
-   Whether to delete a live page or wire its writer is a product decision, and
-   it is recorded rather than made as a side effect of a deletion sweep.
+3. **Readers whose writers can never run.** One of three resolved: the public
+   API's data-quality chain is retired (migration 167) because wiring it would
+   have meant inventing thresholds Foundry has no basis for. Two remain, and
+   they are the same shape: `/agents/okr` renders from `company_okrs` and
+   `scribe.ts` reads `agent_wiki_entries`, and in both cases the only writer is
+   a module nothing can reach. Deleting a mounted page is a product decision,
+   so it is recorded rather than taken as collateral.
 4. **The five deferred erasure tables** (`OWNER_DECISIONS_PENDING` §10) — a
    live gap with a recommended answer, waiting on the owner.
 5. **Adapters for the existing intakes.** The shape is proven; breadth is

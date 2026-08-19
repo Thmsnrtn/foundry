@@ -128,14 +128,9 @@
                     CHECK (premise_type IN ('metric', 'qualitative')),
                     CHECK (status IN ('holding', 'falsified', 'unverifiable', 'revisited')),
                     CHECK (status IN ('on_track','at_risk','off_track','completed')),
-                   'validation_failed','data_gap','conflicting_sources','stale_data'
                   json_each('["src/db/migrations/","docs/foundry-institution/","scripts/",'
                  'customers','product','market','operations','team',
                  'financial','technical','strategy','other'
-                 'no_sudden_drop','no_sudden_spike'
-                 'range','non_negative','max_value','min_value',
-                 )),
-               )),
                )),
              ELSE d.decision
              WHEN 'reconsidered' THEN 'pending'
@@ -1132,8 +1127,6 @@
   ON cross_product_insights(sector, growth_stage, observed_through);
   ON custom_webhook_sources(product_id, is_active);
   ON data_classifications(product_id, surface);
-  ON data_quality_alerts(product_id, resolved_at, created_at);
-  ON data_quality_alerts(product_id, severity)
   ON decision_patterns(market_category, product_lifecycle_stage, contributor_hash);
   ON envelope_usage(product_id, scope, week_starting);
   ON experiment_holdouts(product_id, is_active);
@@ -1151,7 +1144,6 @@
   ON institutional_responsibilities(product_id, state, updated_at);
   ON integration_secret_quarantine(product_id, rotated_at);
   ON integrations(product_id, provider);
-  ON metric_validation_rules(product_id, metric_name);
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);
   ON operator_attention(founder_id, product_id, created_at);
   ON outbound_actions(product_id, inbound_message_id)
@@ -1471,7 +1463,6 @@
   WHERE json_extract(NEW.payload_json,'$.founder_id') IS NOT NULL;
   WHERE json_extract(NEW.payload_json,'$.obligation_kind') NOT IN (
   WHERE length(COALESCE(NEW.secret,'')) < 32
-  WHERE resolved_at IS NULL;
   WHERE trim(COALESCE(NEW.label,''))=''
   WHERE trim(COALESCE(NEW.label,''))=''
   accepted_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1568,7 +1559,6 @@
   actual_outcomes TEXT,
   actual_revenue_impact_usd REAL,
   actual_timeframe_days INTEGER,
-  actual_value   TEXT,
   actual_value REAL,
   actual_value REAL,
   added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1609,7 +1599,6 @@
   ai_calls_limit INTEGER NOT NULL DEFAULT 500,
   ai_calls_used INTEGER DEFAULT 0,
   ai_cost_pct_of_mrr  REAL,
-  alert_type     TEXT NOT NULL CHECK (alert_type IN (
   alert_type TEXT NOT NULL,
   alignment_drop INTEGER NOT NULL DEFAULT 0,
   alignment_score INTEGER NOT NULL,   -- 0-100
@@ -1950,13 +1939,11 @@
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  created_at     TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2212,7 +2199,6 @@
   description            TEXT,
   description          TEXT NOT NULL
   description     TEXT NOT NULL,
-  description    TEXT NOT NULL,
   description   TEXT NOT NULL,
   description TEXT NOT NULL,
   description TEXT NOT NULL,
@@ -2394,7 +2380,6 @@
   expected_event_type TEXT NOT NULL,
   expected_outcome        TEXT,
   expected_value REAL,
-  expected_value TEXT,   -- stored as TEXT to accommodate any scalar type
   experience_level TEXT DEFAULT 'experienced',
   experiment_id    TEXT NOT NULL REFERENCES experiments(id),
   experiment_id TEXT NOT NULL REFERENCES experiments(id),
@@ -2618,12 +2603,10 @@
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
-  id             TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
-  id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
@@ -2885,7 +2868,6 @@
   ip_clarity_score REAL NOT NULL, -- code ownership, no IP disputes, clean licenses
   is_active              INTEGER NOT NULL DEFAULT 1,
   is_active     INTEGER NOT NULL DEFAULT 1,
-  is_active    INTEGER NOT NULL DEFAULT 1,
   is_active INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -3068,8 +3050,6 @@
   metric_key TEXT,                           -- joins with metric_snapshots when present
   metric_name      TEXT NOT NULL,   -- e.g. 'activation_rate', 'churn_rate', 'nps_score'
   metric_name     TEXT,                    -- programmatic metric identifier
-  metric_name    TEXT,
-  metric_name  TEXT NOT NULL,   -- e.g. 'churn_rate', 'activation_rate', 'mrr_cents'
   metric_name TEXT NOT NULL,
   metric_name TEXT NOT NULL,   -- e.g., 'health_score', 'approval_rate', 'evolution_cycles_per_month'
   metric_name TEXT NOT NULL, -- 'mrr', 'runway_months', 'churn_rate', etc.
@@ -3440,13 +3420,11 @@
   product_id      TEXT NOT NULL,
   product_id      TEXT NOT NULL,
   product_id     TEXT NOT NULL,
-  product_id     TEXT NOT NULL,
   product_id    TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
   product_id    TEXT PRIMARY KEY,
-  product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
   product_id   TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
@@ -3736,7 +3714,6 @@
   resolution_reasoning TEXT,
   resolved_at         DATETIME,
   resolved_at       TEXT
-  resolved_at    TEXT,   -- NULL = still open
   resolved_at DATETIME
   resolved_at DATETIME,
   resolved_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -3814,10 +3791,7 @@
   rotated_at     TEXT,
   round_type TEXT NOT NULL, -- 'seed' | 'series_a' | 'series_b'
   row_id TEXT NOT NULL,
-  rule_id        TEXT REFERENCES metric_validation_rules(id),  -- NULL for non-rule alerts
   rule_id TEXT NOT NULL REFERENCES lifecycle_rules(id),
-  rule_params  TEXT NOT NULL DEFAULT '{}',  -- JSON: { min, max, max_pct_change, ... }
-  rule_type    TEXT NOT NULL CHECK (rule_type IN (
   run_completed_at TEXT,
   run_started_at TEXT NOT NULL,
   run_type TEXT CHECK(run_type IN ('initial', 'post_remediation', 'periodic')),
@@ -3884,7 +3858,6 @@
   session_id TEXT,
   session_id TEXT,
   set_by                TEXT NOT NULL DEFAULT 'default',   -- founder id | 'earned' | 'undo_demotion' | 'anomaly' | 'panic'
-  severity       TEXT NOT NULL DEFAULT 'warning' CHECK (severity IN ('warning','critical')),
   severity TEXT CHECK(severity IN ('watch', 'elevated', 'critical')),
   severity TEXT DEFAULT 'info',
   severity TEXT DEFAULT 'medium',
@@ -4587,8 +4560,6 @@
 );
 );
 );
-);
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4889,8 +4860,6 @@ CREATE INDEX idx_decisions_product_gate ON decisions(product_id, gate);
 CREATE INDEX idx_decisions_product_status ON decisions(product_id, status);
 CREATE INDEX idx_decisions_status ON decisions(status);
 CREATE INDEX idx_development_change_responsibility ON development_change_plans(product_id,responsibility_id,created_at);
-CREATE INDEX idx_dq_alerts_open
-CREATE INDEX idx_dq_alerts_product
 CREATE INDEX idx_effect_outcome_reports
 CREATE INDEX idx_envelope_usage_lookup
 CREATE INDEX idx_ethics_product ON ethical_assessment(product_id);
@@ -4965,7 +4934,6 @@ CREATE INDEX idx_memory_edges_from ON memory_edges(from_node_id);
 CREATE INDEX idx_memory_edges_to ON memory_edges(to_node_id);
 CREATE INDEX idx_memory_nodes_product ON memory_nodes(product_id, occurred_at DESC);
 CREATE INDEX idx_message_threads_product
-CREATE INDEX idx_metric_rules_product
 CREATE INDEX idx_metric_snapshots_created ON metric_snapshots(created_at);
 CREATE INDEX idx_metrics_product ON metric_snapshots(product_id);
 CREATE INDEX idx_metrics_product_date ON metric_snapshots(product_id, snapshot_date);
@@ -5188,7 +5156,6 @@ CREATE TABLE customer_intelligence (
 CREATE TABLE customers (
 CREATE TABLE daily_insights (
 CREATE TABLE data_classifications (
-CREATE TABLE data_quality_alerts (
 CREATE TABLE data_residency_settings (
 CREATE TABLE deal_rooms (
 CREATE TABLE debate_sessions (
@@ -5273,7 +5240,6 @@ CREATE TABLE mcp_grants (
 CREATE TABLE memory_edges (
 CREATE TABLE memory_nodes (
 CREATE TABLE metric_snapshots (
-CREATE TABLE metric_validation_rules (
 CREATE TABLE milestone_events (
 CREATE TABLE network_benchmarks (
 CREATE TABLE network_contributions (

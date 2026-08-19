@@ -67,3 +67,36 @@ describe('the column it wrote to is genuinely unread', () => {
     expect(readers, `outcome_accuracy is read by ${readers.join(', ')}`).toEqual([]);
   });
 });
+
+// ── a public promise nothing could keep ────────────────────────────────────
+
+describe('the metrics health endpoint claims only what it can observe', () => {
+  // Comments describe the defect; they are not the defect — the same rule the
+  // gates apply to source they scan.
+  const api = readFileSync('src/api/v1/metrics.ts', 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+
+  it('no longer advertises alerts it could never produce', () => {
+    // Four dead layers under one live promise: no caller created a validation
+    // rule, so nothing could validate, so no alert could be written — and a
+    // scoped public endpoint returned `active_alerts` to API consumers
+    // regardless. PUBLIC CLAIMS MAY NOT OUTRUN EVIDENCE.
+    expect(api).not.toContain('active_alerts');
+    expect(api).not.toContain('data_quality_alerts');
+  });
+
+  it('still answers the question it can answer', () => {
+    // Freshness is real and observable. Deleting the endpoint would have taken
+    // that with it.
+    expect(api).toContain('latest_snapshot');
+    expect(api).toContain('is_stale');
+  });
+
+  it('and the dead chain is gone rather than left for later', () => {
+    const gone = ['src/services/quality/metrics.ts'];
+    for (const f of gone) {
+      expect(() => readFileSync(f, 'utf8'), `${f} should be deleted`).toThrow();
+    }
+  });
+});
