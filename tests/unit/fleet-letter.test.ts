@@ -216,4 +216,41 @@ describe('operator attention memory — explicit, admission-controlled, ranking-
     const after = Number((await query("SELECT COUNT(*) c FROM operator_attention", [])).rows[0]!.c);
     expect(after).toBe(before + 1);
   });
+
+  it('still gives a portfolio operator every place authority is granted or seen', async () => {
+    // THE GAP THIS CLOSES. The fleet letter used to REPLACE the single-product
+    // letter, so a founder with two companies got a ranked list and a bare
+    // title per responsibility — and lost every action surface: what Foundry is
+    // permitted to change, what it changed, the permission asks, the evidence
+    // question, support channels, customer messages, the report-obligation
+    // form. There was no route back to them either, because `/letter` took the
+    // fleet branch whatever the product switcher said.
+    //
+    // An authority a founder cannot see is one they cannot withdraw, so this is
+    // asserted rather than remembered. The fleet ranking stays; the active
+    // company now renders in full beneath it.
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const two = new Hono();
+    two.use('*', async (c, next) => {
+      c.set('founder' as never, founder as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
+    });
+    two.route('/', letterRoutes);
+    const page = await (await two.request('/letter')).text();
+
+    // The fleet ranking is still there — this restores a surface, it does not
+    // trade one for the other.
+    expect(page).toContain('one letter, your whole fleet');
+    expect(page).toContain('ranked across the fleet');
+
+    // And the active company renders in full, named so the founder knows which
+    // of their companies they are acting on.
+    expect(page, 'the active company must be named').toContain('in full');
+    // The intake a company uses to say what it owes.
+    expect(page, 'the report-obligation form must render').toContain('Tell me something');
+    // Tenancy is unchanged by any of it.
+    expect(page).not.toContain('Other tenant decision');
+    expect(page).not.toContain('OtherCo');
+  });
 });

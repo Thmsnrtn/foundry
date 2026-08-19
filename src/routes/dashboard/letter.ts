@@ -6,6 +6,7 @@
 
 import { Hono } from 'hono';
 import { html } from 'hono/html';
+import type { HtmlEscapedString } from 'hono/utils/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
@@ -517,17 +518,34 @@ letterRoutes.get('/letter', async (c) => {
 
   const fluency = getFluency(founder);
 
-  // Jarvis slice 1: a portfolio operator gets ONE letter across the fleet —
-  // composed, then independently VERIFIED before it renders. Single-product
-  // founders keep the classic letter (same facts, no fleet chrome).
+  // A PORTFOLIO OPERATOR GETS ONE LETTER, AND THEN THE WHOLE OF ONE COMPANY.
+  //
+  // The fleet letter used to REPLACE the single-product letter: a founder with
+  // two companies got a ranked needs-you list, system lines, and a bare title
+  // per responsibility — and lost every surface where authority is granted or
+  // seen. What Foundry is permitted to change, what it changed, the permission
+  // asks, the evidence question, support channels, customer messages waiting
+  // for a reply, judgments, the report-obligation form: none of them rendered,
+  // and there was no way to reach them, because `/letter` took this branch
+  // whatever the product switcher said.
+  //
+  // An authority a founder cannot see is one they cannot withdraw, so that was
+  // a governance gap and not a layout preference.
+  //
+  // The fix is structural rather than twenty sections duplicated per company:
+  // the cross-fleet ranking stays on top, and beneath it the ACTIVE company —
+  // the one the switcher already selects — renders in full. Ranking across the
+  // fleet, action within one company.
+  let fleetChrome: HtmlEscapedString | Promise<HtmlEscapedString> | '' = '';
+  let fleetHasItems = false;
   if (ctx.allProducts.length > 1) {
     const { composeFleetLetter } = await import('../../services/letter/fleet.js');
     const { verifyFleetLetter } = await import('../../services/letter/verifier.js');
     const { letter: fleet } = await verifyFleetLetter(await composeFleetLetter(founder.id, fluency));
     const intro2 = explain('letter', fluency);
+    fleetHasItems = !fleet.quiet;
 
-    const content = html`
-      <h1 style="margin-bottom:0.25rem;">The Letter</h1>
+    fleetChrome = html`
       <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — one letter, your whole fleet. Every line verified against the ledgers before you see it.</p>
       ${intro2 ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro2}</p>` : ''}
 
@@ -580,9 +598,12 @@ letterRoutes.get('/letter', async (c) => {
             </div>`))}
         </div>`))}
       `}
-      ${adviceStrip(fluency)}
-    `;
-    return c.html(dashboardLayout(ctx, content));
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin:1.5rem 0 0.6rem;">
+        ${ctx.productName} — in full
+      </div>
+      <p style="color:var(--text-muted);font-size:0.78rem;margin:-0.3rem 0 1rem;">
+        Everything below is this company. Switch companies at the top to act on another.
+      </p>`;
   }
 
   const letter = await composeLetter(ctx.productId, fluency);
@@ -668,11 +689,12 @@ letterRoutes.get('/letter', async (c) => {
 
   const content = html`
     <h1 style="margin-bottom:0.25rem;">The Letter</h1>
+    ${fleetChrome ? fleetChrome : html`
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — from your team.</p>
-    ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}
+    ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}`}
 
     ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
-      && supportChannels.length === 0 && !hasDevelopmentActivity ? html`
+      && supportChannels.length === 0 && !hasDevelopmentActivity && !fleetHasItems ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
         <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
         <div style="font-size:0.88rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.55;">
@@ -684,8 +706,12 @@ letterRoutes.get('/letter', async (c) => {
         </div>
       </div>` : letter.quiet && !hasResponsibilitySummary && !hasDevelopmentActivity ? html`
       <div class="card" style="padding:1.5rem;text-align:center;">
-        <div style="font-size:1rem;color:var(--text-primary);">Quiet day. Nothing needs you.</div>
-        <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.4rem;">That's the goal. Go build — or rest.</div>
+        <div style="font-size:1rem;color:var(--text-primary);">${fleetChrome
+    ? html`Nothing needs you in ${ctx.productName}.`
+    : 'Quiet day. Nothing needs you.'}</div>
+        <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.4rem;">${fleetChrome
+    ? 'Switch companies at the top to look at another.'
+    : "That's the goal. Go build — or rest."}</div>
       </div>` : html`
       ${letter.needsYou ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--accent);">
