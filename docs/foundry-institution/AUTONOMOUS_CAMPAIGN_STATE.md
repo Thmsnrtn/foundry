@@ -25,335 +25,108 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Migrations:** 203 files, highest **167**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **259 files / 2,272 tests**. `npm run check`
-  green, and it now runs every gate. CI runs on this branch for the first time.
-- **Ratchets:** unguarded mutating routes **114** (population corrected from a
-  quarter of the surface — see below); fabricated test schemas **13**;
-  writer-less tables **0**; SELECT drift **0**; fabricated test schemas **4** (was 13).
+- **Head:** `a69a7bc`. **Migrations:** 204 files, highest **168**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **261 files / 2,309 tests**, `npm run check`
+  EXIT=0, every gate chained and running in CI on this branch.
+  **Qualified:** the suite aborts natively about one run in three *before*
+  `closeDb` landed; 24 consecutive clean runs since. See item 3.
+- **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
+  · writer-less tables **0** · SELECT drift **0** · untraced consequential
+  effects **0** · statically unreachable modules **29** · write-only columns
+  **95**.
 
 ## Active work
 
-None in flight. Frontier item 6 is halfway across and gated; the remaining
-nine files are named in the baseline.
+None in flight. Everything below is unstarted or blocked.
 
-## What this tranche established
+## What the last cycle established
 
-An independent whole-system reassessment replaced the seam-reading mode, and
-it was the right change: the findings came from asking what Foundry can
-OBSERVE and what it does with what it learns, not from reading subsystem
-pairs.
+*One paragraph, deliberately. The narrative record is
+`history/SEAM_CAMPAIGN_HISTORY.md`; this file is what a steward needs today.*
 
-**No gate in this repository had ever run in CI.** The trigger named `master`
-and `main`; all development happens on a branch deliberately never merged,
-with no PR open. Every gate was enforced by somebody remembering. And `npm run
-check` — cited everywhere as THE composite and the evidence validation is
-green — omitted thirteen gates, including the one ensuring every model call
-names the company paying for it. A test derives the gate list from `scripts/`
-now, so a gate nobody wires up fails rather than sleeps.
-
-**Two evidence levels were inflated and are corrected down.** Two modules
-carrying E2 claims have zero importers in `src/` — only their own tests reach
-them. E2 means local runtime through production-facing services and there is no
-production-facing service. Both are E1. An evidence level that only moves
-upward is not a ladder.
-
-**THE INSTITUTION HAD NO SENSE OF TIME.** The vocabulary it offers the founder
-is date-shaped — "Something we owe someone by a date" — and the schema could
-not record one. The code said so twice, unprompted: every judgment emitted
-`deadline unknown` because `Demand.deadline` had no supply, and the judgment
-observer records that it can never report `contradicted` without an observer
-that can see a deadline pass. Time is also the only company fact Foundry can
-establish with no founder, provider or integration — a clock is all it needs —
-which makes it the first sense the institution supplies itself. The date comes
-from the company, never from Foundry, on the same constitutional line
-migration 137 draws for outcomes.
-
-**Outcomes were recorded and read by nothing.** The sharpest instance was the
-moment Foundry asks for MORE AUTHORITY: it counted how many checks it had run,
-weighing `matched` and `deviated` equally, and never consulted whether its
-previous assisted actions had failed. The founder now sees both while deciding.
-
-**A paid frontier call bought nothing** — Opus classifying an outcome the
-database already recorded as `outcome_valence`, filed in a column no SELECT
-reads. Deleted; the deterministic fact does the work.
-
-**An adversarial security review of twenty routes found no exploitable
-cross-tenant flaw** — a useful negative result — but did find that the
-platform-admin boundary was made of array order: `founders.email` decides who
-reaches an unscoped cross-tenant surface, and both provisioning paths wrote it
-from `emailAddresses[0]`, neither necessarily primary nor verified.
+The institution computes more than it says. Three large facts about a company —
+that it is being deleted, that Foundry has stopped working for it, and how
+Foundry's own judgments and changes have held up — were all computed correctly
+and appeared nowhere a founder reads. They do now. The same cycle found one rule
+implemented twice and disagreeing (two retention jobs deleting from `audit_log`
+on different horizons), a live-grant predicate copied seven times and drifted
+(an expired grant reported as active authority), an authority check protected by
+a TypeScript type that does not exist at runtime, and a refusal swallowed on the
+one surface that grants authority. Every one of them was found by reading for a
+specific failure shape rather than by reading a subsystem — the shapes are
+listed under "What keeps working" below.
 
 ## Highest-value current opportunities
 
 Provisional, recomputed each cycle. Not a backlog — if something better is
-found, this list loses.
+found, this list loses. **Closed items are not kept here**; the git history is
+the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
 
-1. ~~Two disagreeing answers to "what needs you".~~ **Closed, all three
-   stores.** `decisions`, `institutional_responsibilities` and
-   `strategic_decisions_log` are projected over by one rule, on both paths
-   (`composer.ts` for a company, `fleet.ts` across the fleet): overdue
-   obligation, then contradicted judgment — both LATE against a date the company
-   itself gave — then the founder's own queue, then other responsibility asks,
-   then open judgments. The fleet item is a discriminated union, so every
-   consumer must say which kind it handles; the verifier re-reads each kind from
-   its own ledger and drops it if the ledger no longer says it.
+1. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving an
+   archived unbuildable client, most of `tier1-4`). Deletion adds no capability
+   but makes the route count honest. Mounted, so a founder could in principle
+   POST to it — which makes this a product decision rather than dead-code
+   removal, and it is why it has not been taken.
 
-2. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving
-   an archived unbuildable client, most of `tier1-4`). Deletion adds no
-   capability but makes the route count honest — the 114 figure includes pages
-   no person can reach. (~1,000 LOC of statically dead modules already gone;
-   `check-reachability` holds the rest at 30 and may only shrink.)
-3. **Readers whose writers can never run.** One of three resolved: the public
-   API's data-quality chain is retired (migration 167) because wiring it would
-   have meant inventing thresholds Foundry has no basis for. Two remain, and
-   they are the same shape: `/agents/okr` renders from `company_okrs` and
-   `scribe.ts` reads `agent_wiki_entries`, and in both cases the only writer is
-   a module nothing can reach. Deleting a mounted page is a product decision,
-   so it is recorded rather than taken as collateral.
-4. **The five deferred erasure tables** (`OWNER_DECISIONS_PENDING` §10) — a
-   live gap with a recommended answer, waiting on the owner.
-5. **Adapters for the existing intakes.** The shape is proven; breadth is
+2. **Readers whose writers can never run.** Two remain, same shape:
+   `/agents/okr` renders from `company_okrs`, `scribe.ts` reads
+   `agent_wiki_entries`, and in both cases the only writer is a module nothing
+   can reach. ~769 LOC. Deleting a mounted page is a product decision, so it is
+   recorded rather than taken as collateral.
+
+3. **The suite aborts natively, and the cause is not established.** A Rust panic
+   out of the libsql binding (`PendingException` where `Ok` was expected) that
+   takes the whole run with it. An abort is worse than a failure: "validation
+   green" becomes a claim about a process that survived.
+
+   - **Eliminated by measurement:** the uncleared query-timeout timer (real
+     defect, fixed, abort recurred with the fix in place); the old 1-in-64
+     fixture collision (a different intermittent, resolved earlier).
+   - **Live hypothesis:** nothing ever closed a database connection, so a run
+     left hundreds of native handles to the garbage collector — including
+     collection during the next file's queries, which is where both observed
+     aborts landed. `closeDb()` exists and the suite closes after every file.
+   - **Evidence: 24 consecutive clean runs since.** Against the prior rate that
+     is about a 1-in-10,000 coincidence. Strong, still not a diagnosis — a
+     recurrence eliminates this hypothesis the way the last one was eliminated.
+   - **Method note:** never run two suites at once.
+     `gates-fail-when-they-should` plants real files into the working tree, so
+     concurrent runs collide and produce failures that look like defects.
+
+4. **~95 write-only columns on the older SCP/tier tables.**
+   `check-write-only-columns.mjs` holds the count. The institution's own tables
+   are done — each remaining one there is answered where it is written. These
+   are unexamined, and the two examined so far both turned into something a
+   founder can now see. Two of them are a company's SEASONALITY
+   (`business_model_profile.seasonal_*`): Foundry records the shape of a
+   company's year and nothing reads it.
+
+5. **Three unread outcome predicates.** `shadow_expectation` and
+   `shadow_comparison` (`external-shadowing.ts`), `development_shadow_comparison`
+   (`development-shadowing.ts`). Unlike the two closed ones, their table side IS
+   consumed — `assisting-admission` reads the comparison rows — so these are
+   redundant claims rather than lost learning. The resolution is to say so where
+   they are written, or stop writing them.
+
+6. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
-6. ~~The ladder's tests enter through a door production does not have.~~
-   **Closed.** Twenty test files built ladder state through `discovery.ts`'s four
-   SaaS event types, which nothing in production emits. All twenty were moved
-   onto the real intake under a ratchet, the ratchet reached zero, and
-   `SIGNAL_RESPONSIBILITIES` and the gate are both deleted. Discovery now has one
-   contract: the company states the kind. `reportedObligation()` in
-   `tests/fixtures/responsibility-state.ts` is the fixture door, and it calls
-   `reportCompanyObligation` rather than re-implementing it.
 
-   Left behind as standing guards rather than history:
-   `discovery-is-not-reachable-from-integrations.test.ts` holds that the one
-   caller stays one, that no second domain-shaped contract reappears, and that
-   `EVENT_AGENT_MAP` — the same defect one layer up — stays asserted.
+## What keeps working, for whoever comes next
 
-7. **The rest of the outcome loop.** Two of five closed, both the same shape: a
-   learned claim written beside a state column, with the column read and the
-   claim read by nothing.
-   - `development_change_outcome` — **closed.** The founder sees how Foundry's
-     changes to their systems have held up.
-   - `later_reality_comparison` — **closed.** The founder sees how Foundry's
-     judgments about their company have held up, which is the record that
-     decides how much weight to give the next one.
-   - Still unread: `shadow_expectation` and `shadow_comparison`
-     (`external-shadowing.ts`), `development_shadow_comparison`
-     (`development-shadowing.ts`). These are shadow records rather than
-     outcomes, so the reader they want is probably admission evidence rather
-     than a founder line — `assisting-admission.ts` already counts deviations
-     and verified failures from other sources and is the natural home.
+Three lenses produced almost everything found in the last cycle. They are worth
+trying before inventing a new one:
 
-   Both closures follow the same rules and the next should too: counts and never
-   a rate, `unresolved` carried as its own number, nothing shown at all for a
-   company with no observations, and staleness asymmetric so read-time expiry
-   retires a positive claim and never a negative one. Foundry may not improve
-   its own record by waiting.
-
-9. **97 columns are written and never read.** New instrument:
-   `check-write-only-columns.mjs`, the mirror of `check-writerless-tables`. It
-   was built after finding the same defect by hand twice — `learned_claim_id` is
-   written on four tables, every write recording what Foundry had learned, and
-   nothing read any of them. Two now have readers and both became something the
-   founder can see.
-
-   A write-only column is not automatically a defect: provenance is a real
-   reason to record what no code consumes. But it is always a question, so the
-   count is a ratchet rather than a wall, and the baseline is the list of
-   questions nobody has answered yet. The gate states its own blind spot: it
-   cannot see a read that never names the column (`SELECT *` with generic row
-   iteration), and it ignores `tests/` on purpose — a test reading a column is
-   not the product consuming it.
-
-   Working through the 97 is a real seam. The two already done suggest the
-   shape: ask what the write was FOR, and either give it a reader a person can
-   reach or delete it.
-
-10. **An intermittent native abort in the suite — one cause eliminated, one
-    hypothesis live.** `npm run check` dies with a Rust panic out of the libsql
-    binding (`PendingException` where `Ok` was expected) and SIGABRT. Not the
-    old intermittent, which was resolved as a 1-in-64 fixture collision.
-
-    An abort is worse than a failure: it takes the run with it, so "validation
-    green" becomes a claim about whether the process survived long enough to
-    say so.
-
-    - **Rate:** roughly 1 run in 3 on this machine, measured over a deliberate
-      repeat-run experiment.
-    - **Locus:** both observed aborts landed at the same boundary — immediately
-      after `autopilot.test.ts` finished, as the next file started.
-    - **Eliminated:** the uncleared query-timeout timer. Fixed, and the abort
-      recurred with the fix in place. That settles it: the leak was real and
-      was not this.
-    - **Live hypothesis:** nothing ever closed a database connection. Each test
-      file gets its own module registry and therefore its own libsql client, so
-      a run created hundreds of native handles and left every one to the
-      garbage collector — including collection during the next file's queries,
-      which is exactly the observed boundary. `closeDb()` now exists and the
-      suite closes after every file.
-    - **Evidence so far: six consecutive clean full runs since `aa01e4d`** —
-      three from a deliberate repeat-run experiment on a frozen tree, three from
-      ordinary `npm run check` validations. Against the prior rate that is about
-      a 1-in-17 coincidence. **Suggestive, not settled.** Keep counting: every
-      `npm run check` is a sample, and the next abort — if it comes — eliminates
-      this hypothesis the way the last one eliminated the timer.
-    - **Method note for whoever continues:** do not run the suite concurrently
-      with another run. `gates-fail-when-they-should.test.ts` plants real files
-      into `src/` and `tests/`, so two runs collide and produce failures that
-      look like defects. One such collision cost an hour here.
-
-11. **A refusal the founder could not see, on the surface that grants
-    authority.** `grantAssistingAuthority` caught the database's refusal with a
-    bare `catch {}` and returned `admitted: false`, which the route ignored
-    before redirecting. So a founder granted permission, saw no difference, and
-    was left with a live consent Foundry could not use and no way to find out
-    why. The card compounded it: `granted` meant "a live consent exists", not
-    "Foundry is helping", so a refused admission read exactly like an accepted
-    one.
-
-    Notable because the codebase's own convention is the opposite — the
-    notice-carry route returns `Not carried: <reason>` and the disposition
-    routes all surface refusals. The single exception was the one route that
-    grants authority.
-
-    **Closed.** The reason is captured and logged, the card distinguishes a live
-    grant from actually assisting, and the grant is NOT destroyed: the owner
-    gave it, Foundry declining to use authority is always permitted, and Foundry
-    deleting an owner's grant would be editing the owner's decision.
-
-12. **`authorityRequired` said authority was no longer required after a
-    withdrawal.** ~~Open.~~ **Closed.** The understanding projection read
-    `authority_ref === null`, and that column is deliberately not cleared when a
-    founder withdraws permission — the ledger keeps the history and every
-    execution path re-reads `revoked_at IS NULL`. So the projection inverted the
-    answer on the one question the founder had just acted on. It asks the ledger
-    the same question the execution paths ask now. `absence-summary` had it
-    right all along, which is how it was found.
-
-14. **Working the write-only seam: the institution's own tables are done.**
-    Baseline 96 → 95, and every remaining entry on an institution-owned table
-    now has its answer written where the column is written, as the gate's own
-    message instructs:
-    - `products.scp_constitution_version` — **retired** (migration 168). A
-      version stamp promises that a consequence path asks which constitution a
-      company is on. Nothing did, and it had been 1 for every company since it
-      was added. Wiring it would have meant inventing a second constitution for
-      it to be a version of, which is an owner question.
-    - `system_identities.established_reason`,
-      `responsibility_candidate_decisions.{grounding_mechanism,
-      grounding_evidence_json, resulting_initial_state}`, and
-      `strategic_decisions_log.authority_required_json` — **provenance, stated
-      as such.** The first three answer "how did this come to exist and on whose
-      say-so" for a person, not for code. The fourth is a constant: a judgment
-      can never allocate or execute, and reading it back would be Foundry
-      checking its own constitution against a copy of itself.
-
-    The ~90 that remain are on the older SCP/tier tables and are unexamined.
-
-13. **Three more write-only columns, previously invisible.** The gate matched
-    `INSERT INTO` but not `INSERT OR IGNORE INTO`, so every column written only
-    through a conflict-handling insert could never be reported. Fixed; baseline
-    93 → 96. Two of the three are a company's SEASONALITY
-    (`business_model_profile.seasonal_baseline_factor`, `seasonal_peak_months`)
-    — Foundry records the shape of a company's year and nothing reads it. Worth
-    a look: it is the sort of fact a marina or a dance school would expect to be
-    used.
-
-15. **The interruption policy's top rung did what the rung below it does.**
-    ~~Open.~~ **Closed.** `deliver()`'s `push` branch wrote a notification row
-    and returned `delivered: true`, with a comment claiming a mobile poller
-    picked it up. No such poller exists — nothing turned a notification row into
-    a push — so `decideChannel` deciding an event warranted interrupting the
-    founder had exactly the same effect as deciding it did not. Meanwhile the
-    push capability the owner explicitly asked for sat built and governed with
-    one caller.
-
-    It has a second caller now. The record is still written, because a push is a
-    nudge and a founder who missed the buzz must still find the thing in the
-    app; `delivered` means "a record exists" and `pushed` says whether the phone
-    was reached, which were the same field.
-
-16. **`memberMay` interpolated a capability into SQL with no runtime check.**
-    ~~Open.~~ **Closed.** The capability is a column name, and the closed union
-    protecting it is a TYPE — erased at runtime. What actually protected it was
-    every call site happening to pass a string literal, which is a property of
-    the wiring rather than of the function, and the function is one call site
-    away from being reachable with a request-supplied string.
-
-    `push.ts` carries the identical shape and was hardened for exactly this
-    reason. This is the AUTHORITY check, so it was the last place that should
-    have been relying on a type that does not exist at runtime. It fails closed
-    now, and the check runs BEFORE the ownership shortcut so an unknown
-    capability cannot be answered `true` for an owner either.
-
-    Worth generalising: `grep` for a template literal placing a variable where a
-    column name goes. Two found so far, both by reading rather than by a gate.
-
-17. **Two retention policies, both deleting, silently disagreeing.**
-    ~~Open.~~ **Closed, with a question for the owner.** `services/retention.ts`
-    ran a daily purge over `agent_messages` and `audit_log` on one global
-    window; `services/maintenance/retention.ts` ran its own daily purge over
-    five tables with per-table horizons. They overlapped on `audit_log`, where
-    one said 365 days and the other deleted at 180. The shorter wins, so the
-    audit log has always been kept 180 days while the code stating the policy
-    said 365.
-
-    The crude implementation and its job are deleted. `audit_log` deliberately
-    stays at 180 — removing a duplication must not quietly change what happens
-    to anybody's data, and lengthening retention of records that may name people
-    is the wrong direction to take by accident. Which figure is right is now
-    `OWNER_DECISIONS_PENDING` §11, beside the retention question already with
-    counsel. `DATA_RETENTION_DAYS` survives as a CAP: a deployment that set it
-    did so to keep less.
-
-18. **The live-grant predicate was hand-copied seven times and had drifted.**
-    ~~Open.~~ **Closed.** `reconstruction.ts` asked only for an unrevoked
-    act-grant for the same CAPABILITY: an expired grant reported as active
-    authority, and a grant bound to one responsibility made every other
-    responsibility of that capability report authority it did not have — while
-    execution requires a grant bound to the responsibility and still in date.
-
-    "A copied fragment of a rule drifts the moment the rule grows another axis"
-    was already written in this codebase, about `operatingProduct`. Authority
-    grew two axes — expiry and responsibility binding — and the copies did not
-    follow. There is a canonical `liveActGrant(alias)` in `db/client.ts` now,
-    and five of the six call sites use it. The sixth compares against a
-    caller-supplied clock and says at the line why it is still by hand.
-
-19. **A company being deleted said so only on a page nobody visits.**
-    ~~Open.~~ **Closed.** A previous session built the cancel door for the
-    thirty-day grace window, having found the window had none. The door went on
-    the privacy page. The Letter — the surface a founder opens daily — said
-    nothing at all, so "a founder who clicked by accident, or whose co-founder
-    clicked, could do nothing but watch" was still true of the page they
-    actually read. The notice and the door are on it now, and they disappear
-    when the deletion is cancelled.
-
-    And `pendingDeletion` — the only reader that tells anyone a deletion is
-    coming — **threw** on a malformed audit row: `Number(delete_after_days)` of
-    a bad value is NaN, and `new Date(NaN).toISOString()` is a RangeError. A
-    corrupt record removed the founder's exit rather than degrading the display.
-    It is total now, falling back to the documented thirty days rather than an
-    invented number.
-
-20. **A founder whose payment lapsed read a letter that looked like a working
-    one.** ~~Open.~~ **Closed.** The entitlement sweep writes
-    `entitlement_paused_at`, mails the founder once, and after that the daily
-    surface said nothing — while every section carried on offering permissions
-    to grant and questions to answer, all of it refused at execution time by
-    `operatingProduct`. The one-off mail is not the answer for somebody who
-    missed it or whose card failed while they were away.
-
-    The letter names it now, using `companyMayBeChanged`'s existing axes so a
-    pause the founder chose is never reported as a payment that failed. It
-    overrides the first-run welcome, which would otherwise have told a company
-    running for months that it was on day one.
-
-    Same shape as 19, and worth noticing as a pattern: the institution knew
-    three large facts about a company — being deleted, having stopped, and how
-    it had done — and said none of them on the page the founder opens. The
-    question to keep asking is not "is this computed" but "where does a person
-    read it".
+- **"Where does a person read this?"** The institution knew three large facts
+  about a company — that it was being deleted, that it had stopped, and how its
+  own judgments had held up — and said none of them on the page a founder opens
+  daily. Computing a thing is not telling anybody.
+- **"One rule, two implementations."** Two retention jobs deleting from the same
+  table on different horizons; a live-grant predicate hand-copied seven times
+  and drifted; a type protecting a SQL identifier that does not exist at
+  runtime. Ask which one is in force, not which one is written down.
+- **"What does the offer promise that the guard will refuse?"** Permission
+  offered that the database would not honour; a refusal swallowed on the one
+  surface that grants authority.
 
 ## Blocked — needs a design decision, not effort
 
@@ -362,7 +135,15 @@ found, this list loses.
 
 ## Blocked — owner
 
-**One item pending: retention lawfulness (counsel, not the owner alone).**
+**Three items pending.** §9 retention lawfulness and §11 the audit-log horizon
+both need counsel rather than the owner alone; §10 (the five erasure tables) has
+a recommended answer and waits on the owner.
+
+§11 is new: two retention implementations disagreed about `audit_log` — 365 days
+written down, 180 actually in force. The duplication is fixed at 180, which is
+what has been happening, and which figure is right is the owner's.
+
+**§9, as before: retention lawfulness (counsel, not the owner alone).**
 `OWNER_DECISIONS_PENDING.md` §9 asks whether the retention periods for what
 survives an erasure are right for the jurisdictions Foundry operates in,
 whether a redacted shell satisfies a deletion request, and whether keeping the

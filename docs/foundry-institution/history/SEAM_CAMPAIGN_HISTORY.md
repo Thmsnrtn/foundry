@@ -762,3 +762,53 @@ behaviour today and no test catches it. It stays so the scope a delete means is
 written down at the delete, and it becomes load-bearing the day a scope keys on
 something an id could equal.
 
+---
+
+# Tranche: the first whole-system reassessment
+
+*Moved out of the live frontier, which is for what a steward needs today.*
+
+An independent whole-system reassessment replaced the seam-reading mode, and
+it was the right change: the findings came from asking what Foundry can
+OBSERVE and what it does with what it learns, not from reading subsystem
+pairs.
+
+**No gate in this repository had ever run in CI.** The trigger named `master`
+and `main`; all development happens on a branch deliberately never merged,
+with no PR open. Every gate was enforced by somebody remembering. And `npm run
+check` — cited everywhere as THE composite and the evidence validation is
+green — omitted thirteen gates, including the one ensuring every model call
+names the company paying for it. A test derives the gate list from `scripts/`
+now, so a gate nobody wires up fails rather than sleeps.
+
+**Two evidence levels were inflated and are corrected down.** Two modules
+carrying E2 claims have zero importers in `src/` — only their own tests reach
+them. E2 means local runtime through production-facing services and there is no
+production-facing service. Both are E1. An evidence level that only moves
+upward is not a ladder.
+
+**THE INSTITUTION HAD NO SENSE OF TIME.** The vocabulary it offers the founder
+is date-shaped — "Something we owe someone by a date" — and the schema could
+not record one. The code said so twice, unprompted: every judgment emitted
+`deadline unknown` because `Demand.deadline` had no supply, and the judgment
+observer records that it can never report `contradicted` without an observer
+that can see a deadline pass. Time is also the only company fact Foundry can
+establish with no founder, provider or integration — a clock is all it needs —
+which makes it the first sense the institution supplies itself. The date comes
+from the company, never from Foundry, on the same constitutional line
+migration 137 draws for outcomes.
+
+**Outcomes were recorded and read by nothing.** The sharpest instance was the
+moment Foundry asks for MORE AUTHORITY: it counted how many checks it had run,
+weighing `matched` and `deviated` equally, and never consulted whether its
+previous assisted actions had failed. The founder now sees both while deciding.
+
+**A paid frontier call bought nothing** — Opus classifying an outcome the
+database already recorded as `outcome_valence`, filed in a column no SELECT
+reads. Deleted; the deterministic fact does the work.
+
+**An adversarial security review of twenty routes found no exploitable
+cross-tenant flaw** — a useful negative result — but did find that the
+platform-admin boundary was made of array order: `founders.email` decides who
+reaches an unscoped cross-tenant surface, and both provisioning paths wrote it
+from `emailAddresses[0]`, neither necessarily primary nor verified.
