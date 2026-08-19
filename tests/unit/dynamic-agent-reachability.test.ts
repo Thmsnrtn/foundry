@@ -128,9 +128,17 @@ describe('dynamic agent reachability', () => {
   it('every event-map name is in the closed vocabulary', () => {
     // The dispatcher's map is the main selector. A typo there would be a name
     // that can never load, silently, for exactly one event type.
+    //
+    // Anchored to the DECLARATION, not to `indexOf('EVENT_AGENT_MAP')` and
+    // `indexOf('emitSignalEvent')`. That slice read whatever lay between the
+    // first mention of each, so a comment naming both in the other order left
+    // the map empty and the check vacuous — and it went red for a comment while
+    // staying silent about a real typo, which is the wrong way round.
     const source = readFileSync(
       resolve(__dirname, '../../src/services/scp/events/dispatcher.ts'), 'utf8');
-    const map = source.slice(source.indexOf('EVENT_AGENT_MAP'), source.indexOf('emitSignalEvent'));
+    const declaration = /^const EVENT_AGENT_MAP[^{]*\{([\s\S]*?)^\};/m.exec(source);
+    expect(declaration, 'EVENT_AGENT_MAP is no longer declared as expected').not.toBeNull();
+    const map = declaration![1];
     const names = [...map.matchAll(/'([a-z]+)'/g)].map((m) => m[1]);
     expect(names.length).toBeGreaterThan(10);
     const unknown = [...new Set(names)].filter((n) => !isLoadableAgentName(n));

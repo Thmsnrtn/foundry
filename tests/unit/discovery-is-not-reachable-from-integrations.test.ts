@@ -121,6 +121,30 @@ describe('the only door into responsibility discovery', () => {
       .toEqual([]);
   });
 
+  it('leaves the agent-run branch with no producer, and says so where it is', () => {
+    // The other half of the same fact. `processSignalEvent` DOES run in
+    // production — a scheduled job and a dashboard route both drain pending
+    // signals — and what it reads is `relevant_agents_json`. Only
+    // `emitSignalEvent` ever writes that column; the fifteen other inserts into
+    // `signal_events` do not mention it, so it arrives NULL and is read as `[]`.
+    //
+    // With the test above (nothing emits a routed event type) that pins the
+    // branch: every call takes the empty-list early return, and the ~100 lines
+    // after it have never executed. If a second writer of the column appears,
+    // this fails — which is the moment to check whether an agent is now being
+    // run by an event, deliberately or otherwise.
+    const writers = sourceFiles().filter((f) => {
+      if (f.endsWith('scp/events/dispatcher.ts')) return false;  // the one writer
+      return /relevant_agents_json/.test(strip(readFileSync(f, 'utf8')));
+    });
+    expect(writers.filter((f) => /INSERT\s+INTO\s+signal_events|UPDATE\s+signal_events/i
+      .test(strip(readFileSync(f, 'utf8')))),
+    `these now write relevant_agents_json: ${writers.join(', ')}`).toEqual([]);
+
+    const dispatcher = readFileSync('src/services/scp/events/dispatcher.ts', 'utf8');
+    expect(dispatcher).toContain('NO AGENT HAS EVER BEEN');
+  });
+
   it('says at the intake why there is only one, rather than leaving it inferred', () => {
     const src = readFileSync('src/services/institution/discovery.ts', 'utf8');
     expect(src).toContain('THE FOUR SAAS EVENT TYPES ARE GONE');
