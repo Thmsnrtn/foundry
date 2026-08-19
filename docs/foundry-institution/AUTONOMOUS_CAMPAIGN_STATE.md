@@ -25,11 +25,11 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `a69a7bc`. **Migrations:** 204 files, highest **168**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **261 files / 2,309 tests**, `npm run check`
+- **Head:** `3c8efe3`. **Migrations:** 204 files, highest **168**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **262 files / 2,314 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
-  `closeDb` landed; 24 consecutive clean runs since. See item 3.
+  `closeDb` landed; over 30 consecutive clean runs since. See item 3.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **29** · write-only columns
@@ -86,8 +86,8 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      left hundreds of native handles to the garbage collector — including
      collection during the next file's queries, which is where both observed
      aborts landed. `closeDb()` exists and the suite closes after every file.
-   - **Evidence: 24 consecutive clean runs since.** Against the prior rate that
-     is about a 1-in-10,000 coincidence. Strong, still not a diagnosis — a
+   - **Evidence: over 30 consecutive clean runs since.** Against the prior rate
+     that is a vanishing coincidence. Strong, still not a diagnosis — a
      recurrence eliminates this hypothesis the way the last one was eliminated.
    - **Method note:** never run two suites at once.
      `gates-fail-when-they-should` plants real files into the working tree, so
