@@ -33,7 +33,10 @@ async function buildVertical(suffix:string) {
   // system produces — so the first governed assisted execution was demonstrated
   // on a responsibility the running system could not have.
   const reported=await reportedObligation('ae_product','ae_owner',
-    {kind:'customer_commitment',what:'Answer the people waiting in the support queue'});
+        // One obligation per vertical. The same words reported twice are now ONE
+    // responsibility — discovery converges them — so each of these cases has to
+    // be a genuinely different thing the company owes, which is what it is.
+    {kind:'customer_commitment',what:`Answer the people waiting in the support queue (${suffix})`});
   const signal=reported.signalId;
   const responsibility={id:reported.responsibilityId};
   const facts:Record<UnderstandingFact,unknown>={purpose:'Keep customers supported',desired_outcome:'Restore response capacity',

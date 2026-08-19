@@ -89,6 +89,49 @@ export async function discoverResponsibilityFromSignal(
     [productId, evidenceRef],
   );
   if (existing.rows.length) return getResponsibility(productId, String((existing.rows[0] as Record<string,unknown>).id));
+
+  // THE SAME OBLIGATION, REPORTED AGAIN, IS ONE OBLIGATION.
+  //
+  // A founder who reports something and does not see it land the way they
+  // expected reports it again; a co-founder reports what the founder already
+  // did. Each report is its own signal, so this used to make its own
+  // responsibility for each, and the company owed the same thing twice — listed
+  // twice in the seven-day view, summed twice into a capacity judgment,
+  // permissioned twice, and understood twice before either copy could move.
+  //
+  // The second REPORT is kept. A company saying a thing again is something
+  // that happened, and the evidence says so. What converges is the obligation.
+  //
+  // Four things must match. A deadline is part of what is owed: the same words
+  // for a different stated date are a different obligation, and converging them
+  // would silently discard a date the company just stated — which no path here
+  // is allowed to do, since the institution may not state a deadline itself.
+  // Only an ACTIVE responsibility converges: reporting something again after
+  // deciding not to do it is the company changing its mind, not a duplicate.
+  //
+  // And the SOURCE must match, so this converges a founder onto a founder and a
+  // tool onto a tool, never one onto the other. That is deliberately narrower
+  // than the obligation itself warrants — a company does not owe term reports
+  // twice because a person and a rota both noticed — but merging across sources
+  // is a decision about what provenance a responsibility carries when two
+  // independent witnesses agree, and it is recorded for the owner rather than
+  // taken here. The visible duplicate that remains is the one a founder and one
+  // of their own systems both report.
+  const sameObligation = await query(
+    `SELECT r.id FROM institutional_responsibilities r
+       JOIN signal_events e ON ('signal_event:' || e.id) = r.discovery_evidence_ref
+        AND e.product_id = r.product_id
+      WHERE r.product_id=? AND r.title=? AND r.capability=? AND r.disposition='active'
+        AND ((r.due_at IS NULL AND ? IS NULL) OR r.due_at=?)
+        AND e.source=?
+      ORDER BY r.created_at,r.id LIMIT 1`,
+    [productId, contract.title, contract.capability, due?.at ?? null, due?.at ?? null,
+      String(row.source)],
+  );
+  if (sameObligation.rows.length) {
+    return getResponsibility(productId, String((sameObligation.rows[0] as Record<string,unknown>).id));
+  }
+
   const id = nanoid(); const transitionId = nanoid();
   try {
     await batch([

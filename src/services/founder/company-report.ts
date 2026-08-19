@@ -27,7 +27,8 @@
 
 import { query } from '../../db/client.js';
 import { emitSignalEvent } from '../scp/events/dispatcher.js';
-import { getResponsibility, type Responsibility } from '../institution/responsibility.js';
+import { type Responsibility } from '../institution/responsibility.js';
+import { discoverResponsibilityFromSignal } from '../institution/discovery.js';
 
 /** Generic operational semantics. None of these names an industry, and the
  * same closed set is held in migration 126 so it cannot be widened at runtime. */
@@ -110,14 +111,12 @@ export async function reportCompanyObligation(input: {
     summary: what,
   });
 
-  // emitSignalEvent runs discovery itself; read back what it made, if anything.
-  const discovered = await query(
-    'SELECT id FROM institutional_responsibilities WHERE product_id=? AND discovery_evidence_ref=?',
-    [input.productId, `signal_event:${signalId}`],
-  );
-  const responsibility = discovered.rows.length
-    ? await getResponsibility(input.productId, String((discovered.rows[0] as Record<string, unknown>).id))
-    : null;
+  // Asked of discovery rather than read back by evidence reference. Discovery
+  // converges a repeat of the same obligation onto the responsibility that
+  // already exists, and that one does not carry THIS signal's reference — so
+  // the read-back reported "nothing was discovered" for the case where
+  // something was. Re-running discovery is idempotent by construction.
+  const responsibility = await discoverResponsibilityFromSignal(input.productId, signalId);
   return { signalId, responsibility };
 }
 
@@ -156,12 +155,8 @@ export async function reportExternalObligation(input: {
     summary: what,
   });
 
-  const discovered = await query(
-    'SELECT id FROM institutional_responsibilities WHERE product_id=? AND discovery_evidence_ref=?',
-    [input.productId, `signal_event:${signalId}`],
-  );
-  const responsibility = discovered.rows.length
-    ? await getResponsibility(input.productId, String((discovered.rows[0] as Record<string, unknown>).id))
-    : null;
+  // Same as the founder path: ask discovery, which converges a repeat of the
+  // same obligation rather than reporting nothing was found.
+  const responsibility = await discoverResponsibilityFromSignal(input.productId, signalId);
   return { signalId, responsibility };
 }

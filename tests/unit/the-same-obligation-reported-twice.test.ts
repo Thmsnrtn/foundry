@@ -4,6 +4,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { reportCompanyObligation } from '../../src/services/founder/company-report.js';
+import { setResponsibilityDisposition } from '../../src/services/institution/responsibility.js';
+import { reportExternalObligation } from '../../src/services/founder/company-report.js';
 
 // =============================================================================
 // A COMPANY THAT SAYS THE SAME THING TWICE DOES NOT OWE IT TWICE.
@@ -65,5 +67,74 @@ describe('the same obligation reported twice', () => {
     expect((await query(
       'SELECT COUNT(*) n FROM institutional_responsibilities WHERE product_id=?', [P])).rows[0])
       .toMatchObject({ n: 2 });
+  });
+
+  it('does not converge the same words onto a different stated deadline', async () => {
+    // A deadline is part of what is owed. Converging these would discard a date
+    // the company just stated, and no path here may do that — the institution
+    // is forbidden from stating a deadline itself, so it cannot replace one.
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+    const nextWeek = new Date(Date.now() + 7 * 86_400_000).toISOString();
+    const a = await reportCompanyObligation({
+      productId: P, founderId: OWNER, obligationKind: 'customer_commitment',
+      what: 'Confirm the Saturday cover', dueAt: tomorrow,
+    });
+    const b = await reportCompanyObligation({
+      productId: P, founderId: OWNER, obligationKind: 'customer_commitment',
+      what: 'Confirm the Saturday cover', dueAt: nextWeek,
+    });
+    expect(a?.responsibility?.id).not.toBe(b?.responsibility?.id);
+
+    // And the same words with the same date still converge.
+    const again = await reportCompanyObligation({
+      productId: P, founderId: OWNER, obligationKind: 'customer_commitment',
+      what: 'Confirm the Saturday cover', dueAt: tomorrow,
+    });
+    expect(again?.responsibility?.id).toBe(a?.responsibility?.id);
+  });
+
+  it('treats a report after a deliberate no as the company changing its mind', async () => {
+    const first = await reportCompanyObligation({
+      productId: P, founderId: OWNER, obligationKind: 'maintenance',
+      what: 'Service the studio floor before term starts',
+    });
+    const id = first!.responsibility!.id;
+    await setResponsibilityDisposition({
+      productId: P, responsibilityId: id, ownerId: OWNER,
+      disposition: 'deliberately_not_done', reason: 'No budget this term',
+      evidenceRef: `signal_event:${first!.signalId}`,
+    });
+
+    // Reporting it again is not a duplicate. Absorbing it into the decision not
+    // to do it would answer the founder with their own earlier no.
+    const second = await reportCompanyObligation({
+      productId: P, founderId: OWNER, obligationKind: 'maintenance',
+      what: 'Service the studio floor before term starts',
+    });
+    expect(second?.responsibility).not.toBeNull();
+    expect(second!.responsibility!.id).not.toBe(id);
+  });
+
+  it('converges a tool onto a tool, and does not merge a tool onto a founder', async () => {
+    // Same source converges. A rota system that reports twice has reported one
+    // thing twice.
+    const a = await reportExternalObligation({
+      productId: P, reportedBy: 'rota_job', obligationKind: 'recurring_work',
+      what: 'Every timetabled class has a teacher',
+    });
+    const b = await reportExternalObligation({
+      productId: P, reportedBy: 'rota_job', obligationKind: 'recurring_work',
+      what: 'Every timetabled class has a teacher',
+    });
+    expect(b?.responsibility?.id).toBe(a?.responsibility?.id);
+
+    // Across sources it does not, deliberately: merging is a decision about
+    // what provenance a responsibility carries when two independent witnesses
+    // agree, and discovery.ts records why it is not taken there.
+    const founder = await reportCompanyObligation({
+      productId: P, founderId: OWNER, obligationKind: 'recurring_work',
+      what: 'Every timetabled class has a teacher',
+    });
+    expect(founder?.responsibility?.id).not.toBe(a?.responsibility?.id);
   });
 });
