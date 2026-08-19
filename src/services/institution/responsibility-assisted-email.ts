@@ -112,6 +112,53 @@ export async function executeAssistedSupportEmail(actionId:string, lifecycle:{af
   return {dispatched:acknowledged,certainty:acknowledged?'provider_acknowledged':'not_attempted'};
 }
 
+/**
+ * Assisted effects whose recorded outcome no longer matches the evidence.
+ *
+ * A SETTLED VERDICT IS NOT A CLOSED QUESTION. The reconciliation job selected
+ * `outcome_status IS NULL OR = 'unresolved'`, so the first report to arrive
+ * settled the matter permanently: a customer who said it worked and a founder
+ * who later said it did not left Foundry reporting success, with the
+ * contradiction sitting unread two rows away. `conflicting` exists precisely so
+ * a disagreement is kept rather than resolved by arrival order.
+ *
+ * The test is the evidence itself, which is what `outcome_evidence_ref` is
+ * for — it records exactly which signals a verdict rested on. When more
+ * evidence exists about an effect than the verdict was decided from, the
+ * question is open again. Comparing counts rather than the joined text is
+ * deliberate: evidence is only ever added, and a count does not depend on
+ * `group_concat` ordering.
+ */
+export async function listActionsAwaitingOutcomeReconciliation(): Promise<Array<{
+  productId: string; actionId: string;
+}>> {
+  const rows = await query(
+    `SELECT o.id, o.product_id FROM outbound_actions o
+      WHERE o.responsibility_id IS NOT NULL AND o.effect_id IS NOT NULL
+        -- No observation, no work. An effect nobody outside has said anything
+        -- about is not selected at all, which is what makes this a
+        -- reconciliation rather than a sweep.
+        AND (SELECT COUNT(*) FROM signal_events e
+              WHERE e.product_id=o.product_id
+                AND json_extract(e.payload_json,'$.effect_id')=o.effect_id
+                AND (e.event_type IN ('support_reply_effective','support_reply_failed')
+                     OR e.source='effect_outcome_report')) > 0
+        AND (SELECT COUNT(*) FROM signal_events e
+              WHERE e.product_id=o.product_id
+                AND json_extract(e.payload_json,'$.effect_id')=o.effect_id
+                AND (e.event_type IN ('support_reply_effective','support_reply_failed')
+                     OR e.source='effect_outcome_report'))
+            <> (CASE WHEN o.outcome_evidence_ref IS NULL OR o.outcome_evidence_ref='' THEN 0
+                     ELSE length(o.outcome_evidence_ref)
+                          - length(replace(o.outcome_evidence_ref,',','')) + 1 END)
+      ORDER BY o.executed_at, o.id`,
+    [],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
+    productId: String(row.product_id), actionId: String(row.id),
+  }));
+}
+
 /** Classify independently ingested canonical business evidence and learn without changing authority. */
 export async function reconcileAssistedSupportEmail(productId:string,actionId:string):Promise<AssistedOutcome> {
   const action=(await query(`SELECT responsibility_id,effect_id,effect_certainty FROM outbound_actions
@@ -207,21 +254,45 @@ export async function reconcileAssistedSupportEmail(productId:string,actionId:st
  * thing that tells them apart.
  */
 export async function getFounderAssistingActivity(productId:string):Promise<Array<{title:string;state:string;detail:string}>> {
-  const result=await query(`SELECT r.title,oa.status,oa.effect_certainty,oa.outcome_status,oa.effect_id,oa.authority_scope
+  const result=await query(`SELECT r.title,oa.status,oa.effect_certainty,oa.outcome_status,oa.effect_id,oa.authority_scope,oa.outcome_evidence_ref
     FROM outbound_actions oa JOIN institutional_responsibilities r ON r.id=oa.responsibility_id
     WHERE oa.product_id=? AND r.product_id=? ORDER BY oa.created_at DESC LIMIT 10`,[productId,productId]);
   const rows=result.rows as unknown as Record<string,unknown>[];
 
   // Who reported each outcome, so the sentence can say so.
+  //
+  // READ FROM THE EVIDENCE THE VERDICT RESTS ON, not from every report that
+  // exists about the effect. This counted all of them, so between a new
+  // contradicting report and the next reconciliation the letter said "2
+  // separate reports" told it the thing worked while one of the two said the
+  // opposite. `outcome_evidence_ref` records exactly which signals the verdict
+  // was decided from; asking anything else is a second answer to a question
+  // that already has one.
   const reporters=new Map<string,string[]>();
+  const evidenceIds=new Map<string,string[]>();
+  for (const row of rows) {
+    const effectId=String(row.effect_id??''); if (!effectId) continue;
+    const ref=row.outcome_evidence_ref==null?'':String(row.outcome_evidence_ref);
+    const ids=ref.split(',').map(part=>part.trim().replace(/^signal_event:/,'')).filter(Boolean);
+    if (ids.length) evidenceIds.set(effectId,ids);
+  }
   const effectIds=rows.map(row=>row.effect_id).filter(Boolean).map(String);
-  if (effectIds.length) {
+  const allIds=[...new Set([...evidenceIds.values()].flat())];
+  if (allIds.length) {
     const reports=await query(
-      `SELECT json_extract(payload_json,'$.effect_id') e, json_extract(payload_json,'$.reporter') r
-         FROM signal_events WHERE product_id=? AND source='effect_outcome_report'`,[productId]);
+      `SELECT id, source, json_extract(payload_json,'$.reporter') r
+         FROM signal_events WHERE product_id=? AND id IN (${allIds.map(()=>'?').join(',')})`,
+      [productId,...allIds]);
+    const witness=new Map<string,string>();
     for (const raw of reports.rows as unknown as Record<string,unknown>[]) {
-      const key=String(raw.e); if (!effectIds.includes(key)) continue;
-      reporters.set(key,[...(reporters.get(key)??[]),String(raw.r)]);
+      // The legacy event shape carries no reporter. It is still an outside
+      // system saying something, and the sentence says that rather than
+      // pretending it knows a name.
+      witness.set(String(raw.id),
+        String(raw.source)==='effect_outcome_report'&&raw.r!=null?String(raw.r):'system:observed_event');
+    }
+    for (const [effectId,ids] of evidenceIds) {
+      reporters.set(effectId,ids.map(id=>witness.get(id)).filter((w): w is string=>w!=null));
     }
   }
 

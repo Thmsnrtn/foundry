@@ -129,7 +129,7 @@ describe('an outcome that has already been settled', () => {
 
   it('never tells the founder that reports agreed when they disagree', async () => {
     const { actionId, effectId } = await assistedEffect('attribution');
-    await reportEffectOutcome({ productId: P, effectId, verdict: 'achieved', reporter: 'customer:bo' });
+    await reportEffectOutcome({ productId: P, effectId, verdict: 'achieved', reporter: 'external:rota_system' });
     await reconcileAssistedSupportEmail(P, actionId);
     await reportEffectOutcome({ productId: P, effectId, verdict: 'failed', reporter: `founder:${OWNER}` });
 
@@ -137,7 +137,12 @@ describe('an outcome that has already been settled', () => {
     // The line must describe the evidence the verdict rests on, not every
     // report that happens to exist about the effect.
     const line = (await getFounderAssistingActivity(P))
-      .find((i) => i.detail.includes('worked') || i.detail.includes('disagree'))!;
+      .find((i) => i.title.includes('(attribution)'))!;
+    // Names the one witness the verdict rests on. "2 separate reports" would be
+    // counting a report that says the opposite; "somebody outside" would be
+    // forgetting the witness it has.
+    expect(line.detail).toContain('a system you connected told me');
     expect(line.detail).not.toContain('2 separate reports');
+    expect(line.detail).not.toContain('somebody outside');
   });
 });

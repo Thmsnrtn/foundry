@@ -2566,50 +2566,37 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // observation, so a run with nothing to learn changes nothing at all.
   institutional_effect_reconciliation: {
     fn: async () => {
-      const { reconcileAssistedSupportEmail } = await import(
+      const { listActionsAwaitingOutcomeReconciliation, reconcileAssistedSupportEmail } = await import(
         '../services/institution/responsibility-assisted-email.js'
       );
-      // Effects that dispatched, are still unresolved, and about which somebody
-      // outside has said something. The effect-id join is what makes this a
-      // reconciliation rather than a sweep: no observation, no work.
+      // WHICH ROWS ARE CONSIDERED IS THE SERVICE'S QUESTION, NOT THE JOB'S.
       //
-      // The source/event-type filter is NOT what makes that safe — mutation
-      // testing showed removing it changes nothing, because a signal event with
-      // no matching `$.effect_id` is excluded already. It is here so this pass
-      // considers exactly the evidence `reconcileAssistedSupportEmail` itself
-      // accepts, rather than selecting rows that function would then ignore.
+      // This held its own SELECT, and that copy carried a rule the service did
+      // not: it took only rows still unresolved, so the first report to arrive
+      // settled the verdict permanently and a later contradiction was never
+      // looked at. The selector now lives beside the function that acts on it
+      // and reopens a settled outcome when more evidence exists than the
+      // verdict was decided from.
       //
-      // Nor is the tenant clause what protects tenancy: that function is
-      // itself product-scoped and refuses an action belonging to someone else.
-      // Both are defence in depth on WHICH ROWS ARE CONSIDERED. Saying so
-      // keeps the safety story where it actually lives.
-      const pending = await query(
-        `SELECT DISTINCT o.id, o.product_id
-           FROM outbound_actions o
-           JOIN signal_events e ON e.product_id = o.product_id
-            AND json_extract(e.payload_json,'$.effect_id') = o.effect_id
-          WHERE o.responsibility_id IS NOT NULL
-            AND o.effect_id IS NOT NULL
-            AND (o.outcome_status IS NULL OR o.outcome_status = 'unresolved')
-            AND (e.source = 'effect_outcome_report'
-                 OR e.event_type IN ('support_reply_effective','support_reply_failed'))
-          ORDER BY o.executed_at`,
-        [],
-      );
+      // Still a reconciliation rather than a sweep: an effect nobody has said
+      // anything about is not selected, so a run with nothing to learn changes
+      // nothing at all. And the tenant clause was never what protected
+      // tenancy — `reconcileAssistedSupportEmail` is product-scoped and refuses
+      // an action belonging to someone else.
+      const pending = await listActionsAwaitingOutcomeReconciliation();
 
       let reconciled = 0; let verified = 0; let conflicting = 0;
-      for (const row of pending.rows as unknown as Array<Record<string, unknown>>) {
+      for (const row of pending) {
         // One company's state must never stop another's reconciliation.
         try {
-          const outcome = await reconcileAssistedSupportEmail(
-            String(row.product_id), String(row.id));
+          const outcome = await reconcileAssistedSupportEmail(row.productId, row.actionId);
           reconciled++;
           if (outcome === 'verified_success' || outcome === 'verified_failure') verified++;
           if (outcome === 'conflicting') conflicting++;
         } catch (err) {
           logger.error(
-            `institutional_effect_reconciliation failed for ${String(row.id)}: ${err instanceof Error ? err.message : String(err)}`,
-            { jobName: 'institutional_effect_reconciliation', productId: String(row.product_id) },
+            `institutional_effect_reconciliation failed for ${row.actionId}: ${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'institutional_effect_reconciliation', productId: row.productId },
           );
         }
       }
