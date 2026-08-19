@@ -16,15 +16,15 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `3099ea6`+ on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `aa01e4d` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
-| Migrations | **202 files**, highest number **166**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **257 files / 2,252 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. |
+| Migrations | **203 files**, highest number **167**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
+| Validation | Full suite green: **260 files / 2,294 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
-| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** (was 13) · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0**. |
+| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **29** · **write-only columns 93** (new: the mirror of writer-less tables — columns the system fills and never reads). |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
 | Public API | **Live.** Scoped, expiring, revocable keys issued from settings. Every v1 route needs a scope a founder can grant; the bidirectional gate enforces both directions. |
 | Consequential effects | Converge through `services/outbound/gateway.ts` — kill switch, classification, budget, idempotency, audit. Inventory in `CONSEQUENTIAL_EFFECTS.json`; untraced count ratcheted to zero. |
@@ -46,7 +46,20 @@ Measured at `3099ea6`+ on `claude/foundry-autonomous-continuation-0gents`.
 - **Outcomes now reach the authority request.** `getAssistingCandidates`
   counted matched and deviated comparisons equally and ignored whether previous
   assisted actions had failed. Both are separated and surfaced to the founder
-  at the moment they decide whether to grant more.
+  at the moment they decide whether to grant more. It also counted comparisons
+  the database would refuse as entry evidence, so a founder could be asked to
+  grant a permission that could not then be used; the offer applies the entry
+  guard's own condition now.
+- **Foundry can say how it has done.** Two track records, both read back from
+  learning it had been recording and never once consulting: how its changes to
+  the founder's systems have held up, and how its judgments about the company
+  have. Counts, never a rate. Staleness is asymmetric in both — read-time
+  expiry retires a positive claim and never a negative one, so Foundry cannot
+  improve its own record by waiting.
+- **The owner sees what a judgment was computed from.** The scarcity itself
+  ("you have 2 work blocks; these need 3"), what each side loses, what else was
+  weighed, and whether Foundry can order the alternatives on money — reported
+  as itself in all four states, including "I cannot tell you".
 - Everything else a company can tell Foundry arrives through the four ingest
   routes, twelve integration adapters, two webhooks, and the founder typing
   into The Letter.
@@ -114,9 +127,11 @@ claim below uses them; read that file before trusting a level here.
 - **`sqlite3` IS available** (`/usr/bin/sqlite3`), so `bash scripts/schema-snapshot.sh`
   runs directly. Earlier records said otherwise.
 - The branch is never merged to master — standing owner instruction.
-- Vitest full runs take roughly ten minutes here. Do not start a second one
-  concurrently: `gates-fail-when-they-should` plants fixture files in the
-  working tree, and two runs collide into a false failure.
+- Vitest full runs take roughly ten minutes here. **Do not start a second one
+  concurrently**: `gates-fail-when-they-should` plants fixture files in the
+  working tree, and two runs collide into a false failure. This is written down
+  because it has now cost time twice — the second time to somebody who had this
+  document open and had not read this line.
 
 ## The ladder in production-facing code
 
@@ -171,6 +186,14 @@ All of it is **E2 — local runtime**. Nothing has been exercised by a real foun
 - Economics: near-vacuous while the institution is model-free.
 - Duplicate founder reports still create duplicate responsibilities.
 - NULL-safety gate does not analyse nullable **columns**; trigger tests are the backstop.
+- **The suite aborts intermittently and the cause is not known.** Roughly one
+  run in three, a native libsql panic that takes the run with it rather than
+  failing a test. Two candidates eliminated by measurement (a leaked query
+  timeout; the old fixture collision), one live (nothing ever closed a database
+  connection — now fixed, effect unmeasured). Until this is settled, "full
+  suite green" carries an unstated qualifier: *this time the process survived*.
+  Recorded here rather than in a comment because it qualifies every other
+  evidence claim in this document.
 
 ## Master-audit reconciliation
 

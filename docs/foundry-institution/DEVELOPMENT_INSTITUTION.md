@@ -215,6 +215,27 @@ Two standards this institution holds itself to, both learned the hard way:
   false in the safest-sounding direction. Assert the file changed. This is the
   same unknown-masquerading-as-a-result failure the product keeps having,
   committed by the process that exists to catch it.
+- **Commit before mutating, and check what the revert took.** `git checkout --`
+  reverts the whole file, not the mutation. Uncommitted work in the same file
+  disappears with the mutant, silently, and the next thing you do is build on
+  code you no longer have. It has now happened three times; the fix is to
+  commit first, not to be more careful. Grep for what you expected to still be
+  there afterwards.
+- **Do not contaminate your own experiment.** Repeat runs answering "does this
+  still happen" are worthless if the tree changed underneath them, and worse
+  than worthless if a second concurrent run collides with the first — the gate
+  self-tests plant real files into the working tree, so two runs produce
+  failures that look like defects and cost an hour to disbelieve. Freeze the
+  tree, run one at a time, and note the revision in the output.
+- **Read the environment notes before doing the thing they warn about.**
+  IMPLEMENTATION_STATE already said not to run two suites at once. Having the
+  document open is not having read it.
+- **A fix that does not fix it is still evidence, and must be reported as
+  such.** A leaked timer was a real defect and a plausible cause of an
+  intermittent abort. It was neither the cause nor a waste: the run that
+  aborted with the fix in place is what turned a hypothesis into an eliminated
+  one. Say which it was. "Fixed a possible cause" and "fixed it" are different
+  claims and only one of them was earned.
 
 For consequential work, review with a perspective that did not design the
 change. Its job is to **falsify**, not to praise: recreate the forbidden
