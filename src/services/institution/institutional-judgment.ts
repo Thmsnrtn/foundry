@@ -119,7 +119,14 @@ export async function createDeterministicCapacityJudgment(productId:string,respo
       ...commitments.filter(c=>c.kind==='unknown').map(c=>`commitment status unknown: ${c.text}`),
       ...(economicEffect.status==='unknown'||economicEffect.status==='conflicting'?[`economic ordering ${economicEffect.status}`]:[])]),
     JSON.stringify(affected.map(d=>({responsibilityId:d.responsibilityId,consequence:d.consequence??'unknown'}))),
-    JSON.stringify(economicEffect),JSON.stringify({required:true,reason:'judgment cannot allocate or execute'}),
+    JSON.stringify(economicEffect),
+    // `authority_required_json` is a CONSTANT, and deliberately so: a judgment
+    // can never allocate or execute, whatever it is about. Nothing reads it and
+    // nothing should — the surface states the same boundary in the founder's
+    // words, and a constant read back would be Foundry checking its own
+    // constitution against a copy of itself. It stays because the row should
+    // carry, on its face, what the judgment was and was not.
+    JSON.stringify({required:true,reason:'judgment cannot allocate or execute'}),
     identity,
   ]);
   return id;

@@ -1,0 +1,31 @@
+-- =============================================================================
+-- Migration 168: retire a constitution version nothing consults
+--
+-- `products.scp_constitution_version` was set to 1 by the provisioner and read
+-- by nothing, ever. It has been 1 for every company since migration 017.
+--
+-- A version stamp is a promise that versioning exists: that somewhere a
+-- consequence path asks which constitution a company was provisioned under and
+-- does something different depending on the answer. Nothing does. Read on its
+-- own the column says this system can evolve its constitution and keep track of
+-- which companies are on which — and it cannot, and never could.
+--
+-- WIRING IT WAS THE WRONG FIX, for the same reason the data-quality chain was
+-- retired rather than completed in migration 167. Building a versioning scheme
+-- to justify a column means inventing a second constitution to be a version of,
+-- and deciding what a company on an older one may do differently. That is a
+-- genuine constitutional question and it belongs to the owner, not to a column
+-- somebody has to explain.
+--
+-- The constitutional invariant is unchanged and is enforced where it has always
+-- been enforced: in migrations and triggers, which are versioned by being
+-- migrations. `Foundry may operate Foundry. Foundry may improve Foundry.
+-- Foundry may not silently redefine what Foundry is allowed to do.` A dropped
+-- column that nothing read redefines nothing.
+--
+-- If constitution versioning is wanted later it starts from the owner saying
+-- what a second constitution is, and it will need a consequence path that
+-- consumes the answer — because a rule is not governance until one does.
+-- =============================================================================
+
+ALTER TABLE products DROP COLUMN scp_constitution_version;

@@ -230,6 +230,26 @@ found, this list loses.
     the same question the execution paths ask now. `absence-summary` had it
     right all along, which is how it was found.
 
+14. **Working the write-only seam: the institution's own tables are done.**
+    Baseline 96 → 95, and every remaining entry on an institution-owned table
+    now has its answer written where the column is written, as the gate's own
+    message instructs:
+    - `products.scp_constitution_version` — **retired** (migration 168). A
+      version stamp promises that a consequence path asks which constitution a
+      company is on. Nothing did, and it had been 1 for every company since it
+      was added. Wiring it would have meant inventing a second constitution for
+      it to be a version of, which is an owner question.
+    - `system_identities.established_reason`,
+      `responsibility_candidate_decisions.{grounding_mechanism,
+      grounding_evidence_json, resulting_initial_state}`, and
+      `strategic_decisions_log.authority_required_json` — **provenance, stated
+      as such.** The first three answer "how did this come to exist and on whose
+      say-so" for a person, not for code. The fourth is a constant: a judgment
+      can never allocate or execute, and reading it back would be Foundry
+      checking its own constitution against a copy of itself.
+
+    The ~90 that remain are on the older SCP/tier tables and are unexamined.
+
 13. **Three more write-only columns, previously invisible.** The gate matched
     `INSERT INTO` but not `INSERT OR IGNORE INTO`, so every column written only
     through a conflict-handling insert could never be reported. Fixed; baseline

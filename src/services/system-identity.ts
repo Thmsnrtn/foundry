@@ -86,6 +86,12 @@ export async function establishSystemIdentity(
   if (existing) {
     return { established: existing === productId, productId: existing };
   }
+  // PROVENANCE, ON PURPOSE. `established_reason` is written and read by no
+  // code, and a trigger only checks it is non-empty — validation is not
+  // consumption. It is here for a person asking, later, why THIS product is the
+  // one the system answers to, at a point where the answer would otherwise be
+  // "because it was first". `check-write-only-columns.mjs` will ask about it;
+  // this is the answer, stated where it is written as that gate instructs.
   await query(
     'INSERT INTO system_identities (identity_key, product_id, established_reason) VALUES (?, ?, ?)',
     [key, productId, reason]

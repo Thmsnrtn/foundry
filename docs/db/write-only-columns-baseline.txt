@@ -79,7 +79,6 @@ portfolios.owner_email
 predictions.outcome_recorded_at
 priority_actions.dismissed_at
 product_voice_fingerprints.archived_at
-products.scp_constitution_version
 recommendation_outcomes.action_taken_at
 recommendation_outcomes.action_taken_days_after
 referral_conversions.referral_link_id
