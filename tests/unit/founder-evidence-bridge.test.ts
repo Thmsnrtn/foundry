@@ -192,15 +192,24 @@ describe('progressive founder evidence elicitation', () => {
     const next = await selectFounderEvidenceQuestion(product);
     expect(next!.fact).not.toBe(question.fact);
 
-    // A deferred question is closed to answers; the database, not the caller,
-    // is what refuses.
-    await expect(query(
+    // A deferred question is still ANSWERABLE, and this test used to assert the
+    // opposite. Migration 169 changed it: skipping is a decision about being
+    // asked, and reading it as a decision to withhold the fact for good meant a
+    // required understanding fact stayed unknown forever, keeping its
+    // responsibility out of Shadowing and out of Assisting, silently, from one
+    // hurried click. Not asking again is preserved above; being unable to tell
+    // Foundry the answer was never the point.
+    //
+    // What stays refused - a question nobody asked, another tenant's, and a
+    // replayed answer - is asserted in
+    // `set-aside-question-can-be-answered.test.ts` and in the replay test below.
+    await query(
       `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
        VALUES ('fe_late',?,'founder_assertion','founder_stated:purpose','low',?,'Late answer')`,
       [product, JSON.stringify({
         request_id: question.requestId, predicate: question.fact,
         statement: 'Actually here is the answer', founder_id: OWNER,
-      })])).rejects.toThrow(/request_invalid/);
+      })]);
   });
 
   it('refuses a replayed answer', async () => {

@@ -332,15 +332,29 @@ export async function submitFounderFact(input: {
   });
 }
 
-/** An open question, resolved server-side from the request id and the
- * authenticated founder. Nothing about the question is caller-supplied. */
+/**
+ * An unanswered question, resolved server-side from the request id and the
+ * authenticated founder. Nothing about the question is caller-supplied.
+ *
+ * DEFERRED COUNTS AS UNANSWERED. This asked for `status='open'`, which turned
+ * "Foundry does not ask again" into "the founder can never tell it". Skipping
+ * is a decision about being asked, not a decision to withhold the fact for
+ * good — and the fact itself is load-bearing: a required understanding fact
+ * that stays unknown keeps its responsibility out of Shadowing and therefore
+ * out of Assisting, permanently and silently. One hurried click foreclosed a
+ * responsibility.
+ *
+ * Not asking again is preserved: `factOpportunities` still treats a deferred
+ * request as settled, so nothing puts the question back in front of them. The
+ * founder reaches it by choosing to.
+ */
 export async function getOpenFounderEvidenceRequest(
   requestId: string, founderId: string,
 ): Promise<{ productId: string; responsibilityId: string; fact: AskableFact; scope: EvidenceScope } | null> {
   const row = (await query(
     `SELECT q.product_id,q.responsibility_id,q.predicate,q.scope FROM founder_evidence_requests q
        JOIN products p ON p.id=q.product_id
-      WHERE q.id=? AND p.owner_id=? AND q.status='open'`,
+      WHERE q.id=? AND p.owner_id=? AND q.status IN ('open','deferred')`,
     [requestId, founderId],
   )).rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
@@ -411,8 +425,15 @@ export async function recordFounderEvidenceAnswer(input: {
   return { signalId, claimId };
 }
 
-/** The founder set the question aside. The fact stays unknown — silence is
- * never read as a negative answer — and Foundry does not ask again. */
+/**
+ * The founder set the question aside. The fact stays unknown — silence is never
+ * read as a negative answer — and Foundry does not ask again.
+ *
+ * Not asking again is not the same as never being told. `getSetAsideQuestions`
+ * lists these where the founder can find them, and the answer path takes them:
+ * see migration 169 for why treating a skip as final foreclosed a
+ * responsibility permanently and silently.
+ */
 export async function deferFounderEvidenceRequest(
   requestId: string, founderId: string,
 ): Promise<boolean> {
@@ -423,4 +444,41 @@ export async function deferFounderEvidenceRequest(
     [requestId],
   );
   return true;
+}
+
+/**
+ * Questions the founder set aside, so they can find them again.
+ *
+ * Foundry does not re-ask these — `factOpportunities` still treats them as
+ * settled. This is the other half of that: a list the founder chooses to look
+ * at, on a surface that does not interrupt. Retrievable is not the same as
+ * being asked.
+ *
+ * Ordered oldest first: the one set aside longest has been blocking longest.
+ */
+export async function getSetAsideQuestions(
+  productId: string, limit = 10,
+): Promise<Array<{
+  requestId: string; responsibilityId: string; responsibilityTitle: string;
+  fact: AskableFact; question: string; answerShape: 'text' | 'resource_amount';
+}>> {
+  const rows = await query(
+    `SELECT q.id,q.responsibility_id,q.predicate,r.title
+       FROM founder_evidence_requests q
+       JOIN institutional_responsibilities r
+         ON r.id=q.responsibility_id AND r.product_id=q.product_id
+      WHERE q.product_id=? AND q.status='deferred' AND r.disposition='active'
+      ORDER BY q.resolved_at, q.id LIMIT ?`,
+    [productId, limit],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => {
+    const fact = String(row.predicate) as AskableFact;
+    const title = String(row.title);
+    return {
+      requestId: String(row.id), responsibilityId: String(row.responsibility_id),
+      responsibilityTitle: title, fact,
+      question: questionFor(fact, title),
+      answerShape: answerShapeFor(fact),
+    };
+  });
 }

@@ -174,7 +174,17 @@ export async function planResponsibilityNotice(input: {
   return { actionId, duplicate: false };
 }
 
-/** Notices authored for a responsibility, newest first. */
+/**
+ * Notices authored for a responsibility, newest first.
+ *
+ * NO PRODUCTION CALLER, DELIBERATELY. This is the read-back side of authoring:
+ * it can prove that writing the same words to the same person twice converged
+ * to one notice, which the return value of a single call cannot. The
+ * founder-facing reader is `getUncarriedNotices` below, which answers a
+ * different question — what have I written and not yet asked Foundry to carry.
+ *
+ * Do not prove anything ABOUT the founder's surface through this function.
+ */
 export async function getResponsibilityNotices(
   productId: string, responsibilityId: string, limit = 10,
 ): Promise<ResponsibilityNotice[]> {

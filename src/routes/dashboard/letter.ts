@@ -186,6 +186,43 @@ const evidenceQuestionSection = (
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">Answering tells me how your company works. It does not let me do anything on your behalf — that still needs a separate permission from you. If you skip, I'll leave it as something I don't know.</div>
   </div>`;
 
+// Questions the founder set aside.
+//
+// Skipping is a decision about being asked, not a decision to withhold the fact
+// for good — but "Foundry does not ask again" had become "the founder can never
+// tell it". The answer route resolved the request as `status='open'`, the
+// database guard required the same, and nothing listed what had been skipped.
+// One hurried click kept a responsibility out of Shadowing for good and Foundry
+// never mentioned it again, by design.
+//
+// This does not re-ask. It is a quiet list, below the one live question, that
+// the founder reaches by choosing to. Nothing here interrupts, and there is no
+// second "skip" — it has already been skipped.
+const setAsideSection = (
+  items: Array<{ requestId: string; question: string; responsibilityTitle: string;
+    answerShape: 'text' | 'resource_amount' }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Set aside</div>
+    <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.5rem;">You skipped these. I have not asked again and I will not. They are here in case you want to answer one now.</div>
+    ${items.map((item) => html`
+      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.72rem;color:var(--text-muted);">About ${item.responsibilityTitle}</div>
+        <div style="font-size:0.88rem;color:var(--text-primary);margin-top:0.15rem;">${item.question}</div>
+        <form method="POST" action="/letter/evidence/${item.requestId}/answer"
+          style="display:flex;gap:0.4rem;margin-top:0.4rem;align-items:center;flex-wrap:wrap;">
+          ${item.answerShape === 'resource_amount' ? html`
+            <input name="resource" required maxlength="60" placeholder="Of what? (e.g. days of my time)"
+              style="flex:1;min-width:180px;" />
+            <input name="amount" required type="number" min="0" step="any" placeholder="How much per week?"
+              style="width:150px;" />` : ''}
+          <input name="statement" required maxlength="1000" placeholder="In your own words"
+            style="flex:1;min-width:220px;" />
+          <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Tell me now</button>
+        </form>
+      </div>`)}
+  </div>`;
+
 // The founder tells Foundry something the company has to handle. The kind is
 // chosen explicitly rather than guessed from the words, so an ambiguous
 // sentence never becomes company ontology by accident.
@@ -755,6 +792,8 @@ letterRoutes.get('/letter', async (c) => {
   const development = await getFounderDevelopmentActivity(ctx.productId);
   const { selectFounderEvidenceQuestion } = await import('../../services/institution/founder-evidence.js');
   const evidenceQuestion = await selectFounderEvidenceQuestion(ctx.productId);
+  const { getSetAsideQuestions } = await import('../../services/institution/founder-evidence.js');
+  const setAsideQuestions = await getSetAsideQuestions(ctx.productId);
   const { getAssistingCandidates } = await import('../../services/institution/assisting-admission.js');
   const assistingCandidates = await getAssistingCandidates(ctx.productId);
   const { listFounderFactOpportunities } = await import('../../services/institution/founder-evidence.js');
@@ -885,6 +924,7 @@ letterRoutes.get('/letter', async (c) => {
           : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${evidenceQuestionSection(evidenceQuestion)}
+      ${setAsideSection(setAsideQuestions)}
       ${permissionSection(assistingCandidates)}
       ${metricWatchSection(shadowable)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
