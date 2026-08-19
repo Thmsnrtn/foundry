@@ -289,6 +289,23 @@ found, this list loses.
     Worth generalising: `grep` for a template literal placing a variable where a
     column name goes. Two found so far, both by reading rather than by a gate.
 
+17. **Two retention policies, both deleting, silently disagreeing.**
+    ~~Open.~~ **Closed, with a question for the owner.** `services/retention.ts`
+    ran a daily purge over `agent_messages` and `audit_log` on one global
+    window; `services/maintenance/retention.ts` ran its own daily purge over
+    five tables with per-table horizons. They overlapped on `audit_log`, where
+    one said 365 days and the other deleted at 180. The shorter wins, so the
+    audit log has always been kept 180 days while the code stating the policy
+    said 365.
+
+    The crude implementation and its job are deleted. `audit_log` deliberately
+    stays at 180 — removing a duplication must not quietly change what happens
+    to anybody's data, and lengthening retention of records that may name people
+    is the wrong direction to take by accident. Which figure is right is now
+    `OWNER_DECISIONS_PENDING` §11, beside the retention question already with
+    counsel. `DATA_RETENTION_DAYS` survives as a CAP: a deployment that set it
+    did so to keep less.
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.

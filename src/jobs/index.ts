@@ -196,14 +196,6 @@ export async function behavioralTriggers(): Promise<void> {
   logger.info('behavioral_triggers complete', { jobName: 'behavioral_triggers' });
 }
 
-// ─── Data retention — daily ──────────────────────────────────────────────────
-export async function dataRetention(): Promise<void> {
-  logger.info('data_retention starting', { jobName: 'data_retention' });
-  const { purgeExpiredRecords } = await import('../services/retention.js');
-  const counts = await purgeExpiredRecords();
-  logger.info('data_retention complete', { jobName: 'data_retention', counts });
-}
-
 // ─── SLO / degradation check — hourly ────────────────────────────────────────
 export async function sloCheck(): Promise<void> {
   logger.info('slo_check starting', { jobName: 'slo_check' });
@@ -2290,7 +2282,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   digest_generate:      { fn: digestGenerate,       schedule: '0 7 * * 1',       description: 'Generate and send weekly digests (Monday)' },
   behavioral_triggers:  { fn: behavioralTriggers,   schedule: '0 */6 * * *',     description: 'Evaluate behavioral trigger emails (every 6h)' },
   metric_snapshot:      { fn: metricSnapshot,       schedule: '0 0 * * *',       description: 'Ensure daily metric snapshots exist' },
-  data_retention:       { fn: dataRetention,        schedule: '30 3 * * *',      description: 'Purge operational log rows past the retention window (daily)' },
   slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
   slot_enforcement:     { fn: slotEnforcement,      schedule: '0 9 * * *',       description: 'Enforce founding cohort activation window' },
   cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },

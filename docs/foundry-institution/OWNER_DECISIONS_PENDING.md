@@ -12,7 +12,7 @@ around each item.
 
 ---
 
-# EIGHT ANSWERED, TWO PENDING
+# EIGHT ANSWERED, THREE PENDING
 
 The owner answered the first eight queued decisions; those are recorded below as
 settled, with the record of what was asked and why in git history. Two items are
@@ -226,6 +226,32 @@ what was decided.
 **Not asked here:** whether to retain more. The campaign's answer to every
 "could we keep this" has been no unless a stated purpose needs it, and that is
 an engineering decision already made.
+
+---
+
+## PENDING 11 — Should the audit log be kept for 180 days or 365?
+
+Found while removing a duplication, not while asking about retention — which is
+why it is worth the owner's attention.
+
+**There were two retention implementations, both scheduled daily.** One deleted
+from `agent_messages` and `audit_log` on a single 180-day window; the other had
+per-table horizons and said `audit_log` should be kept 365 days,
+"compliance-relevant; keep longer". The shorter one wins every time, so the
+audit log has always been kept 180 days while the code stating the policy said
+365 and nothing behaved that way.
+
+The duplication is fixed: one implementation, and `audit_log` stays at **180**,
+which is what has actually been happening. Removing a duplication must not
+quietly change what happens to anybody's data, and lengthening retention of
+records that may name people is the wrong direction to take by accident.
+
+**The question for the owner and counsel:** which was right? The audit log is
+what answers "why didn't you show me X?", and it backs the erasure trail. 365
+was somebody's stated intent and it has never been in force. This belongs
+alongside §9, which is already with counsel on retention lawfulness.
+
+Nothing is blocked either way — the system is consistent at 180 today.
 
 ---
 
