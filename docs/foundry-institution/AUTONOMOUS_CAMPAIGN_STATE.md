@@ -25,15 +25,15 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `e2e9c6b`. **Migrations:** 205 files, highest **169**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **264 files / 2,323 tests**, `npm run check`
+- **Head:** `98ff15d`. **Migrations:** 205 files, highest **169**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **266 files / 2,330 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **29** · write-only columns
-  **95**.
+  **94**.
 
 ## Active work
 
@@ -93,13 +93,27 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      `gates-fail-when-they-should` plants real files into the working tree, so
      concurrent runs collide and produce failures that look like defects.
 
-4. **~95 write-only columns on the older SCP/tier tables.**
-   `check-write-only-columns.mjs` holds the count. The institution's own tables
-   are done — each remaining one there is answered where it is written. These
-   are unexamined, and the two examined so far both turned into something a
-   founder can now see. Two of them are a company's SEASONALITY
-   (`business_model_profile.seasonal_*`): Foundry records the shape of a
-   company's year and nothing reads it.
+4. **94 write-only columns.** `check-write-only-columns.mjs` holds the count.
+   Attributed by writing area rather than guessed at:
+
+   - **20 are written by `services/institution`**, and those are the ones worth
+     reading. The claim that they were all "answered where they are written"
+     did not survive checking: `outbound_actions.outcome_evidence_ref` was one
+     of them, and reading it turned out to be the fix for an outcome that could
+     never be reopened once settled. Remaining institution ones include
+     `provider_receipt_json` (the founder cannot see what the provider actually
+     said), `autonomy_consents.from_mode`, and
+     `responsibility_shadow_expectations.observation_source_evidence_ref` (the
+     letter says what differed, never where it was watching).
+   - **22 are `services/scp`** and most of the rest are legacy verticals.
+   - **Two are a company's SEASONALITY** (`business_model_profile.seasonal_*`),
+     and the earlier note here overstated them: the only writer is
+     `routes/api/tier3.ts`, part of the clientless API in item 1. Nothing
+     *records* the shape of a company's year — an unreachable endpoint could,
+     and nothing would read it. That makes them item 1's problem, not their own.
+
+   `signal_events.processing_session_id` accounts for eleven of the institution
+   rows on its own and is one column, not eleven findings.
 
 5. **Two unread outcome predicates.** `shadow_expectation` and
    `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —

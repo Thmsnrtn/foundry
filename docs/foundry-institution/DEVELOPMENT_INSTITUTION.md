@@ -254,6 +254,15 @@ Two standards this institution holds itself to, both learned the hard way:
   criterion proved through a function no production surface calls, and a
   founder-surface claim proved by calling a service directly.
 
+- **A negative assertion passes when the mechanism is missing entirely.** A
+  new test said `expect(detail).not.toContain('2 separate reports')` and passed
+  on its first run — not because the fix worked, but because the column it read
+  had never been added to the SELECT, so attribution was empty and the sentence
+  said nothing at all. Unrelated tests are what caught it. Assert what the
+  output SHOULD say, then add the negative; a test that only forbids a wrong
+  answer accepts no answer. And a fresh test passing immediately is a reason to
+  mutate, not a reason to move on.
+
 - **Ask what a guard PROTECTS before deciding whether changing it is
   weakening.** `founder_assertion_guard` required `status='open'` and the
   resolution guard treated only `'answered'` as terminal — two guards on one
