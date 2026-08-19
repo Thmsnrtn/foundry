@@ -255,3 +255,41 @@ describe('the judgment stops claiming an uncertainty it manufactured', () => {
       .toContain('deadline unknown for');
   });
 });
+
+// ── the sense has to be reachable by a person ──────────────────────────────
+
+describe('a founder can actually state a date', () => {
+  const letter = () => import('node:fs')
+    .then((fs) => fs.readFileSync('src/routes/dashboard/letter.ts', 'utf8'));
+
+  it('offers a date field on the form that reports an obligation', async () => {
+    // The plumbing existed and nothing on screen could reach it. CODE EXISTS
+    // is not PRODUCTION REACHABLE, and production reachable is not HUMAN
+    // reachable — the law this repository keeps re-learning.
+    const src = await letter();
+    const form = src.slice(src.indexOf('const reportObligationSection'));
+    const body = form.slice(0, form.indexOf('</div>`;'));
+    expect(body).toContain("name=\"due_at\"");
+    expect(body).toContain('type="date"');
+    expect(body, 'the founder must be told a date is optional and what it buys')
+      .toMatch(/optional|can't tell you when it's late/);
+  });
+
+  it('reads the day as end of day, so "by the 1st" is not late at 00:01', async () => {
+    const src = await letter();
+    expect(src).toContain('T23:59:59.000Z');
+  });
+
+  it('leaves the entry forms reachable but out of the attention stream', async () => {
+    // They were the only two sections on the page with no empty-state guard,
+    // so a quiet day still produced two blank forms competing with real work.
+    // Hiding them would have been the opposite defect: they are the founder's
+    // way IN.
+    const src = await letter();
+    const page = src.slice(src.indexOf('${uncarriedNoticeSection'));
+    const disclosure = page.slice(0, page.indexOf('</details>'));
+    expect(disclosure).toContain('<details');
+    expect(disclosure).toContain('reportObligationSection(obligationOptions)');
+    expect(disclosure).toContain('observationChannelSection(observationChannels)');
+  });
+});

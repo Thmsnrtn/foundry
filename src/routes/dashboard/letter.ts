@@ -152,9 +152,13 @@ const reportObligationSection = (options: Array<[string, string]>) => html`
       </select>
       <input name="what" required maxlength="200" placeholder="What is it, in your words?"
         style="flex:1;min-width:220px;" />
+      <label style="font-size:0.72rem;color:var(--text-muted);display:flex;align-items:center;gap:0.3rem;">
+        by
+        <input name="due_at" type="date" style="font-size:0.78rem;" />
+      </label>
       <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Add it</button>
     </form>
-    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll start keeping track of it. I won't do anything about it — I'd need to understand it first, and then you'd have to give me permission separately.</div>
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll start keeping track of it. I won't do anything about it — I'd need to understand it first, and then you'd have to give me permission separately. A date is optional; without one I can't tell you when it's late.</div>
   </div>`;
 
 // The one question only the founder can answer.
@@ -675,17 +679,29 @@ letterRoutes.get('/letter', async (c) => {
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${evidenceQuestionSection(evidenceQuestion)}
       ${permissionSection(assistingCandidates)}
-      ${reportObligationSection(obligationOptions)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
       ${supportChannelSection(channelCandidates, supportChannels,
         process.env.APP_URL ?? 'http://localhost:8080')}
       ${customerMessageSection(customerMessages)}
       ${outcomeSection(unresolvedEffects)}
       ${disputedSection(disputedEffects)}
-      ${observationChannelSection(observationChannels)}
       ${noticeSection([...responsibilitySummary.NEEDS_YOU, ...responsibilitySummary.CHANGED,
         ...responsibilitySummary.HANDLED, ...responsibilitySummary.STILL_OPEN])}
       ${uncarriedNoticeSection(uncarriedNotices)}
+      <!-- TELLING ME SOMETHING IS NOT SOMETHING NEEDING YOUR ATTENTION.
+           These two were rendered unconditionally in the attention stream —
+           the only sections on the page with no empty-state guard — so on a
+           genuinely quiet day the founder still got two blank data-entry
+           forms competing with real work. They are the founder's way IN, not
+           Foundry's way of asking, and they must stay reachable: a capability
+           a person cannot reach is the defect this codebase has repeatedly
+           found. So they move behind one disclosure, after the things that do
+           need reading. -->
+      <details style="margin-bottom:1rem;">
+        <summary style="cursor:pointer;font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);padding:0.5rem 0;">Tell me something</summary>
+        ${reportObligationSection(obligationOptions)}
+        ${observationChannelSection(observationChannels)}
+      </details>
       ${tellMeSection(factOpportunities)}
       ${judgmentSection(materialJudgments)}
       ${section('Changes I made to your systems', development.changes.map((c) => `${c.what} — ${c.detail}`))}
@@ -1104,8 +1120,15 @@ letterRoutes.post('/letter/company/report',
   if (what.length > 200) return c.text('Keep it to a short description', 400);
 
   const { reportCompanyObligation } = await import('../../services/founder/company-report.js');
+  // A `date` input gives a bare day. Read it as end of day in UTC so "by the
+  // 1st" is not already late at one minute past midnight — and pass it through
+  // unvalidated beyond that, because `statedDueDate` is the one place that
+  // decides whether a stated date is usable.
+  const rawDue = String(body.due_at ?? '').trim();
+  const dueAt = /^\d{4}-\d{2}-\d{2}$/.test(rawDue) ? `${rawDue}T23:59:59.000Z` : undefined;
   const reported = await reportCompanyObligation({
     productId: ctx.productId, founderId: founder.id as string, obligationKind, what,
+    ...(dueAt ? { dueAt } : {}),
   });
   if (!reported) return c.text('Report refused', 403);
   return c.redirect('/letter');
