@@ -89,21 +89,15 @@ from `emailAddresses[0]`, neither necessarily primary nor verified.
 Provisional, recomputed each cycle. Not a backlog — if something better is
 found, this list loses.
 
-1. ~~Two disagreeing answers to "what needs you".~~ **Closed on both paths.**
-   The single-product headline projects over BOTH canonical sources
-   (`composer.ts`), and the cross-fleet ranking now does too (`fleet.ts`), with
-   the same precedence: a passed date the company itself gave outranks a pending
-   decision, because it is the one ask that is late rather than merely open. The
-   two kinds are a discriminated union rather than a flattened shape — a
-   responsibility has no gate, and inventing one to make the sort uniform would
-   be manufacturing a fact. The verifier checks a responsibility ask as strictly
-   as a decision: fresh ledger read, recomputed classification, dropped if the
-   reason changed or the date is no longer past.
-
-   **Still true and still open:** `strategic_decisions_log` is a third
-   founder-decision store. Material judgments render in their own section and
-   can never be the one thing, however material. That is the last third of this
-   item.
+1. ~~Two disagreeing answers to "what needs you".~~ **Closed, all three
+   stores.** `decisions`, `institutional_responsibilities` and
+   `strategic_decisions_log` are projected over by one rule, on both paths
+   (`composer.ts` for a company, `fleet.ts` across the fleet): overdue
+   obligation, then contradicted judgment — both LATE against a date the company
+   itself gave — then the founder's own queue, then other responsibility asks,
+   then open judgments. The fleet item is a discriminated union, so every
+   consumer must say which kind it handles; the verifier re-reads each kind from
+   its own ledger and drops it if the ledger no longer says it.
 
 2. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving
    an archived unbuildable client, most of `tier1-4`). Deletion adds no
@@ -135,25 +129,26 @@ found, this list loses.
    caller stays one, that no second domain-shaped contract reappears, and that
    `EVENT_AGENT_MAP` — the same defect one layer up — stays asserted.
 
-7. **The rest of the outcome loop.** `development_change_outcome` is closed —
-   Foundry now reads back what it learned about its own changes and the founder
-   sees the track record. Three predicates remain written and read by nothing:
-   `shadow_expectation` and `shadow_comparison` (`external-shadowing.ts`) and
-   `development_shadow_comparison` (`development-shadowing.ts`).
-   `later_reality_comparison` is the fourth and the most valuable: it is
-   Foundry's own judgment track record — whether what it said about the company
-   was borne out — and nothing consults it. Note the earlier entry claiming
-   `shadow_comparison` was read "outside a frozen benchmark" was wrong; the
-   apparent reader is a same-named string in `READINESS_DIMENSIONS`.
+7. **The rest of the outcome loop.** Two of five closed, both the same shape: a
+   learned claim written beside a state column, with the column read and the
+   claim read by nothing.
+   - `development_change_outcome` — **closed.** The founder sees how Foundry's
+     changes to their systems have held up.
+   - `later_reality_comparison` — **closed.** The founder sees how Foundry's
+     judgments about their company have held up, which is the record that
+     decides how much weight to give the next one.
+   - Still unread: `shadow_expectation` and `shadow_comparison`
+     (`external-shadowing.ts`), `development_shadow_comparison`
+     (`development-shadowing.ts`). These are shadow records rather than
+     outcomes, so the reader they want is probably admission evidence rather
+     than a founder line — `assisting-admission.ts` already counts deviations
+     and verified failures from other sources and is the natural home.
 
-8. ~~A founder with two companies is shown a poorer institution than a founder
-   with one.~~ **Closed.** `/letter` routed anyone with more than one company to
-   a fleet composition that REPLACED the single-product letter — a ranked list,
-   system lines, and a bare title per responsibility, with no way back, because
-   the branch ran whatever the product switcher said. Every surface where
-   authority is granted or seen was gone. The ranking is now a prefix and the
-   ACTIVE company renders in full beneath it: ranking across the fleet, action
-   within one company.
+   Both closures follow the same rules and the next should too: counts and never
+   a rate, `unresolved` carried as its own number, nothing shown at all for a
+   company with no observations, and staleness asymmetric so read-time expiry
+   retires a positive claim and never a negative one. Foundry may not improve
+   its own record by waiting.
 
 ## Blocked — needs a design decision, not effort
 

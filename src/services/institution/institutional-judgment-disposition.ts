@@ -13,6 +13,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
+import { getReconstructionClaims } from './reconstruction.js';
 
 export type JudgmentDisposition = 'accepted' | 'rejected' | 'deferred' | 'alternative_selected';
 
@@ -124,4 +125,59 @@ export async function getMaterialJudgments(productId: string): Promise<MaterialJ
     }))
     .filter((j) => j.disposition === null
       || j.evaluationState === 'conflicting' || j.evaluationState === 'contradicted');
+}
+
+/**
+ * FOUNDRY'S OWN JUDGMENT TRACK RECORD.
+ *
+ * `evaluateInstitutionalJudgment` wrote every later-reality comparison twice:
+ * to `institutional_judgment_evaluations.state`, and as a
+ * `later_reality_comparison` reconstruction claim carrying the observations it
+ * rested on. The column is read — `getMaterialJudgments` uses it to decide what
+ * still needs the owner. The claim was read by nothing, and neither was the
+ * `learned_claim_id` pointing at it. The same dead-sided dual-write the
+ * development outcomes had.
+ *
+ * The two sides get different jobs rather than one being deleted. The column
+ * answers "does THIS judgment still need you". The claims answer "how has
+ * Foundry's judgment about this company held up", which is the question a
+ * founder deciding how much weight to give the next one is actually asking, and
+ * it needs provenance and expiry rather than a current-state enum.
+ *
+ * Counts, never a rate, for the same reason as the development record: two
+ * borne out of three is not "67% accurate", and a percentage invites a
+ * confidence the evidence cannot carry.
+ *
+ * STALENESS RUNS ONE WAY ONLY, against Foundry. Read-time expiry exists so an
+ * old positive claim does not silently remain current, so a `supported`
+ * judgment whose evidence has expired falls back to unresolved. A
+ * `contradicted` one is not retired the same way: being wrong is a thing that
+ * happened, and letting time turn it into "nobody knows" would let Foundry
+ * improve its record by waiting.
+ */
+export interface JudgmentRecord {
+  borneOut: number;
+  contradicted: number;
+  unresolved: number;
+}
+
+export async function getJudgmentRecord(
+  productId: string, now: Date = new Date(),
+): Promise<JudgmentRecord | null> {
+  const claims = (await getReconstructionClaims(productId, now))
+    .filter((claim) => claim.predicate === 'later_reality_comparison');
+  if (!claims.length) return null;
+
+  const tally: JudgmentRecord = { borneOut: 0, contradicted: 0, unresolved: 0 };
+  for (const claim of claims) {
+    const state = typeof claim.value === 'string' ? claim.value : null;
+    const current = claim.epistemicStatus === 'known' || claim.epistemicStatus === 'inferred';
+    // `conflicting` is evidence on both sides. It is not Foundry being right,
+    // and it is not Foundry being wrong — it is unresolved, and saying anything
+    // else would be picking a side the evidence does not.
+    if (state === 'contradicted') tally.contradicted++;
+    else if (state === 'supported' && current) tally.borneOut++;
+    else tally.unresolved++;
+  }
+  return tally;
 }

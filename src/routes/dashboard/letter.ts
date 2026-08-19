@@ -96,11 +96,30 @@ const responsibilitySection = (
 // Direction is not permission. The owner tells Foundry which way to go; the
 // separate, exact, responsibility-bound grant is what would let Foundry act.
 // The copy says so on every judgment rather than relying on the founder to know.
+/** How Foundry's judgments about this company have held up. Three counts, never
+ *  a rate: two borne out of three is not "67% accurate", and a percentage
+ *  invites a confidence the evidence cannot carry. A company Foundry has never
+ *  been observed on is told nothing, rather than shown a vacuous record. */
+const judgmentRecordLine = (
+  record: import('../../services/institution/institutional-judgment-disposition.js').JudgmentRecord,
+): string => {
+  const parts: string[] = [];
+  if (record.borneOut) parts.push(`${record.borneOut} that what happened since bore out`);
+  if (record.contradicted) parts.push(`${record.contradicted} that it contradicted`);
+  if (record.unresolved) parts.push(`${record.unresolved} nothing has settled either way`);
+  const total = record.borneOut + record.contradicted + record.unresolved;
+  return `Of the ${total} judgment${total === 1 ? '' : 's'} I have made about your company and`
+    + ` since checked — ${parts.join(', ')}.`;
+};
+
 const judgmentSection = (
   items: Array<import('../../services/institution/institutional-judgment-disposition.js').MaterialJudgment>,
-) => items.length === 0 ? '' : html`
+  record: import('../../services/institution/institutional-judgment-disposition.js').JudgmentRecord | null,
+) => items.length === 0 && record === null ? '' : html`
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
-    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Judgments that need your direction</div>
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">${items.length ? 'Judgments that need your direction' : 'How my judgment has held up'}</div>
+    ${record ? html`
+      <div style="font-size:0.82rem;color:var(--text-muted);padding-bottom:0.5rem;">${judgmentRecordLine(record)}</div>` : ''}
     ${items.map((j) => html`
       <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${j.title}</div>
@@ -632,8 +651,11 @@ letterRoutes.get('/letter', async (c) => {
   const shadowingExceptions = await getMaterialShadowingExceptions(ctx.productId);
   const { getFounderAssistingActivity } = await import('../../services/institution/responsibility-assisted-email.js');
   const assistingActivity = await getFounderAssistingActivity(ctx.productId);
-  const { getMaterialJudgments } = await import('../../services/institution/institutional-judgment-disposition.js');
+  const { getJudgmentRecord, getMaterialJudgments } = await import('../../services/institution/institutional-judgment-disposition.js');
   const materialJudgments = await getMaterialJudgments(ctx.productId);
+  // How Foundry's judgments about this company have held up. Read back from the
+  // learning it had been recording and never once consulting.
+  const judgmentRecord = await getJudgmentRecord(ctx.productId);
   const { getFounderDevelopmentActivity } = await import('../../services/institution/development-assisting.js');
   const development = await getFounderDevelopmentActivity(ctx.productId);
   const { selectFounderEvidenceQuestion } = await import('../../services/institution/founder-evidence.js');
@@ -771,7 +793,7 @@ letterRoutes.get('/letter', async (c) => {
         ${observationChannelSection(observationChannels)}
       </details>
       ${tellMeSection(factOpportunities)}
-      ${judgmentSection(materialJudgments)}
+      ${judgmentSection(materialJudgments, judgmentRecord)}
       ${section('Changes I made to your systems', [
     ...development.changes.map((c) => `${c.what} — ${c.detail}`),
     // HOW THIS HAS HELD UP, not how well. The counts come from what Foundry

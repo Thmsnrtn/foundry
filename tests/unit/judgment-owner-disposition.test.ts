@@ -8,7 +8,7 @@ import { recordReconstructionClaim } from '../../src/services/institution/recons
 import { createDeterministicCapacityJudgment } from '../../src/services/institution/institutional-judgment.js';
 import { evaluateInstitutionalJudgment } from '../../src/services/institution/institutional-judgment-evaluation.js';
 import {
-  getMaterialJudgments, recordJudgmentDisposition,
+  getJudgmentRecord, getMaterialJudgments, recordJudgmentDisposition,
 } from '../../src/services/institution/institutional-judgment-disposition.js';
 
 let app: Hono;
@@ -193,5 +193,80 @@ describe('authenticated owner disposition on institutional judgments', () => {
   it('never surfaces another tenant judgment through the owner projection', async () => {
     expect((await getMaterialJudgments('jd_product')).map((j) => j.id)).not.toContain(foreignJudgmentId);
     expect((await getMaterialJudgments('jd_foreign')).map((j) => j.id)).toEqual([foreignJudgmentId]);
+  });
+});
+
+describe('Foundry reads back how its own judgment has held up', () => {
+  it('counts what later reality did to the judgments it made, from the claim nothing read', async () => {
+    // WHAT THIS CLOSES. `evaluateInstitutionalJudgment` wrote every later-reality
+    // comparison twice: to `institutional_judgment_evaluations.state`, and as a
+    // `later_reality_comparison` claim carrying the observations it rested on.
+    // The column is read — it decides what still needs the owner. The claim was
+    // read by nothing, and neither was the `learned_claim_id` pointing at it.
+    // Foundry was recording whether it had been right about this company and
+    // never once looking.
+    //
+    // The founder is the person that record is for: how much weight to give the
+    // next judgment is decided on it.
+    const record = await getJudgmentRecord('jd_product');
+    expect(record).not.toBeNull();
+    const claims = await query(
+      `SELECT id FROM reconstruction_claims
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`, []);
+    expect(claims.rows.length).toBeGreaterThan(0);
+    expect(record!.borneOut + record!.contradicted + record!.unresolved)
+      .toBe(claims.rows.length);
+    // The earlier tests drove this judgment to contradicted, so at least one is.
+    expect(record!.contradicted).toBeGreaterThan(0);
+
+    // A company Foundry has never been observed on is told nothing, rather than
+    // shown a vacuous perfect record.
+    expect(await getJudgmentRecord('jd_foreign')).toBeNull();
+  });
+
+  it('lets a supported judgment go stale but never un-contradicts itself by waiting', async () => {
+    // Read-time expiry exists so an old positive claim does not silently remain
+    // current. Being WRONG is a thing that happened, and letting time turn it
+    // into "nobody knows" would let Foundry improve its record by waiting.
+    await query(
+      `UPDATE reconstruction_claims SET value_json = ?, valid_until = datetime('now','-1 day')
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`,
+      [JSON.stringify('supported')]);
+    const stale = await getJudgmentRecord('jd_product');
+    expect(stale!.borneOut, 'an expired success is not current evidence').toBe(0);
+
+    await query(
+      `UPDATE reconstruction_claims SET value_json = ?
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`,
+      [JSON.stringify('contradicted')]);
+    const wrong = await getJudgmentRecord('jd_product');
+    expect(wrong!.contradicted, 'a contradiction does not expire in Foundry\'s favour')
+      .toBeGreaterThan(0);
+  });
+
+  it('puts the record on the page, in the founder\'s language and never as a rate', async () => {
+    // PRODUCTION REACHABLE IS NOT HUMAN REACHABLE. A record Foundry computes
+    // and never shows is the same to a founder as one it does not compute.
+    await query(
+      `UPDATE reconstruction_claims SET value_json = ?, valid_until = NULL
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`,
+      [JSON.stringify('contradicted')]);
+    const page = await (await app.request('/letter', { headers: { 'x-founder': 'jd_owner' } })).text();
+    expect(page, 'the record must reach the page').toContain('judgment');
+    expect(page).toContain('I have made about your company');
+    expect(page).toContain('that it contradicted');
+    // Counts, never a rate: a percentage invites a confidence the evidence
+    // cannot carry.
+    expect(page).not.toMatch(/\d+% (accurate|correct|right)/);
+  });
+
+  it('calls conflicting evidence unresolved rather than picking a side', async () => {
+    await query(
+      `UPDATE reconstruction_claims SET value_json = ?, valid_until = NULL
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`,
+      [JSON.stringify('conflicting')]);
+    const record = await getJudgmentRecord('jd_product');
+    expect(record).toMatchObject({ borneOut: 0, contradicted: 0 });
+    expect(record!.unresolved).toBeGreaterThan(0);
   });
 });
