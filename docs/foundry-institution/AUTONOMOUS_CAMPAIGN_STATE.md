@@ -139,8 +139,12 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    - the development-change vertical — `enterDevelopmentAssisting`,
      `planDevelopmentChange`, `executeDevelopmentChange`,
      `verifyDevelopmentChange`, `rollbackDevelopmentChange`,
-     `grantDevelopmentAuthority`, `revokeDevelopmentAuthority` — already
-     recorded as DARK. Foundry improving Foundry, built and not wired;
+     `grantDevelopmentAuthority`, `revokeDevelopmentAuthority`. **Do not wire
+     this.** It is not an oversight: `OWNER_DECISIONS_PENDING` RESOLVED 2 says
+     the bounded regeneration grant is deliberately not performed, so Foundry
+     may not mutate its own repository outside a test. Uncalled is the correct
+     state, and giving the founder a door to grant it is the same act as
+     wiring it;
    - `reconstructCompany` and the candidate chain
      (`discoverCandidatesFromReconstruction`, `supersedeResponsibilityCandidate`),
      both examined below.
