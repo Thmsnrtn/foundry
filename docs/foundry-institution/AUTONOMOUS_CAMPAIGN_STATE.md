@@ -111,27 +111,18 @@ found, this list loses.
    live gap with a recommended answer, waiting on the owner.
 5. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
-6. **The ladder's tests enter through a door production does not have —
-   halfway across.** `emitSignalEvent` is the only function that runs
-   responsibility discovery and has exactly one caller: the company-report path.
-   `discovery.ts` also maps four SaaS event types straight onto
-   responsibilities, and nothing in production can trigger any of them; three
-   appear nowhere else in the repository at all.
+6. **The ladder's fixtures are off the dead door — the map itself can now go.**
+   Twenty test files built ladder state through `discovery.ts`'s four SaaS event
+   types, which nothing in production emits. **The baseline is 0**:
+   `check-ladder-fixture-door.mjs` holds it there, and `reportedObligation()` in
+   `tests/fixtures/responsibility-state.ts` goes through the real intake by
+   calling `reportCompanyObligation` rather than re-implementing it.
 
-   Twenty test files built ladder state through that map. **Ten do now**, held
-   by `check-ladder-fixture-door.mjs` (baseline 9 plus a named vocabulary
-   collision), which may only shrink. The shared fixture moved first, so every
-   file that depends on it now records evidence the running system could have
-   produced, and `reportedObligation()` in `tests/fixtures/responsibility-state.ts`
-   goes through the real intake by calling `reportCompanyObligation` itself
-   rather than re-implementing it.
-
-   The nine that remain are the harder half: the benchmarks, the reachability
-   tests, and the reconstruction suites, several of which assert against
-   specific signal ids. They are a campaign, not a sweep — deleting the map
-   outright turned 25 tests red across 7 files at once, which is how tests get
-   weakened under pressure rather than moved. When the baseline reaches zero the
-   map can be deleted and the gate with it.
+   Three files still name the four types, all of them ABOUT the map rather than
+   entering through it — they pin its exact contents so it cannot widen
+   silently. **The remaining work is deleting `SIGNAL_RESPONSIBILITIES` and this
+   gate with it**, which is now a small change rather than a 47-reference sweep.
+   Take it as its own batch, on its own evidence.
 
 7. **The rest of the outcome loop.** Five more predicates are written and read
    by nothing (`shadow_expectation`, `later_reality_comparison`,

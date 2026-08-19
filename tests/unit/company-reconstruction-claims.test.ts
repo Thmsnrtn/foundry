@@ -10,9 +10,9 @@ beforeAll(async () => {
   await query("INSERT INTO founders (id,clerk_user_id,email) VALUES ('rc_owner','rc_clerk','rc@example.com'),('rc_other','rc_other_clerk','other@example.com')", []);
   await query("INSERT INTO products (id,name,owner_id) VALUES ('rc_product','Unfamiliar Co','rc_owner'),('rc_foreign','Foreign Co','rc_other')", []);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    ('rc_signal_a','rc_product','manual','support_spike','medium','{}','Support queue rising'),
-    ('rc_signal_b','rc_product','manual','support_spike','medium','{}','Support team says normal'),
-    ('rc_foreign_signal','rc_foreign','manual','support_spike','medium','{}','Foreign signal')`, []);
+    ('rc_signal_a','rc_product','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Support queue rising'),
+    ('rc_signal_b','rc_product','company_observation_baseline','company_observation_baseline:support_capacity','low','{}','Support team says normal'),
+    ('rc_foreign_signal','rc_foreign','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Foreign signal')`, []);
   await query(`INSERT INTO integrations (id,product_id,type,status,name,last_synced_at) VALUES
     ('rc_current_system','rc_product','inbound','active','stripe','2025-12-31'),
     ('rc_stale_system','rc_product','inbound','active','github','2025-01-01'),

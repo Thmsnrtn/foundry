@@ -91,6 +91,9 @@ const ABOUT_THE_DEFECT = [
   // quietly change what integration evidence means. It reads the four names; it
   // does not build a fixture through them.
   'tests/unit/founder-reported-obligations.test.ts',
+  // Same: pins the dead map's contents while demonstrating that an unfamiliar
+  // company is recognised through the generic intake instead.
+  'tests/unit/unfamiliar-company-generalization.test.ts',
 ];
 
 // A DIFFERENT VOCABULARY THAT SHARES A WORD. `NOTICE_KINDS` is the closed set

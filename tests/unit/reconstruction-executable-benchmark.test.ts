@@ -37,8 +37,8 @@ beforeAll(async()=>{
     -- was a test that did not need it to be.
     ('exe_r_foreign','exe_foreign','Foreign responsibility','operations','assisting')`,[]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    ('exe_delayed','exe_commerce','warehouse','support_spike','high','{}','Fulfillment delayed'),
-    ('exe_normal','exe_commerce','manual','support_spike','medium','{}','Team reports normal')`,[]);
+    ('exe_delayed','exe_commerce','company_observation_baseline','company_observation_baseline:fulfillment','low','{}','Fulfillment delayed'),
+    ('exe_normal','exe_commerce','company_observation_baseline','company_observation_baseline:fulfillment_reported','low','{}','Team reports normal')`,[]);
   await recordReconstructionClaim({productId:'exe_commerce',subject:'fulfillment',predicate:'health',value:['delayed','normal'],epistemicStatus:'conflicting',
     evidenceRefs:[{kind:'signal_event',id:'exe_delayed'},{kind:'signal_event',id:'exe_normal'}],derivationMethod:'unreconciled canonical source comparison',observedAt:new Date('2026-08-01')});
 });

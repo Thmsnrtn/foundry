@@ -45,7 +45,7 @@ async function overSubscribedCompany(prefix: string): Promise<string> {
   await query('INSERT INTO products (id,name,owner_id) VALUES (?,?,?)',
     [prefix, `${prefix} Co`, `${prefix}_f`]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-    VALUES (?,?,'support','support_spike','medium','{}','Two commitments landed in the same week')`,
+    VALUES (?,?,'company_observation_baseline','company_observation_baseline:commitments','low','{}','Two commitments landed in the same week')`,
   [`${prefix}_sig`, prefix]);
   await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state) VALUES
     (?,?,'Answer customers','support','visible'), (?,?,'Ship the migration','development','visible')`,
@@ -89,7 +89,7 @@ describe('institutional judgment in production', () => {
     await query('INSERT INTO founders (id,clerk_user_id,email) VALUES (?,?,?)', [`${p}_f`, `${p}_c`, `${p}@e.com`]);
     await query('INSERT INTO products (id,name,owner_id) VALUES (?,?,?)', [p, 'Healthy Co', `${p}_f`]);
     await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-      VALUES (?,?,'support','support_spike','low','{}','Normal week')`, [`${p}_sig`, p]);
+      VALUES (?,?,'company_observation_baseline','company_observation_baseline:commitments','low','{}','Normal week')`, [`${p}_sig`, p]);
     await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state) VALUES
       (?,?,'Answer customers','support','visible'), (?,?,'Ship the migration','development','visible')`,
     [`${p}_a`, p, `${p}_b`, p]);

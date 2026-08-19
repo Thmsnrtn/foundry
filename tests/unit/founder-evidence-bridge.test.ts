@@ -5,7 +5,6 @@ import { resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { discoverResponsibilityFromSignal } from '../../src/services/institution/discovery.js';
 import {
   deferFounderEvidenceRequest, recordFounderEvidenceAnswer, selectFounderEvidenceQuestion,
 } from '../../src/services/institution/founder-evidence.js';
@@ -14,6 +13,7 @@ import {
 } from '../../src/services/institution/responsibility-understanding.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
 import { enterResponsibilityAssisting } from '../../src/services/institution/responsibility-assisting.js';
+import { reportedObligation } from '../fixtures/responsibility-state.js';
 
 // =============================================================================
 // The production evidence bridge.
@@ -36,15 +36,21 @@ async function countOf(sql: string, args: unknown[] = []): Promise<number> {
   return Number(((await query(sql, args)).rows[0] as Record<string, unknown>).n);
 }
 
-/** A company whose only institutional state came from a real signal. */
-async function companyFromSignal(prefix: string, owner = OWNER): Promise<string> {
+/** prefix → the report that created that company's responsibility, for the one
+ *  test that has to cite the discovery evidence by id. */
+const reportSignals = new Map<string, string>();
+
+/** A company whose only institutional state came from the company saying what
+ *  it owes — the one intake production has. This used to emit a `support`-shaped
+ *  SaaS signal and hand it to discovery, which nothing in production does, so
+ *  every founder-elicitation behaviour below was exercised against a
+ *  responsibility the running system could not have produced. */
+async function companyFromReport(prefix: string, owner = OWNER): Promise<string> {
   await query('INSERT INTO products (id,name,owner_id) VALUES (?,?,?)', [prefix, `${prefix} Co`, owner]);
-  await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-    VALUES (?,?,'intercom','support_spike','high','{}','Replies took three days last week')`,
-  [`${prefix}_sig`, prefix]);
-  const responsibility = await discoverResponsibilityFromSignal(prefix, `${prefix}_sig`);
-  if (!responsibility) throw new Error('fixture: discovery did not admit the signal');
-  return responsibility.id;
+  const reported = await reportedObligation(prefix, owner,
+    { kind: 'customer_commitment', what: 'Reply to the people who waited three days last week' });
+  reportSignals.set(prefix, reported.signalId);
+  return reported.responsibilityId;
 }
 
 /** Answer whatever Foundry currently asks, once. Returns the fact it asked
@@ -68,12 +74,18 @@ beforeAll(async () => {
 describe('progressive founder evidence elicitation', () => {
   it('carries a real company from an observed signal to Understood through founder answers alone', async () => {
     const product = 'fe_vertical';
-    const responsibilityId = await companyFromSignal(product);
+    const responsibilityId = await companyFromReport(product);
 
     // Foundry asks about a fact the institution requires and it genuinely
-    // cannot observe — and it names the responsibility it is asking about.
+    // cannot observe — and it names the responsibility it is asking about, in
+    // the company's own words. This used to expect 'Restore support response
+    // capacity', a title the institution wrote for a SaaS event type nothing
+    // emits; the question a founder actually sees now quotes them back.
     const first = await selectFounderEvidenceQuestion(product);
-    expect(first).toMatchObject({ responsibilityId, responsibilityTitle: 'Restore support response capacity' });
+    expect(first).toMatchObject({
+      responsibilityId,
+      responsibilityTitle: 'Reply to the people who waited three days last week',
+    });
     const required = (await projectResponsibilityUnderstanding(product, responsibilityId)).requiredFacts;
     expect(required).toContain(first!.fact);
 
@@ -133,7 +145,7 @@ describe('progressive founder evidence elicitation', () => {
 
   it('asks one question at a time and does not ask it again on every refresh', async () => {
     const product = 'fe_stable';
-    await companyFromSignal(product);
+    await companyFromReport(product);
     const a = await selectFounderEvidenceQuestion(product);
     const b = await selectFounderEvidenceQuestion(product);
     const c = await selectFounderEvidenceQuestion(product);
@@ -144,10 +156,10 @@ describe('progressive founder evidence elicitation', () => {
 
   it('asks about the responsibility closest to being understood first', async () => {
     const product = 'fe_priority';
-    const near = await companyFromSignal(product);
-    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-      VALUES ('fe_priority_sig2',?,'stripe','payment_failed','high','{}','A card payment failed')`, [product]);
-    const far = (await discoverResponsibilityFromSignal(product, 'fe_priority_sig2'))!.id;
+    const near = await companyFromReport(product);
+    // A second obligation the same company reports, needing more facts.
+    const far = (await reportedObligation(product, OWNER,
+      { kind: 'revenue_collection', what: 'Collect the payment a card declined' })).responsibilityId;
 
     // The support responsibility needs six facts; billing recovery needs nine.
     // Ground five of the support facts through the ordinary founder path so it
@@ -160,7 +172,7 @@ describe('progressive founder evidence elicitation', () => {
 
   it('treats a skipped question as unknown, not as an answer, and does not nag', async () => {
     const product = 'fe_deferred';
-    const responsibilityId = await companyFromSignal(product);
+    const responsibilityId = await companyFromReport(product);
     const question = (await selectFounderEvidenceQuestion(product))!;
 
     expect(await deferFounderEvidenceRequest(question.requestId, OWNER)).toBe(true);
@@ -193,7 +205,7 @@ describe('progressive founder evidence elicitation', () => {
 
   it('refuses a replayed answer', async () => {
     const product = 'fe_replay';
-    await companyFromSignal(product);
+    await companyFromReport(product);
     const question = (await selectFounderEvidenceQuestion(product))!;
     expect(await recordFounderEvidenceAnswer({
       requestId: question.requestId, founderId: OWNER, statement: 'First answer',
@@ -213,7 +225,7 @@ describe('progressive founder evidence elicitation', () => {
 
   it('preserves a conflict when later independent evidence disagrees', async () => {
     const product = 'fe_conflict';
-    const responsibilityId = await companyFromSignal(product);
+    const responsibilityId = await companyFromReport(product);
     for (let i = 0; i < 10; i++) if (await answerNextQuestion(product, `founder view ${i}`) === null) break;
     expect(await earnResponsibilityUnderstanding(product, responsibilityId))
       .toMatchObject({ state: 'understood' });
@@ -222,7 +234,7 @@ describe('progressive founder evidence elicitation', () => {
     // founder said. Neither side is overwritten: the conflict is recorded as a
     // conflict, citing both sources.
     await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-      VALUES ('fe_conflict_obs',?,'intercom','support_spike','high','{}','Queue is handled by an outsourcer')`, [product]);
+      VALUES ('fe_conflict_obs',?,'company_observation_baseline','company_observation_baseline:support_queue','low','{}','Queue is handled by an outsourcer')`, [product]);
     const founderClaim = (await query(
       `SELECT id FROM reconstruction_claims WHERE product_id=? AND subject=? AND predicate='dependencies'`,
       [product, `responsibility:${responsibilityId}`])).rows[0] as Record<string, unknown>;
@@ -231,7 +243,7 @@ describe('progressive founder evidence elicitation', () => {
       value: { statement: 'Two sources disagree about what this depends on' }, epistemicStatus: 'conflicting',
       evidenceRefs: [
         { kind: 'signal_event', id: 'fe_conflict_obs' },
-        { kind: 'signal_event', id: `${product}_sig` },
+        { kind: 'signal_event', id: reportSignals.get(product)! },
       ],
       derivationMethod: 'independent observation disagrees with founder assertion', observedAt: new Date(),
     });
@@ -249,7 +261,7 @@ describe('progressive founder evidence elicitation', () => {
 
   it('lets the founder change their own view without erasing what they said before', async () => {
     const product = 'fe_revised';
-    const responsibilityId = await companyFromSignal(product);
+    const responsibilityId = await companyFromReport(product);
     const question = (await selectFounderEvidenceQuestion(product))!;
     await recordFounderEvidenceAnswer({ requestId: question.requestId, founderId: OWNER, statement: 'First view' });
 
@@ -279,7 +291,7 @@ describe('progressive founder evidence elicitation', () => {
 
   it('lets an answer go stale rather than staying true forever', async () => {
     const product = 'fe_stale';
-    const responsibilityId = await companyFromSignal(product);
+    const responsibilityId = await companyFromReport(product);
     for (let i = 0; i < 10; i++) if (await answerNextQuestion(product, `founder view ${i}`) === null) break;
 
     // Read a year later: an expiring claim is no longer current, and the
@@ -302,9 +314,9 @@ describe('progressive founder evidence elicitation', () => {
   describe('authentication and tenancy', () => {
     it('refuses a forged founder, a foreign tenant, and a question that was never asked', async () => {
       const mine = 'fe_mine';
-      await companyFromSignal(mine);
+      await companyFromReport(mine);
       const theirs = 'fe_theirs';
-      await companyFromSignal(theirs, OTHER);
+      await companyFromReport(theirs, OTHER);
       const mineQuestion = (await selectFounderEvidenceQuestion(mine))!;
       const theirsQuestion = (await selectFounderEvidenceQuestion(theirs))!;
 
@@ -331,7 +343,7 @@ describe('progressive founder evidence elicitation', () => {
 
     it('refuses a founder identity the database cannot verify', async () => {
       const product = 'fe_forged';
-      await companyFromSignal(product);
+      await companyFromReport(product);
       const question = (await selectFounderEvidenceQuestion(product))!;
       await expect(query(
         `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
@@ -364,7 +376,7 @@ describe('progressive founder evidence elicitation', () => {
     // silently dropped is a silently granted one waiting to happen, so the
     // database refuses the whole assertion rather than storing part of it.
     const product = 'fe_smuggle';
-    await companyFromSignal(product);
+    await companyFromReport(product);
     const question = (await selectFounderEvidenceQuestion(product))!;
     const base = {
       request_id: question.requestId, predicate: question.fact,

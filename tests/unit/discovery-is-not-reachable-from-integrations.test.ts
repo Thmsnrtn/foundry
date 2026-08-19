@@ -13,10 +13,11 @@
 // writes its own rows and never reaches the dispatcher. Sixteen places insert
 // into `signal_events`; one of them goes through the dispatcher.
 //
-// The map is kept because twenty-one test files build ladder state through it
-// — which is itself the finding: a large part of the institution's suite
-// enters through a door production does not have. Sweeping 47 references while
-// deleting something is not how that gets fixed.
+// The map is kept because the institution's own suite entered through it —
+// twenty test files when this was written, which is itself the finding. That is
+// being unwound file by file under `check-ladder-fixture-door.mjs`, which may
+// only shrink; when it reaches zero the map can go. Sweeping the references
+// while deleting something is not how that gets fixed.
 //
 // So the unreachability is asserted instead. CODE EXISTS IS NOT PRODUCTION
 // REACHABLE, and the most convincing form of that mistake is a passing test on
@@ -66,6 +67,39 @@ describe('the only door into responsibility discovery', () => {
     });
     expect(emitters,
       `these now reach discovery with a SaaS event type: ${emitters.join(', ')}`)
+      .toEqual([]);
+  });
+
+  it('selects no agent either, because the agent map is keyed the same way', () => {
+    // THE SAME DEFECT ONE LAYER UP, found while moving the fixtures.
+    //
+    // `EVENT_AGENT_MAP` in the dispatcher routes ten event types to the named
+    // agents, and `dynamic-agent-reachability.test.ts` classified nine agents
+    // `production-reachable` BECAUSE that map selects them. It cannot. The map
+    // is read only by `emitSignalEvent`, whose one caller emits
+    // `founder_reported:<kind>` and `external_company_reported:<kind>` —
+    // neither of which is a key. So `relevant_agents_json` is always `[]` in
+    // production and no agent has ever been selected by an event.
+    //
+    // Those nine agents ARE reachable, by the roster route and by
+    // `agent_instances` scheduling, which load any name on demand. The
+    // conclusion survived; the reason did not, and a reachability inventory
+    // holding a false reason is exactly the thing it exists to prevent.
+    const dispatcher = readFileSync('src/services/scp/events/dispatcher.ts', 'utf8');
+    const mapBody = /EVENT_AGENT_MAP[^{]*\{([\s\S]*?)\n\};/.exec(dispatcher);
+    expect(mapBody, 'EVENT_AGENT_MAP is no longer parseable — this test is stale')
+      .not.toBeNull();
+    const routed = [...mapBody![1].matchAll(/^\s{2}([a-z_]+):/gm)].map((m) => m[1]);
+    expect(routed.length, 'expected the ten routed event types').toBe(10);
+
+    const emitters = sourceFiles().filter((f) => {
+      if (f.endsWith('scp/events/dispatcher.ts')) return false;
+      const src = strip(readFileSync(f, 'utf8'));
+      if (!/\bemitSignalEvent\s*\(/.test(src)) return false;
+      return routed.some((event) => new RegExp(`['\`"]${event}['\`"]`).test(src));
+    });
+    expect(emitters,
+      `these now emit an agent-routed event type through the dispatcher: ${emitters.join(', ')}`)
       .toEqual([]);
   });
 

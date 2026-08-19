@@ -21,6 +21,9 @@
 import { nanoid } from 'nanoid';
 
 import { query } from '../../src/db/client.js';
+import {
+  reportCompanyObligation, type ReportableObligation,
+} from '../../src/services/founder/company-report.js';
 
 const LADDER = ['unknown', 'visible', 'understood', 'shadowing', 'assisting'] as const;
 export type ReachableState = typeof LADDER[number];
@@ -71,17 +74,16 @@ export async function reportedObligation(
   productId: string,
   founderId: string,
   opts: {
-    /** One of migration 126's eight generic kinds. Defaults to the one whose
-     *  capability matches what `payment_failed` used to produce. */
-    kind?: 'recurring_work' | 'customer_commitment' | 'exception' | 'revenue_collection'
-      | 'delivery' | 'maintenance' | 'development' | 'operational_dependency';
+    /** One of migration 126's eight generic kinds. The type comes from the
+     *  production module, so a kind added or removed there is a type error
+     *  here rather than a fixture that silently stops matching. */
+    kind?: ReportableObligation;
     /** The company's own words for what must be handled. */
     what?: string;
     /** A date the COMPANY stated. Never inferred, and a past date is refused. */
     dueAt?: string;
   } = {},
 ): Promise<{ signalId: string; responsibilityId: string }> {
-  const { reportCompanyObligation } = await import('../../src/services/founder/company-report.js');
   const reported = await reportCompanyObligation({
     productId, founderId,
     obligationKind: opts.kind ?? 'revenue_collection',

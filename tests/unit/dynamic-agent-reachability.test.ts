@@ -43,23 +43,35 @@ const modules = readdirSync(AGENTS_DIR).filter((f) => f.endsWith('.ts')).map((f)
  * says so on evidence.
  */
 const CLASSIFICATION: Record<string, { status: string; why: string }> = {
-  // Selected by EVENT_AGENT_MAP in the signal dispatcher, and by the agents
-  // dashboard route. Live.
-  atlas: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for activation_failure and performance_degradation' },
-  beacon: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for competitor_signal' },
-  compass: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for revenue_milestone, competitor_signal, experiment_result' },
-  forge: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for churn_detected, expansion_signal, revenue_milestone, payment_failed' },
-  harbor: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for churn, expansion, nps_drop, activation_failure, support_spike' },
-  ledger: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for revenue_milestone and payment_failed' },
-  oracle: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for churn_detected, nps_drop, experiment_result' },
-  prism: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for nps_drop, activation_failure, support_spike' },
-  sentinel: { status: 'production-reachable', why: 'selected by EVENT_AGENT_MAP for support_spike and performance_degradation' },
-
-  // In the vocabulary and loadable on demand by the dashboard route and by
-  // agent_instances scheduling, but no event map entry selects them.
-  scribe: { status: 'production-reachable', why: 'no event selects it, but the roster route and agent_instances scheduling both load it by name' },
-  shield: { status: 'production-reachable', why: 'no event selects it, but the roster route and agent_instances scheduling both load it by name' },
-  crucible: { status: 'production-reachable', why: 'no event selects it, but the roster route and agent_instances scheduling both load it by name' },
+  // THESE NINE WERE CLASSIFIED ON A REASON THAT DOES NOT HOLD.
+  //
+  // Each said `selected by EVENT_AGENT_MAP for <event types>`. The map exists
+  // and names them, but nothing in production emits any of its ten keys through
+  // `emitSignalEvent` — the only function that reads it — whose one caller emits
+  // `founder_reported:<kind>` and `external_company_reported:<kind>`. So
+  // `relevant_agents_json` is always empty and no agent has ever been selected
+  // by an event. `discovery-is-not-reachable-from-integrations.test.ts` asserts
+  // that, derived from the map rather than listed here.
+  //
+  // The conclusion survives on OTHER evidence: the roster route's
+  // `POST /agents/:name/run` and `agent_instances` scheduling both load any
+  // vocabulary name on demand, and that is a live path a founder can take.
+  // Every one of these twelve is reachable the same way, which is why they now
+  // carry the same reason — an inventory whose entries differ only in a
+  // justification that turned out to be false was telling itself a story about
+  // an event pipeline it does not have.
+  atlas: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  beacon: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  compass: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  forge: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  harbor: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  ledger: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  oracle: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  prism: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  sentinel: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  scribe: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  shield: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  crucible: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
 
   // Not a loadable agent — the shared base class every agent extends. It is
   // reached by ordinary static import from the agents themselves.

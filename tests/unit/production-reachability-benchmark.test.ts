@@ -3,7 +3,6 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { discoverResponsibilityFromSignal } from '../../src/services/institution/discovery.js';
 import {
   deferFounderEvidenceRequest, recordFounderEvidenceAnswer, selectFounderEvidenceQuestion,
 } from '../../src/services/institution/founder-evidence.js';
@@ -11,6 +10,9 @@ import {
   earnResponsibilityUnderstanding, requiredUnderstandingFacts,
 } from '../../src/services/institution/responsibility-understanding.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
+import { getResponsibility } from '../../src/services/institution/responsibility.js';
+import type { ReportableObligation } from '../../src/services/founder/company-report.js';
+import { reportedObligation } from '../fixtures/responsibility-state.js';
 import {
   evaluateProductionReachabilityGate, scoreProductionReachability,
   type ReachabilityObservation, type ReachabilityTruth,
@@ -33,25 +35,47 @@ import {
 const OWNER = 'pr_owner';
 
 interface Fixture {
-  productId: string; name: string; signalSource: string; eventType: string; summary: string;
+  productId: string; name: string;
+  /** The kind the company names, from migration 126's closed generic set. */
+  obligationKind: ReportableObligation;
+  /** The company's OWN WORDS for what it must handle. This becomes the
+   *  responsibility's title verbatim — Foundry does not paraphrase a marina
+   *  back to itself. */
+  what: string;
   /** How the founder behaves: answers everything, or skips the first question. */
   behaviour: 'answers' | 'skips_first';
   /** Whether a later independent observation disagrees with an answer. */
   conflictAfterwards?: boolean;
 }
 
+// EACH COMPANY ENTERS THE WAY A COMPANY CAN.
+//
+// These four used to be admitted by `payment_failed`, `support_spike`,
+// `churn_detected` and `activation_failure` — the four SaaS event types
+// `discovery.ts` maps onto responsibilities, which nothing in production emits.
+// So the benchmark asking "can a normal new company enter the ladder?" answered
+// it by putting four non-software companies through a software company's door,
+// and each of them came out holding a canned SaaS title: a marina with "Resolve
+// failed customer payments".
+//
+// That is the exact shape migrations 135 and 136 spent their effort removing —
+// recognising a marina's reality only when it happens to fit a SaaS vocabulary
+// — reintroduced by the benchmark that was supposed to prove it had gone.
+//
+// Now each company says what it owes in its own words and names the kind from
+// the generic set, which is the only intake production has.
 const FIXTURES: Fixture[] = [
-  { productId: 'pr_marina', name: 'Kestrel Point Marina', signalSource: 'card_terminal',
-    eventType: 'payment_failed', summary: 'A berth-holder card payment was declined',
+  { productId: 'pr_marina', name: 'Kestrel Point Marina', obligationKind: 'revenue_collection',
+    what: 'Collect the berth fee a declined card left unpaid',
     behaviour: 'answers' },
-  { productId: 'pr_dance', name: 'Larkhill Dance School', signalSource: 'front_desk',
-    eventType: 'support_spike', summary: 'Parents waited days for a reply about term dates',
+  { productId: 'pr_dance', name: 'Larkhill Dance School', obligationKind: 'customer_commitment',
+    what: 'Reply to the parents still waiting on term dates',
     behaviour: 'skips_first' },
-  { productId: 'pr_print', name: 'Ashgrove Printing House', signalSource: 'accounts',
-    eventType: 'churn_detected', summary: 'A long-standing trade account stopped ordering',
+  { productId: 'pr_print', name: 'Ashgrove Printing House', obligationKind: 'exception',
+    what: 'Find out why a long-standing trade account stopped ordering',
     behaviour: 'answers', conflictAfterwards: true },
-  { productId: 'pr_apiary', name: 'Thornfield Apiary Supply', signalSource: 'orders',
-    eventType: 'activation_failure', summary: 'A new stockist never placed a first order',
+  { productId: 'pr_apiary', name: 'Thornfield Apiary Supply', obligationKind: 'recurring_work',
+    what: 'Follow up the new stockists who never placed a first order',
     behaviour: 'answers' },
 ];
 
@@ -100,6 +124,10 @@ async function observe(productId: string): Promise<ReachabilityObservation> {
 }
 
 const truths: ReachabilityTruth[] = [];
+/** productId → the report that created its responsibility. The invented-claim
+ *  test cites it, so the only thing wrong with that claim is that nothing in it
+ *  was observed — not that its evidence ref points at nothing. */
+const reportSignals = new Map<string, string>();
 
 beforeAll(async () => {
   await runMigrations();
@@ -108,19 +136,22 @@ beforeAll(async () => {
   // A neighbouring company with its own institutional state, so tenant
   // isolation is a real question rather than a vacuous one.
   await query("INSERT INTO products (id,name,owner_id) VALUES ('pr_neighbour','Unrelated Neighbour','pr_stranger')", []);
-  await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-    VALUES ('pr_neighbour_sig','pr_neighbour','card_terminal','payment_failed','high','{}','Neighbour evidence')`, []);
-  await discoverResponsibilityFromSignal('pr_neighbour', 'pr_neighbour_sig');
+  await reportedObligation('pr_neighbour', 'pr_stranger',
+    { kind: 'operational_dependency', what: 'Something the neighbour has to handle' });
 
   for (const fixture of FIXTURES) {
     await query('INSERT INTO products (id,name,owner_id) VALUES (?,?,?)',
       [fixture.productId, fixture.name, OWNER]);
-    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-      VALUES (?,?,?,?,'high','{}',?)`,
-    [`${fixture.productId}_sig`, fixture.productId, fixture.signalSource, fixture.eventType, fixture.summary]);
-    const responsibility = await discoverResponsibilityFromSignal(fixture.productId, `${fixture.productId}_sig`);
+    const reported = await reportedObligation(fixture.productId, OWNER,
+      { kind: fixture.obligationKind, what: fixture.what });
+    reportSignals.set(fixture.productId, reported.signalId);
+    const responsibilityId = reported.responsibilityId;
+    const responsibility = await getResponsibility(fixture.productId, responsibilityId);
     expect(responsibility, `${fixture.name}: discovery admitted nothing`).not.toBeNull();
-    const responsibilityId = responsibility!.id;
+    // THE COMPANY'S OWN WORDS SURVIVED THE INTAKE. If this ever holds a title
+    // the institution wrote, the ladder has started paraphrasing the company
+    // back to itself, which is what the generic vocabulary exists to prevent.
+    expect(responsibility!.title, `${fixture.name}: title was rewritten`).toBe(fixture.what);
     const required = requiredUnderstandingFacts(responsibility!.capability);
     const deferred: string[] = [];
 
@@ -152,14 +183,15 @@ beforeAll(async () => {
       // An independent system later disagrees with what the founder said.
       // Neither side is overwritten; the disagreement is recorded as one.
       await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-        VALUES (?,?,'accounts','churn_detected','high','{}','The account was handled by a reseller all along')`,
+        VALUES (?,?,'company_observation_baseline','company_observation_baseline:observed','low','{}',
+                'The account was handled by a reseller all along')`,
       [`${fixture.productId}_later`, fixture.productId]);
       await recordReconstructionClaim({
         productId: fixture.productId, subject: `responsibility:${responsibilityId}`, predicate: 'dependencies',
         value: { statement: 'Two sources disagree about what this depends on' }, epistemicStatus: 'conflicting',
         evidenceRefs: [
           { kind: 'signal_event', id: `${fixture.productId}_later` },
-          { kind: 'signal_event', id: `${fixture.productId}_sig` },
+          { kind: 'signal_event', id: reported.signalId },
         ],
         derivationMethod: 'independent observation disagrees with founder assertion', observedAt: new Date(),
       });
@@ -232,7 +264,7 @@ describe('executable production-reachability benchmark', () => {
       ...honest,
       claims: [...honest.claims, {
         productId: truth.productId, subject: `responsibility:${responsibilityId}`, predicate,
-        epistemicStatus: 'known', evidenceRefs: [{ kind: 'signal_event', id: `${truth.productId}_sig` }],
+        epistemicStatus: 'known', evidenceRefs: [{ kind: 'signal_event', id: reportSignals.get(truth.productId)! }],
         derivationMethod: 'inferred from the founder not answering',
       }],
     }, truth);

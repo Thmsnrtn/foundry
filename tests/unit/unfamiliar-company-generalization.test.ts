@@ -8,6 +8,8 @@ import {
   discoverCandidatesFromReconstruction, promoteResponsibilityCandidate,
 } from '../../src/services/institution/responsibility-candidate.js';
 import { discoverResponsibilityFromSignal } from '../../src/services/institution/discovery.js';
+import { getResponsibility } from '../../src/services/institution/responsibility.js';
+import { reportedObligation } from '../fixtures/responsibility-state.js';
 import {
   evaluateE3ResponsibilityRecognitionGate, scoreResponsibilityRecognition,
   type RecognitionActual, type RecognitionTruth,
@@ -179,23 +181,38 @@ describe('unfamiliar-company generalization', () => {
   });
 
   it('states the boundary of that generalization instead of implying there is none', async () => {
-    // The reason abstention is total here is that production discovery's
-    // admitted vocabulary is four SaaS-shaped signal kinds. That is an honest
-    // bound, not a bug — but it must not widen silently, and it must not be
-    // mistaken for "Foundry recognises responsibilities in any company".
+    // WHAT THE ABSTENTION ABOVE IS AND IS NOT ABOUT.
+    //
+    // This test used to say the bound was discovery's four SaaS-shaped signal
+    // kinds, and demonstrated it by feeding the vet practice a declined-card
+    // event so it would be recognised as billing recovery. That framing has
+    // been wrong since migration 126, and it flattered the system twice over:
+    // it presented the SaaS map as the way in, when nothing in production emits
+    // any of those four kinds, and it implied a veterinary practice must
+    // disguise itself as a software company to be recognised at all.
+    //
+    // The real bound is narrower and more honest. Recognition does not key on
+    // domain and never did — it keys on the company STATING the kind of
+    // obligation, from a closed generic set that names no industry. The corpus
+    // above abstains because free-form company evidence is not a statement of
+    // obligation, not because a vet practice is unfamiliar.
     const familiar = 'ug_familiar_shape';
     await query('INSERT INTO products (id,name,owner_id) VALUES (?,?,?)',
       [familiar, 'Rowan Veterinary Practice (billing)', OWNER]);
-    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-      VALUES ('ug_sig_familiar',?,'card_terminal','payment_failed','high','{}','A client card payment failed')`, [familiar]);
 
-    // The same unfamiliar company IS recognised the moment its evidence takes
-    // an admitted shape — so the abstention above is about the evidence
-    // contract, not about the domain.
-    const discovered = await discoverResponsibilityFromSignal(familiar, 'ug_sig_familiar');
+    // The same unfamiliar company IS recognised the moment it says what it
+    // owes — in its own words, through the intake production actually has.
+    const reported = await reportedObligation(familiar, OWNER,
+      { kind: 'revenue_collection', what: 'Collect the fees the practice is still owed' });
+    const discovered = await getResponsibility(familiar, reported.responsibilityId);
     expect(discovered).toMatchObject({ state: 'visible', capability: 'billing_recovery' });
     expect(discovered).toMatchObject({ authorityRef: null });
+    // Its own words, not a title the institution wrote for it.
+    expect(discovered!.title).toBe('Collect the fees the practice is still owed');
 
+    // The dead SaaS map is still pinned to its exact contents. It cannot widen
+    // silently while it exists, and `discovery-is-not-reachable-from-
+    // integrations.test.ts` holds the separate fact that nothing reaches it.
     const contract = (await import('node:fs')).readFileSync(
       new URL('../../src/services/institution/discovery.ts', import.meta.url), 'utf8');
     const admitted = [...contract.matchAll(/^ {2}([a-z_]+): \{ title:/gm)].map((m) => m[1]);

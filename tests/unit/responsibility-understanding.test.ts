@@ -17,8 +17,8 @@ beforeAll(async()=>{
   await query("INSERT INTO founders (id,clerk_user_id,email) VALUES ('under_owner','under_clerk','under@example.com'),('under_foreign_owner','under_foreign_clerk','foreign@example.com')",[]);
   await query("INSERT INTO products (id,name,owner_id) VALUES ('under_product','Support Company','under_owner'),('under_foreign','Foreign','under_foreign_owner')",[]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    ('under_signal','under_product','support','support_spike','high','{}','Support demand exceeds capacity'),
-    ('under_foreign_signal','under_foreign','support','support_spike','high','{}','Foreign')`,[]);
+    ('under_signal','under_product','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Support demand exceeds capacity'),
+    ('under_foreign_signal','under_foreign','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Foreign')`,[]);
   await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state)
     VALUES ('under_resp','under_product','Restore support response capacity','customer_support','visible')`,[]);
 });
