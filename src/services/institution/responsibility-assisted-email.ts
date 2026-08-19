@@ -192,9 +192,22 @@ export async function reconcileAssistedSupportEmail(productId:string,actionId:st
  * closer to the person being told. What changes is that the sentence names
  * WHO said it and how many said it, so "the owner told me" and "three
  * independent systems told me" stop reading identically.
+ *
+ * AND IT NAMES WHAT WAS AUTHORISED. Two capabilities reach this same governed
+ * boundary — a reply to a customer who wrote in, and a notice the founder wrote
+ * to somebody who did not — and every row here described itself as a "bounded
+ * support reply". A dance school that told a teacher their Saturday class needs
+ * cover read back that Foundry was authorised to help with a support reply, to
+ * a customer who does not exist, about a message nobody sent.
+ *
+ * This is the only surface where a planned notice is still visible: "Written,
+ * not sent" drops it the moment it is planned, deliberately, so nobody is
+ * invited to send the same words twice. So the recipient belongs here too —
+ * two notices under one responsibility share a title and the person is the only
+ * thing that tells them apart.
  */
 export async function getFounderAssistingActivity(productId:string):Promise<Array<{title:string;state:string;detail:string}>> {
-  const result=await query(`SELECT r.title,oa.status,oa.effect_certainty,oa.outcome_status,oa.effect_id
+  const result=await query(`SELECT r.title,oa.status,oa.effect_certainty,oa.outcome_status,oa.effect_id,oa.authority_scope
     FROM outbound_actions oa JOIN institutional_responsibilities r ON r.id=oa.responsibility_id
     WHERE oa.product_id=? AND r.product_id=? ORDER BY oa.created_at DESC LIMIT 10`,[productId,productId]);
   const rows=result.rows as unknown as Record<string,unknown>[];
@@ -212,6 +225,22 @@ export async function getFounderAssistingActivity(productId:string):Promise<Arra
     }
   }
 
+  // Who a founder-authored notice is addressed to. Two notices under one
+  // responsibility carry the same title, so the recipient is the only thing
+  // that tells them apart — and it is the fact the founder is being asked to
+  // stand behind.
+  const recipients=new Map<string,string>();
+  if (effectIds.length) {
+    const notices=await query(
+      `SELECT id,payload_json FROM signal_events
+        WHERE product_id=? AND source='founder_responsibility_notice'`,[productId]);
+    for (const raw of notices.rows as unknown as Record<string,unknown>[]) {
+      const key=String(raw.id); if (!effectIds.includes(key)) continue;
+      const payload=JSON.parse(String(raw.payload_json)) as {recipient?:string};
+      if (payload.recipient) recipients.set(key,payload.recipient);
+    }
+  }
+
   /** "the owner", "a system you connected", or a count when several agree. */
   const attribution=(effectId:string):string=>{
     const who=reporters.get(effectId)??[];
@@ -223,13 +252,24 @@ export async function getFounderAssistingActivity(productId:string):Promise<Arra
   return rows.map(row=>{
     const certainty=String(row.effect_certainty??'not_attempted'); const outcome=String(row.outcome_status??'unresolved');
     const effectId=String(row.effect_id??'');
-    const detail=outcome==='verified_success'?`${attribution(effectId)} it worked — reported, not independently confirmed`
+    // WHAT THE FOUNDER AUTHORISED, NAMED. Two capabilities reach this same
+    // boundary and only one of them is a reply to somebody who wrote in.
+    const isNotice=String(row.authority_scope??'')===RESPONSIBILITY_NOTICE_SCOPE;
+    const recipient=recipients.get(effectId);
+    const thing=isNotice
+      ?(recipient?`the note you wrote to ${recipient}`:'the note you wrote')
+      :'this bounded support reply';
+    const state=outcome==='verified_success'?`${attribution(effectId)} it worked — reported, not independently confirmed`
       :outcome==='verified_failure'?`${attribution(effectId)} it did not work`
       :outcome==='conflicting'?'reports about this disagree; I have kept both and will not pick one'
       :certainty==='provider_acknowledged'?'provider accepted it; whether it worked is still unknown'
       :certainty==='ambiguous'?'dispatch is ambiguous and needs reconciliation'
-      :String(row.status)==='approved'?'authorized to help with this bounded support reply; not yet performed'
+      :String(row.status)==='approved'?`authorized to send ${thing}; not yet performed`
       :'no consequential action was verified';
+    // A notice is told apart by its recipient in every state, not only while it
+    // is still waiting: after dispatch the founder still needs to know which
+    // note the outcome is about.
+    const detail=isNotice&&String(row.status)!=='approved'?`${thing}: ${state}`:state;
     return {title:String(row.title),state:String(row.status),detail};
   });
 }
