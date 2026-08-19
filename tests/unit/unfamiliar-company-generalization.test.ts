@@ -210,13 +210,14 @@ describe('unfamiliar-company generalization', () => {
     // Its own words, not a title the institution wrote for it.
     expect(discovered!.title).toBe('Collect the fees the practice is still owed');
 
-    // The dead SaaS map is still pinned to its exact contents. It cannot widen
-    // silently while it exists, and `discovery-is-not-reachable-from-
-    // integrations.test.ts` holds the separate fact that nothing reaches it.
+    // And there is no second contract beside it. The four SaaS event types were
+    // pinned here for as long as they existed, so they could not widen
+    // silently; they are deleted now, and their absence is what gets held.
     const contract = (await import('node:fs')).readFileSync(
       new URL('../../src/services/institution/discovery.ts', import.meta.url), 'utf8');
     const admitted = [...contract.matchAll(/^ {2}([a-z_]+): \{ title:/gm)].map((m) => m[1]);
-    expect(admitted.sort()).toEqual(
-      ['activation_failure', 'churn_detected', 'payment_failed', 'support_spike']);
+    expect(admitted,
+      'a domain-shaped responsibility contract has reappeared beside the generic one')
+      .toEqual([]);
   });
 });

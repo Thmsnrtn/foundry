@@ -2,45 +2,33 @@ import { nanoid } from 'nanoid';
 import { batch, query } from '../../db/client.js';
 import { getResponsibility, type Responsibility } from './responsibility.js';
 
-// NOTHING IN PRODUCTION CAN TRIGGER THESE FOUR.
+// THE FOUR SAAS EVENT TYPES ARE GONE.
 //
-// `emitSignalEvent` is the only function that runs discovery, and it has
-// exactly one caller: the founder-and-company report path. Three of these
-// event types appear nowhere else in the repository at all; `payment_failed`
-// appears in billing and customer-lifecycle code that writes its own rows and
-// never reaches the dispatcher. So this map has never produced a
-// responsibility in production and cannot as the system stands.
+// `discovery.ts` used to map `payment_failed`, `churn_detected`,
+// `support_spike` and `activation_failure` straight onto responsibilities.
+// Nothing in production ever emitted any of them: `emitSignalEvent` is the only
+// function that runs discovery and its one caller reports a stated obligation.
+// Read on its own, that map said Foundry notices a company's billing and support
+// problems and takes them up. It did not, and it had not since before it was
+// written.
 //
-// It is kept rather than deleted, deliberately, and the reason is worth
-// stating. Twenty-one test files construct ladder state through it — which
-// means a large part of the institution's own suite enters through a door
-// production does not have. That is a real finding about the tests, not a
-// reason to sweep 47 references in the course of a deletion; it is recorded in
-// the live frontier and `discovery-is-not-reachable-from-integrations.test.ts`
-// asserts the unreachability so the impression cannot quietly return.
+// It survived a deletion attempt because twenty test files built their ladder
+// state through it — the institution's own suite entering through a door the
+// running system does not have. Those files were moved onto the real intake
+// first, one at a time under a ratchet, because turning twenty-five tests red at
+// once is how tests get weakened under pressure rather than moved. With the
+// ratchet at zero the map had nothing left holding it up.
 //
-// These are also the SaaS shape migrations 135 and 136 spent their effort
-// removing: a ladder that recognises an obligation only when a marina's
-// reality happens to fit a software company's words. The generic vocabulary
-// below is the same semantic rule stated by the company, naming no industry,
-// and it is the one that actually runs.
-const SIGNAL_RESPONSIBILITIES: Record<string, { title: string; capability: string }> = {
-  payment_failed: { title: 'Resolve failed customer payments', capability: 'billing_recovery' },
-  churn_detected: { title: 'Respond to detected customer churn', capability: 'customer_success' },
-  support_spike: { title: 'Restore support response capacity', capability: 'customer_support' },
-  activation_failure: { title: 'Investigate customer activation failure', capability: 'customer_success' },
-};
+// What remains below is the vocabulary that actually runs, and it is the same
+// semantic rule stated without the SaaS words: evidence whose operational
+// responsibility is unambiguous, because the company said what kind it is.
 
-/** Generic operational obligations a founder can report about any company.
+/** Generic operational obligations a company can report about itself.
  *
- * The four event kinds above are SaaS-shaped by history: a marina or a dance
- * school can only be recognised through them when its reality happens to fit a
- * software company's words. These are the same semantic rule — evidence whose
- * operational responsibility is unambiguous — expressed without that
- * vocabulary. None of them names an industry, and migration 126 holds the same
- * closed set, so a sector-specific kind cannot be introduced at runtime.
+ * None of them names an industry, and migration 126 holds the same closed set,
+ * so a sector-specific kind cannot be introduced at runtime.
  *
- * The title is the founder's own description of what must be handled. Foundry
+ * The title is the company's own description of what must be handled. Foundry
  * does not paraphrase the company back to itself. */
 const OBLIGATION_CAPABILITIES: Record<string, string> = {
   recurring_work: 'operations',
@@ -64,36 +52,36 @@ export async function discoverResponsibilityFromSignal(
   );
   if (!evidence.rows.length) return null;
   const row = evidence.rows[0] as Record<string, unknown>;
-  let contract = SIGNAL_RESPONSIBILITIES[String(row.event_type)];
-  let due: { at: string; statedBy: string } | null = null;
+
   // A person said it, or one of the company's own systems did. Both state the
   // kind explicitly from the same closed set, and both are refused by the
   // database if they do not. What differs is provenance, which is preserved in
   // the evidence rather than flattened here — a rota system noticing a class
   // has no teacher is not the founder saying so, and the record says which.
-  if (!contract && ['founder_report', 'external_company_report'].includes(String(row.source))) {
-    // The founder stated, explicitly and from a closed set, what kind of
-    // obligation this is. Nothing is inferred from prose: an unrecognised kind
-    // is refused by migration 126 before it reaches here, and a report without
-    // one never becomes a responsibility.
-    try {
-      const payload = JSON.parse(String(row.payload_json)) as {
-        obligation_kind?: unknown; what?: unknown; due_at?: unknown; due_stated_by?: unknown;
-      };
-      const capability = typeof payload.obligation_kind === 'string'
-        ? OBLIGATION_CAPABILITIES[payload.obligation_kind] : undefined;
-      if (capability && typeof payload.what === 'string' && payload.what.trim()) {
-        contract = { title: payload.what.trim(), capability };
-        // A DATE THE COMPANY STATED, carried from the same evidence that
-        // created the responsibility. Both fields or neither — the database
-        // refuses a date with no author, so reading them separately here would
-        // only move the failure later.
-        if (typeof payload.due_at === 'string' && typeof payload.due_stated_by === 'string') {
-          due = { at: payload.due_at, statedBy: payload.due_stated_by };
-        }
+  if (!['founder_report', 'external_company_report'].includes(String(row.source))) return null;
+
+  // Nothing is inferred from prose: an unrecognised kind is refused by
+  // migration 126 before it reaches here, and a report without one never
+  // becomes a responsibility.
+  let contract: { title: string; capability: string } | undefined;
+  let due: { at: string; statedBy: string } | null = null;
+  try {
+    const payload = JSON.parse(String(row.payload_json)) as {
+      obligation_kind?: unknown; what?: unknown; due_at?: unknown; due_stated_by?: unknown;
+    };
+    const capability = typeof payload.obligation_kind === 'string'
+      ? OBLIGATION_CAPABILITIES[payload.obligation_kind] : undefined;
+    if (capability && typeof payload.what === 'string' && payload.what.trim()) {
+      contract = { title: payload.what.trim(), capability };
+      // A DATE THE COMPANY STATED, carried from the same evidence that
+      // created the responsibility. Both fields or neither — the database
+      // refuses a date with no author, so reading them separately here would
+      // only move the failure later.
+      if (typeof payload.due_at === 'string' && typeof payload.due_stated_by === 'string') {
+        due = { at: payload.due_at, statedBy: payload.due_stated_by };
       }
-    } catch { return null; }
-  }
+    }
+  } catch { return null; }
   if (!contract) return null;
   const evidenceRef = `signal_event:${signalEventId}`;
   const existing = await query(

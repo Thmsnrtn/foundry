@@ -25,13 +25,33 @@ beforeEach(async () => {
 });
 
 describe('company evidence responsibility discovery', () => {
-  it('turns a real payment-failure intake into one Visible evidence-linked responsibility', async () => {
-    const signalId = await emitSignalEvent('p1', { source:'stripe', event_type:'payment_failed', severity:'medium', payload:{ invoice:'in_1' }, summary:'Invoice in_1 failed' });
+  it('turns a reported obligation into one Visible evidence-linked responsibility', async () => {
+    // This used to emit `stripe`/`payment_failed`, one of four SaaS event types
+    // discovery mapped onto responsibilities and nothing in production ever
+    // emitted. That map is deleted; the company stating its own obligation is
+    // the whole of the intake now.
+    const signalId = await emitSignalEvent('p1', { source:'founder_report',
+      event_type:'founder_reported:revenue_collection', severity:'medium',
+      payload:{ obligation_kind:'revenue_collection', what:'Collect the invoice that went unpaid', founder_id:'rd_owner' },
+      summary:'Invoice in_1 failed' });
     const rows = await query('SELECT * FROM institutional_responsibilities WHERE product_id=?',['p1']);
     expect(rows.rows).toHaveLength(1);
-    expect(rows.rows[0]).toMatchObject({ state:'visible', capability:'billing_recovery', discovery_evidence_ref:`signal_event:${signalId}` });
+    expect(rows.rows[0]).toMatchObject({ state:'visible', capability:'billing_recovery',
+      title:'Collect the invoice that went unpaid', discovery_evidence_ref:`signal_event:${signalId}` });
     const history = await query('SELECT evidence_ref,actor_ref FROM responsibility_transitions');
     expect(history.rows[0]).toMatchObject({ evidence_ref:`signal_event:${signalId}`, actor_ref:`intake:signal_event:${signalId}` });
+  });
+
+  it('records the evidence and abstains when a SaaS-shaped event arrives', async () => {
+    // The deleted map's four event types are now ordinary unadmitted evidence.
+    // If one ever produces a responsibility again, something re-introduced a
+    // door production does not have.
+    for (const eventType of ['payment_failed','churn_detected','support_spike','activation_failure']) {
+      await emitSignalEvent('p1', { source:'stripe', event_type:eventType, severity:'medium',
+        payload:{}, summary:`A ${eventType} arrived` });
+    }
+    expect((await query('SELECT id FROM signal_events WHERE product_id=?',['p1'])).rows).toHaveLength(4);
+    expect((await query('SELECT id FROM institutional_responsibilities WHERE product_id=?',['p1'])).rows).toHaveLength(0);
   });
 
   it('preserves unsupported evidence without manufacturing a responsibility', async () => {
@@ -41,13 +61,19 @@ describe('company evidence responsibility discovery', () => {
   });
 
   it('is idempotent under repeated and concurrent discovery', async () => {
-    const signalId = await emitSignalEvent('p1', { source:'support', event_type:'support_spike', severity:'medium', payload:{}, summary:'Support volume spiked' });
+    const signalId = await emitSignalEvent('p1', { source:'founder_report',
+      event_type:'founder_reported:customer_commitment', severity:'medium',
+      payload:{ obligation_kind:'customer_commitment', what:'Answer the people who are waiting', founder_id:'rd_owner' },
+      summary:'Support volume spiked' });
     await Promise.all([discoverResponsibilityFromSignal('p1',signalId), discoverResponsibilityFromSignal('p1',signalId)]);
     expect((await query('SELECT id FROM institutional_responsibilities WHERE discovery_evidence_ref=?',[`signal_event:${signalId}`])).rows).toHaveLength(1);
   });
 
   it('cannot discover from another product signal even when its id is known', async () => {
-    const signalId = await emitSignalEvent('p2', { source:'stripe', event_type:'payment_failed', severity:'medium', payload:{}, summary:'Other tenant failure' });
+    const signalId = await emitSignalEvent('p2', { source:'founder_report',
+      event_type:'founder_reported:revenue_collection', severity:'medium',
+      payload:{ obligation_kind:'revenue_collection', what:'Collect what the other company is owed', founder_id:'rd_owner' },
+      summary:'Other tenant failure' });
     await expect(discoverResponsibilityFromSignal('p1',signalId)).resolves.toBeNull();
     expect((await query('SELECT id FROM institutional_responsibilities WHERE product_id=?',['p1'])).rows).toHaveLength(0);
   });

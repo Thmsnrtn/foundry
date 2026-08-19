@@ -35,11 +35,10 @@ export type ReachableState = typeof LADDER[number];
  *  form to the claim is what produces a bare "malformed JSON" from SQLite.
  *
  *  The source/event pair is one production actually writes
- *  (`company-observation.ts`). It used to be `stripe`/`payment_failed`, which is
- *  a pair NOTHING in this system emits — see `check-ladder-fixture-door.mjs`.
- *  Nothing here depended on the SaaS words; the evidence only has to be
- *  evidence, and evidence the running system could have produced is strictly
- *  better than evidence it could not. */
+ *  (`company-observation.ts`). It used to be a pair nothing in this system emits.
+ *  Nothing here depended on those words; the evidence only has to be evidence,
+ *  and evidence the running system could have produced is strictly better than
+ *  evidence it could not. */
 export async function recordSignal(productId: string, summary = 'Observed'): Promise<string> {
   const id = nanoid();
   await query(
@@ -51,14 +50,14 @@ export async function recordSignal(productId: string, summary = 'Observed'): Pro
 }
 
 /**
- * THE DOOR THE LADDER ACTUALLY HAS.
+ * THE DOOR THE LADDER ACTUALLY HAS — AND NOW THE ONLY ONE.
  *
- * Most of this suite created its first responsibility by emitting a
- * `payment_failed` or `support_spike` signal, because `discovery.ts` maps four
- * such SaaS event types onto responsibilities. Nothing in production emits any
- * of them; three appear nowhere else in the repository at all. So the fixtures
+ * Most of this suite created its first responsibility by emitting a SaaS-shaped
+ * signal, because `discovery.ts` mapped four such event types onto
+ * responsibilities. Nothing in production emitted any of them, so the fixtures
  * were entering the ladder through a door the running system does not have, and
  * everything they went on to assert rested on a state production cannot reach.
+ * Every one of them was moved here and the map was deleted.
  *
  * This goes through the one intake that exists: the company says what it owes,
  * naming the kind from a closed generic vocabulary, and `reportCompanyObligation`

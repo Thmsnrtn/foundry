@@ -157,13 +157,22 @@ describe('founder-reported company obligations', () => {
     }
   });
 
-  it('still admits the original four signal kinds unchanged', async () => {
-    // Generalising the intake must not quietly change what integration
-    // evidence means. The historical contract is untouched.
+  it('is the whole of the intake, with no SaaS map beside it', async () => {
+    // This used to assert the opposite: that generalising the intake left the
+    // original four signal kinds admitted and unchanged. They were unchanged
+    // and they were also unreachable — `emitSignalEvent` is the only function
+    // that runs discovery, and its one caller is this path. Every fixture that
+    // depended on that map was moved onto this one and the map was deleted, so
+    // what is asserted now is its absence.
     const discovery = readFileSync(
       resolve(process.cwd(), 'src/services/institution/discovery.ts'), 'utf8');
     const admitted = [...discovery.matchAll(/^ {2}([a-z_]+): \{ title:/gm)].map((m) => m[1]);
-    expect(admitted.sort()).toEqual(
-      ['activation_failure', 'churn_detected', 'payment_failed', 'support_spike']);
+    expect(admitted, 'a second responsibility contract has reappeared').toEqual([]);
+
+    // And the generic set is exactly migration 126's, in code as well as in
+    // the trigger. A kind in one and not the other is a report the database
+    // accepts and discovery silently drops, or the reverse.
+    const generic = [...discovery.matchAll(/^ {2}([a-z_]+): '[a-z_]+',$/gm)].map((m) => m[1]);
+    expect(generic.sort()).toEqual([...REPORTABLE_OBLIGATIONS].sort());
   });
 });
