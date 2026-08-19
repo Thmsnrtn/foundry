@@ -336,6 +336,25 @@ found, this list loses.
     It is total now, falling back to the documented thirty days rather than an
     invented number.
 
+20. **A founder whose payment lapsed read a letter that looked like a working
+    one.** ~~Open.~~ **Closed.** The entitlement sweep writes
+    `entitlement_paused_at`, mails the founder once, and after that the daily
+    surface said nothing — while every section carried on offering permissions
+    to grant and questions to answer, all of it refused at execution time by
+    `operatingProduct`. The one-off mail is not the answer for somebody who
+    missed it or whose card failed while they were away.
+
+    The letter names it now, using `companyMayBeChanged`'s existing axes so a
+    pause the founder chose is never reported as a payment that failed. It
+    overrides the first-run welcome, which would otherwise have told a company
+    running for months that it was on day one.
+
+    Same shape as 19, and worth noticing as a pattern: the institution knew
+    three large facts about a company — being deleted, having stopped, and how
+    it had done — and said none of them on the page the founder opens. The
+    question to keep asking is not "is this computed" but "where does a person
+    read it".
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.

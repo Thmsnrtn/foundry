@@ -687,6 +687,20 @@ letterRoutes.get('/letter', async (c) => {
   // No `.catch()`: `pendingDeletion` is total by construction, and swallowing
   // here is what hid a RangeError it used to throw on a malformed record.
   const deletion = await pendingDeletion(ctx.productId);
+
+  // HAS FOUNDRY STOPPED? A founder whose card failed saw a letter that looked
+  // exactly like a working one. The entitlement sweep writes
+  // `entitlement_paused_at`, mails them once, and nothing on the daily surface
+  // ever says the institution is no longer acting — while every section carries
+  // on offering things that will be refused.
+  //
+  // `companyMayBeChanged` already names the axis, and its four are exactly the
+  // four a founder needs told apart: a lapsed subscription, a pause they chose,
+  // an archived record, and a scheduled erasure. The erasure has its own card
+  // below, so this covers the other three.
+  const { companyMayBeChanged } = await import('../../api/middleware/entitlement.js');
+  const operating = await companyMayBeChanged(ctx.productId);
+  const stopped = operating.allowed || operating.axis === 'erasure' ? null : operating;
   const { getJudgmentRecord, getMaterialJudgments } = await import('../../services/institution/institutional-judgment-disposition.js');
   const materialJudgments = await getMaterialJudgments(ctx.productId);
   // How Foundry's judgments about this company have held up. Read back from the
@@ -768,6 +782,18 @@ letterRoutes.get('/letter', async (c) => {
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — from your team.</p>
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}`}
 
+    ${stopped ? html`
+    <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid #ffb347;">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.4rem;">I have stopped</div>
+      <div style="font-size:0.95rem;color:var(--text-primary);">${stopped.axis === 'entitlement'
+    ? html`I am not doing anything for ${ctx.productName} at the moment — the subscription is not active.`
+    : stopped.axis === 'paused'
+      ? html`I am not doing anything for ${ctx.productName} at the moment — you paused it.`
+      : html`I am not doing anything for ${ctx.productName} at the moment — its record is archived.`}</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">Nothing is lost. Everything below is what I know; I am simply not acting on it.</div>
+      ${stopped.axis === 'archived' ? '' : html`
+      <a href="/settings" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">${stopped.axis === 'entitlement' ? 'Fix the subscription' : 'Start me again'}</a>`}
+    </div>` : ''}
     ${deletion ? html`
     <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--danger, #ff6b6b);">
       <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--danger, #ff6b6b);margin-bottom:0.4rem;">This company is being deleted</div>
@@ -776,7 +802,8 @@ letterRoutes.get('/letter', async (c) => {
       <a href="/privacy" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">Stop the deletion</a>
     </div>` : ''}
     ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
-      && supportChannels.length === 0 && !hasDevelopmentActivity && !fleetHasItems ? html`
+      && supportChannels.length === 0 && !hasDevelopmentActivity && !fleetHasItems
+      && !stopped && !deletion ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
         <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
         <div style="font-size:0.88rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.55;">
