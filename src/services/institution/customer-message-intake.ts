@@ -228,8 +228,21 @@ async function findMessage(
   };
 }
 
-/** Messages attributed to a responsibility, newest first. Attribution is the
- * channel binding — never an interpretation of what the message says. */
+/**
+ * Messages attributed to a responsibility, newest first. Attribution is the
+ * channel binding — never an interpretation of what the message says.
+ *
+ * NO PRODUCTION CALLER, DELIBERATELY. This is the read-back side of intake and
+ * exists so a test can see what ingestion stored, including for a
+ * responsibility that has not yet reached Shadowing. The founder-facing reader
+ * is `getMessagesAwaitingReply` in `support-reply.ts`, which shows only what
+ * can actually be acted on.
+ *
+ * Do not prove anything ABOUT the founder's surface through this function. The
+ * support pilot readiness suite once marked `tenant_isolation` by calling this
+ * with a foreign product id, and stayed green with the founder-facing query
+ * returning every other tenant's messages.
+ */
 export async function getMessagesForResponsibility(
   productId: string, responsibilityId: string, limit = 20,
 ): Promise<InboundMessage[]> {

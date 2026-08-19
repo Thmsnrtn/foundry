@@ -21,7 +21,7 @@ import {
   getMessagesForResponsibility, ingestCustomerMessage, registerSupportChannel,
 } from '../../src/services/institution/customer-message-intake.js';
 import {
-  getSupportReplyState, planProposedReply, proposeSupportReply,
+  getMessagesAwaitingReply, getSupportReplyState, planProposedReply, proposeSupportReply,
 } from '../../src/services/institution/support-reply.js';
 import { executeAssistedSupportEmail } from '../../src/services/institution/responsibility-assisted-email.js';
 import {
@@ -261,8 +261,17 @@ describe('support pilot readiness', () => {
       countOf('SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=?', [OTHER]),
       countOf('SELECT COUNT(*) n FROM institutional_responsibilities WHERE product_id=?', [OTHER]),
     ]);
-    const stranger = await getMessagesForResponsibility(OTHER, responsibilityId);
-    mark('tenant_isolation', foreign.every((n) => n === 0) && stranger.length === 0);
+    // Through the reader a founder's surface actually calls. This mark used to
+    // be proved with `getMessagesForResponsibility`, which no production
+    // surface calls: the readiness suite stayed green with the founder-facing
+    // query returning every OTHER tenant's messages. A readiness criterion
+    // proved on a path production never runs is not evidence of readiness.
+    const stranger = await getMessagesAwaitingReply(OTHER);
+    const own = await getMessagesAwaitingReply(P);
+    mark('tenant_isolation',
+      foreign.every((n) => n === 0) && stranger.length === 0 && own.length > 0);
+    expect(stranger).toEqual([]);
+    expect(own.length).toBeGreaterThan(0);
 
     // Customer content is real personal data. It must not become convenient
     // diagnostic text: no log or error call in the intake path may carry the
