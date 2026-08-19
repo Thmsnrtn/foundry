@@ -2,44 +2,75 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { executeRaw, query } from '../../src/db/client.js';
-import { splitSqlStatements } from '../../src/db/migrate.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { createResponsibility, setResponsibilityDisposition, transitionResponsibility, type ResponsibilityState } from '../../src/services/institution/responsibility.js';
 import { getSevenDayResponsibilitySummary } from '../../src/services/institution/absence-summary.js';
 
 
-// Minimal stand-ins for the canonical ledgers this view reads. They exist so
-// the seven-day view can be driven through states the real triggers forbid —
-// Operating is frozen by migration 115, and the demotion case below needs it.
+// THE REAL SCHEMA, with one trigger explicitly suspended.
 //
-// They must carry every column the view actually reads, or the view fails here
-// for a reason that has nothing to do with what is being tested. Columns from
-// migrations 112 (responsibility-bound authority) and 114 (assisted execution)
-// are included for exactly that reason.
+// This fabricated `products`, `signal_events`, `autonomy_consents`,
+// `outbound_actions` and `action_executions` by hand, then applied migrations
+// 102–104 on top. The stated reason was sound — the seven-day view has to be
+// driven through Operating, which migration 115 freezes — but the method paid
+// for it with a schema that drifts. When migration 166 gave a responsibility a
+// due date, this file could not see the column and sixteen tests failed for a
+// reason that had nothing to do with what they test.
+//
+// So the schema is real and the ONE obstacle is named and removed. Suspending
+// a single trigger states exactly what is being set aside; rebuilding five
+// tables states nothing and hides the rest.
 async function setupCanonicalLedgers() {
-  await query('CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT, owner_id TEXT NOT NULL)');
-  await query('CREATE TABLE IF NOT EXISTS signal_events (id TEXT PRIMARY KEY, product_id TEXT NOT NULL)');
-  await query(`CREATE TABLE IF NOT EXISTS autonomy_consents (id TEXT PRIMARY KEY, founder_id TEXT,
-    product_id TEXT NOT NULL, capability TEXT NOT NULL, from_mode TEXT, to_mode TEXT NOT NULL,
-    disclosure_version TEXT, accepted_at DATETIME DEFAULT CURRENT_TIMESTAMP, revoked_at TEXT,
-    responsibility_id TEXT, allowed_scope_json TEXT, consequence_boundary TEXT, expires_at TEXT)`);
-  await query(`CREATE TABLE IF NOT EXISTS outbound_actions (id TEXT PRIMARY KEY, product_id TEXT NOT NULL,
-    responsibility_id TEXT, status TEXT NOT NULL, outcome_status TEXT,
-    executed_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
-  await query('CREATE TABLE IF NOT EXISTS action_executions (id TEXT PRIMARY KEY, product_id TEXT NOT NULL, action_type TEXT, integration TEXT, payload_json TEXT, status TEXT, verify_status TEXT)');
-  await query("INSERT OR IGNORE INTO products (id,name,owner_id) VALUES ('p1','P1','f1'),('p2','P2','f2')");
-  await query("INSERT OR IGNORE INTO signal_events (id,product_id) VALUES ('sig1','p1'),('sig_other','p2')");
+  await runMigrations();
+  // TWO LADDER-EARNING GUARDS, NAMED AND SUSPENDED FOR THIS FILE ONLY.
+  //
+  //   responsibility_operating_promotion_freeze — migration 115 freezes
+  //     promotion to Operating because it has not been earned. The demotion
+  //     case below has to start there.
+  //   responsibility_assisting_entry_guard — requires a real shadow-comparison
+  //     evidence chain before Assisting. This file tests what the SEVEN-DAY
+  //     VIEW says about a responsibility in a state, not how the state was
+  //     reached; the ladder's own tests prove the entry conditions.
+  //
+  // Everything else stays: tenancy, provenance, disposition and reference
+  // guards all still apply, so a fixture that fabricates evidence still fails.
+  // Suspending two named triggers says exactly what is set aside. Rebuilding
+  // five tables, which is what this did before, said nothing and hid the rest.
+  await query('DROP TRIGGER IF EXISTS responsibility_operating_promotion_freeze');
+  await query('DROP TRIGGER IF EXISTS responsibility_assisting_entry_guard');
+  //   responsibility_authority_guard — same reason, on the grant side: it
+  //     requires the shadow-comparison chain before a responsibility-bound
+  //     permission exists. The revocation guard stays, because this file tests
+  //     what a WITHDRAWN permission looks like and that must remain real.
+  await query('DROP TRIGGER IF EXISTS responsibility_authority_guard');
+  //   assisted_action_plan_guard — requires a planned action to bind to a live
+  //     grant with matching scope. This file inserts `outbound_actions` purely
+  //     as the "an effect went out and nobody has reported on it" input to the
+  //     view; how such an action becomes legitimate is proven where it is
+  //     enforced, in the assisted-execution tests.
+  await query('DROP TRIGGER IF EXISTS assisted_action_plan_guard');
+  await query(`INSERT OR IGNORE INTO founders (id,clerk_user_id,email)
+    VALUES ('f1','clerk_as1','as1@test.local'),('f2','clerk_as2','as2@test.local')`);
+  await query("INSERT OR IGNORE INTO products (id,name,owner_id,status) VALUES ('p1','P1','f1','active'),('p2','P2','f2','active')");
+  await query(`INSERT OR IGNORE INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+    VALUES ('sig1','p1','external_observation','company_observation','medium','{}','s'),
+           ('sig_other','p2','external_observation','company_observation','medium','{}','s')`);
   await query("INSERT OR IGNORE INTO autonomy_consents (id,founder_id,product_id,capability,from_mode,to_mode,disclosure_version) VALUES ('cons1','f1','p1','general','suggest','act','v1'),('cons_other','f2','p2','general','suggest','act','v1')");
   await query("INSERT OR IGNORE INTO action_executions (id,product_id,action_type,integration,payload_json,status,verify_status) VALUES ('out1','p1','test','test','{}','completed','passed'),('out_other','p2','test','test','{}','completed','passed'),('out_unverified','p1','test','test','{}','completed','pending')");
 }
 
 beforeAll(async () => {
   await setupCanonicalLedgers();
-  for (const file of ['102_responsibility_transfer.sql','103_responsibility_disposition.sql','104_responsibility_reference_provenance.sql'])
-    for (const sql of splitSqlStatements(readFileSync(resolve(__dirname, `../../src/db/migrations/${file}`), 'utf8'))) await query(sql);
 });
 beforeEach(async () => {
-  await executeRaw('DELETE FROM responsibility_dispositions;\nDELETE FROM responsibility_transitions;\nDELETE FROM institutional_responsibilities;\n'
-    + 'DELETE FROM autonomy_consents WHERE responsibility_id IS NOT NULL;\nDELETE FROM outbound_actions;');
+  // CHILDREN BEFORE PARENTS. The fabricated schema had no foreign keys, so
+  // this order never mattered; the real one does — `autonomy_consents` and
+  // `outbound_actions` both reference `institutional_responsibilities`, and
+  // deleting the responsibilities first raises.
+  await executeRaw('DELETE FROM outbound_actions;\n'
+    + 'DELETE FROM autonomy_consents WHERE responsibility_id IS NOT NULL;\n'
+    + 'DELETE FROM responsibility_dispositions;\nDELETE FROM responsibility_transitions;\n'
+    + 'DELETE FROM institutional_responsibilities;');
 });
 
 /** A responsibility-bound grant, as migration 112 shapes them. */
@@ -172,8 +203,8 @@ describe('seven-day responsibility summary', () => {
     // problem being solved, and a week of silence is not success.
     const r = await advance('Close books', 'mature');
     await query(
-      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status)
-       VALUES ('act_pending','p1',?, 'executed', NULL)`, [r.id]);
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,agent_name,integration_name,action_type,rationale)
+       VALUES ('act_pending','p1',?, 'executed', NULL, 'atlas','resend','send_email','fixture')`, [r.id]);
 
     const summary = await getSevenDayResponsibilitySummary('p1');
     expect(summary.HANDLED).toEqual([]);
@@ -183,8 +214,8 @@ describe('seven-day responsibility summary', () => {
   it('reports HANDLED once the outcome is independently established', async () => {
     const r = await advance('Close books', 'mature');
     await query(
-      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status)
-       VALUES ('act_resolved','p1',?, 'executed', 'resolved')`, [r.id]);
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,agent_name,integration_name,action_type,rationale)
+       VALUES ('act_resolved','p1',?, 'executed', 'resolved', 'atlas','resend','send_email','fixture')`, [r.id]);
 
     const summary = await getSevenDayResponsibilitySummary('p1');
     expect(summary.HANDLED).toMatchObject([{ responsibilityId: r.id }]);
@@ -197,8 +228,8 @@ describe('seven-day responsibility summary', () => {
     const r = await advance('Close books', 'mature');
     await query("UPDATE responsibility_transitions SET created_at=datetime('now','-8 days') WHERE responsibility_id=?", [r.id]);
     await query(
-      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status)
-       VALUES ('act_old','p1',?, 'executed', NULL)`, [r.id]);
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,agent_name,integration_name,action_type,rationale)
+       VALUES ('act_old','p1',?, 'executed', NULL, 'atlas','resend','send_email','fixture')`, [r.id]);
 
     const summary = await getSevenDayResponsibilitySummary('p1');
     expect(summary.HANDLED).toEqual([]);
@@ -215,8 +246,8 @@ describe('seven-day responsibility summary', () => {
     const r = await advance('Find cover for Saturday', 'assisting');
     await grant(r.id, { expiresInDays: 30 });
     await query(
-      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at)
-       VALUES ('act_ok','p1',?, 'executed','verified_success',datetime('now'))`, [r.id]);
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at,agent_name,integration_name,action_type,rationale)
+       VALUES ('act_ok','p1',?, 'executed','verified_success',datetime('now'), 'atlas','resend','send_email','fixture')`, [r.id]);
 
     const summary = await getSevenDayResponsibilitySummary('p1');
     expect(summary.HANDLED).toMatchObject([{ responsibilityId: r.id, state: 'assisting' }]);
@@ -229,8 +260,8 @@ describe('seven-day responsibility summary', () => {
     const dispatched = await advance('Chase the parts order', 'assisting');
     await grant(dispatched.id, { expiresInDays: 30 });
     await query(
-      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at)
-       VALUES ('act_pending','p1',?, 'executed',NULL,datetime('now'))`, [dispatched.id]);
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at,agent_name,integration_name,action_type,rationale)
+       VALUES ('act_pending','p1',?, 'executed',NULL,datetime('now'), 'atlas','resend','send_email','fixture')`, [dispatched.id]);
     let summary = await getSevenDayResponsibilitySummary('p1');
     expect(summary.HANDLED).toEqual([]);
     expect(summary.NEEDS_YOU).toMatchObject([{ needsYouBecause: 'outcome_unresolved' }]);
@@ -246,8 +277,8 @@ describe('seven-day responsibility summary', () => {
     await grant(r.id, { expiresInDays: 30 });
     await query("UPDATE responsibility_transitions SET created_at=datetime('now','-8 days') WHERE responsibility_id=?", [r.id]);
     await query(
-      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at)
-       VALUES ('act_old_ok','p1',?, 'executed','verified_success',datetime('now','-9 days'))`, [r.id]);
+      `INSERT INTO outbound_actions (id,product_id,responsibility_id,status,outcome_status,executed_at,agent_name,integration_name,action_type,rationale)
+       VALUES ('act_old_ok','p1',?, 'executed','verified_success',datetime('now','-9 days'), 'atlas','resend','send_email','fixture')`, [r.id]);
     const summary = await getSevenDayResponsibilitySummary('p1');
     expect(summary.HANDLED).toEqual([]);
   });

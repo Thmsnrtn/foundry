@@ -11,15 +11,6 @@
 # exercise a frozen state without disabling the guard that freezes it, which is
 # a design question rather than a fixture question. Recorded rather than
 # quietly converted.
-tests/unit/absence-summary.test.ts:19 → products
-tests/unit/absence-summary.test.ts:20 → signal_events
-tests/unit/absence-summary.test.ts:21 → autonomy_consents
-tests/unit/absence-summary.test.ts:25 → outbound_actions
-tests/unit/absence-summary.test.ts:28 → action_executions
-tests/unit/responsibility-discovery.test.ts:10 → products
-tests/unit/responsibility-discovery.test.ts:11 → signal_events
-tests/unit/responsibility-discovery.test.ts:12 → autonomy_consents
-tests/unit/responsibility-discovery.test.ts:13 → action_executions
 tests/unit/responsibility-transfer.test.ts:10 → products
 tests/unit/responsibility-transfer.test.ts:11 → signal_events
 tests/unit/responsibility-transfer.test.ts:12 → autonomy_consents

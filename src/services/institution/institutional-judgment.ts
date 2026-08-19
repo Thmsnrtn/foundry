@@ -68,14 +68,26 @@ export function findCapacityConflict(view:CapacityView):
 
 export async function createDeterministicCapacityJudgment(productId:string,responsibilityIds:string[]):Promise<string|null> {
   const ids=[...new Set(responsibilityIds)]; if (ids.length<2) return null;
-  const responsibilities=await query(`SELECT id,title FROM institutional_responsibilities WHERE product_id=?
+  const responsibilities=await query(`SELECT id,title,due_at FROM institutional_responsibilities WHERE product_id=?
     AND id IN (${ids.map(()=>'?').join(',')})`,[productId,...ids]);
   if (responsibilities.rows.length!==ids.length) throw new Error('institutional judgment tenant boundary');
+  // THE DEADLINE HAS A SUPPLY NOW. `Demand.deadline` was declared and never
+  // filled by anything, so every judgment this function has ever raised listed
+  // `deadline unknown` for every responsibility in it — an uncertainty that was
+  // structurally guaranteed rather than observed. Where the company has stated
+  // a date it is read from the responsibility, which is the only place a date
+  // is allowed to come from; where it has not, the uncertainty is real and
+  // still reported.
+  const statedDue=new Map<string,string>();
+  for (const r of responsibilities.rows as unknown as Array<Record<string,unknown>>) {
+    if (r.due_at!=null) statedDue.set(String(r.id),String(r.due_at));
+  }
   const view=readCapacityView(await getReconstructionClaims(productId),productId,ids);
   const {commitments,ownerConstraints,economics}=view;
   const found=findCapacityConflict(view);
   if (!found) return null;
-  const {resource,capacity,affected}=found;
+  const {resource,capacity}=found;
+  const affected=found.affected.map(d=>({...d,deadline:d.deadline??statedDue.get(d.responsibilityId)}));
   // One judgment per standing conflict. A scheduled producer sees the same
   // conflict on every tick; re-raising it would spend founder attention to say
   // nothing new. The existing judgment is returned so the caller can tell the

@@ -60,11 +60,36 @@ export function isReportableObligation(value: string): value is ReportableObliga
  * one, and null when it was not — an unusable report is still recorded as
  * evidence, because a company said it. It simply does not manufacture ontology.
  */
+/**
+ * A stated due date, or null.
+ *
+ * ONLY THE COMPANY MAY STATE ONE. Foundry never infers a date from prose —
+ * "by the end of the month" is a sentence, not a deadline, and turning it into
+ * one would be Foundry authoring the thing it later judges itself against. The
+ * founder or the reporting system supplies an explicit ISO date or nothing.
+ *
+ * A date already past is refused rather than stored. It is almost always a
+ * typo or a timezone confusion, and the one thing worse than no sense of time
+ * is a sense of time that starts by reporting a fabricated overdue.
+ */
+export function statedDueDate(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) return null;
+  // A minute of slack: a date entered as "today" is due at midnight, and a
+  // request arriving a moment later should not be refused for it.
+  if (t < Date.now() - 60_000) return null;
+  return new Date(t).toISOString();
+}
+
 export async function reportCompanyObligation(input: {
   productId: string; founderId: string; obligationKind: string; what: string;
+  /** When the company says this is due. Optional; never inferred. */
+  dueAt?: string;
 }): Promise<{ signalId: string; responsibility: Responsibility | null } | null> {
   const what = input.what.trim();
   if (!what || !isReportableObligation(input.obligationKind)) return null;
+  const dueAt = statedDueDate(input.dueAt);
 
   // Defence in depth: the database verifies ownership too, and refuses the
   // whole report if it cannot.
@@ -76,7 +101,12 @@ export async function reportCompanyObligation(input: {
     source: 'founder_report',
     event_type: `founder_reported:${input.obligationKind}`,
     severity: 'medium',
-    payload: { obligation_kind: input.obligationKind, what, founder_id: input.founderId },
+    payload: {
+      obligation_kind: input.obligationKind, what, founder_id: input.founderId,
+      // Carried on the evidence, so the responsibility's date and the record
+      // of who said it come from the same place.
+      ...(dueAt ? { due_at: dueAt, due_stated_by: input.founderId } : {}),
+    },
     summary: what,
   });
 
@@ -104,17 +134,25 @@ export async function reportCompanyObligation(input: {
  */
 export async function reportExternalObligation(input: {
   productId: string; reportedBy: string; obligationKind: string; what: string;
+  /** When the reporting system says this is due. Optional; never inferred. */
+  dueAt?: string;
 }): Promise<{ signalId: string; responsibility: Responsibility | null } | null> {
   const what = input.what.trim();
   const reportedBy = input.reportedBy.trim();
   if (!what || what.length > 200 || !reportedBy) return null;
   if (!isReportableObligation(input.obligationKind)) return null;
+  const dueAt = statedDueDate(input.dueAt);
 
   const signalId = await emitSignalEvent(input.productId, {
     source: 'external_company_report',
     event_type: `external_reported:${input.obligationKind}`,
     severity: 'medium',
-    payload: { obligation_kind: input.obligationKind, what, reported_by: reportedBy },
+    payload: {
+      obligation_kind: input.obligationKind, what, reported_by: reportedBy,
+      // The channel key is the author, exactly as it is for the report itself.
+      // A rota system stating a date is not the founder stating one.
+      ...(dueAt ? { due_at: dueAt, due_stated_by: reportedBy } : {}),
+    },
     summary: what,
   });
 

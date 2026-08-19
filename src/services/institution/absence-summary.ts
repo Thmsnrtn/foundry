@@ -7,7 +7,9 @@ export interface AbsenceItem {
   classification: AbsenceClassification; evidenceRef: string | null;
   authorityRef: string | null; outcomeRef: string | null; reason: string | null;
   /** Why this needs the founder, when it does. Plain language, no ontology. */
-  needsYouBecause?: 'watching' | 'permission_withdrawn' | 'permission_expired' | 'outcome_unresolved';
+  needsYouBecause?: 'overdue' | 'watching' | 'permission_withdrawn' | 'permission_expired' | 'outcome_unresolved';
+  /** When the company said this was due, if it said. Never inferred. */
+  dueAt?: string;
 }
 
 /** Deterministic seven-day responsibility view. Absence is not evidence:
@@ -18,7 +20,7 @@ export async function getSevenDayResponsibilitySummary(
 ): Promise<Record<AbsenceClassification, AbsenceItem[]>> {
   const cutoff = new Date(now.getTime() - 7 * 86_400_000).toISOString();
   const responsibilities = await query(
-    `SELECT id,title,state,evidence_ref,authority_ref,outcome_ref,disposition,disposition_reason,disposition_evidence_ref
+    `SELECT id,title,state,evidence_ref,authority_ref,outcome_ref,disposition,disposition_reason,disposition_evidence_ref,due_at
        FROM institutional_responsibilities WHERE product_id=? ORDER BY updated_at DESC`, [productId],
   );
   const transitions = await query(
@@ -95,11 +97,29 @@ export async function getSevenDayResponsibilitySummary(
     // Why this needs the founder, if it does. Order matters: a withdrawn
     // permission is more urgent than an unresolved outcome, because nothing
     // further can happen at all until it is restored.
+    // A DATE THE COMPANY STATED HAS PASSED. First in the order, and it is the
+    // only reason here that is a fact about the world rather than about
+    // Foundry's own posture: a withdrawn permission, an unresolved outcome and
+    // a shadowing watch are all descriptions of where Foundry has got to. An
+    // overdue obligation is the company being late, which is what the founder
+    // is actually trying to find out. It is also the only one of the four with
+    // a deadline attached, which `EXPERIENCE.md` requires of an interruption
+    // and none of the others could carry.
+    //
+    // Not overdue once it is done: a responsibility whose disposition says it
+    // was handled or deliberately not done is not late, it is finished.
+    const dueAt = row.due_at == null ? undefined : String(row.due_at);
+    const overdue = dueAt !== undefined
+      && Date.parse(dueAt) < Date.now()
+      && row.disposition !== 'deliberately_not_done'
+      && !verifiedRecently.has(id);
+
     const needsYouBecause: AbsenceItem['needsYouBecause'] | undefined =
-      withoutAuthority.has(id)
-        ? (lastGrantRevoked.get(id) === true ? 'permission_withdrawn' : 'permission_expired')
-        : unresolvedEffects.has(id) ? 'outcome_unresolved'
-          : state === 'shadowing' ? 'watching' : undefined;
+      overdue ? 'overdue'
+        : withoutAuthority.has(id)
+          ? (lastGrantRevoked.get(id) === true ? 'permission_withdrawn' : 'permission_expired')
+          : unresolvedEffects.has(id) ? 'outcome_unresolved'
+            : state === 'shadowing' ? 'watching' : undefined;
 
     const classification: AbsenceClassification =
       row.disposition === 'deliberately_not_done' ? 'DELIBERATELY_NOT_DONE' :
@@ -125,6 +145,7 @@ export async function getSevenDayResponsibilitySummary(
       reason: row.disposition === 'deliberately_not_done' ? String(row.disposition_reason) :
         recent?.reason == null ? null : String(recent.reason),
       ...(needsYouBecause ? { needsYouBecause } : {}),
+      ...(dueAt ? { dueAt } : {}),
     });
   }
   return out;

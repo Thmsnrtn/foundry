@@ -1,21 +1,27 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { query } from '../../src/db/client.js';
-import { splitSqlStatements } from '../../src/db/migrate.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { emitSignalEvent } from '../../src/services/scp/events/dispatcher.js';
 import { discoverResponsibilityFromSignal } from '../../src/services/institution/discovery.js';
 
 beforeAll(async () => {
-  await query('CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT, owner_id TEXT NOT NULL)');
-  await query(`CREATE TABLE IF NOT EXISTS signal_events (id TEXT PRIMARY KEY,product_id TEXT NOT NULL,source TEXT,event_type TEXT,severity TEXT,payload_json TEXT,summary TEXT,relevant_agents_json TEXT,processed INTEGER DEFAULT 0,created_at TEXT DEFAULT CURRENT_TIMESTAMP,processed_at TEXT,processing_session_id TEXT)`);
-  await query('CREATE TABLE IF NOT EXISTS autonomy_consents (id TEXT PRIMARY KEY,product_id TEXT,capability TEXT,to_mode TEXT,revoked_at TEXT)');
-  await query('CREATE TABLE IF NOT EXISTS action_executions (id TEXT PRIMARY KEY,product_id TEXT,status TEXT,verify_status TEXT)');
-  for (const file of ['102_responsibility_transfer.sql','103_responsibility_disposition.sql','104_responsibility_reference_provenance.sql','105_responsibility_discovery.sql'])
-    for (const sql of splitSqlStatements(readFileSync(resolve(__dirname, `../../src/db/migrations/${file}`),'utf8'))) await query(sql);
+  // THE REAL SCHEMA, not four migrations chosen by hand. This applied 102–105
+  // and fabricated `products`, `signal_events`, `autonomy_consents` and
+  // `action_executions` around them, so it was testing discovery against a
+  // schema that stopped resembling the live one the moment anything else
+  // changed — which is exactly what happened when migration 166 added a due
+  // date and this file could not see it.
+  await runMigrations();
 });
+
 beforeEach(async () => {
   for (const table of ['responsibility_dispositions','responsibility_transitions','institutional_responsibilities','signal_events']) await query(`DELETE FROM ${table}`);
+  await query(`DELETE FROM products WHERE id LIKE 'p%'`);
+  await query(`DELETE FROM founders WHERE id = 'rd_owner'`);
+  await query(`INSERT INTO founders (id, clerk_user_id, email) VALUES ('rd_owner','clerk_rd','rd@test.local')`);
+  for (const id of ['p1','p2']) {
+    await query(`INSERT INTO products (id, name, owner_id, status) VALUES (?, 'Co', 'rd_owner', 'active')`, [id]);
+  }
 });
 
 describe('company evidence responsibility discovery', () => {

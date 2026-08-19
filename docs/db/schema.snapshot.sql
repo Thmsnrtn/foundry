@@ -283,6 +283,8 @@
       JOIN autonomy_consents a ON a.id=NEW.authority_consent_id
       JOIN governed_effect_kinds k ON k.scope_key=NEW.authority_scope
       JOIN institutional_responsibilities r ON r.id=x.responsibility_id
+      JOIN products p ON p.id = s.product_id
+      JOIN products p ON p.id = s.product_id
       JOIN responsibility_shadow_expectations x ON x.id = c.expectation_id
       JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
       NEW.actor_ref!='institution:deterministic_candidate_grounder' OR NOT EXISTS (
@@ -339,6 +341,8 @@
      WHERE d.responsibility_id = NEW.id
      WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL
+     WHERE p.owner_id = NEW.due_stated_by);
+     WHERE p.owner_id = NEW.due_stated_by);
      WHERE responsibility_id = NEW.id
     'activation_playbook',     -- How we improve activation
     'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
@@ -626,6 +630,8 @@
     SELECT 1 FROM strategic_decisions_log d
     SELECT 1 FROM support_channels c
     SELECT 1 FROM support_channels c
+    SELECT 1 FROM system_identities s
+    SELECT 1 FROM system_identities s
     SELECT 1 FROM system_identities s WHERE s.identity_key=NEW.identity_key);
     UNION ALL
     UNION ALL
@@ -1097,7 +1103,7 @@
   -- ─── Recursive critique yield (Ambros Round 5) ────────────────────────────
   AND NOT EXISTS (
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
-  CHECK(disposition IN ('active','deliberately_not_done')), disposition_reason TEXT, disposition_evidence_ref TEXT, disposition_at DATETIME, capability TEXT NOT NULL DEFAULT 'general', discovery_evidence_ref TEXT);
+  CHECK(disposition IN ('active','deliberately_not_done')), disposition_reason TEXT, disposition_evidence_ref TEXT, disposition_at DATETIME, capability TEXT NOT NULL DEFAULT 'general', discovery_evidence_ref TEXT, due_at DATETIME, due_stated_by TEXT);
   CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, health_score INTEGER DEFAULT 0, scp_constitution_version INTEGER DEFAULT 1, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME);
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
@@ -1141,6 +1147,7 @@
   ON idempotency_keys(product_id, action_type, dedup_key);
   ON inbound_customer_messages(product_id,channel_id,external_message_id);
   ON institutional_responsibilities(product_id, discovery_evidence_ref)
+  ON institutional_responsibilities(product_id, due_at)
   ON institutional_responsibilities(product_id, state, updated_at);
   ON integration_secret_quarantine(product_id, rotated_at);
   ON integrations(product_id, provider);
@@ -1202,6 +1209,10 @@
   SELECT RAISE(ABORT, 'responsibility_disposition:no_record') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_disposition:not_found') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_disposition:reason_required') WHERE trim(NEW.reason)='';
+  SELECT RAISE(ABORT, 'responsibility_due:date_and_source_go_together');
+  SELECT RAISE(ABORT, 'responsibility_due:date_and_source_go_together');
+  SELECT RAISE(ABORT, 'responsibility_due:institution_may_not_state_a_deadline')
+  SELECT RAISE(ABORT, 'responsibility_due:institution_may_not_state_a_deadline')
   SELECT RAISE(ABORT, 'responsibility_reference:authority_invalid')
   SELECT RAISE(ABORT, 'responsibility_reference:authority_invalid')
   SELECT RAISE(ABORT, 'responsibility_reference:evidence_invalid')
@@ -1423,6 +1434,8 @@
   WHERE COALESCE(NEW.channel_key,'') IN (
   WHERE COALESCE(NEW.channel_key,'') NOT GLOB '[a-z][a-z0-9_]*'
   WHERE COALESCE(json_valid(NEW.purposes_json),0)=0
+  WHERE EXISTS (
+  WHERE EXISTS (
   WHERE NEW.body IS NULL OR trim(NEW.body)='' OR length(NEW.body)>8192;
   WHERE NEW.effect_id IS NULL OR NEW.authority_consent_id IS NULL
   WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
@@ -1451,6 +1464,7 @@
   WHERE conflict_identity IS NOT NULL;
   WHERE decision_acted_at IS NULL;
   WHERE discovery_evidence_ref IS NOT NULL;
+  WHERE due_at IS NOT NULL;
   WHERE id = NEW.responsibility_id AND state = NEW.from_state;
   WHERE id=NEW.responsibility_id AND product_id=NEW.product_id;
   WHERE inbound_message_id IS NOT NULL AND status<>'cancelled';
@@ -4626,6 +4640,8 @@ BEFORE INSERT ON inbound_customer_messages
 BEFORE INSERT ON ingest_credentials
 BEFORE INSERT ON institutional_judgment_dispositions
 BEFORE INSERT ON institutional_responsibilities
+BEFORE INSERT ON institutional_responsibilities
+BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON integrations
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
@@ -4659,6 +4675,8 @@ BEFORE INSERT ON system_identities
 BEFORE UPDATE OF config_json ON integrations
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
 BEFORE UPDATE OF disposition, disposition_reason, disposition_evidence_ref, disposition_at
+BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
+BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
 BEFORE UPDATE OF evidence_ref, authority_ref, outcome_ref
 BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE OF state ON institutional_responsibilities
@@ -4672,6 +4690,10 @@ BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5013,6 +5035,7 @@ CREATE INDEX idx_reg_profile_product ON regulatory_profile(product_id);
 CREATE INDEX idx_remediation_prs_audit ON remediation_prs(audit_score_id);
 CREATE INDEX idx_remediation_prs_product ON remediation_prs(product_id);
 CREATE INDEX idx_remediation_prs_status ON remediation_prs(status);
+CREATE INDEX idx_responsibilities_due
 CREATE INDEX idx_responsibilities_product_state
 CREATE INDEX idx_responsibility_authority ON autonomy_consents(product_id,responsibility_id,capability,revoked_at,expires_at);
 CREATE INDEX idx_responsibility_candidates_product_status
@@ -5401,6 +5424,10 @@ CREATE TRIGGER responsibility_disposition_apply
 CREATE TRIGGER responsibility_disposition_evidence_guard
 CREATE TRIGGER responsibility_disposition_guard
 CREATE TRIGGER responsibility_disposition_requires_record
+CREATE TRIGGER responsibility_due_date_needs_a_source
+CREATE TRIGGER responsibility_due_date_needs_a_source_insert
+CREATE TRIGGER responsibility_due_date_not_self_authored
+CREATE TRIGGER responsibility_due_date_not_self_authored_update
 CREATE TRIGGER responsibility_operating_promotion_freeze
 CREATE TRIGGER responsibility_reference_columns_guard
 CREATE TRIGGER responsibility_reference_guard
@@ -5519,16 +5546,24 @@ END;
 END;
 END;
 END;
+END;
+END;
+END;
+END;
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 ON institutional_responsibilities
 ON institutional_responsibilities
+WHEN (NEW.due_at IS NOT NULL) <> (NEW.due_stated_by IS NOT NULL)
+WHEN (NEW.due_at IS NOT NULL) <> (NEW.due_stated_by IS NOT NULL)
 WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
 WHEN COALESCE(OLD.product_id,'')    <> COALESCE(NEW.product_id,'')
 WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN NEW.disposition IS NOT OLD.disposition
+WHEN NEW.due_stated_by IS NOT NULL
+WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.evidence_ref IS NOT OLD.evidence_ref
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'

@@ -43,6 +43,7 @@ export async function discoverResponsibilityFromSignal(
   if (!evidence.rows.length) return null;
   const row = evidence.rows[0] as Record<string, unknown>;
   let contract = SIGNAL_RESPONSIBILITIES[String(row.event_type)];
+  let due: { at: string; statedBy: string } | null = null;
   // A person said it, or one of the company's own systems did. Both state the
   // kind explicitly from the same closed set, and both are refused by the
   // database if they do not. What differs is provenance, which is preserved in
@@ -54,11 +55,20 @@ export async function discoverResponsibilityFromSignal(
     // is refused by migration 126 before it reaches here, and a report without
     // one never becomes a responsibility.
     try {
-      const payload = JSON.parse(String(row.payload_json)) as { obligation_kind?: unknown; what?: unknown };
+      const payload = JSON.parse(String(row.payload_json)) as {
+        obligation_kind?: unknown; what?: unknown; due_at?: unknown; due_stated_by?: unknown;
+      };
       const capability = typeof payload.obligation_kind === 'string'
         ? OBLIGATION_CAPABILITIES[payload.obligation_kind] : undefined;
       if (capability && typeof payload.what === 'string' && payload.what.trim()) {
         contract = { title: payload.what.trim(), capability };
+        // A DATE THE COMPANY STATED, carried from the same evidence that
+        // created the responsibility. Both fields or neither — the database
+        // refuses a date with no author, so reading them separately here would
+        // only move the failure later.
+        if (typeof payload.due_at === 'string' && typeof payload.due_stated_by === 'string') {
+          due = { at: payload.due_at, statedBy: payload.due_stated_by };
+        }
       }
     } catch { return null; }
   }
@@ -73,8 +83,10 @@ export async function discoverResponsibilityFromSignal(
   try {
     await batch([
       { sql: `INSERT INTO institutional_responsibilities
-        (id,product_id,title,description,capability,discovery_evidence_ref)
-        VALUES (?,?,?,?,?,?)`, args: [id,productId,contract.title,String(row.summary),contract.capability,evidenceRef] },
+        (id,product_id,title,description,capability,discovery_evidence_ref,due_at,due_stated_by)
+        VALUES (?,?,?,?,?,?,?,?)`,
+        args: [id,productId,contract.title,String(row.summary),contract.capability,evidenceRef,
+          due?.at ?? null, due?.statedBy ?? null] },
       { sql: `INSERT INTO responsibility_transitions
         (id,responsibility_id,from_state,to_state,evidence_ref,reason,actor_ref)
         VALUES (?,?,'unknown','visible',?,?,?)`,
