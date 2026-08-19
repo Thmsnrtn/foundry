@@ -25,8 +25,8 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `3c8efe3`. **Migrations:** 204 files, highest **168**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **262 files / 2,314 tests**, `npm run check`
+- **Head:** `e2e9c6b`. **Migrations:** 205 files, highest **169**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **264 files / 2,323 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
@@ -120,38 +120,69 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
 6. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
 
-7. **32 of the institution's 126 exported functions have no caller anywhere in
-   `src/`.** Measured, not guessed. About half are the frozen benchmark scorers,
-   which are legitimately test-driven, and eight are the development-assisting
-   vertical already recorded as DARK. The rest are worth reading one at a time.
+7. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
+   functions had no caller anywhere in `src/`. They have been read. What is
+   left is 26, and every one of them is accounted for:
 
-   Four read so far. Three were real defects — a founder question nobody
-   compared against reality, an authority a founder could not withdraw, and a
-   number a founder could start watching but never stop; see the closed work in
-   git history.
+   - the frozen benchmark scorers (`*-benchmark.ts`, `support-pilot-readiness`),
+     legitimately test-driven;
+   - the development-change vertical — `enterDevelopmentAssisting`,
+     `planDevelopmentChange`, `executeDevelopmentChange`,
+     `verifyDevelopmentChange`, `rollbackDevelopmentChange`,
+     `grantDevelopmentAuthority`, `revokeDevelopmentAuthority` — already
+     recorded as DARK. Foundry improving Foundry, built and not wired;
+   - `reconstructCompany` and the candidate chain
+     (`discoverCandidatesFromReconstruction`, `supersedeResponsibilityCandidate`),
+     both examined below.
 
-   The fourth was not a defect and was deliberately kept. Candidate recognition
-   (`discovery.ts:discoverCandidatesFromReconstruction` ->
+   Six defects came out of the sweep, each in git history: a founder question
+   nobody compared against reality; an authority a founder could not withdraw;
+   a number a founder could start watching but never stop; a bounded-help line
+   that called a founder's own notice a support reply to a customer who does
+   not exist; a pilot-readiness criterion proved on a query production never
+   runs; and a responsibility that could be created with nothing to point at.
+   The seventh, and the largest, came from pulling on the last of them: a
+   question the founder skipped could never afterwards be answered, which
+   foreclosed a responsibility permanently and silently (migration 169).
+
+   **Do not build a gate for this.** Reachability at function granularity needs
+   a real call graph — a first attempt that excluded a function's own file
+   called `evaluateInstitutionalJudgment` unreachable when a production entry
+   point in the same module calls it — and even the honest rule cannot tell a
+   test-only benchmark from a defect. The list was worth reading once. It is
+   read.
+
+   **Candidate recognition stays, unreachable and asserted.**
+   `discovery.ts:discoverCandidatesFromReconstruction` ->
    `proposeResponsibilityCandidate` -> `responsibility_candidates` -> The
-   Letter's "Possible responsibilities requiring your judgment") is a four-layer
+   Letter's "Possible responsibilities requiring your judgment" is a four-layer
    chain with no production supply: nothing in `src/` writes an
-   `operational_responsibility` reconstruction claim, so the discovery has
-   nothing to read and its promote/reject routes are unreachable. It was not
-   deleted, for two reasons. It carries an E3 claim — the recognition benchmark
-   scores it, supplying its own claims — and wiring it would require Foundry
-   *inferring* responsibilities, which migrations 126 and 135-138 forbid. The
-   mitigating fact is that the section renders only when non-empty, so no false
-   promise reaches a founder. All three of those facts are now asserted in
-   `tests/unit/candidate-recognition-has-no-production-supply.test.ts`, so the
-   absence is a property under test rather than a thing someone has to remember.
+   `operational_responsibility` reconstruction claim. It was not deleted — it
+   carries an E3 claim the recognition benchmark scores, and wiring it would
+   require Foundry *inferring* responsibilities, which migrations 126 and
+   135-138 forbid. The section renders only when non-empty, so no false promise
+   reaches a founder. All of that is asserted in
+   `candidate-recognition-has-no-production-supply.test.ts`.
 
-   **A gate for this is NOT trivial and should not be faked.** Reachability at
-   function granularity needs a real call graph: a first attempt that excluded a
-   function's own file called `evaluateInstitutionalJudgment` unreachable when a
-   production entry point in the same module calls it. The honest rule — no
-   caller anywhere in `src/`, including its own file — is what produced the 32,
-   and it still cannot tell a test-only benchmark from a defect. Read the list;
-   do not ratchet it until the instrument can be trusted.
+   **`reconstructCompany` is a benchmark-only projection, and its `unknowns`
+   are production-constant.** It assembles identity, systems, responsibilities,
+   claims and unknowns; only the reconstruction benchmark consumes it. System
+   staleness is already surfaced on the integration-health page, and unknown
+   FACTS are surfaced through founder evidence requests — so the projection is
+   not a missing founder surface. But `unknowns` is computed from
+   `subject='company' AND predicate='purpose'`, and nothing in `src/` can write
+   that claim: company-scope founder evidence is recorded under
+   `subject='product:<id>'`, and `purpose` is only ever asked at responsibility
+   scope. In production `unknowns` is permanently `['company_purpose']`.
+
+   **Named trap: two spellings for one subject.** `company-observation.ts`
+   writes `subject='company'`; `founder-evidence.ts` writes
+   `subject='product:<id>'` for the same company scope, and `readCapacityView`
+   reads the latter. Whoever wires a company-level fact next will pick one and
+   be silently invisible to the reader using the other. Left alone rather than
+   normalised on a guess: the `observation_channel` claim written under
+   `'company'` has no reader at all today, so the fix is to decide the spelling
+   when there is a second reader to be consistent with.
 
 ## What keeps working, for whoever comes next
 

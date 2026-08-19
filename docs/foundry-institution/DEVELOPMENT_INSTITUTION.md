@@ -244,6 +244,26 @@ Two standards this institution holds itself to, both learned the hard way:
   one. Say which it was. "Fixed a possible cause" and "fixed it" are different
   claims and only one of them was earned.
 
+- **A test that answers the right question by accident answers a different one
+  later.** Abstention was proved by counting responsibilities carrying any
+  discovery reference, which was only equivalent to "none came from the signal
+  path" while that path was the column's sole writer. A second writer landed
+  and the assertion silently changed meaning. Assert the path — its actor, its
+  route, its own signature — not a side effect that happens to correlate with
+  it today. The same shape appeared twice more in one cycle: a readiness
+  criterion proved through a function no production surface calls, and a
+  founder-surface claim proved by calling a service directly.
+
+- **Ask what a guard PROTECTS before deciding whether changing it is
+  weakening.** `founder_assertion_guard` required `status='open'` and the
+  resolution guard treated only `'answered'` as terminal — two guards on one
+  table disagreeing about the word "resolved". Widening the first preserved
+  every property its own comment claimed (no unasked question, no other
+  tenant's, replay still inert, no smuggled authority) and removed a hole that
+  cost a founder a responsibility. The test is not "did a check get looser" but
+  "did any property it names stop holding" — and each one has to be asserted at
+  the boundary, in the same change, or the claim is just a paragraph.
+
 For consequential work, review with a perspective that did not design the
 change. Its job is to **falsify**, not to praise: recreate the forbidden
 bypass, use the legitimate principal against the guard, mutate the semantic
