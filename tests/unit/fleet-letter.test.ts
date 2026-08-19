@@ -110,6 +110,59 @@ describe('the fleet ranks over BOTH canonical sources', () => {
   });
 });
 
+describe('the third canonical store reaches the ranking too', () => {
+  it('lets a judgment Foundry raised be the one thing, and verifies it as strictly', async () => {
+    // `strategic_decisions_log` holds the judgments Foundry raised about the
+    // company — two responsibilities wanting the same resource, and the owner
+    // having to allocate or change capacity. They rendered in their own section
+    // and could never be the one thing, however material, so the headline
+    // projected over two of the three stores that can hold something needing
+    // the founder.
+    //
+    // An OPEN judgment is real and is not late, so it ranks below the founder's
+    // own decision queue and below the overdue obligation — but it is there,
+    // and it is the one thing when nothing else is.
+    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+      VALUES ('jl_j_sig','jl_p2','operations','capacity_observed','medium','{}','Evidence')`, []);
+    // The judgment's referenced responsibilities must be real and on this
+    // product — migration guard `institutional_judgment:tenant_invalid` refuses
+    // a judgment that names rows it cannot see, which is exactly right.
+    await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state) VALUES
+      ('jl_ra','jl_p2','Urgent support obligation','customer_support','understood'),
+      ('jl_rb','jl_p2','Planned development','development','understood')`, []);
+    await query(`INSERT INTO strategic_decisions_log
+      (id,product_id,decision_title,decision_description,decision_category,made_by,status,
+       agent_context_json,responsibility_refs_json,evidence_refs_json)
+      VALUES ('jl_j','jl_p2','Two things want the same week','Allocate or change capacity',
+              'operations','agent_recommendation','active','{}','["jl_ra","jl_rb"]',
+              '["signal_event:jl_j_sig"]')`, []);
+
+    const fl = await composeFleetLetter('jl_f');
+    const judgment = fl.needsYou.find((n) => n.kind === 'judgment');
+    expect(judgment, 'a material judgment must be rankable').toMatchObject({
+      judgmentId: 'jl_j', productName: 'FireCo',
+    });
+    // Below the decisions, because nothing about it is late.
+    const positions = fl.needsYou.map((n) => n.kind);
+    expect(positions.indexOf('judgment')).toBeGreaterThan(positions.indexOf('decision'));
+
+    // Verified against a fresh read like everything else: once the owner has
+    // said which way to go, it stops being delivered.
+    expect((await verifyFleetLetter(fl)).letter.needsYou
+      .some((n) => n.kind === 'judgment')).toBe(true);
+
+    const tampered = await composeFleetLetter('jl_f');
+    const item = tampered.needsYou.find((n) => n.kind === 'judgment') as { evaluationState: string | null };
+    item.evaluationState = 'contradicted';
+    const checked = await verifyFleetLetter(tampered);
+    expect(checked.letter.needsYou.some((n) => n.kind === 'judgment')).toBe(false);
+    expect(checked.reasons.join(' ')).toContain('evaluation changed');
+
+    await query("DELETE FROM strategic_decisions_log WHERE id='jl_j'", []);
+    await query("DELETE FROM institutional_responsibilities WHERE id IN ('jl_ra','jl_rb')", []);
+  });
+});
+
 describe('the independent verifier — nothing unverified ships', () => {
   it('reconstructs product-scoped responsibility truth instead of trusting the composer', async () => {
     await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state)

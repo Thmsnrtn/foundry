@@ -566,7 +566,11 @@ letterRoutes.get('/letter', async (c) => {
     ? html`${n.productName} · ${gateLabel(n.gate, fluency)}${n.deadline ? html` · due ${n.deadline}` : ''}`
     // A responsibility says why in the founder's language, from the same map
     // the single-product letter uses. No ontology on screen either way.
-    : html`${n.productName} · ${NEEDS_YOU_REASON[n.because] ?? NEEDS_YOU_REASON.watching}${n.dueAt ? html` (${n.dueAt.slice(0, 10)})` : ''}`}</div>
+    : n.kind === 'responsibility'
+      ? html`${n.productName} · ${NEEDS_YOU_REASON[n.because] ?? NEEDS_YOU_REASON.watching}${n.dueAt ? html` (${n.dueAt.slice(0, 10)})` : ''}`
+      : html`${n.productName} · ${n.evaluationState === 'contradicted'
+        ? 'the date you gave passed and this is still unresolved'
+        : 'I raised this and you have not said which way to go'}`}</div>
             </div>
             ${n.kind === 'decision' ? html`
             <a href="/decisions/${n.decisionId}" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;"

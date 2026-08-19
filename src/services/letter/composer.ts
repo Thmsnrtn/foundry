@@ -126,13 +126,43 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
   const overdue = institutional?.NEEDS_YOU.find((i) => i.needsYouBecause === 'overdue');
   const otherAsk = institutional?.NEEDS_YOU.find((i) => i.needsYouBecause !== 'overdue');
 
+  // THE THIRD CANONICAL SOURCE. `strategic_decisions_log` holds the judgments
+  // Foundry raised about the company — two responsibilities wanting the same
+  // resource, and the owner having to allocate or change capacity. They
+  // rendered in their own section and could never be the one thing, however
+  // material, so the headline projected over two of the three stores that can
+  // hold something needing the founder.
+  //
+  // A CONTRADICTED judgment is LATE, in exactly the sense `overdue` is: the
+  // observation pass may only report it against a date the company itself
+  // stated, and it means that date passed with the conflict still standing. It
+  // is placed directly after the overdue responsibility rather than above it
+  // because it is usually derived from one — the concrete obligation is the
+  // thing, the judgment is the commentary on it.
+  //
+  // A judgment that is merely open or conflicting is real and is not late, so
+  // it ranks below the founder's own decision queue and below a responsibility
+  // that has lost its permission. It is still the one thing when nothing else
+  // is, which is the point: Foundry asked, and nobody answered.
+  const { getMaterialJudgments } = await import(
+    '../institution/institutional-judgment-disposition.js');
+  const judgments = await getMaterialJudgments(productId).catch(() => []);
+  const contradicted = judgments.find((j) => j.evaluationState === 'contradicted');
+  const openJudgment = judgments.find((j) => j.evaluationState !== 'contradicted');
+
   const chosen = overdue
     ? { text: `${overdue.title} — you said this was due ${overdue.dueAt?.slice(0, 10) ?? 'earlier'}, and it has not been handled`,
         href: '/letter' }
-    : decisionAsk ?? (otherAsk
-      ? { text: `${otherAsk.title} — ${ASK_WORDS[otherAsk.needsYouBecause ?? 'watching']}`,
+    : contradicted
+      ? { text: `${contradicted.title} — the date you gave passed and this is still unresolved`,
           href: '/letter' }
-      : null);
+      : decisionAsk ?? (otherAsk
+        ? { text: `${otherAsk.title} — ${ASK_WORDS[otherAsk.needsYouBecause ?? 'watching']}`,
+            href: '/letter' }
+        : openJudgment
+          ? { text: `${openJudgment.title} — I raised this and you have not said which way to go`,
+              href: '/letter' }
+          : null);
   const needsYou = chosen?.text ?? null;
   const needsYouHref = chosen?.href ?? '/decisions';
 

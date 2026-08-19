@@ -23,8 +23,16 @@
 //      out" must not be delivered for something now merely being watched,
 //   5. an overdue item's stated date matches the ledger and is still past.
 //
+// For a JUDGMENT — the third canonical store, `strategic_decisions_log`:
+//   1. the judgment exists and belongs to the named product,
+//   2. that product belongs to this founder,
+//   3. a FRESH read still finds it material — the owner may have dispositioned
+//      it since, and delivering it then would assert something dropped,
+//   4. the stated evaluation still matches: "the date you gave passed" must not
+//      be delivered for a judgment later reality has since supported.
+//
 // And for the letter as a whole:
-//   6. it is fresh (composed within the staleness window).
+//   5. it is fresh (composed within the staleness window).
 // A line that fails is DROPPED and logged as a defect (audit_log,
 // action_type 'letter:verifier') — the founder never sees an unverified
 // claim, and every drop is queryable ("why didn't you show me X?").
@@ -34,6 +42,7 @@ import { nanoid } from 'nanoid';
 import { query, insertAuditLog } from '../../db/client.js';
 import type { FleetLetter, FleetNeedsYou } from './fleet.js';
 import { getSevenDayResponsibilitySummary } from '../institution/absence-summary.js';
+import { getMaterialJudgments } from '../institution/institutional-judgment-disposition.js';
 
 const STALENESS_MS = 5 * 60_000;
 
@@ -46,6 +55,7 @@ export interface VerificationResult {
 
 async function verifyNeedsYou(item: FleetNeedsYou, founderId: string): Promise<string | null> {
   if (item.kind === 'responsibility') return verifyResponsibilityAsk(item, founderId);
+  if (item.kind === 'judgment') return verifyJudgmentAsk(item, founderId);
   const fresh = (await query(
     `SELECT d.status, d.gate, d.product_id, p.owner_id
        FROM decisions d JOIN products p ON p.id = d.product_id
@@ -90,6 +100,30 @@ async function verifyResponsibilityAsk(
       return `${ref} due date mismatch (letter says ${item.dueAt}, ledger says ${fresh.dueAt ?? 'none'})`;
     }
     if (new Date(fresh.dueAt).getTime() > Date.now()) return `${ref} is not overdue`;
+  }
+  return null;
+}
+
+async function verifyJudgmentAsk(
+  item: Extract<FleetNeedsYou, { kind: 'judgment' }>, founderId: string,
+): Promise<string | null> {
+  const ref = `judgment ${item.judgmentId}`;
+  const owned = (await query(
+    `SELECT j.id, p.owner_id FROM strategic_decisions_log j JOIN products p ON p.id = j.product_id
+      WHERE j.id = ? AND j.product_id = ?`,
+    [item.judgmentId, item.productId],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!owned) return `${ref} not found on product ${item.productId}`;
+  if (String(owned.owner_id) !== founderId) return `${ref} belongs to another tenant`;
+
+  // Recomputed, never trusted. A judgment the owner has since dispositioned —
+  // or whose later-reality evaluation has moved — is no longer material, and
+  // delivering it would be the letter asserting something the ledger dropped.
+  const fresh = (await getMaterialJudgments(item.productId))
+    .find((candidate) => candidate.id === item.judgmentId);
+  if (!fresh) return `${ref} no longer needs the founder`;
+  if ((fresh.evaluationState ?? null) !== (item.evaluationState ?? null)) {
+    return `${ref} evaluation changed (letter says ${item.evaluationState}, ledger says ${fresh.evaluationState})`;
   }
   return null;
 }

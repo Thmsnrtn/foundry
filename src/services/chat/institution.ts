@@ -88,12 +88,16 @@ export async function handleUtterance(
     const reply = letter.needsYou.length === 0
       ? 'Nothing needs you right now — across everything. Verified against the ledgers just now.'
       : `Across your ${letter.products.length > 1 ? `${letter.products.length} companies` : 'company'}, ranked:\n` +
-        letter.needsYou.slice(0, 3).map((n, i) => (n.kind === 'decision'
-          ? `${i + 1}. ${n.what} (${n.productName}, gate ${n.gate}) → /decisions/${n.decisionId}`
-          // A responsibility has no gate and no decision page. Saying "gate
-          // undefined → /decisions/undefined" would be the chat inventing a
-          // shape for a thing that does not have one.
-          : `${i + 1}. ${n.what} (${n.productName}, ${n.because.replaceAll('_', ' ')}) → /letter`)).join('\n') +
+        letter.needsYou.slice(0, 3).map((n, i) => {
+          // Neither a responsibility nor a judgment has a gate or a decision
+          // page. Saying "gate undefined → /decisions/undefined" would be the
+          // chat inventing a shape for a thing that does not have one.
+          if (n.kind === 'decision') return `${i + 1}. ${n.what} (${n.productName}, gate ${n.gate}) → /decisions/${n.decisionId}`;
+          const why = n.kind === 'responsibility'
+            ? n.because.replaceAll('_', ' ')
+            : n.evaluationState === 'contradicted' ? 'the date you gave passed' : 'awaiting your direction';
+          return `${i + 1}. ${n.what} (${n.productName}, ${why}) → /letter`;
+        }).join('\n') +
         '\nEach line verified against the ledger seconds ago.';
     await query(
       `INSERT INTO conversation_messages (id, thread_id, role, content) VALUES (?, ?, 'assistant', ?)`,

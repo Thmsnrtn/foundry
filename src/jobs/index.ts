@@ -2238,7 +2238,9 @@ export async function fleetLetterNotify(): Promise<void> {
         // decisions and overdue responsibilities are both action_needed; the
         // rest is attention.
         importance: top
-          ? ((top.kind === 'decision' ? top.gate >= 3 : top.because === 'overdue')
+          ? ((top.kind === 'decision' ? top.gate >= 3
+            : top.kind === 'responsibility' ? top.because === 'overdue'
+              : top.evaluationState === 'contradicted')
             ? 'action_needed' : 'attention')
           : 'info',
         title: top ? `Your letter: ${top.what} needs you` : 'Your letter is ready',

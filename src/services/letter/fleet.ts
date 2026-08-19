@@ -56,6 +56,19 @@ export type FleetNeedsYou =
     /** The date the COMPANY gave, when the reason is that it has passed. */
     dueAt: string | null;
     riskState: string;
+  }
+  | {
+    /** The third canonical store: a judgment Foundry raised about the company,
+     *  which rendered in its own section and could never be the one thing. */
+    kind: 'judgment';
+    judgmentId: string;
+    productId: string;
+    productName: string;
+    what: string;
+    /** `contradicted` is LATE — the observation pass may only report it against
+     *  a date the company itself stated. Anything else is open, not late. */
+    evaluationState: string | null;
+    riskState: string;
   };
 
 export interface FleetProductLetter {
@@ -191,8 +204,28 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
   const otherAsks = responsibilityAsks.filter(
     (item) => item.kind === 'responsibility' && item.because !== 'overdue');
 
-  const needsYou: FleetNeedsYou[] = [...overdue, ...decisionItems, ...otherAsks]
-    .slice(0, MAX_NEEDS_YOU);
+  // The third store, ranked by the same rule the single-product letter uses:
+  // a contradicted judgment is late and sits with the overdue obligations; an
+  // open one is real, is not late, and ranks below the founder's own queue.
+  const { getMaterialJudgments } = await import('../institution/institutional-judgment-disposition.js');
+  const judgmentItems: FleetNeedsYou[] = (await Promise.all(letters.map(async (product) =>
+    (await getMaterialJudgments(product.productId).catch(() => [])).map((j): FleetNeedsYou => ({
+      kind: 'judgment' as const,
+      judgmentId: j.id,
+      productId: product.productId,
+      productName: product.productName,
+      what: j.title,
+      evaluationState: j.evaluationState,
+      riskState: product.riskState,
+    }))))).flat();
+  const contradicted = judgmentItems.filter(
+    (j) => j.kind === 'judgment' && j.evaluationState === 'contradicted');
+  const openJudgments = judgmentItems.filter(
+    (j) => j.kind === 'judgment' && j.evaluationState !== 'contradicted');
+
+  const needsYou: FleetNeedsYou[] = [
+    ...overdue, ...contradicted, ...decisionItems, ...otherAsks, ...openJudgments,
+  ].slice(0, MAX_NEEDS_YOU);
 
   // Operator pack: system-health lines join the operator's letter only.
   let system: string[] = [];

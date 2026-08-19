@@ -13,9 +13,19 @@
 // contradicts itself about what matters most is false institutional truth on
 // the surface the founder reads first.
 //
-// Both ledgers stay canonical for what they hold. No third store, no copy:
-// this is a projection over both, which is what the page was already
-// pretending to be.
+// Both ledgers stay canonical for what they hold. No new store, no copy: this
+// is a projection over them, which is what the page was already pretending to
+// be.
+//
+// THERE ARE THREE, not two. `strategic_decisions_log` holds the judgments
+// Foundry raised about the company — two responsibilities wanting the same
+// resource, and the owner having to allocate or change capacity. Those rendered
+// in their own section and could never be the one thing, however material, so
+// the headline was still projecting over a subset. A contradicted judgment is
+// LATE in exactly the sense `overdue` is: the observation pass may only report
+// it against a date the company itself gave. An open one is real and is not
+// late, so it ranks below the founder's own queue — and it is the one thing
+// when nothing else is, because Foundry asked and nobody answered.
 // =============================================================================
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
@@ -38,6 +48,9 @@ beforeEach(async () => {
   await query(`DELETE FROM responsibility_transitions`);
   await query(`DELETE FROM institutional_responsibilities WHERE product_id = ?`, [P]);
   await query(`DELETE FROM decisions WHERE product_id = ?`, [P]);
+  await query(`DELETE FROM institutional_judgment_evaluations WHERE product_id = ?`, [P]);
+  await query(`DELETE FROM strategic_decisions_log WHERE product_id = ?`, [P]);
+  await query(`DELETE FROM signal_events WHERE product_id = ?`, [P]);
   await query(`DELETE FROM products WHERE id = ?`, [P]);
   await query(`DELETE FROM founders WHERE id = ?`, [F]);
   await query(`INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
@@ -64,7 +77,26 @@ async function overdueResponsibility(title: string): Promise<void> {
     `UPDATE institutional_responsibilities SET due_at = ? WHERE id = 'oq_r'`, [inDays(-2)]);
 }
 
-describe('the one thing is chosen across both canonical sources', () => {
+/** A material institutional judgment: raised, evidence-backed, no direction
+ *  given. The guards require the referenced responsibilities to be real and on
+ *  this product, which is why they are seeded rather than named. */
+async function openJudgment(title: string): Promise<void> {
+  await query(
+    `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+     VALUES ('oq_j_sig', ?, 'operations','capacity_observed','medium','{}','Evidence')`, [P]);
+  await query(
+    `INSERT INTO institutional_responsibilities (id,product_id,title,capability,state) VALUES
+       ('oq_ja', ?, 'Urgent support obligation','customer_support','understood'),
+       ('oq_jb', ?, 'Planned development','development','understood')`, [P, P]);
+  await query(
+    `INSERT INTO strategic_decisions_log
+       (id,product_id,decision_title,decision_description,decision_category,made_by,status,
+        agent_context_json,responsibility_refs_json,evidence_refs_json)
+     VALUES ('oq_j', ?, ?, 'Allocate or change capacity','operations','agent_recommendation',
+             'active','{}','["oq_ja","oq_jb"]','["signal_event:oq_j_sig"]')`, [P, title]);
+}
+
+describe('the one thing is chosen across all three canonical sources', () => {
   it('prefers a date the company gave that has passed', async () => {
     // A stated date passing is a fact about the COMPANY. A pending decision is
     // a fact about Foundry's queue. When both exist the founder is told about
@@ -99,6 +131,38 @@ describe('the one thing is chosen across both canonical sources', () => {
     expect(letter.needsYou, 'the headline was silent while the page listed work')
       .toContain('Answer support mail');
     expect(letter.needsYouHref).toBe('/letter');
+  });
+
+  it('speaks for a judgment it raised when nothing else does', async () => {
+    // The third store. This was rendered in its own section and could never be
+    // the headline, so a founder with an empty decision queue and no
+    // responsibility ask was told nothing needed them while Foundry was waiting
+    // on a direction it had asked for.
+    await openJudgment('Two things want the same week');
+    const letter = await composeLetter(P);
+    expect(letter.needsYou).toContain('Two things want the same week');
+    expect(letter.needsYou, 'it must say that Foundry asked and got no answer')
+      .toMatch(/you have not said which way to go/);
+    expect(letter.needsYouHref).toBe('/letter');
+  });
+
+  it('ranks an open judgment below the founder own queue, and a late one above it', async () => {
+    // Nothing about an open judgment is late, so the founder's own pending
+    // decision comes first.
+    await openJudgment('Two things want the same week');
+    await pendingDecision(3, 'Pick a pricing page');
+    expect((await composeLetter(P)).needsYou).toContain('Pick a pricing page');
+
+    // Contradicted is a different thing: the observation pass may only report
+    // it against a date the COMPANY gave, so it means that date passed with the
+    // conflict still standing.
+    await query(
+      `INSERT INTO institutional_judgment_evaluations
+         (id,judgment_id,product_id,state,evidence_refs_json,economic_result_json)
+       VALUES ('oq_ev','oq_j', ?, 'contradicted','[]','{"status":"unknown","value":null}')`, [P]);
+    const later = await composeLetter(P);
+    expect(later.needsYou).toContain('Two things want the same week');
+    expect(later.needsYou).toMatch(/the date you gave passed/);
   });
 
   it('says nothing when there is genuinely nothing', async () => {
