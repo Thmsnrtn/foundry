@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { nanoid } from 'nanoid';
 import { query } from '../../src/db/client.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { emitSignalEvent } from '../../src/services/scp/events/dispatcher.js';
@@ -67,6 +68,31 @@ describe('company evidence responsibility discovery', () => {
       summary:'Support volume spiked' });
     await Promise.all([discoverResponsibilityFromSignal('p1',signalId), discoverResponsibilityFromSignal('p1',signalId)]);
     expect((await query('SELECT id FROM institutional_responsibilities WHERE discovery_evidence_ref=?',[`signal_event:${signalId}`])).rows).toHaveLength(1);
+  });
+
+  it('refuses an obligation payload arriving under a source that is not a report', async () => {
+    // PROVENANCE IS THE WHOLE OF THE CHECK, and it was untested until a mutation
+    // deleted it and the suite stayed green.
+    //
+    // Migration 126's guard — which verifies the stated founder against
+    // `products.owner_id` and refuses a report that smuggles authority — fires
+    // only on `source='founder_report'`. Sixteen places insert into
+    // `signal_events` directly, under sources of their own. If discovery read
+    // the payload without checking where it came from, any of them could write a
+    // well-formed obligation and get a responsibility with nothing having
+    // verified who was speaking for the company.
+    //
+    // The payload below is exactly what the report path sends. The only thing
+    // wrong with it is where it arrived from, and that has to be enough.
+    const signalId = nanoid();
+    await query(
+      `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+       VALUES (?,'p1','stripe','payment_failed','medium',?,'Looks like a report')`,
+      [signalId, JSON.stringify({ obligation_kind:'revenue_collection',
+        what:'Collect what is owed', founder_id:'rd_owner' })]);
+    await expect(discoverResponsibilityFromSignal('p1', signalId)).resolves.toBeNull();
+    expect((await query('SELECT id FROM institutional_responsibilities WHERE product_id=?',['p1'])).rows)
+      .toHaveLength(0);
   });
 
   it('cannot discover from another product signal even when its id is known', async () => {
