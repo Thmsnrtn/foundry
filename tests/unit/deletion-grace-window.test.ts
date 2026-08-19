@@ -253,6 +253,50 @@ describe('a company on its way out stops acting', () => {
     await query(`UPDATE products SET entitlement_paused_at = NULL WHERE id = ?`, [P]);
   });
 
+  it('leaves a door open when an account erasure half-fails', async () => {
+    // THE FROZEN COMPANY. `eraseFounderAccount` pauses each product before
+    // erasing it. If the erasure then throws, the pause stays — and the
+    // immediate path wrote no ledger row, so `pendingDeletion` found nothing,
+    // `cancelDataDeletion` refused, and the company was left not operating
+    // with no reachable way back. Not hypothetical: the identity provider's
+    // webhook is the only caller of this path, and it retries.
+    //
+    // Its own founder and company: a half-erasure deliberately leaves children
+    // behind, which would break the shared fixture's teardown.
+    const F2 = 'dg_halfowner';
+    const P2 = 'dg_halfproduct';
+    await query(`INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
+      [F2, 'clerk_dg_half', 'half@test.local']);
+    await query(
+      `INSERT INTO products (id, name, owner_id, status) VALUES (?, 'Half Co', ?, 'active')`,
+      [P2, F2]);
+    // The failure is planted rather than imagined — a trigger that refuses one
+    // delete in the plan, which is what a real constraint violation looks like.
+    await query(
+      `CREATE TRIGGER dg_break_erasure BEFORE DELETE ON metric_snapshots
+       BEGIN SELECT RAISE(ABORT, 'planted:refuse'); END`);
+    try {
+      await query(
+        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, nps_score)
+         VALUES ('dg_snap', ?, date('now'), 40)`, [P2]);
+      const { eraseFounderAccount } = await import('../../src/services/privacy/consent.js');
+      const outcome = await eraseFounderAccount(F2);
+      expect(outcome.failed.length, 'the planted failure did not fire').toBeGreaterThan(0);
+
+      const paused = ((await query(
+        `SELECT erasure_scheduled_at FROM products WHERE id = ?`, [P2]))
+        .rows[0] as Record<string, unknown>).erasure_scheduled_at;
+      expect(paused, 'a half-erased company should still be paused').not.toBeNull();
+      expect(await pendingDeletion(P2),
+        'the company is paused and nothing says why, so nothing can undo it')
+        .not.toBeNull();
+      expect(await cancelDataDeletion(P2, F2),
+        'the only way out of a frozen company must actually work').toBe(true);
+    } finally {
+      await query('DROP TRIGGER IF EXISTS dg_break_erasure');
+    }
+  });
+
   it('keeps the column and the ledger telling the same story', async () => {
     // Two records of one fact is a drift risk taken deliberately: the hot paths
     // read a column, the audit trail keeps the events. They must not disagree.

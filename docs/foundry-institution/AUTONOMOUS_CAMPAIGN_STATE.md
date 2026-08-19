@@ -26,7 +26,7 @@ inherited list because it was inherited.
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
 - **Migrations:** 201 files, highest **165**. Ordering now gated. Snapshot current.
-- **Validation:** full suite green — **252 files / 2,207 tests**. `npm run check`
+- **Validation:** full suite green — **252 files / 2,208 tests**. `npm run check`
   green; all ratchets hold.
 - **Ratchets:** unguarded mutating routes **114** (population corrected from a
   quarter of the surface — see below); fabricated test schemas **13**;
@@ -107,10 +107,10 @@ Not a backlog — if something better is found, this list loses.
 4. **Remaining findings from the erasure falsification**, ranked low because
    each is bounded: the sever marker `'erased'` is a fake founder id in a
    column readers treat as one; `idempotency_keys.dedup_key` embeds a product
-   id by construction; `introductions.feedback_a/b` have no writer anywhere, so
-   the sever's careful reasoning governs columns nothing populates; and
-   `eraseOneProduct` is not atomic, so a failure mid-plan leaves a company
-   paused with `cancelDataDeletion` returning `nothing_pending`.
+   id by construction; and `introductions.feedback_a/b` have no writer
+   anywhere, so the sever's careful reasoning governs columns nothing
+   populates. (~~The frozen half-erased company~~ — **DONE**: the immediate
+   path records its intent, so the ordinary cancel reaches it.)
 5. **Seam-reading yield is narrowing.** The last two tranches' best finds came
    from turning instruments on themselves and from an independent falsifier —
    not from reading further subsystem pairs. Treat adversarial review as the

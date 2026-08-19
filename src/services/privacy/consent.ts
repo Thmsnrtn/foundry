@@ -936,12 +936,25 @@ export async function eraseFounderAccount(founderId: string): Promise<{
   const failed: Array<{ productId: string; error: string }> = [];
   for (const productId of productIds) {
     try {
-      // MARK IT BEFORE TOUCHING IT. The scheduled path sets this thirty days
-      // earlier; the immediate path — an account deletion, the identity
-      // provider's webhook — used to set nothing, so an append-only ledger had
-      // no way to tell a genuine erasure from an attempt to rewrite history and
-      // refused both. It is also what stops the company acting while this runs,
-      // which is the truth about it either way.
+      // MARK IT BEFORE TOUCHING IT, IN BOTH RECORDS. The scheduled path sets
+      // this thirty days earlier; the immediate path — an account deletion, the
+      // identity provider's webhook — used to set nothing, so an append-only
+      // ledger had no way to tell a genuine erasure from an attempt to rewrite
+      // history and refused both. It is also what stops the company acting
+      // while this runs, which is the truth about it either way.
+      //
+      // AND THE LEDGER ROW, WHICH THIS PATH DID NOT WRITE. Two records of one
+      // fact are tolerated here — hot paths read the column, the trail keeps
+      // the events — on the condition that they never disagree, and this was
+      // the path where they did. `pendingDeletion` reads the ledger and found
+      // nothing, so `cancelDataDeletion` refused, while the COLUMN went on
+      // pausing the company. If `eraseOneProduct` then threw for one product,
+      // that company was frozen with no door: not operating, and the only
+      // cancel returning `nothing_pending` forever. Recording the intent first
+      // means the ordinary cancel works on the ordinary state.
+      if ((await pendingDeletion(productId)) === null) {
+        await scheduleDataDeletion(productId, 0, founderId);
+      }
       await query(
         `UPDATE products SET erasure_scheduled_at = COALESCE(erasure_scheduled_at, datetime('now'))
           WHERE id = ?`, [productId]);

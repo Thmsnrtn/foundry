@@ -16,13 +16,13 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `18e0b78` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `f53e067`+ on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **201 files**, highest number **165**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **252 files / 2,207 tests**. `npm run check` green. |
+| Validation | Full suite green: **252 files / 2,208 tests**. `npm run check` green. |
 | Ratchets | Unguarded mutating routes **114** · fabricated test schemas **13** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
 | Public API | **Live.** Scoped, expiring, revocable keys issued from settings. Every v1 route needs a scope a founder can grant; the bidirectional gate enforces both directions. |
