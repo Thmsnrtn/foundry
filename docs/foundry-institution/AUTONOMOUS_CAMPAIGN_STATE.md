@@ -121,17 +121,29 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    missing and the owner's pilot decision gates on it.
 
 7. **32 of the institution's 126 exported functions have no caller anywhere in
-   `src/`.** Three read so far, three real defects — see the closed work in git
-   history. The rest are worth reading one at a time.
-
-   Original text follows.
-
-   **32 of the institution's 126 exported functions have no caller anywhere in
    `src/`.** Measured, not guessed. About half are the frozen benchmark scorers,
    which are legitimately test-driven, and eight are the development-assisting
-   vertical already recorded as DARK. The rest are worth reading one at a time —
-   the two examined so far were both real: a founder question nobody compared
-   against reality, and an authority a founder could not withdraw.
+   vertical already recorded as DARK. The rest are worth reading one at a time.
+
+   Four read so far. Three were real defects — a founder question nobody
+   compared against reality, an authority a founder could not withdraw, and a
+   number a founder could start watching but never stop; see the closed work in
+   git history.
+
+   The fourth was not a defect and was deliberately kept. Candidate recognition
+   (`discovery.ts:discoverCandidatesFromReconstruction` ->
+   `proposeResponsibilityCandidate` -> `responsibility_candidates` -> The
+   Letter's "Possible responsibilities requiring your judgment") is a four-layer
+   chain with no production supply: nothing in `src/` writes an
+   `operational_responsibility` reconstruction claim, so the discovery has
+   nothing to read and its promote/reject routes are unreachable. It was not
+   deleted, for two reasons. It carries an E3 claim — the recognition benchmark
+   scores it, supplying its own claims — and wiring it would require Foundry
+   *inferring* responsibilities, which migrations 126 and 135-138 forbid. The
+   mitigating fact is that the section renders only when non-empty, so no false
+   promise reaches a founder. All three of those facts are now asserted in
+   `tests/unit/candidate-recognition-has-no-production-supply.test.ts`, so the
+   absence is a property under test rather than a thing someone has to remember.
 
    **A gate for this is NOT trivial and should not be faked.** Reachability at
    function granularity needs a real call graph: a first attempt that excluded a
