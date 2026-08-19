@@ -320,6 +320,22 @@ found, this list loses.
     and five of the six call sites use it. The sixth compares against a
     caller-supplied clock and says at the line why it is still by hand.
 
+19. **A company being deleted said so only on a page nobody visits.**
+    ~~Open.~~ **Closed.** A previous session built the cancel door for the
+    thirty-day grace window, having found the window had none. The door went on
+    the privacy page. The Letter — the surface a founder opens daily — said
+    nothing at all, so "a founder who clicked by accident, or whose co-founder
+    clicked, could do nothing but watch" was still true of the page they
+    actually read. The notice and the door are on it now, and they disappear
+    when the deletion is cancelled.
+
+    And `pendingDeletion` — the only reader that tells anyone a deletion is
+    coming — **threw** on a malformed audit row: `Number(delete_after_days)` of
+    a bad value is NaN, and `new Date(NaN).toISOString()` is a RangeError. A
+    corrupt record removed the founder's exit rather than degrading the display.
+    It is total now, falling back to the documented thirty days rather than an
+    invented number.
+
 ## Blocked — needs a design decision, not effort
 
 - **Named-agent retirement.** The twelve live agents are model-driven; the institution is deliberately model-free. They are Class C, not B: cutting them over would LOSE capability rather than preserve it. Blocked on executive-cognition design, itself blocked on a consumed task with a baseline. Do not force it.

@@ -1304,13 +1304,29 @@ export async function pendingDeletion(productId: string): Promise<{
       WHERE event_type = 'data_deletion_completed' AND target_id = ? LIMIT 1`, [productId]);
   if (done.rows.length > 0) return null;
 
-  const metadata = JSON.parse(String(row.metadata_json ?? '{}')) as Record<string, unknown>;
-  const scheduledAt = String(metadata.scheduled_at ?? row.created_at);
-  const days = Number(metadata.delete_after_days ?? 30);
+  // THIS MUST NOT THROW. It is the only reader that tells a founder a deletion
+  // is coming, and the page carrying it is the only place they can stop it — so
+  // an unparseable record used to remove their exit rather than degrade the
+  // display. `Number(metadata.delete_after_days)` on a malformed row is NaN,
+  // and `new Date(NaN).toISOString()` throws a RangeError.
+  //
+  // The fallbacks are the documented promise, not invented numbers: the page
+  // says thirty days, and the row's own `created_at` is when it was written.
+  let metadata: Record<string, unknown> = {};
+  try { metadata = JSON.parse(String(row.metadata_json ?? '{}')) as Record<string, unknown>; } catch { /* keep {} */ }
+
+  const claimedAt = String(metadata.scheduled_at ?? row.created_at);
+  const scheduledAt = Number.isFinite(Date.parse(claimedAt)) ? claimedAt : String(row.created_at);
+  const claimedDays = Number(metadata.delete_after_days);
+  const days = Number.isFinite(claimedDays) && claimedDays > 0 ? claimedDays : 30;
+  const base = Date.parse(scheduledAt);
   return {
     scheduledAt,
     deleteAfterDays: days,
-    deletesOn: new Date(new Date(scheduledAt).getTime() + days * 86_400_000).toISOString(),
+    // If even `created_at` will not parse there is no honest date to give, and
+    // the caller gets the day it is read rather than an exception: the founder
+    // needs to be told this is happening far more than they need the date.
+    deletesOn: new Date((Number.isFinite(base) ? base : Date.now()) + days * 86_400_000).toISOString(),
     requestedBy: row.actor_type === 'founder' ? String(row.actor_id) : null,
   };
 }

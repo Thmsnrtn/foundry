@@ -313,3 +313,79 @@ describe('a company on its way out stops acting', () => {
     expect(await pendingDeletion(P)).toBeNull();
   });
 });
+
+describe('a malformed record must not remove the founder\'s exit', () => {
+  it('never throws, whatever the audit row says', async () => {
+    // `pendingDeletion` is the only reader that tells a founder a deletion is
+    // coming, and the page carrying it is the only place they can stop it. It
+    // computed `new Date(scheduledAt).getTime() + Number(days) * 86_400_000`
+    // and called `.toISOString()` on the result — so a row with an unparseable
+    // `delete_after_days` produced NaN and threw a RangeError, taking the
+    // countdown AND the cancel door with it.
+    //
+    // Found because a test called `scheduleDataDeletion(P, OWNER)` and put a
+    // founder id where the day count goes. A caller can be wrong; the reader
+    // that stands between somebody and their data being deleted should still
+    // answer.
+    await cancelDataDeletion(P, OWNER).catch(() => false);
+    await scheduleDataDeletion(P, 30, OWNER);
+    for (const broken of [
+      JSON.stringify({ delete_after_days: 'not a number', scheduled_at: 'whenever' }),
+      JSON.stringify({ delete_after_days: -5 }),
+      'not json at all',
+      '{}',
+      // A NULL metadata_json is deliberately not in this list: the column is
+      // NOT NULL, so the schema already makes that case impossible and the
+      // database refused the fixture that tried to build it.
+    ]) {
+      await query(
+        `UPDATE agent_audit_log SET metadata_json = ?
+          WHERE event_type='data_deletion_scheduled' AND target_id = ?`, [broken, P]);
+      const pending = await pendingDeletion(P);
+      expect(pending, `a ${String(broken).slice(0, 20)} row still reports a pending deletion`)
+        .not.toBeNull();
+      // The fallback is the documented promise, not an invented number.
+      expect(pending!.deleteAfterDays).toBe(30);
+      expect(Number.isFinite(Date.parse(pending!.deletesOn)),
+        'and the date it gives is a date').toBe(true);
+    }
+    await cancelDataDeletion(P, OWNER);
+  });
+});
+
+describe('the sign is on the page the founder actually opens', () => {
+  it('says a deletion is coming on The Letter, with a way to stop it', async () => {
+    // The door was built and then put somewhere a founder has to already
+    // suspect something to find. `consent.ts` states the case in the comment
+    // beside the cancel path: "a founder who clicked by accident, or whose
+    // co-founder clicked, could do nothing but watch, and nothing on the page
+    // even told them it was coming." The Letter is the page they open daily.
+    const { Hono } = await import('hono');
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: OWNER, email: 'dg@test.local', preferences: {} } as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
+    });
+    app.route('/', letterRoutes);
+
+    // Nothing scheduled: the letter must not invent a countdown.
+    await cancelDataDeletion(P, OWNER).catch(() => false);
+    const quiet = await (await app.request('/letter')).text();
+    expect(quiet).not.toContain('This company is being deleted');
+
+    await scheduleDataDeletion(P, 30, OWNER);
+    const warned = await (await app.request('/letter')).text();
+    expect(warned, 'the biggest fact about the company must be on the page')
+      .toContain('This company is being deleted');
+    expect(warned, 'and it must not read as somebody else\'s decision')
+      .toContain('it does not have to be you who asked for it');
+    expect(warned, 'with the door, not just the news').toContain('/privacy');
+
+    // Cancelling takes the notice away, so the page never outlives the fact.
+    await cancelDataDeletion(P, OWNER);
+    expect(await (await app.request('/letter')).text())
+      .not.toContain('This company is being deleted');
+  });
+});

@@ -675,6 +675,18 @@ letterRoutes.get('/letter', async (c) => {
   const shadowingExceptions = await getMaterialShadowingExceptions(ctx.productId);
   const { getFounderAssistingActivity } = await import('../../services/institution/responsibility-assisted-email.js');
   const assistingActivity = await getFounderAssistingActivity(ctx.productId);
+  // THE BIGGEST FACT ABOUT A COMPANY BELONGS ON THE PAGE THE FOUNDER READS.
+  //
+  // A scheduled deletion was visible only on the privacy page. `consent.ts`
+  // says why that matters, in the comment beside the cancel door it had to
+  // build: "a founder who clicked by accident, or whose co-founder clicked,
+  // could do nothing but watch, and nothing on the page even told them it was
+  // coming. A grace period nobody can act in is a countdown." The door exists
+  // now; this is the sign pointing at it, on the surface they open daily.
+  const { pendingDeletion } = await import('../../services/privacy/consent.js');
+  // No `.catch()`: `pendingDeletion` is total by construction, and swallowing
+  // here is what hid a RangeError it used to throw on a malformed record.
+  const deletion = await pendingDeletion(ctx.productId);
   const { getJudgmentRecord, getMaterialJudgments } = await import('../../services/institution/institutional-judgment-disposition.js');
   const materialJudgments = await getMaterialJudgments(ctx.productId);
   // How Foundry's judgments about this company have held up. Read back from the
@@ -756,6 +768,13 @@ letterRoutes.get('/letter', async (c) => {
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — from your team.</p>
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}`}
 
+    ${deletion ? html`
+    <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--danger, #ff6b6b);">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--danger, #ff6b6b);margin-bottom:0.4rem;">This company is being deleted</div>
+      <div style="font-size:0.95rem;color:var(--text-primary);">${ctx.productName} and everything in it will be removed on ${String(deletion.deletesOn).slice(0, 10)}.</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">You can stop this until then — it does not have to be you who asked for it.</div>
+      <a href="/privacy" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">Stop the deletion</a>
+    </div>` : ''}
     ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
       && supportChannels.length === 0 && !hasDevelopmentActivity && !fleetHasItems ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
