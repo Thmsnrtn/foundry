@@ -96,6 +96,18 @@ export async function executeAssistedSupportEmail(actionId:string, lifecycle:{af
   const parameters=JSON.parse(String(row.parameters_json)) as {to:string[];subject:string;html:string};
   const result=await invoke({productId:String(row.product_id),tool:'send_email',action:`assisted ${row.authority_scope} ${row.effect_id}`,
     params:parameters,dedupKey:String(row.effect_id),customerExternalId:parameters.to[0],surface:'email_outbound',dataClass:'customer'});
+  // NOTHING READS `reconcile_after`. It is written here, on the executed path
+  // below, and by the SCP executor, and no query anywhere in `src/` selects it;
+  // it stays off the write-only ratchet only because a `SELECT *` in the
+  // outbound executor masks it. So there is no scheduled reconciliation, and
+  // the founder-facing sentence for an ambiguous dispatch no longer says there
+  // is one.
+  //
+  // The timestamp is kept rather than dropped because the mechanism it is
+  // waiting for is legitimate and missing, not wrong: asking the provider
+  // whether it took the message establishes ACKNOWLEDGEMENT, which is a fact
+  // about the provider and not a claim about the outcome. It needs a real
+  // provider call. Whoever builds it should delete this note.
   if (!result.ok) {
     const ambiguous=result.phase==='execution';
     await query(`UPDATE outbound_actions SET status='failed',effect_certainty=?,provider_receipt_json=?,reconcile_after=? WHERE id=?`,
@@ -334,7 +346,7 @@ export async function getFounderAssistingActivity(productId:string):Promise<Arra
       :outcome==='verified_failure'?`${attribution(effectId)} it did not work`
       :outcome==='conflicting'?'reports about this disagree; I have kept both and will not pick one'
       :certainty==='provider_acknowledged'?'provider accepted it; whether it worked is still unknown'
-      :certainty==='ambiguous'?'dispatch is ambiguous and needs reconciliation'
+      :certainty==='ambiguous'?'I do not know whether this went out — the send failed part-way. I have not sent it again, because sending twice is worse than not knowing'
       :String(row.status)==='approved'?`authorized to send ${thing}; not yet performed`
       :'no consequential action was verified';
     // A notice is told apart by its recipient in every state, not only while it
