@@ -62,6 +62,7 @@
 // =============================================================================
 import { readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const BASELINE = join(ROOT, 'docs/db/unguarded-route-baseline.txt');
@@ -85,8 +86,7 @@ function tsFiles(dir) {
 
 /** Comments describe the defect; they are not the defect. */
 function strip(src) {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  return stripComments(src, { lineComments: false })
     .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
 }
 

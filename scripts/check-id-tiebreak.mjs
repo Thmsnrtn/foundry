@@ -40,6 +40,7 @@
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const SRC = join(ROOT, 'src');
@@ -58,7 +59,7 @@ const found = [];
 for (const file of files(SRC)) {
   const source = readFileSync(file, 'utf8');
   // Comments are stripped so a note ABOUT this rule is never mistaken for it.
-  const cleaned = source.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/\S/g, ' '))
+  const cleaned = stripComments(source, { lineComments: false })
     .split('\n').map((l) => (/^\s*(\/\/|--)/.test(l) ? '' : l)).join('\n');
   for (const match of cleaned.matchAll(/ORDER\s+BY\s+([\s\S]{0,200}?)(?=\bLIMIT\b|`|$)/gi)) {
     const terms = match[1].split(',').map((t) => t.trim()).filter(Boolean);

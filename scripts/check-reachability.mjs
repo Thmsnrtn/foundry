@@ -44,6 +44,7 @@
 // =============================================================================
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { dirname, join, relative, resolve } from 'path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const SRC = join(ROOT, 'src');
@@ -83,10 +84,20 @@ function tsFiles(dir) {
   });
 }
 
-/** Static `from '...'` and dynamic `import('...')` alike. */
+/**
+ * Static `from '...'` and dynamic `import('...')` alike.
+ *
+ * COMMENTS ARE STRIPPED FIRST. An import commented out while debugging and left
+ * that way would otherwise still count as an edge, and the module it names
+ * would go on looking reachable while nothing imports it — a false NEGATIVE, in
+ * the direction this gate exists to catch. Measured at zero across `src/` when
+ * this was added; the point is that it stays zero without anybody checking.
+ */
 function importsOf(file) {
   let source;
   try { source = readFileSync(file, 'utf8'); } catch { return []; }
+  source = stripComments(source, { lineComments: false })
+    .split('\n').map((l) => (/^\s*\/\//.test(l) ? '' : l)).join('\n');
   const out = [];
   const re = /(?:from\s*|import\s*\(\s*)['"](\.[^'"]+)['"]/g;
   let m;

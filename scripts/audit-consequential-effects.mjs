@@ -2,14 +2,14 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { globSync } from 'glob';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const files = globSync('src/**/*.ts', { cwd: root, absolute: true }).sort();
 
 /** Comments describe effects; they are not effects. Blanked rather than removed
  *  so reported line numbers still point at the real line. */
-const strip = (s) => s
-  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+const strip = (s) => stripComments(s, { lineComments: false })
   .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
 const rules = [
   { id: 'external_post', re: /fetch\(\s*(['"`])https:\/\/(?!api\.openrouter\.ai)([^'"`]+)\1\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
@@ -186,8 +186,7 @@ if (process.argv.includes('--write')) {
         // Comments explaining the guard are not the guard. This audit found
         // its own version of that: the first attempt matched the sentence
         // describing why the check is there.
-        src = readFileSync(resolve(root, holder), 'utf8')
-          .replace(/\/\*[\s\S]*?\*\//g, ' ')
+        src = stripComments(readFileSync(resolve(root, holder), 'utf8'), { lineComments: false })
           .split('\n')
           .map((l) => l.replace(/^\s*\/\/.*$/, ''))
           // `import type` is erased at compile time. Whatever it names, it

@@ -35,6 +35,7 @@
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const EXECUTOR = 'src/services/scp/actions/executor.ts';
@@ -64,8 +65,7 @@ function tsFiles(dir) {
 /** Comments describe defects; they are not defects. Blanked rather than
  *  removed so reported line numbers still point at the real line. */
 function strip(src) {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  return stripComments(src, { lineComments: false })
     .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
 }
 

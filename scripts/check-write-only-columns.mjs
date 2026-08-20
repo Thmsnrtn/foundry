@@ -70,6 +70,7 @@
 // =============================================================================
 import { readdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const MIGRATIONS = join(ROOT, 'src/db/migrations');
@@ -124,11 +125,10 @@ function sourceFiles(dir = SRC, out = []) {
   return out;
 }
 
-const stripComments = (source) => source
-  .replace(/\/\*[\s\S]*?\*\//g, '')
+const stripLocal = (source) => stripComments(source, { lineComments: false })
   .split('\n').map((line) => line.replace(/^\s*\/\/.*$/, '')).join('\n');
 
-const code = stripComments(sourceFiles().map((f) => readFileSync(f, 'utf8')).join('\n'));
+const code = stripLocal(sourceFiles().map((f) => readFileSync(f, 'utf8')).join('\n'));
 const tables = schema();
 
 // Every write context, per table — and one copy of the code with all of them

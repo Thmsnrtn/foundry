@@ -38,6 +38,7 @@
 import { execSync } from 'child_process';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const DB = '/tmp/_writerless.db';
@@ -62,8 +63,7 @@ function tsFiles(dir) {
   });
 }
 /** Comments describe the defect; they are not the defect. */
-const strip = (s) => s
-  .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+const strip = (s) => stripComments(s, { lineComments: false })
   .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
 
 const files = tsFiles(join(ROOT, 'src'));

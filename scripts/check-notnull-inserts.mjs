@@ -36,6 +36,7 @@
 import { execSync } from 'child_process';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const DB = '/tmp/_notnull.db';
@@ -75,8 +76,7 @@ const at = (src, index) => src.slice(0, index).split('\n').length;
 
 for (const file of tsFiles(join(ROOT, 'src'))) {
   // Comments describe the defect; they are not the defect.
-  const src = readFileSync(file, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  const src = stripComments(readFileSync(file, 'utf8'), { lineComments: false })
     .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
   const rel = relative(ROOT, file);
 

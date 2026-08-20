@@ -47,6 +47,7 @@
 import { execSync } from 'child_process';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const DB = '/tmp/_checkvocab.db';
@@ -106,8 +107,7 @@ for (const dir of ['src', 'tests']) {
   for (const file of tsFiles(join(ROOT, dir))) {
     // Comments describe the defect; they are not the defect. Blanked rather
     // than removed so reported line numbers still point at the real line.
-    const src = readFileSync(file, 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+    const src = stripComments(readFileSync(file, 'utf8'), { lineComments: false })
       .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
     const rel = relative(ROOT, file);
 

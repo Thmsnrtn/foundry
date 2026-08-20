@@ -26,6 +26,7 @@
 import { execSync } from 'child_process';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const BASELINE = join(ROOT, 'docs/db/test-schema-fabrication-baseline.txt');
@@ -51,8 +52,7 @@ for (const file of tsFiles(join(ROOT, 'tests'))) {
   // A header explaining that a migration wrote `CREATE TABLE IF NOT EXISTS
   // board_packets` is prose about the defect, not the defect. Blanked rather
   // than removed so reported line numbers still point at the real line.
-  const src = readFileSync(file, 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
+  const src = stripComments(readFileSync(file, 'utf8'), { lineComments: false })
     .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
   for (const m of src.matchAll(/CREATE\s+TABLE\s+(?:IF NOT EXISTS\s+)?["'`]?(\w+)/gi)) {
     if (!real.has(m[1])) continue;                    // a throwaway table is fine
