@@ -25,15 +25,15 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `9b67a41`. **Migrations:** 209 files, highest **173**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **276 files / 2,362 tests**, `npm run check`
+- **Head:** `4bfab6c`. **Migrations:** 209 files, highest **173**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **278 files / 2,369 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **29** · write-only columns
-  **92** · id tiebreaks **18** · backticks in embedded comments **0**.
+  **85** · id tiebreaks **18** · backticks in embedded comments **0**.
 
 ## Active work
 
@@ -70,6 +70,15 @@ because one parameter happens to carry an agent's name rather than an
 integration's, so migration 173 closes the shape instead. And the field that
 makes an authorisation attributable recorded the literal 'ceo' for every founder
 of every company.
+
+The instruments themselves turned out to be the largest finding. Ten gates
+shared a block-comment regex that reads `app.use('/dashboard/*', mw)` as a
+comment opening and blanks everything to the next real `*/` — 715 lines of code,
+including half of `src/index.ts`: the route mounting, the middleware wiring, the
+scheduler. Two modules were counted reachable through imports blanked into
+nothing, and seven columns sat in the write-only baseline with readers inside
+the blanked regions. It surfaced only because hardening one unrelated gate made
+its baseline move.
 
 Two shapes recurred often enough to become gates rather than lessons: a backtick
 inside an embedded SQL or HTML comment (three parse errors, each to somebody who

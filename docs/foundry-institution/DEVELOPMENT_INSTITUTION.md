@@ -258,6 +258,20 @@ Two standards this institution holds itself to, both learned the hard way:
   criterion proved through a function no production surface calls, and a
   founder-surface claim proved by calling a service directly.
 
+- **A gate's blind spot is invisible from its output, and shows up as a
+  baseline that moves for the wrong reason.** Ten gates opened with the same
+  block-comment regex, and `app.use('/dashboard/*', mw)` is a string containing
+  `/*` — so the regex blanked everything from a route glob to the next real
+  `*/`. 715 lines of code, including half of `src/index.ts`. Every one of those
+  gates had been reporting green over files it could only partly see, and
+  nothing in their output could have said so.
+  It surfaced only because an unrelated hardening of ONE gate made its baseline
+  move: two modules stopped being reachable, seven columns stopped being
+  write-only. **When a ratchet moves for a reason you did not intend, the
+  instrument was wrong before, not after** — chase that before touching the
+  baseline. And a rule ten scripts share is a module, not a line copied ten
+  times; the copies drifted into nothing being able to fix them at once.
+
 - **Making a record true can make a surface worse. Fix both halves in the same
   change.** `approved_by` read 'ceo' for every approval by every founder — legible
   and false. Writing the real principal made it true and turned a founder-facing
