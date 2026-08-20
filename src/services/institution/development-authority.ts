@@ -85,8 +85,17 @@ export async function grantDevelopmentAuthority(input: {
      (id,founder_id,product_id,capability,from_mode,to_mode,disclosure_version,
       responsibility_id,allowed_scope_json,consequence_boundary,expires_at,
       repository_ref,allowed_path_prefixes_json,allowed_change_class,required_verification_json)
-     VALUES (?,?,?,'development','suggest','act',?,?,?,'low',?,?,?,?,?)`,
-    [id, input.ownerId, input.productId, input.disclosureVersion ?? 'development-authority-v1',
+     -- The from-mode column records the RUNG the responsibility is on. It said
+     -- 'suggest', which is autopilot vocabulary and not a rung, in the one
+     -- record that exists to make an authorisation provable rather than
+     -- asserted.
+     VALUES (?,?,?,'development',
+       COALESCE((SELECT state FROM institutional_responsibilities
+                  WHERE id=? AND product_id=?),'unknown'),
+       'act',?,?,?,'low',?,?,?,?,?)`,
+    [id, input.ownerId, input.productId,
+      input.responsibilityId, input.productId,
+      input.disclosureVersion ?? 'development-authority-v1',
       input.responsibilityId, JSON.stringify([input.changeClass]), input.expiresAt.toISOString(),
       input.repository, JSON.stringify(input.allowedPathPrefixes), input.changeClass,
       JSON.stringify(input.requiredVerification)],

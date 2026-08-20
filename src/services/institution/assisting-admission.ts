@@ -215,7 +215,14 @@ export async function grantAssistingAuthority(input: {
   const days = Math.min(Math.max(input.durationDays ?? 30, 1), 90);
   const consentId = await recordConsent({
     founderId: input.founderId, productId: input.productId, capability,
-    fromMode: 'draft', toMode: 'act',
+    // THE LEDGER RECORDS THE RUNG IT ACTUALLY CAME FROM. This said 'draft',
+    // which is not a rung and never was — vocabulary borrowed from the
+    // autopilot, in the one record that exists to make "the user authorized
+    // this" provable rather than asserted. A grant is made from Shadowing, at
+    // the boundary the entry guard enforces, and that is a fact the ladder
+    // already holds. Nothing reads the column, which is exactly how it could
+    // drift into fiction unnoticed.
+    fromMode: String(owned.state), toMode: 'act',
     responsibilityId: input.responsibilityId,
     allowedScope: [grantable.scope],
     consequenceBoundary: 'low',

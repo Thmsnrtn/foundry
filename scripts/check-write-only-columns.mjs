@@ -37,6 +37,11 @@
 //   • It therefore MISSES a read that never names the column — `SELECT *`
 //     followed by generic row iteration. That is a false positive in the
 //     direction of asking a question, which is the safe direction.
+//   • IT COUNTS A MENTION IN AN EMBEDDED SQL COMMENT AS A READ. Comments in
+//     TypeScript are stripped; a `--` comment inside a template literal is not,
+//     because it is part of the string. Naming a column in the SQL comment that
+//     explains it therefore drops it off this list without giving it a reader.
+//     Write such notes above the query, or name the column with a hyphen.
 //   • IT ALSO MISSES A COLUMN MASKED BY THE SAME NAME ON ANOTHER TABLE, and
 //     that one is NOT the safe direction. Reads are matched against all of
 //     `src/` at once, so `outbound_actions.reconcile_after` counted as read
