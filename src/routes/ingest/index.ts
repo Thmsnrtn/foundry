@@ -293,8 +293,17 @@ ingestRoutes.post('/ingest/company-report/:token', async (c) => {
   if (!identity) return c.json({ error: 'Unknown or unscoped ingest credential' }, 401);
   const productId = identity.productId;
 
+  // Same as the outcome intake below: a refusal after a successful
+  // authentication is recorded by shape, so a system that is failing is visible
+  // to the person who connected it.
+  const { clearIngestRefusals, recordIngestRefusal } = await import(
+    '../../services/institution/ingest-credentials.js');
+
   let raw: unknown;
-  try { raw = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+  try { raw = await c.req.json(); } catch {
+    await recordIngestRefusal(identity.credentialId, 'body_unreadable');
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
   const body = (raw ?? {}) as Record<string, unknown>;
 
   const { reportExternalObligation, REPORTABLE_OBLIGATIONS } = await import(
@@ -306,11 +315,13 @@ ingestRoutes.post('/ingest/company-report/:token', async (c) => {
     what: String(body.what ?? ''),
   });
   if (!reported) {
+    await recordIngestRefusal(identity.credentialId, 'fields_invalid');
     return c.json({
       error: 'Report refused', accepted_kinds: REPORTABLE_OBLIGATIONS,
       note: 'what is required and bounded to 200 characters; obligation_kind must be one of accepted_kinds',
     }, 422);
   }
+  await clearIngestRefusals(identity.credentialId);
   // A report is evidence, never permission. Saying so in the response keeps an
   // integration author from concluding otherwise.
   return c.json({
@@ -345,8 +356,20 @@ ingestRoutes.post('/ingest/effect-outcome/:token', async (c) => {
   if (!identity) return c.json({ error: 'Unknown or unscoped ingest credential' }, 401);
   const productId = identity.productId;
 
+  // A SYSTEM BEING REFUSED IS SOMETHING ITS OWNER SHOULD BE ABLE TO SEE.
+  // `last_used_at` records that a credential authenticated, and nothing
+  // recorded that the request which followed was thrown away — so an
+  // integration sending a slightly wrong field looked exactly like one that
+  // worked. Only the shape is recorded; the refused body is external data and
+  // none of it goes anywhere near the record.
+  const { clearIngestRefusals, recordIngestRefusal } = await import(
+    '../../services/institution/ingest-credentials.js');
+
   let raw: unknown;
-  try { raw = await c.req.json(); } catch { return c.json({ error: 'Invalid JSON body' }, 400); }
+  try { raw = await c.req.json(); } catch {
+    await recordIngestRefusal(identity.credentialId, 'body_unreadable');
+    return c.json({ error: 'Invalid JSON body' }, 400);
+  }
   const body = (raw ?? {}) as Record<string, unknown>;
 
   const { reportEffectOutcome } = await import('../../services/institution/effect-outcome.js');
@@ -359,7 +382,13 @@ ingestRoutes.post('/ingest/effect-outcome/:token', async (c) => {
     reporter: `external:${String(body.reported_by ?? 'unnamed_system')}`.slice(0, 120),
     detail: typeof body.detail === 'string' ? body.detail : undefined,
   });
-  if ('refused' in reported) return c.json({ status: 'refused', reason: reported.refused }, 422);
+  if ('refused' in reported) {
+    await recordIngestRefusal(identity.credentialId, 'refused_by_the_institution');
+    return c.json({ status: 'refused', reason: reported.refused }, 422);
+  }
+  // Cleared on the request that got through, not on the one that authenticated:
+  // being let in is not the same as being understood.
+  await clearIngestRefusals(identity.credentialId);
   return c.json({ status: 'accepted', observation_id: reported.id });
 });
 

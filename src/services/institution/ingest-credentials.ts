@@ -58,6 +58,8 @@ export function isIngestPurpose(value: string): value is IngestPurpose {
 export interface IngestCredential {
   id: string; label: string; purposes: IngestPurpose[];
   revoked: boolean; createdAt: string; lastUsedAt: string | null;
+  /** How the system is faring since it last got through. Zero means fine. */
+  refusalCount: number; lastRefusedAt: string | null; lastRefusalReason: string | null;
 }
 
 /** Returned once, at mint time. The secret is not in `IngestCredential` on
@@ -110,13 +112,15 @@ export async function mintIngestCredential(input: {
   return {
     id, label, secret, purposes: [...ordered], revoked: false,
     createdAt: new Date().toISOString(), lastUsedAt: null,
+    refusalCount: 0, lastRefusedAt: null, lastRefusalReason: null,
   };
 }
 
 /** What the owner sees. Secrets are deliberately absent — see `revealSecret`. */
 export async function getIngestCredentials(productId: string): Promise<IngestCredential[]> {
   const rows = await query(
-    `SELECT id,label,purposes_json,revoked_at,created_at,last_used_at
+    `SELECT id,label,purposes_json,revoked_at,created_at,last_used_at,
+            refusal_count,last_refused_at,last_refusal_reason
        FROM ingest_credentials WHERE product_id=? ORDER BY created_at DESC, id`, [productId],
   );
   return (rows.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
@@ -124,6 +128,9 @@ export async function getIngestCredentials(productId: string): Promise<IngestCre
     purposes: JSON.parse(String(r.purposes_json)) as IngestPurpose[],
     revoked: r.revoked_at != null, createdAt: String(r.created_at),
     lastUsedAt: r.last_used_at == null ? null : String(r.last_used_at),
+    refusalCount: Number(r.refusal_count ?? 0),
+    lastRefusedAt: r.last_refused_at == null ? null : String(r.last_refused_at),
+    lastRefusalReason: r.last_refusal_reason == null ? null : String(r.last_refusal_reason),
   }));
 }
 
@@ -155,6 +162,57 @@ export async function revokeIngestCredential(input: {
 }
 
 export interface IngestIdentity { productId: string; credentialId: string; label: string }
+
+/** Why a request from an authenticated system was thrown away. A closed
+ *  vocabulary this system owns; migration 170 refuses anything else, so no
+ *  error string from outside can reach this column. */
+export const INGEST_REFUSALS = [
+  'body_unreadable', 'fields_invalid', 'values_out_of_range', 'too_large',
+  'nothing_recognised', 'refused_by_the_institution', 'could_not_store',
+] as const;
+export type IngestRefusal = typeof INGEST_REFUSALS[number];
+
+export const INGEST_REFUSAL_LABELS: Record<IngestRefusal, string> = {
+  body_unreadable: 'what it sent was not readable',
+  fields_invalid: 'the fields it sent were not the ones I take',
+  values_out_of_range: 'the numbers it sent were outside what I accept',
+  too_large: 'it sent more than I take in one go',
+  nothing_recognised: 'nothing it sent was something I recognise',
+  refused_by_the_institution: 'I could not accept what it was reporting',
+  could_not_store: 'I failed to store it, which is my fault and not theirs',
+};
+
+/**
+ * Record that an authenticated system was refused.
+ *
+ * NOT AN ERROR LOG. Only the shape is kept: which credential, when, how many
+ * times, and one reason from a closed set. The body of a refused request is
+ * external data and may carry customer information, so none of it comes here —
+ * and the CHECK in migration 170 means a future caller cannot put a convenient
+ * error string in either.
+ *
+ * The count is cumulative and cleared by the next request that succeeds, so
+ * what a founder reads is "this has been failing since", not a total that never
+ * goes down.
+ */
+export async function clearIngestRefusals(credentialId: string): Promise<void> {
+  await query(
+    `UPDATE ingest_credentials
+        SET refusal_count=0, last_refused_at=NULL, last_refusal_reason=NULL
+      WHERE id=? AND refusal_count>0`, [credentialId]);
+}
+
+/** See INGEST_REFUSAL_LABELS above for what each reason says to a founder. */
+export async function recordIngestRefusal(
+  credentialId: string, reason: IngestRefusal,
+): Promise<void> {
+  if (!INGEST_REFUSALS.includes(reason)) return;
+  await query(
+    `UPDATE ingest_credentials
+        SET refusal_count=refusal_count+1, last_refused_at=datetime('now'),
+            last_refusal_reason=?
+      WHERE id=?`, [reason, credentialId]);
+}
 
 /**
  * Authenticate one request against one purpose.

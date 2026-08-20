@@ -102,7 +102,7 @@ settingsRoutes.get('/settings', async (c) => {
   // Systems the owner has let report to them, and exactly what each may say.
   // The metric token above is a credential for POSTING NUMBERS; before
   // migration 139 it also opened two intakes with quite different consequences.
-  const { getIngestCredentials, INGEST_PURPOSES, INGEST_PURPOSE_LABELS } = await import(
+  const { getIngestCredentials, INGEST_PURPOSES, INGEST_PURPOSE_LABELS, INGEST_REFUSAL_LABELS } = await import(
     '../../services/institution/ingest-credentials.js');
   const credentials = productId ? await getIngestCredentials(productId) : [];
   // A freshly minted secret is shown once. The redirect carries the credential
@@ -452,6 +452,10 @@ settingsRoutes.get('/settings', async (c) => {
               <div style="color:var(--text-dim);font-size:0.76rem;">
                 may ${cred.purposes.map((p) => INGEST_PURPOSE_LABELS[p].may).join('; ')}
               </div>
+              ${cred.refusalCount > 0 && !cred.revoked ? html`
+              <div style="color:#ffb347;font-size:0.76rem;margin-top:0.2rem;">
+                I have turned this away ${String(cred.refusalCount)} ${cred.refusalCount === 1 ? 'time' : 'times'} since it last got through — ${INGEST_REFUSAL_LABELS[cred.lastRefusalReason as keyof typeof INGEST_REFUSAL_LABELS] ?? 'I could not use what it sent'}.
+              </div>` : ''}
             </td>
             <td style="text-align:right;padding:0.35rem 0;">
               ${cred.revoked ? html`<span style="color:var(--text-dim);">withdrawn</span>` : html`
