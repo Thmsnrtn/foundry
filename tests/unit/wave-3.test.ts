@@ -122,28 +122,47 @@ describe('peer-signal', () => {
     expect(big.headline).toMatch(/80%/);
   });
 
-  it('topPeerValidatedDecisionTypes filters by sample size and positive rate', async () => {
-    // pricing_change: 6 rows, 5 positive, 1 negative → 83% (qualifies)
-    for (const dir of ['positive', 'positive', 'positive', 'positive', 'positive', 'negative']) {
+  it('topPeerValidatedDecisionTypes counts COMPANIES, not rows', async () => {
+    // This case used to insert six rows with no contributor and expect them to
+    // qualify, because the reader counted rows. "n=5 founders like you" then
+    // meant five DECISIONS, which one company satisfies on its own — and the
+    // sentence went to that company's competitor. The reader now counts
+    // distinct contributors, so the fixture says which company each row is.
+    //
+    // pricing_change: six different companies, five positive → 83% (qualifies)
+    const dirs = ['positive', 'positive', 'positive', 'positive', 'positive', 'negative'];
+    for (const [i, dir] of dirs.entries()) {
       await query(
         `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage,
-           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [nanoid(), 'pricing_change', 'growth', 'green', '{}', 'inc', dir]
+           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction,
+           contributor_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nanoid(), 'pricing_change', 'growth', 'green', '{}', 'inc', dir, `peer_co_${i}`]
       );
     }
-    // small_sample: 3 rows (under threshold)
-    for (const dir of ['positive', 'positive', 'positive']) {
+    // small_sample: three companies (under the floor)
+    for (const [i, dir] of ['positive', 'positive', 'positive'].entries()) {
       await query(
         `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage,
-           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [nanoid(), 'small_sample', 'growth', 'green', '{}', 'inc', dir]
+           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction,
+           contributor_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nanoid(), 'small_sample', 'growth', 'green', '{}', 'inc', dir, `small_co_${i}`]
+      );
+    }
+    // one_company_many_times: eight rows, one company. Qualified before.
+    for (let i = 0; i < 8; i += 1) {
+      await query(
+        `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage,
+           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction,
+           contributor_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nanoid(), 'one_company_many_times', 'growth', 'green', '{}', 'inc', 'positive', 'busy_co']
       );
     }
     const top = await topPeerValidatedDecisionTypes('growth', 5);
-    expect(top.length).toBe(1);
-    expect(top[0].decision_type).toBe('pricing_change');
+    expect(top.map((t) => t.decision_type)).toEqual(['pricing_change']);
+    expect(top[0].sample_size).toBe(6);
   });
 });
 

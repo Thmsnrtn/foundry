@@ -162,9 +162,16 @@ landingRoutes.get('/', async (c) => {
 
       <!-- Daily briefing example -->
       <div style="margin-bottom:2.5rem;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">A Real Briefing</div>
+        <!-- This block used to be labelled as though it were a genuine
+             briefing from a genuine customer. It never was: the company, its
+             revenue, its experiment result and its cost are all numbers
+             somebody typed. Presentation is legitimate; presenting invented
+             traction as something that happened is not. The label now says what
+             the block is, and the numbers stay, because an example is allowed
+             to be an example. -->
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">What a briefing looks like — an illustration, not a customer</div>
         <div class="card" style="padding:1.75rem;font-family:monospace;font-size:0.82rem;line-height:1.7;color:var(--text-primary);">
-          <div style="color:var(--accent);font-weight:700;margin-bottom:0.5rem;">DAILY BRIEFING · MailDeck · March 30, 2026</div>
+          <div style="color:var(--accent);font-weight:700;margin-bottom:0.5rem;">DAILY BRIEFING · Example Co · illustration</div>
           <div style="color:var(--text-dim);margin-bottom:1rem;">Signal: 84/100 (GREEN) · MRR: $6,430 ↑$310 · 2 decisions waiting</div>
           <div style="margin-bottom:0.75rem;"><strong>What happened</strong></div>
           <div style="color:var(--text-dim);margin-bottom:0.25rem;">→ Atlas: Closed a security gap in the auth flow (Gate 0, autonomous).</div>
@@ -323,7 +330,12 @@ caseStudyRoutes.get('/case-studies', async (c) => {
   const artifacts = result.rows as unknown as Array<Record<string, unknown>>;
   return c.html(publicLayout('Case Studies', html`
     <h1>Case Studies</h1>
-    <p>Documented evidence from real products, timestamped and verifiable.</p>
+    <!-- This line used to assert that the artifacts below were verified
+         evidence from real products. They are composed by Foundry from a
+         company's own recorded events and published when its founder chooses
+         to; nothing verifies them, and the date on them is the row's creation
+         time. What is true is who published, and when. -->
+    <p>Written by Foundry from each company's own record, and published by its founder.</p>
     ${artifacts.length === 0
       ? html`<div class="empty-state"><p>No published case studies yet. Check back soon.</p></div>`
       : html`<div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:1rem;">

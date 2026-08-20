@@ -26,6 +26,9 @@ export interface CohortPatternRow {
   supporting_data_json: string | null;
   confidence: number;
   company_count: number;
+  /** 'observed' means companies were counted. 'reference' means somebody wrote
+   *  the pattern down; see migration 174. */
+  evidence_source: 'observed' | 'reference';
   computed_at: string;
 }
 
@@ -152,7 +155,12 @@ export async function getCohortPatterns(productId: string): Promise<Array<{
     if (supportingData?.median_weeks_to_event) {
       insight += ` Typically occurs within ${supportingData.median_weeks_to_event} weeks.`;
     }
-    if (p.company_count > 0) {
+    // "Observed across N similar companies" is a claim that N companies were
+    // counted. For a seeded reference pattern none were, and this page renders
+    // to a paying founder. A prior is worth having and worth labelling.
+    if (p.evidence_source === 'reference') {
+      insight += ' A known pattern for this kind of company — a prior Foundry was given, not something it observed in its own network.';
+    } else if (p.company_count > 0) {
       insight += ` Observed across ${p.company_count} similar companies.`;
     }
 
@@ -459,8 +467,10 @@ export async function seedDefaultCohortPatterns(): Promise<void> {
     await query(
       `INSERT OR IGNORE INTO cohort_patterns
        (id, cohort_key, cohort_definition_json, pattern_type, pattern_name,
-        pattern_description, supporting_data_json, confidence, company_count, computed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        pattern_description, supporting_data_json, confidence, company_count, computed_at, evidence_source)
+       -- These five rows are priors somebody wrote down, not observations.
+       -- The count beside them is illustrative and the surface says so.
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reference')`,
       [id, cohort_key, cohort_definition_json, pattern_type, pattern_name, pattern_description, supporting_data_json, confidence, company_count, computed_at],
     );
   }

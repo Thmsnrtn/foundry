@@ -23,12 +23,50 @@ Each transition is explicit and traceable. A later object must reference the ups
 - **Claim:** a bounded, challengeable interpretation of evidence.
 - **Judgment:** an evaluated claim with uncertainty, alternatives, and consequence.
 - **Decision:** a chosen course, including decide-not-to-act.
-- **Authority:** owner policy granting a bounded actor permission; never inferred from skill or requested by the caller as a fact.
+- **Authority:** owner policy granting a bounded actor permission; never inferred from skill or requested by the caller as a fact. Authority is one term of legitimacy, not the whole of it.
 - **ActionPlan:** intended steps, controls, expected effects, and rollback/reconciliation plan.
 - **Execution:** an attempt through one or more ControlPaths at the governed boundary.
 - **ActionReceipt:** durable record of request, authorization, attempt, provider response, and effect certainty.
 - **Outcome:** independently observed business effect, including failure, ambiguity, or no effect.
 - **Learning:** calibrated update to company understanding, policy, routing, or strategy.
+
+## The legitimate action envelope
+
+Owner authority answers *may this actor do this?* It does not answer *may this
+be done at all, to these people, here.* A consequential action is legitimate
+only inside:
+
+```text
+demonstrated capability
+∩ current owner/company authority
+∩ sufficient evidence
+∩ applicable external permission
+∩ Foundry constitutional permission
+∩ recorded constraints of affected parties
+∩ proportionate safeguards and accountability
+```
+
+**This is not a policy engine and must not become one.** Most terms are already
+structural and already enforced: capability by the shadow comparison required
+before Assisting, authority by the consent ledger, evidence by
+provenance-bearing claims and their freshness, constitutional permission by the
+closed effect-kind vocabulary and the consequence boundary, safeguards by the
+governed boundary's receipts, effect certainty and outcome reconciliation.
+
+Two terms were absent, and they are the extension:
+
+- **Recorded constraints of affected parties.** The governed execution boundary
+  must be able to refuse on behalf of somebody who is not the owner. The
+  boundary evaluates recorded constraints held by the person an effect reaches,
+  at the point every effect converges — not in each caller, and not as a rule
+  one department happens to remember. New constraint kinds are added as recorded
+  facts, never as inferred ones.
+- **Applicable external permission.** Foundry does not evaluate law. Where an
+  action depends on one, the dependence is named, versioned and source-backed,
+  or it is counsel debt in `OWNER_DECISIONS_PENDING.md`. A remembered legal
+  conclusion is not a permission.
+
+A term that cannot be evaluated is unknown. Unknown is not permission.
 
 ## Responsibility transfer
 
@@ -43,6 +81,31 @@ Promotion is responsibility-specific, evidence-based, revocable, and bounded by 
 The kernel owns semantic company objects, provenance, authority evaluation, execution convergence, receipts, reconciliation, outcomes, and learning. Provider APIs, browser automation, CLI, MCP, founder backends, humans, and physical workflows are replaceable ControlPaths. Provider-specific state must not become company truth.
 
 Consequential mutations enter one governed execution boundary. That boundary obtains authority from trusted policy and server-side context, binds tenant and actor, applies idempotency and spend/safety constraints atomically where required, records the attempt, and classifies effect certainty. Timeouts and ambiguous provider responses become reconciliation work, never assumed success or safe retry.
+
+## Deployment modes
+
+One kernel serves both the commercial product and the owner's private
+deployment. A mode may differ only in **permission friction** — what requires an
+explicit human act. A mode may not differ in truth, provenance, company
+boundaries, accountability, purpose limitation, or the evidence/action/receipt/
+outcome distinction. A capability does not graduate from private use to
+commercial exposure by working; it graduates on evidence, per
+`PROOF_PROGRAM.md`.
+
+## Company creation
+
+Creating a company is an institutional progression, not a generator:
+
+```text
+founder intent → company hypothesis → evidence-backed customer, problem, offer
+and economic hypotheses → minimum operating institution → instrumented market
+surface → observed market evidence → first real customer or value → progressively
+earned resources and responsibility
+```
+
+A generated company is represented as a **hypothesis** until reality says
+otherwise. A landing page is a surface, not a result; shipping one is not
+traction. Foundry may build the surface and must not supply the evidence.
 
 ## Migration and recursion
 

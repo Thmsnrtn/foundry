@@ -7,6 +7,7 @@ import { query } from '../../db/client.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import type { GrowthStage, RiskStateValue } from '../../types/index.js';
+import { PEER_SIGNAL_MIN_SAMPLE } from '../decisions/patterns.js';
 
 export interface Prediction {
   id: string;
@@ -153,14 +154,20 @@ async function predictFromPatterns(productId: string): Promise<Prediction[]> {
   if (!p) return [];
 
   // Find patterns from similar products that had negative outcomes
+  // "${cnt} similar products saw negative outcomes" is a claim about a
+  // POPULATION, and cnt was a row count: three rows from one company said three
+  // products. Counted by distinct contributor now, and floored at the same
+  // number as every other peer reader rather than a third one invented here.
   const patterns = await query(
-    `SELECT decision_type, option_chosen_category, outcome_direction, outcome_timeframe_days, COUNT(*) as cnt
+    `SELECT decision_type, option_chosen_category, outcome_direction, outcome_timeframe_days,
+            COUNT(DISTINCT contributor_hash) as cnt
      FROM decision_patterns
      WHERE market_category = ? AND product_lifecycle_stage = ? AND outcome_direction = 'negative'
+       AND contributor_hash IS NOT NULL
      GROUP BY decision_type, option_chosen_category
-     HAVING cnt >= 3
+     HAVING cnt >= ?
      LIMIT 5`,
-    [p.sector_profile ?? 'b2b_saas', p.growth_stage ?? 'growth']
+    [p.sector_profile ?? 'b2b_saas', p.growth_stage ?? 'growth', PEER_SIGNAL_MIN_SAMPLE]
   );
 
   if (patterns.rows.length === 0) return [];

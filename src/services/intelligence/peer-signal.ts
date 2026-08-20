@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { PEER_SIGNAL_MIN_SAMPLE } from '../decisions/patterns.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -104,19 +105,29 @@ export async function topPeerValidatedDecisionTypes(
   productLifecycleStage: string,
   limit: number = 5
 ): Promise<PeerSignalForDecision[]> {
+  // COUNTED BY COMPANY, NOT BY ROW. This was `COUNT(*) ... HAVING n >= 5` and
+  // the card said "n=5" to mean five peers — which one company making five
+  // similar decisions satisfied exactly as well as five companies making one
+  // each. The sentence shown to that company's competitor asserted the second.
+  //
+  // `decisions/patterns.ts` documents this defect as fixed on its own reader
+  // and exports the rule; this reader kept the row count, and unlike that one
+  // it is not consent-gated, so it is the copy a founder actually sees. Rows
+  // with no `contributor_hash` cannot be attributed to a company and are not
+  // counted as one.
   const r = await query(
     `SELECT
        decision_type,
-       COUNT(*) AS n,
-       SUM(CASE WHEN outcome_direction = 'positive' THEN 1 ELSE 0 END) AS positive,
+       COUNT(DISTINCT contributor_hash) AS n,
+       COUNT(DISTINCT CASE WHEN outcome_direction = 'positive' THEN contributor_hash END) AS positive,
        AVG(outcome_timeframe_days) AS avg_days
      FROM decision_patterns
-    WHERE product_lifecycle_stage = ?
+    WHERE product_lifecycle_stage = ? AND contributor_hash IS NOT NULL
     GROUP BY decision_type
-    HAVING n >= 5 AND CAST(positive AS REAL) / n >= 0.6
+    HAVING n >= ? AND CAST(positive AS REAL) / n >= 0.6
     ORDER BY n DESC
     LIMIT ?`,
-    [productLifecycleStage, limit]
+    [productLifecycleStage, PEER_SIGNAL_MIN_SAMPLE, limit]
   );
 
   return r.rows.map((row) => {

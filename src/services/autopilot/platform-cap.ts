@@ -23,6 +23,12 @@ const byRank = (a: AutopilotMode, b: AutopilotMode): AutopilotMode => (RANK[a] <
 
 // Category → the loudest autonomy the platform permits, whatever the founder
 // sets. Absent → 'act' (no platform ceiling; the ladder alone governs).
+// ABSENCE MEANT MAXIMUM AUTONOMY, and that is why `customer_success` slipped
+// through: `category` is open text with no CHECK, so a capability nobody
+// remembered to list here reached 'act' by default. The default is stated
+// below rather than left implicit; a capability that reaches outside the
+// company belongs in this table, and the way to find out that it is missing
+// should not be a founder's customer receiving mail.
 const PLATFORM_CAP: Record<string, AutopilotMode> = {
   // Outreach reaches third parties — capped at Suggest, permanently by owner
   // decision rather than pending a prerequisite.
@@ -40,6 +46,17 @@ const PLATFORM_CAP: Record<string, AutopilotMode> = {
   // send_email playbook can never fire on its own, and the Playbooks page says
   // so on the row rather than showing a badge that means nothing.
   outreach: 'suggest',
+  // Customer success reaches third parties too, and by the same post. It was
+  // absent from this table, so it defaulted to 'act': a per-person churn score
+  // — assigned by a model, with no confidence and no evidence reference —
+  // selected which named customers got an email, daily, with nobody in the
+  // loop.
+  //
+  // The reasoning above is not about outreach. It is about what a send costs
+  // the founder: their domain, their reputation, their liability. That is
+  // identical here, and the asymmetry was an omission rather than a decision.
+  // Nothing about this category was ever argued to be different.
+  customer_success: 'suggest',
   // Any future money-touching capability caps here, permanently (immutable:
   // never auto-move money without explicit, recent, revocable consent).
   billing: 'shadow',

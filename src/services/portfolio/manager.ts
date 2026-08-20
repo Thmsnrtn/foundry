@@ -38,14 +38,48 @@ export async function createPortfolio(
 }
 
 /**
- * Add a product to a portfolio.
+ * Add a company to a portfolio — if somebody at that company agreed.
+ *
+ * THE COMPANY WAS NEVER ASKED. The route checked that the caller owns the
+ * PORTFOLIO and then took `product_id` straight from the request body. Anyone
+ * with a portfolio could absorb any company by id, and portfolio membership is
+ * not decorative: it puts that company's name, MRR, risk state, churn and
+ * activation on somebody else's dashboard, and its metrics into a percentile
+ * comparison against its peers.
+ *
+ * Owner authority is not sovereignty over a company that did not choose you.
+ *
+ * WHAT IS ALLOWED, and it covers the owner's own portfolio exactly: a portfolio
+ * may hold a company whose owner is the same person as the portfolio's owner.
+ * A portfolio of your own companies needs no permission from anybody but you.
+ * Anything else needs the company's owner to have agreed, and there is no way
+ * to record that agreement yet — so it is refused rather than assumed, and the
+ * refusal says which of the two it was.
  */
+export type PortfolioAddRefusal = 'company_unknown' | 'company_not_yours';
+
 export async function addToPortfolio(
   portfolioId: string,
   productId: string,
   founderId: string,
   investmentData?: { fund_vintage?: string; investment_date?: string; investment_amount?: number; board_seat?: boolean }
-): Promise<void> {
+): Promise<{ refused: PortfolioAddRefusal } | null> {
+  const owned = (await query(
+    `SELECT p.owner_id, f.email AS owner_email
+       FROM products p JOIN founders f ON f.id = p.owner_id
+      WHERE p.id = ?`, [productId],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!owned) return { refused: 'company_unknown' };
+
+  const portfolio = (await query(
+    'SELECT owner_email FROM portfolios WHERE id = ?', [portfolioId],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!portfolio) return { refused: 'company_unknown' };
+
+  const sameOwner = String(owned.owner_email).toLowerCase()
+    === String(portfolio.owner_email).toLowerCase();
+  if (!sameOwner) return { refused: 'company_not_yours' };
+
   await query(
     `INSERT INTO portfolio_memberships (id, portfolio_id, product_id, founder_id, fund_vintage, investment_date, investment_amount, board_seat)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -60,6 +94,7 @@ export async function addToPortfolio(
       investmentData?.board_seat ? 1 : 0,
     ]
   );
+  return null;
 }
 
 /**

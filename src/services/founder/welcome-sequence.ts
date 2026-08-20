@@ -73,7 +73,15 @@ function templateDay7(name: string | null): { subject: string; html: string } {
     html: `
       <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px;">
         <p>${greeting}</p>
-        <p>It's day 7. I noticed you haven't been on Foundry much this week — that's totally fine, but I'd love to hear why.</p>
+        <!-- This asserted "I noticed you haven't been on Foundry much this
+             week". Nobody noticed anything: the day-7 selector is a created_at
+             window and nothing else. The comment beside it describes an
+             engagement predicate over a dashboard_views signal, which does not exist
+             anywhere in this system — so a founder who used Foundry daily got a
+             claim about their own behaviour that had never been checked.
+             Implementing the check would mean building engagement tracking to
+             justify a sentence; asking instead is true today. -->
+        <p>It's day 7. How has Foundry been? I'd love to hear what is and isn't landing.</p>
         <p>Three options, in order of effort:</p>
         <ul>
           <li><strong>One-line reply</strong> with what's not landing.</li>
@@ -169,8 +177,10 @@ export async function runWelcomeSequenceTick(): Promise<{
   // Each stage looks for founders whose created_at lands in its window.
   // Day 0: created in last 12h (catches new signups since the previous tick).
   // Day 3: created 3-3.5 days ago.
-  // Day 7: created 7-7.5 days ago AND has < 3 dashboard_views (engagement
-  //        signal — re-use the existing audit_log path).
+  // Day 7: created 7-7.5 days ago. NOTHING ELSE — this said "AND has < 3
+  //        dashboard_views (engagement signal)", and no such signal exists
+  //        anywhere in this system. The copy no longer claims an observation
+  //        that the selector cannot make.
   // For each match, find the founder's first product and send the stage.
   const counts = { day_0: 0, day_3: 0, day_7: 0 };
 

@@ -299,6 +299,22 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_b');
   });
 
+  it('check-backticks-in-embedded-comments sees a continuation line', () => {
+    // The first version tested only whether a line BEGAN a comment, so a
+    // multi-line HTML comment hid the defect everywhere after the first line —
+    // which is where a long explanation names the symbol it is about. It
+    // reported clean while a parse error sat in the tree.
+    plant('src/services/_gate_fixture_m.ts',
+      j('export const q = (): string => `\n',
+        '  <div>\n',
+        '    <', '!-- a note that runs on\n',
+        '         and names a ', '`', 'symbol', '`', ' on the second line --', '>\n',
+        '  </div>`;\n'));
+    const r = run('check-backticks-in-embedded-comments.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_m');
+  });
+
   it('check-id-tiebreak fails on a new ORDER BY that falls back to id', () => {
     // An id is not a clock. Three real defects in one campaign came from a
     // nanoid or a content hash deciding which row was current.

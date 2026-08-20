@@ -383,10 +383,14 @@ platformApiRoutes.post('/api/portfolios/:id/companies', async (c) => {
   const portfolioId = c.req.param('id');
   if (!(await verifyPortfolioOwnership(portfolioId, founder.email))) return c.json({ error: 'Not found' }, 404);
   const body = await c.req.json() as Record<string, unknown>;
-  await addToPortfolio(
+  // Owning the portfolio is not owning the company. `addToPortfolio` decides
+  // whether this company may be held here; the route surfaces its answer
+  // instead of discarding it.
+  const refusal = await addToPortfolio(
     portfolioId, body.product_id as string,
     body.founder_id as string, body.investment as any
   );
+  if (refusal) return c.json({ error: refusal.refused }, 403);
   return c.json({ status: 'added' });
 });
 

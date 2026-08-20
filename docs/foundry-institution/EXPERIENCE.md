@@ -22,6 +22,27 @@ Natural-language policy is input, not executable authority. It compiles into det
 
 Founder interruption must have an institutional reason, consequence, deadline, evidence, and a clear response. Batch low-consequence attention. Human and physical tasks use the same responsibility, commitment, receipt, outcome, and learning semantics as machine work. Every surface should reveal current responsibility-transfer state without implying that visibility or competence equals operational authority.
 
+## People who are not the founder
+
+Some of what Foundry does reaches somebody who never chose it — a customer, a
+supplier, a person a notice is about. The founder's interface is not their
+interface, and they are not represented by it.
+
+Two obligations follow, and only two for now. A constraint such a person has
+recorded — most concretely, having asked not to be contacted — binds Foundry at
+the governed boundary regardless of what the founder authorises. And where
+consequence and applicable rules demand notice, explanation, correction or
+redress, the architecture must have somewhere to put them. Neither is a general
+appeals process, and neither may be inferred from prose: a person's constraint
+is a recorded fact.
+
+## Truthful representation of new companies
+
+A company Foundry helped create is described as a hypothesis until reality
+provides evidence. Surfaces distinguish *what was built* from *what was
+observed*, and never present generated presentation as traction, customers or
+outcomes.
+
 ## Owner-absence test
 
 The institution should support a seven-day owner absence without making activity

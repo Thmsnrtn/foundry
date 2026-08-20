@@ -12,8 +12,14 @@
 // already written the lesson down. A rule that keeps being broken by the person
 // who wrote it is not a rule, it is a wish. This is the mechanical version.
 //
-// WHAT IT CHECKS, exactly: a line inside a template literal that begins a SQL
-// comment (`--`) or an HTML comment and also contains a backtick. Nothing else.
+// WHAT IT CHECKS, exactly: a line inside a template literal that is part of a
+// SQL comment (`--`) or an HTML comment, and contains a backtick.
+//
+// CONTINUATION LINES COUNT, and that was a real miss. The first version tested
+// only whether a line BEGAN a comment, so a multi-line HTML comment hid the
+// defect on every line after the first — which is exactly where a long
+// explanation puts the symbol it is naming. It caught nothing while a parse
+// error sat in the tree. An HTML comment now stays open until its terminator.
 //
 // WHAT IT DOES NOT CHECK, and why it does not try:
 //   • Backticks elsewhere inside a template literal. Nested template literals
@@ -43,12 +49,18 @@ for (const root of ROOTS) {
   for (const file of files(root)) {
     const source = readFileSync(file, 'utf8');
     let inTemplate = false;
+    let inHtmlComment = false;
     source.split('\n').forEach((line, index) => {
       // A line's own comment status is decided BEFORE counting its backticks,
       // so the offending line is reported rather than the one after it.
       const wasInTemplate = inTemplate;
       const trimmed = line.trim();
-      const embeddedComment = trimmed.startsWith('--') || trimmed.startsWith('<!--');
+      const wasInHtmlComment = inHtmlComment;
+      if (trimmed.includes('<!--')) inHtmlComment = true;
+      // A SQL comment ends at the newline; an HTML one runs until its
+      // terminator, so a continuation line is still inside it.
+      const embeddedComment = trimmed.startsWith('--') || wasInHtmlComment || trimmed.includes('<!--');
+      if (line.includes('-->')) inHtmlComment = false;
       if (wasInTemplate && embeddedComment && line.includes('`')) {
         offences.push(`${relative(ROOT, file)}:${index + 1}  ${trimmed.slice(0, 78)}`);
       }
