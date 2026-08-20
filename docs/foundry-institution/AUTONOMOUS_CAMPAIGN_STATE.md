@@ -171,7 +171,9 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      `gates-fail-when-they-should` plants real files into the working tree, so
      concurrent runs collide and produce failures that look like defects.
 
-4. **92 write-only columns.** `check-write-only-columns.mjs` holds the count.
+4. **85 write-only columns.** `check-write-only-columns.mjs` holds the count;
+   this line said 92 while the ratchet said 85, which is the kind of drift the
+   ratchet exists to prevent in code and evidently not in prose.
    Attributed by writing area rather than guessed at:
 
    - **20 are written by `services/institution`**, and those are the ones worth
@@ -193,7 +195,38 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    `signal_events.processing_session_id` accounts for eleven of the institution
    rows on its own and is one column, not eleven findings.
 
-5. **Two unread outcome predicates.** `shadow_expectation` and
+5. **One concept, two canonical truths: `customers` and
+   `customer_intelligence`.** Both are live — 12 readers and 19 readers — and
+   they hold overlapping facts about the same people. `customers.churn_risk` is
+   deterministic, computed by `computeCustomerHealth` from `customer_events`,
+   and it is what selects who the customer-success department writes to.
+   `customer_intelligence.health_score` is separate, and its sub-scores are
+   where an agent's judgment lands. `ARCHITECTURE.md` says there is one
+   canonical truth for each concept; here there are two, and neither is
+   labelled the shadow of the other.
+
+   **This is a slice, not a correction** — shadow, compare, cutover, delete —
+   which is why it is recorded rather than started at the tail of a cycle.
+   Recorded now because the fabrication finding this cycle made the split
+   visible: the agent path wrote to one table while the department read the
+   other, so an invented customer could not even have influenced the sweep that
+   was the reason to worry about it.
+
+   Related and smaller: `customer_events` has exactly one writer,
+   `routes/api/platform.ts`, part of the clientless API in item 1. Where that
+   API is unused, "at risk" reduces to `last_active_at` recency. The score is
+   honest about what it has; what it has is thin, and no surface says so.
+
+6. **Two ledgers, two spellings for the same principal.** `outbound_actions`
+   and `action_executions` are no longer two EXECUTION paths — the second now
+   enters the gateway — but they remain two ledgers. `approved_by` takes
+   `founder:<id>` in one, and `voice:<id>`, `system:playbook`,
+   `autopilot:<category>` or a bare founder id in the other. Both readers that
+   interpret the field key on the `autopilot:` prefix, so nothing misreads a
+   founder as an autopilot today. One vocabulary written two ways is the shape
+   that ends with a reader agreeing with only one of them.
+
+7. **Two unread outcome predicates.** `shadow_expectation` and
    `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —
    `assisting-admission` reads the comparison rows — so these are redundant
    claims rather than lost learning. The resolution is to say so where they are
@@ -209,7 +242,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    external-metric twin, because having them wired in two places is how one of
    them came to be wired in none.
 
-6. **Adapters for the existing intakes.** The shape is proven; breadth is
+8. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
 
    Related, and now decided rather than open: the same obligation reported
@@ -222,7 +255,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-7. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
+9. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
    functions had no caller anywhere in `src/`. They have been read. What is
    left is 26, and every one of them is accounted for:
 
@@ -292,8 +325,20 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
 
 ## What keeps working, for whoever comes next
 
-Three lenses produced almost everything found in the last cycle. They are worth
-trying before inventing a new one:
+These lenses produced almost everything found in the last two cycles. They are
+worth trying before inventing a new one:
+
+- **"What does this claim that its execution path cannot support?"** The one
+  that produced this cycle. A `success: true` from a function that contacted
+  nobody; "No product or founder ID stored" above a primary key containing the
+  product id; "anonymized usage patterns" over a named founder's funnel;
+  "statistical patterns across hundreds of products" over an eligibility floor
+  of five. Read the sentence, then read the line under it — the sentence was
+  often true when it was written and nobody re-read it after the code moved.
+- **"Who is this control for, and can they reach it?"** A suppression list with
+  no way in. Four privacy toggles nothing read. A control that cannot be
+  populated or is not consulted is a sentence in a migration, and it will be
+  believed by the next person who greps for it.
 
 - **"Where does a person read this?"** The institution knew three large facts
   about a company — that it was being deleted, that it had stopped, and how its
@@ -320,13 +365,43 @@ trying before inventing a new one:
 
 ## Blocked — owner
 
-**Three items pending.** §9 retention lawfulness and §11 the audit-log horizon
-both need counsel rather than the owner alone; §10 (the five erasure tables) has
-a recommended answer and waits on the owner.
+**Six items pending.** §9 retention lawfulness, §11 the audit-log horizon and
+§13 the cross-company aggregation threshold need counsel rather than the owner
+alone; §10 (the five erasure tables) has a recommended answer and waits; §12
+needs a deployment FACT before it is a decision; §14 is a product and legal
+position rather than a mechanism.
 
-§11 is new: two retention implementations disagreed about `audit_log` — 365 days
-written down, 180 actually in force. The duplication is fixed at 180, which is
-what has been happening, and which figure is right is the owner's.
+§11: two retention implementations disagreed about `audit_log` — 365 days
+written down, 180 actually in force. Fixed at 180, which is what has been
+happening; which figure is right is the owner's.
+
+**§12 — one shared key reads any company's whole picture.**
+`GET /internal/operator/dashboard-data?product_id=…` returns a named company's
+risk state, stressors, MRR decomposition, retention, NPS, churn and cohort
+summary, behind a single process-wide `ECOSYSTEM_SERVICE_KEY` with no owner
+check and no tenant binding. Its own comment says it is "used by Apex Micro,
+other ecosystem products". Whether that key has ever left the owner's control
+is a fact only the owner has, and the two answers want opposite changes —
+per-company scoping, or withdrawal — which is why it is not guessed at. The
+route is read-only and nothing was relaxed; `/internal` is deliberately outside
+the member-capability ratchet because no member is present on it, which is also
+why this went unexamined.
+
+**§13 — is k = 5 defensible?** Cross-company aggregation now has one floor at
+five distinct contributing companies, and contribution requires consent. Five
+is the smallest count at which no single contributor dominates an aggregate.
+Whether it is sufficient for the jurisdictions Foundry operates in, whether a
+consent toggle is the right basis at all, and whether a published percentile
+must be recomputed when a contributing company erases itself, are counsel
+questions. The floor stands meanwhile and nothing claims it is legally
+sufficient.
+
+**§14 — should Foundry's own funnel analytics be consent-gated?** They record a
+NAMED founder's progression regardless of the Help Improve Foundry toggle. The
+copy has been corrected to say so and the consent type is registered as a
+recorded preference with that reason; whether the toggle should govern all of
+it, none of it, or the detail beyond billing lifecycle is a position rather
+than a mechanism.
 
 **§9, as before: retention lawfulness (counsel, not the owner alone).**
 `OWNER_DECISIONS_PENDING.md` §9 asks whether the retention periods for what
