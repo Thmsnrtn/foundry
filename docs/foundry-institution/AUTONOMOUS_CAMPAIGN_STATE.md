@@ -25,9 +25,9 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `01b6fea`, pushed.
+- **Head:** `6401d00`, pushed.
   **Migrations:** 210 files, highest **174**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **290 files / 2,448 tests**, `npm run check`
+- **Validation:** full suite green — **291 files / 2,457 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
