@@ -300,6 +300,7 @@ function refusalSentence(receiptJson: unknown): string | null {
     case 'policy': return 'it did not pass the rules for this kind of message, so it did not go';
     case 'no_handler': return 'I have no way to send this, so it did not go';
     case 'in_flight': return 'the same message was already on its way, so I did not send a second';
+    case 'contact_refused': return 'this person is on your do-not-contact list, so it did not go';
     case 'refused': return 'I stopped this before touching the provider, so it did not go';
     default: return null;
   }

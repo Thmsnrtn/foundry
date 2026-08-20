@@ -186,6 +186,39 @@ const evidenceQuestionSection = (
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">Answering tells me how your company works. It does not let me do anything on your behalf — that still needs a separate permission from you. If you skip, I'll leave it as something I don't know.</div>
   </div>`;
 
+// Somebody who asked not to be contacted.
+//
+// The person an effect reaches is not represented by the founder's authority,
+// and until now they had no subject position at all: the suppression list had
+// no way in and the governed path never read it. This is the way in. Foundry
+// does not infer it from a customer's reply — reading intent out of prose is
+// how a person's wish becomes a model's guess — so the company states it.
+const doNotContactSection = (
+  items: Array<{ email: string; reason: string; recordedAt: string }>,
+  labels: Record<string, string>,
+) => html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Who I will not contact</div>
+    ${items.length === 0 ? html`
+      <div style="font-size:0.78rem;color:var(--text-muted);">Nobody yet. If someone tells you to stop, tell me and I will not write to them again — whatever else you have given me permission to do.</div>`
+    : items.map((item) => html`
+      <div style="padding:0.4rem 0;border-top:1px solid rgba(255,255,255,0.05);font-size:0.82rem;color:var(--text-primary);">
+        ${item.email}
+        <span style="color:var(--text-muted);font-size:0.75rem;"> — ${labels[item.reason] ?? item.reason}, since ${item.recordedAt.slice(0, 10)}</span>
+      </div>`)}
+    <form method="POST" action="/letter/do-not-contact"
+      style="display:flex;gap:0.4rem;margin-top:0.6rem;align-items:center;flex-wrap:wrap;">
+      <input name="email" required type="email" maxlength="320" placeholder="Their email address"
+        style="flex:1;min-width:220px;" />
+      <select name="reason" style="font-size:0.78rem;">
+        <option value="they_asked">they asked me to stop</option>
+        <option value="founder">I do not want them contacted</option>
+        <option value="bounced">mail to them bounces</option>
+      </select>
+      <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Add</button>
+    </form>
+  </div>`;
+
 // Questions the founder set aside.
 //
 // Skipping is a decision about being asked, not a decision to withhold the fact
@@ -853,6 +886,9 @@ letterRoutes.get('/letter', async (c) => {
   const evidenceQuestion = await selectFounderEvidenceQuestion(ctx.productId);
   const { getSetAsideQuestions } = await import('../../services/institution/founder-evidence.js');
   const setAsideQuestions = await getSetAsideQuestions(ctx.productId);
+  const { CONTACT_CONSTRAINT_LABELS, getContactConstraints } = await import(
+    '../../services/institution/contact-constraint.js');
+  const contactConstraints = await getContactConstraints(ctx.productId);
   const { getAssistingCandidates } = await import('../../services/institution/assisting-admission.js');
   const assistingCandidates = await getAssistingCandidates(ctx.productId);
   const { listFounderFactOpportunities } = await import('../../services/institution/founder-evidence.js');
@@ -918,6 +954,12 @@ letterRoutes.get('/letter', async (c) => {
   // An authority a founder cannot see is one they cannot withdraw.
   const hasDevelopmentActivity = development.changes.length > 0
     || development.permitted.length > 0 || development.record !== null;
+  // Both short-circuit branches below replace the whole body, so both would
+  // hide a person the company has been asked not to contact. Neither may: the
+  // founder who recorded that constraint has to be able to see the list they
+  // added to, and anyone reviewing what this company will not do has to be able
+  // to read it on the page rather than in the database.
+  const hasRecordedPerson = contactConstraints.length > 0;
   const needsYou = letter.needsYou
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
     : null;
@@ -957,6 +999,7 @@ letterRoutes.get('/letter', async (c) => {
     </div>` : ''}
     ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
       && supportChannels.length === 0 && !hasDevelopmentActivity && !fleetHasItems
+          && !hasRecordedPerson
       && !stopped && !deletion ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
         <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
@@ -967,7 +1010,8 @@ letterRoutes.get('/letter', async (c) => {
           <a href="/connections" class="btn btn-primary" style="font-size:0.85rem;align-self:flex-start;">Connect your tools → so Foundry can see your real numbers</a>
           <a href="/decisions" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">Log your first decision → and the belief behind it, so Foundry can watch it</a>
         </div>
-      </div>` : letter.quiet && !hasResponsibilitySummary && !hasDevelopmentActivity ? html`
+      </div>` : letter.quiet && !hasResponsibilitySummary && !hasDevelopmentActivity
+      && !hasRecordedPerson ? html`
       <div class="card" style="padding:1.5rem;text-align:center;">
         <div style="font-size:1rem;color:var(--text-primary);">${fleetChrome
     ? html`Nothing needs you in ${ctx.productName}.`
@@ -993,6 +1037,7 @@ letterRoutes.get('/letter', async (c) => {
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}
       ${evidenceQuestionSection(evidenceQuestion)}
       ${setAsideSection(setAsideQuestions)}
+      ${doNotContactSection(contactConstraints, CONTACT_CONSTRAINT_LABELS)}
       ${permissionSection(assistingCandidates)}
       ${darkenedWatchSection(darkenedWatches)}
       ${metricWatchSection(shadowable)}
@@ -1415,6 +1460,31 @@ letterRoutes.post('/letter/evidence/:requestId/answer', async (c) => {
   });
   // Do not reveal whether another tenant's question, or a resolved one, exists.
   if (!recorded) return c.text('Answer refused', 403);
+  return c.redirect('/letter');
+});
+
+// A person told this company to stop. Recorded as a fact the company states —
+// never inferred from what somebody wrote — and honoured at the governed
+// boundary regardless of what the founder has otherwise authorised.
+// Ordinary company management, not a brake anyone may pull. The list is
+// append-only by design, so a member who could write to it could silently stop
+// the company writing to its best customer and nobody could undo it here. The
+// same capability that governs the sending address governs who it may reach.
+letterRoutes.post('/letter/do-not-contact',
+  requireCompanyCapability('can_manage_company'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No company selected', 400);
+
+  const body = await c.req.parseBody();
+  const { recordContactConstraint } = await import(
+    '../../services/institution/contact-constraint.js');
+  const result = await recordContactConstraint({
+    productId: ctx.productId, founderId: founder.id as string,
+    email: String(body.email ?? ''),
+    reason: String(body.reason ?? 'founder') as never,
+  });
+  if ('refused' in result) return c.text('I could not record that', 400);
   return c.redirect('/letter');
 });
 

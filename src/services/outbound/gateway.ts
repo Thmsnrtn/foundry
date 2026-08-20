@@ -40,6 +40,7 @@ export type RefusalPhase =
   | 'budget'
   | 'in_flight'
   | 'no_handler'
+  | 'contact_refused'
   | 'execution'
   // A handler refused before touching the provider. 'execution' means "the
   // handler ran and we do not know what reached the outside world", which is
@@ -149,6 +150,40 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   }
   if (policy.requireCustomerExternalId && !req.customerExternalId) {
     return refusePolicy(invocationId, req, 'customer external id is required');
+  }
+
+  // 2b. THE PERSON THIS REACHES MAY HAVE SAID NO.
+  //
+  // Owner authority answers whether this actor may act. It does not answer
+  // whether this may be done to THIS person, and the person an effect reaches
+  // is not represented by the founder's permission. Migration 094 stated the
+  // rule on its face — "never contacted again, by any mode, at any trust
+  // level" — and one department consulted it while the governed path did not.
+  //
+  // Checked HERE because this is where every outward effect converges, so no
+  // caller has to remember it. `requireCustomerExternalId` already means "this
+  // effect is addressed to an identified party", so the condition is a property
+  // of the registered capability rather than a new field a caller could omit.
+  if (policy.requireCustomerExternalId && req.customerExternalId) {
+    const { contactIsRefused } = await import('../institution/contact-constraint.js');
+    const constraint = await contactIsRefused(req.productId, req.customerExternalId);
+    if (constraint.refused) {
+      await recordGatewayInvocation({
+        invocation_id: invocationId,
+        product_id: req.productId,
+        agent: policy.actor,
+        tool: req.tool,
+        action: req.action,
+        outcome: 'refused',
+        reason: `contact_refused: ${constraint.reason}`,
+      });
+      return {
+        ok: false,
+        invocation_id: invocationId,
+        phase: 'contact_refused',
+        reason: constraint.reason,
+      };
+    }
   }
 
   // 3. Classification is mandatory and derived from the registered policy.

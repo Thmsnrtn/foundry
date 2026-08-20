@@ -37,20 +37,20 @@ export interface OutreachSweepResult {
   suppressed: number;
 }
 
-export async function addSuppression(productId: string, email: string, reason: string): Promise<void> {
-  await query(
-    `INSERT INTO outreach_suppressions (id, product_id, email, reason)
-     VALUES (?, ?, ?, ?) ON CONFLICT(product_id, email) DO NOTHING`,
-    [nanoid(), productId, email.toLowerCase().trim(), reason],
-  );
-}
-
+// SUPPRESSION MOVED TO `institution/contact-constraint.ts`.
+//
+// It lived here, and only this department read it — while the institution's
+// governed email path, which is what actually reaches a customer, never did.
+// `addSuppression` had no caller anywhere, so nobody could get onto the list
+// and this reader always found it empty: a rule with no way in and one way out.
+//
+// It is now consulted at the governed boundary, where every outward effect
+// converges, and this sweep keeps its own check as defence in depth — a
+// suppressed champion should not consume an envelope slot or a budget unit on
+// the way to being refused.
 export async function isSuppressed(productId: string, email: string): Promise<boolean> {
-  const r = await query(
-    'SELECT id FROM outreach_suppressions WHERE product_id = ? AND email = ?',
-    [productId, email.toLowerCase().trim()],
-  );
-  return r.rows.length > 0;
+  const { contactIsRefused } = await import('../institution/contact-constraint.js');
+  return (await contactIsRefused(productId, email)).refused;
 }
 
 /** A referral ask that earns its warmth: it names only what is true — the

@@ -14,7 +14,12 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { runMarketingSweep, draftContentBrief } from '../../src/services/departments/marketing.js';
 import { runProductSweep, deriveHypothesis } from '../../src/services/departments/product.js';
-import { runOutreachSweep, addSuppression } from '../../src/services/departments/outreach.js';
+import { runOutreachSweep } from '../../src/services/departments/outreach.js';
+// `addSuppression` is gone. It had no caller anywhere in `src/` and its list
+// was consulted by one department while the governed email path ignored it, so
+// the record and the refusal have moved to one place: a recorded constraint
+// held by the person an effect reaches, checked where every effect converges.
+import { recordContactConstraint } from '../../src/services/institution/contact-constraint.js';
 import { setPolicy } from '../../src/services/autopilot/policy.js';
 import { checkPremises } from '../../src/services/memory/kernel.js';
 
@@ -169,7 +174,11 @@ describe('outreach: the slowest ladder, the hardest rails', () => {
   });
 
   it('the suppression list beats every mode', async () => {
-    await addSuppression('dp_p', 'ADA@fan.co', 'unsubscribed'); // case-insensitive
+    // Recorded by the company through the same door a founder uses, and still
+    // case-insensitive: an address is not two people because of a capital.
+    expect(await recordContactConstraint({
+      productId: 'dp_p', founderId: 'dp_f', email: 'ADA@fan.co', reason: 'they_asked',
+    })).toEqual({ recorded: true });
     await query("DELETE FROM action_executions WHERE product_id='dp_p'", []); // clear dedup
     const res = await runOutreachSweep('dp_p');
     expect(res.suppressed).toBe(1);
