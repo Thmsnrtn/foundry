@@ -157,6 +157,90 @@ contract.
 
 All of it is **E2 — local runtime**. Nothing has been exercised by a real founder, a real outside system, or a real provider.
 
+## The legitimate action envelope, term by term
+
+`ARCHITECTURE.md` states that a consequential action is legitimate only inside
+the intersection of seven terms. This is what each term is actually made of in
+this repository today, and where it is not made of anything. **It is a report
+on code, not an aspiration**; the two absent terms are named as absent.
+
+| Term | What enforces it | Level |
+|---|---|---|
+| demonstrated capability | Assisting admission requires real shadow comparisons against founder-stated expectations — the SQL counts them, and migration 115 keeps Operating frozen (`assisting-admission.ts:111`) | structural |
+| owner/company authority | the consent ledger, plus one company authorization model: `memberMay` / `requireCompanyCapability` / `requireOwner`, with the unguarded-route ratchet holding the line | structural |
+| sufficient evidence | provenance-bearing claims and their freshness; a responsibility cannot be created with nothing to point at | structural |
+| applicable external permission | **nothing** | absent — see below |
+| Foundry constitutional permission | the closed effect-kind vocabulary (`CONSEQUENTIAL_EFFECTS.json`, gated by `audit-consequential-effects.mjs`) and the consequence boundary; RESOLVED 4 forbids runtime creation of effect kinds | structural |
+| recorded constraints of affected parties | **one kind**, checked at the boundary — see below | E2 |
+| proportionate safeguards and accountability | the governed boundary's receipts, effect certainty, and outcome reconciliation | structural, with a named defect |
+
+**Recorded constraints of affected parties — now real, and narrow.** The
+governed execution boundary can refuse on behalf of somebody who is not the
+owner. `gateway.ts:167` consults `contactIsRefused` before classification and
+returns phase `contact_refused`, so no caller has to remember it; the founder
+records and reads the list on The Letter, gated on `can_manage_company` because
+the list is append-only and writing to it silently stops the company writing to
+whoever is on it.
+
+State the limits plainly:
+
+- **It is one constraint kind — do not contact — and nothing else.** This is
+  not a rights engine. A second kind is a second recorded fact, not a policy
+  language.
+- **It is consulted only where `requireCustomerExternalId` is true**, which
+  today is `send_email` and `send_account_notice`. That now covers both action
+  regimes: `action_executions` had its own `send_email` arm and it has been
+  routed into the gateway, so there is one place where a send is decided. `send_push`, `mcp_call` and
+  outbound webhooks do not consult it, correctly: none of them is addressed to
+  an identified outside person by address. A new capability that IS so
+  addressed inherits the check by setting that flag, and gets no check if it
+  does not — that is the coupling to watch.
+- **It interacts with RESOLVED 7 and the interaction is deliberate.**
+  `send_account_notice` requires a customer external id, so an address on the
+  list stops receiving account mail — the one capability that otherwise
+  survives an entitlement pause. Fail-closed was chosen over an exemption:
+  an address is on that list because somebody said stop or because mail to it
+  does not arrive, and unknown is not permission. If that is ever the wrong
+  answer it is one condition at `gateway.ts:167`, and it should be an owner
+  decision rather than a convenience.
+- **It is a recorded fact, never an inferred one.** Nothing reads a customer's
+  reply and concludes they meant stop.
+
+**Applicable external permission — absent, and deliberately not simulated.**
+Foundry does not evaluate law and nothing in this repository pretends to. Where
+an action depends on a legal conclusion, the dependence is counsel debt in
+`OWNER_DECISIONS_PENDING.md` — §9 retention periods, §11 the audit-log window,
+§13 the benchmark aggregation threshold — and a remembered legal conclusion is
+not a permission. **No legal-knowledge store exists and building one on a
+model's recollection would be the exact failure this term names.**
+
+**Accountability — the role-label defect is closed; the spelling is not
+uniform.** `approved_by` used to be written as the literal `'ceo'` on both the
+approve and the reject paths, so every decision by every founder of every
+company recorded the same approver, and the surface rendered it. A role label
+is not a responsible identity. Both writers now record the acting principal
+(`agents-integrations.ts:568`, `executor.ts:270`) and the surface translates a
+principal reference back into a sentence a person can read
+(`agents-integrations.ts:293`).
+
+What is left is smaller and worth stating so it is not rediscovered as a
+defect: the two action regimes still spell the same principal differently. They
+are no longer two EXECUTION paths — `action_executions` sends through the
+gateway now — but they remain two ledgers with two vocabularies.
+`outbound_actions.approved_by` takes `founder:<id>`, while
+`action_executions.approved_by` takes `voice:<id>`, `system:playbook`,
+`autopilot:<category>` — and, from the dashboard approval, a **bare** founder
+id (`agents-actions.ts:258`). Both readers that interpret the field key on the
+`autopilot:` prefix, so nothing misreads a founder as an autopilot today. It is
+one vocabulary written two ways, which is the shape that eventually produces a
+reader agreeing with only one of them.
+
+**Do not turn this table into a policy engine.** Five of the seven terms are
+already structural and are enforced by machinery that exists for its own
+reasons. The value of the table is that it says which two were not, and it
+stops being useful the moment it becomes a compliance surface with rows for
+hypothetical futures.
+
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope |

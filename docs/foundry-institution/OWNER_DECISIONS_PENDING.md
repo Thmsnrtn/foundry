@@ -12,13 +12,25 @@ around each item.
 
 ---
 
-# EIGHT ANSWERED, THREE PENDING
+# EIGHT ANSWERED, SIX PENDING
 
 The owner answered the first eight queued decisions; those are recorded below as
-settled, with the record of what was asked and why in git history. Two items are
-pending at the end of this file. Neither blocks the campaign: §9 needs counsel
-rather than the owner alone, and §10 has a recommended answer and a stated live
-gap while it waits.
+settled, with the record of what was asked and why in git history. Six items
+are pending at the end of this file — §§9, 10, 11, 12, 13 and 14 — and none
+blocks the campaign.
+
+Three of the five need counsel rather than the owner alone (§9 retention
+periods, §11 the audit-log window, §13 the benchmark aggregation threshold);
+§10 has a recommended answer and a stated live gap while it waits; §12 needs a
+deployment fact from the owner before it is even a decision.
+
+§14 is a product and legal position rather than an engineering mechanism, which
+is why it is here rather than decided in git history.
+
+**Counsel debt is a kind of proof debt** (`PROOF_PROGRAM.md`): a conclusion
+software cannot responsibly draw. Each item below states the question, what
+depends on it, and what Foundry does meanwhile. None of them is answered by a
+model's recollection of law, and none is quietly resolved by an implementation.
 
 ---
 
@@ -306,3 +318,141 @@ principal, which is why it is not simply done.
 test asserts every table in that surface carries a disposition, so the deferral
 is visible rather than an omission — but it IS a live gap: an erased person's
 id remains in those five tables in companies they did not own.
+
+---
+
+## PENDING 12 — One shared key reads any company's whole picture: **DEPLOYMENT FACT, THEN COUNSEL**
+
+`GET /internal/operator/dashboard-data?product_id=…`
+(`src/routes/internal/ecosystem.ts:42`) returns a named company's risk state and
+its reason, its active stressors, its MRR decomposition by new/expansion/
+contraction/churn, its signups, active users, activation, retention, support
+volume, NPS and churn rate, its latest cohort summary, and how many decisions
+are pending. Its own comment says who it is for: *"used by Apex Micro, other
+ecosystem products."*
+
+The only thing between that and the internet is `internalMiddleware`
+(`src/middleware/internal.ts`): one process-wide `ECOSYSTEM_SERVICE_KEY`,
+compared timing-safely, and **nothing else**. There is no owner check, no tenant
+binding, and no per-caller identity — the key is not issued to anybody, so
+holding it is indistinguishable from being every company at once. The
+`product_id` is a query parameter, so a holder reads any company by id.
+
+**What is actually being asked, and it is a fact before it is a decision:**
+
+1. **Who holds that key today?** If it lives only in the owner's own
+   deployment and is used by the owner's own products, this is one owner
+   reading their own portfolio and the exposure is bounded by that fact. If it
+   has ever been given to a party outside the owner's control, then one
+   company's full operating picture has been readable by another, and the
+   companies whose numbers those are never agreed to it.
+2. **If it is shared, what is owed?** That is the cross-company frontier the
+   owner's direction names as distinct and high-risk. Consent, disclosure and
+   whatever notice applies are counsel questions, not engineering ones.
+
+**Why this is queued rather than fixed.** The correction depends entirely on
+answer 1, and the two answers want opposite changes: a private-portfolio key
+wants per-company scoping it does not have, while a shared key wants
+withdrawal, not scoping. Guessing would either break a working ecosystem
+integration or leave a disclosure standing under a scope check that looks like
+a control.
+
+**What holds meanwhile.** Nothing has been relaxed and nothing new was opened.
+The route is read-only — it writes nothing and reaches nothing outward. The
+`/internal` surface is deliberately outside the member-capability ratchet
+(`scripts/check-route-guards.mjs`, `NOT_A_MEMBER_SURFACE`) because no member is
+present on it, which is correct and is also why this went unexamined by that
+gate.
+
+---
+
+## PENDING 13 — Cross-company benchmarks: is aggregation with k = 5 enough? **COUNSEL**
+
+A company's metrics are pooled and returned to other companies as percentiles.
+Two present-tense engineering corrections were made this cycle and both hold:
+
+- Contribution now requires the company's own recorded consent —
+  `submitBenchmark` returns without writing unless
+  `hasConsent(productId, 'benchmark_contribution')`
+  (`src/services/benchmarking/pool.ts:60`). Before that, the privacy toggle a
+  founder could switch governed nothing.
+- A percentile is published only above **five distinct contributing companies**,
+  counted as companies rather than rows — `MIN_CONTRIBUTORS = 5`
+  (`pool.ts:37`, applied at `pool.ts:223`). Before that, one company reporting
+  the same metric five times was a "sample of five", and the number a founder
+  read as peer comparison could be their own data reflected back.
+  `PEER_SIGNAL_MIN_SAMPLE = 5` (`src/services/decisions/patterns.ts:73`) is the
+  same floor on the peer-signal path, likewise now counting distinct
+  contributors.
+
+**What only counsel can answer.** Five is an engineering estimate, chosen
+because it is the smallest number at which one contributor cannot dominate an
+aggregate. It is not a legal conclusion and this campaign will not turn it into
+one:
+
+1. **Is k = 5 a defensible threshold for the jurisdictions Foundry operates
+   in?** Several regimes have expectations about small-cell aggregation, and
+   some of them are higher than five for data that can be re-identified from
+   context — a category with four peers and one obvious outlier is a
+   worked example, not a hypothetical.
+2. **Is a recorded consent toggle the right basis at all** for using one
+   company's operating data to serve another, or does this need something
+   stronger — and does the company understand what it agreed to when the toggle
+   says "benchmark contribution"?
+3. **Is the aggregate still that company's data?** Whether a percentile derived
+   from a company's numbers must be withdrawn when that company erases itself
+   is a legal question about the aggregate, not an engineering one about the
+   rows. Today an erasure does not recompute published percentiles.
+
+**Until it is answered.** The floor stands at five and the consent gate stands.
+Nothing in the code claims either is legally sufficient; each says only what it
+does. If counsel changes the threshold it is one exported constant and the
+tests that pin it will catch anything that drifts. This belongs alongside §9
+and §11, which are already with counsel on data lawfulness.
+
+
+---
+
+## PENDING 14 — Should Foundry's own funnel analytics be consent-gated?
+
+**The situation.** `telemetry/funnel.ts` records a NAMED founder's progression
+through signup → repo connected → audit done → briefing viewed → decision
+approved → trial started → paid. It is Foundry's own first-party product
+analytics: `founder_id`, the step, the timestamp. It is not anonymised, and it
+runs whether or not the founder has switched anything on.
+
+The privacy page offered a toggle called **Help Improve Foundry**, described as
+*"Allow Foundry to use your anonymized usage patterns to improve the product
+for everyone"*, covering *"feature usage, navigation patterns, and error
+rates"*. Nothing read it. So a founder who left it off was told their usage
+patterns were not being used, while their named progression was recorded
+anyway.
+
+**What has been done meanwhile, and it is only half.** The copy now says what
+actually happens: the account and subscription progression is recorded either
+way because it is how the service is run and billed, and the toggle covers
+anything beyond that. The consent type is listed in `RECORDED_PREFERENCE_ONLY`
+with that reason, and a test holds every consent type against either a reader
+or that register — so this cannot quietly become a toggle nobody notices again.
+
+**What is actually being asked.** Three readings, all defensible, and the
+answer is a position rather than a mechanism:
+
+1. **First-party analytics need no consent.** Recording how a customer moves
+   through your own product's setup is ordinary service operation. The toggle
+   then governs only optional detail beyond it, which is what the corrected
+   copy already describes.
+2. **The toggle should govern all of it.** A founder who says no should mean
+   no, and Foundry losing its own conversion data by default is the cost of
+   that. `recordFunnelStep` gains a consent check and the default is off.
+3. **Split it.** Keep the billing-and-lifecycle steps ungated as service
+   operation; gate feature-level and navigation detail — which is roughly the
+   line the corrected copy draws, made real rather than described.
+
+**No recommendation is offered on 1 vs 2**, because the choice is about what
+Foundry is willing to say to its own customers rather than about how to build
+it. If 2 or 3 is chosen, the change is one call site and a consent check.
+
+**Related, and separate:** whether this data is subject to the retention
+questions already with counsel in §9 and §11. `funnel_events` was not in that
+table.

@@ -25,14 +25,17 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `4bfab6c`. **Migrations:** 209 files, highest **173**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **278 files / 2,369 tests**, `npm run check`
+- **Head:** `1af4fc6` plus the tranche this checkpoint describes.
+  **Migrations:** 210 files, highest **174**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **287 files / 2,426 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
+  **Read the exit code from the run that produced the log** — a commit went out
+  with five red tests this cycle because it was read from a wrapper.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
-  effects **0** · statically unreachable modules **29** · write-only columns
+  effects **0** · statically unreachable modules **28** · write-only columns
   **85** · id tiebreaks **18** · backticks in embedded comments **0**.
 
 ## Active work
@@ -44,46 +47,92 @@ None in flight. Everything below is unstarted or blocked.
 *One paragraph, deliberately. The narrative record is
 `history/SEAM_CAMPAIGN_HISTORY.md`; this file is what a steward needs today.*
 
-The institution says things it cannot back, and reads records it does not
-follow. A founder was told a reconciliation was coming that has no mechanism; a
-verdict about whether something worked was settled permanently by whichever
-report arrived first; a founder read one reply above a button that would send a
-different one; a skipped question could never afterwards be answered, which
-foreclosed a responsibility for good; a company that said the same thing twice
-owed it twice; and a watch the founder ended by disconnecting its channel went
-dark in silence. Almost every one was found by asking what a written record was
-FOR and then looking for its reader — `outcome_evidence_ref`,
+**This cycle: the owner's direction on ethics, legitimacy and the private
+frontier landed, and it was implemented rather than filed.** The doctrine went
+into the existing canonical artifacts — no new ethics universe — and then the
+repository was read for the places where the doctrine had outrun the code.
+`ARCHITECTURE.md` names seven terms of the legitimate action envelope; five
+were already structural, and `IMPLEMENTATION_STATE.md` now reports each of them
+against real code. The two that were absent were the work.
+
+The **affected-party term** existed as a sentence in migration 094 — "never
+contacted again, by any mode, at any trust level" — with no way in and one
+reader. `addSuppression` had no caller anywhere in `src/`, so the list was
+always empty, and the governed email path never consulted it. It is now checked
+at the boundary every outward effect converges through, recorded by the founder
+and readable by them, and gated on `can_manage_company` because an append-only
+list is a brake somebody could pull on the company's best customer. The
+**external-permission term** is deliberately still absent: three counsel-debt
+items are queued instead of a legal-knowledge store built on a model's
+recollection.
+
+Reading for **"what does this claim that its execution path cannot support"**
+then found three fabrications in a row. An agent's parsed LLM output was fed to
+`upsertCustomer`, whose insert branch CREATED a customer — name, email, plan,
+MRR, stage `trial` — indistinguishable in the same table from one a real
+billing system reported through the scoped API, and read as ground truth by the
+priority ranker, the strategy synthesis and the accuracy tracker. The creating
+function is deleted; a model may now judge a customer it cannot invent, and a
+refused signal lands where the founder reads it. `network/benchmarks.ts` said
+"No product or founder ID stored" in two places while its primary key is
+`${productId}_week_${metric}`. And the question *how few companies may stand
+behind a number shown to another company* was asked in four places and answered
+three ways — 3, 5, 5, and a bare literal 3 — with two of them sharing the name
+`MIN_CONTRIBUTORS` while disagreeing. The weakest answer governed the two paths
+that publish to a company's competitors. One constant now, at the strictest of
+what was there.
+
+The same lens found the largest one. `ARCHITECTURE.md` says consequential
+mutations enter ONE governed execution boundary; there were two.
+`action_executions` had its own switch, whose `send_email` arm returned
+`success: true` with the note *"Email draft stored. Email provider integration
+pending."* Nothing was sent — and the live send path had existed the whole time,
+one directory away, with the sender-of-record rule, the kill switch, the
+entitlement pause, classification, idempotency and effect certainty. The
+execution was marked `completed`, the customer-success department counted it as
+`sent`, and the attribution entry read *"Foundry sent a check-in on the
+founder's behalf under consent <id>"*. The note described a gap that had been
+closed elsewhere and never re-read. The second regime now enters the first, a
+refusal is no longer counted as a send, and the affected-party refusal built at
+the top of this cycle binds both paths because there is now only one path.
+
+Two smaller ones from the same reading. The privacy page's **Aggregate
+Insights** governed nothing — contribution was consented while RECEIVING was
+gated by nothing at all — and it promised "statistical patterns across hundreds
+of products", a scale nobody counted, over what is an eligibility floor of five
+companies rather than a statistic. It governs the reading now. And **Help
+Improve Foundry** described a choice the code does not offer: Foundry's own
+funnel analytics record a NAMED founder's progression regardless. The copy now
+says what happens, and the position is queued as owner decision §14. Every
+consent type is now either consulted or listed in `RECORDED_PREFERENCE_ONLY`
+with a reason, held by a test — four separate toggles governing nothing was
+four separate findings that should have been one rule.
+
+**A process failure worth keeping.** The commit before this cycle's work was
+pushed with five tests red: capping `customer_success` at 'suggest' was correct
+and the tests asserting the old behaviour were not updated with it. Validation
+was run and its exit code was read from the wrong stream. Read the exit code,
+and read it from the run that produced the log.
+
+
+**The cycle before this one, compressed** — the detail is in git history and in
+`history/SEAM_CAMPAIGN_HISTORY.md`. Its method was asking what a written record
+was FOR and then looking for its reader: `outcome_evidence_ref`,
 `reply_proposal_id`, `provider_receipt_json` and `reconcile_after` were all
-written faithfully and consumed by nothing.
+written faithfully and consumed by nothing. "Who finds out when this fails"
+found the same silence around Foundry's own dependencies — a dead integration,
+a support channel dropping customers, and the scheduled loops themselves could
+all fail while the page read like a calm day. "Who certifies their own
+authority" found two doors on the outbound boundary (`queueEmail` deleted,
+`proposeAction` closed by migration 173) and an attribution field recording the
+literal `'ceo'` for every founder of every company.
 
-Reading for "who finds out when this fails" then found the same silence around
-Foundry's own dependencies: a connected system whose every call was thrown away
-looked healthy because `last_used_at` records being let in and nothing recorded
-not being understood; a support channel dropping customers looked like a quiet
-inbox; and the scheduled loops could fail or stop entirely with the page reading
-exactly as it does on a calm day. All three now say so.
-
-Asking "who certifies their own authority" found two doors on the outbound
-boundary. `queueEmail` wrote an approved action from a caller-supplied authority
-level and was deleted; `proposeAction` does the same and is contained only
-because one parameter happens to carry an agent's name rather than an
-integration's, so migration 173 closes the shape instead. And the field that
-makes an authorisation attributable recorded the literal 'ceo' for every founder
-of every company.
-
-The instruments themselves turned out to be the largest finding. Ten gates
-shared a block-comment regex that reads `app.use('/dashboard/*', mw)` as a
-comment opening and blanks everything to the next real `*/` — 715 lines of code,
-including half of `src/index.ts`: the route mounting, the middleware wiring, the
-scheduler. Two modules were counted reachable through imports blanked into
-nothing, and seven columns sat in the write-only baseline with readers inside
-the blanked regions. It surfaced only because hardening one unrelated gate made
-its baseline move.
-
-Two shapes recurred often enough to become gates rather than lessons: a backtick
-inside an embedded SQL or HTML comment (three parse errors, each to somebody who
-had already written the lesson down), and an ORDER BY falling back to a nanoid
-id (three real defects, in three modules that did not know about each other).
+The instruments were the largest finding: ten gates shared a block-comment regex
+that reads `app.use('/dashboard/*', mw)` as a comment opening and blanked 715
+lines of code, including half of `src/index.ts`. It surfaced only because
+hardening one unrelated gate made its baseline move. Two shapes recurred often
+enough to become gates rather than lessons — a backtick inside an embedded SQL
+or HTML comment, and an ORDER BY falling back to a nanoid id.
 
 ## Highest-value current opportunities
 

@@ -4,7 +4,6 @@ src/mcp/cli.ts
 src/middleware/tenant.ts
 src/prompts/voice-judge.ts
 src/services/ai/composer.ts
-src/services/audit/log.ts
 src/services/calibration/taste-journal.ts
 src/services/distribution/briefing-share.ts
 src/services/financial/institutional-economics.ts
