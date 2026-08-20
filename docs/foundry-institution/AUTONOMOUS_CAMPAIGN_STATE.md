@@ -25,15 +25,15 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `98ff15d`. **Migrations:** 205 files, highest **169**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **266 files / 2,330 tests**, `npm run check`
+- **Head:** `ee7360d`. **Migrations:** 205 files, highest **169**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **271 files / 2,341 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **29** · write-only columns
-  **94**.
+  **92** · id tiebreaks **18** · backticks in embedded comments **0**.
 
 ## Active work
 
@@ -44,17 +44,22 @@ None in flight. Everything below is unstarted or blocked.
 *One paragraph, deliberately. The narrative record is
 `history/SEAM_CAMPAIGN_HISTORY.md`; this file is what a steward needs today.*
 
-The institution computes more than it says. Three large facts about a company —
-that it is being deleted, that Foundry has stopped working for it, and how
-Foundry's own judgments and changes have held up — were all computed correctly
-and appeared nowhere a founder reads. They do now. The same cycle found one rule
-implemented twice and disagreeing (two retention jobs deleting from `audit_log`
-on different horizons), a live-grant predicate copied seven times and drifted
-(an expired grant reported as active authority), an authority check protected by
-a TypeScript type that does not exist at runtime, and a refusal swallowed on the
-one surface that grants authority. Every one of them was found by reading for a
-specific failure shape rather than by reading a subsystem — the shapes are
-listed under "What keeps working" below.
+The institution says things it cannot back, and reads records it does not
+follow. A founder was told a reconciliation was coming that has no mechanism; a
+verdict about whether something worked was settled permanently by whichever
+report arrived first; a founder read one reply above a button that would send a
+different one; a skipped question could never afterwards be answered, which
+foreclosed a responsibility for good; a company that said the same thing twice
+owed it twice; and a watch the founder ended by disconnecting its channel went
+dark in silence. Almost every one was found by asking what a written record was
+FOR and then looking for its reader — `outcome_evidence_ref`,
+`reply_proposal_id`, `provider_receipt_json` and `reconcile_after` were all
+written faithfully and consumed by nothing.
+
+Two shapes recurred often enough to become gates rather than lessons: a backtick
+inside an embedded SQL or HTML comment (three parse errors, each to somebody who
+had already written the lesson down), and an ORDER BY falling back to a nanoid
+id (three real defects, in three modules that did not know about each other).
 
 ## Highest-value current opportunities
 
@@ -93,7 +98,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      `gates-fail-when-they-should` plants real files into the working tree, so
      concurrent runs collide and produce failures that look like defects.
 
-4. **94 write-only columns.** `check-write-only-columns.mjs` holds the count.
+4. **92 write-only columns.** `check-write-only-columns.mjs` holds the count.
    Attributed by writing area rather than guessed at:
 
    - **20 are written by `services/institution`**, and those are the ones worth

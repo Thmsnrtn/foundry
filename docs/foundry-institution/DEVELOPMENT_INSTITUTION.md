@@ -258,6 +258,16 @@ Two standards this institution holds itself to, both learned the hard way:
   criterion proved through a function no production surface calls, and a
   founder-surface claim proved by calling a service directly.
 
+- **The same defect in a third module is a gate, not a third fix.** An ORDER BY
+  falling back to `id` decided which claim was current, which reply would be
+  sent, and whether a founder had withdrawn a permission — three modules, none
+  aware of the others, every id in the system a nanoid or a content hash. Fixing
+  the third one and moving on would have left the fourth to be found by a
+  founder. Two occurrences is a coincidence worth noting where it lives; three
+  is a shape, and a shape can be refused mechanically. The gate does not need to
+  be clever — `check-id-tiebreak` cannot tell a winner from a list and says so —
+  it needs to stop the next one arriving unexamined.
+
 - **A negative assertion passes when the mechanism is missing entirely.** A
   new test said `expect(detail).not.toContain('2 separate reports')` and passed
   on its first run — not because the fix worked, but because the column it read
