@@ -44,6 +44,59 @@ None in flight. Everything below is unstarted or blocked.
 
 ## What the last cycle established
 
+**The owner answered §10, §14 and §12, and all three are implemented.**
+
+**§10 — split by kind.** Five tables sat marked `owner_decision`, holding an
+erased person's identity inside companies they did not own. The answer:
+authority and artefact are different things. `api_keys` and `mcp_grants` are
+**revoked and removed** — an authority held by a principal that no longer exists
+must not act, and handing it to the company owner would be inventing a grant
+nobody made. `webhooks`, `deal_rooms` and `decision_votes` are **preserved and
+their author severed**: the integration keeps delivering, the room stays open,
+the vote still says which way it went, and NULL says NOBODY rather than naming
+somebody who did not do it. Migration 175 made those three columns nullable,
+which is the whole reason this was stuck — not indecision, an absent column
+state. Revocation is not silent: each one writes into the company's own audit
+trail, naming no person, because naming one would undo the erasure that caused
+it. The disposition `owner_decision` no longer exists and a test asserts it
+cannot return.
+
+**§14 — split analytics.** The funnel recorded a NAMED founder's whole
+progression whether "Help Improve Foundry" was on or off. It is two paths now:
+service state (signup, repo connected, trial, paid) stays ungated and is
+**disclosed in those words**, and the usage half is recorded **only with
+consent** and then against a contributor hash. Minimisation first — no consent
+means no row, not a row filtered out at read time, which would make the toggle a
+display preference rather than a control. A step in neither list fails closed to
+telemetry. The readout carries which population each count is over, because the
+telemetry half is a smaller denominator by construction and a rate crossing that
+boundary compares two different groups — the same provenance error the wisdom
+network made. `product_telemetry_events` entered the erasure map in the commit
+that created it: a pseudonym is not anonymity, and a table the erasure has never
+heard of survives forever.
+
+**§12 — a portfolio principal, not a global secret.** Possession of one
+process-wide key read any company's entire operating picture by arbitrary
+`product_id`. The two `/internal` routes that touch company data now resolve the
+credential to a **principal with enumerated company membership** — no wildcard,
+so a company outside the scope is a row that does not exist rather than a check
+that could be written wrong. A principal may only be scoped to companies its
+issuer OWNS, enforced at issuance and again by a database trigger, which is what
+keeps a private portfolio principal from becoming a route into a commercial
+customer's data. It fails closed today: until one is issued, those routes serve
+nobody. **Rotating the deployed secret is the owner's own act and is recorded as
+outstanding rather than reported as done.**
+
+**Three interim positions are now in force** pending counsel, and they bind like
+decisions: keep the shorter retention rather than lengthening by guess and never
+call a redacted shell proven anonymous (a test holds that claim out of the
+disposition strings); audit logs stay at 180 days as the interim default; and
+**k = 5 is not a safe harbour** — cross-company benchmarking is counsel debt and
+external proof debt before broad release, not something the local floor
+demonstrates.
+
+
+
 *One paragraph, deliberately. The narrative record is
 `history/SEAM_CAMPAIGN_HISTORY.md`; this file is what a steward needs today.*
 

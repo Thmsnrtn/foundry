@@ -12,17 +12,19 @@ around each item.
 
 ---
 
-# EIGHT ANSWERED, SIX PENDING
+# TEN ANSWERED, FOUR PENDING
 
 The owner answered the first eight queued decisions; those are recorded below as
-settled, with the record of what was asked and why in git history. Six items
-are pending at the end of this file — §§9, 10, 11, 12, 13 and 14 — and none
-blocks the campaign.
+settled, with the record of what was asked and why in git history. **§10 and §14 are now answered and implemented** — see RESOLVED 9 and RESOLVED
+10 below. Four items remain pending — §§9, 11, 12 and 13 — and none blocks the
+campaign.
 
-Three of the five need counsel rather than the owner alone (§9 retention
-periods, §11 the audit-log window, §13 the benchmark aggregation threshold);
-§10 has a recommended answer and a stated live gap while it waits; §12 needs a
-deployment fact from the owner before it is even a decision.
+Three need counsel rather than the owner alone (§9 retention periods, §11 the
+audit-log window, §13 the benchmark aggregation threshold). §12 is an owner
+instruction that is partly an operational act only the owner can perform.
+
+**The owner's interim positions on the three counsel questions are recorded at
+the end of this file and are in force now.**
 
 §14 is a product and legal position rather than an engineering mechanism, which
 is why it is here rather than decided in git history.
@@ -289,102 +291,100 @@ Nothing is blocked either way — the system is consistent at 180 today.
 
 ---
 
-## PENDING 10 — When a member erases their account, what happens to the company assets they configured?
+## RESOLVED 9 — Member erasure and company assets: **SPLIT BY KIND**
 
-**The situation.** A person can be a member of a company they do not own.
-Erasing their account now reaches those companies: their conversations,
-journal, notifications, consents and membership are deleted, and the company's
-own records — its audit trail, its decisions, its integration history — are
-severed so they stay and stop naming the person.
+The owner's answer: *"Adopt split by kind, with authority versus artifact as the
+governing distinction. Revoke `api_keys` and `mcp_grants`; do not transfer
+personal authority. Preserve genuinely company-owned integrations/artifacts
+while severing the erased person's identity. Do not falsely reassign
+authorship."*
 
-Five tables cannot be settled that way, because the row is a **company asset
-the company is still running on**, on a NOT NULL column:
+**Implemented.** Migration 175 made the three artefact identity columns
+nullable, which is the whole reason these five tables sat undecided — not
+indecision, an absent column state.
 
-| Table | What it is |
-|---|---|
-| `api_keys` | a credential the company may currently be authenticating with |
-| `mcp_grants` | an authority grant the company may depend on |
-| `webhooks` | an integration that may be delivering right now |
-| `deal_rooms` | a shared artefact other people are using |
-| `decision_votes` | part of the company's decision record — and the person's own written rationale is inside it |
+- **AUTHORITY — `api_keys`, `mcp_grants` — is revoked and removed.** An
+  authority held by a principal that no longer exists must not act, and handing
+  it to the company owner would be inventing a grant nobody made. The
+  revocation column is set before the row goes, so a partial failure leaves a
+  DEAD credential rather than a live one.
+- **ARTEFACT — `webhooks`, `deal_rooms`, `decision_votes` — is preserved and its
+  author severed.** The integration keeps delivering, the room stays open, the
+  vote still says which way it went. `NULL` says NOBODY; another founder's id
+  would say somebody who did not do it. A test asserts the company owner is
+  never written into these columns.
+- **Revocation is not silent.** Each one writes into the company's own audit
+  trail — what stopped, how many, and that the account it was issued to was
+  erased — naming no person, because naming one would undo the erasure that
+  caused it. Losing a capability with no explanation was the named cost of this
+  choice; this is what makes it acceptable rather than careless.
 
-**The tension, plainly.** Deleting these takes a working capability away from a
-company that did nothing wrong — a webhook stops delivering, an API key stops
-authenticating, a decision loses a vote that was genuinely cast. Keeping them
-keeps the erased person's identity in a live company, which is the thing an
-erasure exists to remove. The columns are NOT NULL, so severing to nothing is
-not available without a schema change and a marker value.
+**Standing consequences:**
 
-**Three legitimate readings, all defensible:**
-
-1. **The person wins.** Delete. An erasure means erasure; a company that relied
-   on a departing member's credential should re-establish it. Cost: silent
-   breakage in a company with no warning.
-2. **The company wins.** Keep the row, transfer ownership to the company owner,
-   and record the transfer. Cost: the erased person's id survives until the
-   transfer runs, and somebody must decide who inherits.
-3. **Split by kind.** Revoke the credentials (`api_keys`, `mcp_grants`) because
-   an authority held by a person who no longer exists should not act, and
-   transfer or anonymise the artefacts (`webhooks`, `deal_rooms`,
-   `decision_votes`) because they are the company's work.
-
-**Recommendation: 3.** It is the only one that distinguishes *authority* from
-*artefact*, which is a distinction the constitution already makes everywhere
-else — authority held by a principal that no longer exists should not survive
-the principal, while a record the company authored should. It needs a schema
-change to make the artefact columns nullable, or a company-owned marker
-principal, which is why it is not simply done.
-
-**Until it is answered.** These five tables are marked `owner_decision` in
-`PERSON_ACROSS_COMPANIES` and are deliberately NOT touched by the erasure. A
-test asserts every table in that surface carries a disposition, so the deferral
-is visible rather than an omission — but it IS a live gap: an erased person's
-id remains in those five tables in companies they did not own.
+- The disposition `owner_decision` no longer exists in
+  `PERSON_ACROSS_COMPANIES`, and a test asserts it cannot return. Every table
+  holding a person inside a company they do not own is `delete`, `sever` or
+  `revoke`.
+- **A severed vote is not an unauthorized one.** `audit-unauthorized-votes.mjs`
+  now excludes `founder_id IS NULL`, or every erasure would manufacture a
+  finding: the person was entitled at the time, and the audit asks who voted
+  *without the right to*.
+- **The free text stays, and is counsel's question.** `decision_votes.rationale`
+  and `.concerns` are the reasoning behind a company decision — a decision
+  record stripped of *why* is not a truthful record — and they are also the
+  erased person's own words. The attribution goes now; whether the words may be
+  retained is queued with §9 rather than deleted on a guess or kept without one.
 
 ---
 
-## PENDING 12 — One shared key reads any company's whole picture: **DEPLOYMENT FACT, THEN COUNSEL**
+## PENDING 12 — Rotate `ECOSYSTEM_SERVICE_KEY`: **OWNER ACTION, CODE SIDE DONE**
 
-`GET /internal/operator/dashboard-data?product_id=…`
-(`src/routes/internal/ecosystem.ts:42`) returns a named company's risk state and
-its reason, its active stressors, its MRR decomposition by new/expansion/
-contraction/churn, its signups, active users, activation, retention, support
-volume, NPS and churn rate, its latest cohort summary, and how many decisions
-are pending. Its own comment says who it is for: *"used by Apex Micro, other
-ecosystem products."*
+The owner's instruction: *"Do not assume who holds ECOSYSTEM_SERVICE_KEY. If
+current evidence cannot positively establish that it has remained solely within
+owner-controlled infrastructure, treat distribution as unknown and rotate it.
+Long term, private owner-portfolio access may exist, but it must be represented
+as an explicit service/portfolio principal with scoped company membership rather
+than possession of one global secret plus arbitrary product_id. Commercial
+customer access must remain isolated."*
 
-The only thing between that and the internet is `internalMiddleware`
-(`src/middleware/internal.ts`): one process-wide `ECOSYSTEM_SERVICE_KEY`,
-compared timing-safely, and **nothing else**. There is no owner check, no tenant
-binding, and no per-caller identity — the key is not issued to anybody, so
-holding it is indistinguishable from being every company at once. The
-`product_id` is a query parameter, so a holder reads any company by id.
+**What the code now does.** The two `/internal` routes that touch a company's
+data — the operator dashboard read and the conversion-signal write — resolve the
+presented credential to a **principal** and require that company to be in its
+scope. Possession of the global key is no longer sufficient for either.
 
-**What is actually being asked, and it is a fact before it is a decision:**
+- **Scope is enumerated membership, not a flag.** There is no wildcard and no
+  "all companies" option, deliberately: reaching a company outside the scope is
+  not a permission check that could be written wrong, it is a row that does not
+  exist (migration 177).
+- **Isolation is structural.** A principal may only be scoped to companies its
+  issuer OWNS — checked at issuance, and again by a database trigger, because
+  the first is a property of one function and the second is a property of the
+  table. Ownership can change after issuance; the trigger makes that a refusal
+  rather than a silent inheritance. One owner therefore cannot scope a principal
+  into another owner's company at all.
+- **A credential, not a password.** Issued to a named party, mandatory expiry,
+  revocable, hash-only storage, last-used recorded — the same shape as ingest
+  credentials and API keys.
+- **Issuance exists.** `POST /settings/portfolio-principals`, behind
+  `requireOwner()`, because a credential reading several companies at once is
+  the exceptional boundary rather than ordinary company work. A control with no
+  way in is a sentence in a migration, and this campaign has found that shape
+  four times.
+- **It fails closed today.** Until a principal is issued, those two routes serve
+  nobody. That is the correct state for a surface whose key distribution the
+  owner has instructed us to treat as unknown.
 
-1. **Who holds that key today?** If it lives only in the owner's own
-   deployment and is used by the owner's own products, this is one owner
-   reading their own portfolio and the exposure is bounded by that fact. If it
-   has ever been given to a party outside the owner's control, then one
-   company's full operating picture has been readable by another, and the
-   companies whose numbers those are never agreed to it.
-2. **If it is shared, what is owed?** That is the cross-company frontier the
-   owner's direction names as distinct and high-risk. Consent, disclosure and
-   whatever notice applies are counsel questions, not engineering ones.
+**WHAT REMAINS, AND IT IS YOURS.** Rotating the deployed
+`ECOSYSTEM_SERVICE_KEY` is an operational act on the environment that no code
+change performs, and it is recorded here rather than reported as done. The key
+still guards the two `/internal` routes that carry no company data
+(`/internal/icp`, `/internal/campaign/receive`); rotating it costs nothing and
+removes the standing question.
 
-**Why this is queued rather than fixed.** The correction depends entirely on
-answer 1, and the two answers want opposite changes: a private-portfolio key
-wants per-company scoping it does not have, while a shared key wants
-withdrawal, not scoping. Guessing would either break a working ecosystem
-integration or leave a disclosure standing under a scope check that looks like
-a control.
-
-**What holds meanwhile.** Nothing has been relaxed and nothing new was opened.
-The route is read-only — it writes nothing and reaches nothing outward. The
-`/internal` surface is deliberately outside the member-capability ratchet
-(`scripts/check-route-guards.mjs`, `NOT_A_MEMBER_SURFACE`) because no member is
-present on it, which is correct and is also why this went unexamined by that
-gate.
+If any ecosystem product currently calls the operator endpoint, it will now
+receive 404 until a portfolio principal is issued to it and scoped to the
+companies it should see. That is the intended behaviour of this change, not a
+regression — the old answer was that it could see all of them.
 
 ---
 
@@ -435,46 +435,88 @@ and §11, which are already with counsel on data lawfulness.
 
 ---
 
-## PENDING 14 — Should Foundry's own funnel analytics be consent-gated?
+## RESOLVED 10 — Foundry's own analytics: **SPLIT ANALYTICS**
 
-**The situation.** `telemetry/funnel.ts` records a NAMED founder's progression
-through signup → repo connected → audit done → briefing viewed → decision
-approved → trial started → paid. It is Foundry's own first-party product
-analytics: `founder_id`, the step, the timestamp. It is not anonymised, and it
-runs whether or not the founder has switched anything on.
+The owner's answer: *"Adopt split analytics. Necessary
+service/billing/security/configuration state remains ungated and disclosed.
+Optional feature/navigation/product-improvement telemetry must actually honor
+the Help Improve Foundry preference. Prefer minimization and de-identification
+where practical. Separate operational state from analytics rather than treating
+everything as one funnel."*
 
-The privacy page offered a toggle called **Help Improve Foundry**, described as
-*"Allow Foundry to use your anonymized usage patterns to improve the product
-for everyone"*, covering *"feature usage, navigation patterns, and error
-rates"*. Nothing read it. So a founder who left it off was told their usage
-patterns were not being used, while their named progression was recorded
-anyway.
+**Implemented.** The funnel is two paths rather than one table with a rule
+applied to some of its rows — because a rule applied to some rows is a rule
+somebody eventually forgets.
 
-**What has been done meanwhile, and it is only half.** The copy now says what
-actually happens: the account and subscription progression is recorded either
-way because it is how the service is run and billed, and the toggle covers
-anything beyond that. The consent type is listed in `RECORDED_PREFERENCE_ONLY`
-with that reason, and a test holds every consent type against either a reader
-or that register — so this cannot quietly become a toggle nobody notices again.
+| Step | Kind | Recorded |
+|---|---|---|
+| `signup`, `repo_connected`, `trial_started`, `paid` | service | always, against the account, **disclosed on the privacy page in those words** |
+| `audit_done`, `briefing_viewed`, `decision_approved` | telemetry | only with `product_improvement` consent, against a contributor hash |
 
-**What is actually being asked.** Three readings, all defensible, and the
-answer is a position rather than a mechanism:
+**Minimisation first, de-identification second**, in that order. Without consent
+**nothing is recorded** — not a row filtered out at read time, which would make
+the toggle a display preference rather than a control. With consent, the row
+carries a hash and no founder id, no product id and no free text (migration
+176).
 
-1. **First-party analytics need no consent.** Recording how a customer moves
-   through your own product's setup is ordinary service operation. The toggle
-   then governs only optional detail beyond it, which is what the corrected
-   copy already describes.
-2. **The toggle should govern all of it.** A founder who says no should mean
-   no, and Foundry losing its own conversion data by default is the cost of
-   that. `recordFunnelStep` gains a consent check and the default is off.
-3. **Split it.** Keep the billing-and-lifecycle steps ungated as service
-   operation; gate feature-level and navigation detail — which is roughly the
-   line the corrected copy draws, made real rather than described.
+**Standing consequences:**
 
-**No recommendation is offered on 1 vs 2**, because the choice is about what
-Foundry is willing to say to its own customers rather than about how to build
-it. If 2 or 3 is chosen, the change is one call site and a consent check.
+- **A step in neither list fails closed to telemetry.** The mistake that costs
+  somebody something is recording without consent.
+- **The readout says which population each count is over.** The telemetry half
+  counts consenting people only — a smaller denominator by construction — so a
+  conversion rate crossing the boundary compares two different groups. Each row
+  carries its `kind` rather than leaving a reader to infer it from a dip. This
+  is the same provenance error the wisdom network made when a cohort count was
+  published as a contributor count.
+- **The erasure reaches it.** `product_telemetry_events` is in the named-key
+  erasure map from the same commit that created it. A pseudonym is not
+  anonymity, and a table the erasure has never heard of survives forever —
+  which is how `network_contributions` outlived erasures for months.
+- **The page no longer claims more than the code does.** It says what is always
+  recorded and why, and that off means not written.
+- `RECORDED_PREFERENCE_ONLY` is down to one entry (`ai_training_opt_out`, which
+  has no path to gate because no training pipeline exists).
 
-**Related, and separate:** whether this data is subject to the retention
-questions already with counsel in §9 and §11. `funnel_events` was not in that
-table.
+---
+
+
+# OWNER INTERIM POSITIONS — in force now, pending counsel
+
+These are not answers to the counsel questions. They are the owner's standing
+instruction for how Foundry behaves **while** those questions are open, and they
+bind the campaign the same way a resolved decision does.
+
+**Retention (§9).** Keep the current shorter, general behaviour rather than
+lengthening retention by guess. **Do not call redacted id shells proven
+anonymous** — they are *tombstoned and redacted*, and their identifiability and
+legal status are externally unconfirmed. Prefer purpose-specific retention over
+one global period.
+
+*What this forbids:* any code comment, surface, or document asserting that a
+redacted `products` or `founders` row identifies nobody. What is true is what
+was done to it — every describing column cleared, the email replaced, the
+identity-provider handle severed — and whether that suffices is not ours to
+state.
+
+**Audit logs (§11).** Retain **180 days** as the interim general default,
+because that is current actual behaviour. If counsel establishes a different
+basis or period for narrowly necessary erasure and accountability evidence,
+separate that from the general default rather than moving the default to meet
+it.
+
+**Cross-company benchmarking (§13).** **Do not treat k = 5 as a safe harbour.**
+Contribution stays explicitly opt-in. Commercial cross-company benchmarking is
+**external proof debt** and counsel debt before broad release — it is not
+demonstrated by the floor holding locally. Future safeguards must consider
+re-identification, contributor dominance and competition sensitivity, not count
+alone.
+
+*What this forbids:* promoting cross-company benchmarking toward commercial
+maturity on the strength of the threshold, or describing five as sufficient
+anywhere a customer reads it.
+
+**And the standing instruction over all of them:** *"Do not let these external
+questions block unrelated development."* Preserve the questions, implement the
+safest locally resolvable structural corrections, and resume autonomous
+stewardship.
