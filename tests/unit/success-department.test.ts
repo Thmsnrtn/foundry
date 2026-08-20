@@ -78,18 +78,38 @@ describe('the trust ladder governs the department', () => {
     expect(res.skipped).toBe(2);
   });
 
-  it('act: sends autonomously — only after the founder granted it', async () => {
+  it('act: the founder may grant it, and the platform cap still holds it', async () => {
+    // THIS USED TO ASSERT THAT IT SENT. `customer_success` was absent from the
+    // platform cap table, so it defaulted to 'act': a per-person churn score
+    // assigned by a model, with no confidence and no evidence reference,
+    // selected which NAMED CUSTOMERS got an email, daily, with nobody in the
+    // loop. Outreach was capped at 'suggest' for reaching third parties; this
+    // reaches the same third parties by the same post, and the asymmetry was
+    // an omission rather than a decision.
+    //
+    // So the founder's setting is honoured as far as the ceiling allows and no
+    // further: the work is proposed, and a person decides it goes.
     await seedCustomer('cs_c4', 0.95);
     await setPolicy('cs_p', CATEGORY, 'act', 'cs_f');
     const res = await runSuccessSweep('cs_p');
-    expect(res.sent).toBe(1);
+    expect(res.sent, 'the platform ceiling is not a founder setting').toBe(0);
+    expect(res.proposed).toBe(1);
 
     const exec = (await query(
       `SELECT status, approved_by FROM action_executions
        WHERE product_id='cs_p' AND payload_json LIKE '%cs_c4%'`, [],
     )).rows[0] as Record<string, string>;
-    expect(exec.status).toBe('completed');
-    expect(exec.approved_by).toBe('autopilot:customer_success'); // attributable
+    expect(exec.status).toBe('pending');
+    expect(exec.approved_by, 'nothing approved it, and nothing pretends to have')
+      .toBeFalsy();
+  });
+
+  it('is held by the cap rather than by the ladder, and says which', async () => {
+    const { effectiveMode, isCappedBelow, platformCap } = await import(
+      '../../src/services/autopilot/platform-cap.js');
+    expect(platformCap(CATEGORY)).toBe('suggest');
+    expect(effectiveMode('act', CATEGORY)).toBe('suggest');
+    expect(isCappedBelow('act', CATEGORY), 'Controls can say so honestly').toBe(true);
   });
 
   it('the department envelope is a hard weekly wall', async () => {

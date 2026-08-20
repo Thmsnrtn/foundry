@@ -110,8 +110,17 @@ describe('declared success, independently checked', () => {
   });
 });
 
-describe('the act-tier department declares before it acts', () => {
-  it('customer-success acts carry criteria automatically', async () => {
+describe('a proposal is not an act, and declares nothing', () => {
+  it('customer-success is held at the platform ceiling, so nothing is verified', async () => {
+    // THIS USED TO ASSERT THAT IT ACTED AND CARRIED CRITERIA. `customer_success`
+    // is now capped at 'suggest' — it reaches third parties by the same post as
+    // outreach, and its absence from the cap table was an omission rather than
+    // a decision. So the founder's 'act' produces a proposal, and a proposal
+    // has no outcome to declare success criteria for: declaring them would be
+    // asserting that something happened.
+    //
+    // What an act DOES declare is asserted in
+    // `attribution-under-a-lifted-ceiling.test.ts`, against the real branch.
     await query(
       `INSERT INTO customers (id, product_id, owner_id, name, email, churn_risk, health_score, last_active_at)
        VALUES ('av_c2', 'av_p', 'av_f', 'Risk', 'risk@c.co', 0.9, 0.3, ?)`,
@@ -120,14 +129,15 @@ describe('the act-tier department declares before it acts', () => {
     await setPolicy('av_p', 'customer_success', 'act', 'av_f');
     const { runSuccessSweep } = await import('../../src/services/departments/success.js');
     const res = await runSuccessSweep('av_p');
-    expect(res.sent).toBe(1);
+    expect(res.sent).toBe(0);
+    expect(res.proposed).toBe(1);
 
     const exec = (await query(
-      "SELECT verify_criteria, verify_status FROM action_executions WHERE product_id='av_p' AND payload_json LIKE '%av_c2%'", [],
+      "SELECT status, verify_criteria, verify_status FROM action_executions WHERE product_id='av_p' AND payload_json LIKE '%av_c2%'", [],
     )).rows[0] as Record<string, string>;
-    expect(exec.verify_status).toBe('pending');
-    const criteria = JSON.parse(exec.verify_criteria);
-    expect(criteria.map((c: { kind: string }) => c.kind)).toContain('customer_health_not_worse');
-    expect(criteria.find((c: { kind: string }) => c.kind === 'customer_health_not_worse').baseline_health).toBe(0.3);
+    expect(exec.status).toBe('pending');
+    expect(exec.verify_status, 'nothing happened, so nothing is awaiting verification')
+      .toBeFalsy();
+    expect(exec.verify_criteria).toBeFalsy();
   });
 });

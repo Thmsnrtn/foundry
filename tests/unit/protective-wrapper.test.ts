@@ -35,9 +35,18 @@ describe('primitive 1 — autonomy is a lattice: min(setting, platform cap)', ()
     expect(effectiveMode('act', 'refunds')).toBe('shadow');
     expect(effectiveMode('act', 'billing')).toBe('shadow');
 
-    // uncapped capability: the ladder alone governs.
-    expect(effectiveMode('act', 'customer_success')).toBe('act');
-    expect(platformCap('customer_success')).toBe('act');
+    // customer success reaches third parties by the same post as outreach, and
+    // was absent from the table — so it defaulted to 'act' and a model-assigned
+    // churn score chose which named customers got mail. It is capped now, and
+    // this asserts the cap rather than the old default.
+    expect(platformCap('customer_success')).toBe('suggest');
+    expect(effectiveMode('act', 'customer_success')).toBe('suggest');
+
+    // A capability with no ceiling: the ladder alone governs. ABSENCE MEANS
+    // MAXIMUM AUTONOMY, which is the whole reason the omission above mattered,
+    // so the default is asserted deliberately rather than left implicit.
+    expect(platformCap('an_unlisted_capability')).toBe('act');
+    expect(effectiveMode('act', 'an_unlisted_capability')).toBe('act');
   });
 
   it('getEffectiveMode enforces the cap end-to-end, whatever the founder set', async () => {
@@ -89,7 +98,16 @@ describe('primitive 3 — no autonomous act without live consent (+ attribution)
     expect(res.proposed).toBe(1);      // downgraded to a proposal
   });
 
-  it('act WITH live consent executes and writes an attribution trail', async () => {
+  it('live consent is still not enough, because the ceiling is above it', async () => {
+    // THIS USED TO ASSERT THAT IT SENT, and it was the last line of defence in
+    // the wrong order: consent was the only thing between a model's churn score
+    // and a named customer's inbox, because the platform had no ceiling for
+    // this capability at all. The lattice is min(setting, CAP, consent), and a
+    // founder's live consent cannot climb above the cap.
+    //
+    // What the attribution trail contains WHEN it is reachable is asserted in
+    // `attribution-under-a-lifted-ceiling.test.ts`, which is explicit about
+    // hypothesising a ceiling this one pins to 'suggest'.
     await query("DELETE FROM action_executions WHERE product_id='pw_p'", []); // clear dedup
     // Realistic transition INTO act from below records fresh consent.
     await setPolicy('pw_p', 'customer_success', 'suggest', 'pw_f');
@@ -98,13 +116,13 @@ describe('primitive 3 — no autonomous act without live consent (+ attribution)
 
     const { runSuccessSweep } = await import('../../src/services/departments/success.js');
     const res = await runSuccessSweep('pw_p');
-    expect(res.sent).toBe(1);
+    expect(res.sent, 'consent does not lift a platform ceiling').toBe(0);
+    expect(res.proposed).toBe(1);
 
     const attribution = await query(
       "SELECT reasoning FROM audit_log WHERE action_type='attribution:customer_success'", [],
     );
-    expect(attribution.rows.length).toBe(1);
-    expect(String((attribution.rows[0] as Record<string, string>).reasoning)).toMatch(/on the founder's behalf under consent/);
+    expect(attribution.rows.length, 'nothing acted, so nothing is attributed').toBe(0);
   });
 });
 
