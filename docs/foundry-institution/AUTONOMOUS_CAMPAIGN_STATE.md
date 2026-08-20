@@ -25,8 +25,8 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `30e1d44`. **Migrations:** 207 files, highest **171**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **274 files / 2,349 tests**, `npm run check`
+- **Head:** `9b67a41`. **Migrations:** 209 files, highest **173**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **276 files / 2,362 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
@@ -55,6 +55,21 @@ dark in silence. Almost every one was found by asking what a written record was
 FOR and then looking for its reader — `outcome_evidence_ref`,
 `reply_proposal_id`, `provider_receipt_json` and `reconcile_after` were all
 written faithfully and consumed by nothing.
+
+Reading for "who finds out when this fails" then found the same silence around
+Foundry's own dependencies: a connected system whose every call was thrown away
+looked healthy because `last_used_at` records being let in and nothing recorded
+not being understood; a support channel dropping customers looked like a quiet
+inbox; and the scheduled loops could fail or stop entirely with the page reading
+exactly as it does on a calm day. All three now say so.
+
+Asking "who certifies their own authority" found two doors on the outbound
+boundary. `queueEmail` wrote an approved action from a caller-supplied authority
+level and was deleted; `proposeAction` does the same and is contained only
+because one parameter happens to carry an agent's name rather than an
+integration's, so migration 173 closes the shape instead. And the field that
+makes an authorisation attributable recorded the literal 'ceo' for every founder
+of every company.
 
 Two shapes recurred often enough to become gates rather than lessons: a backtick
 inside an embedded SQL or HTML comment (three parse errors, each to somebody who

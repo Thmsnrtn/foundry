@@ -258,6 +258,14 @@ Two standards this institution holds itself to, both learned the hard way:
   criterion proved through a function no production surface calls, and a
   founder-surface claim proved by calling a service directly.
 
+- **Making a record true can make a surface worse. Fix both halves in the same
+  change.** `approved_by` read 'ceo' for every approval by every founder — legible
+  and false. Writing the real principal made it true and turned a founder-facing
+  column into a raw id. Truth in the record and English on the page are two
+  obligations, not one; a change that satisfies the first and breaks the second
+  has traded one defect for another and will read as a regression to the person
+  looking at it.
+
 - **The same defect in a third module is a gate, not a third fix.** An ORDER BY
   falling back to `id` decided which claim was current, which reply would be
   sent, and whether a founder had withdrawn a permission — three modules, none
