@@ -280,7 +280,27 @@ function pendingActionCard(action: OutboundActionRecord) {
   </div>`;
 }
 
-function actionHistoryRow(action: OutboundActionRecord) {
+/**
+ * Who authorised this, as a person reads it.
+ *
+ * The column stores a principal reference, and the surface rendered it raw. It
+ * used to read 'ceo' for every approval by every founder, which was legible and
+ * false; storing the actual founder made it true and unreadable. Both halves
+ * matter — the record is attributable and the sentence is in English.
+ *
+ * An unrecognised value is shown as-is rather than guessed at. A principal this
+ * does not know about is exactly the thing somebody should be able to see.
+ */
+function approverText(approvedBy: string | null, viewerId: string): string {
+  if (!approvedBy) return '-';
+  if (approvedBy === `founder:${viewerId}`) return 'you';
+  if (approvedBy.startsWith('founder:')) return 'another owner';
+  if (approvedBy === 'auto') return 'automatically, after the notice window';
+  if (approvedBy.startsWith('institution:')) return 'Foundry, under a permission you gave';
+  return approvedBy;
+}
+
+function actionHistoryRow(action: OutboundActionRecord, viewerId: string) {
   const statusMap: Record<string, string> = {
     executed: 'badge-success',
     failed: 'badge-error',
@@ -299,7 +319,7 @@ function actionHistoryRow(action: OutboundActionRecord) {
     <td>${action.integration_name} / ${action.action_type}</td>
     <td>${action.preview_text ?? action.rationale.slice(0, 60)}</td>
     <td><span class="badge ${cls}">${action.status}</span></td>
-    <td style="font-size:12px;">${action.approved_by ?? '-'}</td>
+    <td style="font-size:12px;">${approverText(action.approved_by, viewerId)}</td>
   </tr>`;
 }
 
@@ -383,7 +403,7 @@ agentIntegrationRoutes.get('/agents/integrations', async (c) => {
             </tr>
           </thead>
           <tbody>
-            ${history.map((a) => actionHistoryRow(a))}
+            ${history.map((a) => actionHistoryRow(a, String(founder.id)))}
           </tbody>
         </table>
       </div>
@@ -512,7 +532,7 @@ agentIntegrationRoutes.get('/agents/integrations/actions', async (c) => {
             </tr>
           </thead>
           <tbody>
-            ${history.filter((a) => a.status !== 'pending_approval').map((a) => actionHistoryRow(a))}
+            ${history.filter((a) => a.status !== 'pending_approval').map((a) => actionHistoryRow(a, String(founder.id)))}
           </tbody>
         </table>
       </div>`}
@@ -546,7 +566,7 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve',
     // approver. Ownership is verified three lines above and then thrown away;
     // `approved_by` is the field that makes an authorisation attributable, and
     // a constant makes it merely attributed.
-    await approveAction(actionId, String(founder.id));
+    await approveAction(actionId, `founder:${String(founder.id)}`);
   } catch (err) {
     console.error('[Integration] Approve action failed:', err);
   }
@@ -572,7 +592,7 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/reject',
   const body = await c.req.parseBody();
   const reason = body.reason as string | undefined;
 
-  await rejectAction(actionId, String(founder.id), reason);
+  await rejectAction(actionId, `founder:${String(founder.id)}`, reason);
 
   return c.redirect('/agents/integrations/actions');
 });
@@ -612,3 +632,7 @@ agentIntegrationRoutes.post('/webhooks/integrations/stripe', async (c) => {
     return c.json({ error: 'Webhook processing failed' }, 400);
   }
 });
+
+/** Exposed for tests. The vocabulary is the load-bearing part: a principal this
+ *  does not recognise is shown as-is rather than guessed at. */
+export const __approverTextForTest = approverText;

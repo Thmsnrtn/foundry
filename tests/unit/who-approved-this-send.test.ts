@@ -70,6 +70,20 @@ describe('an outbound action for a real integration', () => {
   });
 });
 
+describe('the approver a person reads', () => {
+  it('says who in English, and does not guess at a principal it does not know', async () => {
+    const { __approverTextForTest } = await import(
+      '../../src/routes/dashboard/agents-integrations.js');
+    expect(__approverTextForTest(`founder:${OWNER}`, OWNER)).toBe('you');
+    expect(__approverTextForTest('founder:somebody-else', OWNER)).toBe('another owner');
+    expect(__approverTextForTest('auto', OWNER)).toContain('after the notice window');
+    expect(__approverTextForTest('institution:assisting', OWNER)).toContain('permission you gave');
+    expect(__approverTextForTest(null, OWNER)).toBe('-');
+    // Storing the truth made the old rendering unreadable; both halves matter.
+    expect(__approverTextForTest('something_new', OWNER)).toBe('something_new');
+  });
+});
+
 describe('approving an action', () => {
   beforeAll(async () => {
     const { agentIntegrationRoutes } = await import('../../src/routes/dashboard/agents-integrations.js');
@@ -95,7 +109,7 @@ describe('approving an action', () => {
     const row = (await query(
       'SELECT approved_by,feedback_data_json FROM outbound_actions WHERE id=?', ['wa_reject']))
       .rows[0] as Record<string, unknown>;
-    expect(row.approved_by).toBe(OWNER);
+    expect(row.approved_by).toBe(`founder:${OWNER}`);
     // "Rejected by CEO" attributed a reason to a role nobody holds. Silence is
     // silence.
     expect(String(row.feedback_data_json)).not.toContain('CEO');
@@ -114,6 +128,9 @@ describe('approving an action', () => {
 
     const row = (await query('SELECT approved_by FROM outbound_actions WHERE id=?', ['wa_approve']))
       .rows[0] as Record<string, unknown>;
-    expect(row.approved_by).toBe(OWNER);
+    // A principal reference, in the same vocabulary as `institution:assisting`
+    // and `autopilot:<category>` — this column already held prefixed principals
+    // and a bare id would have been the odd one out.
+    expect(row.approved_by).toBe(`founder:${OWNER}`);
   });
 });
