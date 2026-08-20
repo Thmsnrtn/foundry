@@ -70,7 +70,8 @@ export interface PeerSignal {
  * to a competitor asserted the second. An honest abstention beats a confident
  * number, and a number about the wrong population is worse than either.
  */
-export const PEER_SIGNAL_MIN_SAMPLE = 5;
+import { MIN_CONTRIBUTORS as PEER_SIGNAL_MIN_SAMPLE } from '../institution/contributor-floor.js';
+export { PEER_SIGNAL_MIN_SAMPLE };
 
 /**
  * "Founders at your stage who chose X saw Y." Reads anonymized cross-product

@@ -123,7 +123,10 @@ describe('the number in the claim is the number that was measured', () => {
     // a founder is eventually shown.
     const { aggregateInsights } = await import('../../src/services/wisdom/network.js');
 
-    // Cohort of twelve, of whom exactly four contributed this pattern.
+    // Cohort of twelve, of whom exactly six contributed this pattern. Six
+    // rather than four because the contributor floor is now one shared
+    // constant at 5 — the point of the fixture is that the published number is
+    // the CONTRIBUTORS and not the cohort, and it needs the two to differ.
     for (let i = 0; i < 12; i++) {
       await query(
         `INSERT INTO founders (id, clerk_user_id, email, wisdom_network_opted_in)
@@ -133,7 +136,7 @@ describe('the number in the claim is the number that was measured', () => {
          VALUES (?,?,?,'active','marketplace','growth')`,
         [`cn_p${i}`, `Co ${i}`, `cn_f${i}`]);
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       await query(
         `INSERT INTO decision_patterns
            (id, decision_type, product_lifecycle_stage, risk_state_at_decision,
@@ -148,11 +151,11 @@ describe('the number in the claim is the number that was measured', () => {
 
     const published = await query(
       `SELECT sample_size FROM cross_product_insights WHERE sector = 'marketplace'`);
-    expect(published.rows.length, 'four contributors clears the threshold').toBeGreaterThan(0);
+    expect(published.rows.length, 'six contributors clears the threshold').toBeGreaterThan(0);
     for (const row of published.rows as unknown as Array<Record<string, unknown>>) {
       expect(Number(row.sample_size),
         'the published number must be the companies that contributed, not the cohort')
-        .toBe(4);
+        .toBe(6);
     }
   });
 
@@ -197,7 +200,7 @@ describe('a cross-company claim records how it was made', () => {
         `INSERT INTO products (id, name, owner_id, status, sector_profile, growth_stage)
          VALUES (?,?,?,'active','fintech','growth')`, [`pv_p${i}`, `Co ${i}`, `pv_f${i}`]);
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) {
       await query(
         `INSERT INTO decision_patterns
            (id, decision_type, product_lifecycle_stage, risk_state_at_decision,
@@ -214,12 +217,12 @@ describe('a cross-company claim records how it was made', () => {
       `SELECT provenance_json, observed_through, sample_size
          FROM cross_product_insights WHERE sector = 'fintech'`))
       .rows[0] as Record<string, string>;
-    expect(row, 'four contributors clears the floor').toBeTruthy();
+    expect(row, 'six contributors clears the floor').toBeTruthy();
 
     const p = JSON.parse(row.provenance_json) as Record<string, unknown>;
     expect(p.method).toBe(AGGREGATION_METHOD_VERSION);
     expect(p.unit, 'the unit is the claim').toBe('distinct contributing companies');
-    expect(p.distinct_contributors).toBe(4);
+    expect(p.distinct_contributors).toBe(6);
     expect((p.population as Record<string, unknown>).cohort_products).toBe(12);
     expect(p.distinct_contributors,
       'the contributor count and the cohort count are different numbers and both are recorded')

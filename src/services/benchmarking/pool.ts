@@ -34,7 +34,8 @@ import { hasConsent } from '../privacy/consent.js';
  * this, the segment publishes nothing: a percentile over one contributor is
  * that contributor's exact number, handed to everybody in their segment.
  */
-export const MIN_CONTRIBUTORS = 5;
+import { MIN_CONTRIBUTORS } from '../institution/contributor-floor.js';
+export { MIN_CONTRIBUTORS };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

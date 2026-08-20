@@ -1,11 +1,21 @@
 // =============================================================================
 // FOUNDRY — Intelligence Network: Cross-Founder Benchmarks
-// Aggregates anonymized metric data across all opted-in products to generate
-// industry benchmarks. No founder-identifiable data ever stored here.
+//
+// Aggregates metrics across opted-in companies into industry benchmarks.
+//
+// This header used to end "No founder-identifiable data ever stored here",
+// which was not true of the code beneath it: a contribution row's primary key
+// is `${productId}_week_${metric}` and names the company that contributed it.
+// See `contributeToNetwork` for why the id stays plain and what protection is
+// actually in force — aggregation before publication, above a shared
+// contributor floor, never a row on its own.
 // =============================================================================
 
 import { query } from '../../db/client.js';
 import type { NetworkBenchmark, BenchmarkComparison } from '../../types/index.js';
+// One rule about how few companies may stand behind a number shown to another
+// company. Imported rather than restated: this file had its own weaker number.
+import { MIN_CONTRIBUTORS } from '../institution/contributor-floor.js';
 
 // ─── MRR Brackets ────────────────────────────────────────────────────────────
 
@@ -131,8 +141,28 @@ export async function getAllBenchmarkComparisons(
 // ─── Contribute to Network ────────────────────────────────────────────────────
 
 /**
- * Contribute this product's anonymized metrics to the network benchmarks.
- * Called weekly for opted-in products. No product or founder ID stored.
+ * Contribute this product's metrics to the network benchmarks. Called weekly,
+ * and only for a founder who opted in — checked below, not assumed by the
+ * caller.
+ *
+ * THE ROW NAMES THE COMPANY, AND THIS USED TO SAY IT DID NOT. The line here
+ * read "No product or founder ID stored", which was false and was believed:
+ * the primary key is `${productId}_week_${metric}`, so every contribution
+ * carries the contributing company in its own id. That claim is how the table
+ * came to sit in the erasure sweep's NOT_COMPANY_DATA list under the reason
+ * "single metric values with no key of any kind", while erased companies kept
+ * being folded into percentiles shown to other founders.
+ *
+ * The id is deliberately NOT hashed. It is what the by-product erasure sweep
+ * matches on (`consent.ts`, `network_contributions` prefix rule) and what makes
+ * the weekly upsert replace a company's prior contribution rather than
+ * accumulate one row per week per company — which would let one company weight
+ * an aggregate by turning up more often.
+ *
+ * What is true, stated as narrowly as it holds: **nothing derived from these
+ * rows is published below the contributor floor, and no row is ever exposed
+ * individually.** That is aggregation before publication, not anonymity at
+ * rest, and the difference matters to whoever reads this next.
  */
 export async function contributeToNetwork(
   productId: string,
@@ -159,9 +189,9 @@ export async function contributeToNetwork(
   const m = metricsResult.rows[0] as Record<string, number | null>;
   const mrrBracket = getMRRBracket(m.new_mrr_cents ?? 0);
 
-  // Upsert anonymized contribution into network aggregates
-  // This is a rolling window — each weekly run replaces the prior contribution
-  const contributionId = `${productId}_week`;  // deterministic per product per week
+  // A rolling window: each weekly run replaces this company's prior
+  // contribution, so a company that runs more often does not weigh more.
+  const contributionId = `${productId}_week`;  // deterministic per product
   const metrics = [
     ['activation_rate', m.activation_rate],
     ['day_30_retention', m.day_30_retention],
@@ -200,8 +230,19 @@ async function recomputeBenchmarks(
       [metric, lifecycleStage, mrrBracket, marketCategory ?? 'unknown'],
     );
 
+    // ONE CONTRIBUTOR FLOOR, NOT THREE DIFFERENT ONES. This was 3 while
+    // `benchmarking/pool.ts` and `decisions/patterns.ts` both used 5 for the
+    // same question — how few companies may stand behind a number shown to
+    // another company — so the weakest of the three decided what got published.
+    // A cell with three contributors and one obvious outlier is a worked
+    // example, not a hypothetical.
+    //
+    // One row per company per metric here: the id is deterministic per product,
+    // so the upsert above means a company cannot appear twice in this list.
+    // `values.length` therefore counts CONTRIBUTING COMPANIES, which is the
+    // thing the floor is about.
     const values = result.rows.map((r) => (r as Record<string, number>).value).filter(Boolean);
-    if (values.length < 3) continue;
+    if (values.length < MIN_CONTRIBUTORS) continue;
 
     const p25 = values[Math.floor(values.length * 0.25)];
     const p50 = values[Math.floor(values.length * 0.5)];

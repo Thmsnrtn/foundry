@@ -62,8 +62,14 @@ const MIN_SAMPLE_SIZE = 10;
  * making three similar decisions satisfies on its own. So an insight derived
  * from one company was published to that company's competitors, in a file whose
  * header promises "no individual product data surfaces".
+ *
+ * IT WAS 3 HERE AND 5 IN THE BENCHMARK POOL, under the same name. This path is
+ * the one that injects an insight into a competitor's prompt, so it was the
+ * least defensible place for the lower number. Re-exported from the canonical
+ * floor rather than restated.
  */
-export const MIN_CONTRIBUTORS = 3;
+import { MIN_CONTRIBUTORS } from '../institution/contributor-floor.js';
+export { MIN_CONTRIBUTORS };
 
 /** How the aggregation was done. Stamped on every insight so a row can be read
  * against the method that produced it — the contributor count and the cohort

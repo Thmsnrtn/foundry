@@ -1,10 +1,14 @@
 // =============================================================================
 // Tests: an eligibility floor is not a statistic
 //
-// The owner's decision is explicit: MIN_CONTRIBUTORS = 3 and
-// PEER_SIGNAL_MIN_SAMPLE = 5 stay, and they are "conservative eligibility
-// floors, not proof of broad statistical validity". The dashboard card was
-// fixed to say so. The generator was not.
+// The owner's decision is explicit: the contributor floors stay, and they are
+// "conservative eligibility floors, not proof of broad statistical validity".
+// The dashboard card was fixed to say so. The generator was not.
+//
+// (Those floors were later found to be three different numbers under two names,
+// and are now one shared constant — `institution/contributor-floor.ts`. That
+// changed how few companies may publish; it changed nothing about what a floor
+// IS, which is what this file is about.)
 //
 // It still told the model, twice:
 //
@@ -95,7 +99,7 @@ describe('the numbers are returned under the names of what they are', () => {
           confidence, avg_impact, conditions, provenance_json, observed_through)
        VALUES ('ncs_i1','marketplace','growth','retention_tactic',
                'Companies that emailed at day 3 saw fewer cancellations.',
-               4, 0.8, 12, NULL, ?, datetime('now','-10 days'))`,
+               6, 0.8, 12, NULL, ?, datetime('now','-10 days'))`,
       [JSON.stringify({ method: 'contributor-counted/v2', eligibility_floor_only: true })]);
   });
 
@@ -107,7 +111,7 @@ describe('the numbers are returned under the names of what they are', () => {
       .toBeCloseTo(0.8);
     expect(insight.estimated_impact_pct).toBe(12);
     expect(insight.contributing_companies, 'the unit is companies, and it says so')
-      .toBe(4);
+      .toBe(6);
     // The old names asserted measurement. They must not come back by accident.
     expect(insight as unknown as Record<string, unknown>).not.toHaveProperty('confidence');
     expect(insight as unknown as Record<string, unknown>).not.toHaveProperty('avg_impact');
