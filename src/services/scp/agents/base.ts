@@ -274,34 +274,32 @@ export abstract class BaseAgent {
     // 16. Process v2/v3 signal fields (all fire-and-forget, non-fatal)
 
     // Customer signals → customer_intelligence
+    //
+    // A MODEL MAY JUDGE A CUSTOMER; IT MAY NOT INVENT ONE. This called
+    // `upsertCustomer`, whose insert branch created a customer record from a
+    // model's `external_id`, `name`, `email`, `plan` and `mrr_cents` —
+    // indistinguishable, once written, from one a real billing system reported
+    // through the public API. `recordAgentCustomerSignal` resolves an existing
+    // customer or refuses, and writes only the health sub-scores and the note,
+    // which are assessments rather than facts about the world.
     if (result.customerSignals && result.customerSignals.length > 0) {
       const signals = result.customerSignals;
-      import('../../customer/intelligence.js').then(({ upsertCustomer, addAgentNote, updateHealthScore }) => {
+      import('../../customer/intelligence.js').then(async ({ recordAgentCustomerSignal }) => {
         for (const sig of signals) {
-          const { note, external_id, name, email, mrr_cents, plan,
-                  health_login_score, health_feature_score,
-                  health_sentiment_score, health_billing_score, stage } = sig;
-          upsertCustomer(productId, {
-            external_customer_id: external_id,
-            account_name: name,
-            email,
-            plan,
-            mrr_cents,
-          }).then(async (customer) => {
-            // Update health sub-scores if provided
-            if (health_login_score !== undefined || health_feature_score !== undefined ||
-                health_sentiment_score !== undefined || health_billing_score !== undefined) {
-              await updateHealthScore(customer.id, {
-                login_frequency_score: health_login_score,
-                feature_depth_score: health_feature_score,
-                support_sentiment_score: health_sentiment_score,
-                billing_health_score: health_billing_score,
-              }).catch((err) => { logger.error(`updateHealthScore failed for customer ${customer.id}: ${err}`); });
-            }
-            if (note) {
-              await addAgentNote(customer.id, agentName, note).catch((err) => { logger.error(`addAgentNote failed for customer ${customer.id}: ${err}`); });
-            }
-          }).catch((err) => { logger.error(`upsertCustomer failed for ${agentName}/${productId}: ${err}`); });
+          const outcome = await recordAgentCustomerSignal(productId, agentName, {
+            external_id: sig.external_id,
+            note: sig.note,
+            health_login_score: sig.health_login_score,
+            health_feature_score: sig.health_feature_score,
+            health_sentiment_score: sig.health_sentiment_score,
+            health_billing_score: sig.health_billing_score,
+          }).catch((err) => {
+            logger.error(`recordAgentCustomerSignal failed for ${agentName}/${productId}: ${err}`);
+            return null;
+          });
+          if (outcome && 'refused' in outcome) {
+            logger.warn(`${agentName} named a customer ${productId} does not have: ${outcome.refused}`);
+          }
         }
       }).catch((err) => { logger.error(`import customer/intelligence.js failed: ${err}`); });
     }

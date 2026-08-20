@@ -102,74 +102,14 @@ export function computeHealthScore(scores: {
   return Math.round(composite * 10) / 10;
 }
 
-// ─── upsertCustomer ────────────────────────────────────────────────────────────
-
-export async function upsertCustomer(
-  productId: string,
-  data: {
-    external_customer_id: string;
-    account_name?: string;
-    email?: string;
-    plan?: string;
-    mrr_cents?: number;
-  }
-): Promise<CustomerRecord> {
-  // Try to get existing
-  const existing = await query(
-    `SELECT * FROM customer_intelligence WHERE product_id = ? AND external_customer_id = ?`,
-    [productId, data.external_customer_id]
-  );
-
-  if (existing.rows.length > 0) {
-    // Update mutable fields
-    await query(
-      `UPDATE customer_intelligence
-       SET account_name = COALESCE(?, account_name),
-           email = COALESCE(?, email),
-           plan = COALESCE(?, plan),
-           mrr_cents = COALESCE(?, mrr_cents),
-           updated_at = datetime('now')
-       WHERE product_id = ? AND external_customer_id = ?`,
-      [
-        data.account_name ?? null,
-        data.email ?? null,
-        data.plan ?? null,
-        data.mrr_cents ?? null,
-        productId,
-        data.external_customer_id,
-      ]
-    );
-    const updated = await query(
-      `SELECT * FROM customer_intelligence WHERE product_id = ? AND external_customer_id = ?`,
-      [productId, data.external_customer_id]
-    );
-    return rowToRecord(updated.rows[0] as Record<string, unknown>);
-  }
-
-  // Insert new
-  const id = nanoid();
-  await query(
-    `INSERT INTO customer_intelligence
-       (id, product_id, external_customer_id, account_name, email, plan, mrr_cents,
-        stage, stage_entered_at, health_score, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'trial', datetime('now'), 50.0, datetime('now'), datetime('now'))`,
-    [
-      id,
-      productId,
-      data.external_customer_id,
-      data.account_name ?? null,
-      data.email ?? null,
-      data.plan ?? null,
-      data.mrr_cents ?? 0,
-    ]
-  );
-
-  const result = await query(
-    `SELECT * FROM customer_intelligence WHERE id = ?`,
-    [id]
-  );
-  return rowToRecord(result.rows[0] as Record<string, unknown>);
-}
+// ─── upsertCustomer: DELETED ──────────────────────────────────────────────────
+//
+// It created a customer record — account name, email, plan, MRR, stage 'trial',
+// health 50 — from whatever its caller handed it, and its only caller was the
+// agent runner passing a model's parsed JSON. Deleting it removes the door
+// rather than posting a sign on it. `recordAgentCustomerSignal` below is what
+// an agent may do; `api/v1/customers.ts` is how a real customer arrives, from a
+// real system holding a scoped credential.
 
 // ─── updateHealthScore ────────────────────────────────────────────────────────
 
@@ -354,4 +294,98 @@ export async function getCustomer(
   );
   if (result.rows.length === 0) return null;
   return rowToRecord(result.rows[0] as Record<string, unknown>);
+}
+
+// ─── recordAgentCustomerSignal ────────────────────────────────────────────────
+
+/**
+ * A MODEL MAY JUDGE A CUSTOMER. IT MAY NOT INVENT ONE.
+ *
+ * `harbor.ts` parses an LLM response and maps `parsed.customer_signals` into
+ * `CustomerSignal[]` — `external_id`, `name`, `email`, and four health
+ * sub-scores, every field of it produced by a model. The agent runner then fed
+ * that straight into `upsertCustomer`, whose insert branch CREATES a customer:
+ * an account name, an email address, a plan, an MRR figure, `stage='trial'` and
+ * a starting health score of 50, written into `customer_intelligence` with
+ * nothing on the row to say where it came from.
+ *
+ * The other writer of that table is `api/v1/customers.ts` — a scoped external
+ * credential reporting a real customer from a real system. Both landed in the
+ * same shape, so nothing downstream could tell them apart: the priority ranker,
+ * the strategy synthesis and the accuracy tracker all read those rows as the
+ * company's customers.
+ *
+ * FOUNDRY MAY CREATE PRESENTATION. IT MAY NOT FABRICATE EVIDENCE. A customer is
+ * a fact about the world — it is reported by a system that has one, or by a
+ * person. So this resolves an EXISTING customer and refuses otherwise, and it
+ * writes only the fields that are a judgment:
+ *
+ *   • the four health sub-scores, which are an assessment and say so;
+ *   • a note, which is attributed to the agent that wrote it.
+ *
+ * It never writes identity or money — `account_name`, `email`, `plan`,
+ * `mrr_cents`, `stage`. Those are facts, and a model updating an MRR figure is
+ * fabricating evidence about revenue as surely as inventing the customer was.
+ *
+ * A REFUSAL IS NOT SILENCE. It lands in `agent_audit_log`, which the founder's
+ * audit page reads, because an agent repeatedly naming customers the company
+ * does not have is worth somebody knowing.
+ */
+export type AgentCustomerSignalRefusal = 'external_id_missing' | 'no_such_customer';
+
+export async function recordAgentCustomerSignal(
+  productId: string,
+  agentName: string,
+  signal: {
+    external_id?: string;
+    note?: string;
+    health_login_score?: number;
+    health_feature_score?: number;
+    health_sentiment_score?: number;
+    health_billing_score?: number;
+  },
+): Promise<{ recorded: true; customerId: string } | { refused: AgentCustomerSignalRefusal }> {
+  const externalId = (signal.external_id ?? '').trim();
+  if (!externalId) return { refused: 'external_id_missing' };
+
+  const existing = await query(
+    `SELECT id FROM customer_intelligence WHERE product_id = ? AND external_customer_id = ?`,
+    [productId, externalId],
+  );
+  const row = existing.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    const { logAudit } = await import('../audit/log.js');
+    await logAudit({
+      product_id: productId,
+      actor_type: 'agent',
+      actor_id: agentName,
+      action: 'customer_signal.refused',
+      resource_type: 'customer_intelligence',
+      resource_id: externalId,
+      details: {
+        reason: 'no_such_customer',
+        // What the agent claimed, kept so a founder can see what was refused
+        // rather than only that something was. It is not written to the
+        // customer record, which is the whole point.
+        claimed_external_id: externalId,
+      },
+    });
+    return { refused: 'no_such_customer' };
+  }
+
+  const customerId = String(row.id);
+  const hasScore = signal.health_login_score !== undefined
+    || signal.health_feature_score !== undefined
+    || signal.health_sentiment_score !== undefined
+    || signal.health_billing_score !== undefined;
+  if (hasScore) {
+    await updateHealthScore(customerId, {
+      login_frequency_score: signal.health_login_score,
+      feature_depth_score: signal.health_feature_score,
+      support_sentiment_score: signal.health_sentiment_score,
+      billing_health_score: signal.health_billing_score,
+    });
+  }
+  if (signal.note) await addAgentNote(customerId, agentName, signal.note);
+  return { recorded: true, customerId };
 }
