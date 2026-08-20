@@ -25,8 +25,8 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `ee7360d`. **Migrations:** 205 files, highest **169**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **271 files / 2,341 tests**, `npm run check`
+- **Head:** `30e1d44`. **Migrations:** 207 files, highest **171**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **274 files / 2,349 tests**, `npm run check`
   EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
@@ -226,6 +226,12 @@ trying before inventing a new one:
   about a company — that it was being deleted, that it had stopped, and how its
   own judgments had held up — and said none of them on the page a founder opens
   daily. Computing a thing is not telling anybody.
+- **"What happens when this fails, and who finds out?"** A credential that
+  authenticated and then had every request thrown away looked healthy:
+  `last_used_at` recorded being let in, and nothing recorded not being
+  understood. The same on a support channel, where the thing thrown away was a
+  customer's message and the founder read the silence as nobody having written.
+  Foundry knows both facts and said neither.
 - **"One rule, two implementations."** Two retention jobs deleting from the same
   table on different horizons; a live-grant predicate hand-copied seven times
   and drifted; a type protecting a SQL identifier that does not exist at
