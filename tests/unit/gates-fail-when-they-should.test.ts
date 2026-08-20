@@ -299,6 +299,18 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_b');
   });
 
+  it('check-id-tiebreak fails on a new ORDER BY that falls back to id', () => {
+    // An id is not a clock. Three real defects in one campaign came from a
+    // nanoid or a content hash deciding which row was current.
+    plant('src/services/_gate_fixture_t.ts',
+      j('import { query } from "../db/client.js";\n',
+        'export const q = () => query(`SELECT id FROM products\n',
+        '  ORDER ', 'BY created_at DESC, id DESC LIMIT 1`, []);\n'));
+    const r = run('check-id-tiebreak.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_t');
+  });
+
   it('audit-consequential-effects fails on an outward call its rules cannot see', () => {
     // The window blind spot: a POST to a URL held in a variable matched no rule
     // and was therefore absent from the inventory rather than reported.
@@ -323,6 +335,7 @@ describe('and passes on a clean tree', () => {
       'check-test-schema-fabrication.mjs', 'audit-consequential-effects.mjs',
       'check-writerless-tables.mjs', 'check-notnull-inserts.mjs',
       'check-write-only-columns.mjs', 'check-backticks-in-embedded-comments.mjs',
+      'check-id-tiebreak.mjs',
     ]) {
       const r = run(script);
       expect(r.code, `${script}: ${r.output}`).toBe(0);
