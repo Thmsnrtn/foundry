@@ -175,7 +175,10 @@ agentsOkr.get('/agents/okr', async (c) => {
     </div>
 
     ${okrs.length === 0
-      ? html`<div class="card" style="padding:3rem;text-align:center;color:var(--text-muted);font-size:0.9rem;">No OKRs defined yet. Agents will create objectives as your strategy evolves.</div>`
+      ? html`<div class="card" style="padding:3rem;text-align:center;color:var(--text-muted);font-size:0.9rem;">
+          <div>No objectives here.</div>
+          <div style="margin-top:0.5rem;font-size:0.82rem;">Nothing in Foundry creates them today, so this page will stay empty until something does. It used to say agents would fill it in as your strategy evolved, which was a promise nothing could keep.</div>
+        </div>`
       : okrCards}
   `;
 

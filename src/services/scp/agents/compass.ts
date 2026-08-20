@@ -83,6 +83,13 @@ export class CompassAgent extends BaseAgent {
       // cancelled — there is no 'active'. Compass's view of the company's
       // objectives has always been empty, and an agent with no OKRs in context
       // reasons as though the company has none.
+      //
+      // FIXING THE STATUS FILTER DID NOT MAKE IT NON-EMPTY, and the reason is
+      // larger: `createOKR` has no caller anywhere in `src/`, so no company can
+      // have an OKR at all. This query is correct and will return nothing until
+      // something creates one. The founder-facing page said "Agents will create
+      // objectives as your strategy evolves"; nothing does, and it no longer
+      // says so.
       `SELECT objective_text AS objective, status FROM company_okrs
         WHERE product_id=? AND status IN ('on_track','at_risk','off_track') LIMIT 5`,
       [productId]
