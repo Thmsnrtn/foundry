@@ -26,9 +26,9 @@
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const ROOT = resolve(__dirname, '../..');
@@ -62,6 +62,30 @@ function run(script: string): { code: number; output: string } {
 
 afterEach(() => {
   for (const p of planted.splice(0)) if (existsSync(p)) rmSync(p);
+});
+
+/**
+ * SWEEP WHAT AN EARLIER RUN LEFT BEHIND.
+ *
+ * `afterEach` cleans up when this process finishes its work. A run that is
+ * KILLED does not, and one such leftover — `_gate_fixture_agent.ts`, planted to
+ * prove the reachability gate — survived into a commit and reached the branch,
+ * where the public-claims audit read it as a thirteenth AI agent against a
+ * pricing claim of twelve. The audit caught it, which is the system working;
+ * this is so the next run heals rather than inheriting.
+ *
+ * `.gitignore` stops such a file being committed at all. This stops it being
+ * PRESENT, which is what makes a clean tree actually clean.
+ */
+beforeAll(() => {
+  const sweep = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const abs = resolve(dir, entry.name);
+      if (entry.isDirectory()) sweep(abs);
+      else if (/^_gate_fixture_.*\.ts$/.test(entry.name)) rmSync(abs);
+    }
+  };
+  sweep(resolve(ROOT, 'src'));
 });
 
 describe('every gate refuses the defect it exists for', () => {
