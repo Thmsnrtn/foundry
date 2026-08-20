@@ -273,8 +273,40 @@ export async function reconcileAssistedSupportEmail(productId:string,actionId:st
  * two notices under one responsibility share a title and the person is the only
  * thing that tells them apart.
  */
+/**
+ * Which boundary stopped a send, in words a founder can act on.
+ *
+ * "No consequential action was verified" is not a reason. When the gateway
+ * refuses before the provider is touched Foundry knows exactly why, records it
+ * in `provider_receipt_json`, and nothing had ever read it — so a founder whose
+ * message to a person did not go could not tell a switched-off Foundry from a
+ * rule they could change.
+ *
+ * ONLY `phase` IS READ, NEVER `reason`. The phase is a closed vocabulary
+ * Foundry owns. `reason` carries handler and provider error strings, which are
+ * external content: repeating them to a founder means putting somebody else's
+ * text on Foundry's page, and it is exactly where a provider's internals leak.
+ * An unrecognised phase falls through to the plain sentence rather than being
+ * printed.
+ */
+function refusalSentence(receiptJson: unknown): string | null {
+  if (receiptJson == null) return null;
+  let phase: unknown;
+  try { phase = (JSON.parse(String(receiptJson)) as { phase?: unknown }).phase; } catch { return null; }
+  switch (phase) {
+    case 'kill_switch': return 'I am switched off for this kind of action, so it did not go';
+    case 'budget': return 'it would have gone over the limit set for this week, so it did not go';
+    case 'classification': return 'it would have carried customer data somewhere not approved for it, so it did not go';
+    case 'policy': return 'it did not pass the rules for this kind of message, so it did not go';
+    case 'no_handler': return 'I have no way to send this, so it did not go';
+    case 'in_flight': return 'the same message was already on its way, so I did not send a second';
+    case 'refused': return 'I stopped this before touching the provider, so it did not go';
+    default: return null;
+  }
+}
+
 export async function getFounderAssistingActivity(productId:string):Promise<Array<{title:string;state:string;detail:string}>> {
-  const result=await query(`SELECT r.title,oa.status,oa.effect_certainty,oa.outcome_status,oa.effect_id,oa.authority_scope,oa.outcome_evidence_ref
+  const result=await query(`SELECT r.title,oa.status,oa.effect_certainty,oa.outcome_status,oa.effect_id,oa.authority_scope,oa.outcome_evidence_ref,oa.provider_receipt_json
     FROM outbound_actions oa JOIN institutional_responsibilities r ON r.id=oa.responsibility_id
     WHERE oa.product_id=? AND r.product_id=? ORDER BY oa.created_at DESC LIMIT 10`,[productId,productId]);
   const rows=result.rows as unknown as Record<string,unknown>[];
@@ -356,7 +388,7 @@ export async function getFounderAssistingActivity(productId:string):Promise<Arra
       :certainty==='provider_acknowledged'?'provider accepted it; whether it worked is still unknown'
       :certainty==='ambiguous'?'I do not know whether this went out — the send failed part-way. I have not sent it again, because sending twice is worse than not knowing'
       :String(row.status)==='approved'?`authorized to send ${thing}; not yet performed`
-      :'no consequential action was verified';
+      :refusalSentence(row.provider_receipt_json) ?? 'no consequential action was verified';
     // A notice is told apart by its recipient in every state, not only while it
     // is still waiting: after dispatch the founder still needs to know which
     // note the outcome is about.
