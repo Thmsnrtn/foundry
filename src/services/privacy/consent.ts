@@ -57,7 +57,14 @@ export type DataResidencySettings = {
   preferred_region: string;
   data_retention_days: number;
   delete_agent_logs_after_days: number;
+  /** INERT. Stored, defaulted, selected and upserted here — and read by
+   *  nothing, offered by nothing. No page sets it and no path anonymises on it.
+   *  Left in place rather than deleted because dropping a column is a migration
+   *  and the row is harmless; named here so nobody wires a toggle to it
+   *  believing it already means something. Making it mean something is a
+   *  decision about customer data, not a UI change. */
   anonymize_customer_data: boolean;
+  /** INERT, same shape: the data export does not consult it. */
   export_format: string;
 };
 
@@ -307,13 +314,33 @@ export async function exportProductData(
   productId: string,
   _format: 'json' | 'csv'
 ): Promise<Record<string, unknown[]>> {
-  const tables = (await tablesWithProductId())
-    .filter((t) => !(t in EXCLUDED_FROM_EXPORT));
+  // Everything keyed on `product_id`, including the tables an ERASURE keeps:
+  // data retained on a stated basis is still the company's while it exists, and
+  // an access request is about what is held, not about what would survive.
+  const byProductId = (await tablesWithProductId())
+    .filter((t) => !(t in EXCLUDED_FROM_EXPORT))
+    .map((table) => ({ table, predicate: 'product_id = ?', subject: 'product_id' as const }));
+
+  // AND THE TABLES THAT DO NOT SAY WHOSE THEY ARE. This is the half the export
+  // could not see: the children hanging off erased parents, and the tables
+  // naming their subject as a contributor hash, a scope id, or the first
+  // component of a composite key. The erasure had to go and find them, and its
+  // section header explains why they are company data. Answering an access
+  // request without them contradicts that finding.
+  const byOtherKey = (await companyDataSources())
+    .filter((s) => s.predicate !== 'product_id = ?')
+    .filter((s) => !(s.table in EXCLUDED_FROM_EXPORT))
+    .map((s) => ({ table: s.table, predicate: s.predicate, subject: s.subject }));
+
+  const contributor = (await import('../wisdom/network.js')).contributorHash(productId);
 
   const out: Record<string, unknown[]> = {};
-  for (const table of tables) {
+  for (const source of [...byProductId, ...byOtherKey]) {
+    const table = source.table;
     try {
-      const res = await query(`SELECT * FROM ${table} WHERE product_id = ?`, [productId]);
+      const res = await query(
+        `SELECT * FROM ${table} WHERE ${source.predicate}`,
+        [source.subject === 'contributor_hash' ? contributor : productId]);
       if (res.rows.length === 0) continue;
       out[table] = (res.rows as unknown as Array<Record<string, unknown>>).map((row) => {
         const clean: Record<string, unknown> = {};
@@ -857,26 +884,49 @@ function namedKeyPredicate(
   return key.where ? `${subject} AND ${key.where}` : subject;
 }
 
-export async function erasurePlan(): Promise<ErasureStep[]> {
-  const steps: ErasureStep[] = [];
+/** Where a company's rows live and how to select them. */
+export interface CompanyDataSource {
+  table: string;
+  /** A WHERE clause with one placeholder, bound to `subject`. */
+  predicate: string;
+  /** Which value the placeholder takes: the product id, or the contributor
+   *  hash for the one table that names its subject that way. */
+  subject: 'product_id' | 'contributor_hash';
+  /** How far down the parent chain this table sits. Deletes go deepest-first. */
+  depth: number;
+}
+
+/**
+ * EVERY PLACE A COMPANY'S DATA SITS, DERIVED ONCE.
+ *
+ * This was inside `erasurePlan`, which meant the export could not see it. The
+ * export swept `tablesWithProductId()` and nothing else, so an access request
+ * was answered without the fifty-five tables that do not carry the column —
+ * the eleven children hanging off erased parents, and the ones naming their
+ * subject as `contributor_hash`, `scope_id` or a composite id prefix. Those
+ * are the exact tables the erasure had to go and find, and the comment above
+ * this section explains at length why they are company data.
+ *
+ * "This is yours and goes when you go" and "this is not yours to receive" are
+ * the same claim read two ways. One derivation, two consumers.
+ */
+export async function companyDataSources(): Promise<CompanyDataSource[]> {
+  const sources: CompanyDataSource[] = [];
 
   for (const table of await tablesToErase()) {
-    steps.push({ table, sql: `DELETE FROM ${table} WHERE product_id = ?`, depth: 0 });
+    sources.push({ table, predicate: 'product_id = ?', subject: 'product_id', depth: 0 });
   }
   for (const [table, key] of Object.entries(ERASE_BY_NAMED_KEY)) {
-    steps.push({ table, sql: `DELETE FROM ${table} WHERE ${namedKeyPredicate(key)}`, depth: 0 });
+    sources.push({ table, predicate: namedKeyPredicate(key), subject: key.subject, depth: 0 });
   }
 
-  // A child is deleted through its parent's own predicate, nested as deep as
-  // the descent goes. The parent rows still exist at this point precisely
-  // because children run first.
-  const predicates = new Map<string, string>();
-  for (const t of await tablesToErase()) predicates.set(t, 'product_id = ?');
-  for (const [t, k] of Object.entries(ERASE_BY_NAMED_KEY)) predicates.set(t, namedKeyPredicate(k));
-
-  const children = await childTablesOfErasure();
+  // A child is reached through its parent's own predicate, nested as deep as
+  // the descent goes. For a delete the parent rows still exist at that point
+  // precisely because children run first.
+  const predicates = new Map(sources.map((s) => [s.table, s.predicate]));
+  const subjects = new Map(sources.map((s) => [s.table, s.subject]));
   const depthOf = new Map<string, number>();
-  for (const c of children) {
+  for (const c of await childTablesOfErasure()) {
     const parentPredicate = predicates.get(c.parent);
     if (!parentPredicate) continue;                       // parent is retained, not erased
     const predicate =
@@ -884,10 +934,19 @@ export async function erasurePlan(): Promise<ErasureStep[]> {
     predicates.set(c.table, predicate);
     const depth = (depthOf.get(c.parent) ?? 0) + 1;
     depthOf.set(c.table, depth);
-    steps.push({ table: c.table, sql: `DELETE FROM ${c.table} WHERE ${predicate}`, depth });
+    sources.push({
+      table: c.table, predicate, depth,
+      subject: subjects.get(c.parent) ?? 'product_id',
+    });
   }
 
-  return steps.sort((a, b) => b.depth - a.depth);
+  return sources;
+}
+
+export async function erasurePlan(): Promise<ErasureStep[]> {
+  return (await companyDataSources())
+    .map((s) => ({ table: s.table, sql: `DELETE FROM ${s.table} WHERE ${s.predicate}`, depth: s.depth }))
+    .sort((a, b) => b.depth - a.depth);
 }
 
 /** Every table the live schema holds, and which bucket it falls in. Exported
@@ -1219,6 +1278,127 @@ function founderRedactionSql(): string {
  * row, and doing it first means a cascade cannot take a second person's record
  * with it on the way past.
  */
+/** Where a person's own rows live, and how to select them. */
+export interface FounderDataSource {
+  table: string;
+  /** A WHERE clause; `binds` placeholders, all bound to the founder id, then
+   *  `emailBinds` bound to their email address. */
+  predicate: string;
+  binds: number;
+  emailBinds: number;
+}
+
+/**
+ * A PERSON COULD BE ERASED AND COULD NOT ASK WHAT WAS HELD.
+ *
+ * `exportProductData` answers for a COMPANY. There was no counterpart for the
+ * person: `FOUNDER_SCOPED` names twelve tables that are theirs rather than any
+ * company's — their voice, their health circumstances, their devices, their
+ * peer profile, their referral history — and `PERSON_ACROSS_COMPANIES` names
+ * the rows that are their own activity inside companies they do not own. Both
+ * maps existed only so an erasure could clear them. Nothing read either to
+ * answer "what do you have about me?"
+ *
+ * The erasure itself fires from the identity provider's `user.deleted` webhook,
+ * so there is no Foundry surface where a person asks to be erased and therefore
+ * no moment at which Foundry could have offered them their data first. The
+ * product-deletion modal recommends exporting beforehand; the account path had
+ * nothing to offer.
+ *
+ * Derived from the same two maps the erasure runs on, so a table cannot be
+ * erasable and unaskable at once.
+ */
+export function founderDataSources(): FounderDataSource[] {
+  const out: FounderDataSource[] = [];
+
+  for (const [table, disposition] of Object.entries(FOUNDER_SCOPED)) {
+    const op = disposition.onAccountErasure;
+    if (op.op === 'redact') {
+      // The account row itself. Redaction is what happens to it on erasure;
+      // for an export it is simply theirs.
+      out.push({ table, predicate: 'id = ?', binds: 1, emailBinds: 0 });
+      continue;
+    }
+    if (op.op === 'sever') {
+      out.push({
+        table,
+        predicate: op.parties.map((party) => `${party.column} = ?`).join(' OR '),
+        binds: op.parties.length,
+        emailBinds: 0,
+      });
+      continue;
+    }
+    const column = op.by ?? 'founder_id';
+    const subject = op.match === 'suffix' ? `${column} LIKE '%:' || ?` : `${column} = ?`;
+    out.push({
+      table,
+      predicate: op.where ? `${subject} AND ${op.where}` : subject,
+      binds: 1,
+      emailBinds: 0,
+    });
+  }
+
+  // Their own activity inside companies they do not own. Only the rows an
+  // erasure would DELETE — those are wholly the person's. A row the erasure
+  // SEVERS is the company's record that happens to name them, and a row marked
+  // for an owner decision is a company asset; neither is theirs to receive.
+  for (const [table, spec] of Object.entries(PERSON_ACROSS_COMPANIES)) {
+    if (spec.op !== 'delete') continue;
+    const byId = spec.columns.map((column) => `${column} = ?`);
+    const byEmail = (spec.byEmail ?? []).map((column) => `${column} = ?`);
+    out.push({
+      table,
+      predicate: [...byId, ...byEmail].join(' OR '),
+      binds: spec.columns.length,
+      emailBinds: (spec.byEmail ?? []).length,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Everything Foundry holds about a PERSON, as opposed to about a company.
+ *
+ * Same redaction as the company export: a subject access request is a right to
+ * one's own data, not a way to extract a live credential.
+ */
+export async function exportFounderData(founderId: string): Promise<Record<string, unknown[]>> {
+  const emailRow = (await query('SELECT email FROM founders WHERE id = ?', [founderId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const email = emailRow ? String(emailRow.email) : '';
+
+  const out: Record<string, unknown[]> = {};
+  for (const source of founderDataSources()) {
+    if (source.table in EXCLUDED_FROM_EXPORT) continue;
+    if (!source.predicate) continue;
+    try {
+      const args = [
+        ...Array<string>(source.binds).fill(founderId),
+        ...Array<string>(source.emailBinds).fill(email),
+      ];
+      const res = await query(
+        `SELECT * FROM ${source.table} WHERE ${source.predicate}`, args);
+      if (res.rows.length === 0) continue;
+      const rows = (res.rows as unknown as Array<Record<string, unknown>>).map((row) => {
+        const clean: Record<string, unknown> = {};
+        for (const [col, value] of Object.entries(row)) {
+          clean[col] = SECRET_COLUMN.test(col) && value != null ? '[redacted]' : value;
+        }
+        return clean;
+      });
+      // A table can appear twice — once founder-scoped and once as activity in
+      // somebody else's company — so rows are merged rather than overwritten.
+      out[source.table] = [...(out[source.table] ?? []), ...rows];
+    } catch {
+      // Same posture as the company export: a table that cannot be read is
+      // omitted rather than failing the file.
+      continue;
+    }
+  }
+  return out;
+}
+
 async function runFounderScopedErasure(founderId: string): Promise<void> {
   const entries = Object.entries(FOUNDER_SCOPED);
   const order = (op: AccountErasure) => (op.op === 'sever' ? 0 : 1);

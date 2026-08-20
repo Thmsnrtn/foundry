@@ -290,7 +290,16 @@ privacySettings.get('/privacy', async (c) => {
               <select id="data_retention_days" name="data_retention_days" class="input" style="max-width:200px;">
                 ${''}${html([retentionSelect] as unknown as TemplateStringsArray)}
               </select>
-              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">How long Foundry retains your product data. Current: ${retentionLabel(residency.data_retention_days)}</p>
+              <!-- THIS SAID "How long Foundry retains your product data" AND
+                   GOVERNED NOTHING. The data_residency_settings row was written
+                   by this form, read back by this page, and consulted by no
+                   job. The retention sweep now honours it where it is SHORTER
+                   than the platform horizon — a company that set this did so to
+                   keep less — and the sentence says which half is in force
+                   rather than implying both. Keeping data LONGER than the
+                   platform horizon is the question already with counsel, and a
+                   dropdown does not answer it. -->
+              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">A shorter period than Foundry's own is honoured: your data goes when you asked, not when Foundry's schedule would. A longer one is not — Foundry's horizon still applies. Current: ${retentionLabel(residency.data_retention_days)}</p>
             </div>
 
             <div>
@@ -300,7 +309,13 @@ privacySettings.get('/privacy', async (c) => {
               <select id="delete_agent_logs_after_days" name="delete_agent_logs_after_days" class="input" style="max-width:200px;">
                 ${''}${html([logRetentionSelect] as unknown as TemplateStringsArray)}
               </select>
-              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Agent activity logs older than this are automatically deleted. Current: ${logRetentionLabel(residency.delete_agent_logs_after_days)}</p>
+              <!-- Same correction, narrower scope. This governs agent chatter
+                   (agent_messages), where the shorter of this and the retention
+                   period above wins. It deliberately does NOT reach the audit
+                   trail: two of its event types are the record that an erasure
+                   happened, and whether that record may be shortened is a legal
+                   question, not a dropdown. -->
+              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Agent-to-agent activity older than this is deleted, if that is sooner than Foundry's own schedule. The audit trail is kept separately — it is what answers &ldquo;why didn't you show me this?&rdquo; — and this setting does not shorten it. Current: ${logRetentionLabel(residency.delete_agent_logs_after_days)}</p>
             </div>
 
           </div>
@@ -328,6 +343,17 @@ privacySettings.get('/privacy', async (c) => {
           <div style="display:flex;gap:0.5rem;flex-shrink:0;flex-wrap:wrap;">
             <a href="/privacy/export" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download current product data as JSON">JSON</a>
             <a href="/privacy/export?format=csv" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download current product data as CSV">CSV</a>
+          </div>
+        </div>
+
+        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);margin-bottom:0.25rem;">Export What Foundry Holds About You</div>
+            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Not a company &mdash; you. Your profile and preferences, how you like to be worked with, your devices and connections, your referrals, and your own activity inside companies you do not own. Credentials are shown as present, never as their value.</p>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0;flex-wrap:wrap;">
+            <a href="/privacy/export-account" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download your own account data as JSON">JSON</a>
+            <a href="/privacy/export-account?format=csv" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download your own account data as CSV">CSV</a>
           </div>
         </div>
 
@@ -549,6 +575,48 @@ privacySettings.get('/privacy/export', async (c) => {
     headers: {
       'Content-Type': 'application/json',
       'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  });
+});
+
+// ─── GET /privacy/export-account — what Foundry holds about the PERSON ───────
+//
+// Every export on this page answered for a COMPANY. The person had no way to
+// ask what was held about THEM — their voice, their health circumstances, their
+// devices, their peer profile, their referral history, and their own activity
+// inside companies they do not own. All of it was already mapped, and mapped
+// only so an erasure could clear it.
+//
+// The erasure fires from the identity provider's `user.deleted` webhook, so
+// there is no moment on this page where Foundry could offer it. This is that
+// moment, offered before it is needed rather than after it is too late.
+//
+// ALWAYS THE ACTING PERSON. There is no id parameter: the subject is the
+// session, so this cannot become a way to read somebody else.
+privacySettings.get('/privacy/export-account', async (c) => {
+  const founder = c.get('founder');
+  const { exportFounderData } = await import('../../services/privacy/consent.js');
+  const data = await exportFounderData(String(founder.id));
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (c.req.query('format') === 'csv') {
+    const csvParts = (Object.entries(data) as Array<[string, unknown[]]>)
+      .filter(([, rows]) => Array.isArray(rows) && rows.length > 0)
+      .map(([name, rows]) => `# ${name}\n${jsonToCsv(rows)}`)
+      .join('\n\n');
+    return csvResponse(csvParts, `foundry-account-${today}.csv`);
+  }
+
+  return new Response(JSON.stringify({
+    exported_at: new Date().toISOString(),
+    scope: 'account',
+    founder_id: founder.id,
+    ...data,
+  }, null, 2), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Disposition': `attachment; filename="foundry-account-${today}.json"`,
     },
   });
 });

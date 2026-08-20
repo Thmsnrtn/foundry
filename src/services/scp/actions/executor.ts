@@ -421,22 +421,29 @@ async function executeAction(
       // certainty rather than flattened into `success: false`.
       return executeGovernedEmail(executionId, productId, payload);
 
+    // THE SAME FABRICATION AS THE OLD `send_email` ARM, TWICE MORE. Both
+    // returned `success: true` with a note saying the integration was pending,
+    // so the caller marked the execution 'completed'. A founder could build an
+    // action template of either type on a live page, approve one, and read
+    // "Call" or "CRM" as done while nothing anywhere had happened.
+    //
+    // Unlike email there is no real path to route into — no Calendly, no CRM.
+    // So the honest answer is a refusal. `not_attempted` is the accurate effect
+    // certainty and it books no reconciliation, because there is definitively
+    // no effect to chase. The template picker no longer offers either type;
+    // existing rows still render, and now say what they are.
     case 'schedule_call':
       return {
-        success: true,
-        integration_response: {
-          note: 'Calendly integration pending. Call scheduling request recorded.',
-          details: payload,
-        },
+        success: false,
+        error: 'no call-scheduling integration exists; nothing was scheduled',
+        effect_certainty: 'not_attempted',
       };
 
     case 'update_crm':
       return {
-        success: true,
-        integration_response: {
-          note: 'CRM update recorded. CRM integration pending.',
-          details: payload,
-        },
+        success: false,
+        error: 'no CRM integration exists; nothing was updated',
+        effect_certainty: 'not_attempted',
       };
 
     case 'mcp_tool': {

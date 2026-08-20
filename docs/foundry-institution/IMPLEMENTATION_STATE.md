@@ -205,6 +205,23 @@ State the limits plainly:
   decision rather than a convenience.
 - **It is a recorded fact, never an inferred one.** Nothing reads a customer's
   reply and concludes they meant stop.
+- **Access is now answered from the same derivation as erasure, at both
+  scopes.** The company export read only the tables carrying `product_id`,
+  while the erasure had established that fifty-five others hold company data;
+  both consume `companyDataSources()` now. And there was no PERSON-scoped
+  export at all: `FOUNDER_SCOPED` and `PERSON_ACROSS_COMPANIES` existed only so
+  an erasure could clear them. `exportFounderData` is derived from the same two
+  maps. A table cannot be erasable and unaskable at once, at either scope.
+  Credentials appear as present, never as their value, on both paths.
+- **Notice, explanation, correction and redress: one of four exists.**
+  `EXPERIENCE.md` states these as an obligation the architecture must be able to
+  meet, and that is a design rule rather than a description. Today: a
+  **correction** an affected person makes is exactly the contact constraint
+  above. **Notice** could be carried — the governed boundary can reach a person
+  and record that it did — but nothing composes one. **Explanation** and
+  **redress** have no record type at all. That is the honest state, and it is
+  deliberately not filled with a general appeals bureaucracy; a second kind is
+  a recorded fact, added when a real obligation needs it.
 
 **Applicable external permission — absent, and deliberately not simulated.**
 Foundry does not evaluate law and nothing in this repository pretends to. Where

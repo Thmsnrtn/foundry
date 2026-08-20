@@ -32,9 +32,12 @@ Two obligations follow, and only two for now. A constraint such a person has
 recorded — most concretely, having asked not to be contacted — binds Foundry at
 the governed boundary regardless of what the founder authorises. And where
 consequence and applicable rules demand notice, explanation, correction or
-redress, the architecture must have somewhere to put them. Neither is a general
-appeals process, and neither may be inferred from prose: a person's constraint
-is a recorded fact.
+redress, the architecture must have somewhere to put them.
+
+The second is a design rule, not a description: today only correction exists,
+as the constraint itself. `IMPLEMENTATION_STATE.md` records which of the four
+are real. Neither obligation is a general appeals process, and neither may be
+inferred from prose: a person's constraint is a recorded fact.
 
 ## Truthful representation of new companies
 

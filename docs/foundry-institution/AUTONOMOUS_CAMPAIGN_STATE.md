@@ -108,6 +108,42 @@ consent type is now either consulted or listed in `RECORDED_PREFERENCE_ONLY`
 with a reason, held by a test — four separate toggles governing nothing was
 four separate findings that should have been one rule.
 
+Pulling the same thread twice more. `schedule_call` and `update_crm` had the
+identical shape as the old email arm — `success: true` with a note saying the
+integration was pending — and a founder could build a template of either type
+on a live page, approve one, and read "Call" or "CRM" as done. There is no
+Calendly and no CRM to route into, so both refuse, and the template picker no
+longer offers a type the executor will refuse. And the privacy page's two
+retention dropdowns wrote a settings row that the retention sweep never read:
+they are honoured now where they ask Foundry to keep **less**, which is the
+direction that needs no counsel, with the boundaries (the financial log, the
+erasure trail) stated in §9 rather than drawn silently.
+
+And the largest of the tail: **the erasure knew about fifty-five tables the
+export could not see.** `exportProductData` swept the tables carrying
+`product_id` and nothing else — its own header argues that the denominator is
+the point, since an earlier version exported ten tables against a guessed one.
+Four hundred lines further down, the same file establishes at length that
+fifty-five tables carry no `product_id` and that three quarters of them ARE
+company data: eleven children hanging off erased parents, and the ones naming
+their subject as a contributor hash, a scope id, or the first component of a
+composite key. A founder asking for their own data got the conversation and not
+what they said in it. "This is yours and goes when you go" and "this is not
+yours to receive" are the same claim read two ways; there is one derivation
+now, `companyDataSources()`, and two consumers.
+
+The same asymmetry one level down, and it was worse. `FOUNDER_SCOPED` names
+twelve tables that are the PERSON'S rather than any company's — their voice,
+their health circumstances, their devices, their peer profile, their referral
+history — and `PERSON_ACROSS_COMPANIES` names their own activity inside
+companies they do not own. Both maps existed **only so an erasure could clear
+them**. Nothing read either to answer "what do you have about me?", and the
+erasure fires from the identity provider's `user.deleted` webhook, so there was
+no Foundry surface where a person asks to be erased and therefore no moment at
+which they could be offered their data first. `exportFounderData` is derived
+from the same two maps, and the privacy page offers it before it is needed
+rather than after it is too late.
+
 **A process failure worth keeping.** The commit before this cycle's work was
 pushed with five tests red: capping `customer_success` at 'suggest' was correct
 and the tests asserting the old behaviour were not updated with it. Validation

@@ -309,7 +309,15 @@ agentsActions.get('/agents/actions/templates', async (c) => {
     `;
   });
 
-  const ACTION_TYPES: ActionType[] = ['send_email', 'create_ticket', 'post_slack', 'schedule_call', 'update_crm', 'custom_webhook'];
+  // WHAT THE OFFER PROMISES, THE EXECUTOR MUST BE ABLE TO DO. `schedule_call`
+  // and `update_crm` were offered here and had no integration behind them: the
+  // executor returned success with a "pending" note, so a founder could build a
+  // template, approve an action, and read it as completed while nothing
+  // happened. They are refused at execution now, and offering a type that will
+  // be refused is the same defect one step earlier. Existing templates of those
+  // types still render — removing them from the picker is not deleting a
+  // founder's work.
+  const ACTION_TYPES: ActionType[] = ['send_email', 'create_ticket', 'post_slack', 'custom_webhook'];
 
   const content = html`
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.5rem;">

@@ -239,6 +239,28 @@ what was decided.
 "could we keep this" has been no unless a stated purpose needs it, and that is
 an engineering decision already made.
 
+**Amended — the founder's own retention dropdowns now do half of what they
+said.** The privacy page offers "Data Retention Period" and "Agent Log
+Retention", and until now `data_residency_settings` was written by that form,
+read back by the same page, and consulted by no job. The retention sweep
+honours both settings where they are **shorter** than Foundry's own horizon,
+and the copy now says which half is in force.
+
+Longer is deliberately not honoured, and that is this section's question rather
+than an engineering one: a company asking Foundry to keep data for ten years
+may be asking for something a jurisdiction forbids, and a dropdown is not the
+place to answer it. Two boundaries were drawn by hand and are worth counsel's
+eye:
+
+- `ai_cost_log` is exempt entirely. It carries no `product_id`, and a financial
+  record is also where a company's shorter preference should not silently win —
+  it is the same 13-month accounting need that pulls against §9's first
+  question.
+- The agent-log setting reaches agent-to-agent chatter and deliberately **not**
+  `agent_audit_log`, two of whose event types are the record that an erasure
+  happened. Whether a founder may shorten that record is precisely §9's third
+  question, so it is not offered.
+
 ---
 
 ## PENDING 11 — Should the audit log be kept for 180 days or 365?

@@ -120,3 +120,47 @@ describe('the affected-party term binds both regimes', () => {
     expect(row.reconcile_after).toBeFalsy();
   });
 });
+
+describe('the two arms that had no integration at all', () => {
+  // Same shape, no gateway to route into: there is no Calendly and no CRM. Both
+  // returned `success: true` with a "pending" note, so the execution was marked
+  // completed and a founder read "Call" or "CRM" as done.
+  const attempt = async (actionType: 'schedule_call' | 'update_crm') => {
+    const execId = await createExecution(P, null, {
+      action_type: actionType, integration: 'none', to_email: 'x@example.com',
+      subject: 'x', body: 'x',
+    } as never);
+    const result = await approveAndExecute(execId, `founder:${OWNER}`);
+    const row = (await query(
+      'SELECT status, effect_certainty, reconcile_after FROM action_executions WHERE id = ?',
+      [execId],
+    )).rows[0] as Record<string, unknown>;
+    return { result, row };
+  };
+
+  it('refuses to schedule a call nothing can schedule', async () => {
+    const { result, row } = await attempt('schedule_call');
+    expect(result.success).toBe(false);
+    expect(row.status).toBe('failed');
+    expect(row.effect_certainty).toBe('not_attempted');
+    expect(row.reconcile_after, 'there is no effect to chase').toBeFalsy();
+  });
+
+  it('refuses to update a CRM that is not connected', async () => {
+    const { result, row } = await attempt('update_crm');
+    expect(result.success).toBe(false);
+    expect(row.status).toBe('failed');
+    expect(row.effect_certainty).toBe('not_attempted');
+  });
+
+  it('is not offered on the page where a founder builds a template', () => {
+    // The offer and the guard have to agree. Offering a type that will be
+    // refused is the same defect one step earlier.
+    const page = readFileSync('src/routes/dashboard/agents-actions.ts', 'utf8');
+    const picker = page.slice(page.indexOf('const ACTION_TYPES'));
+    const list = picker.slice(0, picker.indexOf('];'));
+    expect(list).toContain('send_email');
+    expect(list).not.toContain('schedule_call');
+    expect(list).not.toContain('update_crm');
+  });
+});
