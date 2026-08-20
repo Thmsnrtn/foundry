@@ -1351,6 +1351,7 @@
   SELECT RAISE(ABORT,'observation_channel:key_invalid')
   SELECT RAISE(ABORT,'observation_channel:label_invalid')
   SELECT RAISE(ABORT,'observation_channel:reserved_key')
+  SELECT RAISE(ABORT,'outbound_action:born_approved')
   SELECT RAISE(ABORT,'reconstruction_claim:conflict_requires_multiple_sources')
   SELECT RAISE(ABORT,'reconstruction_claim:derivation_required') WHERE trim(NEW.derivation_method)='';
   SELECT RAISE(ABORT,'reconstruction_claim:evidence_invalid') WHERE EXISTS (
@@ -1459,6 +1460,7 @@
   WHERE NEW.event_type <> 'external_reported:'
   WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
   WHERE NEW.intake_key IS NULL OR length(NEW.intake_key)<24;
+  WHERE NEW.integration_name IN ('resend');
   WHERE NEW.label IS NULL OR trim(NEW.label)='';
   WHERE NEW.last_error_name IS NOT NULL
   WHERE NEW.last_error_name IS NOT NULL
@@ -4647,6 +4649,7 @@ BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON integrations
 BEFORE INSERT ON job_health
+BEFORE INSERT ON outbound_actions
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
 BEFORE INSERT ON products
@@ -4695,6 +4698,7 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5412,6 +5416,7 @@ CREATE TRIGGER job_health_error_name_guard
 CREATE TRIGGER job_health_error_name_update_guard
 CREATE TRIGGER judgment_conflict_identity_guard
 CREATE TRIGGER judgment_conflict_identity_immutable
+CREATE TRIGGER outbound_action_birth_guard
 CREATE TRIGGER products_status_is_lifecycle_only_insert
 CREATE TRIGGER products_status_is_lifecycle_only_update
 CREATE TRIGGER reconstruction_claim_guard
@@ -5557,6 +5562,7 @@ END;
 END;
 END;
 END;
+END;
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 ON institutional_responsibilities
@@ -5576,5 +5582,6 @@ WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
 WHEN NEW.state <> OLD.state
 WHEN NEW.state IN ('operating', 'mature', 'exception_owned')
+WHEN NEW.status = 'approved' AND NEW.responsibility_id IS NULL
 WHEN NEW.status IS NOT OLD.status
 WHEN OLD.status IN ('reserved','ambiguous') AND NEW.status IN ('settled','released','expired')

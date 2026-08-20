@@ -541,7 +541,12 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve',
   if (result.rows.length === 0) return c.redirect('/agents/integrations/actions');
 
   try {
-    await approveAction(actionId, 'ceo');
+    // WHO APPROVED IT IS A PERSON, NOT A ROLE. This passed the literal 'ceo',
+    // so every approval by every founder of every company recorded the same
+    // approver. Ownership is verified three lines above and then thrown away;
+    // `approved_by` is the field that makes an authorisation attributable, and
+    // a constant makes it merely attributed.
+    await approveAction(actionId, String(founder.id));
   } catch (err) {
     console.error('[Integration] Approve action failed:', err);
   }

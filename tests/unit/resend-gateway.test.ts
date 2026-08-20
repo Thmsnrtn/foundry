@@ -104,6 +104,7 @@ async function insertAction(opts: {
   to?: string;
   subject?: string;
   agentName?: string;
+  approvedBy?: string;
 }): Promise<string> {
   const id = nanoid();
   const params = {
@@ -111,11 +112,20 @@ async function insertAction(opts: {
     subject: opts.subject ?? 'Hi',
     html: '<p>hello</p>',
   };
+  // BORN WAITING, THEN APPROVED BY SOMEBODY. This inserted an approved row
+  // directly, which migration 173 now refuses for an integration that can
+  // actually do something: an outbound action that is approved from birth,
+  // names no responsibility, and points at a real integration is authority the
+  // caller asserted. Production reaches this state the way a person does — the
+  // row waits, and an owner approves it — so the fixture does too.
   await query(
     `INSERT INTO outbound_actions (id, product_id, agent_name, integration_name, action_type, authority_level, status, parameters_json, preview_text, rationale, confidence)
-     VALUES (?, ?, ?, 'resend', 'send_email', 0, 'approved', ?, ?, ?, 0.9)`,
+     VALUES (?, ?, ?, 'resend', 'send_email', 2, 'pending_approval', ?, ?, ?, 0.9)`,
     [id, productId, opts.agentName ?? 'beacon', JSON.stringify(params), 'preview', 'because']
   );
+  await query(
+    `UPDATE outbound_actions SET status='approved', approved_by=?, approved_at=datetime('now') WHERE id=?`,
+    [opts.approvedBy ?? 'rg_owner', id]);
   return id;
 }
 

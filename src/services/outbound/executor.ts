@@ -230,7 +230,10 @@ export async function getPendingApprovals(productId: string): Promise<OutboundAc
  */
 export async function approveAction(
   actionId: string,
-  approvedBy: string = 'ceo',
+  /** The person. Not a role: a constant here makes an authorisation merely
+   *  attributed rather than attributable, which is the whole point of the
+   *  field. Callers resolve it from the authenticated founder. */
+  approvedBy: string,
 ): Promise<{ success: boolean; result?: unknown }> {
   const now = new Date().toISOString();
 
