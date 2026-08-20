@@ -585,10 +585,19 @@ function startScheduler(): void {
           return;
         }
         logger.info(`Running: ${name}`, { jobName: name });
+        // A LOG IS NOT A RECORD. Every failure here was logged and forgotten,
+        // so a week in which the institution's loops threw on every run looked
+        // exactly like a calm week on the page the founder reads. The class
+        // name of the error is kept and never its message — see
+        // `loop-health.ts` for why.
+        const { recordJobFailure, recordJobSuccess } = await import(
+          './services/institution/loop-health.js');
         try {
           await job.fn();
+          await recordJobSuccess(name).catch(() => { /* health is a record, never a gate */ });
         } catch (err) {
           logger.error(`Error in ${name}`, { jobName: name, error: String(err) });
+          await recordJobFailure(name, err).catch(() => { /* as above */ });
         } finally {
           await releaseJobLock(name);
         }

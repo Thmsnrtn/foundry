@@ -411,6 +411,34 @@ const disputedSection = (
       </div>`)}
   </div>`;
 
+// PART OF ME HAS STOPPED RUNNING, AND THIS PAGE IS THEREFORE OUT OF DATE.
+//
+// "Nothing happened" and "nothing ran" are different facts, and the letter said
+// the first for both. Every scheduled job was wrapped in a try/catch that
+// logged and moved on, so a week in which the reconciliation pass threw on
+// every run looked exactly like a calm week: no new outcomes, no new
+// judgments, nothing visibly wrong.
+//
+// This sits above everything rather than beneath it. A founder reading the rest
+// of the page needs to know first that part of what fills it has stopped —
+// telling them afterwards is telling them once they have already decided.
+//
+// It does not show the error. What went wrong is Foundry's problem, and the
+// class name is kept for whoever operates it; what the founder needs is which
+// of their things is not being kept current, and since when.
+const loopsStoppedSection = (
+  items: Array<{ label: string; consecutiveFailures: number; lastSuccessAt: string | null }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid #ffb34755;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.6rem;">Part of me has stopped</div>
+    <div style="font-size:0.82rem;color:var(--text-primary);">Some of what I do runs on a schedule. Some of it is failing, so what you read below may be out of date — not because nothing happened, but because I have not been able to look.</div>
+    ${items.map((item) => html`
+      <div style="padding:0.45rem 0;border-top:1px solid rgba(255,255,255,0.05);font-size:0.8rem;color:var(--text-muted);">
+        ${item.label} — failed ${String(item.consecutiveFailures)} ${item.consecutiveFailures === 1 ? 'time' : 'times'} in a row${item.lastSuccessAt ? `, last worked ${item.lastSuccessAt.slice(0, 10)}` : ', and has never yet worked'}.
+      </div>`)}
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem;">This is mine to fix, not yours. It is here because you should not have to guess whether the rest of this page is current.</div>
+  </div>`;
+
 // Notices the founder wrote and did not send.
 //
 // Authoring and carrying are deliberately separate — writing something down is
@@ -891,12 +919,19 @@ letterRoutes.get('/letter', async (c) => {
     ? letter.needsYou.replace(/^Gate-(\d+)/, (_, g: string) => gateLabel(Number(g), fluency))
     : null;
   const intro = explain('letter', fluency);
+  // Whether the parts of Foundry that keep this page current are running. Read
+  // last and rendered first: a founder needs to know the page may be stale
+  // BEFORE they read it, not after they have acted on it.
+  const { getFailingInstitutionLoops } = await import('../../services/institution/loop-health.js');
+  const failingLoops = await getFailingInstitutionLoops();
 
   const content = html`
     <h1 style="margin-bottom:0.25rem;">The Letter</h1>
     ${fleetChrome ? fleetChrome : html`
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">${new Date().toDateString()} — from your team.</p>
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}`}
+
+    ${loopsStoppedSection(failingLoops)}
 
     ${stopped ? html`
     <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid #ffb347;">

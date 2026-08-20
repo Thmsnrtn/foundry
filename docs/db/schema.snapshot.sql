@@ -261,7 +261,7 @@
       AND p.owner_id=NEW.founder_id
       AND q.predicate=json_extract(NEW.payload_json,'$.predicate')
       AND q.product_id=NEW.product_id
-      AND q.status='open');
+      AND q.status IN ('open','deferred'));
       AND r.authority_ref='autonomy_consent:' || a.id
       AND r.capability='customer_support' AND r.disposition='active');
       AND r.disposition='active'
@@ -348,13 +348,19 @@
     'audit_completed', 'remediation_merged',
     'behavioral',        -- Observed pattern about how to behave
     'benchmark_contribution',  -- anonymous metrics shared to pool
+    'body_unreadable',
+    'body_unreadable',
     'capability_requirements','risks','failure_modes','stakeholder_obligations','financial_consequence',
     'churn_response',          -- What we do when churn spikes
     'co_founder', 'advisor', 'investor_observer'
     'cohort_anomaly', 'competitive_signal'
     'competitive_response',    -- How we respond to competitive threats
     'concern', 'endorsement', 'question', 'context', 'precedent'
+    'contact_required',
+    'content_required',
+    'content_too_large',
     'correction',        -- Founder changed what the agent proposed
+    'could_not_store'
     'decision_made', 'decision_outcome',
     'delivery','maintenance','development','operational_dependency');
     'delivery','maintenance','development','operational_dependency');
@@ -363,11 +369,14 @@
     'direct','experiment','contribution','protective'
     'domain'             -- Domain knowledge specific to this company
     'explain', 'compare', 'scenario', 'action', 'search', 'general'
+    'fields_invalid',
+    'fields_invalid',
     'founder_correction', 'self_observation', 'evolution_synthesis'
     'fundraising_narrative',   -- Our story for investors
     'generating','pr_open','merged','rejected','failed','skipped'
     'golden_lesson', 'constraint_added', 'authority_change',
     'harbor','sentinel','ledger','shield','oracle','crucible'
+    'identity_required',
     'inconclusive'
     'lead_investor', 'angel', 'advisor', 'board_member', 'observer'
     'llm_tokens','integration_api','email_send','compute','experiment','other'
@@ -375,6 +384,7 @@
     'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
     'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
     'not_configured'
+    'nothing_recognised',
     'onboarding_kit',          -- First hire onboarding from DNA + history
     'operating_principles',    -- "The [Product] Way" — decision heuristics
     'pending_approval','approved','executing','executed','failed','rejected','cancelled'
@@ -388,6 +398,7 @@
     'recovery_protocol'        -- What we do in RED state
     'recurring_work','customer_commitment','exception','revenue_collection',
     'recurring_work','customer_commitment','exception','revenue_collection',
+    'refused_by_the_institution',
     'resource_demand'))
     'retention','messaging','feature','operations','other'
     'risk_state_change', 'lifecycle_gate',
@@ -396,9 +407,12 @@
     'signups_7d','active_users','support_volume_7d','nps_score')
     'signups_7d','active_users','support_volume_7d','nps_score');
     'stressor_created', 'stressor_resolved',
+    'timestamp_invalid'
+    'too_large',
     'tool_preferences', 'error_recovery', 'shared_knowledge'
     'unknown','visible','understood','shadowing','assisting','operating','mature','exception_owned'
     'validation',        -- Founder confirmed the agent was right
+    'values_out_of_range',
     'visitor','trial','activated','paying','at_risk','churned','expansion','advocate'
     (NEW.disposition='alternative_selected' AND (NEW.selected_alternative IS NULL OR NOT EXISTS (
     )
@@ -424,6 +438,8 @@
     AND (
     AND (NEW.conflict_identity IS NULL OR NEW.conflict_identity<>OLD.conflict_identity);
     AND (NEW.verification_status IS NOT 'passed' OR NEW.diff_verified IS NOT 1
+    AND (length(NEW.last_error_name) > 64 OR NEW.last_error_name LIKE '% %');
+    AND (length(NEW.last_error_name) > 64 OR NEW.last_error_name LIKE '% %');
     AND NOT EXISTS (
     CHECK (status IN ('in_progress','completed','skipped')),
     FROM autonomy_consents a
@@ -736,6 +752,8 @@
    WHERE NEW.outcome_ref IS NOT NULL AND NOT EXISTS (
   ) AND NOT EXISTS (
   ) AND NOT EXISTS (
+  )));
+  )));
   )),
   )),
   )),
@@ -917,7 +935,7 @@
   -- Structured output
   -- The From this company's third-party mail goes out as. The provider refuses
   -- The KEY only. The value is deliberately not copied here: this table exists
-  -- The assertion answers an OPEN question of this company. It cannot answer a
+  -- The assertion answers an UNANSWERED question of this company. It cannot
   -- The canonical evidence that the founder issued this, and to whom.
   -- The canonical evidence that this company said it tracks this.
   -- The channel must be this company's, live, and bound to the responsibility
@@ -966,6 +984,8 @@
   -- a minimum: an exact match, so widening consequence is never a side effect
   -- a sector-specific kind at runtime however well meant.
   -- against, so an observation that names one is not external.
+  -- already answered — which is what makes a replayed answer inert. A question
+  -- answer a question that was never asked, another tenant's question, or one
   -- any company can have; none of them names an industry. Widening the set
   -- are not a verified outcome, and neither is a successful write.
   -- assumptions: { monthly_burn_delta_usd, mrr_growth_rate_pct, churn_rate_override, headcount_additions, ... }
@@ -1028,7 +1048,6 @@
   -- outcome for something that never happened is not an outcome; a plan that
   -- policy) are deliberately absent until something consumes them; adding a
   -- provider is a code change in the send boundary, so it is a code change
-  -- question that was never asked, another tenant's question, or one already
   -- rather than assumed equal, because assuming it is how a guard ends up
   -- re-grant; it is erasing that the founder ever said stop.
   -- reality a reading described. Mirrors OBSERVABLE_FIELDS; a test asserts the
@@ -1039,7 +1058,6 @@
   -- repository is not a bound scope.
   -- reproducing ALL of it: the first version of this migration recreated only
   -- requires real comparison evidence there, and it still does. Applying this
-  -- resolved — which is what makes a replayed answer inert.
   -- responsibility that reached Assisting is not permanently qualified
   -- responsibility-bound, and low consequence.
   -- results: { runway_months, probability_series_a, target_hit_probability, ... }
@@ -1063,6 +1081,7 @@
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
   -- the evidence must be this company's own — a credential justified by another
   -- the field quietly dropped.
+  -- the founder set aside has not been answered.
   -- the four: 'reconsidered' returns a candidate to 'pending'. Spelled out
   -- the message is being attributed to. Attribution is structural.
   -- the ratchets/audits are what make any of it binding.
@@ -1097,6 +1116,8 @@
   -- ─── Meta ─────────────────────────────────────────────────────────────────
   -- ─── Recursive critique yield (Ambros Round 5) ────────────────────────────
   AND NOT EXISTS (
+  CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
+  CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
   CHECK(disposition IN ('active','deliberately_not_done')), disposition_reason TEXT, disposition_evidence_ref TEXT, disposition_at DATETIME, capability TEXT NOT NULL DEFAULT 'general', discovery_evidence_ref TEXT, due_at DATETIME, due_stated_by TEXT);
   CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, health_score INTEGER DEFAULT 0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME);
@@ -1311,6 +1332,8 @@
   SELECT RAISE(ABORT,'institutional_judgment:tenant_invalid') WHERE EXISTS (
   SELECT RAISE(ABORT,'integration_config:secret_in_plaintext') WHERE EXISTS (
   SELECT RAISE(ABORT,'integration_config:secret_in_plaintext') WHERE EXISTS (
+  SELECT RAISE(ABORT,'job_health:error_name_is_not_a_message')
+  SELECT RAISE(ABORT,'job_health:error_name_is_not_a_message')
   SELECT RAISE(ABORT,'judgment_disposition:alternative_invalid') WHERE
   SELECT RAISE(ABORT,'judgment_disposition:append_only');
   SELECT RAISE(ABORT,'judgment_disposition:judgment_invalid') WHERE NOT EXISTS (
@@ -1437,6 +1460,8 @@
   WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
   WHERE NEW.intake_key IS NULL OR length(NEW.intake_key)<24;
   WHERE NEW.label IS NULL OR trim(NEW.label)='';
+  WHERE NEW.last_error_name IS NOT NULL
+  WHERE NEW.last_error_name IS NOT NULL
   WHERE NEW.responsibility_id IS NOT NULL AND NEW.capability IS NOT NULL AND EXISTS (
   WHERE NEW.responsibility_id IS NOT NULL AND NOT EXISTS (
   WHERE NEW.revoked_at IS NOT NULL;
@@ -1860,6 +1885,7 @@
   conflict_check_passed INTEGER NOT NULL DEFAULT 0
   conflict_points_json TEXT NOT NULL DEFAULT '[]',   -- things agents disagree on
   conflicts_json TEXT, -- JSON array of identified conflicts
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
   consecutive_rejections INTEGER NOT NULL DEFAULT 0,
   consensus_points_json TEXT NOT NULL DEFAULT '[]',  -- things multiple agents agree on
@@ -2885,6 +2911,7 @@
   item_ref    TEXT NOT NULL,             -- e.g. decision id
   items_json TEXT NOT NULL,       -- JSON: [{id, text, category, impact, done}]
   jargon_level TEXT DEFAULT 'moderate',
+  job_name             TEXT PRIMARY KEY,
   job_name TEXT PRIMARY KEY,
   job_title TEXT NOT NULL,
   job_type TEXT NOT NULL,
@@ -2938,8 +2965,10 @@
   last_error TEXT,
   last_error TEXT,
   last_error TEXT,
+  last_error_name      TEXT,
   last_evaluated_at TEXT,
   last_event_at TEXT,
+  last_failure_at      TEXT,
   last_login_streak INTEGER DEFAULT 0,
   last_message_at DATETIME,
   last_message_at TEXT DEFAULT (datetime('now')),
@@ -2953,6 +2982,7 @@
   last_scanned_at DATETIME,
   last_seen_at DATETIME,
   last_sent_at TEXT,
+  last_success_at      TEXT,
   last_successful_sync TEXT,
   last_sync_at TEXT,
   last_sync_status TEXT,
@@ -4184,6 +4214,7 @@
   updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
@@ -4559,7 +4590,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
@@ -4570,6 +4600,8 @@
 , disposition TEXT, disposition_evidence_json TEXT);
 , dna_completion_pct INTEGER DEFAULT 0, wisdom_layer_active BOOLEAN DEFAULT FALSE, unread_competitive_signals INTEGER DEFAULT 0, audit_age_days INTEGER DEFAULT 0, unread_milestones INTEGER DEFAULT 0, open_remediation_prs INTEGER DEFAULT 0, pending_decisions_count INTEGER DEFAULT 0);
 , last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+, last_refused_at DATETIME, refusal_count INTEGER NOT NULL DEFAULT 0, last_refusal_reason TEXT
+, last_refused_at TEXT, refusal_count INTEGER NOT NULL DEFAULT 0, last_refusal_reason TEXT
 , month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
 , name TEXT, secret_hash TEXT, is_active INTEGER DEFAULT 1, updated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);
@@ -4614,6 +4646,7 @@ BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON integrations
+BEFORE INSERT ON job_health
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
 BEFORE INSERT ON products
@@ -4659,8 +4692,11 @@ BEFORE UPDATE ON founder_evidence_requests
 BEFORE UPDATE ON governed_effect_kinds
 BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
+BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5226,6 +5262,7 @@ CREATE TABLE introductions (
 CREATE TABLE investor_annotations (
 CREATE TABLE investor_updates (
 CREATE TABLE investors (
+CREATE TABLE job_health (
 CREATE TABLE job_locks (
 CREATE TABLE key_results (
 CREATE TABLE leading_indicators (
@@ -5371,6 +5408,8 @@ CREATE TRIGGER institutional_judgment_non_authorizing_guard
 CREATE TRIGGER institutional_judgment_observation_guard
 CREATE TRIGGER integration_config_no_secrets_insert
 CREATE TRIGGER integration_config_no_secrets_update
+CREATE TRIGGER job_health_error_name_guard
+CREATE TRIGGER job_health_error_name_update_guard
 CREATE TRIGGER judgment_conflict_identity_guard
 CREATE TRIGGER judgment_conflict_identity_immutable
 CREATE TRIGGER products_status_is_lifecycle_only_insert
@@ -5442,6 +5481,8 @@ CREATE UNIQUE INDEX idx_roi_monthly_product ON roi_monthly_summaries(product_id,
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
+END;
 END;
 END;
 END;
