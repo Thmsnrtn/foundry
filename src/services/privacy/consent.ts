@@ -758,6 +758,20 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     // `network_contributions` stayed misclassified too.
     onAccountErasure: { op: 'delete', by: 'key', where: "key LIKE 'audit:founder:%'", match: 'suffix' },
   },
+  ecosystem_principals: {
+    reason: 'a portfolio credential this person issued over companies they own',
+    // AUTHORITY, BY THE RULE JUST SETTLED IN §10. A principal issued by somebody
+    // who no longer exists must not keep reading their portfolio, and there is
+    // nobody to transfer it to — the companies it was scoped to are being erased
+    // in the same pass, since it may only ever name companies its issuer owns.
+    // `ecosystem_principal_companies` cascades on this delete.
+    //
+    // Found by the erasure classification gate rather than by remembering: a
+    // table added without a disposition is one the erasure steps around in
+    // silence, which is how `network_contributions` survived erasures for
+    // months.
+    onAccountErasure: { op: 'delete', by: 'created_by' },
+  },
   ai_daily_spend: {
     reason: 'the founder\'s own daily spend rollup, keyed by scope rather than by a founder column',
     // THE ROLLUP CARRIES THE PERSON UNDER A NAME NOTHING WAS LOOKING FOR.

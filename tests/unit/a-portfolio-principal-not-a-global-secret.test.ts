@@ -197,3 +197,32 @@ describe('the credential itself', () => {
     expect(await principalMayRead(issued.id, MINE_A)).toBe(false);
   });
 });
+
+describe('the principal goes when its issuer does', () => {
+  it('is authority, by the rule §10 settled for every other credential', async () => {
+    const issued = await issueEcosystemPrincipal({
+      founderId: OWNER, label: 'Apex Micro', companyIds: [MINE_A] });
+    if ('refused' in issued) throw new Error(issued.refused);
+
+    const { FOUNDER_SCOPED_DISPOSITIONS } = await import(
+      '../../src/services/privacy/consent.js');
+    const d = (FOUNDER_SCOPED_DISPOSITIONS as Record<string, { onAccountErasure: { op: string } }>)
+      .ecosystem_principals;
+    expect(d, 'a table with no disposition is one the erasure steps around in silence')
+      .toBeDefined();
+    // A principal issued by somebody who no longer exists must not keep reading
+    // their portfolio, and there is nobody to transfer it to.
+    expect(d.onAccountErasure.op).toBe('delete');
+  });
+
+  it('takes its scope with it, rather than leaving rows pointing at nothing', async () => {
+    const issued = await issueEcosystemPrincipal({
+      founderId: OWNER, label: 'Apex Micro', companyIds: [MINE_A, MINE_B] });
+    if ('refused' in issued) throw new Error(issued.refused);
+
+    await query('DELETE FROM ecosystem_principals WHERE id = ?', [issued.id]);
+    expect((await query(
+      'SELECT id FROM ecosystem_principal_companies WHERE principal_id = ?', [issued.id])).rows,
+    'the scope cascades').toEqual([]);
+  });
+});
