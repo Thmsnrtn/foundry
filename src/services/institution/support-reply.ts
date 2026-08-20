@@ -103,7 +103,11 @@ export async function getReplyProposalForMessage(
     `SELECT id,payload_json,created_at FROM signal_events
       WHERE product_id=? AND source='founder_reply_proposal'
         AND json_extract(payload_json,'$.message_id')=?
-      ORDER BY created_at DESC, id DESC LIMIT 1`, [productId, messageId],
+      -- Ties break on INSERTION ORDER, not on id. The proposal id is a content
+      -- hash, so ordering by it made "which words are current" depend on the
+      -- hash whenever a founder wrote twice inside one second — the same defect
+      -- getReconstructionClaims had with nanoid claim ids.
+      ORDER BY created_at DESC, rowid DESC LIMIT 1`, [productId, messageId],
   )).rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
   const payload = JSON.parse(String(row.payload_json)) as { message_id: string; body: string; subject?: string };
@@ -208,9 +212,13 @@ export type SupportReplyState =
  * into one another on screen. */
 export async function getSupportReplyState(
   productId: string, messageId: string,
-): Promise<{ state: SupportReplyState; actionId: string | null; outcome: string | null }> {
+): Promise<{
+  state: SupportReplyState; actionId: string | null; outcome: string | null;
+  /** The proposal the plan is BOUND to, once one exists. Not the newest one. */
+  proposalId: string | null;
+}> {
   const action = (await query(
-    `SELECT id,status,outcome_status FROM outbound_actions
+    `SELECT id,status,outcome_status,reply_proposal_id FROM outbound_actions
       WHERE product_id=? AND inbound_message_id=? AND status<>'cancelled'`, [productId, messageId],
   )).rows[0] as Record<string, unknown> | undefined;
   if (action) {
@@ -219,10 +227,19 @@ export async function getSupportReplyState(
       state: status === 'executed' ? 'sent' : status === 'failed' ? 'failed' : 'planned',
       actionId: String(action.id),
       outcome: action.outcome_status == null ? null : String(action.outcome_status),
+      proposalId: action.reply_proposal_id == null ? null : String(action.reply_proposal_id),
     };
   }
   const proposal = await getReplyProposalForMessage(productId, messageId);
-  return { state: proposal ? 'proposed' : 'message_only', actionId: null, outcome: null };
+  return {
+    state: proposal ? 'proposed' : 'message_only', actionId: null, outcome: null,
+    proposalId: proposal?.id ?? null,
+  };
+}
+
+/** One authored proposal, by its own id. */
+async function proposalById(productId: string, proposalId: string): Promise<ReplyProposal | null> {
+  return findProposal(productId, proposalId);
 }
 
 /**
@@ -265,7 +282,16 @@ export async function getMessagesAwaitingReply(
   for (const raw of rows.rows as unknown as Array<Record<string, unknown>>) {
     const messageId = String(raw.id);
     const state = await getSupportReplyState(productId, messageId);
-    const proposal = await getReplyProposalForMessage(productId, messageId);
+    // THE WORDS SHOWN ARE THE WORDS THAT WILL GO. This asked for the newest
+    // proposal for the message, which stops being the planned one the moment a
+    // founder has second thoughts after asking Foundry to carry the first —
+    // nothing refuses that, and nothing re-plans it. The founder then read
+    // their new words above a Send button that would dispatch the old ones.
+    // `reply_proposal_id` records exactly what the plan bound to and had never
+    // been read.
+    const proposal = state.proposalId
+      ? await proposalById(productId, state.proposalId)
+      : null;
     out.push({
       messageId,
       responsibilityId: String(raw.responsibility_id),

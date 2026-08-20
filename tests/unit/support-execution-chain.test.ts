@@ -119,7 +119,7 @@ beforeAll(async () => {
 describe('the first production-facing support execution chain', () => {
   it('shows a message with no reply as exactly that', async () => {
     expect(await getSupportReplyState(PRODUCT, messageId))
-      .toEqual({ state: 'message_only', actionId: null, outcome: null });
+      .toEqual({ state: 'message_only', actionId: null, outcome: null, proposalId: null });
     expect(await countOf('SELECT COUNT(*) n FROM outbound_actions WHERE product_id=?', [PRODUCT])).toBe(0);
   });
 
