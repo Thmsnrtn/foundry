@@ -41,13 +41,26 @@ if (!db) {
   console.log('No database given — reporting against a freshly migrated schema.');
 }
 
+// A SEVERED VOTE IS NOT AN UNAUTHORIZED ONE. Migration 175 made `founder_id`
+// nullable so an erased person's identity leaves a company they did not own
+// while the company keeps its decision record. NULL means "the person who cast
+// this has been erased", and they were entitled at the time — this audit asks
+// who voted WITHOUT THE RIGHT TO, and a row with nobody in it cannot answer
+// that. Without `dv.founder_id IS NOT NULL`, every account erasure would
+// manufacture a finding here.
+//
+// The clause lives in the SQL and its explanation lives HERE, because this
+// string is flattened with `.replace(/\n/g, ' ')` before it is executed — a
+// `--` comment inside it swallows the rest of the query on one line. Same shape
+// as a backtick inside an embedded comment, and it failed the same way once.
 const SQL = `
 SELECT dv.id, dv.product_id, dv.decision_id, dv.founder_id, dv.voted_at,
        COALESCE(t.role, 'not a member') AS role
   FROM decision_votes dv
   LEFT JOIN team_members t
     ON t.product_id = dv.product_id AND t.founder_id = dv.founder_id
- WHERE NOT EXISTS (SELECT 1 FROM products p
+ WHERE dv.founder_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM products p
                     WHERE p.id = dv.product_id AND p.owner_id = dv.founder_id)
    AND NOT EXISTS (SELECT 1 FROM team_members t2
                     WHERE t2.product_id = dv.product_id

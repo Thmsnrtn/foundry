@@ -27,6 +27,10 @@ export type ConsentType =
  * preference with a reason. The list is short on purpose and the test
  * `a-privacy-toggle-that-governs-nothing` holds it against the vocabulary, so
  * a new toggle cannot be added to the privacy page without one or the other.
+ *
+ * IT IS DOWN TO ONE. `product_improvement` sat here while the owner's §14
+ * decision was pending; it now gates the telemetry half of the funnel, and
+ * nothing is recorded at all without it.
  */
 export const RECORDED_PREFERENCE_ONLY: Partial<Record<ConsentType, string>> = {
   // There is no training pipeline. Nothing in this repository trains a model on
@@ -35,14 +39,6 @@ export const RECORDED_PREFERENCE_ONLY: Partial<Record<ConsentType, string>> = {
   // that if a training path is ever proposed it meets an existing answer.
   ai_training_opt_out:
     'no training path exists to gate; the row is the auditable preference itself',
-  // Foundry's own first-party funnel analytics (`telemetry/funnel.ts`) record a
-  // NAMED founder's progression regardless of this toggle. Whether first-party
-  // product analytics should be consent-gated is a product and legal position
-  // rather than an engineering mechanism, so it is queued in
-  // `OWNER_DECISIONS_PENDING.md` §14 and the privacy page has been corrected in
-  // the meantime to describe what actually happens.
-  product_improvement:
-    'first-party funnel analytics are not gated on it; owner decision §14 pending',
 };
 
 export type ConsentSummary = {
@@ -600,6 +596,14 @@ const ERASE_BY_NAMED_KEY: Record<string, {
   // into percentiles shown to other founders. That is the exact harm the
   // `decision_patterns` contributor hash exists to prevent.
   network_contributions: { column: 'id', subject: 'product_id', match: 'prefix' },
+  // Product-improvement telemetry, recorded only with consent and keyed by
+  // contributor hash so the table names nobody. Erased by the same route
+  // `decision_patterns` is: a pseudonym is not anonymity, and an account that
+  // goes must take its linkage with it rather than leaving rows nobody can
+  // find. Added with migration 176, in the same commit that created the table —
+  // a table that can be written before the erasure knows about it is how
+  // `network_contributions` came to survive erasures for months.
+  product_telemetry_events: { column: 'contributor_hash', subject: 'contributor_hash' },
 };
 
 /**
@@ -1130,7 +1134,20 @@ export async function eraseFounderAccount(founderId: string): Promise<{
 type PersonInOthersCompany =
   | { op: 'delete'; columns: string[]; reason: string; byEmail?: string[] }
   | { op: 'sever'; columns: string[]; reason: string }
-  | { op: 'owner_decision'; columns: string[]; reason: string };
+  /**
+   * AUTHORITY HELD BY A PRINCIPAL THAT NO LONGER EXISTS.
+   *
+   * Revoked, never transferred. The owner's §10 decision is that authority and
+   * artefact are different things: a credential or a grant must stop acting,
+   * and handing it to the company owner would be inventing a grant nobody
+   * made. `revokedColumn` is set if the row has one, then the row goes.
+   *
+   * NOT SILENT. Deleting a working credential takes a capability away from a
+   * company that did nothing wrong, and the cost of that choice was named when
+   * it was made. Each revocation writes a record into the company's own audit
+   * trail, so the founder can see what stopped and why.
+   */
+  | { op: 'revoke'; columns: string[]; reason: string; revokedColumn?: string };
 
 const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   // ── theirs, wholly ────────────────────────────────────────────────────────
@@ -1181,12 +1198,39 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
     reason: 'carries a person\'s email verbatim; a spent invitation is nobody\'s asset',
   },
 
-  // ── genuinely the owner's call ────────────────────────────────────────────
-  api_keys: { op: 'owner_decision', columns: ['founder_id', 'created_by'], reason: 'a credential the company may be running on' },
-  mcp_grants: { op: 'owner_decision', columns: ['created_by'], reason: 'an authority grant the company may depend on' },
-  webhooks: { op: 'owner_decision', columns: ['founder_id', 'created_by'], reason: 'an integration the company may depend on' },
-  deal_rooms: { op: 'owner_decision', columns: ['created_by'], reason: 'a shared artefact other people are using' },
-  decision_votes: { op: 'owner_decision', columns: ['founder_id'], reason: 'part of the company\'s decision record, on a NOT NULL column, with the person\'s own words in it' },
+  // ── AUTHORITY: revoked, never transferred (owner decision §10) ────────────
+  api_keys: {
+    op: 'revoke', revokedColumn: 'revoked_at', columns: ['founder_id', 'created_by'],
+    reason: 'a credential issued to this person; it must not keep authenticating for them',
+  },
+  mcp_grants: {
+    op: 'revoke', revokedColumn: 'revoked_at', columns: ['created_by'],
+    reason: 'an authority this person granted; it must not keep acting on their say-so',
+  },
+
+  // ── ARTEFACT: preserved, and the author severed (owner decision §10) ──────
+  //
+  // Migration 175 made these three identity columns nullable, which is the
+  // whole reason they sat undecided: not indecision, an absent column state.
+  // NULL says NOBODY. Another founder's id would say somebody who did not do
+  // it, and the owner's decision is explicit that authorship is not reassigned.
+  webhooks: {
+    op: 'sever', columns: ['founder_id', 'created_by'],
+    reason: 'an integration the company may be delivering through; it keeps working and stops naming them',
+  },
+  deal_rooms: {
+    op: 'sever', columns: ['created_by'],
+    reason: 'a shared artefact other people are using; it stays open and stops naming them',
+  },
+  decision_votes: {
+    op: 'sever', columns: ['founder_id'],
+    // The free text stays: `rationale` and `concerns` are the reasoning behind
+    // a company decision, and a decision record stripped of why is not a
+    // truthful record. They are also the person's own words. That tension is
+    // irreducible in engineering and is queued for counsel (§9) rather than
+    // resolved by deleting on a guess or keeping without one.
+    reason: 'a vote genuinely cast; the record stays truthful and stops naming who cast it',
+  },
 };
 
 /** Exported so a test can prove the map is TOTAL against the live schema. */
@@ -1204,10 +1248,31 @@ async function erasePersonAcrossCompanies(founderId: string): Promise<void> {
   const email = who?.email == null ? null : String(who.email);
 
   for (const [table, d] of Object.entries(PERSON_ACROSS_COMPANIES)) {
-    if (d.op === 'owner_decision') continue;          // queued, not guessed
     for (const column of d.columns) {
       if (d.op === 'sever') {
         await query(`UPDATE ${table} SET ${column} = NULL WHERE ${column} = ?`, [founderId]);
+        continue;
+      }
+      if (d.op === 'revoke') {
+        // REVOKE, THEN REMOVE, AND SAY SO WHERE THE COMPANY READS IT.
+        //
+        // Setting the revocation column first means that if anything below
+        // fails, what is left behind is a DEAD credential rather than a live
+        // one — the safe direction for a partial erasure. The record is written
+        // before the row goes, because after it there is nothing to describe.
+        await recordCredentialRevocation(table, column, founderId, d.reason);
+        if (d.revokedColumn) {
+          await query(
+            `UPDATE ${table} SET ${d.revokedColumn} = datetime('now')
+              WHERE ${column} = ? AND ${d.revokedColumn} IS NULL`, [founderId]);
+        }
+        for (const child of await childrenOf(table)) {
+          await query(
+            `DELETE FROM ${child.table} WHERE ${child.column} IN`
+            + ` (SELECT ${child.parentColumn} FROM ${table} WHERE ${column} = ?)`,
+            [founderId]);
+        }
+        await query(`DELETE FROM ${table} WHERE ${column} = ?`, [founderId]);
         continue;
       }
       // CHILDREN FIRST, for the same reason the by-product plan orders itself:
@@ -1228,6 +1293,45 @@ async function erasePersonAcrossCompanies(founderId: string): Promise<void> {
         await query(`DELETE FROM ${table} WHERE ${column} = ?`, [email]);
       }
     }
+  }
+}
+
+/**
+ * Tell the company that a credential stopped working, and why.
+ *
+ * The cost of revoking rather than transferring was named when the decision was
+ * made: a webhook stops delivering, an API key stops authenticating, and the
+ * company did nothing wrong. What makes that acceptable rather than careless is
+ * that it is VISIBLE. A capability disappearing with no explanation is the
+ * silent-breakage failure this campaign keeps finding; the founder's audit page
+ * reads `agent_audit_log`, so this lands where they will see it.
+ *
+ * It names no person. That would defeat the erasure that caused it.
+ */
+async function recordCredentialRevocation(
+  table: string, column: string, founderId: string, reason: string,
+): Promise<void> {
+  const affected = (await query(
+    `SELECT product_id, COUNT(*) AS n FROM ${table}
+      WHERE ${column} = ? AND product_id IS NOT NULL GROUP BY product_id`,
+    [founderId])).rows as unknown as Array<Record<string, unknown>>;
+
+  const { logAudit } = await import('../audit/log.js');
+  for (const row of affected) {
+    await logAudit({
+      product_id: String(row.product_id),
+      actor_type: 'system',
+      actor_id: 'account_erasure',
+      action: 'credential.revoked_on_erasure',
+      resource_type: table,
+      details: {
+        count: Number(row.n),
+        reason,
+        // Deliberately no principal: the account this belonged to has been
+        // erased, and naming it here would undo that.
+        note: 'the account this was issued to was erased; re-establish it if the company still needs it',
+      },
+    });
   }
 }
 

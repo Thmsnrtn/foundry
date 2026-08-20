@@ -139,12 +139,35 @@ describe('the cross-company map is total', () => {
       .toEqual([]);
   });
 
-  it('states a reason for every disposition, including the deferred ones', async () => {
+  it('states a reason for every disposition, and none is deferred any more', async () => {
     const { PERSON_ACROSS_COMPANIES_DISPOSITIONS } = await import(
       '../../src/services/privacy/consent.js');
     for (const [table, d] of Object.entries(PERSON_ACROSS_COMPANIES_DISPOSITIONS)) {
       expect(d.reason.length, `${table} must say why`).toBeGreaterThan(15);
-      expect(d.op).toMatch(/^(delete|sever|owner_decision)$/);
+      // `owner_decision` is gone: the owner answered §10 with split-by-kind —
+      // authority revoked, artefact preserved and its author severed. A
+      // disposition that means "nobody has decided" must not come back without
+      // somebody putting it there on purpose.
+      expect(d.op, `${table}`).toMatch(/^(delete|sever|revoke)$/);
+    }
+  });
+
+  it('never claims a redacted shell is anonymous', async () => {
+    // OWNER INTERIM POSITION (pending counsel on §9): a redacted `products` or
+    // `founders` row is TOMBSTONED AND REDACTED, not proven anonymous. What is
+    // true is what was done to it — columns cleared, email replaced, the
+    // identity-provider handle severed. Whether that satisfies a deletion
+    // request is a legal question about the row, and software must not answer
+    // it in a comment. Held here so the claim cannot drift back in.
+    const { RETAINED_ON_ERASURE_DISPOSITIONS, FOUNDER_SCOPED_REASONS } = await import(
+      '../../src/services/privacy/consent.js');
+    const claims = [
+      ...Object.values(RETAINED_ON_ERASURE_DISPOSITIONS).map((d) => d.basis ?? ''),
+      ...Object.values(FOUNDER_SCOPED_REASONS),
+    ];
+    for (const claim of claims) {
+      expect(claim.toLowerCase(), 'a legal conclusion software may not draw')
+        .not.toMatch(/anonymi[sz]|identifies nobody|no longer identifiable/);
     }
   });
 
