@@ -144,6 +144,24 @@ which they could be offered their data first. `exportFounderData` is derived
 from the same two maps, and the privacy page offers it before it is needed
 rather than after it is too late.
 
+**One vocabulary for who allowed it**, closing the last piece of the two-ledger
+finding. `approved_by` is the field that makes an authorisation attributable and
+it held four spellings of one idea — `founder:<id>`, `institution:assisting`,
+`auto`, `voice:<id>`, `system:playbook`, `autopilot:<category>`, and from the
+dashboard approval a BARE founder id. Nothing misread a founder as an autopilot,
+because both readers that interpret the field happen to key on the `autopilot:`
+prefix; that is a property of which two readers exist, not of the data. Both
+approval doors now refuse a value that names no kind, and refuse it CLOSED — an
+authorisation nobody can be held to is not one. Test fixtures were passing the
+bare word `'founder'`, a role label with nobody behind it, which is the literal
+`'ceo'` defect surviving where nobody was looking.
+
+And the one reader that turns the field into English lived on ONE ledger's page
+and knew only three of the six kinds. The other ledger's page never rendered
+`approved_by` at all: it showed the agent that PROPOSED an action and never who
+ALLOWED it, which is the distinction the constitution turns on. It says
+"proposed by" and "Authorised by" now, from one reader.
+
 **A process failure worth keeping.** The commit before this cycle's work was
 pushed with five tests red: capping `customer_success` at 'suggest' was correct
 and the tests asserting the old behaviour were not updated with it. Validation
@@ -253,16 +271,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    API is unused, "at risk" reduces to `last_active_at` recency. The score is
    honest about what it has; what it has is thin, and no surface says so.
 
-6. **Two ledgers, two spellings for the same principal.** `outbound_actions`
-   and `action_executions` are no longer two EXECUTION paths — the second now
-   enters the gateway — but they remain two ledgers. `approved_by` takes
-   `founder:<id>` in one, and `voice:<id>`, `system:playbook`,
-   `autopilot:<category>` or a bare founder id in the other. Both readers that
-   interpret the field key on the `autopilot:` prefix, so nothing misreads a
-   founder as an autopilot today. One vocabulary written two ways is the shape
-   that ends with a reader agreeing with only one of them.
-
-7. **Two unread outcome predicates.** `shadow_expectation` and
+6. **Two unread outcome predicates.** `shadow_expectation` and
    `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —
    `assisting-admission` reads the comparison rows — so these are redundant
    claims rather than lost learning. The resolution is to say so where they are
@@ -278,7 +287,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    external-metric twin, because having them wired in two places is how one of
    them came to be wired in none.
 
-8. **Adapters for the existing intakes.** The shape is proven; breadth is
+7. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
 
    Related, and now decided rather than open: the same obligation reported
@@ -291,7 +300,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-9. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
+8. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
    functions had no caller anywhere in `src/`. They have been read. What is
    left is 26, and every one of them is accounted for:
 

@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { describePrincipal } from '../../services/outbound/acting-principal.js';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
@@ -283,22 +284,15 @@ function pendingActionCard(action: OutboundActionRecord) {
 /**
  * Who authorised this, as a person reads it.
  *
- * The column stores a principal reference, and the surface rendered it raw. It
- * used to read 'ceo' for every approval by every founder, which was legible and
- * false; storing the actual founder made it true and unreadable. Both halves
- * matter — the record is attributable and the sentence is in English.
+ * MOVED, not rewritten. This was the only reader of the principal vocabulary,
+ * and it lived on the page for ONE of the two ledgers — so the other ledger's
+ * approvals were recorded and never rendered anywhere. It knew about
+ * `founder:`, `auto` and `institution:` and nothing about `voice:`,
+ * `autopilot:` or `system:`, which is what the other ledger writes.
  *
- * An unrecognised value is shown as-is rather than guessed at. A principal this
- * does not know about is exactly the thing somebody should be able to see.
+ * One vocabulary, one reader: `services/outbound/acting-principal.ts`.
  */
-function approverText(approvedBy: string | null, viewerId: string): string {
-  if (!approvedBy) return '-';
-  if (approvedBy === `founder:${viewerId}`) return 'you';
-  if (approvedBy.startsWith('founder:')) return 'another owner';
-  if (approvedBy === 'auto') return 'automatically, after the notice window';
-  if (approvedBy.startsWith('institution:')) return 'Foundry, under a permission you gave';
-  return approvedBy;
-}
+const approverText = describePrincipal;
 
 function actionHistoryRow(action: OutboundActionRecord, viewerId: string) {
   const statusMap: Record<string, string> = {

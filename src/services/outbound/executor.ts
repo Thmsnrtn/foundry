@@ -235,6 +235,15 @@ export async function approveAction(
    *  field. Callers resolve it from the authenticated founder. */
   approvedBy: string,
 ): Promise<{ success: boolean; result?: unknown }> {
+  // ONE VOCABULARY, BOTH LEDGERS. Fails closed for the same reason the other
+  // door does: a value this does not recognise means the record would not say
+  // who authorised the action, and an authorisation nobody can be held to is
+  // not an authorisation.
+  const { isPrincipalRef } = await import('./acting-principal.js');
+  if (!isPrincipalRef(approvedBy)) {
+    throw new Error(`approver is not a principal reference: ${approvedBy}`);
+  }
+
   const now = new Date().toISOString();
 
   // Mark as approved
@@ -270,6 +279,10 @@ export async function approveAction(
 export async function rejectAction(
   actionId: string, decidedBy: string, reason?: string,
 ): Promise<void> {
+  const { isPrincipalRef } = await import('./acting-principal.js');
+  if (!isPrincipalRef(decidedBy)) {
+    throw new Error(`decider is not a principal reference: ${decidedBy}`);
+  }
   const now = new Date().toISOString();
   await query(
     `UPDATE outbound_actions SET

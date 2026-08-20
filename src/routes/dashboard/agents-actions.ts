@@ -14,6 +14,7 @@ import {
   cancelExecution,
   listPendingExecutions,
 } from '../../services/scp/actions/executor.js';
+import { principalRef, describePrincipal } from '../../services/outbound/acting-principal.js';
 import { getAllTemplates, createTemplate } from '../../services/scp/actions/templates.js';
 import { query } from '../../db/client.js';
 import type { ActionType } from '../../services/scp/actions/executor.js';
@@ -194,9 +195,16 @@ agentsActions.get('/agents/actions', async (c) => {
           <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.2rem;flex-wrap:wrap;">
             <span style="font-size:0.72rem;padding:2px 8px;border-radius:99px;${statusBadgeStyle(status)}">${status}</span>
             <span style="font-size:0.79rem;color:var(--text-dim);">${label}</span>
-            ${ex.agent_name ? html`<span style="font-size:0.79rem;color:var(--text-muted);">by ${ex.agent_name}</span>` : ''}
+            ${ex.agent_name ? html`<span style="font-size:0.79rem;color:var(--text-muted);">proposed by ${ex.agent_name}</span>` : ''}
             <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${timeAgo(ex.created_at as string)}</span>
           </div>
+          <!-- WHO PROPOSED IT IS NOT WHO ALLOWED IT. This row showed the
+               agent's name and nothing else, so an action that reached outside
+               the company recorded its authorising principal and no surface
+               read it. An authority a founder cannot see is one they cannot
+               withdraw, and the two words this page used to blur — "by" for the
+               proposer — are the distinction the constitution turns on. -->
+          <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:0.2rem;">Authorised by ${describePrincipal(ex.approved_by as string | null, String(founder.id))}</div>
           ${resultText ? html`<div style="font-size:0.8rem;color:var(--text-dim);">${resultText}</div>` : ''}
           ${ex.error_message ? html`<div style="font-size:0.79rem;color:#ff6b6b;">${ex.error_message}</div>` : ''}
         </div>
@@ -255,7 +263,10 @@ agentsActions.post('/agents/actions/:id/approve',
     // The ownership scope was the only thing keeping a non-owner out, which
     // made approving an outward effect owner-only by accident;
     // `can_trigger_actions` exists to say who may.
-    await approveAndExecute(id, founder.id, { scopeProductId: ctx.productId });
+    // `kind:id`, not a bare id. This was the one caller writing a bare founder
+    // id into a column every other caller filled with a principal reference.
+    await approveAndExecute(id, principalRef('founder', String(founder.id)),
+      { scopeProductId: ctx.productId });
     return c.redirect('/agents/actions?tab=history');
   });
 

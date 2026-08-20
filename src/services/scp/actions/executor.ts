@@ -7,6 +7,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { isPrincipalRef } from '../../outbound/acting-principal.js';
 import { sendSlackNotification } from '../../integration/slack.js';
 import { getIntegration } from '../../integration/fabric.js';
 
@@ -166,6 +167,23 @@ export async function approveAndExecute(
         WHERE id=? AND status='pending'`,
       [`refused before dispatch: ${gate.reason}`, executionId]);
     return { success: false, error: `refused: ${gate.reason}`, effect_certainty: 'not_attempted' };
+  }
+
+  // WHO AUTHORISED THIS, IN THE ONE VOCABULARY. The dashboard passed a BARE
+  // founder id here while every other caller passed `kind:id`, so this column
+  // held four spellings of one idea. Nothing misread a founder as an autopilot
+  // — both readers that interpret the field key on the `autopilot:` prefix —
+  // but that is a property of which two readers exist, not of the data.
+  //
+  // Fails closed: a value this does not recognise is not another sort of
+  // approver, it is "I do not know who authorised this", and the safe answer to
+  // that at an approval door is no.
+  if (!isPrincipalRef(approverId)) {
+    return {
+      success: false,
+      error: `approver is not a principal reference: ${approverId}`,
+      effect_certainty: 'not_attempted',
+    };
   }
 
   // Atomically claim the row: only a 'pending' execution can be approved.

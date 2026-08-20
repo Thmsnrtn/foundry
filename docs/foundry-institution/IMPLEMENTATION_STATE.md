@@ -240,10 +240,12 @@ is not a responsible identity. Both writers now record the acting principal
 principal reference back into a sentence a person can read
 (`agents-integrations.ts:293`).
 
-What is left is smaller and worth stating so it is not rediscovered as a
-defect: the two action regimes still spell the same principal differently. They
-are no longer two EXECUTION paths — `action_executions` sends through the
-gateway now — but they remain two ledgers with two vocabularies.
+The two action regimes are no longer two EXECUTION paths — `action_executions`
+sends through the gateway — and no longer two vocabularies:
+`services/outbound/acting-principal.ts` holds the closed set of principal kinds,
+both approval doors refuse a value that names no kind, and one function turns a
+reference into a sentence for both ledgers' surfaces. They remain two LEDGERS,
+which is a schema question rather than a semantic one.
 `outbound_actions.approved_by` takes `founder:<id>`, while
 `action_executions.approved_by` takes `voice:<id>`, `system:playbook`,
 `autopilot:<category>` — and, from the dashboard approval, a **bare** founder

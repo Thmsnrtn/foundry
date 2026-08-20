@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { principalRef } from '../../src/services/outbound/acting-principal.js';
 import { executeRaw, query } from '../../src/db/client.js';
 import { runMigrations } from '../../src/db/migrate.js';
 
@@ -33,7 +34,7 @@ beforeEach(async () => {
 
 async function run(payload: ActionPayload) {
   const id = await createExecution('p1', null, payload);
-  const result = await approveAndExecute(id, 'founder-1');
+  const result = await approveAndExecute(id, principalRef('founder', 'founder-1'));
   const row = (await query('SELECT * FROM action_executions WHERE id=?', [id])).rows[0] as Record<string, unknown>;
   return { id, result, row };
 }
@@ -68,7 +69,7 @@ describe('approved action runtime effect certainty', () => {
     const { id, row } = await run(linearPayload);
     expect(row.effect_certainty).toBe('ambiguous');
     expect(row.reconcile_after).toBeTruthy();
-    await expect(approveAndExecute(id, 'founder-1')).resolves.toMatchObject({ success: false });
+    await expect(approveAndExecute(id, principalRef('founder', 'founder-1'))).resolves.toMatchObject({ success: false });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 

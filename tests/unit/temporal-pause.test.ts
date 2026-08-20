@@ -24,6 +24,10 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+// `approved_by` takes a principal reference — a kind AND an id. These
+// fixtures passed the bare word 'founder', which is a role label with nobody
+// behind it: the same shape as the literal 'ceo' this field used to hold.
+import { principalRef } from '../../src/services/outbound/acting-principal.js';
 import { nanoid } from 'nanoid';
 
 import { runMigrations } from '../../src/db/migrate.js';
@@ -88,7 +92,7 @@ describe('a pause reaches work that was already queued', () => {
     await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
 
     // 4pm.
-    const result = await approveAndExecute(id, 'founder', { scopeProductId: P });
+    const result = await approveAndExecute(id, principalRef('founder', F), { scopeProductId: P });
     expect(result.success).toBe(false);
     expect(slackSpy, 'the pause has to reach the queue, not only the plan')
       .not.toHaveBeenCalled();
@@ -101,7 +105,7 @@ describe('a pause reaches work that was already queued', () => {
     await query(
       `UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?`, [P]);
 
-    expect((await approveAndExecute(id, 'founder', { scopeProductId: P })).success).toBe(false);
+    expect((await approveAndExecute(id, principalRef('founder', F), { scopeProductId: P })).success).toBe(false);
     expect(slackSpy).not.toHaveBeenCalled();
   });
 
@@ -111,7 +115,7 @@ describe('a pause reaches work that was already queued', () => {
     await query(
       `UPDATE products SET status='archived', scp_status='archived' WHERE id=?`, [P]);
 
-    expect((await approveAndExecute(id, 'founder', { scopeProductId: P })).success).toBe(false);
+    expect((await approveAndExecute(id, principalRef('founder', F), { scopeProductId: P })).success).toBe(false);
     expect(slackSpy).not.toHaveBeenCalled();
   });
 
@@ -119,7 +123,7 @@ describe('a pause reaches work that was already queued', () => {
     // The half that says the guard is not simply refusing everything.
     const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
     const id = await queueWhileOperating();
-    expect((await approveAndExecute(id, 'founder', { scopeProductId: P })).success).toBe(true);
+    expect((await approveAndExecute(id, principalRef('founder', F), { scopeProductId: P })).success).toBe(true);
     expect(slackSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -127,13 +131,13 @@ describe('a pause reaches work that was already queued', () => {
     const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
     const id = await queueWhileOperating();
     await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
-    await approveAndExecute(id, 'founder', { scopeProductId: P });
+    await approveAndExecute(id, principalRef('founder', F), { scopeProductId: P });
 
     // A fresh action after resuming: the refused one is terminal, and that is
     // the honest outcome rather than a queue that silently re-fires.
     await query(`UPDATE products SET scp_status='active' WHERE id=?`, [P]);
     const next = await queueWhileOperating();
-    expect((await approveAndExecute(next, 'founder', { scopeProductId: P })).success).toBe(true);
+    expect((await approveAndExecute(next, principalRef('founder', F), { scopeProductId: P })).success).toBe(true);
   });
 });
 

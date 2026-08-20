@@ -24,6 +24,10 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+// `approved_by` takes a principal reference — a kind AND an id. These
+// fixtures passed the bare word 'founder', which is a role label with nobody
+// behind it: the same shape as the literal 'ceo' this field used to hold.
+import { principalRef } from '../../src/services/outbound/acting-principal.js';
 import { nanoid } from 'nanoid';
 
 import { runMigrations } from '../../src/db/migrate.js';
@@ -78,7 +82,7 @@ describe('an approved action still asks whether the company may act', () => {
     const id = await execution();
     await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
 
-    const result = await approveAndExecute(id, 'founder', { ownerId: F });
+    const result = await approveAndExecute(id, principalRef('founder', F), { ownerId: F });
     expect(result.success).toBe(false);
     expect(slackSpy, 'nothing may leave the building').not.toHaveBeenCalled();
 
@@ -95,7 +99,7 @@ describe('an approved action still asks whether the company may act', () => {
     await query(
       `UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?`, [P]);
 
-    expect((await approveAndExecute(id, 'founder', { ownerId: F })).success).toBe(false);
+    expect((await approveAndExecute(id, principalRef('founder', F), { ownerId: F })).success).toBe(false);
     expect(slackSpy).not.toHaveBeenCalled();
   });
 
@@ -105,7 +109,7 @@ describe('an approved action still asks whether the company may act', () => {
     await query(
       `UPDATE products SET status='archived', scp_status='archived' WHERE id=?`, [P]);
 
-    expect((await approveAndExecute(id, 'founder', { ownerId: F })).success).toBe(false);
+    expect((await approveAndExecute(id, principalRef('founder', F), { ownerId: F })).success).toBe(false);
     expect(slackSpy).not.toHaveBeenCalled();
   });
 
@@ -115,7 +119,7 @@ describe('an approved action still asks whether the company may act', () => {
     const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
     const id = await execution();
 
-    const result = await approveAndExecute(id, 'founder', { ownerId: F });
+    const result = await approveAndExecute(id, principalRef('founder', F), { ownerId: F });
     expect(result.success, 'an operating company may still act').toBe(true);
     expect(slackSpy).toHaveBeenCalledTimes(1);
     expect((await statusOf(id)).status).toBe('completed');
@@ -129,10 +133,10 @@ describe('an approved action still asks whether the company may act', () => {
     const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
     const id = await execution();
     await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
-    await approveAndExecute(id, 'founder', { ownerId: F });
+    await approveAndExecute(id, principalRef('founder', F), { ownerId: F });
 
     await query(`UPDATE products SET scp_status='active' WHERE id=?`, [P]);
-    const second = await approveAndExecute(id, 'founder', { ownerId: F });
+    const second = await approveAndExecute(id, principalRef('founder', F), { ownerId: F });
     expect(second.success, 'a cancelled execution is finished, not queued').toBe(false);
     expect(slackSpy).not.toHaveBeenCalled();
   });
