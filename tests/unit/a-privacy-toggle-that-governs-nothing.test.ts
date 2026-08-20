@@ -9,7 +9,10 @@ import { query } from '../../src/db/client.js';
 import {
   MIN_CONTRIBUTORS, refreshPercentiles, submitBenchmark,
 } from '../../src/services/benchmarking/pool.js';
-import { recordConsent } from '../../src/services/privacy/consent.js';
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { stripComments } from '../../scripts/lib/strip-comments.mjs';
+import { RECORDED_PREFERENCE_ONLY, recordConsent } from '../../src/services/privacy/consent.js';
 
 // =============================================================================
 // A CONTROL THE FOUNDER CAN SET MUST GOVERN SOMETHING.
@@ -130,6 +133,22 @@ describe('what the founder is promised', () => {
     expect(shown).toContain('five different companies');
   });
 
+  it('no longer claims a scale nobody measured, or a control that is not offered', () => {
+    const page = readFileSync(
+      resolve(__dirname, '../../src/routes/dashboard/privacy.ts'), 'utf8');
+    // Rendered strings only. The comments beside them quote the old copy on
+    // purpose, and a scan that read those would be checking the explanation.
+    const shown = stripComments(page, { lineComments: true });
+
+    expect(shown, 'a scale nobody counted').not.toContain('hundreds of products');
+    expect(shown, 'an eligibility floor is not a statistic')
+      .not.toContain('statistical patterns');
+    // The funnel records a named founder either way, so the page may not imply
+    // that switching this off means nothing about usage is recorded.
+    expect(shown).not.toContain('anonymized usage patterns');
+    expect(shown).toContain('regardless of this setting');
+  });
+
   it('cannot grant the one consent the code enforces elsewhere, which is why that path is dead', async () => {
     // `decisions/patterns.ts` gates the peer decision signal on
     // `cross_company_patterns`. That type is in the TypeScript union and NOT in
@@ -139,5 +158,51 @@ describe('what the founder is promised', () => {
     await company('bp_check', false);
     await expect(recordConsent('bp_check', 'f_bp_check', 'cross_company_patterns' as never, true))
       .rejects.toThrow();
+  });
+});
+
+describe('every toggle in the vocabulary', () => {
+  // The union is the vocabulary; read from the source because a type is erased
+  // at runtime and this test is about what the type CLAIMS.
+  const consentSource = readFileSync(
+    resolve(__dirname, '../../src/services/privacy/consent.ts'), 'utf8');
+  const declared = [...consentSource
+    .slice(consentSource.indexOf('export type ConsentType ='),
+      consentSource.indexOf(';', consentSource.indexOf('export type ConsentType =')))
+    .matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+
+  const srcFiles = (dir: string): string[] => readdirSync(dir).flatMap((e) => {
+    const p = join(dir, e);
+    return statSync(p).isDirectory() ? srcFiles(p) : p.endsWith('.ts') ? [p] : [];
+  });
+  // Comments in this codebase quote the defect they describe, and a scan that
+  // read them would find every type "consulted" by its own explanation.
+  const code = srcFiles('src')
+    .filter((f) => !f.endsWith('services/privacy/consent.ts'))
+    .map((f) => stripComments(readFileSync(f, 'utf8'), { lineComments: true }))
+    .join('\n');
+
+  it('is a vocabulary the test can actually see', () => {
+    expect(declared).toContain('benchmark_contribution');
+    expect(declared.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('is either consulted somewhere, or a recorded preference with a reason', () => {
+    const unaccounted = declared.filter((type) => {
+      const consulted = new RegExp(`hasConsent\\([^)]*'${type}'`).test(code);
+      const reason = (RECORDED_PREFERENCE_ONLY as Record<string, string | undefined>)[type];
+      return !consulted && !(reason && reason.length > 20);
+    });
+    expect(unaccounted,
+      'a control the founder can set must govern something, or say why it does not')
+      .toEqual([]);
+  });
+
+  it('does not let a path claim exemption while also being consulted', () => {
+    // Both would mean the register is describing something other than the code.
+    for (const type of Object.keys(RECORDED_PREFERENCE_ONLY)) {
+      expect(new RegExp(`hasConsent\\([^)]*'${type}'`).test(code),
+        `${type} claims to gate nothing, but something gates on it`).toBe(false);
+    }
   });
 });

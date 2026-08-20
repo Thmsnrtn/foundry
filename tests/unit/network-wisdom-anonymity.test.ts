@@ -247,10 +247,27 @@ describe('a cross-company claim records how it was made', () => {
   });
 });
 
+describe('who receives a cross-company claim', () => {
+  it('is a company that asked for one', async () => {
+    // The privacy page offers "Aggregate Insights" and nothing read it:
+    // contributing was consented while RECEIVING was governed by nothing, so a
+    // company that had left the switch off was served insights anyway. Fails
+    // closed, and the default is off.
+    const { getRelevantInsights } = await import('../../src/services/wisdom/network.js');
+    expect(await getRelevantInsights('pv_p1'),
+      'a company that never asked for cross-company insight does not get one')
+      .toEqual([]);
+  });
+});
+
 describe('an old claim is not a current one', () => {
   it('is not injected into a prompt once its observations have aged out', async () => {
     const { getRelevantInsights, INSIGHT_FRESHNESS_DAYS } = await import(
       '../../src/services/wisdom/network.js');
+    // Receiving is gated on the receiving company's own consent now. This test
+    // is about FRESHNESS, so the consent is granted and the age is the variable.
+    const { recordConsent } = await import('../../src/services/privacy/consent.js');
+    await recordConsent('pv_p0', 'pv_f0', 'aggregate_insights', true);
     expect(await getRelevantInsights('pv_p0'), 'fresh insight is served')
       .not.toHaveLength(0);
 

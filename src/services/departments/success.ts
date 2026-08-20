@@ -146,7 +146,19 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
     const consent = mode === 'act' ? await activeConsent(productId, CATEGORY) : null;
 
     if (mode === 'act' && consent) {
-      await approveAndExecute(execId, 'autopilot:customer_success');
+      // THE BOUNDARY MAY REFUSE, AND THIS USED TO COUNT THE REFUSAL AS A SEND.
+      // The result was discarded and `sent` incremented unconditionally, so a
+      // company with no sender of record, a paused subscription, or a customer
+      // who had asked not to be contacted still read "sent" in the letter and
+      // still had an attribution entry saying Foundry wrote to them on the
+      // founder's behalf. A refused effect is a proposal that did not happen.
+      const outcome = await approveAndExecute(execId, 'autopilot:customer_success');
+      if (!outcome.success) {
+        log.warn('customer success send refused at the boundary',
+          { productId, executionId: execId, error: outcome.error });
+        result.proposed++;
+        continue;
+      }
       // Verified action (Jarvis axis 1): declare what success means BEFORE
       // the consequences arrive. The independent sweep checks in 7 days;
       // failure logs a defect AND demotes this category one rung.

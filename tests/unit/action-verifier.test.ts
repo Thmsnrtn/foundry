@@ -115,7 +115,8 @@ describe('a proposal is not an act, and declares nothing', () => {
     // THIS USED TO ASSERT THAT IT ACTED AND CARRIED CRITERIA. `customer_success`
     // is now capped at 'suggest' — it reaches third parties by the same post as
     // outreach, and its absence from the cap table was an omission rather than
-    // a decision. So the founder's 'act' produces a proposal, and a proposal
+    // a decision. What a send costs the founder is the reason, not anything
+    // about how the churn score is computed: it is deterministic. So the founder's 'act' produces a proposal, and a proposal
     // has no outcome to declare success criteria for: declaring them would be
     // asserting that something happened.
     //

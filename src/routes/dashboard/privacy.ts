@@ -142,16 +142,32 @@ privacySettings.get('/privacy', async (c) => {
       learnMore: 'Contributions are stored against your company so you can erase them — they are not anonymous at rest, and saying otherwise would be untrue. What leaves the pool is only an aggregate, and only once at least five different companies are in the same segment. Below that, nothing is published.',
     },
     {
+      // TWO CLAIMS WERE UNTRUE AND ONE CONTROL DID NOTHING. Nothing read this
+      // toggle: contribution to the wisdom network was consented separately
+      // while RECEIVING was governed by nothing, so a company that left this
+      // off was served insights anyway. It governs the reading now
+      // (`wisdom/network.ts`). "Hundreds of products" was a scale nobody
+      // measured, and "statistical patterns" was an eligibility floor of five
+      // companies rather than a statistic — the same overstatement this page
+      // already corrected one toggle above.
       name: 'aggregate_insights',
       label: 'Aggregate Insights',
-      description: 'Receive insights derived from anonymized data across all Foundry products in your category.',
-      learnMore: 'Insights are generated from statistical patterns across hundreds of products. No individual product data is ever revealed.',
+      description: 'Receive insights drawn from what other Foundry companies in your category decided, and what happened. Off unless you turn it on.',
+      learnMore: 'An insight is published only once at least five different companies are behind it, and it carries the number that was measured rather than a claim of statistical significance. It is a peer signal, not evidence about your company.',
     },
     {
+      // THIS DESCRIBED A CHOICE THE CODE DOES NOT OFFER. Foundry's own funnel
+      // analytics (`telemetry/funnel.ts`) record a NAMED founder's progression
+      // through signup, audit, briefing, decision, trial and paid — whether or
+      // not this is on, and not anonymised. Whether first-party product
+      // analytics should be consent-gated is a product and legal position, not
+      // an engineering mechanism, so it is queued as an owner decision and the
+      // copy says what actually happens meanwhile. Describing a control that
+      // does not exist is worse than not offering one.
       name: 'product_improvement',
       label: 'Help Improve Foundry',
-      description: 'Allow Foundry to use your anonymized usage patterns to improve the product for everyone.',
-      learnMore: 'This covers feature usage, navigation patterns, and error rates — never your business data or customer information.',
+      description: 'Let Foundry look at how you use it — beyond the basic account activity it records either way — to improve the product.',
+      learnMore: 'Foundry records your progress through setup and subscription against your account regardless of this setting, because it is how the service is run and billed. This toggle covers anything beyond that: feature usage and navigation detail. It never covers your business data or your customers.',
     },
     {
       name: 'ai_training_opt_out',

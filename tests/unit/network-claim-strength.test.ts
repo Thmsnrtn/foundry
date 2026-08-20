@@ -50,6 +50,12 @@ beforeAll(async () => {
   await query(
     `INSERT INTO products (id, name, owner_id, status, sector_profile, growth_stage)
      VALUES (?,'Claim Co',?, 'active','marketplace','growth')`, [P, F]);
+  // Receiving cross-company insight is now gated on the receiving company's own
+  // Aggregate Insights consent — the toggle used to govern nothing, so a
+  // company that left it off was served them anyway. This file is about what a
+  // served claim may SAY, so it consents and moves on.
+  const { recordConsent } = await import('../../src/services/privacy/consent.js');
+  await recordConsent(P, F, 'aggregate_insights', true);
 });
 
 describe('the generator does not command a claim the data cannot carry', () => {

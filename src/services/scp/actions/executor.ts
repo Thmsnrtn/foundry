@@ -320,6 +320,58 @@ export async function listPendingExecutions(productId: string): Promise<Array<{
 
 // ─── Internal Execution Router ────────────────────────────────────────────────
 
+/**
+ * Send through the one governed execution boundary.
+ *
+ * The dedup key is the execution id: this row is the at-most-once unit, and a
+ * retry of the same execution is the same send rather than a second one.
+ */
+async function executeGovernedEmail(
+  executionId: string,
+  productId: string,
+  payload: ActionPayload,
+): Promise<ExecutionResult> {
+  const to = String(payload.to_email ?? '').trim();
+  if (!to) return { success: false, error: 'no recipient', effect_certainty: 'not_attempted' };
+
+  // Importing the integration is what registers the capability on the gateway's
+  // process-global registry. Without it the gateway answers 'no_handler', which
+  // would look like a missing provider rather than a missing import.
+  await import('../../integration/resend.js');
+  const { invoke } = await import('../../outbound/gateway.js');
+
+  const res = await invoke({
+    productId,
+    tool: 'send_email',
+    action: `customer email: ${String(payload.subject ?? '').slice(0, 120)}`,
+    params: { to: [to], subject: payload.subject ?? '', html: payload.body ?? '' },
+    dedupKey: `action_execution:${executionId}`,
+    customerExternalId: to,
+    surface: 'email_outbound',
+    dataClass: 'customer',
+  });
+
+  if (res.ok) {
+    return {
+      success: true,
+      integration_response: res.result,
+      effect_certainty: 'provider_acknowledged',
+    };
+  }
+  // 'execution' is the only phase where something may have reached the outside
+  // world. Every other refusal is definitively nothing attempted, and booking
+  // reconciliation work for it would invent an effect to chase.
+  const ambiguous = res.phase === 'execution';
+  return {
+    success: false,
+    error: `${res.phase}: ${res.reason}`,
+    effect_certainty: ambiguous ? 'ambiguous' : 'not_attempted',
+    reconcile_after: ambiguous
+      ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      : null,
+  };
+}
+
 async function executeAction(
   executionId: string,
   payload: ActionPayload
@@ -345,19 +397,29 @@ async function executeAction(
       return executeWebhook(payload);
 
     case 'send_email':
-      // Draft-only today (no live third-party send path exists). When live
-      // sending is wired, the send boundary MUST call assertSenderOfRecord
-      // (services/outbound/sender-of-record.ts): a third-party recipient
-      // requires the founder's own connected sender, never a Foundry domain.
-      return {
-        success: true,
-        integration_response: {
-          note: 'Email draft stored. Email provider integration pending.',
-          to: payload.to_email,
-          subject: payload.subject,
-          body_preview: (payload.body ?? '').slice(0, 200),
-        },
-      };
+      // ONE GOVERNED BOUNDARY, NOT TWO — AND THIS ONE USED TO CLAIM A SEND IT
+      // HAD NOT MADE.
+      //
+      // This returned `success: true` with the note "Email draft stored. Email
+      // provider integration pending." Nothing was sent. The caller then marked
+      // the execution 'completed', and the customer-success department counted
+      // it as `sent` and wrote an attribution entry reading "Foundry sent a
+      // check-in on the founder's behalf under consent <id>". A live third-party
+      // send path DID exist the whole time — `integration/resend.ts`, registered
+      // on the outbound gateway, with the sender-of-record rule, the kill
+      // switch, the entitlement pause, classification, idempotency, receipts and
+      // effect certainty.
+      //
+      // So the second regime is routed into the first rather than given its own
+      // provider call. Nothing here decides safety: the registered capability
+      // policy does, which is the point of having one boundary.
+      //
+      // A REFUSAL IS NOT A FAILURE TO RECONCILE. The gateway distinguishes
+      // 'refused' — the handler declined before touching a provider, so
+      // definitively nothing left the building — from 'execution', where the
+      // outcome is unknown. That distinction is carried through as effect
+      // certainty rather than flattened into `success: false`.
+      return executeGovernedEmail(executionId, productId, payload);
 
     case 'schedule_call':
       return {

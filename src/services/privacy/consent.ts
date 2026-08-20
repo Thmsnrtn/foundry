@@ -13,6 +13,38 @@ export type ConsentType =
   | 'ai_training_opt_out'
   | 'cross_company_patterns';
 
+/**
+ * A CONSENT THAT NOTHING READS IS NOT A CONTROL.
+ *
+ * Four of these five once governed nothing: a founder could switch off
+ * benchmark contribution and keep contributing, switch off cross-company
+ * patterns and keep supplying them, switch off aggregate insights and keep
+ * receiving them. Each was found separately, which is why the rule is stated
+ * here rather than in any one of them.
+ *
+ * Every consent type is either CONSULTED — some production path calls
+ * `hasConsent` with it and behaves differently — or listed below as a recorded
+ * preference with a reason. The list is short on purpose and the test
+ * `a-privacy-toggle-that-governs-nothing` holds it against the vocabulary, so
+ * a new toggle cannot be added to the privacy page without one or the other.
+ */
+export const RECORDED_PREFERENCE_ONLY: Partial<Record<ConsentType, string>> = {
+  // There is no training pipeline. Nothing in this repository trains a model on
+  // anything, so there is no path to gate — the toggle is what the privacy page
+  // says it is: a formal, auditable record of the founder's preference, kept so
+  // that if a training path is ever proposed it meets an existing answer.
+  ai_training_opt_out:
+    'no training path exists to gate; the row is the auditable preference itself',
+  // Foundry's own first-party funnel analytics (`telemetry/funnel.ts`) record a
+  // NAMED founder's progression regardless of this toggle. Whether first-party
+  // product analytics should be consent-gated is a product and legal position
+  // rather than an engineering mechanism, so it is queued in
+  // `OWNER_DECISIONS_PENDING.md` §14 and the privacy page has been corrected in
+  // the meantime to describe what actually happens.
+  product_improvement:
+    'first-party funnel analytics are not gated on it; owner decision §14 pending',
+};
+
 export type ConsentSummary = {
   benchmark_contribution: boolean;
   aggregate_insights: boolean;

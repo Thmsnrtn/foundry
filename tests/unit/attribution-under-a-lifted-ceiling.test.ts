@@ -7,8 +7,8 @@ import { describe, it, expect, beforeAll, vi } from 'vitest';
 // WHAT THE ACT BRANCH DOES, WHEN SOMETHING LETS IT RUN.
 //
 // `customer_success` is capped at 'suggest' by the platform (`platform-cap.ts`)
-// because a per-person churn score assigned by a model, with no confidence and
-// no evidence reference, was choosing which NAMED CUSTOMERS got an email daily.
+// because it reaches third parties by the same post as outreach, and a send
+// puts the founder's domain, reputation and liability behind the message.
 // That cap is an owner-controlled ceiling, and it makes the department's act
 // branch — consent gate, execution, declared success criteria, attribution
 // trail — unreachable in production today.
@@ -45,6 +45,19 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { setPolicy } from '../../src/services/autopilot/policy.js';
 import { hasActConsent } from '../../src/services/autopilot/consent.js';
+import { registerToolHandler } from '../../src/services/outbound/gateway.js';
+import { SEND_EMAIL_POLICY } from '../../src/services/integration/resend.js';
+
+// The department's send now goes through the ONE governed boundary rather than
+// a draft-only stub that returned success. So a provider has to be standing
+// there for the act path to complete — which is itself the point: without one,
+// nothing is sent and nothing may say it was.
+let dispatched = 0;
+const provider = (ok: boolean) => registerToolHandler(
+  'send_email',
+  async () => { if (!ok) throw new Error('provider down'); dispatched += 1; return { message_id: 'm1' }; },
+  SEND_EMAIL_POLICY,
+);
 
 beforeAll(async () => {
   await runMigrations();
@@ -70,8 +83,34 @@ describe('with the ceiling hypothetically lifted', () => {
     expect(res.proposed).toBe(1);
   });
 
+  it('does not call a refused send a send', async () => {
+    // The boundary refuses when the handler throws — no sender of record, a
+    // paused company, a provider outage. This used to be counted as `sent`
+    // regardless, with an attribution entry saying Foundry had written to the
+    // customer on the founder's behalf. A refused effect is a proposal that did
+    // not happen.
+    await query("DELETE FROM action_executions WHERE product_id='lc_p'", []);
+    await query("DELETE FROM audit_log WHERE product_id='lc_p'", []);
+    provider(false);
+    await setPolicy('lc_p', 'customer_success', 'suggest', 'lc_f');
+    await setPolicy('lc_p', 'customer_success', 'act', 'lc_f');
+
+    const { runSuccessSweep } = await import('../../src/services/departments/success.js');
+    const res = await runSuccessSweep('lc_p');
+    expect(res.sent, 'nothing reached anybody').toBe(0);
+    expect(res.proposed).toBe(1);
+
+    const attribution = await query(
+      `SELECT id FROM audit_log WHERE product_id='lc_p' AND action_type='attribution:customer_success'`, [],
+    );
+    expect(attribution.rows, 'nothing acted, so nothing is attributed').toEqual([]);
+  });
+
   it('acts under consent, and the act is attributable to it', async () => {
     await query("DELETE FROM action_executions WHERE product_id='lc_p'", []); // clear dedup
+    await query("DELETE FROM audit_log WHERE product_id='lc_p'", []);
+    dispatched = 0;
+    provider(true);
     // A realistic transition INTO act from below is what records fresh consent.
     await setPolicy('lc_p', 'customer_success', 'suggest', 'lc_f');
     await setPolicy('lc_p', 'customer_success', 'act', 'lc_f');
@@ -80,6 +119,7 @@ describe('with the ceiling hypothetically lifted', () => {
     const { runSuccessSweep } = await import('../../src/services/departments/success.js');
     const res = await runSuccessSweep('lc_p');
     expect(res.sent).toBe(1);
+    expect(dispatched, 'and something actually reached the provider').toBe(1);
 
     const attribution = (await query(
       `SELECT reasoning, input_context FROM audit_log

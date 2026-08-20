@@ -48,14 +48,18 @@ const PLATFORM_CAP: Record<string, AutopilotMode> = {
   outreach: 'suggest',
   // Customer success reaches third parties too, and by the same post. It was
   // absent from this table, so it defaulted to 'act': a per-person churn score
-  // — assigned by a model, with no confidence and no evidence reference —
   // selected which named customers got an email, daily, with nobody in the
   // loop.
   //
-  // The reasoning above is not about outreach. It is about what a send costs
-  // the founder: their domain, their reputation, their liability. That is
-  // identical here, and the asymmetry was an omission rather than a decision.
-  // Nothing about this category was ever argued to be different.
+  // CORRECTION TO AN EARLIER VERSION OF THIS NOTE, which called that score
+  // "assigned by a model". It is not. `computeCustomerHealth` derives it
+  // deterministically from `customer_events` and `last_active_at`
+  // (`services/customers/intelligence.ts`), and the cap does not rest on the
+  // score's provenance. It rests on what a send costs the founder: their
+  // domain, their reputation, their liability — identical to outreach, which
+  // is capped for exactly that reason. The asymmetry was an omission rather
+  // than a decision, and nothing about this category was ever argued to be
+  // different.
   customer_success: 'suggest',
   // Any future money-touching capability caps here, permanently (immutable:
   // never auto-move money without explicit, recent, revocable consent).

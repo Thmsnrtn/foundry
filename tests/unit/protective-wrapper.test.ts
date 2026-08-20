@@ -36,9 +36,9 @@ describe('primitive 1 — autonomy is a lattice: min(setting, platform cap)', ()
     expect(effectiveMode('act', 'billing')).toBe('shadow');
 
     // customer success reaches third parties by the same post as outreach, and
-    // was absent from the table — so it defaulted to 'act' and a model-assigned
-    // churn score chose which named customers got mail. It is capped now, and
-    // this asserts the cap rather than the old default.
+    // was absent from the table — so it defaulted to 'act' and a churn score
+    // chose which named customers got mail. It is capped now, and this asserts
+    // the cap rather than the old default.
     expect(platformCap('customer_success')).toBe('suggest');
     expect(effectiveMode('act', 'customer_success')).toBe('suggest');
 

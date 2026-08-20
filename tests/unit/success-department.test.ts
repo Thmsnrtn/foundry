@@ -80,12 +80,11 @@ describe('the trust ladder governs the department', () => {
 
   it('act: the founder may grant it, and the platform cap still holds it', async () => {
     // THIS USED TO ASSERT THAT IT SENT. `customer_success` was absent from the
-    // platform cap table, so it defaulted to 'act': a per-person churn score
-    // assigned by a model, with no confidence and no evidence reference,
-    // selected which NAMED CUSTOMERS got an email, daily, with nobody in the
-    // loop. Outreach was capped at 'suggest' for reaching third parties; this
-    // reaches the same third parties by the same post, and the asymmetry was
-    // an omission rather than a decision.
+    // platform cap table, so it defaulted to 'act': a churn score selected
+    // which NAMED CUSTOMERS got an email, daily, with nobody in the loop.
+    // Outreach was capped at 'suggest' for reaching third parties; this reaches
+    // the same third parties by the same post, and the asymmetry was an
+    // omission rather than a decision.
     //
     // So the founder's setting is honoured as far as the ceiling allows and no
     // further: the work is proposed, and a person decides it goes.

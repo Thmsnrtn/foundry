@@ -255,8 +255,22 @@ Return an empty array if the rows show no pattern worth describing.`;
 
 /**
  * Get insights relevant to a specific product's sector, stage, and challenges.
+ *
+ * THE RECEIVING COMPANY'S TOGGLE NOW GOVERNS THE RECEIVING. The privacy page
+ * offers "Aggregate Insights — receive insights derived from data across all
+ * Foundry products in your category", and nothing read it: contribution was
+ * consented through `wisdom_network_opted_in` while receipt was governed by
+ * nothing at all, so a company that had left the switch off was served them
+ * anyway. That is the fourth control this campaign has found promising a data
+ * choice it did not make.
+ *
+ * Fails closed, and the default is off — a company that has not asked for
+ * cross-company insight does not get one.
  */
 export async function getRelevantInsights(productId: string): Promise<CrossProductInsight[]> {
+  const { hasConsent } = await import('../privacy/consent.js');
+  if (!(await hasConsent(productId, 'aggregate_insights'))) return [];
+
   const product = await query('SELECT sector_profile, growth_stage FROM products WHERE id = ?', [productId]);
   const p = product.rows[0] as Record<string, string> | undefined;
   if (!p) return [];
