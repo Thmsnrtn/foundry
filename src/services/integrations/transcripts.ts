@@ -7,6 +7,11 @@
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
+// THE STRUCTURED LOGGER, NOT `console`. Both lines below carry an error that may
+// quote the transcript — which is a customer speaking — and the logger is where
+// redaction and the log budget live. The ratchet caught this: a comment here
+// once claimed a console line was "the honest end of the road", and it was not.
+import { log } from '../../lib/logger.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -142,7 +147,10 @@ export async function analyzeTranscript(transcriptId: string): Promise<void> {
   const callType = row.call_type as string;
   const participants = (row.participant_emails as string | null) ?? '';
 
-  if (!transcriptText) return;
+  if (!transcriptText) {
+    await recordAnalysisFailure(transcriptId, 'transcript_empty');
+    return;
+  }
 
   const systemPrompt = `You are an expert at analyzing business call transcripts. Extract structured insights and return ONLY valid JSON with no markdown formatting.
 
@@ -182,7 +190,12 @@ ${transcriptText.slice(0, 12000)}
          objections_json = ?,
          commitments_json = ?,
          summary = ?,
-         processed_at = datetime('now')
+         processed_at = datetime('now'),
+         -- A retry that succeeds clears the earlier failure. Migration 178's
+         -- trigger refuses a row that is both analysed and failed, so this is
+         -- not tidiness — without it the write is rejected.
+         analysis_failed_at = NULL,
+         analysis_failure_reason = NULL
        WHERE id = ?`,
       [
         analysis.sentiment,
@@ -195,7 +208,81 @@ ${transcriptText.slice(0, 12000)}
       ],
     );
   } catch (err) {
-    console.error('[transcripts] analyzeTranscript error:', err);
+    // A FAILURE THAT LOOKED EXACTLY LIKE A CALM STATE. This was a console line,
+    // and all three callers wrap this function in `.catch(() => {})`, so it was
+    // swallowed twice. `processed_at IS NULL` meant both "not analysed yet" and
+    // "analysed and failed", and nothing could tell them apart — the founder
+    // saw a call with no summary and no indication Foundry had tried.
+    //
+    // The reason is classified from the shape of the failure, never from the
+    // error's text: an error message may quote the transcript, which is
+    // customer speech, and migration 178's CHECK would refuse it anyway.
+    log.error('transcript analysis failed', err, { transcriptId });
+    await recordAnalysisFailure(transcriptId, classifyAnalysisFailure(err));
+  }
+}
+
+/** Why an analysis did not produce a result. A closed vocabulary this system
+ *  owns — see migration 178. */
+export type AnalysisFailureReason =
+  | 'transcript_empty'
+  | 'model_unavailable'
+  | 'response_unparseable'
+  | 'response_out_of_bounds'
+  | 'could_not_store';
+
+export const ANALYSIS_FAILURE_LABELS: Record<AnalysisFailureReason, string> = {
+  transcript_empty: 'the call arrived with no transcript to read',
+  model_unavailable: 'the analysis could not be run just now',
+  response_unparseable: 'the analysis came back in a form I could not read',
+  response_out_of_bounds: 'the analysis came back outside what I accept',
+  could_not_store: 'the analysis was made and could not be saved',
+};
+
+/**
+ * Which of the closed reasons this failure is.
+ *
+ * MATCHED AGAINST THE MESSAGES THE CODE ACTUALLY THROWS, not against a guess at
+ * them. A first version of this matched `^AI response schema validation failed`
+ * and `SyntaxError`, and classified an unparseable model response as
+ * `model_unavailable` — because `parseJSONResponse` WRAPS the SyntaxError, so
+ * the name is `Error` and the prefix is `Failed to parse AI JSON response`. The
+ * test caught it. Both real prefixes are in `services/ai/client.ts:599,606`.
+ *
+ * Classifying on message text is fragile and it is what is available here; the
+ * mitigation is that the fallback is the least specific claim (`the analysis
+ * could not be run`), never a confident wrong one, and that the reasons are a
+ * closed set the database enforces.
+ */
+function classifyAnalysisFailure(err: unknown): AnalysisFailureReason {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/^Failed to parse AI JSON response/.test(message)
+      || /^AI response schema validation failed/.test(message)) {
+    return 'response_unparseable';
+  }
+  if (/SQLITE_|no such column|constraint failed/i.test(message)) return 'could_not_store';
+  return 'model_unavailable';
+}
+
+/**
+ * Record that an analysis was attempted and did not produce a result.
+ *
+ * Never throws: this runs inside a catch, and a failure to record a failure
+ * must not replace the original one. It goes to the structured logger, which is
+ * where redaction lives — an error at this point may carry the transcript.
+ */
+async function recordAnalysisFailure(
+  transcriptId: string, reason: AnalysisFailureReason,
+): Promise<void> {
+  try {
+    await query(
+      `UPDATE call_transcripts
+          SET analysis_failed_at = datetime('now'), analysis_failure_reason = ?
+        WHERE id = ?`,
+      [reason, transcriptId],
+    );
+  } catch (err) {
+    log.error('could not record transcript analysis failure', err, { transcriptId });
   }
 }
 

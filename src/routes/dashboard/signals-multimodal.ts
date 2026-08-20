@@ -296,6 +296,24 @@ multimodalSignals.get('/signals/multimodal/transcript/:id', async (c) => {
   const objections: string[] = t['objections_json'] ? JSON.parse(String(t['objections_json'])) : [];
   const commitments: string[] = t['commitments_json'] ? JSON.parse(String(t['commitments_json'])) : [];
 
+  // WHAT THE FOUNDER SAW WHEN ANALYSIS FAILED: nothing. No summary, no
+  // objections, no commitments — identical to a call that had not been analysed
+  // yet, because both states were `processed_at IS NULL`. The failure was a
+  // console line swallowed twice. It says so now, in one sentence, with the
+  // reason from a closed vocabulary rather than a raw error that could quote
+  // the customer's own words back at them.
+  const { ANALYSIS_FAILURE_LABELS } = await import('../../services/integrations/transcripts.js');
+  const failureReason = t['analysis_failure_reason']
+    ? String(t['analysis_failure_reason']) : null;
+  const failureNote = failureReason
+    ? (ANALYSIS_FAILURE_LABELS as Record<string, string>)[failureReason] ?? failureReason
+    : null;
+  // WHEN it failed, not only that it did. A failure an hour old and one three
+  // weeks old mean different things — the first may be worth retrying and the
+  // second says something is persistently wrong with this connection.
+  const failedAt = t['analysis_failed_at'] ? String(t['analysis_failed_at']).slice(0, 16) : null;
+  const notAnalysedYet = !t['processed_at'] && !failureReason;
+
   const content = html`
     <div class="page-header">
       <a href="/signals/multimodal?tab=transcripts" class="back-link">← Transcripts</a>
@@ -303,6 +321,19 @@ multimodalSignals.get('/signals/multimodal/transcript/:id', async (c) => {
     </div>
     <div class="detail-grid">
       <div class="detail-main">
+        ${failureNote ? html`
+          <div class="insight-card" style="border:1px solid #ffb347;">
+            <h3 style="color:#ffb347;">I could not analyse this call</h3>
+            <p>${failureNote}${failedAt ? html`, when I tried on ${failedAt}` : ''}.
+               The recording and the transcript are untouched, and nothing below is
+               missing because there was nothing in the call &mdash; it is missing
+               because the reading of it did not finish.</p>
+          </div>` : ''}
+        ${notAnalysedYet ? html`
+          <div class="insight-card">
+            <h3>Not analysed yet</h3>
+            <p>This call is here and I have not read it yet.</p>
+          </div>` : ''}
         ${t['summary'] ? html`<div class="insight-card"><h3>Summary</h3><p>${String(t['summary'])}</p></div>` : ''}
         ${objections.length > 0 ? html`
           <div class="insight-card">

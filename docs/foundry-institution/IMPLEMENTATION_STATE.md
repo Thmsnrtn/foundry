@@ -283,6 +283,20 @@ proven is that the path now connects, and that the outcome verifier no longer
 abstains on a customer it could not find — the latter mutation-tested, since
 its failure mode was a silent pass rather than an error.
 
+**Calls.** Transcript ingestion is live (RESOLVED 5), `/signals/multimodal` is
+mounted, and its detail page renders the extracted summary, objections,
+competitor mentions and commitments. That sense reaches a PERSON and must not
+reach the institution by extraction: migration 126 forbids inferring an
+obligation from free-form chat, which is what a model reading commitments out
+of a call would be. If it is ever taken further, the founder reports the
+obligation through the existing explicit intake and chooses the kind from the
+closed set themselves.
+
+A failed analysis is now a state of its own (migration 178) rather than being
+indistinguishable from one that has not run. The reason is a closed vocabulary
+enforced by CHECK, for the same reason migration 170 gave: a transcript is
+customer speech and an error message may quote it.
+
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope |

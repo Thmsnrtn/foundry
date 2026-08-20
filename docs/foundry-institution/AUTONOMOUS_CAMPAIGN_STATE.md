@@ -240,6 +240,37 @@ hand-set `is_champion = 1`. The production job marks a champion at
 `health_score > 80` and would never have marked either row. Every rail below it
 was exercised; the thing that decides WHO gets written to was not.
 
+**A failed reading looked exactly like a calm one.** `analyzeTranscript` ended
+in `console.error`, and all three of its live callers — the Fathom webhook, the
+Fireflies webhook, the manual upload page — wrap it in `.catch(() => {})`.
+Swallowed twice. The consequence was not a missing log: `processed_at IS NULL`
+meant BOTH "not analysed yet" AND "analysed and failed", so a founder opened a
+call, saw no summary and no insights, and there was no state in which Foundry
+said it had tried. Migration 178 records the attempt with a closed reason
+vocabulary — the shape, never the content, because a raw error can quote the
+transcript and a transcript is a customer speaking — and two triggers keep the
+row coherent: never both analysed and failed, never a failure without a reason.
+
+**Two things checked rather than assumed, and both corrected me.** This list had
+recorded that transcripts "reach one dashboard page and nothing else" and
+proposed wiring extracted commitments into responsibility discovery. The page is
+mounted and does render them; and migration 126 settles the rest — *"nothing
+inferred from free-form chat: the founder states the kind explicitly, and
+ambiguity stays conversation."* Building what the note proposed would have
+violated it. Separately, I suspected the analysis spent money silently:
+`callSonnet` is passed the product id and routes through the reserving AI
+client, so the spend is accounted, and the prompt already carries a proper
+untrusted-data boundary. What is true is narrower — a call that succeeded and
+then failed to PARSE was paid for and left nothing behind.
+
+**And the failure classifier matched a prefix I had guessed at.** It tested for
+`SyntaxError` and `^AI response schema validation failed`, so an unparseable
+model response was recorded as `model_unavailable` — `parseJSONResponse` wraps
+the SyntaxError, making the name `Error` and the prefix `Failed to parse AI JSON
+response`. The test caught it. Classifying on message text is fragile; the
+mitigation is that the fallback is the least specific claim, never a confident
+wrong one.
+
 **A process failure worth keeping.** The commit before this cycle's work was
 pushed with five tests red: capping `customer_success` at 'suggest' was correct
 and the tests asserting the old behaviour were not updated with it. Validation
@@ -362,28 +393,34 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    `outreach_suppressions` one that is consulted at the boundary. Retire the
    column or fold it in; do not leave a third.
 
-6. **A company's customer calls reach one dashboard page and nothing else.**
-   `POST /api/v1/webhooks` made Fathom/Fireflies transcript ingestion live
-   (RESOLVED 5), so real customer call content arrives. `analyzeTranscript`
-   extracts sentiment, topics, competitor mentions, objections and
-   **commitments — "next steps/commitments"** — into `call_transcripts`. The
-   only reader outside its own writer is `routes/dashboard/signals-multimodal.ts`.
+6. **The transcript sense: NOT a gap. Corrected before it was built on.**
 
-   A commitment the company made to a customer on a call is institutional by
-   nature: it is an obligation taken on. But **it must not become a
-   responsibility by extraction** — migrations 126 and 135–138 forbid Foundry
-   inferring responsibilities, which is exactly why the candidate-recognition
-   chain is deliberately unwired. A model reading intent out of a transcript is
-   the same shape as reading "stop emailing me" out of a customer's reply.
+   This list said a company's customer calls "reach one dashboard page and
+   nothing else", and proposed wiring extracted commitments into responsibility
+   discovery through a founder question. **Both halves were wrong**, and the
+   check that found it was reading the code rather than trusting the note.
 
-   **The coherent connection, worked out and not yet built:** an extracted
-   commitment becomes a QUESTION to the founder through the existing founder
-   evidence path — *"on the call with X on the 3rd it sounded like you committed
-   to Y; did you?"* — and only the founder's answer is a recorded fact. That
-   keeps recorded-not-inferred, gives the sense a reader that acts, and costs
-   the founder one bounded question rather than a queue. The extraction is
-   already there; what is missing is the question and the answer's route into
-   discovery.
+   `/signals/multimodal` is mounted (`index.ts:516`) and its transcript detail
+   page renders the extracted commitments, objections and competitor mentions
+   (`signals-multimodal.ts:295-297`). The sense reaches a person.
+
+   And it must not reach further by extraction. Migration 126 states the
+   boundary in the words that settle it: *"nothing inferred from free-form
+   chat: the founder states the kind explicitly, and ambiguity stays
+   conversation."* A transcript is free-form speech. Proposing a responsibility
+   from a model's reading of it — even for confirmation — is the thing that
+   sentence forbids, and it is the same reason the candidate-recognition chain
+   is deliberately unwired.
+
+   **The correct shape, if this is ever taken further:** the founder reports the
+   obligation through the existing explicit intake, choosing the kind from the
+   closed set themselves. Foundry may show them what it heard. It may not
+   choose the kind for them, and it may not pre-fill one.
+
+   What is genuinely worth checking here, and has not been: whether a founder is
+   told a transcript arrived at all, or must navigate to the page to find out.
+   That is a "where does a person read this" question about NOTICE, and it can
+   be answered without inferring anything.
 
 7. **Two unread outcome predicates.** `shadow_expectation` and
    `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —
