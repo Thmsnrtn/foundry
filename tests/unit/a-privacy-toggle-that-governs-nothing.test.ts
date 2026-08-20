@@ -143,10 +143,16 @@ describe('what the founder is promised', () => {
     expect(shown, 'a scale nobody counted').not.toContain('hundreds of products');
     expect(shown, 'an eligibility floor is not a statistic')
       .not.toContain('statistical patterns');
-    // The funnel records a named founder either way, so the page may not imply
-    // that switching this off means nothing about usage is recorded.
-    expect(shown).not.toContain('anonymized usage patterns');
-    expect(shown).toContain('regardless of this setting');
+    // The funnel used to record a named founder either way. The owner's §14
+    // decision split it: service state is disclosed as always-recorded, and the
+    // usage half is now genuinely gated. The page may claim neither more nor
+    // less than that.
+    expect(shown, 'the usage half was never anonymised, and is now hashed rather than absent')
+      .not.toContain('anonymized usage patterns');
+    expect(shown, 'the always-recorded half is disclosed in plain words')
+      .toContain('what it needs to run and bill your account');
+    expect(shown, 'and off means not written, not written-and-ignored')
+      .toContain('nothing is written');
   });
 
   it('cannot grant the one consent the code enforces elsewhere, which is why that path is dead', async () => {

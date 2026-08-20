@@ -156,18 +156,17 @@ privacySettings.get('/privacy', async (c) => {
       learnMore: 'An insight is published only once at least five different companies are behind it, and it carries the number that was measured rather than a claim of statistical significance. It is a peer signal, not evidence about your company.',
     },
     {
-      // THIS DESCRIBED A CHOICE THE CODE DOES NOT OFFER. Foundry's own funnel
-      // analytics (`telemetry/funnel.ts`) record a NAMED founder's progression
-      // through signup, audit, briefing, decision, trial and paid — whether or
-      // not this is on, and not anonymised. Whether first-party product
-      // analytics should be consent-gated is a product and legal position, not
-      // an engineering mechanism, so it is queued as an owner decision and the
-      // copy says what actually happens meanwhile. Describing a control that
-      // does not exist is worse than not offering one.
+      // THIS DESCRIBED A CHOICE THE CODE DID NOT OFFER, and now it offers it.
+      // Foundry's own funnel recorded a NAMED founder's whole progression
+      // whether or not this was on. The owner's decision is to split rather
+      // than gate the lot: service, billing and configuration state stays
+      // ungated and is disclosed here in those words, and the usage half is
+      // recorded ONLY with this consent — not filtered later, not recorded at
+      // all — and then against a contributor hash rather than a name.
       name: 'product_improvement',
       label: 'Help Improve Foundry',
-      description: 'Let Foundry look at how you use it — beyond the basic account activity it records either way — to improve the product.',
-      learnMore: 'Foundry records your progress through setup and subscription against your account regardless of this setting, because it is how the service is run and billed. This toggle covers anything beyond that: feature usage and navigation detail. It never covers your business data or your customers.',
+      description: 'Let Foundry learn from how you use it. Off means the usage half is not recorded at all, rather than recorded and ignored.',
+      learnMore: 'Foundry always records what it needs to run and bill your account: that you signed up, connected a repo, started a trial, and paid. That is service state, not analytics, and a switch over it would not be a real choice. This toggle covers the rest — completing an audit, opening a briefing, approving a decision. With it on, those are stored against a one-way hash rather than your name, and they go when your account does. With it off, nothing is written.',
     },
     {
       name: 'ai_training_opt_out',
