@@ -56,7 +56,15 @@ export async function getSevenDayResponsibilitySummary(
   for (const row of (await query(
     `SELECT responsibility_id,revoked_at FROM autonomy_consents
       WHERE product_id=? AND responsibility_id IS NOT NULL
-      ORDER BY accepted_at DESC, id DESC`, [productId],
+      -- Ties break on INSERTION ORDER, not on id. accepted_at is
+      -- second-granular and consent ids are nanoids, so a founder who revoked a
+      -- permission and immediately granted a new one had "which grant is the
+      -- last one" decided by which random id sorted higher — and the view then
+      -- told them they had taken a permission away when they had just restored
+      -- it and let it run out. Third instance of this shape in one campaign:
+      -- reconstruction claims by claim id, reply proposals by content hash,
+      -- and this.
+      ORDER BY accepted_at DESC, rowid DESC`, [productId],
   )).rows as unknown as Array<Record<string, unknown>>) {
     const rid = String(row.responsibility_id);
     if (!lastGrantRevoked.has(rid)) lastGrantRevoked.set(rid, row.revoked_at != null);

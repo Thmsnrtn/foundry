@@ -124,7 +124,10 @@ export async function discoverResponsibilityFromSignal(
       WHERE r.product_id=? AND r.title=? AND r.capability=? AND r.disposition='active'
         AND ((r.due_at IS NULL AND ? IS NULL) OR r.due_at=?)
         AND e.source=?
-      ORDER BY r.created_at,r.id LIMIT 1`,
+      -- Oldest first, by INSERTION ORDER. Two responsibilities cannot both be
+      -- the convergence target, and a nanoid tiebreak would pick between them
+      -- at random.
+      ORDER BY r.created_at,r.rowid LIMIT 1`,
     [productId, contract.title, contract.capability, due?.at ?? null, due?.at ?? null,
       String(row.source)],
   );
