@@ -21,15 +21,6 @@ import { log } from '../../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface EmailMetrics {
-  sent: number;
-  delivered: number;
-  opened: number;
-  clicked: number;
-  open_rate: number;
-  click_rate: number;
-}
-
 interface SendEmailParams {
   to: string[];
   subject: string;
@@ -52,73 +43,19 @@ export async function isResendConnected(productId: string): Promise<boolean> {
   return integration !== null && integration.status === 'active';
 }
 
-// ─── Email Queuing ────────────────────────────────────────────────────────────
-
-/**
- * Queue an email to be sent by creating an outbound_action record.
- * Returns the outbound_action ID.
- */
-export async function queueEmail(
-  productId: string,
-  params: {
-    agent_name: string;
-    to: string | string[];
-    subject: string;
-    html: string;
-    rationale: string;
-    confidence?: number;
-    authority_level?: number;
-  },
-): Promise<string> {
-  const id = nanoid();
-  const authorityLevel = params.authority_level ?? 2;
-  const confidence = params.confidence ?? 0.8;
-  const toList = Array.isArray(params.to) ? params.to : [params.to];
-
-  const parameters = {
-    to: toList,
-    subject: params.subject,
-    html: params.html,
-  };
-
-  const previewText = `Send email to ${toList.join(', ')}: "${params.subject}"`;
-
-  // Expires in 48 hours by default (emails become stale)
-  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-  const now = new Date().toISOString();
-
-  const status = authorityLevel === 0 ? 'approved' : 'pending_approval';
-
-  await query(
-    `INSERT INTO outbound_actions (
-      id, product_id, agent_name, integration_name, action_type,
-      authority_level, status, parameters_json, preview_text, rationale,
-      confidence, expires_at, created_at
-    ) VALUES (?, ?, ?, 'resend', 'send_email', ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      productId,
-      params.agent_name,
-      authorityLevel,
-      status,
-      JSON.stringify(parameters),
-      previewText,
-      params.rationale,
-      confidence,
-      expiresAt,
-      now,
-    ],
-  );
-
-  // Update outbound_actions count on integration
-  await query(
-    `UPDATE integrations SET total_outbound_actions = total_outbound_actions + 1, updated_at = ?
-     WHERE product_id = ? AND name = 'resend'`,
-    [now, productId],
-  );
-
-  return id;
-}
+// ─── Email Queuing — REMOVED ─────────────────────────────────────────────────
+//
+// `queueEmail` created an `outbound_actions` row from an authority level the
+// CALLER supplied, and wrote `status='approved'` when that level was zero. It
+// carried no responsibility, so `assisted_action_plan_guard` — which fires only
+// when `responsibility_id` is present — never looked at it. A caller could
+// therefore certify its own authority and mark the action approved, which is
+// the one thing the outbound boundary exists to refuse.
+//
+// Nothing in `src/` or `tests/` called it. It was a door standing open in a
+// wall nobody had walked through yet, and deleting it removes no capability:
+// the governed path is `planAssistedSupportEmail` -> `executeAssistedSupportEmail`,
+// which binds a responsibility, an exact live consent, and a scope.
 
 // ─── Email Execution (gateway-routed) ─────────────────────────────────────────
 
@@ -483,56 +420,20 @@ export const SEND_EMAIL_POLICY = {
 } as const;
 registerToolHandler('send_email', sendEmailHandler, SEND_EMAIL_POLICY);
 
-// ─── Email Metrics ────────────────────────────────────────────────────────────
-
-/**
- * Get email performance metrics from stored events.
- */
-export async function getEmailMetrics(
-  productId: string,
-  days: number = 30,
-): Promise<EmailMetrics> {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-
-  // Count executed email actions
-  const sentResult = await query(
-    `SELECT COUNT(*) as count FROM outbound_actions
-     WHERE product_id = ? AND integration_name = 'resend' AND action_type = 'send_email'
-       AND status = 'executed' AND executed_at >= ?`,
-    [productId, since],
-  );
-  const sent = ((sentResult.rows[0] as Record<string, unknown>)?.count as number) ?? 0;
-
-  // Count delivery/open/click events from integration_events (Resend webhooks)
-  const eventResult = await query(
-    `SELECT event_type, COUNT(*) as count FROM integration_events
-     WHERE product_id = ? AND integration_name = 'resend' AND created_at >= ?
-     GROUP BY event_type`,
-    [productId, since],
-  );
-
-  let delivered = 0;
-  let opened = 0;
-  let clicked = 0;
-
-  for (const row of eventResult.rows) {
-    const r = row as Record<string, unknown>;
-    const eventType = r.event_type as string;
-    const count = r.count as number;
-
-    if (eventType === 'email.delivered') delivered += count;
-    if (eventType === 'email.opened') opened += count;
-    if (eventType === 'email.clicked') clicked += count;
-  }
-
-  // Provider acceptance is not delivery. With no independently ingested
-  // delivery event the business outcome remains unknown, never inferred.
-
-  const open_rate = delivered > 0 ? Math.round((opened / delivered) * 100) / 100 : 0;
-  const click_rate = delivered > 0 ? Math.round((clicked / delivered) * 100) / 100 : 0;
-
-  return { sent, delivered, opened, clicked, open_rate, click_rate };
-}
+// ─── Email Metrics — REMOVED ─────────────────────────────────────────────────
+//
+// `getEmailMetrics` counted `email.delivered` / `email.opened` events from
+// `integration_events`. Nothing writes those: there is no Resend webhook intake,
+// and the only writer of that table is the fabric's `storeEvent`, called by Slack
+// and Sentry. So the function returned delivered=0 and open_rate=0 for every
+// company, always — presenting UNKNOWN as a measured zero, which is the
+// epistemic error the rest of this system is built to refuse. It had no caller
+// anywhere, so it never told anybody that.
+//
+// DELIVERY EVIDENCE IS STILL WORTH HAVING, and this is not it. A provider
+// delivery or bounce event is exactly the independently observed outcome the
+// effect layer wants, and it needs a real webhook intake with signature
+// verification — an external surface, not a counter over an empty table.
 
 /** Exposed for tests. The determination is the load-bearing half of the
  * sender-of-record rule — the rule itself is four lines — and it reads the
