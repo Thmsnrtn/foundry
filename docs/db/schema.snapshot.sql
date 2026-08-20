@@ -447,6 +447,7 @@
     JOIN autonomy_consents a ON a.id=NEW.authority_consent_id
     JOIN institutional_responsibilities r ON r.id=a.responsibility_id
     JOIN institutional_responsibilities r ON r.id=x.responsibility_id
+    JOIN products pr ON pr.id = NEW.product_id
     JOIN reconstruction_claims claim
     JOIN responsibility_candidates replacement ON replacement.id=NEW.superseded_by_candidate_id
     JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
@@ -750,6 +751,7 @@
    WHERE NEW.evidence_ref IS NOT NULL AND NOT EXISTS (
    WHERE NEW.outcome_ref IS NOT NULL AND NOT EXISTS (
    WHERE NEW.outcome_ref IS NOT NULL AND NOT EXISTS (
+   WHERE p.id = NEW.principal_id AND pr.owner_id = p.created_by
   ) AND NOT EXISTS (
   ) AND NOT EXISTS (
   )));
@@ -891,6 +893,7 @@
   -- JSON object keyed by agent name containing the signal or flag that was raised
   -- Key terms
   -- Lifecycle stage
+  -- Mandatory. A credential with no end is one nobody ever revisits.
   -- Meta
   -- Meta
   -- Meta
@@ -904,6 +907,7 @@
   -- No echo. An external observer cannot know what it is being compared
   -- No high-consequence development authority exists at this evidence level.
   -- Only a real institutional judgment of this product may be dispositioned.
+  -- Only the hash. The secret is shown once, at issuance, and never again.
   -- Optional unit, again the founder's words: 'boats', 'classes', 'orders'.
   -- Outcome fields (populated when measured)
   -- Output
@@ -928,7 +932,11 @@
   -- Scoped to `assisting` deliberately. A FIRST grant is made from Shadowing
   -- Sections (all JSON or Markdown)
   -- Session-derived identity is verified against the real product owner. A
+  -- Severable. The room stays open for the people using it.
+  -- Severable. The vote was genuinely cast and the record stays truthful about
+  -- Severable. The webhook keeps delivering; it stops naming the person.
   -- Shared
+  -- Stable per person, and the only identifier here. Never a founder id.
   -- Stakeholder breakdown (JSON array of {name, type, shares, options, pct_ownership})
   -- State
   -- Status
@@ -976,6 +984,7 @@
   -- What the agent saw
   -- When a send through this identity was last accepted by the provider.
   -- Which provider account the mail goes through. Closed vocabulary: adding a
+  -- Who this was issued to, in words a person can check against reality.
   -- Widening the ring requires a new migration, which is itself inside the
   -- Writing a reply is not deciding what Foundry may do with it. A proposal
   -- `resource_demand` is responsibility-scoped and `resource_capacity` is
@@ -1078,6 +1087,7 @@
   -- tenant's signal would be an attribution leak in both directions.
   -- tenant's signal would be an attribution leak in both directions.
   -- than stored and ignored — the shape of the attempt is the problem, and a
+  -- that; who cast it goes with them.
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
   -- the evidence must be this company's own — a credential justified by another
   -- the field quietly dropped.
@@ -1150,6 +1160,8 @@
   ON custom_webhook_sources(product_id, is_active);
   ON data_classifications(product_id, surface);
   ON decision_patterns(market_category, product_lifecycle_stage, contributor_hash);
+  ON ecosystem_principal_companies(principal_id, product_id);
+  ON ecosystem_principals(key_hash);
   ON envelope_usage(product_id, scope, week_starting);
   ON experiment_holdouts(product_id, is_active);
   ON experiment_results_timeline(experiment_id, checkpoint_date);
@@ -1175,6 +1187,8 @@
   ON outreach_suppressions(product_id, email);
   ON phase_beta_proposals(blocked_during_freeze_id);
   ON phase_beta_proposals(product_id, status);
+  ON product_telemetry_events(contributor_hash, step);
+  ON product_telemetry_events(step, created_at);
   ON product_voice_fingerprints(product_id) WHERE status = 'active';
   ON product_voice_fingerprints(product_id, status, version DESC);
   ON product_webhooks(product_id, enabled);
@@ -1209,12 +1223,14 @@
   PRIMARY KEY (key, window_start)
   PRIMARY KEY (product_id, prompt, condition_name)
   PRIMARY KEY (scope, scope_id, date)
+  SELECT 1 FROM ecosystem_principals p
   SELECT 1 FROM json_each(NEW.evidence_refs_json) refs WHERE NOT EXISTS (
   SELECT 1 FROM strategic_decisions_log d WHERE d.id=NEW.judgment_id AND d.product_id=NEW.product_id);
   SELECT RAISE(ABORT, 'ai_spend_ceiling:founder') WHERE NEW.founder_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:global') WHERE COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:product') WHERE NEW.product_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'candidate_status:no_decision') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT, 'ecosystem_principal:company_not_in_issuers_portfolio');
   SELECT RAISE(ABORT, 'judgment_disposition:append_only') WHERE EXISTS (
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
@@ -1408,6 +1424,7 @@
   UNIQUE(integration_id, secret_key)
   UNIQUE(metric, market_category, lifecycle_stage, mrr_bracket)
   UNIQUE(portfolio_id, product_id)
+  UNIQUE(principal_id, product_id)
   UNIQUE(product_id)
   UNIQUE(product_id)
   UNIQUE(product_id, agent_name)
@@ -1853,7 +1870,7 @@
   computed_at TEXT NOT NULL DEFAULT (datetime('now'))
   computed_at TEXT NOT NULL DEFAULT (datetime('now')),
   concerns TEXT,
-  concerns TEXT,               -- JSON: string[] of specific concerns
+  concerns TEXT,
   condition TEXT,
   condition_met BOOLEAN DEFAULT FALSE,
   condition_name TEXT NOT NULL,
@@ -1927,6 +1944,7 @@
   contributing_signals_json TEXT NOT NULL,  -- JSON array of signal descriptions
   contribution_margin REAL,
   contribution_margin REAL,
+  contributor_hash TEXT NOT NULL,
   control_description TEXT NOT NULL,
   control_mean     REAL,
   control_n        INTEGER,           -- observations in control group at checkpoint
@@ -2006,6 +2024,8 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2119,8 +2139,10 @@
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_at TEXT NOT NULL,
   created_by   TEXT NOT NULL,               -- founder id
+  created_by TEXT
   created_by TEXT DEFAULT 'system',
   created_by TEXT NOT NULL REFERENCES founders(id),
+  created_by TEXT REFERENCES founders(id),
   credential   TEXT NOT NULL,
   credentials TEXT,
   credentials_json TEXT,
@@ -2195,7 +2217,7 @@
   decision_id TEXT NOT NULL REFERENCES decisions(id),
   decision_id TEXT REFERENCES decisions(id),
   decision_id TEXT,                         -- decisions.id when applicable
-  decision_ids TEXT,                   -- JSON: decision_id[] to share
+  decision_ids TEXT,
   decision_rationale      TEXT,
   decision_source TEXT NOT NULL DEFAULT 'strategic'
   decision_source TEXT NOT NULL,  -- 'action_execution' | 'strategic_decision' | 'override'
@@ -2364,8 +2386,8 @@
   event_type TEXT NOT NULL,                 -- 'click' | 'signup' | 'paid'
   event_type TEXT NOT NULL,   -- 'churn_detected' | 'expansion_signal' | 'nps_drop' | 'activation_failure' | 'revenue_milestone' | 'competitor_signal' | 'support_spike' | 'payment_failed'
   event_types_json TEXT NOT NULL,           -- JSON array of WebhookEventType
+  events TEXT NOT NULL,
   events TEXT NOT NULL,                -- JSON: string[] of event types
-  events TEXT NOT NULL, -- JSON array of event types
   evidence        TEXT,                         -- what falsified it (the observed value)
   evidence TEXT NOT NULL,
   evidence TEXT,
@@ -2418,6 +2440,7 @@
   expires_at   DATETIME NOT NULL,
   expires_at DATETIME NOT NULL
   expires_at DATETIME NOT NULL
+  expires_at DATETIME NOT NULL,
   expires_at DATETIME NOT NULL,
   expires_at DATETIME,
   expires_at DATETIME,        -- Actions become stale after this
@@ -2497,8 +2520,6 @@
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
-  founder_id TEXT NOT NULL REFERENCES founders(id),
-  founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL UNIQUE,
   founder_id TEXT NOT NULL,
   founder_id TEXT NOT NULL,
@@ -2518,6 +2539,8 @@
   founder_id TEXT PRIMARY KEY REFERENCES founders(id),
   founder_id TEXT PRIMARY KEY REFERENCES founders(id),
   founder_id TEXT PRIMARY KEY REFERENCES founders(id),
+  founder_id TEXT REFERENCES founders(id),
+  founder_id TEXT REFERENCES founders(id),
   founder_id TEXT,
   founder_id TEXT,
   founder_notes TEXT,                         -- free-form: "remove the qualifier", "best version so far"
@@ -2563,6 +2586,7 @@
   global_cap_cents REAL NOT NULL,
   gmv REAL,
   granted INTEGER NOT NULL DEFAULT 0, -- 1=granted, 0=denied
+  granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   granted_at TEXT,
   gross_margin REAL,
   grounding_evidence_json TEXT NOT NULL,
@@ -2643,6 +2667,9 @@
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -2931,8 +2958,10 @@
   key_gaps TEXT,                       -- JSON: string[] — what's blocking raise readiness
   key_gaps_json TEXT NOT NULL, -- JSON array of gaps
   key_hash TEXT UNIQUE NOT NULL,
+  key_hash TEXT UNIQUE NOT NULL,
   key_metrics_context TEXT NOT NULL, -- JSON: anonymized metric ranges
   key_persons TEXT,
+  key_prefix TEXT NOT NULL,
   key_prefix TEXT NOT NULL,
   key_quotes TEXT, -- JSON: array of {quote, theme}
   key_result_id   TEXT NOT NULL REFERENCES key_results(id),
@@ -2947,6 +2976,7 @@
   label             TEXT NOT NULL,
   label         TEXT NOT NULL,
   label TEXT NOT NULL,
+  label TEXT NOT NULL,
   label TEXT NOT NULL,                       -- e.g. "Acquisition: 200 trial signups/mo"
   last_accepted_at DATETIME,
   last_active_at DATETIME,
@@ -2960,7 +2990,7 @@
   last_contacted_by TEXT,               -- Agent name
   last_delivered_at DATETIME,
   last_delivered_at DATETIME,
-  last_delivery_at DATETIME
+  last_delivery_at DATETIME,
   last_demoted_at       DATETIME,
   last_demotion_reason  TEXT,
   last_dispatch_at TEXT,
@@ -2995,6 +3025,7 @@
   last_updated TEXT NOT NULL DEFAULT (datetime('now'))
   last_updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   last_used_at  TEXT,
+  last_used_at DATETIME
   last_used_at DATETIME,
   last_viewed_at DATETIME,
   last_viewed_at DATETIME,
@@ -3392,7 +3423,7 @@
   preferences TEXT,
   preferred_channel TEXT DEFAULT 'email',
   preferred_length TEXT DEFAULT 'medium',
-  preferred_option TEXT,       -- which option they'd choose
+  preferred_option TEXT,
   preferred_region TEXT NOT NULL DEFAULT 'us-east' CHECK (preferred_region IN ('us-east','us-west','eu-west','ap-southeast')),
   preferred_timezone    TEXT NOT NULL DEFAULT 'UTC',
   premise         TEXT NOT NULL,               -- the belief, in the founder's words
@@ -3409,6 +3440,7 @@
   primary_icp TEXT,
   primary_objection TEXT,
   primary_use_case TEXT,
+  principal_id TEXT NOT NULL REFERENCES ecosystem_principals(id) ON DELETE CASCADE,
   prior_content_digest  TEXT,
   prior_existed         INTEGER,
   priority INTEGER DEFAULT 5,    -- 1=critical, 10=low
@@ -3465,6 +3497,7 @@
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -3638,6 +3671,7 @@
   product_id TEXT,
   product_id TEXT,
   product_id TEXT,
+  product_id TEXT,
   product_id TEXT,                     -- nullable, no FK: created pre-product during onboarding
   product_lifecycle_stage TEXT NOT NULL,
   progress_pct     INTEGER NOT NULL DEFAULT 0,  -- 0-100
@@ -3689,7 +3723,7 @@
   rationale TEXT NOT NULL,    -- Why the agent proposes this action
   rationale TEXT,
   rationale TEXT,
-  rationale TEXT,              -- why they voted this way
+  rationale TEXT,
   re_audit_completed_at DATETIME,
   re_audit_triggered_at DATETIME,
   reaction    TEXT NOT NULL CHECK(reaction IN ('opened', 'acted', 'dismissed')),
@@ -3798,6 +3832,7 @@
   revoked_at    TEXT,
   revoked_at   DATETIME,
   revoked_at DATETIME
+  revoked_at DATETIME,
   risk_alignment REAL,
   risk_assessment TEXT,
   risk_state TEXT NOT NULL DEFAULT 'green' CHECK(risk_state IN ('green', 'yellow', 'red')),
@@ -4034,6 +4069,7 @@
   status TEXT NOT NULL DEFAULT 'unknown', -- 'healthy' | 'degraded' | 'stale' | 'error' | 'unknown'
   status_code INTEGER,
   step        TEXT NOT NULL,
+  step TEXT NOT NULL,
   step_label    TEXT NOT NULL DEFAULT 'Starting…',
   strategic_fork_scenarios TEXT,
   strategic_rationale TEXT, -- why this acquirer would want us
@@ -4363,6 +4399,11 @@
  evidence_refs_json TEXT NOT NULL, economic_result_json TEXT NOT NULL, learned_claim_id TEXT REFERENCES reconstruction_claims(id),
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
+)
+);
+);
+);
+);
 );
 );
 );
@@ -4612,7 +4653,6 @@
 , paid_through TEXT);
 , payload_json TEXT, attempt_count INTEGER, failed_at DATETIME, effect_certainty TEXT, provider_acknowledged_at TEXT, reconcile_after TEXT);
 , pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT, success_threshold REAL, outcome TEXT, winning_variant_id TEXT, concluded_at DATETIME);
-, product_id TEXT, created_by TEXT);
 , product_id TEXT, role TEXT, scopes TEXT, created_by TEXT, expires_at TEXT);
 , progress REAL);
 , provenance_json TEXT, observed_through TEXT);
@@ -4640,6 +4680,7 @@ BEFORE INSERT ON company_observation_channels
 BEFORE INSERT ON cost_events
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON development_change_plans
+BEFORE INSERT ON ecosystem_principal_companies
 BEFORE INSERT ON founder_evidence_requests
 BEFORE INSERT ON governed_effect_kinds
 BEFORE INSERT ON inbound_customer_messages
@@ -4699,6 +4740,7 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4901,6 +4943,8 @@ CREATE INDEX idx_decisions_product_gate ON decisions(product_id, gate);
 CREATE INDEX idx_decisions_product_status ON decisions(product_id, status);
 CREATE INDEX idx_decisions_status ON decisions(status);
 CREATE INDEX idx_development_change_responsibility ON development_change_plans(product_id,responsibility_id,created_at);
+CREATE INDEX idx_ecosystem_principal_companies_lookup
+CREATE INDEX idx_ecosystem_principals_hash
 CREATE INDEX idx_effect_outcome_reports
 CREATE INDEX idx_envelope_usage_lookup
 CREATE INDEX idx_ethics_product ON ethical_assessment(product_id);
@@ -5019,6 +5063,7 @@ CREATE INDEX idx_premises_decision ON decision_premises(decision_id);
 CREATE INDEX idx_premises_product_status ON decision_premises(product_id, status);
 CREATE INDEX idx_priority_actions_product ON priority_actions(product_id, priority_score DESC) WHERE is_active = 1;
 CREATE INDEX idx_product_dna_product ON product_dna(product_id);
+CREATE INDEX idx_product_telemetry_step
 CREATE INDEX idx_products_entitlement_paused
 CREATE INDEX idx_products_market_category ON products(market_category);
 CREATE INDEX idx_products_owner ON products(owner_id);
@@ -5113,6 +5158,8 @@ CREATE INDEX idx_wiki_reads_agent    ON agent_wiki_reads(agent_name);
 CREATE INDEX idx_wiki_reads_entry    ON agent_wiki_reads(entry_id);
 CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
 CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
+CREATE TABLE IF NOT EXISTS "deal_rooms" (
+CREATE TABLE IF NOT EXISTS "decision_votes" (
 CREATE TABLE IF NOT EXISTS "decisions" (
 CREATE TABLE IF NOT EXISTS "founders" (
 CREATE TABLE IF NOT EXISTS "hypotheses" (
@@ -5120,6 +5167,7 @@ CREATE TABLE IF NOT EXISTS "integrations" (
 CREATE TABLE IF NOT EXISTS "notifications" (
 CREATE TABLE IF NOT EXISTS "oauth_states" (
 CREATE TABLE IF NOT EXISTS "push_log" (
+CREATE TABLE IF NOT EXISTS "webhooks" (
 CREATE TABLE acquirer_signals (
 CREATE TABLE action_drafts (
 CREATE TABLE action_executions (
@@ -5198,16 +5246,16 @@ CREATE TABLE customers (
 CREATE TABLE daily_insights (
 CREATE TABLE data_classifications (
 CREATE TABLE data_residency_settings (
-CREATE TABLE deal_rooms (
 CREATE TABLE debate_sessions (
 CREATE TABLE decision_counterfactuals (
 CREATE TABLE decision_outcomes (
 CREATE TABLE decision_patterns (
 CREATE TABLE decision_premises (
 CREATE TABLE decision_quality_scores (
-CREATE TABLE decision_votes (
 CREATE TABLE development_change_plans (
 CREATE TABLE dimension_hints (
+CREATE TABLE ecosystem_principal_companies (
+CREATE TABLE ecosystem_principals (
 CREATE TABLE envelope_usage (
 CREATE TABLE envelopes (
 CREATE TABLE ethical_assessment (
@@ -5314,6 +5362,7 @@ CREATE TABLE priority_actions (
 CREATE TABLE privacy_consents (
 CREATE TABLE product_dna (
 CREATE TABLE product_sending_identities (
+CREATE TABLE product_telemetry_events (
 CREATE TABLE product_voice_fingerprints (
 CREATE TABLE product_webhooks (
 CREATE TABLE products (
@@ -5370,7 +5419,6 @@ CREATE TABLE voice_memos (
 CREATE TABLE voice_sessions (
 CREATE TABLE web_audit_results (
 CREATE TABLE webhook_deliveries (
-CREATE TABLE webhooks (
 CREATE TABLE weekly_compressed_briefs (
 CREATE TABLE weekly_plans (
 CREATE TABLE wisdom_patterns (
@@ -5390,6 +5438,7 @@ CREATE TRIGGER development_change_plan_guard
 CREATE TRIGGER development_change_plan_immutable_binding
 CREATE TRIGGER development_shadow_observation_independence_guard
 CREATE TRIGGER development_verification_observation_guard
+CREATE TRIGGER ecosystem_scope_stays_inside_the_portfolio
 CREATE TRIGGER effect_outcome_report_guard
 CREATE TRIGGER external_company_report_guard
 CREATE TRIGGER external_metric_observation_guard
@@ -5477,6 +5526,7 @@ CREATE UNIQUE INDEX idx_investor_updates_month ON investor_updates(product_id, m
 CREATE UNIQUE INDEX idx_judgment_conflict_identity
 CREATE UNIQUE INDEX idx_milestones_unique ON milestone_events(founder_id, product_id, milestone_key);
 CREATE UNIQUE INDEX idx_onboarding_product ON onboarding_sessions(product_id);
+CREATE UNIQUE INDEX idx_product_telemetry_identity
 CREATE UNIQUE INDEX idx_products_ingest_token ON products(ingest_token);
 CREATE UNIQUE INDEX idx_products_share_token ON products(share_token);
 CREATE UNIQUE INDEX idx_push_subscriptions_apns
@@ -5564,6 +5614,8 @@ END;
 END;
 END;
 END;
+END;
+FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 ON institutional_responsibilities
@@ -5585,4 +5637,5 @@ WHEN NEW.state <> OLD.state
 WHEN NEW.state IN ('operating', 'mature', 'exception_owned')
 WHEN NEW.status = 'approved' AND NEW.responsibility_id IS NULL
 WHEN NEW.status IS NOT OLD.status
+WHEN NOT EXISTS (
 WHEN OLD.status IN ('reserved','ambiguous') AND NEW.status IN ('settled','released','expired')

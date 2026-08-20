@@ -756,6 +756,80 @@ settingsRoutes.post('/settings/api-keys', requireCompanyCapability('can_manage_c
     </div>`));
 });
 
+// ─── Portfolio principals (owner decision §12) ───────────────────────────────
+//
+// A CREDENTIAL WITH NO WAY IN IS A SENTENCE IN A MIGRATION, and this campaign
+// has found that shape four times. The ecosystem routes now require a principal
+// scoped to named companies rather than possession of one global secret, which
+// means those routes serve nobody until one can be issued. This is the way in.
+//
+// THE EXCEPTIONAL BOUNDARY, not an ordinary company capability. A credential
+// that reads SEVERAL companies at once is the same kind of act as ending a
+// subscription or archiving a product: nothing grants it, and being able to
+// manage a company is not the same as being able to mint a portfolio key over
+// it. `requireOwner()` asks that of the selected company; the service then
+// requires ownership of EVERY company named in the body, and a database trigger
+// requires it again — because the service check is a property of one function
+// while the trigger is a property of the table, and ownership can change after
+// issuance.
+
+settingsRoutes.post('/settings/portfolio-principals', requireOwner(), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+
+  const body = await c.req.parseBody({ all: true });
+  const raw = body.company;
+  const companyIds = (Array.isArray(raw) ? raw : raw == null ? [] : [raw]).map(String);
+  const days = Number(body.days ?? 90);
+
+  const { issueEcosystemPrincipal } = await import(
+    '../../services/institution/ecosystem-principal.js');
+  const issued = await issueEcosystemPrincipal({
+    founderId: founder.id as string,
+    label: String(body.label ?? ''),
+    companyIds,
+    days: Number.isFinite(days) ? days : undefined,
+  });
+
+  if ('refused' in issued) {
+    return c.html(dashboardLayout(ctx, html`
+      <div class="card">
+        <h3>Principal not issued</h3>
+        <p>${issued.refused === 'companies_required'
+          ? 'Choose at least one company it may read. There is no "all companies" option, deliberately.'
+          : issued.refused === 'label_required'
+            ? 'Give it a name so you can recognise who holds it.'
+            : 'One of those companies is not yours to grant.'}</p>
+        <a href="/settings" class="btn btn-secondary btn-sm">Back to settings</a>
+      </div>`));
+  }
+
+  return c.html(dashboardLayout(ctx, html`
+    <div class="card">
+      <h3>Copy this key now</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);">
+        Shown once. Foundry stored only a hash, so nobody — including Foundry —
+        can show it again. It reads the companies listed below and no others.
+      </p>
+      <input type="text" readonly value="${issued.key}"
+        style="width:100%;font-family:monospace;font-size:0.8rem;cursor:pointer;"
+        onclick="this.select()" />
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.75rem;">
+        <strong>${issued.label}</strong> — ${issued.companyIds.length} ${issued.companyIds.length === 1 ? 'company' : 'companies'} ·
+        expires ${issued.expiresAt.slice(0, 10)}
+      </p>
+      <a href="/settings" class="btn btn-secondary btn-sm">Back to settings</a>
+    </div>`));
+});
+
+settingsRoutes.post('/settings/portfolio-principals/:id/revoke', requireOwner(), async (c) => {
+  const founder = c.get('founder');
+  const { revokeEcosystemPrincipal } = await import(
+    '../../services/institution/ecosystem-principal.js');
+  await revokeEcosystemPrincipal(c.req.param('id'), founder.id as string);
+  return c.redirect('/settings');
+});
+
 settingsRoutes.post('/settings/api-keys/:id/revoke', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
