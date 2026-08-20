@@ -83,6 +83,24 @@ describe('approving an action', () => {
     app.route('/', agentIntegrationRoutes);
   });
 
+  it('records the person who rejected it too, and no invented reason', async () => {
+    await query(
+      `INSERT INTO outbound_actions
+         (id,product_id,agent_name,integration_name,action_type,authority_level,status,
+          parameters_json,preview_text,rationale)
+       VALUES ('wa_reject',?,'beacon','slack','post_message',2,'pending_approval','{}','p','r')`,
+      [P]);
+    const res = await app.request('/agents/integrations/actions/wa_reject/reject', { method: 'POST' });
+    expect([200, 302]).toContain(res.status);
+    const row = (await query(
+      'SELECT approved_by,feedback_data_json FROM outbound_actions WHERE id=?', ['wa_reject']))
+      .rows[0] as Record<string, unknown>;
+    expect(row.approved_by).toBe(OWNER);
+    // "Rejected by CEO" attributed a reason to a role nobody holds. Silence is
+    // silence.
+    expect(String(row.feedback_data_json)).not.toContain('CEO');
+  });
+
   it('records the person who approved it, not the word ceo', async () => {
     await query(
       `INSERT INTO outbound_actions

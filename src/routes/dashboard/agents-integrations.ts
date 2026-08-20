@@ -572,7 +572,7 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/reject',
   const body = await c.req.parseBody();
   const reason = body.reason as string | undefined;
 
-  await rejectAction(actionId, reason);
+  await rejectAction(actionId, String(founder.id), reason);
 
   return c.redirect('/agents/integrations/actions');
 });

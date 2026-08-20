@@ -259,19 +259,29 @@ export async function approveAction(
 }
 
 /**
- * CEO rejects an action — records as negative feedback signal.
+ * A person rejects an action — recorded as a negative feedback signal.
+ *
+ * WHO DECIDED IS A PERSON, NOT A ROLE, on this side too. This wrote the literal
+ * 'ceo' into `approved_by`, so the record of who turned an action down was the
+ * same string for every founder of every company — and the reason defaulted to
+ * "Rejected by CEO", which attributes a decision to a role nobody holds. The
+ * route verifies ownership and then had nothing to hand on.
  */
-export async function rejectAction(actionId: string, reason?: string): Promise<void> {
+export async function rejectAction(
+  actionId: string, decidedBy: string, reason?: string,
+): Promise<void> {
   const now = new Date().toISOString();
   await query(
     `UPDATE outbound_actions SET
       status = 'rejected',
-      approved_by = 'ceo',
+      approved_by = ?,
       approved_at = ?,
       feedback_status = 'negative',
       feedback_data_json = ?
      WHERE id = ?`,
-    [now, JSON.stringify({ reason: reason ?? 'Rejected by CEO', rejected_at: now }), actionId],
+    [decidedBy, now,
+      JSON.stringify({ reason: reason ?? 'Rejected without a stated reason', rejected_at: now }),
+      actionId],
   );
 }
 
