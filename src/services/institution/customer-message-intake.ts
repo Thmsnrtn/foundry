@@ -32,6 +32,8 @@ const MAX_SUBJECT = 512;
 export interface SupportChannel {
   id: string; label: string; responsibilityId: string;
   responsibilityTitle: string; intakeKey: string; revoked: boolean;
+  /** Customers turned away since a message last got through. Zero means fine. */
+  refusalCount: number; lastRefusalReason: string | null;
 }
 
 /**
@@ -83,12 +85,14 @@ export async function registerSupportChannel(input: {
   return {
     id, label, intakeKey, revoked: false,
     responsibilityId: input.responsibilityId, responsibilityTitle: String(owned.title),
+    refusalCount: 0, lastRefusalReason: null,
   };
 }
 
 export async function getSupportChannels(productId: string): Promise<SupportChannel[]> {
   const rows = await query(
-    `SELECT c.id,c.label,c.intake_key,c.revoked_at,c.responsibility_id,r.title
+    `SELECT c.id,c.label,c.intake_key,c.revoked_at,c.responsibility_id,r.title,
+            c.refusal_count,c.last_refusal_reason
        FROM support_channels c JOIN institutional_responsibilities r ON r.id=c.responsibility_id
       WHERE c.product_id=? ORDER BY c.created_at`, [productId],
   );
@@ -96,6 +100,8 @@ export async function getSupportChannels(productId: string): Promise<SupportChan
     id: String(r.id), label: String(r.label), intakeKey: String(r.intake_key),
     revoked: r.revoked_at != null, responsibilityId: String(r.responsibility_id),
     responsibilityTitle: String(r.title),
+    refusalCount: Number(r.refusal_count ?? 0),
+    lastRefusalReason: r.last_refusal_reason == null ? null : String(r.last_refusal_reason),
   }));
 }
 
@@ -117,9 +123,56 @@ export interface InboundMessage {
   sourceObservedAt: string; receivedAt: string;
 }
 
+/** Reasons a channel's owner can be told about. `unknown_channel` is absent on
+ *  purpose: there is no channel to record it against, and answering an unknown
+ *  key any differently would tell a stranger which keys exist. */
+export const CHANNEL_REFUSAL_LABELS: Record<string, string> = {
+  body_unreadable: 'what it sent was not readable',
+  fields_invalid: 'the fields it sent were not the ones I take',
+  identity_required: 'it did not say which message this was',
+  contact_required: 'it did not say who wrote',
+  content_required: 'it sent no message',
+  content_too_large: 'the message was longer than I take',
+  timestamp_invalid: 'the time it gave was not a time',
+};
+
 export type IntakeRefusal =
   | 'unknown_channel' | 'identity_required' | 'contact_required'
   | 'content_required' | 'content_too_large' | 'timestamp_invalid';
+
+/**
+ * Record that a support channel turned a message away.
+ *
+ * A CUSTOMER WROTE AND WAS DROPPED. Nothing recorded that, so the founder saw a
+ * quiet inbox and concluded nobody had written. A metric can be resent; a
+ * person who wrote once and got no answer does not write again.
+ *
+ * The message itself never reaches this record — it is the customer's own words
+ * and their address. Only the shape is kept, and migration 171 refuses a reason
+ * outside the closed set, so no error string can be written in its place.
+ *
+ * Keyed by intake key rather than channel id because that is what the route
+ * holds at the point a request fails validation, before anything has resolved.
+ * An unknown key updates nothing, which is also the answer a stranger gets.
+ */
+export async function recordChannelRefusal(
+  intakeKey: string, reason: string,
+): Promise<void> {
+  if (!(reason in CHANNEL_REFUSAL_LABELS)) return;
+  await query(
+    `UPDATE support_channels
+        SET refusal_count=refusal_count+1, last_refused_at=datetime('now'),
+            last_refusal_reason=?
+      WHERE intake_key=? AND revoked_at IS NULL`, [reason, intakeKey]);
+}
+
+/** Cleared by the message that got through, not by one that merely arrived. */
+export async function clearChannelRefusals(intakeKey: string): Promise<void> {
+  await query(
+    `UPDATE support_channels
+        SET refusal_count=0, last_refused_at=NULL, last_refusal_reason=NULL
+      WHERE intake_key=? AND refusal_count>0`, [intakeKey]);
+}
 
 /**
  * A message arrives from outside.

@@ -397,10 +397,17 @@ ingestRoutes.post('/ingest/customer-message/:channelKey', async (c) => {
   if (!channelKey || !/^[\w-]{24,128}$/.test(channelKey)) {
     return c.json({ error: 'Invalid channel key' }, 400);
   }
+  // A CUSTOMER WROTE AND WAS DROPPED, and nothing recorded it. The founder saw
+  // a quiet inbox and concluded nobody had written. Only the shape is kept —
+  // the refused body is the customer's own words and their address.
+  const { clearChannelRefusals, recordChannelRefusal } = await import(
+    '../../services/institution/customer-message-intake.js');
+
   let raw: unknown;
   try {
     raw = await c.req.json();
   } catch {
+    await recordChannelRefusal(channelKey, 'body_unreadable');
     return c.json({ error: 'Invalid JSON body' }, 400);
   }
   const parsed = z.object({
@@ -412,6 +419,7 @@ ingestRoutes.post('/ingest/customer-message/:channelKey', async (c) => {
     source_observed_at: z.string().max(64).optional(),
   }).safeParse(raw);
   if (!parsed.success) {
+    await recordChannelRefusal(channelKey, 'fields_invalid');
     return c.json({ error: 'Validation failed', details: parsed.error.issues.map((i) => i.message) }, 422);
   }
 
@@ -429,9 +437,13 @@ ingestRoutes.post('/ingest/customer-message/:channelKey', async (c) => {
   });
   if ('refused' in result) {
     // An unknown or revoked key is answered exactly like a wrong one: the
-    // caller learns nothing about which channels exist.
+    // caller learns nothing about which channels exist. It is not recorded
+    // either — there is no channel to record it against, and a stranger
+    // probing keys must not leave a trail on somebody's channel.
+    await recordChannelRefusal(channelKey, result.refused);
     const status = result.refused === 'unknown_channel' ? 401 : 422;
     return c.json({ error: result.refused }, status);
   }
+  await clearChannelRefusals(channelKey);
   return c.json({ status: result.duplicate ? 'already_received' : 'accepted', message_id: result.message.id });
 });

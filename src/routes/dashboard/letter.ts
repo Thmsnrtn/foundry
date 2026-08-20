@@ -345,7 +345,9 @@ const customerMessageSection = (
 // are refused identically, so nobody learns which channels exist.
 const supportChannelSection = (
   candidates: Array<{ responsibilityId: string; title: string }>,
-  existing: Array<{ id: string; label: string; intakeKey: string; responsibilityTitle: string; revoked: boolean }>,
+  existing: Array<{ id: string; label: string; intakeKey: string; responsibilityTitle: string;
+    revoked: boolean; refusalCount: number; lastRefusalReason: string | null }>,
+  refusalLabels: Record<string, string>,
   appUrl: string,
 ) => candidates.length === 0 && existing.length === 0 ? '' : html`
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
@@ -358,6 +360,10 @@ const supportChannelSection = (
         <input type="text" readonly value="${appUrl}/ingest/customer-message/${c.intakeKey}"
           style="width:100%;font-size:0.72rem;font-family:monospace;margin-top:0.25rem;cursor:pointer;"
           onclick="this.select()" />
+        ${c.refusalCount > 0 ? html`
+        <div style="font-size:0.74rem;color:#ffb347;margin-top:0.25rem;">
+          I have turned away ${String(c.refusalCount)} ${c.refusalCount === 1 ? 'message' : 'messages'} on this since one last got through — ${refusalLabels[c.lastRefusalReason ?? ''] ?? 'I could not use what was sent'}. Somebody wrote and I did not keep it.
+        </div>` : ''}
         <form method="POST" action="/letter/channels/${c.id}/revoke" style="margin-top:0.25rem;">
           <button type="submit" class="btn btn-ghost" style="font-size:0.7rem;padding:0.2rem 0.45rem;">Stop using this</button>
         </form>
@@ -831,7 +837,7 @@ letterRoutes.get('/letter', async (c) => {
   const customerMessages = await getMessagesAwaitingReply(ctx.productId);
   const { getUncarriedNotices } = await import('../../services/institution/responsibility-notice.js');
   const uncarriedNotices = await getUncarriedNotices(ctx.productId);
-  const { getSupportChannels } = await import('../../services/institution/customer-message-intake.js');
+  const { CHANNEL_REFUSAL_LABELS, getSupportChannels } = await import('../../services/institution/customer-message-intake.js');
   const supportChannels = await getSupportChannels(ctx.productId);
   // Offered only where a message could actually be acted on, and only where one
   // is not already registered — a second channel for the same responsibility is
@@ -953,7 +959,7 @@ letterRoutes.get('/letter', async (c) => {
       ${darkenedWatchSection(darkenedWatches)}
       ${metricWatchSection(shadowable)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
-      ${supportChannelSection(channelCandidates, supportChannels,
+      ${supportChannelSection(channelCandidates, supportChannels, CHANNEL_REFUSAL_LABELS,
         process.env.APP_URL ?? 'http://localhost:8080')}
       ${customerMessageSection(customerMessages)}
       ${outcomeSection(unresolvedEffects)}
