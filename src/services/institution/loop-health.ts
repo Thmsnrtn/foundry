@@ -29,13 +29,18 @@ import { query } from '../../db/client.js';
  * reported, judgments raised and later compared with reality, expectations
  * resolved against what was actually observed.
  */
-export const INSTITUTION_LOOPS: Record<string, string> = {
-  institutional_effect_reconciliation:
-    'turning what people outside report into whether something worked',
-  institutional_judgment_tick:
-    'raising judgments about your company and checking them against what happened',
-  external_metric_shadow_resolution:
-    'comparing what you said you would expect against what your systems reported',
+export const INSTITUTION_LOOPS: Record<string, { label: string; staleAfterHours: number }> = {
+  institutional_effect_reconciliation: {
+    label: 'turning what people outside report into whether something worked',
+    // Hourly. Six missed runs is past any plausible blip.
+    staleAfterHours: 6,
+  },
+  institutional_judgment_tick: {
+    label: 'raising judgments about your company, checking them against what '
+      + 'happened, and resolving what you said you would expect',
+    // Every six hours. A day of silence is four missed runs.
+    staleAfterHours: 24,
+  },
 };
 
 /** One job's health. `consecutiveFailures` is the only number a founder needs:
@@ -43,6 +48,8 @@ export const INSTITUTION_LOOPS: Record<string, string> = {
 export interface LoopHealth {
   jobName: string; label: string;
   consecutiveFailures: number;
+  /** It is not erroring — it has simply not run for longer than it should. */
+  stoppedRunning: boolean;
   lastSuccessAt: string | null; lastFailureAt: string | null;
   lastErrorName: string | null;
 }
@@ -87,18 +94,43 @@ export async function recordJobFailure(jobName: string, error: unknown): Promise
  * schedule and a clock the deployment agrees with, and it is worth doing
  * separately rather than guessed at here.
  */
-export async function getFailingInstitutionLoops(): Promise<LoopHealth[]> {
+export async function getFailingInstitutionLoops(now: Date = new Date()): Promise<LoopHealth[]> {
   const names = Object.keys(INSTITUTION_LOOPS);
   const rows = await query(
     `SELECT job_name,last_success_at,last_failure_at,consecutive_failures,last_error_name
        FROM job_health
-      WHERE consecutive_failures > 0 AND job_name IN (${names.map(() => '?').join(',')})
-      ORDER BY consecutive_failures DESC, job_name`, names);
-  return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
-    jobName: String(row.job_name), label: INSTITUTION_LOOPS[String(row.job_name)] ?? String(row.job_name),
-    consecutiveFailures: Number(row.consecutive_failures),
-    lastSuccessAt: row.last_success_at == null ? null : String(row.last_success_at),
-    lastFailureAt: row.last_failure_at == null ? null : String(row.last_failure_at),
-    lastErrorName: row.last_error_name == null ? null : String(row.last_error_name),
-  }));
+      WHERE job_name IN (${names.map(() => '?').join(',')})`, names);
+
+  const out: LoopHealth[] = [];
+  for (const row of rows.rows as unknown as Array<Record<string, unknown>>) {
+    const jobName = String(row.job_name);
+    const loop = INSTITUTION_LOOPS[jobName];
+    if (!loop) continue;
+    const failures = Number(row.consecutive_failures);
+    const lastSuccessAt = row.last_success_at == null ? null : String(row.last_success_at);
+
+    // STOPPED IS NOT ONLY FAILING. A job that never runs throws nothing: a
+    // scheduler that never started, a process group serving HTTP without crons,
+    // a cron expression that never matches. Silence looks identical to calm.
+    //
+    // Judged only against a loop that HAS worked before, so a fresh company is
+    // never told Foundry has stopped when it has simply not had its first tick.
+    // That is the honest half of the question; the other half — a job that has
+    // never once succeeded — cannot be told apart from a new install without a
+    // deployment clock, and is not guessed at here.
+    const silentHours = lastSuccessAt == null ? 0
+      : (now.getTime() - Date.parse(`${lastSuccessAt.replace(' ', 'T')}Z`)) / 3_600_000;
+    const stale = lastSuccessAt != null && silentHours > loop.staleAfterHours;
+    if (failures === 0 && !stale) continue;
+
+    out.push({
+      jobName, label: loop.label, consecutiveFailures: failures,
+      stoppedRunning: stale && failures === 0,
+      lastSuccessAt,
+      lastFailureAt: row.last_failure_at == null ? null : String(row.last_failure_at),
+      lastErrorName: row.last_error_name == null ? null : String(row.last_error_name),
+    });
+  }
+  return out.sort((a, b) => b.consecutiveFailures - a.consecutiveFailures
+    || a.jobName.localeCompare(b.jobName));
 }

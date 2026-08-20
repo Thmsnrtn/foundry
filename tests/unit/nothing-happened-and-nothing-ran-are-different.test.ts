@@ -62,7 +62,8 @@ describe('an institution loop that is failing', () => {
 
     const failing = await getFailingInstitutionLoops();
     expect(failing).toHaveLength(1);
-    expect(failing[0]).toMatchObject({ consecutiveFailures: 2, lastErrorName: 'TypeError' });
+    expect(failing[0]).toMatchObject({
+      consecutiveFailures: 2, lastErrorName: 'TypeError', stoppedRunning: false });
 
     const html = await page();
     expect(html).toContain('Part of me has stopped');
@@ -96,6 +97,41 @@ describe('an institution loop that is failing', () => {
     await expect(query(
       "UPDATE job_health SET last_error_name='connection refused talking to jo@fieldstone.example' WHERE job_name=?",
       ['institutional_judgment_tick'])).rejects.toThrow(/error_name_is_not_a_message/);
+  });
+
+  it('notices a loop that stopped running rather than started failing', async () => {
+    // The likelier production failure: a scheduler that never started, a
+    // process group serving HTTP without crons, a cron expression that never
+    // matches. Nothing throws. Silence looks exactly like calm.
+    await recordJobSuccess('institutional_effect_reconciliation');
+    expect(await getFailingInstitutionLoops()).toEqual([]);
+    await query(
+      "UPDATE job_health SET last_success_at=datetime('now','-9 hours') WHERE job_name=?",
+      ['institutional_effect_reconciliation']);
+
+    const stopped = await getFailingInstitutionLoops();
+    expect(stopped).toHaveLength(1);
+    expect(stopped[0]).toMatchObject({ stoppedRunning: true, consecutiveFailures: 0 });
+    expect(await page()).toContain('has not run when it should have');
+  });
+
+  it('never tells a company that has just arrived that Foundry has stopped', async () => {
+    // Nothing has run yet because nothing has had a first tick. Reading
+    // staleness out of that silence would greet every new company with a
+    // failure notice.
+    expect(await getFailingInstitutionLoops()).toEqual([]);
+    expect(await page()).not.toContain('Part of me has stopped');
+  });
+
+  it('names only jobs that exist, so the map cannot drift from the registry', async () => {
+    const { INSTITUTION_LOOPS } = await import('../../src/services/institution/loop-health.js');
+    const { JOB_REGISTRY } = await import('../../src/jobs/index.js');
+    // This map named `external_metric_shadow_resolution`, which is not a job —
+    // that work happens inside the judgment tick. A loop-health list that names
+    // work nobody schedules is the same fiction it exists to catch.
+    for (const name of Object.keys(INSTITUTION_LOOPS)) {
+      expect(JOB_REGISTRY[name], `${name} is not a scheduled job`).toBeTruthy();
+    }
   });
 
   it('is recorded by the scheduler itself, not only by this test', () => {

@@ -427,14 +427,17 @@ const disputedSection = (
 // class name is kept for whoever operates it; what the founder needs is which
 // of their things is not being kept current, and since when.
 const loopsStoppedSection = (
-  items: Array<{ label: string; consecutiveFailures: number; lastSuccessAt: string | null }>,
+  items: Array<{ label: string; consecutiveFailures: number; stoppedRunning: boolean;
+    lastSuccessAt: string | null }>,
 ) => items.length === 0 ? '' : html`
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid #ffb34755;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.6rem;">Part of me has stopped</div>
     <div style="font-size:0.82rem;color:var(--text-primary);">Some of what I do runs on a schedule. Some of it is failing, so what you read below may be out of date — not because nothing happened, but because I have not been able to look.</div>
     ${items.map((item) => html`
       <div style="padding:0.45rem 0;border-top:1px solid rgba(255,255,255,0.05);font-size:0.8rem;color:var(--text-muted);">
-        ${item.label} — failed ${String(item.consecutiveFailures)} ${item.consecutiveFailures === 1 ? 'time' : 'times'} in a row${item.lastSuccessAt ? `, last worked ${item.lastSuccessAt.slice(0, 10)}` : ', and has never yet worked'}.
+        ${item.label} — ${item.stoppedRunning
+    ? 'has not run when it should have'
+    : `failed ${String(item.consecutiveFailures)} ${item.consecutiveFailures === 1 ? 'time' : 'times'} in a row`}${item.lastSuccessAt ? `, last worked ${item.lastSuccessAt.slice(0, 10)}` : ', and has never yet worked'}.
       </div>`)}
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem;">This is mine to fix, not yours. It is here because you should not have to guess whether the rest of this page is current.</div>
   </div>`;
