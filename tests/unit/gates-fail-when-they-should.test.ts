@@ -282,6 +282,23 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('attempt_count');
   });
 
+  it('check-backticks-in-embedded-comments fails on a backtick in embedded SQL', () => {
+    // Three parse errors in one campaign, each to somebody who had already
+    // written the lesson down. The backtick closes the template literal and the
+    // error surfaces tens of lines from the cause.
+    //
+    // Assembled from fragments so this file does not contain the defect it
+    // plants: the gate scans tests/ too.
+    plant('src/services/_gate_fixture_b.ts',
+      j('import { query } from "../db/client.js";\n',
+        'export const q = () => query(`SELECT id FROM products\n',
+        '  -- the ', '`', 'id', '`', ' column\n',
+        '  WHERE id = ?`, []);\n'));
+    const r = run('check-backticks-in-embedded-comments.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_b');
+  });
+
   it('audit-consequential-effects fails on an outward call its rules cannot see', () => {
     // The window blind spot: a POST to a URL held in a variable matched no rule
     // and was therefore absent from the inventory rather than reported.
@@ -305,7 +322,7 @@ describe('and passes on a clean tree', () => {
       'check-route-guards.mjs', 'check-kernel-boundary.mjs',
       'check-test-schema-fabrication.mjs', 'audit-consequential-effects.mjs',
       'check-writerless-tables.mjs', 'check-notnull-inserts.mjs',
-      'check-write-only-columns.mjs',
+      'check-write-only-columns.mjs', 'check-backticks-in-embedded-comments.mjs',
     ]) {
       const r = run(script);
       expect(r.code, `${script}: ${r.output}`).toBe(0);

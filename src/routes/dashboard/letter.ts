@@ -495,6 +495,28 @@ const metricWatchSection = (
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem;">I'll watch and tell you whether you were right. Watching doesn't let me change anything.</div>
   </div>`;
 
+// Watches the founder ended by disconnecting the channel they ran on.
+//
+// Revoking a channel is honoured where it matters — no further reading for it
+// is admitted — and everything that followed was silent. The expectation can
+// never resolve, so the responsibility sits at Shadowing for good and nothing
+// connected that to the button they pressed.
+//
+// This does not ask for the channel back. Foundry does not argue with a
+// founder's decision; it says what stopped, which is the difference between
+// honouring a choice and hiding what it cost.
+const darkenedWatchSection = (
+  items: Array<{ responsibilityId: string; title: string; channelLabel: string }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">I have stopped watching</div>
+    ${items.map((item) => html`
+      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">You disconnected ${item.channelLabel}, which is how I was watching this. I have stopped, and it will not go any further until you give me another way to see it.</div>
+      </div>`)}
+  </div>`;
+
 // What the owner would expect a development check to report.
 //
 // The twin of the metric watch. Offered only for development responsibilities
@@ -827,6 +849,8 @@ letterRoutes.get('/letter', async (c) => {
   }));
   const { getShadowableResponsibilities } = await import('../../services/institution/external-shadowing.js');
   const shadowable = await getShadowableResponsibilities(ctx.productId);
+  const { getDarkenedWatches } = await import('../../services/institution/external-shadowing.js');
+  const darkenedWatches = await getDarkenedWatches(ctx.productId);
   const { availableDevelopmentChecks } = await import('../../services/institution/development-shadowing.js');
   const developmentChecks = await availableDevelopmentChecks(ctx.productId);
   const understoodDevelopment = (await (await import('../../db/client.js')).query(
@@ -926,6 +950,7 @@ letterRoutes.get('/letter', async (c) => {
       ${evidenceQuestionSection(evidenceQuestion)}
       ${setAsideSection(setAsideQuestions)}
       ${permissionSection(assistingCandidates)}
+      ${darkenedWatchSection(darkenedWatches)}
       ${metricWatchSection(shadowable)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
       ${supportChannelSection(channelCandidates, supportChannels,

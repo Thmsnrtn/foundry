@@ -94,6 +94,51 @@ export async function getShadowableResponsibilities(
 }
 
 /**
+ * Watches the founder ended by disconnecting the channel they ran on.
+ *
+ * Revoking a channel is honoured where it matters — `isAdmissibleObservationField`
+ * refuses every further reading — and everything that follows from that was
+ * silent. The expectation stays open and can never resolve, so the
+ * responsibility sits at Shadowing for good: it cannot reach Assisting, and
+ * nothing connected that to the button the founder pressed.
+ *
+ * Foundry does not undo the decision and does not ask for the channel back. It
+ * says what stopped, which is the difference between honouring a choice and
+ * hiding its cost.
+ *
+ * Only company-declared channels appear here. A built-in metric is a source
+ * adapter rather than a company statement and cannot be revoked, so there is
+ * nothing for the founder to have done.
+ */
+export async function getDarkenedWatches(productId: string): Promise<Array<{
+  responsibilityId: string; title: string; channelKey: string; channelLabel: string;
+}>> {
+  const rows = await query(
+    `SELECT r.id, r.title, c.channel_key, c.label
+       FROM responsibility_shadow_expectations x
+       JOIN institutional_responsibilities r
+         ON r.id=x.responsibility_id AND r.product_id=x.product_id
+       JOIN company_observation_channels c
+         ON c.product_id=x.product_id
+        -- The event type is external_metric:FIELD:DIRECTION; the channel
+        -- is the field in the middle, and matching on the prefix alone would
+        -- catch a channel whose key is a prefix of another's.
+        AND x.expected_event_type LIKE 'external_metric:' || c.channel_key || ':%'
+      WHERE x.product_id=? AND c.revoked_at IS NOT NULL
+        AND r.state='shadowing' AND r.disposition='active'
+        AND NOT EXISTS (
+          SELECT 1 FROM responsibility_shadow_comparisons cmp
+           WHERE cmp.expectation_id=x.id AND cmp.classification IN ('matched','deviated'))
+      ORDER BY x.created_at DESC`,
+    [productId],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
+    responsibilityId: String(row.id), title: String(row.title),
+    channelKey: String(row.channel_key), channelLabel: String(row.label),
+  }));
+}
+
+/**
  * The founder states what they would expect to see if this responsibility is
  * being carried, and Foundry begins watching.
  *
