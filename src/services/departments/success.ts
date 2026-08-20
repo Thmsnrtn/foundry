@@ -19,7 +19,15 @@
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
-import { getAtRiskCustomers } from '../customers/intelligence.js';
+// ASKED THROUGH ONE ACCESSOR, NOT ONE TABLE. `getAtRiskCustomers` read
+// `customers`, which is written by a session-authenticated route no client
+// calls and by the demo seed. The documented external surface a real company
+// integrates against — `POST /api/v1/customers`, with issued scoped
+// credentials — writes `customer_intelligence`. So a company that reported its
+// customers the documented way was invisible to this department, and the
+// capability was structurally starved for exactly the companies that
+// integrated properly. See `institution/company-customers.ts`.
+import { getCustomersAtRisk } from '../institution/company-customers.js';
 import { getEffectiveMode } from '../autopilot/policy.js';
 import { createExecution, approveAndExecute } from '../scp/actions/executor.js';
 import { checkAndConsume, weekStarting } from '../outbound/envelopes.js';
@@ -42,10 +50,21 @@ export interface SuccessSweepResult {
 
 /** A check-in drafted ONLY from what we actually know about the customer.
  *  Deterministic: it cannot claim anything the ledger doesn't hold. */
-export function draftCheckIn(c: Record<string, unknown>, productName: string): { subject: string; body: string } {
+export function draftCheckIn(
+  // NAMED FIELDS RATHER THAN A BAG. This took `Record<string, unknown>` and
+  // read `last_active_at`, which is the LEGACY store's column name — so a
+  // customer arriving from the reported store produced "I wanted to check in"
+  // with the quiet-days sentence silently dropped, because the property simply
+  // was not there. A loose type is how a store migration goes quiet instead of
+  // failing. `lastActive` accepts either spelling for the fixtures that predate
+  // this, and nothing else.
+  c: { name?: string | null; lastActiveAt?: string | null; last_active_at?: string | null },
+  productName: string,
+): { subject: string; body: string } {
   const name = String(c.name ?? '').trim() || 'there';
-  const daysQuiet = c.last_active_at
-    ? Math.max(0, Math.floor((Date.now() - new Date(String(c.last_active_at)).getTime()) / 86_400_000))
+  const lastActive = c.lastActiveAt ?? c.last_active_at ?? null;
+  const daysQuiet = lastActive
+    ? Math.max(0, Math.floor((Date.now() - new Date(String(lastActive)).getTime()) / 86_400_000))
     : null;
   const lines = [
     `Hi ${name},`,
@@ -93,7 +112,7 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
     .rows[0] as Record<string, string> | undefined;
   const productName = productRow?.name ?? 'our product';
 
-  const atRisk = (await getAtRiskCustomers(productId))
+  const atRisk = (await getCustomersAtRisk(productId))
     .filter((c) => typeof c.email === 'string' && String(c.email).includes('@'))
     .slice(0, MAX_PER_SWEEP);
 
@@ -112,7 +131,7 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
         action_type: 'dept:customer_success',
         gate: 0,
         trigger: 'customer_success_sweep',
-        reasoning: `shadow: would draft a check-in for ${String(c.name ?? c.email)} (churn risk ${Number(c.churn_risk).toFixed(2)})`,
+        reasoning: `shadow: would draft a check-in for ${String(c.name ?? c.email)} (churn risk ${Number(c.churnRisk).toFixed(2)})`,
         input_context: JSON.stringify({ customer_id: customerId }),
         output: undefined,
         outcome: 'shadow',
@@ -126,7 +145,7 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
     if (!envelope.allowed) { result.skipped++; continue; }
 
     // The per-customer budget: nobody gets nagged (default 3 msgs/week).
-    const budget = await checkAndIncrement(productId, String(c.external_id ?? customerId), weekStarting());
+    const budget = await checkAndIncrement(productId, String(c.externalId ?? customerId), weekStarting());
     if (!budget.allowed) { result.skipped++; continue; }
 
     const draft = draftCheckIn(c, productName);
@@ -169,7 +188,7 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
         {
           kind: 'customer_health_not_worse',
           customer_id: customerId,
-          baseline_health: c.health_score != null ? Number(c.health_score) : null,
+          baseline_health: c.healthScore,
         },
       ], 7 * 24);
       // Per-action attribution (primitive 3): the disclosed-agent paper trail —

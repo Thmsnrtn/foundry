@@ -154,9 +154,16 @@ describe('the loop closes', () => {
 describe('outreach: the slowest ladder, the hardest rails', () => {
   beforeAll(async () => {
     await query(
-      `INSERT INTO customers (id, product_id, owner_id, name, email, health_score, is_champion)
-       VALUES ('or_c1', 'dp_p', 'dp_f', 'Ada', 'ada@fan.co', 0.95, 1),
-              ('or_c2', 'dp_p', 'dp_f', 'Sup', 'sup@fan.co', 0.9, 1)`,
+      // HEALTH IS 0–100, AND THIS FIXTURE SAID 0.95. The champion flag was
+      // hand-set, so the rails below were proven while the criterion that
+      // SELECTS who gets written to was bypassed entirely — the production job
+      // marks a champion at `health_score > 80` and would never have marked
+      // either of these. Corrected to what the job actually writes; the flag is
+      // kept because `customers` still carries it, and the accessor derives the
+      // same two conditions rather than trusting it.
+      `INSERT INTO customers (id, product_id, owner_id, name, email, health_score, churn_risk, is_champion)
+       VALUES ('or_c1', 'dp_p', 'dp_f', 'Ada', 'ada@fan.co', 95, 0.05, 1),
+              ('or_c2', 'dp_p', 'dp_f', 'Sup', 'sup@fan.co', 90, 0.10, 1)`,
       [],
     );
   });

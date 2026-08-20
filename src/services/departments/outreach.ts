@@ -55,7 +55,12 @@ export async function isSuppressed(productId: string, email: string): Promise<bo
 
 /** A referral ask that earns its warmth: it names only what is true — the
  *  customer's actual standing — and asks one small, specific favor. */
-export function draftReferralAsk(c: Record<string, unknown>, productName: string): { subject: string; body: string } {
+export function draftReferralAsk(
+  // Named field rather than a bag, for the reason `draftCheckIn` states: a
+  // loose type is how a store migration goes quiet instead of failing.
+  c: { name?: string | null },
+  productName: string,
+): { subject: string; body: string } {
   const name = String(c.name ?? '').trim() || 'there';
   return {
     subject: `A small favor — and thank you`,
@@ -89,11 +94,14 @@ export async function runOutreachSweep(productId: string): Promise<OutreachSweep
     .rows[0] as Record<string, string> | undefined;
   const productName = productRow?.name ?? 'our product';
 
-  const champions = (await query(
-    `SELECT * FROM customers WHERE product_id = ? AND is_champion = 1
-       AND email LIKE '%@%' ORDER BY health_score DESC LIMIT ?`,
-    [productId, MAX_PER_SWEEP],
-  )).rows as unknown as Array<Record<string, unknown>>;
+  // ASKED THROUGH THE ACCESSOR, NOT ONE TABLE. `customers.is_champion` is a
+  // stored flag set by the daily health refresh, and only for rows in that
+  // store. A company that reported its customers through the documented
+  // external API had none of them considered here — the same defect as the
+  // at-risk sweep, one department over. See `institution/company-customers.ts`.
+  const { getChampions } = await import('../institution/company-customers.js');
+  const champions = (await getChampions(productId, MAX_PER_SWEEP))
+    .filter((c) => typeof c.email === 'string' && String(c.email).includes('@'));
 
   const result: OutreachSweepResult = { champions: champions.length, shadowed: 0, proposed: 0, skipped: 0, suppressed: 0 };
 
@@ -117,7 +125,7 @@ export async function runOutreachSweep(productId: string): Promise<OutreachSweep
 
     const envelope = await checkAndConsume(productId, ENVELOPE_SCOPE);
     if (!envelope.allowed) { result.skipped++; continue; }
-    const budget = await checkAndIncrement(productId, String(c.external_id ?? customerId), weekStarting());
+    const budget = await checkAndIncrement(productId, String(c.externalId ?? customerId), weekStarting());
     if (!budget.allowed) { result.skipped++; continue; }
 
     const draft = draftReferralAsk(c, productName);

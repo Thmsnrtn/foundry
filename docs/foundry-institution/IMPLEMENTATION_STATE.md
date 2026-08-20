@@ -260,6 +260,29 @@ reasons. The value of the table is that it says which two were not, and it
 stops being useful the moment it becomes a compliance surface with rows for
 hypothetical futures.
 
+## What Foundry can sense about a company
+
+A company's customers are the sense with the sharpest consequence — the
+departments that write to people read them — and it was the one with two
+answers. `POST /api/v1/customers` (documented, scoped credentials) writes
+`customer_intelligence`; the departments read `customers`, written only by a
+session-authenticated route no client calls and by the demo seed. A company
+that integrated the documented way was invisible to them.
+
+One accessor now answers it — `services/institution/company-customers.ts` —
+reading both stores, reporting which one each record came from, and stating the
+at-risk and champion predicates once each. This is the **compare** stage of a
+shadow → compare → cutover → delete, not the end of it:
+`customerStoreSplit(productId).onlyLegacy` reaching zero is what says the
+legacy read can be deleted. Four read-only readers still query `customers`
+directly and are the remaining cutover work.
+
+**What this does not claim.** Nothing here is E2-and-above evidence about a
+REAL company: no real company has reported customers through that API. What is
+proven is that the path now connects, and that the outcome verifier no longer
+abstains on a customer it could not find — the latter mutation-tested, since
+its failure mode was a silent pass rather than an error.
+
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope |

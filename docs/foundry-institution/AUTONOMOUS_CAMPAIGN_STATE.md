@@ -215,6 +215,31 @@ and knew only three of the six kinds. The other ledger's page never rendered
 ALLOWED it, which is the distinction the constitution turns on. It says
 "proposed by" and "Authorised by" now, from one reader.
 
+**A company that integrated properly was invisible to the departments that act
+on customers.** Two customer stores, split along the line between where a real
+company's data enters — the documented `POST /api/v1/customers`, with issued
+scoped credentials — and where the institution looks. The success and outreach
+departments are real: governed, platform-capped, consent-gated, budgeted,
+verified, tested. They were structurally starved for exactly the companies that
+integrated the documented way, and nothing was broken; the two halves had
+simply never been introduced.
+
+Three things fell out of one accessor. The outcome verifier looked a reported
+customer up in the wrong table and **abstained** — a vacuous pass, proven under
+mutation: health fell from 80 to 10 and the criterion recorded `passed`.
+`draftCheckIn` took `Record<string, unknown>` and read `last_active_at`, the
+legacy column name, so a reported customer would have silently lost the
+personalised sentence rather than failing — a loose type is how a store
+migration goes quiet. And two "at risk" definitions turned out to be one:
+`churn_risk > 0.6` and `health_score < 40` are the same line, because
+`computeCustomerHealth` defines churn risk as `(100 - health)/100`.
+
+**A test fixture that proved the rails while bypassing the criterion.** The
+outreach champion fixture set `health_score` to `0.95` on a 0–100 column and
+hand-set `is_champion = 1`. The production job marks a champion at
+`health_score > 80` and would never have marked either row. Every rail below it
+was exercised; the thing that decides WHO gets written to was not.
+
 **A process failure worth keeping.** The commit before this cycle's work was
 pushed with five tests red: capping `customer_success` at 'suggest' was correct
 and the tests asserting the old behaviour were not updated with it. Validation
@@ -303,28 +328,64 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    rows on its own and is one column, not eleven findings.
 
 5. **One concept, two canonical truths: `customers` and
-   `customer_intelligence`.** Both are live — 12 readers and 19 readers — and
-   they hold overlapping facts about the same people. `customers.churn_risk` is
-   deterministic, computed by `computeCustomerHealth` from `customer_events`,
-   and it is what selects who the customer-success department writes to.
-   `customer_intelligence.health_score` is separate, and its sub-scores are
-   where an agent's judgment lands. `ARCHITECTURE.md` says there is one
-   canonical truth for each concept; here there are two, and neither is
-   labelled the shadow of the other.
+   `customer_intelligence`** — now in the COMPARE stage, with the live harm
+   fixed and a measurable cutover criterion.
 
-   **This is a slice, not a correction** — shadow, compare, cutover, delete —
-   which is why it is recorded rather than started at the tail of a cycle.
-   Recorded now because the fabrication finding this cycle made the split
-   visible: the agent path wrote to one table while the department read the
-   other, so an invented customer could not even have influenced the sweep that
-   was the reason to worry about it.
+   The split ran exactly along the line between where a real company's data
+   ENTERS and where the institution LOOKS. `POST /api/v1/customers` — the
+   documented external surface with issued scoped credentials, the path a real
+   company integrates against — writes `customer_intelligence`. The customer
+   success and outreach departments read `customers`, whose only writers are a
+   session-authenticated route no client calls and the demo seed. **A company
+   that reported its customers the documented way was invisible to the
+   departments that act on customers**, and the outcome verifier's
+   `customer_health_not_worse` looked such a customer up in the wrong table and
+   abstained — a vacuous pass, forever, for exactly those customers.
 
-   Related and smaller: `customer_events` has exactly one writer,
-   `routes/api/platform.ts`, part of the clientless API in item 1. Where that
-   API is unused, "at risk" reduces to `last_active_at` recency. The score is
-   honest about what it has; what it has is thin, and no surface says so.
+   `institution/company-customers.ts` is the one accessor: both stores read,
+   every record says which it came from, one at-risk predicate and one champion
+   predicate stated once. `customerStoreSplit(productId).onlyLegacy` reaching
+   zero is the criterion that says the legacy read can go — the *compare* stage
+   made measurable rather than asserted.
 
-6. **Two unread outcome predicates.** `shadow_expectation` and
+   **What is left, deliberately.** Four read-only readers still query
+   `customers` directly (`north-star`, `founder/intelligence`, `graph/engine`,
+   and `customers/intelligence` itself). They analyse rather than act, so they
+   were not migrated in the same tranche; migrating them and deleting the
+   legacy read is the cutover. `customer_events` has one writer,
+   `routes/api/platform.ts`, part of the clientless API in item 1 — where that
+   API is unused, `customers.churn_risk` reduces to `last_active_at` recency.
+
+   Related, found while here and not yet acted on:
+   `customer_intelligence.do_not_contact_until` has **no readers and no
+   writers** — a third contact control, inert, beside the canonical
+   `outreach_suppressions` one that is consulted at the boundary. Retire the
+   column or fold it in; do not leave a third.
+
+6. **A company's customer calls reach one dashboard page and nothing else.**
+   `POST /api/v1/webhooks` made Fathom/Fireflies transcript ingestion live
+   (RESOLVED 5), so real customer call content arrives. `analyzeTranscript`
+   extracts sentiment, topics, competitor mentions, objections and
+   **commitments — "next steps/commitments"** — into `call_transcripts`. The
+   only reader outside its own writer is `routes/dashboard/signals-multimodal.ts`.
+
+   A commitment the company made to a customer on a call is institutional by
+   nature: it is an obligation taken on. But **it must not become a
+   responsibility by extraction** — migrations 126 and 135–138 forbid Foundry
+   inferring responsibilities, which is exactly why the candidate-recognition
+   chain is deliberately unwired. A model reading intent out of a transcript is
+   the same shape as reading "stop emailing me" out of a customer's reply.
+
+   **The coherent connection, worked out and not yet built:** an extracted
+   commitment becomes a QUESTION to the founder through the existing founder
+   evidence path — *"on the call with X on the 3rd it sounded like you committed
+   to Y; did you?"* — and only the founder's answer is a recorded fact. That
+   keeps recorded-not-inferred, gives the sense a reader that acts, and costs
+   the founder one bounded question rather than a queue. The extraction is
+   already there; what is missing is the question and the answer's route into
+   discovery.
+
+7. **Two unread outcome predicates.** `shadow_expectation` and
    `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —
    `assisting-admission` reads the comparison rows — so these are redundant
    claims rather than lost learning. The resolution is to say so where they are
@@ -340,7 +401,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    external-metric twin, because having them wired in two places is how one of
    them came to be wired in none.
 
-7. **Adapters for the existing intakes.** The shape is proven; breadth is
+8. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
 
    Related, and now decided rather than open: the same obligation reported
@@ -353,7 +414,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-8. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
+9. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
    functions had no caller anywhere in `src/`. They have been read. What is
    left is 26, and every one of them is accounted for:
 
