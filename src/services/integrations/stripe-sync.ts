@@ -149,15 +149,21 @@ export async function syncStripeRevenue(founderId: string): Promise<void> {
 
     // Upsert metric snapshot
     await query(
-      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, churned_mrr_cents, signups_7d, active_users, mrr_health_ratio)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      // `mrr_cents` — the level — was computed into `currentMrr` above and
+      // discarded here, the same defect the live path in `stripe.ts` had. This
+      // module is not reachable today (no route calls its OAuth entry points),
+      // so this is not a live fix; it is the defect removed before somebody
+      // wires it up and inherits it.
+      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents, new_mrr_cents, churned_mrr_cents, signups_7d, active_users, mrr_health_ratio)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (product_id, snapshot_date) DO UPDATE SET
+         mrr_cents = excluded.mrr_cents,
          new_mrr_cents = excluded.new_mrr_cents,
          churned_mrr_cents = excluded.churned_mrr_cents,
          signups_7d = excluded.signups_7d,
          active_users = excluded.active_users,
          mrr_health_ratio = excluded.mrr_health_ratio`,
-      [nanoid(), productId, today, newMrr, churnedMrr, newCustomersList.length, allActiveSubscriptions.length, healthRatio]
+      [nanoid(), productId, today, currentMrr, newMrr, churnedMrr, newCustomersList.length, allActiveSubscriptions.length, healthRatio]
     );
 
     // Dispatch webhook
