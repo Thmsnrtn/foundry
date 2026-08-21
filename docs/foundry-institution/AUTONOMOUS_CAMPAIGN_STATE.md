@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** see `git log -1`. Pushed through `001e8ea`; anything after it is
-  local until the run that covers it is green.
+- **Head:** `855d8a3`, pushed. Verify against `git log -1` before trusting this
+  line; it is the one thing here that goes stale fastest.
   **Migrations:** 217 files, highest **181**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **309 files / 2,666 tests** at `95d188f`,
+- **Validation:** full suite green at `855d8a3` — **310 files / 2,675 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
