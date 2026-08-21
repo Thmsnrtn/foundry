@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `f72f731`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `2a914de`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 218 files, highest **182**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `f72f731` — **315 files / 2,742 tests**,
+- **Validation:** full suite green at `2a914de` — **316 files / 2,748 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -737,10 +737,22 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    closed set themselves. Foundry may show them what it heard. It may not
    choose the kind for them, and it may not pre-fill one.
 
-   What is genuinely worth checking here, and has not been: whether a founder is
-   told a transcript arrived at all, or must navigate to the page to find out.
-   That is a "where does a person read this" question about NOTICE, and it can
-   be answered without inferring anything.
+   **ANSWERED: the founder was not told.** A call arrived by webhook, was
+   stored, analysed and rendered — and nothing said so. They had to navigate to
+   `/signals/multimodal` and think to look. `analyzeTranscript` now delivers a
+   notice at `attention`, which the policy puts in the Letter unless the founder
+   raises it: a call came in, here is what was heard, read it tomorrow. Not for
+   a transcript the founder pasted in — they already know, and reporting
+   somebody's own action back to them as news is how a notification stream
+   becomes something people stop reading.
+
+   **Why it sat open for several cycles is the transferable part.** Telling the
+   founder meant choosing how loudly, and until migration 182 the quiet rungs of
+   `ux/interruption.ts` wrote nothing — so a founder who preferred to read it
+   tomorrow would have lost it entirely. The question was never hard. It was
+   blocked by something two frontier items away that nobody had connected to it.
+   **When an easy question stays open, look for what it is waiting on rather
+   than for what makes it hard.**
 
 8. **Two unread outcome predicates.** `shadow_expectation` and
    `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —
