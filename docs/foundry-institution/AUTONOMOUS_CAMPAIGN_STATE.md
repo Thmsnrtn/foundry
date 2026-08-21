@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `2a914de`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `771d049`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 218 files, highest **182**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `2a914de` — **316 files / 2,748 tests**,
+- **Validation:** full suite green at `771d049` — **317 files / 2,753 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -754,13 +754,27 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    **When an easy question stays open, look for what it is waiting on rather
    than for what makes it hard.**
 
-8. **Two unread outcome predicates.** `shadow_expectation` and
-   `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —
-   `assisting-admission` reads the comparison rows — so these are redundant
-   claims rather than lost learning. The resolution is to say so where they are
-   written, or stop writing them.
+8. **CLOSED: two unread claim predicates, and why they stay written.**
+   `shadow_expectation` and `shadow_comparison` go into `reconstruction_claims`
+   and no consumer filters on either — every reader selects by predicate, and
+   neither name is in `UNDERSTANDING_FACTS`, `later_reality_comparison` or
+   `development_need`.
 
-   `development_shadow_comparison` turned out to be something else entirely:
+   They stay, and the distinction is now written where they are written: the
+   OPERATIONAL copy of each fact is a dedicated row
+   (`responsibility_shadow_expectations`, `responsibility_shadow_comparisons`)
+   that the comparison and `assisting-admission` really do read; the claim is
+   the PROVENANCE copy, carrying evidence refs back to the founder's
+   authenticated statement and to the independent observations. **One is acted
+   on, one is accounted for.** Deleting them would also have put an E3
+   benchmark's evidence at risk to save nothing.
+
+   Two records of one fact is a shape this campaign normally treats as a defect,
+   so a test holds the premise the comment rests on — that nothing reads them.
+   If that stops being true, the comment explaining why it does not matter fails
+   with it.
+
+   `development_shadow_comparison` was something else entirely and is resolved:
    pulling on it found that **nothing in production ever resolved a development
    shadow expectation**. The Letter lets a founder open one — Foundry asks what
    they would expect a check to report and records their answer — and
