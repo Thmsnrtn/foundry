@@ -117,6 +117,40 @@ describe('no agent turns an unreported metric into a number', () => {
   });
 });
 
+describe('the two agents whose fabrications point opposite ways', () => {
+  it('does not report a company that has never reported support volume as having none', () => {
+    const src = stripComments(
+      readFileSync('src/services/scp/agents/sentinel.ts', 'utf8'), { lineComments: true });
+    expect(src, '`support_volume_7d` is nullable and carries no default')
+      .not.toMatch(/Number\(metricsRow\.support_volume_7d\) \|\| 0/);
+    expect(readFileSync('src/services/scp/agents/sentinel.ts', 'utf8'))
+      .toMatch(/never reported, which is not the same as none/);
+  });
+
+  it('does not give a company that has spent nothing an ROI of zero', () => {
+    const src = stripComments(
+      readFileSync('src/services/scp/agents/ledger.ts', 'utf8'), { lineComments: true });
+    // The worst possible return, reported for the state of having spent
+    // nothing yet, to the agent whose job is judging whether spend is worth it.
+    expect(src).not.toMatch(/attributedRevenue \/ aiCostTotal : 0/);
+    expect(src).toMatch(/attributedRevenue \/ aiCostTotal : null/);
+  });
+
+  it('does not report a model that declined to estimate NRR as 100%', () => {
+    const src = stripComments(
+      readFileSync('src/services/scp/agents/ledger.ts', 'utf8'), { lineComments: true });
+    expect(src, '100% net revenue retention is a healthy company')
+      .not.toMatch(/nrr_estimate \?\? 100/);
+    expect(src).toMatch(/nrr !== null && nrr < 90/);
+  });
+
+  it('raises no budget alert from an unknown utilisation', () => {
+    const src = stripComments(
+      readFileSync('src/services/scp/agents/ledger.ts', 'utf8'), { lineComments: true });
+    expect(src).toMatch(/utilPct !== null && utilPct > 80/);
+  });
+});
+
 describe('an unknown rate raises nothing', () => {
   it('guards every threshold that used to fire on the fabricated zero', () => {
     const harbor = stripComments(

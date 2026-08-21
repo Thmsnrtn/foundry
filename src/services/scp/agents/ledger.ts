@@ -170,8 +170,12 @@ export class LedgerAgent extends BaseAgent {
         ).join(', ')
       : 'No executed actions in 30d';
 
-    const roi = aiCostTotal > 0 ? attributedRevenue / aiCostTotal : 0;
-    const budgetUtilization = budget > 0 ? (aiCostTotal / budget) * 100 : 0;
+    // A COMPANY THAT HAS SPENT NOTHING HAS NO ROI, NOT AN ROI OF ZERO. The
+    // fallback reported the worst possible return for the state of having spent
+    // nothing yet, to an agent whose job is judging whether the spend is worth
+    // it. See `ai/measured.ts`.
+    const roi = aiCostTotal > 0 ? attributedRevenue / aiCostTotal : null;
+    const budgetUtilization = budget > 0 ? (aiCostTotal / budget) * 100 : null;
 
     // Stripe integration events
     const stripeEvents = (context.integrationEvents ?? []).filter(e => e.source === 'stripe');
@@ -194,8 +198,8 @@ You track AI/tool costs as a percentage of revenue — costs that are growing fa
     );
 
     const userPrompt = `MRR last ${metricRows.length} periods (newest first): ${mrrSeries || 'No MRR data'}.
-Total AI cost (30d): $${directCost.toFixed(4)}. Budget: $${budget.toFixed(2)}/month. Utilization: ${budgetUtilization.toFixed(1)}%.
-Attributed revenue (30d): $${attributedRevenue.toFixed(2)}. Calculated ROI: ${roi.toFixed(2)}x.
+Total AI cost (30d): $${directCost.toFixed(4)}. Budget: $${budget.toFixed(2)}/month. Utilization: ${budgetUtilization === null ? 'unknown' : `${budgetUtilization.toFixed(1)}%`}.
+Attributed revenue (30d): $${attributedRevenue.toFixed(2)}. Calculated ROI: ${roi === null ? 'not computable — nothing has been spent yet' : `${roi.toFixed(2)}x`}.
 Revenue by agent: ${revenueBreakdown}.
 Executed actions (30d): ${executedContext}.
 ${stripeContext}.
@@ -282,7 +286,7 @@ Return JSON only (no markdown fences):
           parameters: {
             title: rec.title,
             estimated_impact_usd: rec.estimated_impact_usd,
-            budget_utilization_pct: health?.budget_utilization_pct ?? budgetUtilization,
+            budget_utilization_pct: health?.budget_utilization_pct ?? budgetUtilization ?? 0,
           },
           authority_level: 1,
           estimated_value_usd: rec.estimated_impact_usd,
@@ -295,19 +299,23 @@ Return JSON only (no markdown fences):
 
     // Broadcast budget warning when utilization > 80%
     const utilPct = health?.budget_utilization_pct ?? budgetUtilization;
-    if (utilPct > 80) {
+    const utilText = utilPct === null ? 'unknown' : `${utilPct.toFixed(1)}%`;
+    if (utilPct !== null && utilPct > 80) {
       agentMessages.push({
         to_agent: 'broadcast',
         message_type: 'alert',
         priority: utilPct > 95 ? 'critical' : 'high',
-        subject: `Budget utilization at ${utilPct.toFixed(1)}% — AI cost review needed`,
-        body: `Ledger reports budget utilization at ${utilPct.toFixed(1)}% for the month. AI costs: $${directCost.toFixed(4)}. Budget cap: $${budget.toFixed(2)}. All agents should minimize unnecessary Claude calls until next billing cycle.`,
+        subject: `Budget utilization at ${utilText} — AI cost review needed`,
+        body: `Ledger reports budget utilization at ${utilText} for the month. AI costs: $${directCost.toFixed(4)}. Budget cap: $${budget.toFixed(2)}. All agents should minimize unnecessary Claude calls until next billing cycle.`,
       });
     }
 
     // Alert Forge when NRR < 90%
-    const nrr = health?.nrr_estimate ?? 100;
-    if (nrr < 90) {
+    // 100% NET REVENUE RETENTION IS A HEALTHY COMPANY. It was what a model
+    // declining to estimate produced, and it went into the run description as
+    // a figure. Null raises nothing and is reported as nothing.
+    const nrr = health?.nrr_estimate ?? null;
+    if (nrr !== null && nrr < 90) {
       agentMessages.push({
         to_agent: 'forge',
         message_type: 'alert',
@@ -353,7 +361,7 @@ Return JSON only (no markdown fences):
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed financial analysis: AI cost $${directCost.toFixed(4)}, budget utilization ${utilPct.toFixed(1)}%, ROI ${roi.toFixed(2)}x, NRR ${nrr.toFixed(1)}%`,
+      description: `Completed financial analysis: AI cost $${directCost.toFixed(4)}, budget utilization ${utilText}, ROI ${roi === null ? 'not computable' : `${roi.toFixed(2)}x`}, NRR ${nrr === null ? 'not estimated' : `${nrr.toFixed(1)}%`}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),

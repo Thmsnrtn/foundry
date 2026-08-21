@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { measured } from '../../ai/measured.js';
 
 interface SentinelClaudeResponse {
   observations: string[];
@@ -121,7 +122,10 @@ export class SentinelAgent extends BaseAgent {
     const metricsRow = metricsResult.rows.length > 0
       ? (metricsResult.rows[0] as Record<string, unknown>)
       : null;
-    const supportVolume = metricsRow ? Number(metricsRow.support_volume_7d) || 0 : 0;
+    // `support_volume_7d` is nullable and carries no default, so `|| 0` told an
+    // agent judging operational health that a company which has never reported
+    // support volume had none. See `ai/measured.ts`.
+    const supportVolume = measured(metricsRow?.support_volume_7d);
 
     const githubContext = githubEvents.length > 0
       ? `GitHub deployment/PR events: ${githubEvents.map(e => `[${e.event_type}] ${e.summary}`).join(' | ')}`
@@ -142,7 +146,7 @@ You push back when engineering is moving too fast without adequate testing or wh
     );
 
     const userPrompt = `Infrastructure stressors: ${stressorList}.
-Support volume (7d, incident proxy): ${supportVolume}.
+Support volume (7d, incident proxy): ${supportVolume}${supportVolume === 'unknown' ? ' — never reported, which is not the same as none' : ''}.
 ${githubContext}.
 
 Assess infrastructure and deployment health. Return JSON only (no markdown fences):
