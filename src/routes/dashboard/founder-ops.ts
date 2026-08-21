@@ -37,7 +37,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
   const defaultChurn = { at_risk_share_pct: null, at_risk_count: 0, at_risk_products: [], churned_this_month: null, rescue_opportunities: 0 };
   const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_failing: 0, jobs_never_reported: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: 0, recent_actions: [] };
   const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: 0, at_risk_by_company: [], champions: 0, revenue_at_risk: 0 };
-  const defaultWellbeing = { energy_score: 70, stress_signals: [], days_since_break: 0, override_count_7d: 0, burnout_trajectory: 'stable' as const, recommendation: null };
+  const defaultWellbeing = { energy_score: null, stress_signals: [], days_since_break: null, override_count_7d: null, burnout_trajectory: 'unknown' as const, recommendation: null };
   const defaultGrowth = { new_signups_7d: 0, new_signups_30d: 0, paid_share_pct: null, trial_to_paid_rate: null, expansion_revenue: null, top_acquisition_channels: [] };
   const defaultAICost = { total_tokens_24h: 0, total_cost_24h: 0, avg_latency_ms: null, calls_by_model: null, cost_per_founder: 0 };
 
@@ -253,14 +253,15 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
         </div>
       </div>
 
-      <div class="card" style="border-left:4px solid ${wellbeing.energy_score > 60 ? '#059669' : wellbeing.energy_score > 35 ? '#d97706' : '#dc2626'};">
+      <div class="card" style="border-left:4px solid ${wellbeing.energy_score == null ? '#9ca3af' : wellbeing.energy_score > 60 ? '#059669' : wellbeing.energy_score > 35 ? '#d97706' : '#dc2626'};">
         <h3>Founder Wellbeing</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
-          ${metricBadge('Energy Score', wellbeing.energy_score + '/100')}
+          ${metricBadge('Energy Score', wellbeing.energy_score == null ? 'not observed' : wellbeing.energy_score + '/100')}
           ${metricBadge('Trajectory', wellbeing.burnout_trajectory)}
-          ${metricBadge('Stress Signals', wellbeing.stress_signals.length)}
-          ${metricBadge('Overrides (7d)', wellbeing.override_count_7d)}
+          ${metricBadge('Stress Signals', wellbeing.energy_score == null ? 'not observed' : wellbeing.stress_signals.length)}
+          ${metricBadge('Overrides (7d)', wellbeing.override_count_7d == null ? 'not recorded' : wellbeing.override_count_7d)}
         </div>
+        ${wellbeing.energy_score == null ? html`<p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">Nothing has been recorded about how you are doing. This card is grey rather than green because a green one would be a guess.</p>` : ''}
         ${wellbeing.recommendation ? html`<p style="font-size:0.8rem;color:#d97706;margin-top:0.5rem;">${wellbeing.recommendation}</p>` : ''}
       </div>
     </div>

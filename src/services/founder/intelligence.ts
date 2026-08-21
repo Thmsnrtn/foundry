@@ -538,12 +538,43 @@ export async function generateDailyDigest(): Promise<{
 
 // ─── Wellbeing Monitor ──────────────────────────────────────────────────────
 
+/**
+ * WHAT FOUNDRY HAS OBSERVED ABOUT THE PERSON — which is often nothing.
+ *
+ * This card carries a coloured left border on the operator page: green above
+ * 60, amber above 35, red below. A founder with NO `founder_health` row at all
+ * got `motivation = 50` and `engagement = 'stable'` by default, which produced
+ * `energy_score: 70` — a GREEN card, "70/100", "Trajectory: stable", no stress
+ * signals — about a person Foundry had never observed once.
+ *
+ * That is the worst version of this defect class, because of who reads it and
+ * what they conclude. A founder seeing a green wellbeing card believes
+ * something has been watching. A number assembled from three defaults is not
+ * watching, and the reassurance is the harm.
+ *
+ * So every field here is null when its input is absent, and the card says it
+ * has not observed rather than colouring itself green.
+ */
 export interface WellbeingData {
-  energy_score: number;
+  /** NULL when nothing about this person has been recorded — no health row, or
+   *  a row with none of the three inputs the score is built from. */
+  energy_score: number | null;
   stress_signals: string[];
-  days_since_break: number;
-  override_count_7d: number;
-  burnout_trajectory: 'improving' | 'stable' | 'declining';
+  /** NULL: nothing records founder activity gaps. This was `0` under a comment
+   *  reading "Would track from activity gaps", which rendered as "you had a
+   *  break today". */
+  days_since_break: number | null;
+  /** NULL, AND IT WOULD STILL BE NULL IF IT WERE WIRED UP. The store that
+   *  answers this, `decision_quality_scores`, has no writer:
+   *  `recordDecisionContext` is exported from `scp/founder/decision-tracker.ts`
+   *  and called from nowhere, which is why the override rates over there are
+   *  also permanently zero. `0` here told a founder they had not overridden
+   *  Foundry once this week — a claim about that person's behaviour, drawn
+   *  from a table nothing writes to. */
+  override_count_7d: number | null;
+  /** 'unknown' until there are enough snapshots to compare. It defaulted to
+   *  'stable', which is a finding, not an absence of one. */
+  burnout_trajectory: 'improving' | 'stable' | 'declining' | 'unknown';
   recommendation: string | null;
 }
 
@@ -551,48 +582,69 @@ export async function getWellbeing(founderId: string): Promise<WellbeingData> {
   const health = await safeQuery('SELECT * FROM founder_health WHERE founder_id = ?', [founderId]);
   const h = health.rows[0] as Record<string, unknown> | undefined;
 
-  const motivation = (h?.motivation_score as number) ?? 50;
-  const engagement = (h?.engagement_trend as string) ?? 'stable';
+  // READ AS OBSERVED-OR-NOT, not as a value-or-default. The old code wrote
+  // `?? 50` and `?? 'stable'` here, and those two substitutions are the whole
+  // reason an unobserved founder scored 70.
+  const motivation = h?.motivation_score == null ? null : Number(h.motivation_score);
+  const runway = h?.personal_runway_months == null ? null : Number(h.personal_runway_months);
 
-  // Compute energy score
-  let energy = 70;
+  // `engagement_trend` CANNOT BE READ AS AN OBSERVATION WHEN IT SAYS 'stable'.
+  // Migration 006 gives the column `DEFAULT 'stable'`, so every row that has
+  // ever been written for any other reason carries it, and a written default
+  // is indistinguishable from a judgment that engagement is steady. It also
+  // adjusts nothing — only 'declining' and 'critical' move the score — so
+  // treating it as evidence would do nothing except make an unobserved founder
+  // scoreable, which is the whole defect.
+  const rawEngagement = h?.engagement_trend == null ? null : String(h.engagement_trend);
+  const engagement = rawEngagement === 'stable' ? null : rawEngagement;
+
   const stressSignals: string[] = [];
+  let energy: number | null = null;
 
-  if (motivation < 30) { energy -= 25; stressSignals.push('Low motivation score'); }
-  else if (motivation < 50) { energy -= 10; }
-  if (engagement === 'declining') { energy -= 15; stressSignals.push('Declining engagement'); }
-  if (engagement === 'critical') { energy -= 30; stressSignals.push('Critical engagement drop'); }
-
-  const runway = (h?.personal_runway_months as number) ?? null;
-  if (runway !== null && runway < 3) { energy -= 15; stressSignals.push(`Only ${runway} months runway`); }
-
-  energy = Math.max(0, Math.min(100, energy));
+  if (motivation !== null || engagement !== null || runway !== null) {
+    // 70 is the starting point for a person we have SOMETHING on. It is not a
+    // score for a person we have nothing on.
+    energy = 70;
+    if (motivation !== null) {
+      if (motivation < 30) { energy -= 25; stressSignals.push('Low motivation score'); }
+      else if (motivation < 50) { energy -= 10; }
+    }
+    if (engagement === 'declining') { energy -= 15; stressSignals.push('Declining engagement'); }
+    if (engagement === 'critical') { energy -= 30; stressSignals.push('Critical engagement drop'); }
+    if (runway !== null && runway < 3) { energy -= 15; stressSignals.push(`Only ${runway} months runway`); }
+    energy = Math.max(0, Math.min(100, energy));
+  }
 
   // Burnout trajectory from snapshots
   const snapshots = await safeQuery(
     'SELECT motivation_score FROM founder_health_snapshots WHERE founder_id = ? ORDER BY snapshot_date DESC LIMIT 5',
     [founderId]
   );
-  const scores = (snapshots.rows as unknown as Array<Record<string, number>>).map((s) => s.motivation_score ?? 50);
-  let trajectory: 'improving' | 'stable' | 'declining' = 'stable';
+  const scores = (snapshots.rows as unknown as Array<Record<string, number>>)
+    .map((s) => s.motivation_score).filter((v): v is number => v != null);
+  let trajectory: WellbeingData['burnout_trajectory'] = 'unknown';
   if (scores.length >= 3) {
     const recent = scores.slice(0, 2);
     const older = scores.slice(2);
     const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
     const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
+    trajectory = 'stable';
     if (recentAvg > olderAvg + 5) trajectory = 'improving';
     if (recentAvg < olderAvg - 5) trajectory = 'declining';
   }
 
+  // NO RECOMMENDATION FROM NO OBSERVATION. Telling somebody to take a break
+  // because a default said 70, or not telling them because it did, are both
+  // advice about a person nothing has looked at.
   let recommendation: string | null = null;
-  if (energy < 40) recommendation = 'Your energy is low. Consider delegating decisions and taking a break.';
+  if (energy !== null && energy < 40) recommendation = 'Your energy is low. Consider delegating decisions and taking a break.';
   else if (stressSignals.length > 0) recommendation = 'Some stress signals detected. Review your workload.';
 
   return {
     energy_score: energy,
     stress_signals: stressSignals,
-    days_since_break: 0, // Would track from activity gaps
-    override_count_7d: 0,
+    days_since_break: null,
+    override_count_7d: null,
     burnout_trajectory: trajectory,
     recommendation,
   };
