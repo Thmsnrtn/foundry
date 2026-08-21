@@ -255,7 +255,20 @@ export interface CustomerHealthOverview {
   warning: number;
   critical: number;
   avg_health_score: number;
-  top_at_risk: Array<{ name: string; health: number; churn_risk: number }>;
+  /** WHICH COMPANIES NEED ATTENTION, NEVER WHICH OF THEIR CUSTOMERS.
+   *
+   * This was `Array<{ name: string; health: number; churn_risk: number }>` —
+   * the ten most at-risk CUSTOMERS across every company on the platform, by
+   * name, read with no product scope at all. The operator is Foundry's own
+   * owner and legitimately administers the COMPANIES; a company's customers are
+   * that company's, and `operator-pack.ts` already states the boundary and is
+   * structurally held to it. This surface was the same rule's other
+   * implementation, unenforced.
+   *
+   * Nothing rendered the names — `founder-ops` uses only the counts — so they
+   * crossed the boundary into a clientless API response and no further. Removed
+   * at the source rather than relying on nobody looking. */
+  at_risk_by_company: Array<{ company: string; customers_at_risk: number }>;
   champions: number;
   revenue_at_risk: number;
 }
@@ -275,8 +288,15 @@ export async function getCustomerHealthOverview(): Promise<CustomerHealthOvervie
 
   const t = totals.rows[0] as Record<string, number> | undefined;
 
+  // Aggregated per company, so the operator learns which COMPANY needs looking
+  // at without learning who any of its customers are.
   const atRisk = await safeQuery(
-    'SELECT name, health_score, churn_risk FROM customers WHERE churn_risk > 0.5 ORDER BY churn_risk DESC LIMIT 10', []
+    `SELECT p.name AS company, COUNT(*) AS n
+       FROM customers c JOIN products p ON p.id = c.product_id
+      WHERE c.churn_risk > 0.5
+      GROUP BY c.product_id, p.name
+      ORDER BY n DESC, p.name ASC
+      LIMIT 10`, []
   );
 
   return {
@@ -285,10 +305,9 @@ export async function getCustomerHealthOverview(): Promise<CustomerHealthOvervie
     warning: t?.warning ?? 0,
     critical: t?.critical ?? 0,
     avg_health_score: Math.round(t?.avg_health ?? 0),
-    top_at_risk: (atRisk.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
-      name: (r.name as string) ?? 'Unknown',
-      health: (r.health_score as number) ?? 0,
-      churn_risk: (r.churn_risk as number) ?? 0,
+    at_risk_by_company: (atRisk.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+      company: (r.company as string) ?? 'Unknown',
+      customers_at_risk: Number(r.n ?? 0),
     })),
     champions: t?.champions ?? 0,
     revenue_at_risk: Math.round((t?.mrr_at_risk ?? 0) / 100),
@@ -468,7 +487,11 @@ export async function getActivityTimeline(limit: number = 50): Promise<Array<{
   id: string; action: string; detail: string; gate: number; timestamp: string; category: string;
 }>> {
   const result = await safeQuery(
-    'SELECT id, action_type, reasoning, gate, created_at, product_id FROM audit_log ORDER BY created_at DESC LIMIT ?',
+    // `reasoning` is model-written narrative about a company's operations and
+    // can quote its specifics. The operator needs to know WHAT happened WHERE,
+    // which is what remains; the account of why belongs to the company whose
+    // audit trail it is.
+    'SELECT id, action_type, gate, created_at, product_id FROM audit_log ORDER BY created_at DESC LIMIT ?',
     [limit]
   );
 

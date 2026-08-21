@@ -142,4 +142,28 @@ describe('primitive 4 — the operator brain sees aggregates only (Level-1/2 bou
     const selects = src.match(/SELECT[\s\S]*?FROM/gi) ?? [];
     for (const s of selects) expect(s).toMatch(/COUNT\(|SUM\(/i);
   });
+
+  it('holds the OTHER operator surface to the same rule', () => {
+    // ONE RULE, TWO IMPLEMENTATIONS, ONE ENFORCED. `founder/intelligence.ts`
+    // feeds `/founder-ops` and `/api/founder-intelligence` — both gated on
+    // `isFounder`, so operator-only and not a leak between founders — and it
+    // read the ten most at-risk CUSTOMERS across every company on the platform
+    // by name, with no product scope, plus each company's audit `reasoning`.
+    //
+    // The operator is Foundry's owner: they administer the COMPANIES and bill
+    // them. A company's customers are that company's. Nothing rendered the
+    // names, so they crossed into a clientless API response and no further —
+    // removed at the source rather than relying on nobody looking.
+    const src = readFileSync('src/services/founder/intelligence.ts', 'utf8');
+    const customerSelects = (src.match(/SELECT[\s\S]*?FROM\s+customers/gi) ?? []);
+    expect(customerSelects.length, 'the operator still asks about customers').toBeGreaterThan(0);
+    for (const s of customerSelects) {
+      expect(s, 'and only ever in aggregate').toMatch(/COUNT\(|SUM\(|AVG\(/i);
+    }
+    // The company a customer belongs to is Foundry's own customer and may be
+    // named; the customer may not.
+    expect(src).not.toMatch(/SELECT[^;]*\bname\b[^;]*FROM\s+customers/i);
+    expect(src, 'a company\'s account of why belongs to that company')
+      .not.toMatch(/SELECT[^;]*\breasoning\b[^;]*FROM\s+audit_log/i);
+  });
 });
