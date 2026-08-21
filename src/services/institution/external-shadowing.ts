@@ -191,6 +191,27 @@ export async function beginExternalMetricShadowing(input: {
       }),
       `The founder said what they would expect to see if this is being handled`],
   );
+  // NOTHING FILTERS ON THIS PREDICATE, AND THAT IS THE POINT OF SAYING SO HERE.
+  //
+  // Every consumer of `reconstruction_claims` selects by predicate:
+  // `responsibility-understanding.ts` against `UNDERSTANDING_FACTS`,
+  // `institutional-judgment-disposition.ts` against
+  // `later_reality_comparison`, `development-disposition.ts` against
+  // `development_need`. `shadow_expectation` is in none of those lists, so no
+  // decision anywhere turns on this claim.
+  //
+  // It is still written, and the reason is not inertia. The OPERATIONAL copy of
+  // this fact is the `responsibility_shadow_expectations` row created below,
+  // which is what the comparison and `assisting-admission` actually read. This
+  // claim is the PROVENANCE copy: what Foundry knows about the company, with an
+  // evidence ref back to the founder's own authenticated statement, which is
+  // what a reconstruction shows and what an audit would ask for.
+  //
+  // Two different records of one fact is a shape this campaign usually treats
+  // as a defect, so the distinction has to be stated rather than assumed: one
+  // is acted on, one is accounted for. If a consumer ever needs to decide
+  // something from a founder's stated expectation, it reads this — and the
+  // reason to look here first is written down.
   const expectationClaimId = await recordReconstructionClaim({
     productId: input.productId, subject: `responsibility:${input.responsibilityId}`,
     predicate: 'shadow_expectation',
@@ -266,6 +287,11 @@ export async function resolveExternalMetricShadowing(
   // a fact. Marking it `conflicting` would also have meant reaching for a
   // second evidence source to satisfy the multi-source rule, which is exactly
   // the kind of accommodation that turns an invariant into a formality.
+  // Same standing as `shadow_expectation` above: no consumer filters on this
+  // predicate. The operational copy is the `responsibility_shadow_comparisons`
+  // row, which `assisting-admission` reads to decide whether a responsibility
+  // has been watched long enough. This is the accounted-for copy, carrying the
+  // evidence refs of the independent observations the classification rests on.
   const learnedClaimId = await recordReconstructionClaim({
     productId, subject: `responsibility:${String(expectation.responsibility_id)}`,
     predicate: 'shadow_comparison',
