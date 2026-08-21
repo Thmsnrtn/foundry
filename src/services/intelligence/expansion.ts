@@ -36,14 +36,32 @@ export async function estimateTAMCeiling(productId: string): Promise<number> {
     [productId]
   );
   const m = metrics.rows[0] as Record<string, unknown> | undefined;
-  const arpu = m ? (((m.new_mrr_cents as number) ?? 0) / Math.max(1, (m.active_users as number) ?? 1)) / 100 : 0;
+
+  // ARPU IS REVENUE PER USER, AND THIS WAS NEITHER.
+  //
+  //   new_mrr_cents   the NEW BUSINESS won this period, not the MRR level. A
+  //                   company at $50k MRR with a flat month had an ARPU of $0.
+  //   Math.max(1, …)  a company with no reported active users got a denominator
+  //                   of ONE, so its ARPU became its entire monthly revenue —
+  //                   one user's worth of revenue equal to the whole company's.
+  //   the ?? 0 / : 0  no metrics at all produced "Current ARPU: $0/mo", stated
+  //                   to a model that was then asked to size the market from it.
+  //
+  // Null when either input is missing or the user count is zero. A TAM estimate
+  // made from a fabricated ARPU is worse than one made from an acknowledged gap:
+  // the model can say what it cannot know, and could not before.
+  const mrrLevel = m?.mrr_cents == null ? null : Number(m.mrr_cents);
+  const activeUsers = m?.active_users == null ? null : Number(m.active_users);
+  const arpu = mrrLevel !== null && activeUsers !== null && activeUsers > 0
+    ? (mrrLevel / activeUsers) / 100
+    : null;
 
   const prompt = `Estimate the Total Addressable Market (TAM) for this product.
 
 Product: ${p.name}
 Sector: ${p.sector_profile ?? 'b2b_saas'}
 Market: ${p.market_category ?? 'general'}
-Current ARPU: $${arpu.toFixed(0)}/mo
+Current ARPU: ${arpu === null ? 'not known — no MRR level or no active-user count has been reported' : `$${arpu.toFixed(0)}/mo`}
 Geography: ${p.country_code ?? 'US'}
 
 Return JSON: {"tam_estimate_usd": number (annual), "methodology": "brief explanation"}`;
