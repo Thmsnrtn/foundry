@@ -1173,6 +1173,9 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   voice_memos: { op: 'delete', columns: ['founder_id'], reason: 'voice recordings of the person' },
   voice_sessions: { op: 'delete', columns: ['founder_id'], reason: 'voice sessions the person held' },
   notifications: { op: 'delete', columns: ['founder_id'], reason: 'messages addressed to them' },
+  // Same kind as `notifications`: something Foundry decided to tell this person
+  // and how loudly. It is addressed to them and it goes with them.
+  quieted_events: { op: 'delete', columns: ['founder_id'], reason: 'what Foundry chose not to interrupt them for' },
   notification_preferences: { op: 'delete', columns: ['founder_id'], reason: 'how they wanted to be reached' },
   push_log: { op: 'delete', columns: ['founder_id'], reason: 'what was pushed to their devices' },
   onboarding_checklist: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
