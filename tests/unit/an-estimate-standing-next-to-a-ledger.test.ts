@@ -41,33 +41,48 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  await query('DELETE FROM ai_daily_spend');
   await query('DELETE FROM cost_events');
   await query('DELETE FROM agent_cost_log');
   await query('DELETE FROM chat_messages');
 });
 
 describe('what the operator is told about spend', () => {
-  it('is what was recorded, not a rate multiplied by a proxy', async () => {
-    await query(
-      `INSERT INTO cost_events (id, product_id, cost_type, amount_usd)
-       VALUES ('ce1', ?, 'llm_tokens', 4.25), ('ce2', ?, 'email_send', 0.75)`, [P, P]);
+  // WHICH LEDGER CHANGED, AND THE REASON IS NOT A WEAKENING.
+  //
+  // These three used to assert against `cost_events`, because that was where
+  // this badge read from when the estimate was removed. `cost_events` turned
+  // out to have ONE writer — `scp/agents/base.ts`, fire-and-forget, agent
+  // sessions only — so it covers neither founder chat nor voice replies, while
+  // `ai/client.ts` reserves and settles EVERY call into `ai_daily_spend`. The
+  // requirement these tests exist for is unchanged and still asserted: the
+  // operator is told what was recorded, never a rate times a proxy. They now
+  // point at the ledger that actually holds all of it — and at global scope,
+  // because the finish trigger writes the same amount to three rows.
+  const spend = (cents: number, date = new Date().toISOString().slice(0, 10)) => query(
+    `INSERT INTO ai_daily_spend (scope, scope_id, date, spent_cents, updated_at)
+     VALUES ('global','__global__',?,?, datetime('now'))
+     ON CONFLICT(scope, scope_id, date) DO UPDATE SET spent_cents = spent_cents + excluded.spent_cents`,
+    [date, cents]);
 
-    const cost = await getAICostData();
-    expect(cost.total_cost_24h, 'the ledger says 5.00').toBe(5);
+  it('is what was recorded, not a rate multiplied by a proxy', async () => {
+    await spend(500);
+    expect((await getAICostData()).total_cost_24h, 'the ledger says 5.00').toBe(5);
   });
 
-  it('counts every kind of spend the ledger holds, not only model tokens', async () => {
+  it('counts a call the partial ledger never heard about', async () => {
+    // A founder chat: settled through `ai/client.ts`, and `cost_events` has no
+    // writer for it, so this used to read as no spend at all.
+    await spend(200);
     await query(
       `INSERT INTO cost_events (id, product_id, cost_type, amount_usd)
-       VALUES ('ce1', ?, 'integration_api', 2.00)`, [P]);
+       VALUES ('ce1', ?, 'llm_tokens', 0.0)`, [P]);
     expect((await getAICostData()).total_cost_24h,
-      'an API call is money the company spent').toBe(2);
+      'money the company spent, whether or not an agent logged it').toBe(2);
   });
 
   it('does not count spend from before the window', async () => {
-    await query(
-      `INSERT INTO cost_events (id, product_id, cost_type, amount_usd, created_at)
-       VALUES ('old', ?, 'llm_tokens', 99, datetime('now','-3 days'))`, [P]);
+    await spend(9900, new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10));
     expect((await getAICostData()).total_cost_24h).toBe(0);
   });
 

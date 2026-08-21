@@ -129,15 +129,28 @@ export async function getIntegrationHealth(productId: string): Promise<
     source: string;
     status: 'healthy' | 'degraded' | 'stale' | 'error' | 'unknown';
     last_event_at: string | null;
+    /** When the connection last WORKED, which is not when data last arrived.
+     *  NULL means it has never completed a sync. */
+    last_successful_sync: string | null;
     data_freshness_hours: number | null;
     consecutive_failures: number;
     error_message: string | null;
     status_message: string;
   }>
 > {
+  // `last_successful_sync` IS THE FACT THAT SEPARATES QUIET FROM BROKEN, and it
+  // was recorded on every successful event and then never selected. The page
+  // showed `last_event_at` — when data last ARRIVED — and built its whole
+  // status message from it. For a webhook-driven source, a quiet fortnight and
+  // a dead connection produce the identical line: "No data in 14 days".
+  //
+  // `institution/loop-health.ts` already says this about the scheduler, in
+  // these words: "Nothing happened" and "nothing ran" are different facts. One
+  // rule, stated in one place and not the other, over a column that had the
+  // answer the whole time.
   const result = await query(
-    `SELECT integration_source, status, last_event_at, data_freshness_hours,
-            consecutive_failures, error_message
+    `SELECT integration_source, status, last_event_at, last_successful_sync,
+            data_freshness_hours, consecutive_failures, error_message
      FROM integration_health
      WHERE product_id = ?
      ORDER BY integration_source ASC`,
@@ -154,15 +167,21 @@ export async function getIntegrationHealth(productId: string): Promise<
       : null;
     const failures = (row.consecutive_failures as number) ?? 0;
     const errorMessage = (row.error_message as string) ?? null;
+    const lastSuccessfulSync = (row.last_successful_sync as string) ?? null;
 
     return {
       source,
       status,
       last_event_at: lastEventAt,
+      /** When the integration last WORKED, as opposed to when data last
+       *  arrived. NULL means it has never completed a sync — which is a
+       *  configuration problem, not a quiet source. */
+      last_successful_sync: lastSuccessfulSync,
       data_freshness_hours: freshness,
       consecutive_failures: failures,
       error_message: errorMessage,
-      status_message: _buildStatusMessage(status, lastEventAt, freshness, failures, errorMessage),
+      status_message: _buildStatusMessage(
+        status, lastEventAt, lastSuccessfulSync, freshness, failures, errorMessage),
     };
   });
 }
@@ -235,10 +254,18 @@ function _computeStatus(
 function _buildStatusMessage(
   status: string,
   lastEventAt: string | null,
+  lastSuccessfulSync: string | null,
   freshnessHours: number | null,
   failures: number,
   errorMessage: string | null,
 ): string {
+  if (status === 'error' && lastSuccessfulSync === null && failures > 0) {
+    // Failing and never once successful is a different message from failing
+    // after having worked: the first is almost always the credentials.
+    return `Failing · ${failures} consecutive error${failures > 1 ? 's' : ''} and never a successful sync`
+      + `${errorMessage ? ` · ${errorMessage.slice(0, 80)}` : ''}`;
+  }
+
   if (status === 'error') {
     return failures > 0
       ? `Failing · ${failures} consecutive error${failures > 1 ? 's' : ''}${errorMessage ? ` · ${errorMessage.slice(0, 80)}` : ''}`
@@ -250,13 +277,20 @@ function _buildStatusMessage(
   }
 
   if (status === 'stale') {
+    // THE ONE PLACE THE DISTINCTION CHANGES WHAT SOMEBODY DOES. A stale
+    // integration that has never once synced is misconfigured and the founder
+    // should go and fix it; a stale one that synced this morning is a quiet
+    // source and there is nothing to do. Both used to read "No data in 9 days".
+    const quiet = lastSuccessfulSync !== null
+      ? ` · Connection last worked ${_fmtAgo(lastSuccessfulSync)}`
+      : ' · It has never completed a sync — check the connection';
     if (freshnessHours !== null) {
       const days = Math.floor(freshnessHours / 24);
       const hrs = Math.round(freshnessHours % 24);
       const label = days > 0 ? `${days}d ago` : `${hrs}h ago`;
-      return `No data in ${days > 0 ? `${days} day${days > 1 ? 's' : ''}` : `${hrs} hours`} · Last ${label}`;
+      return `No data in ${days > 0 ? `${days} day${days > 1 ? 's' : ''}` : `${hrs} hours`} · Last ${label}${quiet}`;
     }
-    return 'No recent data';
+    return `No recent data${quiet}`;
   }
 
   if (status === 'healthy' && lastEventAt) {
