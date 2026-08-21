@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `855d8a3`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `6b4df85`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 217 files, highest **181**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `855d8a3` — **310 files / 2,675 tests**,
+- **Validation:** full suite green at `6b4df85` — **313 files / 2,708 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
@@ -248,6 +248,77 @@ the median variance AND ITS DIRECTION above the forecasts it judges.
 This one is worth the work rather than a curiosity for a specific reason:
 **Foundry asks companies to state what they expect and compares it against
 reality, and its own forecasts were exempt from that.**
+
+**Then the same reading found the two things underneath every number on those
+surfaces: what the words mean, and what the units are.**
+
+**MRR the level and MRR the movement, under one name.** The founder's own
+ingest endpoint mapped the field `mrr` to the column `new_mrr_cents`. A company
+POSTing `{"mrr": 50000}` — meaning "our MRR is fifty thousand dollars", which is
+what the word means — had that recorded as NEW BUSINESS WON THIS PERIOD,
+alongside its real expansion, contraction and churn. `mrr_health_ratio` is
+computed at ingest as churned/new, so a level in the denominator made the
+company look healthy; the operator's portfolio figure was adding a level to a
+sum of movements; Forge and Oracle put `new=$50,000.00` into their prompts.
+
+Meanwhile `metric_snapshots.mrr_cents` — the column that MEANS the level, and
+the one every investor-facing surface reads — had no writer on that door at all,
+so those companies read "N/A" for MRR everywhere. `POST /api/v1/metrics`, the
+public API, has always written the level correctly. **The same company got a
+different answer depending which door it used.**
+
+**A fraction compared against a percentage.** `activation_rate`, `churn_rate`,
+`day_30_retention` and `mrr_health_ratio` are stored as 0–1 fractions — the
+ingest validates that range and `ux/fluency.ts` says so in words. Five readers
+treated them as percentage points, and the failure mode is the thing to
+remember: **every "higher is better" test fails (`0.68 >= 40`) and every "lower
+is better" test passes (`0.02 <= 3`)**. A company scored zero for excellent
+retention and full marks for catastrophic churn, and nothing looked broken from
+either side.
+
+In `fundraising-readiness.ts` six of the ten points in `scoreTraction` were
+unreachable by anybody. Two of those were unreachable twice over:
+`mrr_growth_pct` and `customer_count` are NOT COLUMNS on `metric_snapshots`,
+read off a `SELECT *` row and `undefined` forever, and `d30_retention` is not
+one either — the real column is `day_30_retention`, sitting there with the data
+in it. In `network/failure-library.ts`, `{ churn_rate_gt: 8 }` means eight per
+cent, so no failure pattern keyed on churn could match for any company; the
+library kept matching on its other criteria and simply never fired on that one.
+And both briefings and the investor update told a company churning 2% a month
+that its churn was 0.0%.
+
+`ratePoints()` states the conversion once. It converts the VALUE, not the
+threshold: `>= 40` reads as forty per cent to a person and `>= 0.4` reads as a
+bug waiting to be "fixed". `nps_score` is left alone — already on its own
+-100..100 scale, and scaling it would be this same mistake reversed.
+
+**A product telling its customer it delivered nothing.** `/roi` is mounted and
+authenticated and headlined "Value Delivered This Month". It reported **$0** and
+a 0% action rate for every company, always, because `recommendation_outcomes`
+has no writer — `recordRecommendation` and `markActedOn` are exported from
+`roi/outcome-tracker.ts` and called from nowhere. The line underneath read
+"Foundry is tracking recommendations — value will appear as outcomes are
+measured", and nothing was tracking anything.
+
+**It is deliberately still not wired, and that is the interesting part.** The
+obvious move is to call `recordRecommendation` from every agent run. It would be
+worse than doing nothing: recommendations would accumulate while `markActedOn`
+still had no caller, turning an UNMEASURED action rate into a MEASURED 0%. **A
+loop that records its denominator and never its numerator produces a confident
+wrong answer, which is harder to notice than an honest blank.** Wiring the other
+half needs a real answer to "what counts as acting on a recommendation"; a test
+now fails if a caller appears for one without the other.
+
+**A gate that was measured and rejected.** The ghost-column class —
+`mrr_growth_pct` read off a `SELECT *` — is invisible to every column gate here,
+and looked like the next ratchet. Two attempts were measured: matching property
+casts against the file's single starred table gave 48 findings, mostly
+properties belonging to other queries in the same file; binding variables to
+their query through `.rows[0]` gave 108, still leaky because generic names like
+`r` and `row` are reused across queries. **Real scope analysis is the price of
+this one**, and a gate that cries wolf gets baselined into uselessness. Not
+built. The specific findings were verified by hand against the built schema
+instead.
 
 **The write-only list is a question-asker, not a work queue** — measured, not
 asserted. Of the 84 entries, 47 are reachable by a mechanism that ratchet

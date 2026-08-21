@@ -404,6 +404,36 @@ entries, of which 47 were reachable by a mechanism it cannot see — a literal
 `SELECT *`, a SQL trigger, or the export's dynamic `SELECT * FROM ${table}`. It
 is a question-asker, as its own header says. Check before building.
 
+## What a metric means, and what units it is in
+
+Two conventions govern every company number in this system. Both were being
+ignored by readers, and both are now stated in code rather than in prose.
+
+**`mrr_cents` is the LEVEL; `new_mrr_cents` is new business won this period.**
+The ingest field `mrr` maps to `mrr_cents` — it used to map to `new_mrr_cents`,
+so a company reporting its total MRR had it recorded as new business, and every
+investor-facing surface (which reads the level) showed N/A. `POST
+/api/v1/metrics` always wrote the level correctly, so the same company got
+different answers from the two doors. The settings page spells the difference
+out to the founder, because that is what somebody sends wrong.
+
+**Rates are stored as 0–1 fractions.** `activation_rate`, `churn_rate`,
+`day_30_retention`, `mrr_health_ratio` — the ingest validates that range and
+`ux/fluency.ts` names them. Use `ratePoints()` from `ai/measured.ts` to compare
+against a percentage threshold, and convert the value rather than the threshold.
+Watch for the asymmetry this failure has: **every "higher is better" test fails
+and every "lower is better" test passes**, so a broken scorer awards full marks
+for the worst possible number and nothing looks wrong. `nps_score` is on its own
+-100..100 scale and must NOT be scaled.
+
+**And one rule about outcome loops.** `/roi` reports "not measured" rather than
+$0, because `recommendation_outcomes` has no writer. **Do not wire
+`recordRecommendation` without `markActedOn`**: recording the denominator and
+never the numerator turns an unmeasured rate into a measured 0%, which is a
+confident wrong answer and harder to notice than a blank. A test fails if a
+caller appears for one without the other. Wiring both needs a real answer to
+"what counts as acting on a recommendation".
+
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope |
