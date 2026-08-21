@@ -447,6 +447,21 @@ governs how loudly Foundry may interrupt THIS PERSON. `risk-state.ts` cited the
 first in place of the second, in a comment, and was right about the first.
 **Watch for a satisfied guard named where an absent one belongs.**
 
+**Quieting an event to the letter is only safe when the Letter carries it.**
+`deliver()`'s letter and log rungs write nothing. `letter/composer.ts` composes
+from a specific list — completed executions, gate-0 decisions decided in the
+last day, the top pending decision, falsified premises, the memory digest,
+peer-radar warnings, the trust ledger, dissent. An event outside that list is
+DROPPED by a founder lowering their ceiling, silently. Route a notification
+through `deliver()` only when the underlying fact is already in the Letter.
+
+**And a company's MRR reaches Foundry through TWO doors**, not one: the
+founder's ingest token and `POST /api/v1/metrics`. Anything that must happen
+when a company reports its numbers — forecast reconciliation is the first
+example — belongs in a shared function both call.
+`reconcileForecastsFromSnapshot` is that, and a test requires both doors to use
+it.
+
 **The general form, which is worth more than the instance:** when a doctrine
 sentence is written into a type, check every consumer before believing it. A
 rule in a comment protects the file it sits in; only a shared helper and an

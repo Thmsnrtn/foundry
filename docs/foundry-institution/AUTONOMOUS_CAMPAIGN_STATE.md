@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `89f51d3`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `b286983`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 217 files, highest **181**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `89f51d3` — **315 files / 2,728 tests**,
+- **Validation:** full suite green at `b286983` — **315 files / 2,734 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -360,6 +360,37 @@ as one thing is how a control that WAS working became the reason nobody looked
 for the one that wasn't. Worth watching for generally: a satisfied guard cited
 in place of an absent one.
 
+**And then the same lens on sentences I had written myself.** Two commits after
+wiring the forecast reconciliation into the ingest route, under a comment of
+mine reading *"This is the only path by which a company's real MRR reaches
+Foundry"*, it turned out not to be: `POST /api/v1/metrics` — the documented
+public API with issued scoped credentials, the path this very file calls the one
+a real company integrates against — also writes `mrr_cents`. So a company
+integrating the DOCUMENTED way had forecasts recorded and never scored. Same
+shape as the customer-store split, introduced while closing that very loop.
+
+**And on the interruption module's own justification**, after using it to find
+the module's bypass. Its quiet rungs write nothing, excused by *"the Letter
+composes from the ledgers, so the event will appear there"*. The Letter composes
+from a SPECIFIC LIST — completed executions, gate-0 decisions, the top pending
+decision, falsified premises, the memory digest, peer-radar warnings, the trust
+ledger, dissent. An event in that list survives being quieted; one outside it
+(a Signal drop, a wellbeing pulse, drafts awaiting approval, a milestone, a
+billing failure) would be **dropped silently by a founder setting a lower
+ceiling than they realised they were setting**.
+
+That is why the eleven direct notification calls were not converted wholesale,
+and the rule now sits where somebody would read it before doing exactly that:
+route through `deliver()` only when the Letter already carries the fact. The
+peer-radar bell is converted as proof and as the unambiguous case —
+`letter/composer.ts` calls `scanForWarnings` itself.
+
+**The rule for the whole cycle, stated plainly:** a claim in a comment is
+evidence of what somebody believed when they wrote it, and nothing else — and
+that includes claims written five minutes ago by whoever is reading. Three of
+this cycle's findings came from checking such sentences against their consumers;
+one of them was mine.
+
 **A gate that was measured and rejected.** The ghost-column class —
 `mrr_growth_pct` read off a `SELECT *` — is invisible to every column gate here,
 and looked like the next ratchet. Two attempts were measured: matching property
@@ -528,17 +559,27 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    sites — so those bells skip both `max_channel` and the strain quieting that
    `ux/interruption.ts` exists to apply.
 
-   **Not mechanical, which is why it is here rather than done.** Each site needs
-   an `importance` chosen for it, and that is a judgment about what the event
-   means to a founder. And routing them through `deliver()` means a ceiling
-   below `notification` DROPS the bell — which costs the founder a record they
-   currently get, unless the caller already writes its own durable row (most
-   do; check per site). Do not put the ceiling check inside
-   `createNotification` instead: that module is the RECORD primitive and
-   `interruption.ts` is the POLICY, and the policy's own header says detection
-   and delivery are separate concerns.
+   **The condition is now known, and it decides each site.** `deliver()`'s
+   letter rung writes nothing, which is safe ONLY when the Letter already
+   carries the fact. It composes from: completed executions, gate-0 decisions
+   decided in the last day, the top pending decision, falsified premises, the
+   memory digest, peer-radar warnings, the trust ledger, dissent.
 
-   A test pins the three files so the list can only shrink.
+   - **Safe to convert** — the Letter has the fact: peer radar (**done**),
+     falsified premises (`getExpiredBeliefs`), pending/decided decisions
+     (decision follow-up, retrospective, autopilot).
+   - **NOT safe as-is** — the Letter does not carry it, so quieting DROPS it:
+     the Signal-drop alert, the wellbeing pulse, check-in drafts awaiting
+     approval, milestones, billing failures. Either give the letter rung
+     something durable the Letter reads, or leave these outside the policy and
+     say so at the site.
+
+   Do NOT put the ceiling check inside `createNotification`: that module is the
+   RECORD primitive and `interruption.ts` is the POLICY, and the policy's own
+   header separates detection from delivery.
+
+   Eight direct calls in `jobs/index.ts` became seven. A test pins the three
+   files and the direction.
 
 2. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving an
    archived unbuildable client, most of `tier1-4`). Deletion adds no capability
