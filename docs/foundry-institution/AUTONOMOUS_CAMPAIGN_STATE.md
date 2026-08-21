@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `0157982`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `10be3ab`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 219 files, highest **183**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `0157982` — **319 files / 2,764 tests**,
+- **Validation:** full suite green at `10be3ab` — **319 files / 2,766 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -39,7 +39,8 @@ inherited list because it was inherited.
   effects **0** · statically unreachable modules **28** · write-only columns
   **81** · id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** (1,886 statements) · INSERT value-list
-  mismatches **0** (377).
+  mismatches **0** (377) · tables written and never read **13** (226 written
+  tables checked).
 
 ## Active work
 
@@ -641,7 +642,34 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      gate to flag it; excluding them would blunt a gate to avoid an operational
      annoyance of my own making. The discipline is the fix.
 
-5. **81 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
+5. **13 tables written and never read** — `check-unread-tables.mjs`, the mirror
+   of `check-writerless-tables`. That one found tables live code SELECTs from
+   and nothing fills; this finds tables live code FILLS and nothing SELECTs
+   from. A write on every path, an erasure obligation carried and schema
+   surface maintained, for a record nobody looks at.
+
+   **A sharper instrument than the column list**, because a whole table nobody
+   reads is unambiguous. Three exclusions, each a real reader the scan cannot
+   otherwise see: a SQL trigger body (`ai_spend_reservations` is consumed
+   entirely by migration 099's triggers), the erasure map (`exportFounderData`
+   reads those through a dynamic `SELECT * FROM ${table}` — `gate_events` and
+   `referral_conversions` reach a person that way), and a plain `FROM`.
+
+   Three on the baseline are new information rather than restatements:
+   **`customer_health_snapshots`** records a customer's health history daily and
+   nothing reads it — a company sense captured and discarded; **`board_decks`**
+   generates a draft nobody opens; **`web_audit_results`** holds the non-code
+   track's audit output. `portfolio_snapshots` and `okr_progress_updates` are
+   items 2 and 3's problem, not their own. The rest —
+   `agent_positions`, `auto_execution_log`, `causal_chains`,
+   `cofounder_alignment_scores`, `expansion_analysis`, `integration_sync_log`,
+   `portfolio_alerts`, `switching_cost_analysis` — are unexamined.
+
+   **Measured while building it:** every table holding a write-only column has a
+   writer, so `founder_focus_settings` was the only case of its kind and that
+   shape is exhausted. Do not go looking for more.
+
+6. **81 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
    read it rather than this line. Prose drifts from the ratchet — this entry has
    said 92 and 85 while the ratchet said otherwise, which is exactly the drift
    the ratchet exists to prevent in code and evidently not here.
@@ -692,7 +720,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    `signal_events.processing_session_id` accounts for eleven of the institution
    rows on its own and is one column, not eleven findings.
 
-6. **One concept, two canonical truths: `customers` and
+7. **One concept, two canonical truths: `customers` and
    `customer_intelligence`** — now in the COMPARE stage, with the live harm
    fixed and a measurable cutover criterion.
 
@@ -737,7 +765,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    inert contact control beside the canonical one consulted at the boundary.
    Migration 179 dropped it.
 
-7. **The transcript sense: NOT a gap. Corrected before it was built on.**
+8. **The transcript sense: NOT a gap. Corrected before it was built on.**
 
    This list said a company's customer calls "reach one dashboard page and
    nothing else", and proposed wiring extracted commitments into responsibility
@@ -778,7 +806,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    **When an easy question stays open, look for what it is waiting on rather
    than for what makes it hard.**
 
-8. **CLOSED: two unread claim predicates, and why they stay written.**
+9. **CLOSED: two unread claim predicates, and why they stay written.**
    `shadow_expectation` and `shadow_comparison` go into `reconstruction_claims`
    and no consumer filters on either — every reader selects by predicate, and
    neither name is in `UNDERSTANDING_FACTS`, `later_reality_comparison` or
@@ -808,7 +836,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    external-metric twin, because having them wired in two places is how one of
    them came to be wired in none.
 
-9. **Adapters for the existing intakes.** The shape is proven; breadth is
+10. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
 
    Related, and now decided rather than open: the same obligation reported
@@ -821,7 +849,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-10. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
+11. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
    functions had no caller anywhere in `src/`. They have been read. What is
    left is 26, and every one of them is accounted for:
 
