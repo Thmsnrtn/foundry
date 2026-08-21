@@ -75,19 +75,40 @@ export async function computeUnitEconomics(productId: string): Promise<UnitEcono
   const activeUsers = (m.active_users as number) ?? 0;
   if (activeUsers === 0) return null;
 
-  const totalMRR = ((m.new_mrr_cents as number) ?? 0) +
-    ((m.expansion_mrr_cents as number) ?? 0) -
-    ((m.contraction_mrr_cents as number) ?? 0) -
-    ((m.churned_mrr_cents as number) ?? 0);
-  const arpu = totalMRR / activeUsers / 100; // Convert cents to dollars
+  // `totalMRR` was new + expansion - contraction - churned, which is NET NEW
+  // MRR — a movement — and it was divided by active users to give ARPU, from
+  // which LTV, CAC payback, the LTV:CAC ratio and the gross margin all follow.
+  // A company with a flat month had an ARPU of zero and a company with a bad
+  // month had a NEGATIVE lifetime value. `mrr_cents` is the level.
+  const mrrLevel = m.mrr_cents == null ? null : Number(m.mrr_cents);
+  if (mrrLevel === null) return null;
+  const arpu = mrrLevel / activeUsers / 100; // Convert cents to dollars
 
   const cogsPerCustomer = (p?.avg_cogs_per_customer as number) ?? 0;
   const contributionMargin = arpu > 0 ? (arpu - cogsPerCustomer) / arpu : 0;
   const cac = (p?.avg_cac as number) ?? 0;
 
-  const churnRate = (m.churn_rate as number) ?? 5; // Default 5% monthly
-  const monthlyChurnDecimal = churnRate / 100;
-  const avgLifetimeMonths = monthlyChurnDecimal > 0 ? 1 / monthlyChurnDecimal : 60;
+  // A HUNDREDFOLD, AND ONLY FOR COMPANIES THAT REPORTED THEIR CHURN.
+  //
+  // `metric_snapshots.churn_rate` is stored as a 0–1 FRACTION — the ingest
+  // validates that range and IMPLEMENTATION_STATE states it. Dividing it by 100
+  // turned 5% monthly churn into 0.0005, an average customer lifetime of 2,000
+  // months, and an LTV inflated a hundredfold.
+  //
+  // The `?? 5` default was written in PERCENT, so the fallback path divided
+  // correctly and the real-data path did not: a company that reported its churn
+  // got a worse answer than one that reported nothing. That is the tell for a
+  // units bug — when the fallback and the measurement disagree about the
+  // arithmetic that follows them, one of them is in the wrong unit.
+  //
+  // And the default itself is gone. Five percent monthly churn assumed for a
+  // company that never reported any, then compounded into LTV, CAC payback and
+  // the LTV:CAC ratio, is an invented unit-economics model presented as this
+  // company's.
+  const monthlyChurn = m.churn_rate == null ? null : Number(m.churn_rate);
+  if (monthlyChurn === null) return null;
+  const avgLifetimeMonths = monthlyChurn > 0 ? 1 / monthlyChurn : null;
+  if (avgLifetimeMonths === null) return null;
 
   const ltv = arpu * contributionMargin * avgLifetimeMonths;
   const cacPaybackMonths = cac > 0 && (arpu * contributionMargin) > 0

@@ -80,28 +80,47 @@ Return JSON: {"tam_estimate_usd": number (annual), "methodology": "brief explana
  * Project when the product hits TAM saturation milestones.
  */
 export async function projectTAMSaturation(productId: string): Promise<{
-  pct_20: number;
-  pct_50: number;
-  pct_80: number;
+  /** Years to reach 20/50/80% of TAM. Null when there is nothing to project from. */
+  pct_20: number | null;
+  pct_50: number | null;
+  pct_80: number | null;
 }> {
   const tam = await estimateTAMCeiling(productId);
-  if (tam <= 0) return { pct_20: 0, pct_50: 0, pct_80: 0 };
+  // Zero years to saturation for a company whose TAM could not be estimated —
+  // "you are already there" — was the most flattering answer available.
+  if (tam <= 0) return { pct_20: null, pct_50: null, pct_80: null };
 
   const metrics = await query(
     'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 12',
     [productId]
   );
 
-  if (metrics.rows.length < 2) return { pct_20: 99, pct_50: 99, pct_80: 99 };
+  // 99 years was the answer for a company with fewer than two snapshots — a
+  // number, in a field a founder reads as a projection, for a company nobody
+  // has measured twice. Null says the same thing without pretending.
+  if (metrics.rows.length < 2) return { pct_20: null, pct_50: null, pct_80: null };
 
-  const rows = metrics.rows as unknown as Array<Record<string, number>>;
-  const latestMRR = ((rows[0]?.new_mrr_cents ?? 0) + (rows[0]?.expansion_mrr_cents ?? 0)) / 100;
+  const rows = metrics.rows as unknown as Array<Record<string, number | null>>;
+
+  // The LEVEL. This summed new + expansion MRR and called it the company's
+  // revenue — the same wrong sum the portfolio overview made, and the same
+  // consequence: a company at $50k MRR with a flat month looked like a company
+  // with no revenue, and its years-to-saturation was computed from that.
+  const level = (r: Record<string, number | null> | undefined): number | null =>
+    r?.mrr_cents == null ? null : Number(r.mrr_cents) / 100;
+
+  const latestMRR = level(rows[0]);
+  const earliestMRR = level(rows[rows.length - 1]);
+  if (latestMRR === null || earliestMRR === null || earliestMRR <= 0) {
+    return { pct_20: null, pct_50: null, pct_80: null };
+  }
+
   const annualRevenue = latestMRR * 12;
-
-  // Compute average monthly growth rate
-  const earliestMRR = ((rows[rows.length - 1]?.new_mrr_cents ?? 0) + (rows[rows.length - 1]?.expansion_mrr_cents ?? 0)) / 100;
   const months = rows.length;
-  const monthlyGrowth = earliestMRR > 0 ? Math.pow(latestMRR / earliestMRR, 1 / months) - 1 : 0.05;
+  // No `?? 0.05` fallback: the branch that needed it cannot be reached now,
+  // and a 5% monthly growth rate assumed for a company is a forecast about
+  // somebody's business that nobody made.
+  const monthlyGrowth = Math.pow(latestMRR / earliestMRR, 1 / months) - 1;
 
   function monthsToTarget(target: number): number {
     if (monthlyGrowth <= 0 || annualRevenue >= target) return 0;
@@ -173,7 +192,7 @@ export async function modelDepthVsBreadth(productId: string): Promise<{
   const prompt = `Model two strategic scenarios for this SaaS product.
 
 Product: ${p.name} (${p.sector_profile})
-Current MRR: $${m ? (((m.new_mrr_cents as number) ?? 0) / 100).toFixed(0) : '0'}
+Current MRR: ${m?.mrr_cents == null ? 'not reported' : `$${(Number(m.mrr_cents) / 100).toFixed(0)}`}
 Active users: ${(m?.active_users as number) ?? 0}
 
 Scenario A (Depth): Go deeper in current market. More features, higher ARPU, stronger lock-in.
@@ -265,8 +284,8 @@ export async function generateExpansionBrief(productId: string): Promise<string>
 
 ## TAM Analysis
 - Estimated TAM: $${(tam / 1000000).toFixed(1)}M/year
-- Years to 20% penetration: ${saturation.pct_20}
-- Years to 50% penetration: ${saturation.pct_50}
+- Years to 20% penetration: ${saturation.pct_20 ?? 'not projectable — fewer than two MRR snapshots, or no reported MRR level'}
+- Years to 50% penetration: ${saturation.pct_50 ?? 'not projectable — fewer than two MRR snapshots, or no reported MRR level'}
 
 ## Expansion Readiness
 - ${readiness.transferable_pct}% of product is transferable
