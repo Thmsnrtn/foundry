@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `771d049`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `03cbb13`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 218 files, highest **182**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `771d049` — **317 files / 2,753 tests**,
+- **Validation:** full suite green at `03cbb13` — **318 files / 2,758 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -611,9 +611,18 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      left hundreds of native handles to the garbage collector — including
      collection during the next file's queries, which is where both observed
      aborts landed. `closeDb()` exists and the suite closes after every file.
-   - **Evidence: over 30 consecutive clean runs since.** Against the prior rate
-     that is a vanishing coincidence. Strong, still not a diagnosis — a
-     recurrence eliminates this hypothesis the way the last one was eliminated.
+   - **Evidence: 39 completed runs in the scratchpad, zero abort signatures**
+     (`grep -lEi "PendingException|rust panic|SIGABRT|Aborted"` over every
+     `g*.log`), on top of the 30+ counted when `closeDb` landed. Against the
+     prior rate of roughly one in three, that is a vanishing coincidence.
+
+     **Still not a diagnosis, and the distinction is not pedantry.** What is
+     established is that the abort has not recurred since a specific change; the
+     mechanism was never observed. A recurrence eliminates this hypothesis the
+     way the uncleared-timer one was eliminated — by measurement, not argument.
+     Do not promote this to "fixed" without a mechanism, and do not spend more
+     runs accumulating the same evidence: it is already strong, and more of it
+     answers no question that is open.
    - **Method note:** never run two suites at once.
      `gates-fail-when-they-should` plants real files into the working tree, so
      concurrent runs collide and produce failures that look like defects.
