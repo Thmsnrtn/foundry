@@ -220,11 +220,40 @@ export async function getMRRIntelligence(): Promise<MRRIntelligence> {
 
 // ─── Churn Intelligence ─────────────────────────────────────────────────────
 
+/**
+ * THE OPERATOR'S AT-RISK NUMBERS — none of which were churn.
+ *
+ * `churn_rate_30d` was at-risk companies over active companies. Nothing in
+ * that query looks at time, so there was no 30-day window; and a company
+ * flagged yellow or red is by definition still active, so a churn rate was
+ * being computed entirely from companies that had not churned. It is renamed
+ * to the question it actually answers.
+ *
+ * Worse, its numerator and `at_risk_count` and `rescue_opportunities` were all
+ * `atRisk.rows.length` — the length of a list carrying `LIMIT 20`. With fifty
+ * at-risk companies the headline card read "At Risk: 20", and the rate divided
+ * a capped numerator by an uncapped denominator. The list is for the page; the
+ * counts now come from a count.
+ */
 export interface ChurnIntelligence {
-  churn_rate_30d: number;
+  /** Active companies flagged yellow or red, over all active companies.
+   *  NULL when there are no active companies — the old code substituted a
+   *  denominator of 1 rather than saying it had nothing to divide. */
+  at_risk_share_pct: number | null;
+  /** EVERY at-risk company, not the length of the capped list below. */
   at_risk_count: number;
+  /** The worst twenty, for a page that has to fit. `at_risk_count` is the total. */
   at_risk_products: Array<{ id: string; name: string; risk_state: string; stressor_count: number }>;
-  churned_this_month: number;
+  /** NULL BECAUSE NOTHING RECORDS WHEN A COMPANY CHURNED. Archiving happens in
+   *  two places and neither leaves a churn date: `deprovisionSCP` moves
+   *  `scp_status` and touches `updated_at`, which any other write also moves,
+   *  and erasure archives the row — and an erasure is NOT a churn. A person
+   *  exercising a deletion right and a customer leaving are different events,
+   *  and counting the first as the second would be the worst kind of guess
+   *  here. `0` claimed nobody left. */
+  churned_this_month: number | null;
+  /** Yellow-flagged companies: still reachable, not yet red. Counted over all
+   *  of them rather than over the twenty that fit on the page. */
   rescue_opportunities: number;
 }
 
@@ -237,15 +266,27 @@ export async function getChurnIntelligence(): Promise<ChurnIntelligence> {
      ORDER BY ls.risk_state DESC LIMIT 20`, []
   );
 
-  const totalActive = await safeQuery("SELECT COUNT(*) as c FROM products WHERE status = 'active'", []);
-  const total = (totalActive.rows[0] as Record<string, number>)?.c ?? 1;
+  // COUNTED, NOT MEASURED OFF THE PAGE. The same predicate as the list above,
+  // without the limit that exists only so a card fits.
+  const totals = await safeQuery(
+    `SELECT
+       (SELECT COUNT(*) FROM products WHERE status = 'active') AS active,
+       (SELECT COUNT(*) FROM products p JOIN lifecycle_state ls ON p.id = ls.product_id
+         WHERE ls.risk_state IN ('yellow','red') AND p.status = 'active') AS at_risk,
+       (SELECT COUNT(*) FROM products p JOIN lifecycle_state ls ON p.id = ls.product_id
+         WHERE ls.risk_state = 'yellow' AND p.status = 'active') AS yellow`, []);
+
+  const row = (totals.rows[0] ?? {}) as Record<string, unknown>;
+  const active = Number(row.active ?? 0);
+  const atRiskCount = Number(row.at_risk ?? 0);
 
   return {
-    churn_rate_30d: atRisk.rows.length > 0 ? Math.round((atRisk.rows.length / total) * 100 * 10) / 10 : 0,
-    at_risk_count: atRisk.rows.length,
+    at_risk_share_pct: active === 0 ? null
+      : Math.round((atRiskCount / active) * 100 * 10) / 10,
+    at_risk_count: atRiskCount,
     at_risk_products: atRisk.rows as unknown as ChurnIntelligence['at_risk_products'],
-    churned_this_month: 0,
-    rescue_opportunities: atRisk.rows.filter((r) => (r as Record<string, string>).risk_state === 'yellow').length,
+    churned_this_month: null,
+    rescue_opportunities: Number(row.yellow ?? 0),
   };
 }
 

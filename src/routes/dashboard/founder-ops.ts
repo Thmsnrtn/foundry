@@ -34,7 +34,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
 
   const defaultPulse = { status: 'healthy' as const, mrr: 0, mrr_delta_pct: 0, active_products: 0, active_founders: 0, founders_this_month: 0, churn_this_month: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
   const defaultMRR = { current_mrr: 0, mrr_30d_ago: 0, mrr_trend: 'flat' as const, growth_rate_pct: 0, arr: 0, by_tier: {}, mrr_history: [], forecast_3m: 0, forecast_6m: 0 };
-  const defaultChurn = { churn_rate_30d: 0, at_risk_count: 0, at_risk_products: [], churned_this_month: 0, rescue_opportunities: 0 };
+  const defaultChurn = { at_risk_share_pct: null, at_risk_count: 0, at_risk_products: [], churned_this_month: null, rescue_opportunities: 0 };
   const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_failing: 0, jobs_never_reported: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: 0, recent_actions: [] };
   const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: 0, at_risk_by_company: [], champions: 0, revenue_at_risk: 0 };
   const defaultWellbeing = { energy_score: 70, stress_signals: [], days_since_break: 0, override_count_7d: 0, burnout_trajectory: 'stable' as const, recommendation: null };
@@ -145,6 +145,8 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
     ${churn.at_risk_products.length > 0 ? html`
     <div class="card" style="margin-bottom:1.5rem;">
       <h3>At-Risk Products</h3>
+      ${churn.at_risk_count > churn.at_risk_products.length ? html`
+        <div style="font-size:0.8rem;color:#6b7280;">the worst ${churn.at_risk_products.length} of ${churn.at_risk_count} — this table is capped, the count above is not</div>` : ''}
       <table style="width:100%;font-size:0.87rem;margin-top:0.5rem;">
         <thead><tr style="text-align:left;border-bottom:1px solid #e5e7eb;">
           <th style="padding:0.5rem;">Product</th><th>Risk State</th><th>Stressors</th></tr></thead>
