@@ -29,14 +29,19 @@ roiDashboard.use('*', requireCompanyCapability('can_view_financials'));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function fmtDollars(v: number): string {
+/** NULL RENDERS AS "not measured", never as $0. The headline on this page said
+ *  "Value Delivered This Month: $0" for every company, always, because nothing
+ *  writes `recommendation_outcomes` — a product telling its customer it was
+ *  worthless, on no evidence. */
+function fmtDollars(v: number | null): string {
+  if (v === null) return 'not measured';
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
   return `$${v.toFixed(0)}`;
 }
 
-function fmtPct(v: number): string {
-  return `${v.toFixed(1)}%`;
+function fmtPct(v: number | null): string {
+  return v === null ? 'not measured' : `${v.toFixed(1)}%`;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -94,7 +99,24 @@ roiDashboard.get('/roi', async (c) => {
           <span style="opacity:0.8;font-size:0.85rem;">ROI</span>
         </div>
       ` : html``}
-      <p style="margin:0.75rem 0 0;font-size:1.05rem;opacity:0.85;max-width:600px;">${summary.headline}</p>
+      ${cm.measurement === 'no_recommendations_recorded' ? html`
+        <p style="margin:0.75rem 0 0;font-size:0.9rem;opacity:0.85;max-width:640px;">
+          Nothing has been recorded to value yet. Foundry captures a
+          recommendation's outcome only when one is written down and later
+          marked as acted on, and that capture is not wired up — so this is a
+          blank, not a zero. It does not mean nothing was delivered.
+        </p>
+      ` : html`
+        <p style="margin:0.75rem 0 0;font-size:1.05rem;opacity:0.85;max-width:600px;">${summary.headline}</p>
+      `}
+      ${cm.time_saved_dollars > 0 ? html`
+        <p style="margin:0.5rem 0 0;font-size:0.8rem;opacity:0.6;max-width:640px;">
+          Separately, and as an assumption rather than a measurement: two hours
+          saved per acted-on recommendation at $200 an hour comes to
+          ${fmtDollars(cm.time_saved_dollars)}. It is not added to the figure
+          above.
+        </p>
+      ` : html``}
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1rem;margin-top:2rem;">
         <div style="background:rgba(255,255,255,0.07);border-radius:0.75rem;padding:1rem;">
