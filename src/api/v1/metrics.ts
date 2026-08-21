@@ -91,6 +91,16 @@ metricsApi.post('/snapshots', requireScope('metrics:write'), async (c) => {
       ]
     );
 
+    // A FORECAST THAT HAS COME DUE IS SCORED HERE TOO. This door writes the MRR
+    // LEVEL — the quantity `forecast_checkpoints` predicts — and the
+    // reconciliation was wired only at the founder's own ingest token, so a
+    // company integrating through the documented API with issued credentials
+    // never had a prediction checked. Never fails the report.
+    const { reconcileForecastsFromSnapshot } = await import(
+      '../../services/scp/forecasting/runway.js'
+    );
+    await reconcileForecastsFromSnapshot(productId, mrr_cents as number | null | undefined);
+
     const result = await query(
       `SELECT * FROM metric_snapshots WHERE product_id = ? AND snapshot_date = ?`,
       [productId, snapshot_date]

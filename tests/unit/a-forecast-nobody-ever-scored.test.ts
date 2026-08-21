@@ -130,13 +130,49 @@ describe('reality is recorded against it', () => {
       'a variance of 0 would have scored predicting nothing as a perfect forecast').toBeNull();
   });
 
-  it('is reconciled where a company’s real MRR arrives', () => {
-    const src = stripComments(readFileSync('src/routes/ingest/index.ts', 'utf8'),
-      { lineComments: true });
-    expect(src, 'recordCheckpointActual had no caller anywhere')
-      .toMatch(/recordCheckpointActual/);
-    expect(src, 'and it must never fail the founder’s ingest')
-      .toMatch(/forecast checkpoint reconciliation failed/);
+  it('is reconciled at BOTH doors that write the level', () => {
+    // `metric_snapshots.mrr_cents` is written by the founder's own ingest token
+    // AND by `POST /api/v1/metrics`, the documented API with issued scoped
+    // credentials. The reconciliation was wired at the first only, under a
+    // comment claiming it was "the only path by which a company's real MRR
+    // reaches Foundry" — so a company integrating the documented way never had
+    // a prediction checked. `recordCheckpointActual` had no caller at all
+    // before that.
+    for (const f of ['src/routes/ingest/index.ts', 'src/api/v1/metrics.ts']) {
+      const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
+      expect(src, `${f} must reconcile`).toMatch(/reconcileForecastsFromSnapshot\(/);
+    }
+    const runway = stripComments(
+      readFileSync('src/services/scp/forecasting/runway.ts', 'utf8'), { lineComments: true });
+    expect(runway, 'stated once, including the never-fail posture')
+      .toMatch(/export async function reconcileForecastsFromSnapshot/);
+    expect(runway).toMatch(/forecast checkpoint reconciliation failed/);
+  });
+
+  it('scores a checkpoint from the public API door', async () => {
+    const productId = await companyWithForecasts();
+    await query(
+      `INSERT INTO forecast_checkpoints (id, product_id, checkpoint_date, predicted_value, metric_name)
+       VALUES (?, ?, date('now'), 4000000, 'mrr_cents')`, [nanoid(), productId]);
+
+    const { reconcileForecastsFromSnapshot } = await import(
+      '../../src/services/scp/forecasting/runway.js');
+    await reconcileForecastsFromSnapshot(productId, 5_000_000);
+
+    const [cp] = (await query(
+      'SELECT actual_value, variance_pct FROM forecast_checkpoints WHERE product_id = ?',
+      [productId])).rows as unknown as Array<Record<string, unknown>>;
+    expect(Number(cp!.actual_value)).toBe(5_000_000);
+    expect(Number(cp!.variance_pct), '25% above the prediction').toBeCloseTo(25, 1);
+  });
+
+  it('does nothing, and throws nothing, when no level was reported', async () => {
+    const productId = await companyWithForecasts();
+    const { reconcileForecastsFromSnapshot } = await import(
+      '../../src/services/scp/forecasting/runway.js');
+    await expect(reconcileForecastsFromSnapshot(productId, null)).resolves.toBeUndefined();
+    await expect(reconcileForecastsFromSnapshot(productId, undefined)).resolves.toBeUndefined();
+    await expect(reconcileForecastsFromSnapshot(productId, NaN)).resolves.toBeUndefined();
   });
 });
 

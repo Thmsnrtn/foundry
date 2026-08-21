@@ -245,25 +245,20 @@ ingestRoutes.post('/ingest/:token', async (c) => {
     // Same posture as the observation above: it must never fail the ingest.
     // RECONCILED AGAINST THE LEVEL, BECAUSE THE FORECAST PREDICTS A LEVEL.
     // `monthly_projection.mrr_cents_median` is where MRR is expected to BE in
-    // month N. The first version of this compared it against
-    // new + expansion - contraction - churned, which is a sum of MOVEMENTS —
-    // the same confusion the field map above was making, and it would have
-    // scored every forecast against the wrong quantity. A company that reports
-    // only its movements has no level to compare, and no comparison is made.
-    try {
-      const mrrIdx = columns.indexOf('mrr_cents');
-      if (mrrIdx !== -1) {
-        const { recordCheckpointActual } = await import(
-          '../../services/scp/forecasting/runway.js'
-        );
-        await recordCheckpointActual(productId, 'mrr_cents', Number(values[mrrIdx]) || 0);
-      }
-    } catch (err) {
-      const { log } = await import('../../lib/logger.js');
-      log.error(
-        `forecast checkpoint reconciliation failed: ${err instanceof Error ? err.message : String(err)}`,
-        { productId },
+    // month N; comparing it against new + expansion - contraction - churned
+    // would score it against a sum of MOVEMENTS. A company reporting only its
+    // movements has no level to compare, and no comparison is made.
+    //
+    // Shared with `api/v1/metrics.ts`, the other door that writes the level.
+    // This comment used to claim it was "the only path by which a company's
+    // real MRR reaches Foundry", which was wrong, and left companies
+    // integrating the documented way with forecasts nobody ever scored.
+    const mrrIdx = columns.indexOf('mrr_cents');
+    if (mrrIdx !== -1) {
+      const { reconcileForecastsFromSnapshot } = await import(
+        '../../services/scp/forecasting/runway.js'
       );
+      await reconcileForecastsFromSnapshot(productId, Number(values[mrrIdx]));
     }
 
     // Quantities this company declared it tracks. Before migration 135 these

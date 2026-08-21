@@ -497,6 +497,36 @@ export async function getForecastAccuracy(productId: string): Promise<ForecastAc
   };
 }
 
+/**
+ * A COMPANY REPORTED ITS MRR — SCORE ANY FORECAST THAT HAS COME DUE.
+ *
+ * `metric_snapshots.mrr_cents` is written by TWO doors: the founder's own
+ * ingest token and `POST /api/v1/metrics`, the documented public API with
+ * issued scoped credentials. The reconciliation was wired at the first only,
+ * under a comment of mine reading "This is the only path by which a company's
+ * real MRR reaches Foundry". It was not, and the consequence was that a company
+ * integrating the DOCUMENTED way never had its forecasts scored — the same
+ * shape as the customer-store split, one layer along.
+ *
+ * Stated once here so both doors get the same behaviour, including the posture:
+ * a reconciliation must never fail the report that triggered it. A company
+ * telling Foundry its numbers is the thing that matters; scoring an old
+ * prediction is not worth losing it over.
+ */
+export async function reconcileForecastsFromSnapshot(
+  productId: string, mrrCents: number | null | undefined,
+): Promise<void> {
+  if (mrrCents === null || mrrCents === undefined || !Number.isFinite(Number(mrrCents))) return;
+  try {
+    await recordCheckpointActual(productId, 'mrr_cents', Number(mrrCents));
+  } catch (error) {
+    const { log } = await import('../../../lib/logger.js');
+    log.error('forecast checkpoint reconciliation failed', {
+      productId, error: error instanceof Error ? error.name : 'Error',
+    });
+  }
+}
+
 // ─── Public: Record actual value for a checkpoint ────────────────────────────
 
 export async function recordCheckpointActual(
