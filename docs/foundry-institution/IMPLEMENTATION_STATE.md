@@ -16,15 +16,15 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `aa01e4d` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `b7f156b` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
-| Migrations | **203 files**, highest number **167**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **260 files / 2,294 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
+| Migrations | **225 files**, highest number **189**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
+| Validation | Full suite green: **327 files / 2,855 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
-| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **29** · **write-only columns 93** (new: the mirror of writer-less tables — columns the system fills and never reads). |
+| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **27** · write-only columns **70** · tables written and never read **4**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
 | Public API | **Live.** Scoped, expiring, revocable keys issued from settings. Every v1 route needs a scope a founder can grant; the bidirectional gate enforces both directions. |
 | Consequential effects | Converge through `services/outbound/gateway.ts` — kill switch, classification, budget, idempotency, audit. Inventory in `CONSEQUENTIAL_EFFECTS.json`; untraced count ratcheted to zero. |
@@ -404,6 +404,43 @@ entries, of which 47 were reachable by a mechanism it cannot see — a literal
 `SELECT *`, a SQL trigger, or the export's dynamic `SELECT * FROM ${table}`. It
 is a question-asker, as its own header says. Check before building.
 
+**What Foundry made, and whether it asked.** An executed `action_drafts` row —
+pricing copy, landing copy, an onboarding flow, a remediation PR — appears in
+the Letter's `handled` section, and says which the founder approved and which
+Foundry did on its own. `approved_at IS NULL` is what "alone" means; it was the
+only thing the retired `auto_execution_log.trigger` column recorded, and nobody
+read that table.
+
+**Who moved a key result.** `okr_progress_updates` is read on the OKR page: the
+date, the movement, the note, and whether it was the founder or an agent. The
+page can also CREATE an objective now, guarded by `requireOwner()` — until it
+could, nothing anywhere in the running system could produce a row for that page
+to render, and `compass.ts` and `forecasting/targets.ts` were reasoning about
+objectives that could not exist.
+
+**Whether an integration is still working, and whether Foundry gave up on it.**
+`integration_sync_log` is read on the Integrations page as the trailing week of
+attempts. It has two writers with disjoint column vocabularies — `sync.ts`
+writes `status` and `error_message`, `framework.ts` writes `errors` and leaves
+`status` NULL — so the reader DERIVES success rather than trusting either
+spelling. Errored integrations are retried to a stated limit
+(`MAX_CONSECUTIVE_SYNC_FAILURES`), and crossing that limit is announced once
+through the interruption ladder. Before this, one failed sync set
+`status = 'error'` and the hourly job selected `status = 'active'`: the
+integration was never tried again, and nothing said so.
+
+**A debate that crashed is not a debate.** `SynthesisOutput.failure_reason` is
+null only when a synthesis really happened. A non-null reason ends the session
+`'failed'`, keeps it out of the founder's daily briefing, and gives the page a
+red badge instead of a green "Complete" beside a conflict count of zero.
+
+**Causal chains are read, not recomputed.** `graph_rebuild` writes them weekly;
+the route reads that batch and computes only when none has ever been stored. It
+used to call Opus again on every request for an answer the job had already paid
+for. The chains keep their cause and effect as labels, with ids resolved
+against the entities the prompt actually showed the model and left NULL when the
+model names something the graph does not contain.
+
 ## What a metric means, and what units it is in
 
 Two conventions govern every company number in this system. Both were being
@@ -421,6 +458,21 @@ out to the founder, because that is what somebody sends wrong.
 `day_30_retention`, `mrr_health_ratio` — the ingest validates that range and
 `ux/fluency.ts` names them. Use `ratePoints()` from `ai/measured.ts` to compare
 against a percentage threshold, and convert the value rather than the threshold.
+
+**A percentile has a DIRECTION, and it belongs with the metric.** Portfolio
+benchmarking now returns a `performance_percentile` — the share of peers this
+company is doing better than — with each metric declaring `higherIsBetter` in
+one list. It used to return the share of peers with a lower VALUE and let the
+reader supply the direction, which meant the company with the least churn in a
+portfolio scored 0 and was told to prioritise retention. If a percentile is
+compared against a threshold anywhere, check which way it points.
+
+**An estimate says what it was made from.** `EstimateBasis` — `{ inputs,
+measured }` — travels with every model estimate in
+`intelligence/competitive-v2.ts`, in the same shape and with the same word as
+`Forecast.projected_from` in `founder/intelligence.ts`. `measured: false` means
+no figure from this company reached the model. There is one vocabulary for this;
+do not invent a second.
 Watch for the asymmetry this failure has: **every "higher is better" test fails
 and every "lower is better" test passes**, so a broken scorer awards full marks
 for the worst possible number and nothing looks wrong. `nps_score` is on its own

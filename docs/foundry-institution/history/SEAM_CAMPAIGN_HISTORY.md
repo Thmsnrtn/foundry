@@ -742,6 +742,107 @@ refused before. Token surfaces stay out because "which capability does this
 member hold" cannot be asked where no member is present, and that exclusion is
 tested in both directions.
 
+## The owner answered §10, §14 and §12
+
+*Moved out of the live frontier when it stopped being what a steward
+needs to start working today. The decisions remain load-bearing and are
+recorded in the migrations that implement them.*
+
+**The owner answered §10, §14 and §12, and all three are implemented.**
+
+**§10 — split by kind.** Five tables sat marked `owner_decision`, holding an
+erased person's identity inside companies they did not own. The answer:
+authority and artefact are different things. `api_keys` and `mcp_grants` are
+**revoked and removed** — an authority held by a principal that no longer exists
+must not act, and handing it to the company owner would be inventing a grant
+nobody made. `webhooks`, `deal_rooms` and `decision_votes` are **preserved and
+their author severed**: the integration keeps delivering, the room stays open,
+the vote still says which way it went, and NULL says NOBODY rather than naming
+somebody who did not do it. Migration 175 made those three columns nullable,
+which is the whole reason this was stuck — not indecision, an absent column
+state. Revocation is not silent: each one writes into the company's own audit
+trail, naming no person, because naming one would undo the erasure that caused
+it. The disposition `owner_decision` no longer exists and a test asserts it
+cannot return.
+
+**§14 — split analytics.** The funnel recorded a NAMED founder's whole
+progression whether "Help Improve Foundry" was on or off. It is two paths now:
+service state (signup, repo connected, trial, paid) stays ungated and is
+**disclosed in those words**, and the usage half is recorded **only with
+consent** and then against a contributor hash. Minimisation first — no consent
+means no row, not a row filtered out at read time, which would make the toggle a
+display preference rather than a control. A step in neither list fails closed to
+telemetry. The readout carries which population each count is over, because the
+telemetry half is a smaller denominator by construction and a rate crossing that
+boundary compares two different groups — the same provenance error the wisdom
+network made. `product_telemetry_events` entered the erasure map in the commit
+that created it: a pseudonym is not anonymity, and a table the erasure has never
+heard of survives forever.
+
+**§12 — a portfolio principal, not a global secret.** Possession of one
+process-wide key read any company's entire operating picture by arbitrary
+`product_id`. The two `/internal` routes that touch company data now resolve the
+credential to a **principal with enumerated company membership** — no wildcard,
+so a company outside the scope is a row that does not exist rather than a check
+that could be written wrong. A principal may only be scoped to companies its
+issuer OWNS, enforced at issuance and again by a database trigger, which is what
+keeps a private portfolio principal from becoming a route into a commercial
+customer's data. It fails closed today: until one is issued, those routes serve
+nobody. **Rotating the deployed secret is the owner's own act and is recorded as
+outstanding rather than reported as done.**
+
+**Three interim positions are now in force** pending counsel, and they bind like
+decisions: keep the shorter retention rather than lengthening by guess and never
+call a redacted shell proven anonymous (a test holds that claim out of the
+disposition strings); audit logs stay at 180 days as the interim default; and
+**k = 5 is not a safe harbour** — cross-company benchmarking is counsel debt and
+external proof debt before broad release, not something the local floor
+demonstrates.
+
+
+
+*One paragraph, deliberately. The narrative record is
+`history/SEAM_CAMPAIGN_HISTORY.md`; this file is what a steward needs today.*
+
+**The owner's direction on ethics, legitimacy and the private frontier landed
+and was implemented rather than filed** — into the existing canonical artifacts,
+no second ethics universe. The repository was then read for where the doctrine
+had outrun the code. `ARCHITECTURE.md` names seven terms of the legitimate
+action envelope; the **external-permission term is deliberately still absent**,
+because it is counsel debt rather than a mechanism, and naming it before it
+exists would be the claim this institution refuses to make.
+
+**One vocabulary for who allowed it**, closing the two-ledger seam: four
+spellings of `approved_by` became one principal reference
+(`outbound/acting-principal.ts`), so a founder, a voice session, autopilot, the
+institution and the system are told apart by kind rather than by string.
+
+**A company that integrated properly was invisible to the departments that act
+on customers.** `POST /api/v1/customers` — the documented external surface —
+writes `customer_intelligence`, while success and outreach read `customers`.
+`institution/company-customers.ts` is now the one accessor over both, and it is
+the ONE place the at-risk and champion predicates are stated. See opportunity 5
+for the cutover criterion.
+
+**A failed reading looked exactly like a calm one.** `analyzeTranscript` ended
+in a `catch` that logged and returned, so a week where every transcript failed
+to parse rendered as a week with nothing to say. Migration 178 gives the failure
+a durable place and the page renders it.
+
+**One rule, two implementations, one enforced.** Contact refusal lived in the
+outreach department only, while the governed email path — the one that actually
+reaches a customer — never consulted it, and nothing could get onto the list.
+It is now checked at the boundary where every outward effect converges;
+migration 179 retired the third, inert do-not-contact column.
+
+**A process failure worth keeping.** A commit went out with five red tests
+because the exit code was read from a wrapper rather than from the run that
+produced the log. And a killed validation run left `_gate_fixture_agent.ts` in
+the working tree, where it was committed and then caught by the public-claims
+audit as a thirteenth AI agent against "All plans include 12 AI agents".
+`.gitignore` and a `beforeAll` sweep now handle the fixture; nothing but
+discipline handles the exit code.
+
 ## Yield
 
 Still high, and the highest-yield probe of the stretch was turning an instrument
