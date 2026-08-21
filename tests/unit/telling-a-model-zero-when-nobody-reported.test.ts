@@ -151,6 +151,20 @@ describe('the two agents whose fabrications point opposite ways', () => {
   });
 });
 
+describe('the agent the metric sweep missed', () => {
+  it('does not tell Crucible a never-audited company scored 0/10', () => {
+    const src = stripComments(
+      readFileSync('src/services/scp/agents/crucible.ts', 'utf8'), { lineComments: true });
+    // Found by sweeping prompts that ask for company facts. This agent reads
+    // `audit_scores` rather than `metric_snapshots`, which is why it survived
+    // the sweep that fixed the other five: 0/10 is the WORST possible audit
+    // score, and never audited is not that.
+    expect(src).not.toMatch(/Number\(audit\.d1_score\) \|\| 0/);
+    expect(src).toMatch(/measured\(audit\?\.d1_score\)/);
+    expect(src, 'and the prompt says so in words').toMatch(/'not audited'/);
+  });
+});
+
 describe('an unknown rate raises nothing', () => {
   it('guards every threshold that used to fire on the fabricated zero', () => {
     const harbor = stripComments(
