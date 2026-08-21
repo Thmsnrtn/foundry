@@ -6,6 +6,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { ratePoints } from '../ai/measured.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -387,10 +388,17 @@ async function loadProductState(productId: string): Promise<ProductState> {
   const risk_state = (lifecycleResult.rows[0] as Record<string, string>)?.risk_state ?? 'green';
   const has_fundraising_activity = ((fundraisingResult.rows[0] as Record<string, number>)?.cnt ?? 0) > 0;
 
+  // PERCENTAGE POINTS, BECAUSE THE CRITERIA ARE WRITTEN IN THEM.
+  // `match_criteria: { churn_rate_gt: 8 }` means eight per cent, and
+  // `churn_rate` is stored as a 0–1 fraction — so `0.08 > 8` was false and no
+  // failure pattern keyed on churn could ever match, for any company. The
+  // library looked like it was working: it matched on the other criteria and
+  // simply never fired on this one. `nps_score` is already on its own -100..100
+  // scale and is left alone.
   return {
-    churn_rate: (latest?.churn_rate as number | null) ?? null,
+    churn_rate: ratePoints(latest?.churn_rate),
     nps_score: (latest?.nps_score as number | null) ?? null,
-    activation_rate: (latest?.activation_rate as number | null) ?? null,
+    activation_rate: ratePoints(latest?.activation_rate),
     mrr_growth_rate,
     mrr_growth_weeks,
     runway_months,

@@ -90,10 +90,14 @@ describe('public ingest refuses poison', () => {
   it('accepts a sane payload', async () => {
     const res = await json(T, { mrr: 1200, churn_rate: 0.04, signups_7d: 12, nps: 40 });
     expect(res.status).toBe(200);
-    const snap = (await query("SELECT churn_rate, new_mrr_cents FROM metric_snapshots WHERE product_id='sc_p'", []))
+    const snap = (await query("SELECT churn_rate, mrr_cents FROM metric_snapshots WHERE product_id='sc_p'", []))
       .rows[0] as Record<string, number>;
     expect(Number(snap.churn_rate)).toBe(0.04);
-    expect(Number(snap.new_mrr_cents)).toBe(120000);
+    // `mrr` means the level and lands in `mrr_cents`. It used to land in
+    // `new_mrr_cents`, which means new business won this period — see
+    // `mrr-the-level-and-mrr-the-movement.test.ts`. What this test is for is
+    // unchanged: a sane payload is accepted and stored as sent.
+    expect(Number(snap.mrr_cents)).toBe(120000);
   });
 
   it('refuses Infinity, out-of-range rates, negative counts, absurd NPS', async () => {

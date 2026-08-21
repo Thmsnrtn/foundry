@@ -56,6 +56,27 @@ export function money(cents: unknown): string {
 }
 
 /**
+ * A STORED RATE AS PERCENTAGE POINTS, for comparing against a threshold.
+ *
+ * `activation_rate`, `churn_rate`, `day_30_retention` and `mrr_health_ratio`
+ * are stored as 0–1 fractions — the ingest endpoint validates that range and
+ * `ux/fluency.ts` names them as fractions in so many words. Several readers
+ * compared them against thresholds written in percentage points, and the
+ * failure is silent in a particular way: every "higher is better" test fails
+ * (`0.68 >= 40`) and every "lower is better" test passes (`0.02 <= 3`), so a
+ * company scores zero for excellent retention and full marks for catastrophic
+ * churn, and nothing looks broken.
+ *
+ * Convert the value here rather than rewriting thresholds as fractions:
+ * `>= 40` reads as forty per cent to a person, and `>= 0.4` reads as a bug
+ * waiting to be "fixed".
+ */
+export function ratePoints(value: unknown): number | null {
+  const n = num(value);
+  return n === null ? null : n * 100;
+}
+
+/**
  * A ratio a caller computes itself, where the denominator may be empty.
  *
  * The reason this exists rather than being written inline each time: every

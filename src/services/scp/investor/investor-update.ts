@@ -164,8 +164,11 @@ export async function generateInvestorUpdate(
   const prevMrrCents = (prevMetricsRow.mrr_cents as number) ?? null;
   const mrrDisplay = mrrCents !== null ? `$${(mrrCents / 100).toLocaleString()}` : 'N/A';
   const mrrGrowth = (metricsRow.mrr_growth_pct as number) ?? null;
-  const churnRate = (metricsRow.churn_rate as number) ?? null;
-  const activationRate = (metricsRow.activation_rate as number) ?? null;
+  // `* 100`: stored as 0–1 fractions. An investor update reporting "0.0%
+  // churn" for a company churning 2% a month is the version of this that
+  // matters most.
+  const churnRate = metricsRow.churn_rate == null ? null : Number(metricsRow.churn_rate) * 100;
+  const activationRate = metricsRow.activation_rate == null ? null : Number(metricsRow.activation_rate) * 100;
   const customerCount = (metricsRow.customer_count as number) ?? null;
 
   const keyMetrics: Record<string, unknown> = {

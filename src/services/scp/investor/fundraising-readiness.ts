@@ -6,6 +6,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { ratePoints } from '../../ai/measured.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -156,16 +157,32 @@ export async function assessFundraisingReadiness(
 ): Promise<FundraisingReadiness> {
   const mult = ROUND_MULTIPLIERS[targetRound];
 
-  // Load metrics
+  // Load metrics — two snapshots, because growth needs a previous level to
+  // compare against and there is no growth column to read.
   let metricsRow: Record<string, unknown> = {};
+  let mrrGrowthPct: number | null = null;
   try {
     const metricsResult = await query(
-      'SELECT * FROM metric_snapshots WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 1',
+      'SELECT * FROM metric_snapshots WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 2',
       [productId]
     );
     if (metricsResult.rows.length > 0) {
       metricsRow = metricsResult.rows[0] as Record<string, unknown>;
     }
+    const prior = metricsResult.rows[1] as Record<string, unknown> | undefined;
+    const now = metricsRow.mrr_cents == null ? null : Number(metricsRow.mrr_cents);
+    const then = prior?.mrr_cents == null ? null : Number(prior.mrr_cents);
+    if (now !== null && then !== null && then > 0) {
+      mrrGrowthPct = ((now - then) / then) * 100;
+    }
+  } catch { /* ok */ }
+
+  // Customers counted where they actually live, across both stores. There is
+  // no customer count on a metric snapshot.
+  let customerCount: number | null = null;
+  try {
+    const { getCompanyCustomers } = await import('../../institution/company-customers.js');
+    customerCount = (await getCompanyCustomers(productId)).length;
   } catch { /* ok */ }
 
   // Load DNA
@@ -243,11 +260,21 @@ export async function assessFundraisingReadiness(
 
   const data: ProductData = {
     mrr_cents: metricsRow.mrr_cents as number | null,
-    mrr_growth_pct: metricsRow.mrr_growth_pct as number | null,
-    churn_rate: metricsRow.churn_rate as number | null,
-    customer_count: metricsRow.customer_count as number | null,
-    activation_rate: metricsRow.activation_rate as number | null,
-    d30_retention: metricsRow.d30_retention as number | null,
+    // `mrr_growth_pct` AND `customer_count` ARE NOT COLUMNS on
+    // `metric_snapshots` and never have been. Read off a `SELECT *` row, they
+    // were `undefined` forever, so the growth and customer tests in
+    // `scoreTraction` could never award their four points to anybody. Growth is
+    // computed here from two snapshots of the level; the customer count comes
+    // from the accessor that actually knows, across both customer stores.
+    mrr_growth_pct: mrrGrowthPct,
+    churn_rate: ratePoints(metricsRow.churn_rate),
+    customer_count: customerCount,
+    // POINTS, NOT FRACTIONS — every threshold below is written in percentage
+    // points. And `d30_retention` is not a column: the real one is
+    // `day_30_retention`, so this read `undefined` and scored zero for every
+    // company that has ever reported retention.
+    activation_rate: ratePoints(metricsRow.activation_rate),
+    d30_retention: ratePoints(metricsRow.day_30_retention),
     dna_completion_pct: dnaCompletion,
     has_cto: hasCTO,
     has_advisors: hasAdvisors,

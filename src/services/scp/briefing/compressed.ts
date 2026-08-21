@@ -171,10 +171,12 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
     ? `${(latestMetrics.mrr_growth_pct as number).toFixed(1)}% MoM`
     : 'unknown growth';
   const churnDisplay = latestMetrics.churn_rate != null
-    ? `${(latestMetrics.churn_rate as number).toFixed(1)}%`
+    // `* 100`: these are stored as 0–1 fractions (`ux/fluency.ts` names them
+    // as such), so 2% churn rendered as "0.0%" in a briefing a founder reads.
+    ? `${((latestMetrics.churn_rate as number) * 100).toFixed(1)}%`
     : 'unknown';
   const activationDisplay = latestMetrics.activation_rate != null
-    ? `${(latestMetrics.activation_rate as number).toFixed(1)}%`
+    ? `${((latestMetrics.activation_rate as number) * 100).toFixed(1)}%`
     : 'unknown';
 
   const contextForAI = `
