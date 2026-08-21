@@ -355,6 +355,7 @@ settingsRoutes.get('/settings', async (c) => {
       <details style="margin-bottom:0.75rem;">
         <summary style="font-size:0.82rem;color:var(--text-dim);cursor:pointer;">Example payload</summary>
         <pre class="ingest-example">{
+  "mrr": 52000,
   "new_mrr": 4500,
   "churned_mrr": 200,
   "activation_rate": 0.34,
@@ -364,7 +365,15 @@ settingsRoutes.get('/settings', async (c) => {
   "active_users": 87,
   "signups_7d": 23
 }</pre>
-        <p style="font-size:0.78rem;color:var(--text-dim);margin:0.35rem 0 0;">MRR values in dollars. Rates as decimals (0.34 = 34%).</p>
+        <p style="font-size:0.78rem;color:var(--text-dim);margin:0.35rem 0 0;">
+          MRR values in dollars. Rates as decimals (0.34 = 34%).
+          <strong>"mrr" is what you bill in total this month; "new_mrr" is only
+          the part of it that is new business.</strong> Send both if you have
+          both — the total is what your investor materials and forecasts read,
+          and the movement is what revenue health is measured from. Sending
+          neither is fine; sending the total under the wrong name is not, which
+          is why they are spelled out here.
+        </p>
       </details>
       <form method="POST" action="/settings/generate-ingest" style="display:inline;">
         <button type="submit" class="btn btn-ghost btn-sm">Regenerate token</button>

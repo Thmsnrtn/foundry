@@ -43,10 +43,34 @@ function validateMetricValue(field: string, raw: unknown): number | null {
 // Dollar values (mrr, new_mrr, churned_mrr) are accepted as dollars and
 // stored as cents. Rate values (0.0–1.0) stored as-is.
 const DOLLAR_FIELDS = new Set(['mrr', 'new_mrr', 'expansion_mrr', 'contraction_mrr', 'churned_mrr']);
+// `mrr_cents` is accepted under its own name too, already in cents, for a
+// caller that has read the schema rather than the example.
+const CENTS_FIELDS = new Set(['mrr_cents']);
 
+// MRR THE LEVEL AND MRR THE MOVEMENT ARE DIFFERENT QUANTITIES.
+//
+// `mrr` used to map to `new_mrr_cents`. A company POSTing `{"mrr": 50000}` —
+// meaning "our MRR is fifty thousand dollars", which is what the word means —
+// had that recorded as NEW BUSINESS WON THIS PERIOD, alongside its real
+// expansion, contraction and churn figures. Everything downstream inherited it:
+// `mrr_health_ratio` is computed here as churned/new, so a level in the
+// denominator made every company look healthy; the operator's portfolio figure
+// sums new + expansion - contraction - churned and was adding a level to
+// movements; and Forge and Oracle put `new=$50,000.00` into their prompts.
+//
+// Meanwhile `metric_snapshots.mrr_cents` — the column that means the level, and
+// the one every investor-facing surface reads — had NO WRITER on this door at
+// all. So `scp/investor/board-packet.ts`, `investor-update.ts`,
+// `fundraising-readiness.ts` and both briefings showed "N/A" for MRR to any
+// company that reported through the founder's own ingest token, while the same
+// company's number sat in the wrong column.
+//
+// `mrr` now means the level. Nothing needs migrating: no company has reported
+// through this door yet.
 const FIELD_MAP: Record<string, string> = {
   // MRR (dollars → cents)
-  mrr:               'new_mrr_cents',
+  mrr:               'mrr_cents',
+  mrr_cents:         'mrr_cents',
   new_mrr:           'new_mrr_cents',
   expansion_mrr:     'expansion_mrr_cents',
   contraction_mrr:   'contraction_mrr_cents',
@@ -127,7 +151,8 @@ ingestRoutes.post('/ingest/:token', async (c) => {
         continue;
       }
       columns.push(col);
-      values.push(DOLLAR_FIELDS.has(key) ? Math.round(numVal * 100) : numVal);
+      values.push(DOLLAR_FIELDS.has(key) && !CENTS_FIELDS.has(key)
+        ? Math.round(numVal * 100) : numVal);
     } else {
       // Unknown fields go into custom_metrics
       customMetrics[key] = value;
@@ -210,18 +235,20 @@ ingestRoutes.post('/ingest/:token', async (c) => {
     // MRR reaches Foundry, so it is where the comparison belongs.
     //
     // Same posture as the observation above: it must never fail the ingest.
+    // RECONCILED AGAINST THE LEVEL, BECAUSE THE FORECAST PREDICTS A LEVEL.
+    // `monthly_projection.mrr_cents_median` is where MRR is expected to BE in
+    // month N. The first version of this compared it against
+    // new + expansion - contraction - churned, which is a sum of MOVEMENTS —
+    // the same confusion the field map above was making, and it would have
+    // scored every forecast against the wrong quantity. A company that reports
+    // only its movements has no level to compare, and no comparison is made.
     try {
-      const mrrIdx = columns.indexOf('new_mrr_cents');
+      const mrrIdx = columns.indexOf('mrr_cents');
       if (mrrIdx !== -1) {
         const { recordCheckpointActual } = await import(
           '../../services/scp/forecasting/runway.js'
         );
-        const expansionIdx = columns.indexOf('expansion_mrr_cents');
-        const contractionIdx = columns.indexOf('contraction_mrr_cents');
-        const churnedIdx2 = columns.indexOf('churned_mrr_cents');
-        const at = (i: number) => (i === -1 ? 0 : Number(values[i]) || 0);
-        const netMrr = at(mrrIdx) + at(expansionIdx) - at(contractionIdx) - at(churnedIdx2);
-        await recordCheckpointActual(productId, 'mrr_cents', netMrr);
+        await recordCheckpointActual(productId, 'mrr_cents', Number(values[mrrIdx]) || 0);
       }
     } catch (err) {
       const { log } = await import('../../lib/logger.js');
