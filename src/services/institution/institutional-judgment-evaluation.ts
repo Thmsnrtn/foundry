@@ -18,6 +18,27 @@ export async function evaluateInstitutionalJudgment(productId:string,judgmentId:
  let learned:string|undefined;
  if(refs.length) learned=await recordReconstructionClaim({productId,subject:`judgment:${judgmentId}`,predicate:'later_reality_comparison',value:state,
   epistemicStatus:state==='conflicting'?'conflicting':'known',evidenceRefs:refs,derivationMethod:'bounded later-reality comparison',observedAt:new Date()});
+ // NO PRODUCTION PATH SUPPLIES AN ECONOMIC RESULT, AND THE STORED VALUE SAYS SO.
+ //
+ // `economic_result` is read out of the observation's payload, and the only
+ // producer of those observations is `runJudgmentObservationPass` below, whose
+ // payload carries `judgment_id`, `evidence_claim_ids`, `resolved` and an
+ // overdue reference — never an economic result. The single supply anywhere is
+ // a hand-written `source:'independent'` event in
+ // `institutional-judgment-evaluation.test.ts`.
+ //
+ // So `economic_result_json` is `{status:'unknown'}` on every row this system
+ // will ever write, and the reason to say that here is that the stored shape
+ // distinguishes UNKNOWN from OBSERVED — a reader who found `unknown` might
+ // otherwise conclude Foundry looked and found no economic effect. It did not
+ // look. Nothing can.
+ //
+ // The mechanism is kept rather than dropped because it is the carrier for an
+ // externally supplied observation, which is what `source:'independent'` means:
+ // when a company reports what a judgment cost or saved, this is where it
+ // lands. A test holds the premise that no production producer exists yet, so
+ // this comment fails when that stops being true — and at that point the column
+ // becomes worth reading.
  const economics=observations.rows.map(r=>{try{return JSON.parse(String((r as Record<string,unknown>).payload_json)).economic_result;}catch{return undefined;}}).filter(x=>x!==undefined);
  await query(`INSERT INTO institutional_judgment_evaluations
   (id,judgment_id,product_id,state,evidence_refs_json,economic_result_json,learned_claim_id) VALUES (?,?,?,?,?,?,?)`,
