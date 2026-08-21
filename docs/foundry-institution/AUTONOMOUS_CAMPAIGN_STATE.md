@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `c37ab56`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `f72f731`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 218 files, highest **182**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `c37ab56` — **315 files / 2,740 tests**,
+- **Validation:** full suite green at `f72f731` — **315 files / 2,742 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -553,7 +553,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    the wellbeing card proves it: that one was three `??` defaults about a
    person, with no metric in sight.
 
-1. **CLOSED in `jobs`: the ceiling now costs the founder nothing.** Eleven
+1. **CLOSED: the ceiling now costs the founder nothing.** Eleven
    in-app bells bypassed `ux/interruption.ts`, and the reason turned out not to
    be laziness — the policy's two quietest rungs WROTE NOTHING, excused by "the
    Letter composes from the ledgers, so the event will appear there". It
@@ -568,11 +568,20 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    genuinely quiet. The `log` rung records too — that is the audit trail behind
    "why didn't you tell me?", which the module's header already promised.
 
-   All eight bells in `jobs/index.ts` now route through the policy with an
-   importance chosen for what each means to a founder; that file no longer
-   imports `createNotification`. **Two files remain and are pinned by a test:**
-   `services/billing/stripe.ts` and `services/ux/milestones.ts`. Both are now
-   ordinary conversions — the blocker is gone — needing only an importance each.
+   All eight bells in `jobs/index.ts` route through the policy now, each with an
+   importance chosen for what it means to a founder, and milestones with them —
+   a celebration is the most optional thing Foundry ever says.
+
+   **`billing/stripe.ts` stays direct, and that is the right answer, not the
+   leftover.** `max_channel` is an ATTENTION preference; the owner's §14
+   decision draws the line — necessary service, billing, security and
+   configuration state stays ungated and disclosed, optional telemetry and
+   celebration honour the preference. A founder whose card is failing is told
+   their service is about to lapse whatever they set about notification volume.
+   Those notices are founder-scoped with no product id, which a company-scoped
+   policy cannot anchor anyway. **Anything ADDED to the pinned list is a claim
+   that some message outranks a founder's stated wishes; the test exists to make
+   somebody write that claim down.**
 
    Deliberately no delivered/undelivered flag on `quieted_events`: a quieted
    event is a fact about a moment, and a lifecycle would invent a second place

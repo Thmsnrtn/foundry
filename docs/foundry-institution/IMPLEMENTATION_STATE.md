@@ -453,8 +453,15 @@ dropped by a founder lowering their ceiling — which is why eight scheduled bel
 bypassed the policy rather than lose the fact. Migration 182 (`quieted_events`)
 holds them and `letter/composer.ts` reads the last day's back as `noted`. Route
 any founder-facing notification through `deliver()`; there is no longer a
-condition to check first. Two direct `createNotification` callers remain
-(`billing/stripe.ts`, `ux/milestones.ts`), pinned by a test.
+condition to check first.
+
+**One exception, and it is a decision rather than a gap.** `billing/stripe.ts`
+notifies directly. `max_channel` is an attention preference, and the owner's §14
+line keeps necessary service, billing, security and configuration state ungated
+and disclosed while optional telemetry and celebration honour the preference. A
+founder whose card is failing is told, whatever they set about volume. A test
+pins that file; adding another is a claim that some message outranks a founder's
+stated wishes, and the test is there to make somebody write it down.
 
 **And a company's MRR reaches Foundry through TWO doors**, not one: the
 founder's ingest token and `POST /api/v1/metrics`. Anything that must happen
