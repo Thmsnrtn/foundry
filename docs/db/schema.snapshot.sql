@@ -1672,7 +1672,6 @@
   amount_usd REAL NOT NULL,
   analysis TEXT NOT NULL,
   analyzed_at TEXT DEFAULT (datetime('now'))
-  analyzed_at TEXT DEFAULT (datetime('now'))
   annotation_type TEXT CHECK(annotation_type IN (
   anonymize_customer_data INTEGER NOT NULL DEFAULT 0,
   answer_signal_id  TEXT REFERENCES signal_events(id),
@@ -1977,8 +1976,6 @@
   core_workflow_completion_rate REAL,
   correct_predictions INTEGER NOT NULL DEFAULT 0,
   cost_avoided_dollars REAL NOT NULL DEFAULT 0,
-  cost_to_leave_incumbent REAL,
-  cost_to_leave_us REAL,
   cost_trailing_30d_usd REAL DEFAULT 0.0
   cost_type TEXT NOT NULL CHECK(cost_type IN (
   cost_usd REAL DEFAULT 0.0
@@ -2206,7 +2203,6 @@
   data_inputs_used TEXT NOT NULL, -- JSON
   data_json TEXT NOT NULL DEFAULT '{}',
   data_points TEXT,            -- JSON: [{label, value}] — structured data surfaced alongside answer
-  data_portability_score REAL,
   data_retention_days INTEGER NOT NULL DEFAULT 730, -- 2 years default
   data_sources TEXT,
   date        TEXT NOT NULL,
@@ -2885,7 +2881,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -2908,7 +2903,6 @@
   integration TEXT NOT NULL,
   integration TEXT NOT NULL, -- which integration handles execution
   integration_complexity_score REAL NOT NULL, -- API quality, data portability, tech debt
-  integration_depth_score REAL,
   integration_id TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
   integration_id TEXT NOT NULL,
   integration_name     TEXT NOT NULL,
@@ -3324,7 +3318,6 @@
   owner_id TEXT NOT NULL,
   owner_id TEXT NOT NULL,
   owner_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
   owner_id TEXT,
   p25              REAL,
   p25              REAL,
@@ -3587,7 +3580,6 @@
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL UNIQUE REFERENCES products(id),
   product_id TEXT NOT NULL UNIQUE,
-  product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
@@ -4117,7 +4109,6 @@
   surface TEXT NOT NULL,                          -- 'email_outbound'|'public_landing'|...
   surfaced_at TEXT DEFAULT (datetime('now')),
   surveillance_proportionality_score REAL,
-  switching_cost_ratio REAL,
   sync_cursor TEXT,
   sync_frequency_minutes INTEGER DEFAULT 60,
   synthesis TEXT,                 -- 1-2 sentence framing paragraph
@@ -4408,7 +4399,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
 );
 );
 );
@@ -5139,7 +5129,6 @@ CREATE INDEX idx_stressor_product_active ON stressor_history(product_id, status)
 CREATE INDEX idx_stressor_status ON stressor_history(status);
 CREATE INDEX idx_stripe_events_product ON stripe_events(product_id, processed);
 CREATE INDEX idx_support_channels_product ON support_channels(product_id,responsibility_id);
-CREATE INDEX idx_switching_product ON switching_cost_analysis(product_id);
 CREATE INDEX idx_sync_log_integration ON integration_sync_log(integration_id, started_at DESC);
 CREATE INDEX idx_sync_log_product ON integration_sync_log(product_id, started_at DESC);
 CREATE INDEX idx_taste_journals_product_agent
@@ -5420,7 +5409,6 @@ CREATE TABLE stressor_history (
 CREATE TABLE stripe_events (
 CREATE TABLE stripe_webhook_events (
 CREATE TABLE support_channels (
-CREATE TABLE switching_cost_analysis (
 CREATE TABLE system_identities (
 CREATE TABLE taste_journals (
 CREATE TABLE team_health_metrics (

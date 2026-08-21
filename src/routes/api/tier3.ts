@@ -148,7 +148,7 @@ tier3ApiRoutes.get('/api/products/:id/switching-costs', requireTier('investor_la
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const costs = await analyzeSwitchingCosts(productId, founder.id);
+  const costs = await analyzeSwitchingCosts(productId);
   return c.json(costs);
 });
 
