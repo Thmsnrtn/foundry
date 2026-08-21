@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `03cbb13`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `0157982`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-  **Migrations:** 218 files, highest **182**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `03cbb13` — **318 files / 2,758 tests**,
+  **Migrations:** 219 files, highest **183**. Ordering gated. Snapshot current.
+- **Validation:** full suite green at `0157982` — **319 files / 2,764 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -37,7 +37,7 @@ inherited list because it was inherited.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **28** · write-only columns
-  **82** · id tiebreaks **18** · backticks in embedded comments **0** ·
+  **81** · id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** (1,886 statements) · INSERT value-list
   mismatches **0** (377).
 
@@ -641,7 +641,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      gate to flag it; excluding them would blunt a gate to avoid an operational
      annoyance of my own making. The discipline is the fix.
 
-5. **82 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
+5. **81 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
    read it rather than this line. Prose drifts from the ratchet — this entry has
    said 92 and 85 while the ratchet said otherwise, which is exactly the drift
    the ratchet exists to prevent in code and evidently not here.
@@ -655,6 +655,21 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    believe it, and check before building. **35 remain genuinely unread.** Two
    were taken this cycle — `integration_health.last_successful_sync` and
    `forecast_checkpoints.variance_pct` — and both were real.
+
+   **A third kind, found by mining it further: a column whose whole TABLE is
+   unreachable.** `founder_focus_settings.focus_area` was on the list; the table
+   holding it had no writer at all — no settings page, no route, no API — and a
+   nightly job dutifully expiring values nobody could set. Migration 183 dropped
+   it, applying the owner decision recorded in 157 ("remove the consuming halves
+   rather than build the producing ones") to a case that sweep missed. **The
+   sibling table was removed then and this one was left standing next to the
+   comment explaining why it should not be** — so when reading this list, check
+   whether the TABLE is reachable before asking about the column.
+
+   Also taken from it: `integration_health.last_successful_sync` (real, fixed),
+   `forecast_checkpoints.variance_pct` (real, fixed) and
+   `institutional_judgment_evaluations.economic_result_json` (documented rather
+   than fixed — an unfilled inbound slot, not a control that does nothing).
 
    The remaining attribution by writing area, which stands:
 
