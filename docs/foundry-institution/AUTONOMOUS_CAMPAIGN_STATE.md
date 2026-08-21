@@ -25,10 +25,11 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `8ea8397`, pushed.
-  **Migrations:** 213 files, highest **177**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **294 files / 2,491 tests**, `npm run check`
-  EXIT=0, every gate chained and running in CI on this branch.
+- **Head:** `111b7b0`. Pushed through `af473cc`; the commits after it are local
+  until the run that covers them is green.
+  **Migrations:** 215 files, highest **179**. Ordering gated. Snapshot current.
+- **Validation:** full suite green at `af473cc` — **302 files / 2,574 tests**,
+  `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
   **Read the exit code from the run that produced the log** — a commit went out
@@ -36,13 +37,105 @@ inherited list because it was inherited.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **28** · write-only columns
-  **85** · id tiebreaks **18** · backticks in embedded comments **0**.
+  **84** · id tiebreaks **18** · backticks in embedded comments **0**.
 
 ## Active work
 
 None in flight. Everything below is unstarted or blocked.
 
 ## What the last cycle established
+
+**One page, read line by line, and almost every number on it was a claim
+nothing measured.** `founder/intelligence.ts` is what the operator of Foundry
+looks at. The lens was the plainest available — read the number, then find the
+query that produced it — and it held for eleven consecutive findings. They are
+worth listing together because the SHAPES repeat, and a steward who recognises
+the shapes will find them faster elsewhere than by reading files.
+
+**The constant wearing a measurement's name.** `total_jobs: 30, jobs_healthy:
+30` under the comment "From job registry", when the registry has ninety and
+nothing was read. `runway_months: 999` under "SaaS with low burn" —
+eighty-three years, asserted by a comment, where nothing records burn at all.
+`churned_this_month: 0`, `expansion_revenue: 0`, `override_count_7d: 0`,
+`days_since_break: 0` under "Would track from activity gaps",
+`top_acquisition_channels: []`. Each read as a measured absence.
+
+**The quotient with an empty denominator, answered anyway.** The same mistake
+twice over, and worth seeing in both directions: `auto_execute_rate` fell back
+to **100** — the most reassuring number on the automation panel, printed
+precisely when no decision had been made — and `avg_health_score` fell to **0**,
+the worst possible score, printed for having scored nobody. Whether the fallback
+flatters or alarms is an accident of which digit was typed. The same shape wrote
+`?? 1` as a denominator, turning "no founders" into a real division.
+
+**The default that makes an unobserved subject scoreable.** The Founder
+Wellbeing card is colour-coded green above 60. A founder with no health record
+took `motivation ?? 50` and `engagement ?? 'stable'` and scored **70** — a green
+card about a person Foundry had never observed once. This is the one to
+remember: it is about a person, a person reads it, and the reassurance is the
+harm. Note the second-order trap found while fixing it — `engagement_trend`
+carries `DEFAULT 'stable'` in migration 006, so a row written for any other
+reason *looks* like an observation. A written default is not evidence.
+
+**The page limit that became the measurement.** At-risk companies were read with
+`LIMIT 20` and then every number derived from `rows.length`. The headline card
+read "At Risk: 20" for any portfolio with twenty or more, and the rate divided
+that capped numerator by an uncapped denominator, so it FELL as the real problem
+grew.
+
+**Two labels over one expression.** "Activation Rate" and "Trial → Paid" sat
+side by side on the growth card as two measurements; they were the same line of
+code twice. Two numbers that can never disagree are one number, and a reader
+comparing them believes they have corroborated something.
+
+**The name that belongs to someone else's money.** `PulseData.mrr` summed
+`metric_snapshots` across all products — the operated COMPANIES' reported MRR
+movement — and went out of the executive dashboard beside `mrr.current_mrr`,
+Foundry's own subscription revenue. An alert read "MRR declined 14% this month"
+about whichever the reader assumed. `mrr_history` was the same portfolio series
+plotted as Foundry's own history. Not the same quantity, not the same company,
+not even the same KIND: one a level, one a sum of movements.
+
+**Revenue counted before anyone paid.** The Stripe webhook sets `founders.tier`
+on `customer.subscription.created` *including* while status is `trialing` — that
+is the branch that records `trial_ends_at`. Every trialist counted at full list
+price in `current_mrr`, `arr`, `by_tier` and every forecast compounded from them.
+
+**The label that is not the thing.** `churn_rate_30d` had no 30-day window and
+was computed entirely from companies that were still active. `churn_this_month`
+counted founders who signed up over a week ago and never subscribed — they never
+paid, so they cannot have left. `activation_rate` rated an activation event that
+does not exist.
+
+**And the mirror image, which is the one a steward will miss.**
+`last_audit_run: null` was hardcoded while `audit_scores` has a real writer and a
+`created_at`. The fact existed and was thrown away, leaving the operator unable
+to tell "never audited" from "not looked up". Discarding a fact is the same
+failure as inventing one, and it does not look like a defect on the page.
+
+**What could NOT be fixed, and why that matters more than what could.** Several
+of these are null now rather than computed, and each null carries its reason in
+the type: no tier-change history exists, so Foundry's own expansion revenue
+cannot be derived; nothing records when a company churns, and the only archive
+path that leaves a timestamp is ERASURE — a person exercising a deletion right
+is not a customer leaving, and counting the first as the second would have been
+the worst guess available; nothing records burn; nothing records founder
+activity gaps. `override_count_7d` would still be null if it were wired up,
+because `decision_quality_scores` has no writer at all —
+`recordDecisionContext` is exported from `scp/founder/decision-tracker.ts` and
+called from nowhere, which is why the override rates over there are permanently
+zero too. A test now watches for a caller appearing.
+
+**Method note that paid for itself twice.** Two findings were wrong on first
+read and were caught by checking rather than by writing them down. The tier
+price map `{solo: 79, growth: 199, investor_ready: 399}` looked like it could
+never match migration 001's `('founding_cohort','growth','scale')` CHECK —
+migration 080 had already fixed that, and the map is correct. And a wellbeing
+test failed on the `DEFAULT 'stable'` column rather than on the code, which is
+what surfaced the second-order trap above. Read the migration before writing the
+finding.
+
+## What the cycle before that established
 
 **The owner answered §10, §14 and §12, and all three are implemented.**
 
@@ -100,226 +193,73 @@ demonstrates.
 *One paragraph, deliberately. The narrative record is
 `history/SEAM_CAMPAIGN_HISTORY.md`; this file is what a steward needs today.*
 
-**This cycle: the owner's direction on ethics, legitimacy and the private
-frontier landed, and it was implemented rather than filed.** The doctrine went
-into the existing canonical artifacts — no new ethics universe — and then the
-repository was read for the places where the doctrine had outrun the code.
-`ARCHITECTURE.md` names seven terms of the legitimate action envelope; five
-were already structural, and `IMPLEMENTATION_STATE.md` now reports each of them
-against real code. The two that were absent were the work.
+**The owner's direction on ethics, legitimacy and the private frontier landed
+and was implemented rather than filed** — into the existing canonical artifacts,
+no second ethics universe. The repository was then read for where the doctrine
+had outrun the code. `ARCHITECTURE.md` names seven terms of the legitimate
+action envelope; the **external-permission term is deliberately still absent**,
+because it is counsel debt rather than a mechanism, and naming it before it
+exists would be the claim this institution refuses to make.
 
-The **affected-party term** existed as a sentence in migration 094 — "never
-contacted again, by any mode, at any trust level" — with no way in and one
-reader. `addSuppression` had no caller anywhere in `src/`, so the list was
-always empty, and the governed email path never consulted it. It is now checked
-at the boundary every outward effect converges through, recorded by the founder
-and readable by them, and gated on `can_manage_company` because an append-only
-list is a brake somebody could pull on the company's best customer. The
-**external-permission term** is deliberately still absent: three counsel-debt
-items are queued instead of a legal-knowledge store built on a model's
-recollection.
-
-Reading for **"what does this claim that its execution path cannot support"**
-then found three fabrications in a row. An agent's parsed LLM output was fed to
-`upsertCustomer`, whose insert branch CREATED a customer — name, email, plan,
-MRR, stage `trial` — indistinguishable in the same table from one a real
-billing system reported through the scoped API, and read as ground truth by the
-priority ranker, the strategy synthesis and the accuracy tracker. The creating
-function is deleted; a model may now judge a customer it cannot invent, and a
-refused signal lands where the founder reads it. `network/benchmarks.ts` said
-"No product or founder ID stored" in two places while its primary key is
-`${productId}_week_${metric}`. And the question *how few companies may stand
-behind a number shown to another company* was asked in four places and answered
-three ways — 3, 5, 5, and a bare literal 3 — with two of them sharing the name
-`MIN_CONTRIBUTORS` while disagreeing. The weakest answer governed the two paths
-that publish to a company's competitors. One constant now, at the strictest of
-what was there.
-
-The same lens found the largest one. `ARCHITECTURE.md` says consequential
-mutations enter ONE governed execution boundary; there were two.
-`action_executions` had its own switch, whose `send_email` arm returned
-`success: true` with the note *"Email draft stored. Email provider integration
-pending."* Nothing was sent — and the live send path had existed the whole time,
-one directory away, with the sender-of-record rule, the kill switch, the
-entitlement pause, classification, idempotency and effect certainty. The
-execution was marked `completed`, the customer-success department counted it as
-`sent`, and the attribution entry read *"Foundry sent a check-in on the
-founder's behalf under consent <id>"*. The note described a gap that had been
-closed elsewhere and never re-read. The second regime now enters the first, a
-refusal is no longer counted as a send, and the affected-party refusal built at
-the top of this cycle binds both paths because there is now only one path.
-
-Two smaller ones from the same reading. The privacy page's **Aggregate
-Insights** governed nothing — contribution was consented while RECEIVING was
-gated by nothing at all — and it promised "statistical patterns across hundreds
-of products", a scale nobody counted, over what is an eligibility floor of five
-companies rather than a statistic. It governs the reading now. And **Help
-Improve Foundry** described a choice the code does not offer: Foundry's own
-funnel analytics record a NAMED founder's progression regardless. The copy now
-says what happens, and the position is queued as owner decision §14. Every
-consent type is now either consulted or listed in `RECORDED_PREFERENCE_ONLY`
-with a reason, held by a test — four separate toggles governing nothing was
-four separate findings that should have been one rule.
-
-Pulling the same thread twice more. `schedule_call` and `update_crm` had the
-identical shape as the old email arm — `success: true` with a note saying the
-integration was pending — and a founder could build a template of either type
-on a live page, approve one, and read "Call" or "CRM" as done. There is no
-Calendly and no CRM to route into, so both refuse, and the template picker no
-longer offers a type the executor will refuse. And the privacy page's two
-retention dropdowns wrote a settings row that the retention sweep never read:
-they are honoured now where they ask Foundry to keep **less**, which is the
-direction that needs no counsel, with the boundaries (the financial log, the
-erasure trail) stated in §9 rather than drawn silently.
-
-And the largest of the tail: **the erasure knew about fifty-five tables the
-export could not see.** `exportProductData` swept the tables carrying
-`product_id` and nothing else — its own header argues that the denominator is
-the point, since an earlier version exported ten tables against a guessed one.
-Four hundred lines further down, the same file establishes at length that
-fifty-five tables carry no `product_id` and that three quarters of them ARE
-company data: eleven children hanging off erased parents, and the ones naming
-their subject as a contributor hash, a scope id, or the first component of a
-composite key. A founder asking for their own data got the conversation and not
-what they said in it. "This is yours and goes when you go" and "this is not
-yours to receive" are the same claim read two ways; there is one derivation
-now, `companyDataSources()`, and two consumers.
-
-The same asymmetry one level down, and it was worse. `FOUNDER_SCOPED` names
-twelve tables that are the PERSON'S rather than any company's — their voice,
-their health circumstances, their devices, their peer profile, their referral
-history — and `PERSON_ACROSS_COMPANIES` names their own activity inside
-companies they do not own. Both maps existed **only so an erasure could clear
-them**. Nothing read either to answer "what do you have about me?", and the
-erasure fires from the identity provider's `user.deleted` webhook, so there was
-no Foundry surface where a person asks to be erased and therefore no moment at
-which they could be offered their data first. `exportFounderData` is derived
-from the same two maps, and the privacy page offers it before it is needed
-rather than after it is too late.
-
-**One vocabulary for who allowed it**, closing the last piece of the two-ledger
-finding. `approved_by` is the field that makes an authorisation attributable and
-it held four spellings of one idea — `founder:<id>`, `institution:assisting`,
-`auto`, `voice:<id>`, `system:playbook`, `autopilot:<category>`, and from the
-dashboard approval a BARE founder id. Nothing misread a founder as an autopilot,
-because both readers that interpret the field happen to key on the `autopilot:`
-prefix; that is a property of which two readers exist, not of the data. Both
-approval doors now refuse a value that names no kind, and refuse it CLOSED — an
-authorisation nobody can be held to is not one. Test fixtures were passing the
-bare word `'founder'`, a role label with nobody behind it, which is the literal
-`'ceo'` defect surviving where nobody was looking.
-
-And the one reader that turns the field into English lived on ONE ledger's page
-and knew only three of the six kinds. The other ledger's page never rendered
-`approved_by` at all: it showed the agent that PROPOSED an action and never who
-ALLOWED it, which is the distinction the constitution turns on. It says
-"proposed by" and "Authorised by" now, from one reader.
+**One vocabulary for who allowed it**, closing the two-ledger seam: four
+spellings of `approved_by` became one principal reference
+(`outbound/acting-principal.ts`), so a founder, a voice session, autopilot, the
+institution and the system are told apart by kind rather than by string.
 
 **A company that integrated properly was invisible to the departments that act
-on customers.** Two customer stores, split along the line between where a real
-company's data enters — the documented `POST /api/v1/customers`, with issued
-scoped credentials — and where the institution looks. The success and outreach
-departments are real: governed, platform-capped, consent-gated, budgeted,
-verified, tested. They were structurally starved for exactly the companies that
-integrated the documented way, and nothing was broken; the two halves had
-simply never been introduced.
-
-Three things fell out of one accessor. The outcome verifier looked a reported
-customer up in the wrong table and **abstained** — a vacuous pass, proven under
-mutation: health fell from 80 to 10 and the criterion recorded `passed`.
-`draftCheckIn` took `Record<string, unknown>` and read `last_active_at`, the
-legacy column name, so a reported customer would have silently lost the
-personalised sentence rather than failing — a loose type is how a store
-migration goes quiet. And two "at risk" definitions turned out to be one:
-`churn_risk > 0.6` and `health_score < 40` are the same line, because
-`computeCustomerHealth` defines churn risk as `(100 - health)/100`.
-
-**A test fixture that proved the rails while bypassing the criterion.** The
-outreach champion fixture set `health_score` to `0.95` on a 0–100 column and
-hand-set `is_champion = 1`. The production job marks a champion at
-`health_score > 80` and would never have marked either row. Every rail below it
-was exercised; the thing that decides WHO gets written to was not.
+on customers.** `POST /api/v1/customers` — the documented external surface —
+writes `customer_intelligence`, while success and outreach read `customers`.
+`institution/company-customers.ts` is now the one accessor over both, and it is
+the ONE place the at-risk and champion predicates are stated. See opportunity 5
+for the cutover criterion.
 
 **A failed reading looked exactly like a calm one.** `analyzeTranscript` ended
-in `console.error`, and all three of its live callers — the Fathom webhook, the
-Fireflies webhook, the manual upload page — wrap it in `.catch(() => {})`.
-Swallowed twice. The consequence was not a missing log: `processed_at IS NULL`
-meant BOTH "not analysed yet" AND "analysed and failed", so a founder opened a
-call, saw no summary and no insights, and there was no state in which Foundry
-said it had tried. Migration 178 records the attempt with a closed reason
-vocabulary — the shape, never the content, because a raw error can quote the
-transcript and a transcript is a customer speaking — and two triggers keep the
-row coherent: never both analysed and failed, never a failure without a reason.
+in a `catch` that logged and returned, so a week where every transcript failed
+to parse rendered as a week with nothing to say. Migration 178 gives the failure
+a durable place and the page renders it.
 
-**Two things checked rather than assumed, and both corrected me.** This list had
-recorded that transcripts "reach one dashboard page and nothing else" and
-proposed wiring extracted commitments into responsibility discovery. The page is
-mounted and does render them; and migration 126 settles the rest — *"nothing
-inferred from free-form chat: the founder states the kind explicitly, and
-ambiguity stays conversation."* Building what the note proposed would have
-violated it. Separately, I suspected the analysis spent money silently:
-`callSonnet` is passed the product id and routes through the reserving AI
-client, so the spend is accounted, and the prompt already carries a proper
-untrusted-data boundary. What is true is narrower — a call that succeeded and
-then failed to PARSE was paid for and left nothing behind.
+**One rule, two implementations, one enforced.** Contact refusal lived in the
+outreach department only, while the governed email path — the one that actually
+reaches a customer — never consulted it, and nothing could get onto the list.
+It is now checked at the boundary where every outward effect converges;
+migration 179 retired the third, inert do-not-contact column.
 
-**And the failure classifier matched a prefix I had guessed at.** It tested for
-`SyntaxError` and `^AI response schema validation failed`, so an unparseable
-model response was recorded as `model_unavailable` — `parseJSONResponse` wraps
-the SyntaxError, making the name `Error` and the prefix `Failed to parse AI JSON
-response`. The test caught it. Classifying on message text is fragile; the
-mitigation is that the fallback is the least specific claim, never a confident
-wrong one.
-
-**One rule, two implementations, one enforced — on the operator boundary this
-time.** `protective-wrapper` states it ("the operator brain sees aggregates
-only") and holds `letter/operator-pack.ts` to it structurally. The OTHER
-operator surface, `founder/intelligence.ts`, selected the ten most at-risk
-CUSTOMERS across every company on the platform by name with no product scope,
-plus each company's audit `reasoning`. Both surfaces gate on `isFounder`, so
-operator-only rather than a leak between founders, and nothing rendered the
-names — they reached a clientless API response and stopped. Fixed at the source
-anyway. The principle it settles: **the operator administers the COMPANIES and
-bills them, so a company may be named; a company's customers belong to that
-company.**
-
-And the assertion I wrote to enforce it flagged `p.name` — the company's own
-name, the thing the rule permits. It now reads the projection and requires every
-column to be an aggregate or to come from the joined `products` table, which
-states the distinction instead of pattern-matching a word that appears on both
-sides of it.
-
-**A process failure worth keeping.** The commit before this cycle's work was
-pushed with five tests red: capping `customer_success` at 'suggest' was correct
-and the tests asserting the old behaviour were not updated with it. Validation
-was run and its exit code was read from the wrong stream. Read the exit code,
-and read it from the run that produced the log.
-
-
-**The cycle before this one, compressed** — the detail is in git history and in
-`history/SEAM_CAMPAIGN_HISTORY.md`. Its method was asking what a written record
-was FOR and then looking for its reader: `outcome_evidence_ref`,
-`reply_proposal_id`, `provider_receipt_json` and `reconcile_after` were all
-written faithfully and consumed by nothing. "Who finds out when this fails"
-found the same silence around Foundry's own dependencies — a dead integration,
-a support channel dropping customers, and the scheduled loops themselves could
-all fail while the page read like a calm day. "Who certifies their own
-authority" found two doors on the outbound boundary (`queueEmail` deleted,
-`proposeAction` closed by migration 173) and an attribution field recording the
-literal `'ceo'` for every founder of every company.
-
-The instruments were the largest finding: ten gates shared a block-comment regex
-that reads `app.use('/dashboard/*', mw)` as a comment opening and blanked 715
-lines of code, including half of `src/index.ts`. It surfaced only because
-hardening one unrelated gate made its baseline move. Two shapes recurred often
-enough to become gates rather than lessons — a backtick inside an embedded SQL
-or HTML comment, and an ORDER BY falling back to a nanoid id.
+**A process failure worth keeping.** A commit went out with five red tests
+because the exit code was read from a wrapper rather than from the run that
+produced the log. And a killed validation run left `_gate_fixture_agent.ts` in
+the working tree, where it was committed and then caught by the public-claims
+audit as a thirteenth AI agent against "All plans include 12 AI agents".
+`.gitignore` and a `beforeAll` sweep now handle the fixture; nothing but
+discipline handles the exit code.
 
 ## Highest-value current opportunities
 
 Provisional, recomputed each cycle. Not a backlog — if something better is
 found, this list loses. **Closed items are not kept here**; the git history is
 the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
+
+0. **The same lens, on the surfaces `founder/intelligence.ts` was not.** Eleven
+   findings came out of one file by reading each number and then looking for the
+   query behind it. Nothing about that file is special; it was read first. The
+   surfaces that have NOT had this treatment and carry the same shape — a
+   number, a person reading it, a fallback where the data is absent — are:
+
+   - `scp/briefing/compressed.ts` and `email-digest.ts`, `investor/board_packet.ts`,
+     `scp/investor/fundraising-readiness.ts` and `investor-update.ts`. These read
+     `metric_snapshots` for a COMPANY and render rates to that company's founder,
+     and an investor-facing document is the highest-consequence place for a
+     number nothing measured.
+   - `scp/agents/{harbor,beacon,prism,oracle}.ts`, each of which does
+     `(Number(metrics.activation_rate) || 0) * 100` — the `|| 0` is the exact
+     fallback shape that produced most of this cycle's findings, and it is
+     written five times.
+
+   **What to look for, in order of how often it paid:** a fallback (`?? 0`,
+   `|| 0`, `: 0`, `?? 50`) standing where the absence of data should be; a
+   denominator that cannot be empty because someone substituted 1; a count taken
+   from `rows.length` where the query carries a LIMIT; two fields whose
+   expressions are identical; a field name naming a window or a subject the
+   query does not touch; and a hardcoded null where a writer actually exists.
 
 1. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving an
    archived unbuildable client, most of `tier1-4`). Deletion adds no capability
@@ -352,9 +292,10 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      `gates-fail-when-they-should` plants real files into the working tree, so
      concurrent runs collide and produce failures that look like defects.
 
-4. **85 write-only columns.** `check-write-only-columns.mjs` holds the count;
-   this line said 92 while the ratchet said 85, which is the kind of drift the
-   ratchet exists to prevent in code and evidently not in prose.
+4. **84 write-only columns.** `check-write-only-columns.mjs` holds the count;
+   read it rather than this line. Prose drifts from the ratchet — this entry has
+   said 92 and 85 while the ratchet said otherwise, which is exactly the drift
+   the ratchet exists to prevent in code and evidently not here.
    Attributed by writing area rather than guessed at:
 
    - **20 are written by `services/institution`**, and those are the ones worth
@@ -404,21 +345,22 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
 
    **What is left.** `customers/intelligence.ts` legitimately owns the legacy
    table — it computes health and marks champions there, and is that store's
-   service. `founder/intelligence.ts` aggregates PLATFORM-WIDE across all
-   companies for the operator, so it cannot use the per-product accessor; its
-   totals, champion count and MRR-at-risk therefore still exclude every reported
-   customer. That is Foundry's own view of its platform being computed from one
-   store — lower stakes than a founder's own numbers, same class of error, and a
-   UNION away. Deleting the legacy read is the cutover, and
-   `customerStoreSplit(...).onlyLegacy` reaching zero is its criterion. `customer_events` has one writer,
-   `routes/api/platform.ts`, part of the clientless API in item 1 — where that
-   API is unused, `customers.churn_risk` reduces to `last_active_at` recency.
+   service. Everything else has converged: `founder/intelligence.ts` aggregates
+   platform-wide through `getAllCustomers`, which deduplicates across both
+   stores rather than UNIONing them (a UNION would double-count anyone in both,
+   and overstating is the error that flatters).
 
-   Related, found while here and not yet acted on:
-   `customer_intelligence.do_not_contact_until` has **no readers and no
-   writers** — a third contact control, inert, beside the canonical
-   `outreach_suppressions` one that is consulted at the boundary. Retire the
-   column or fold it in; do not leave a third.
+   **The cutover criterion is `customerStoreSplit(productId).onlyLegacy`
+   reaching zero**, which says the legacy read can go. Nothing else is waiting
+   on a judgment; it is waiting on data.
+
+   `customer_events` has one writer, `routes/api/platform.ts`, part of the
+   clientless API in item 1 — where that API is unused, `customers.churn_risk`
+   reduces to `last_active_at` recency.
+
+   **Closed:** `customer_intelligence.do_not_contact_until` was a third,
+   inert contact control beside the canonical one consulted at the boundary.
+   Migration 179 dropped it.
 
 6. **The transcript sense: NOT a gap. Corrected before it was built on.**
 
@@ -551,8 +493,14 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
 These lenses produced almost everything found in the last two cycles. They are
 worth trying before inventing a new one:
 
+- **"Read the number, then find the query behind it."** The one that produced
+  the last cycle, eleven times in one file. It is narrower than the lens below
+  and that is why it works: it does not ask whether a claim is supportable, it
+  asks what SQL ran. A constant, a fallback, or a `rows.length` off a limited
+  query answers instantly and unambiguously.
+
 - **"What does this claim that its execution path cannot support?"** The one
-  that produced this cycle. A `success: true` from a function that contacted
+  that produced the cycle before. A `success: true` from a function that contacted
   nobody; "No product or founder ID stored" above a primary key containing the
   product id; "anonymized usage patterns" over a named founder's funnel;
   "statistical patterns across hundreds of products" over an eligibility floor

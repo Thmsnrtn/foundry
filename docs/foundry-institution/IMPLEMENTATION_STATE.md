@@ -316,6 +316,27 @@ This is separate from `OWNER_DECISIONS_PENDING` §12, which asks who holds the
 ecosystem key. That one is about a surface outside the member model; this is
 about Foundry's own operator view of its paying customers.
 
+**What the operator surface now says when it does not know.** Every number on
+`/founder-ops` was read against the query behind it, and most of them turned out
+to be constants, fallbacks, or a different quantity than the label claimed. The
+standing rule that came out of it, and which any future field on this surface
+must follow: **an absent input is null and the page says why, never a digit.**
+Concretely, and each with its reason in the type — Foundry's own expansion
+revenue (no tier-change history exists), when a company churned (no archive path
+records it, and the one that leaves a timestamp is erasure, which is not a
+churn), Foundry's burn and therefore its runway (nothing records it), a
+founder's activity gaps, and the 7-day override count (`decision_quality_scores`
+has no writer — `recordDecisionContext` is exported and called from nowhere,
+which is also why the override rates in `scp/founder/decision-tracker.ts` are
+permanently zero; a test watches for a caller appearing).
+
+Two rules worth carrying to any other surface. A rate over an empty denominator
+is null, not a digit — `auto_execute_rate` fell back to 100 and
+`avg_health_score` to 0, and which way a fallback flatters is an accident of
+typing. And **a column default is not an observation**: `founder_health.
+engagement_trend` carries `DEFAULT 'stable'`, so a row written for any other
+reason looked like a judgment that a person was doing fine.
+
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope |
