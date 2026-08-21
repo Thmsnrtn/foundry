@@ -881,7 +881,8 @@ export async function getGrowthSignals(): Promise<GrowthSignals> {
 
 export interface AICostData {
   total_tokens_24h: number;
-  /** Actually recorded spend, summed from `cost_events`. */
+  /** Reconciled spend from `ai_daily_spend` at global scope — the same ledger
+   *  the daily ceiling is enforced against, and the only complete one. */
   total_cost_24h: number;
   /** NULL means NOT MEASURED, never zero. Nothing in this system records
    *  per-call latency, and a `0` here was rendered as a measurement. */
@@ -917,10 +918,28 @@ export interface AICostData {
  * and the surface says so rather than printing a number.
  */
 export async function getAICostData(): Promise<AICostData> {
-  // The canonical spend ledger: real amounts, every cost type.
+  // THE LEDGER THE CEILING ENFORCES AGAINST, which is the one that decides
+  // whether Foundry may act at all.
+  //
+  // This read `cost_events` under a comment of mine calling it "the canonical
+  // spend ledger: real amounts, every cost type". That was wrong, and correcting
+  // it matters more than the number did. `cost_events` has ONE writer —
+  // `scp/agents/base.ts`, fire-and-forget, for agent sessions only — so it
+  // excludes founder chat, voice replies and every other model call. This same
+  // function was already counting chat TOKENS while reporting no chat COST,
+  // which is what a partial ledger beside a complete one looks like from the
+  // outside.
+  //
+  // `ai/client.ts` reserves and settles every call, so `ai_daily_spend` is
+  // complete and reconciled — including calls whose provider response was lost,
+  // which expire at the full authorized amount rather than vanishing.
+  //
+  // SCOPE 'global' ONLY. The finish trigger writes the same amount to the
+  // global, product and founder rows, so summing across scopes counts each call
+  // up to three times.
   const spend = await safeQuery(
-    `SELECT COALESCE(SUM(amount_usd), 0) AS total FROM cost_events
-      WHERE created_at > datetime('now', '-1 day')`, []);
+    `SELECT COALESCE(SUM(spent_cents), 0) / 100.0 AS total FROM ai_daily_spend
+      WHERE scope = 'global' AND date >= date('now', '-1 day')`, []);
   const totalCost = Number((spend.rows[0] as Record<string, unknown>)?.total ?? 0);
 
   // Tokens from the two paths that record them, which do not overlap: agent

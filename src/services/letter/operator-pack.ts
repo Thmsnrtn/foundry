@@ -28,8 +28,15 @@ export async function getOperatorSystemLines(): Promise<string[]> {
   // AI spend today vs trailing 7-day average — the runaway-bill early warning.
   try {
     const spend = await query(
+      // SCOPE 'global' ONLY. `ai_daily_spend` carries one row per scope, and the
+      // reservation-finish trigger adds the same amount to the global, product
+      // and founder rows. Summing across scopes counted every call up to three
+      // times, so the figure this line prints to the operator — "AI spend today
+      // is X USD" — was inflated. The ratio it warns on survived the error,
+      // because the inflation appears in both halves; the money did not.
       `SELECT date, SUM(spent_cents) as cents FROM ai_daily_spend
-        WHERE date >= date('now', '-7 days') GROUP BY date ORDER BY date DESC`,
+        WHERE scope = 'global' AND date >= date('now', '-7 days')
+        GROUP BY date ORDER BY date DESC`,
       [],
     );
     const rows = spend.rows as unknown as Array<Record<string, unknown>>;
