@@ -426,6 +426,19 @@ and every "lower is better" test passes**, so a broken scorer awards full marks
 for the worst possible number and nothing looks wrong. `nps_score` is on its own
 -100..100 scale and must NOT be scaled.
 
+**A Signal is not shown, spoken or prompted unless it was measured.**
+`SignalResult.hasData` was already declared with the Honesty Law and honoured by
+one of its ten consumers. Use `signalText()` / `signalNumber()` from
+`services/signal.ts`; a test enumerates every caller of `computeSignal` and
+fails when one neither reads `hasData` nor uses them. A default is NOT written
+to `signal_history` — a gap there means nothing was known that day, which is
+what the sparkline, the 7-day trend and the drop alert all need it to mean.
+
+**The general form, which is worth more than the instance:** when a doctrine
+sentence is written into a type, check every consumer before believing it. A
+rule in a comment protects the file it sits in; only a shared helper and an
+enumerating test protect the callers.
+
 **And one rule about outcome loops.** `/roi` reports "not measured" rather than
 $0, because `recommendation_outcomes` has no writer. **Do not wire
 `recordRecommendation` without `markActedOn`**: recording the denominator and

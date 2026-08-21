@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `6b4df85`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `d6cb291`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 217 files, highest **181**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `6b4df85` — **313 files / 2,708 tests**,
+- **Validation:** full suite green at `d6cb291` — **314 files / 2,720 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
@@ -308,6 +308,41 @@ loop that records its denominator and never its numerator produces a confident
 wrong answer, which is harder to notice than an honest blank.** Wiring the other
 half needs a real answer to "what counts as acting on a recommendation"; a test
 now fails if a caller appears for one without the other.
+
+**And the sharpest instance of all of it: a rule Foundry had already written
+down, and obeyed once.** `SignalResult.hasData` is declared in
+`services/signal.ts` with the Honesty Law and this sentence: *"the score is a
+default, not a measurement. First-run surfaces must say 'not enough data yet'
+rather than present a falsely-confident number."*
+
+Ten places compute a Signal. **One honoured it.** The other nine printed the
+default, so a company Foundry had never measured appeared as a confident 85 out
+of 100: on a public share link under a badge reading "LIVE SIGNAL"; spoken aloud
+in the voice briefing, where there is no colour and no second glance; twice into
+a model, which reasons from it and repeats it back; in Fleet Triage, where it
+sorted among real companies and pulled the fleet average on a page whose whole
+purpose is choosing what to look at first; over the mobile API; and as the
+baseline for a drop alert.
+
+That last one had teeth. The default was written into `signal_history` like any
+other score, so the first day a company actually reported something, the real
+score landed against a default baseline and the founder was told their Signal
+had fallen thirty points **from a number their company was never at**. The same
+history feeds the share page's sparkline and the 7-day trend in conversation
+context.
+
+**A default no longer enters the record at all**, and not-writing beats writing
+a flag: every reader of `signal_history` gets the guarantee for free instead of
+having to remember it, and a gap means nothing was known that day, which is what
+a gap should mean.
+
+**The lesson is about instruments, not about Signal.** The rule did not need to
+be discovered — it was already written, in the codebase's own words, in the type
+itself. What was missing was ONE WAY TO OBEY IT and something that notices when
+a caller does not. Writing a rule into a comment protects the file it is in.
+`signalText`/`signalNumber` plus a test that enumerates every caller of
+`computeSignal` protects the other nine. **When a doctrine sentence appears in a
+type, check every consumer before believing it.**
 
 **A gate that was measured and rejected.** The ghost-column class —
 `mrr_growth_pct` read off a `SELECT *` — is invisible to every column gate here,
