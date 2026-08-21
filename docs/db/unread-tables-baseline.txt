@@ -1,5 +1,4 @@
 agent_positions
-auto_execution_log
 board_decks
 causal_chains
 cofounder_alignment_scores

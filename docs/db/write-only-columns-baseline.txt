@@ -1,4 +1,3 @@
-action_drafts.execution_result
 action_executions.approval_note
 agent_configs.parent_version
 agent_configs.updated_by
@@ -16,7 +15,6 @@ ai_spend_reservations.global_cap_cents
 ai_spend_reservations.product_cap_cents
 ai_spend_reservations.reserved_cents
 anomalies.expected_value
-auto_execution_log.action_draft_id
 autonomy_consents.from_mode
 board_packets.metrics_snapshot_json
 causal_chains.effect_entity_id

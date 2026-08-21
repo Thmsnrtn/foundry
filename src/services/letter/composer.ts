@@ -49,7 +49,8 @@ const ASK_WORDS: Record<string, string> = {
 };
 
 export async function composeLetter(productId: string, f: Fluency = 'balanced'): Promise<Letter> {
-  const [executions, gate0, pending, expired, digest, radar, ledger, dissent, quieted] = await Promise.all([
+  const [executions, gate0, pending, expired, digest, radar, ledger, dissent, quieted,
+    executedDrafts] = await Promise.all([
     query(
       `SELECT action_type, integration FROM action_executions
        WHERE product_id = ? AND status = 'completed'
@@ -92,6 +93,21 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
           AND datetime(created_at) >= datetime('now', '-1 day')
         ORDER BY created_at DESC LIMIT 10`,
       [productId]),
+    // ARTIFACTS FOUNDRY PRODUCED, AND WHO LET IT.
+    //
+    // `action_drafts` is a second execution path beside `action_executions`:
+    // pricing copy, landing copy, an onboarding flow, a remediation PR. Its
+    // results were recorded TWICE — `execution_result` on the draft and a whole
+    // row in `auto_execution_log` — and read by neither. So the one path where
+    // Foundry produces something by itself was the one the founder could not
+    // see, and `approved_at IS NULL` is the only place the distinction between
+    // "I approved this" and "Foundry did it alone" survives.
+    query(
+      `SELECT action_type, title, execution_result, approved_at FROM action_drafts
+        WHERE product_id = ? AND status = 'executed'
+          AND datetime(COALESCE(executed_at, created_at)) >= datetime('now', '-1 day')
+        ORDER BY executed_at DESC LIMIT 10`,
+      [productId]),
   ]);
 
   const handled: string[] = [
@@ -109,6 +125,21 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
           ? `Handled a routine call (gate 0): ${d.what}`
           : `Handled autonomously (gate 0): ${d.what}`),
     ),
+    ...(executedDrafts.rows as unknown as Array<Record<string, unknown>>).map((d) => {
+      // The distinction is the point. "Made you a pricing page" and "made you a
+      // pricing page without asking" are different sentences, and only one of
+      // them is the founder's own decision coming back to them.
+      const what = String(d.title ?? d.action_type ?? 'an artifact');
+      const alone = d.approved_at == null;
+      const result = d.execution_result == null ? '' : ` — ${String(d.execution_result)}`;
+      return f === 'plain'
+        ? (alone
+          ? `Made this without asking, because you had trusted it with the category: ${what}${result}`
+          : `Made this after you approved it: ${what}${result}`)
+        : (alone
+          ? `Auto-executed (gate 0): ${what}${result}`
+          : `Executed on approval: ${what}${result}`);
+    }),
   ];
 
   // ONE QUESTION, ONE ANSWER.

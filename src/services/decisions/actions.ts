@@ -274,12 +274,12 @@ async function executeAction(draftId: string, productId: string): Promise<{ succ
     [success ? 'executed' : 'failed', result, draftId]
   );
 
-  // Log execution
-  await query(
-    `INSERT INTO auto_execution_log (id, product_id, action_draft_id, action_type, trigger, output, success)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [nanoid(), productId, draftId, d.action_type, d.gate === 0 ? 'auto_gate_0' : 'founder_approved', result, success ? 1 : 0]
-  );
+  // The execution record is the UPDATE above and nothing else. `auto_execution_log`
+  // duplicated every field of it — the draft id, the action type, the output as
+  // `execution_result`, success as `status`, and the trigger as
+  // `approved_at IS NULL` — and nothing read either copy. Migration 185 retired
+  // the duplicate and gave the surviving one a reader: the Letter now says what
+  // Foundry made, and whether it asked first.
 
   // Update linked decision if exists
   if (d.decision_id) {

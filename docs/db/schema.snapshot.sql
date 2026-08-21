@@ -1560,7 +1560,6 @@
   action_agent TEXT NOT NULL,
   action_config TEXT NOT NULL,
   action_config_json TEXT NOT NULL, -- JSON: action payload template
-  action_draft_id TEXT REFERENCES action_drafts(id),
   action_execution_id TEXT, -- FK to action_executions if one was created
   action_items TEXT,
   action_label TEXT,
@@ -1572,7 +1571,6 @@
   action_taken_at TEXT,
   action_taken_days_after INTEGER,            -- how many days after recommendation
   action_type          TEXT NOT NULL,
-  action_type TEXT NOT NULL,
   action_type TEXT NOT NULL,
   action_type TEXT NOT NULL,
   action_type TEXT NOT NULL,
@@ -2376,7 +2374,6 @@
   error TEXT
   error TEXT,
   error TEXT,
-  error TEXT,
   error_count INTEGER DEFAULT 0,
   error_count_trailing_7d INTEGER DEFAULT 0,
   error_log TEXT,
@@ -2437,7 +2434,6 @@
   evolution_policy TEXT,               -- JSON: evolution configuration
   evolutions_promoted_count INTEGER NOT NULL DEFAULT 0,
   executed_at DATETIME,
-  executed_at TEXT DEFAULT (datetime('now'))
   executed_at TEXT,
   executed_at TEXT,
   execution_budget_weekly INTEGER, -- max executions per week (null = unlimited)
@@ -2899,7 +2895,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -2913,7 +2908,6 @@
   indicator_name TEXT NOT NULL,
   initiative_type TEXT NOT NULL,  -- 'proactive_check', 'message_response', 'event_reaction'
   input_context TEXT NOT NULL,         -- What situation prompted this lesson
-  input_context TEXT,
   input_context TEXT, -- JSON
   input_tokens INTEGER NOT NULL DEFAULT 0,
   inputs TEXT NOT NULL,
@@ -3302,7 +3296,6 @@
   outcome_status        TEXT CHECK (outcome_status IN ('verified_success','verified_failure','unresolved')),
   outcome_timeframe_days INTEGER,
   outcome_valence INTEGER,
-  output TEXT,
   output TEXT, -- JSON
   output_id TEXT,
   output_tokens INTEGER NOT NULL DEFAULT 0,
@@ -3604,7 +3597,6 @@
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL UNIQUE REFERENCES products(id),
   product_id TEXT NOT NULL UNIQUE,
-  product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
@@ -4117,7 +4109,6 @@
   subject TEXT NOT NULL,
   subject TEXT NOT NULL,
   subscription_id TEXT REFERENCES push_subscriptions(id),
-  success INTEGER,
   success_count INTEGER DEFAULT 0,
   success_metric TEXT NOT NULL,          -- e.g., "trial_to_paid_conversion_rate"
   successful_sessions INTEGER NOT NULL DEFAULT 0,
@@ -4258,7 +4249,6 @@
   treatment_mean   REAL,
   treatment_n      INTEGER,           -- observations in treatment group at checkpoint
   trial_ends_at TEXT
-  trigger TEXT NOT NULL,
   trigger TEXT NOT NULL,
   trigger_conditions TEXT NOT NULL,     -- JSON: {threshold?, stage?, days?}
   trigger_config_json TEXT NOT NULL, -- JSON: conditions to evaluate
@@ -4428,7 +4418,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
 );
 );
 );
@@ -4905,7 +4894,6 @@ CREATE INDEX idx_audit_scores_product_verdict ON audit_scores(product_id, verdic
 CREATE INDEX idx_audit_trail_changed_by ON audit_trail(changed_by);
 CREATE INDEX idx_audit_trail_created ON audit_trail(created_at);
 CREATE INDEX idx_audit_trail_table_row ON audit_trail(table_name, row_id);
-CREATE INDEX idx_auto_exec_product ON auto_execution_log(product_id);
 CREATE INDEX idx_autonomy_consents
 CREATE INDEX idx_autopilot_product ON autopilot_policies(product_id);
 CREATE INDEX idx_bdl_briefing
@@ -5241,7 +5229,6 @@ CREATE TABLE api_keys (
 CREATE TABLE audit_log (
 CREATE TABLE audit_scores (
 CREATE TABLE audit_trail (
-CREATE TABLE auto_execution_log (
 CREATE TABLE autonomy_consents (
 CREATE TABLE autopilot_config (
 CREATE TABLE autopilot_policies (
