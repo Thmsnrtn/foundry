@@ -197,7 +197,14 @@ export async function detectIsolationDrift(founderId: string, productId: string)
   const health = await query('SELECT engagement_trend, motivation_score FROM founder_health WHERE founder_id = ?', [founderId]);
   const h = health.rows[0] as Record<string, unknown> | undefined;
 
-  if (h && ((h.engagement_trend === 'declining' || h.engagement_trend === 'critical') && ((h.motivation_score as number) ?? 100) < 40)) {
+  // `?? 100` read an unknown motivation as the maximum, so this never fired for
+  // a founder nobody had measured — the quiet direction, but by accident rather
+  // than by decision. Stated as a decision now: an insight about a person needs
+  // an observation of that person.
+  const motivation = h?.motivation_score == null ? null : Number(h.motivation_score);
+  if (h && motivation !== null
+      && (h.engagement_trend === 'declining' || h.engagement_trend === 'critical')
+      && motivation < 40) {
     const insight: PsychologyInsight = {
       id: nanoid(),
       pattern_type: 'isolation_drift',

@@ -74,7 +74,17 @@ export interface GrowthStageConfig {
 
 // ─── Founder Health ─────────────────────────────────────────────────────────
 
-export type EngagementTrend = 'rising' | 'stable' | 'declining' | 'critical';
+/**
+ * `'unknown'` exists because it did not. `detectEngagementTrend` returned
+ * `'stable'` when it had fewer than three snapshots to look at, so a founder
+ * about whom Foundry knew nothing was reported as engagement-stable — a claim
+ * about a person, from no observation of that person.
+ *
+ * Nothing acts on 'unknown', so the behavioural change is nil: the two
+ * consumers (`ai/calibration.ts` and `intelligence/psychology.ts`) only branch
+ * on 'declining' and 'critical'. The change is to what the system SAYS.
+ */
+export type EngagementTrend = 'rising' | 'stable' | 'declining' | 'critical' | 'unknown';
 
 export interface FounderHealth {
   id: string;

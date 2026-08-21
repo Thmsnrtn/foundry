@@ -208,12 +208,20 @@ async function predictFounderBurnout(founderId: string): Promise<Prediction | nu
   );
   if (snapshots.rows.length < 3) return null;
 
-  const scores = (snapshots.rows as unknown as Array<Record<string, number>>).map((s) => s.motivation_score ?? 50);
+  // Same substitution as `founder-health.ts` carried: a snapshot with no
+  // motivation score counted as 50 in a prediction about a person.
+  const scores = (snapshots.rows as unknown as Array<Record<string, unknown>>)
+    .map((s) => s.motivation_score)
+    .filter((v): v is number => v !== null && v !== undefined)
+    .map(Number);
 
-  // Is motivation consistently declining?
+  // A burnout prediction about a person needs snapshots of that person. Three
+  // rows of which two had no score used to become three scores of 50.
+  if (scores.length < 3) return null;
+
   const isConsistentDecline = scores.every((s, i) => i === 0 || s <= scores[i - 1]!);
-  const latest = scores[0] ?? 50;
-  const oldest = scores[scores.length - 1] ?? 50;
+  const latest = scores[0]!;
+  const oldest = scores[scores.length - 1]!;
   const totalDrop = oldest - latest;
 
   if (isConsistentDecline && totalDrop > 15 && latest < 50) {

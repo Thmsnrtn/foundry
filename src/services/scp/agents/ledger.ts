@@ -137,20 +137,35 @@ export class LedgerAgent extends BaseAgent {
     }
 
     // ── 7. Build prompt data ──────────────────────────────────────────────────
+    // These three are COMPANY-REPORTED and nullable. `|| 0` told the financial
+    // agent that a month with no churn figure had churned exactly nothing, and
+    // that a month with no new-business figure won exactly nothing. A month
+    // nobody reported and a month that genuinely stood still looked identical to
+    // the agent whose whole job is reading the shape of the revenue.
+    //
+    // Foundry's OWN ledgers below are different and are left as they are: an
+    // absent `ai_cost_trailing_30d_usd` really does mean no spend was recorded,
+    // because Foundry is the thing that records it.
+    const { money } = await import('../../ai/measured.js');
     const metricRows = metricsResult.rows as Record<string, unknown>[];
     const mrrSeries = metricRows.map(row => {
       const date = row.snapshot_date as string;
-      const newMrr = (Number(row.new_mrr_cents) || 0) / 100;
-      const churned = (Number(row.churned_mrr_cents) || 0) / 100;
-      const expansion = (Number(row.expansion_mrr_cents) || 0) / 100;
-      return `${date}: new=$${newMrr.toFixed(2)} churned=$${churned.toFixed(2)} expansion=$${expansion.toFixed(2)}`;
+      return `${date}: new=${money(row.new_mrr_cents)} `
+        + `churned=${money(row.churned_mrr_cents)} `
+        + `expansion=${money(row.expansion_mrr_cents)}`;
     }).join(' | ');
 
     const productRow = productResult.rows.length > 0
       ? (productResult.rows[0] as Record<string, unknown>)
       : null;
     const aiCostTotal = productRow ? Number(productRow.ai_cost_trailing_30d_usd) || 0 : 0;
-    const budget = productRow ? Number(productRow.operating_budget_monthly_usd) || 50 : 50;
+    // The founder's operating budget. `|| 50` invented a $50/month budget for a
+    // company that had not set one — and then `budgetUtilization` divided the
+    // real AI spend by that invented number and reported the percentage to the
+    // agent that judges whether the spend is justified. `|| 50` also swallowed a
+    // genuine budget of 0.
+    const budget = productRow?.operating_budget_monthly_usd == null
+      ? null : Number(productRow.operating_budget_monthly_usd);
     const attributedRevenue = productRow ? Number(productRow.attributed_revenue_trailing_30d_usd) || 0 : 0;
 
     const costRow = costResult.rows.length > 0 ? (costResult.rows[0] as Record<string, unknown>) : null;
@@ -175,7 +190,9 @@ export class LedgerAgent extends BaseAgent {
     // nothing yet, to an agent whose job is judging whether the spend is worth
     // it. See `ai/measured.ts`.
     const roi = aiCostTotal > 0 ? attributedRevenue / aiCostTotal : null;
-    const budgetUtilization = budget > 0 ? (aiCostTotal / budget) * 100 : null;
+    const budgetUtilization = budget !== null && budget > 0
+      ? (aiCostTotal / budget) * 100
+      : null;
 
     // Stripe integration events
     const stripeEvents = (context.integrationEvents ?? []).filter(e => e.source === 'stripe');
@@ -198,7 +215,7 @@ You track AI/tool costs as a percentage of revenue — costs that are growing fa
     );
 
     const userPrompt = `MRR last ${metricRows.length} periods (newest first): ${mrrSeries || 'No MRR data'}.
-Total AI cost (30d): $${directCost.toFixed(4)}. Budget: $${budget.toFixed(2)}/month. Utilization: ${budgetUtilization === null ? 'unknown' : `${budgetUtilization.toFixed(1)}%`}.
+Total AI cost (30d): $${directCost.toFixed(4)}. Budget: ${budget === null ? 'not set by the founder' : `$${budget.toFixed(2)}/month`}. Utilization: ${budgetUtilization === null ? 'unknown' : `${budgetUtilization.toFixed(1)}%`}.
 Attributed revenue (30d): $${attributedRevenue.toFixed(2)}. Calculated ROI: ${roi === null ? 'not computable — nothing has been spent yet' : `${roi.toFixed(2)}x`}.
 Revenue by agent: ${revenueBreakdown}.
 Executed actions (30d): ${executedContext}.
@@ -308,7 +325,13 @@ Return JSON only (no markdown fences):
         message_type: 'alert',
         priority: utilPct > 95 ? 'critical' : 'high',
         subject: `Budget utilization at ${utilText} — AI cost review needed`,
-        body: `Ledger reports budget utilization at ${utilText} for the month. AI costs: $${directCost.toFixed(4)}. Budget cap: $${budget.toFixed(2)}. All agents should minimize unnecessary Claude calls until next billing cycle.`,
+        // `utilPct` is only non-null when a budget was set, so this branch
+        // cannot be reached without one — but the value is narrowed explicitly
+        // rather than asserted, because that coupling is not visible here.
+        body: `Ledger reports budget utilization at ${utilText} for the month. `
+          + `AI costs: $${directCost.toFixed(4)}. `
+          + `Budget cap: ${budget === null ? 'not set' : `$${budget.toFixed(2)}`}. `
+          + `All agents should minimize unnecessary Claude calls until next billing cycle.`,
       });
     }
 

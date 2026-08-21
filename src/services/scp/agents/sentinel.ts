@@ -274,7 +274,10 @@ Assess infrastructure and deployment health. Return JSON only (no markdown fence
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed infra analysis: status=${infra?.deployment_status ?? 'unknown'}, risk=${infra?.risk_level ?? 'unknown'}, incidents=${infra?.open_incidents ?? 0}`,
+      description: `Completed infra analysis: status=${infra?.deployment_status ?? 'unknown'}, `
+        + `risk=${infra?.risk_level ?? 'unknown'}, `
+        // Zero open incidents is a finding. Not knowing is not that finding.
+        + `incidents=${infra?.open_incidents ?? 'unknown'}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
