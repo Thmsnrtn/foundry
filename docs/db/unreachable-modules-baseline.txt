@@ -22,6 +22,5 @@ src/services/integration/stripe-gateway.ts
 src/services/integrations/stripe-sync.ts
 src/services/intelligence/benchmarks.ts
 src/services/intelligence/shippability.ts
-src/services/scp/wiki.ts
 src/services/truth/engine.ts
 src/views/numbers.ts
