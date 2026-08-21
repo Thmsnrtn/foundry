@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { pctOfFraction, measured } from '../../ai/measured.js';
 
 interface BeaconClaudeResponse {
   observations: string[];
@@ -134,13 +135,16 @@ export class BeaconAgent extends BaseAgent {
     // ── 7. Build prompt data ──────────────────────────────────────────────────
     const metricRows = metricsResult.rows as Record<string, unknown>[];
     const latest = metricRows[0] ?? {};
-    const signups = Number(latest.signups_7d) || 0;
-    const activeUsers = Number(latest.active_users) || 0;
-    const activationRate = (Number(latest.activation_rate) || 0) * 100;
+    // `|| 0` here reported a company that has never sent a metric snapshot as a
+    // company with zero signups, zero active users and a 0.0% activation rate —
+    // three findings, to a model asked to judge acquisition quality. Counts and
+    // rates say `unknown` when nothing was reported. See `ai/measured.ts`.
+    const signups = measured(latest.signups_7d);
+    const activeUsers = measured(latest.active_users);
 
     // Signup trend
     const signupTrend = metricRows.length > 1
-      ? metricRows.map(r => `${r.snapshot_date as string}: ${Number(r.signups_7d) || 0} signups`).join(' | ')
+      ? metricRows.map(r => `${r.snapshot_date as string}: ${measured(r.signups_7d)} signups`).join(' | ')
       : `${signups} signups (7d)`;
 
     const dna = dnaResult.rows.length > 0
@@ -166,7 +170,7 @@ export class BeaconAgent extends BaseAgent {
     const channelRows = cohortChannelResult.rows as Record<string, unknown>[];
     const channelPerf = channelRows.length > 0
       ? channelRows.map(r =>
-          `${r.acquisition_channel as string}: ${r.total_users as number} users, ${((Number(r.avg_activation) || 0) * 100).toFixed(1)}% activation`
+          `${r.acquisition_channel as string}: ${r.total_users as number} users, ${pctOfFraction(r.avg_activation)} activation`
         ).join(' | ')
       : 'No channel data';
 
@@ -192,7 +196,7 @@ You prioritize experiments over campaigns. You size them by expected value: "A $
 You connect marketing decisions to downstream revenue retention, not just acquisition volume.`
     );
 
-    const userPrompt = `Signup trend: ${signupTrend}. Active users: ${activeUsers}. Activation rate: ${activationRate.toFixed(1)}%.
+    const userPrompt = `Signup trend: ${signupTrend}. Active users: ${activeUsers}. Activation rate: ${pctOfFraction(latest.activation_rate)}.
 Channel performance: ${channelPerf}.
 ICP: ${icp}.
 Positioning: ${positioning}.
@@ -315,13 +319,15 @@ Return JSON only (no markdown fences):
 
     // Notify Forge of strong acquisition channels (expansion opportunity)
     const topChannel = channelRows[0];
-    if (topChannel && (Number(topChannel.avg_activation) || 0) > 0.5) {
+    const topActivation = topChannel?.avg_activation == null
+      ? null : Number(topChannel.avg_activation);
+    if (topChannel && topActivation !== null && topActivation > 0.5) {
       agentMessages.push({
         to_agent: 'forge',
         message_type: 'insight',
         priority: 'normal',
-        subject: `High-activation channel identified: ${topChannel.acquisition_channel as string} (${((Number(topChannel.avg_activation) || 0) * 100).toFixed(0)}% activation)`,
-        body: `Channel '${topChannel.acquisition_channel as string}' drives the highest activation rate (${((Number(topChannel.avg_activation) || 0) * 100).toFixed(0)}%). This segment may have higher LTV — Forge should evaluate expansion pricing for this cohort.`,
+        subject: `High-activation channel identified: ${topChannel.acquisition_channel as string} (${pctOfFraction(topChannel.avg_activation, 0)} activation)`,
+        body: `Channel '${topChannel.acquisition_channel as string}' drives the highest activation rate (${pctOfFraction(topChannel.avg_activation, 0)}). This segment may have higher LTV — Forge should evaluate expansion pricing for this cohort.`,
       });
     }
 

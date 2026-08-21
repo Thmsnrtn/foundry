@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { pctOfFraction, measured } from '../../ai/measured.js';
 
 interface PrismClaudeResponse {
   observations: string[];
@@ -116,14 +117,16 @@ export class PrismAgent extends BaseAgent {
     const metrics = metricsResult.rows.length > 0
       ? (metricsResult.rows[0] as Record<string, unknown>)
       : null;
-    const activationRate = metrics ? (Number(metrics.activation_rate) || 0) * 100 : 0;
-    const day30Retention = metrics ? (Number(metrics.day_30_retention) || 0) * 100 : 0;
+    // See `ai/measured.ts`: a company that has reported nothing is not a company
+    // with a 0.0% activation rate, and a model asked to judge experience quality
+    // should be told which of those it is looking at.
 
     const audit = auditResult.rows.length > 0
       ? (auditResult.rows[0] as Record<string, unknown>)
       : null;
-    const d2 = audit ? Number(audit.d2_score) || 0 : 0;
-    const d4 = audit ? Number(audit.d4_score) || 0 : 0;
+    // 0/10 is the worst possible audit score. Never audited is not that.
+    const d2 = measured(audit?.d2_score);
+    const d4 = measured(audit?.d4_score);
 
     const betaRows = betaResult.rows as Record<string, unknown>[];
     const feedbackThemes: string[] = [];
@@ -156,8 +159,8 @@ You name specific friction points with specificity — not "onboarding needs imp
 You defend the user experience when business pressure threatens it.`
     );
 
-    const userPrompt = `Activation rate: ${activationRate.toFixed(1)}%. Day-30 retention: ${day30Retention.toFixed(1)}%.
-UX audit scores: Experience Coherence ${d2}/10, Value Legibility ${d4}/10.
+    const userPrompt = `Activation rate: ${pctOfFraction(metrics?.activation_rate)}. Day-30 retention: ${pctOfFraction(metrics?.day_30_retention)}.
+UX audit scores: Experience Coherence ${d2 === 'unknown' ? 'unknown' : `${d2}/10`}, Value Legibility ${d4 === 'unknown' ? 'unknown' : `${d4}/10`}.
 Beta feedback themes: ${feedbackSummary}.
 
 Return JSON only (no markdown fences):
@@ -305,7 +308,7 @@ Return JSON only (no markdown fences):
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed financial analysis: activation ${activationRate.toFixed(1)}%, retention ${day30Retention.toFixed(1)}%, ${betaRows.length} beta records, runway=${runwayMonths}mo`,
+      description: `Completed financial analysis: activation ${pctOfFraction(metrics?.activation_rate)}, retention ${pctOfFraction(metrics?.day_30_retention)}, ${betaRows.length} beta records, runway=${runwayMonths}mo`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),

@@ -15,6 +15,7 @@ import type {
 } from '../types.js';
 import { callOpus, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { pctOfFraction, measured, money } from '../../ai/measured.js';
 
 interface OracleClaudeResponse {
   observations: string[];
@@ -141,15 +142,19 @@ export class OracleAgent extends BaseAgent {
 
     const metricSeries = metricRows.map(row => {
       const date = row.snapshot_date as string;
-      const signups = Number(row.signups_7d) || 0;
-      const active = Number(row.active_users) || 0;
-      const newMrr = (Number(row.new_mrr_cents) || 0) / 100;
-      const activation = ((Number(row.activation_rate) || 0) * 100).toFixed(1);
-      const retention = ((Number(row.day_30_retention) || 0) * 100).toFixed(1);
-      const churn = ((Number(row.churn_rate) || 0) * 100).toFixed(1);
-      const nps = Number(row.nps_score) || 0;
-      const healthRatio = Number(row.mrr_health_ratio) || 0;
-      return `${date}: signups=${signups} active=${active} newMRR=$${newMrr.toFixed(2)} activation=${activation}% ret30d=${retention}% churn=${churn}% nps=${nps} healthRatio=${healthRatio.toFixed(2)}`;
+      // A SERIES IS WHERE THIS MATTERS MOST. Oracle is asked to find trends
+      // across these rows, and a column the company stopped reporting used to
+      // become a run of zeros — which is not missing data to a model looking
+      // for a trend, it is a collapse. See `ai/measured.ts`.
+      const signups = measured(row.signups_7d);
+      const active = measured(row.active_users);
+      const newMrr = money(row.new_mrr_cents);
+      const activation = pctOfFraction(row.activation_rate);
+      const retention = pctOfFraction(row.day_30_retention);
+      const churn = pctOfFraction(row.churn_rate);
+      const nps = measured(row.nps_score);
+      const healthRatio = measured(row.mrr_health_ratio, 2);
+      return `${date}: signups=${signups} active=${active} newMRR=${newMrr} activation=${activation} ret30d=${retention} churn=${churn} nps=${nps} healthRatio=${healthRatio}`;
     }).join('\n');
 
     const signalRows = signalHistoryResult.rows as Record<string, unknown>[];

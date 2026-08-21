@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { measured, money } from '../../ai/measured.js';
 
 interface ForgeClaudeResponse {
   observations: string[];
@@ -119,20 +120,23 @@ export class ForgeAgent extends BaseAgent {
     // ── 6. Build prompt data ──────────────────────────────────────────────────
     const metricRows = metricsResult.rows as Record<string, unknown>[];
 
+    // `mrr_health_ratio` IS NULL BY DESIGN. Migration 001 defines it as
+    // churned/new, "null if new is 0" — so null means the division could not be
+    // done. `|| 0` mapped that to 0.00, and the prompt below explains that
+    // scale as `>1.0 = churn exceeds new MRR — critical`, which makes 0.00 the
+    // BEST possible reading. A company with no new MRR at all was reported to
+    // the model as being in perfect revenue health. See `ai/measured.ts`.
     const mrrTrend = metricRows.map(row => {
       const date = row.snapshot_date as string;
-      const newMrr = (Number(row.new_mrr_cents) || 0) / 100;
-      const churned = (Number(row.churned_mrr_cents) || 0) / 100;
-      const expansion = (Number(row.expansion_mrr_cents) || 0) / 100;
-      const healthRatio = Number(row.mrr_health_ratio) || 0;
-      return `${date}: new=$${newMrr.toFixed(2)} churned=$${churned.toFixed(2)} expansion=$${expansion.toFixed(2)} health_ratio=${healthRatio.toFixed(2)}`;
+      return `${date}: new=${money(row.new_mrr_cents)} churned=${money(row.churned_mrr_cents)}`
+        + ` expansion=${money(row.expansion_mrr_cents)} health_ratio=${measured(row.mrr_health_ratio, 2)}`;
     }).join(' | ');
 
     const latest = metricRows[0];
     const latestNewMrr = (Number(latest.new_mrr_cents) || 0) / 100;
     const latestChurned = (Number(latest.churned_mrr_cents) || 0) / 100;
     const latestExpansion = (Number(latest.expansion_mrr_cents) || 0) / 100;
-    const healthRatio = Number(latest.mrr_health_ratio) || 0;
+    const healthRatio = latest.mrr_health_ratio == null ? null : Number(latest.mrr_health_ratio);
 
     const lifecycle = lifecycleResult.rows.length > 0
       ? (lifecycleResult.rows[0] as Record<string, unknown>)
@@ -140,9 +144,11 @@ export class ForgeAgent extends BaseAgent {
     const currentPrompt = lifecycle ? ((lifecycle.current_prompt as string) ?? 'unknown') : 'unknown';
     const riskState = lifecycle ? ((lifecycle.risk_state as string) ?? 'unknown') : 'unknown';
 
+    // A founder with no tier is not a founder on the cheapest tier — they are
+    // trialing, cancelled, or not yet subscribed, and Forge prices against this.
     const founderTier = founderResult.rows.length > 0
-      ? ((founderResult.rows[0] as Record<string, unknown>).tier as string) ?? 'solo'
-      : 'solo';
+      ? ((founderResult.rows[0] as Record<string, unknown>).tier as string) ?? 'none'
+      : 'unknown';
 
     const highValueRows = highValueResult.rows as Record<string, unknown>[];
     const highValueSummary = highValueRows.length > 0
@@ -170,7 +176,7 @@ You push back when the company is underpriced. You have seen founders leave mill
     );
 
     const userPrompt = `MRR trend (last ${metricRows.length} snapshots, newest first): ${mrrTrend}.
-Health ratio (churned/new): ${healthRatio.toFixed(2)} (>1.0 = churn exceeds new MRR — critical).
+Health ratio (churned/new): ${measured(latest.mrr_health_ratio, 2)} (>1.0 = churn exceeds new MRR — critical; unknown means there was no new MRR to divide by).
 New MRR (latest): $${latestNewMrr.toFixed(2)}. Churned: $${latestChurned.toFixed(2)}. Expansion: $${latestExpansion.toFixed(2)}.
 Lifecycle: ${currentPrompt} | Risk state: ${riskState}.
 Founder tier: ${founderTier}.
@@ -299,13 +305,13 @@ Return JSON only (no markdown fences):
 
     // ── 11. Inter-agent messages ──────────────────────────────────────────────
     const agentMessages: AgentMessageSignal[] = [];
-    if (healthRatio > 1.2) {
+    if (healthRatio !== null && healthRatio > 1.2) {
       agentMessages.push({
         to_agent: 'harbor',
         message_type: 'alert',
         priority: 'critical',
-        subject: `Revenue health ratio critical: ${healthRatio.toFixed(2)} — churn exceeds new MRR`,
-        body: `MRR health ratio is ${healthRatio.toFixed(2)} — churned MRR ($${latestChurned.toFixed(0)}) exceeds new MRR ($${latestNewMrr.toFixed(0)}). Urgent retention focus needed. Forge is proposing ${pendingDecisions.length} revenue actions.`,
+        subject: `Revenue health ratio critical: ${measured(latest.mrr_health_ratio, 2)} — churn exceeds new MRR`,
+        body: `MRR health ratio is ${measured(latest.mrr_health_ratio, 2)} — churned MRR ($${latestChurned.toFixed(0)}) exceeds new MRR ($${latestNewMrr.toFixed(0)}). Urgent retention focus needed. Forge is proposing ${pendingDecisions.length} revenue actions.`,
       });
     }
     if (latestExpansion > latestNewMrr * 0.5) {

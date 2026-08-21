@@ -13,6 +13,7 @@ import type {
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { pctOfFraction, measured } from '../../ai/measured.js';
 
 interface HarborClaudeResponse {
   observations: string[];
@@ -132,10 +133,17 @@ export class HarborAgent extends BaseAgent {
     const metrics = metricsResult.rows.length > 0
       ? (metricsResult.rows[0] as Record<string, unknown>)
       : null;
-    const activationRate = metrics ? (Number(metrics.activation_rate) || 0) * 100 : 0;
-    const day30Retention = metrics ? (Number(metrics.day_30_retention) || 0) * 100 : 0;
-    const churnRate = metrics ? (Number(metrics.churn_rate) || 0) * 100 : 0;
-    const nps = metrics ? Number(metrics.nps_score) || 0 : 0;
+    // NULL MEANS THE COMPANY HAS NOT REPORTED IT. These were `|| 0`, which put
+    // `Churn rate: 0.0%. NPS: 0.0.` into a prompt whose system message says "You
+    // do not hedge when customer data is clear" — a model told to be confident,
+    // handed facts nobody observed. Worse, the activation threshold below fired
+    // a founder-facing alert on that zero. See `ai/measured.ts`.
+    const asPct = (v: unknown): number | null => {
+      const n = v === null || v === undefined ? null : Number(v);
+      return n === null || !Number.isFinite(n) ? null : n * 100;
+    };
+    const activationRate = asPct(metrics?.activation_rate);
+    const churnRate = asPct(metrics?.churn_rate);
 
     const cohortRows = cohortsResult.rows as Record<string, unknown>[];
     let cohortTrend = 'No cohort data';
@@ -182,7 +190,7 @@ You also identify expansion signals — accounts showing power-user behavior tha
 You are direct, named, and specific. You do not hedge when customer data is clear.`
     );
 
-    const userPrompt = `Activation rate: ${activationRate.toFixed(1)}%. Day-30 retention: ${day30Retention.toFixed(1)}%. Churn rate: ${churnRate.toFixed(1)}%. NPS: ${nps.toFixed(1)}.
+    const userPrompt = `Activation rate: ${pctOfFraction(metrics?.activation_rate)}. Day-30 retention: ${pctOfFraction(metrics?.day_30_retention)}. Churn rate: ${pctOfFraction(metrics?.churn_rate)}. NPS: ${measured(metrics?.nps_score, 1)}.
 Cohort retention trend: ${cohortTrend}.
 Retention stressors: ${stressorList}.
 Known at-risk customers (${atRiskRows.length}): ${atRiskSummary}.${stripeContext ? `\n${stripeContext}` : ''}
@@ -280,24 +288,27 @@ Return JSON only (no markdown fences):
 
     // ── 10. Message Forge and Beacon if churn is elevated ────────────────────
     const agentMessages: AgentMessageSignal[] = [];
-    if (churnRate > 5 || (parsed.at_risk_alerts ?? []).some(a => a.urgency === 'immediate')) {
+    // AN UNKNOWN RATE RAISES NOTHING. A threshold crossed by a fabricated zero
+    // is an alert about a company that reported no metrics at all.
+    if ((churnRate !== null && churnRate > 5)
+        || (parsed.at_risk_alerts ?? []).some(a => a.urgency === 'immediate')) {
       agentMessages.push({
         to_agent: 'forge',
         message_type: 'alert',
-        priority: churnRate > 10 ? 'critical' : 'high',
-        subject: `Elevated churn signal: ${churnRate.toFixed(1)}% — revenue impact risk`,
-        body: `Harbor detected elevated churn (${churnRate.toFixed(1)}%). At-risk segments: ${
+        priority: churnRate !== null && churnRate > 10 ? 'critical' : 'high',
+        subject: `Elevated churn signal: ${pctOfFraction(metrics?.churn_rate)} — revenue impact risk`,
+        body: `Harbor detected elevated churn (${pctOfFraction(metrics?.churn_rate)}). At-risk segments: ${
           (parsed.at_risk_alerts ?? []).map(a => a.segment).join(', ') || 'see analysis'
         }. Recommend reviewing pricing and expansion strategy.`,
       });
     }
-    if (activationRate < 30) {
+    if (activationRate !== null && activationRate < 30) {
       agentMessages.push({
         to_agent: 'beacon',
         message_type: 'insight',
         priority: 'high',
-        subject: `Low activation rate (${activationRate.toFixed(1)}%) — acquisition quality concern`,
-        body: `Harbor reports activation at ${activationRate.toFixed(1)}%. This may indicate ICP mismatch in acquisition. Cohort trend: ${cohortTrend.slice(0, 200)}.`,
+        subject: `Low activation rate (${pctOfFraction(metrics?.activation_rate)}) — acquisition quality concern`,
+        body: `Harbor reports activation at ${pctOfFraction(metrics?.activation_rate)}. This may indicate ICP mismatch in acquisition. Cohort trend: ${cohortTrend.slice(0, 200)}.`,
       });
     }
 
@@ -318,7 +329,7 @@ Return JSON only (no markdown fences):
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed CS analysis: activation ${activationRate.toFixed(1)}%, churn ${churnRate.toFixed(1)}%, NPS ${nps.toFixed(1)}, ${customerSignals.length} customer signals`,
+      description: `Completed CS analysis: activation ${pctOfFraction(metrics?.activation_rate)}, churn ${pctOfFraction(metrics?.churn_rate)}, NPS ${measured(metrics?.nps_score, 1)}, ${customerSignals.length} customer signals`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
