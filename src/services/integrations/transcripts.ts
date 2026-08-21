@@ -137,7 +137,8 @@ export async function ingestTranscript(
  */
 export async function analyzeTranscript(transcriptId: string): Promise<void> {
   const result = await query(
-    `SELECT product_id, transcript_text, call_type, participant_emails FROM call_transcripts WHERE id = ?`,
+    `SELECT product_id, transcript_text, call_type, participant_emails, source
+       FROM call_transcripts WHERE id = ?`,
     [transcriptId],
   );
   if (result.rows.length === 0) return;
@@ -146,6 +147,7 @@ export async function analyzeTranscript(transcriptId: string): Promise<void> {
   const transcriptText = row.transcript_text as string;
   const callType = row.call_type as string;
   const participants = (row.participant_emails as string | null) ?? '';
+  const source = String(row.source ?? '');
 
   if (!transcriptText) {
     await recordAnalysisFailure(transcriptId, 'transcript_empty');
@@ -207,6 +209,55 @@ ${transcriptText.slice(0, 12000)}
         transcriptId,
       ],
     );
+
+    // THE FOUNDER IS TOLD A CALL CAME IN.
+    //
+    // A customer call arrives by webhook, is stored, analysed and rendered —
+    // and nothing told the founder it happened. They had to navigate to
+    // `/signals/multimodal` and think to look. The sense reached a page; it did
+    // not reach a person.
+    //
+    // Only for calls that arrived on their own. A founder who pasted a
+    // transcript in already knows about it, and telling them would be Foundry
+    // reporting the founder's own action back to them as news.
+    //
+    // `attention` puts it in the Letter by default rather than ringing a bell:
+    // a call came in, here is what was heard, read it tomorrow. Their ceiling
+    // can quiet it further and — since migration 182 — that costs them nothing.
+    if (source !== 'manual' && source !== '') {
+      try {
+        const { deliver } = await import('../ux/interruption.js');
+        const productId = String(row.product_id);
+        const ownerRow = (await query(
+          `SELECT f.id AS founder_id, f.preferences FROM products p
+             JOIN founders f ON f.id = p.owner_id WHERE p.id = ?`, [productId]))
+          .rows[0] as Record<string, unknown> | undefined;
+        if (ownerRow) {
+          let prefs: Record<string, unknown> | null = null;
+          try {
+            prefs = ownerRow.preferences
+              ? JSON.parse(String(ownerRow.preferences)) as Record<string, unknown> : null;
+          } catch { /* unset or unreadable preferences are no ceiling */ }
+
+          await deliver(String(ownerRow.founder_id), productId, {
+            importance: 'attention',
+            title: `A ${callType} call came in from ${source}`,
+            // The summary is the model's reading of customer speech. It is
+            // shown as such, and the page is where the detail lives.
+            body: analysis.summary
+              ? `What I heard: ${String(analysis.summary).slice(0, 300)}`
+              : 'I have read it and had nothing to summarise.',
+            actionUrl: '/signals/multimodal', actionLabel: 'Read the call',
+          }, prefs as never);
+        }
+      } catch (error) {
+        // Never cost the analysis its result. The transcript is stored and
+        // rendered either way; this is the notice, not the fact.
+        log.error('transcript arrival notice failed', {
+          transcriptId, error: error instanceof Error ? error.name : 'Error',
+        });
+      }
+    }
   } catch (err) {
     // A FAILURE THAT LOOKED EXACTLY LIKE A CALM STATE. This was a console line,
     // and all three callers wrap this function in `.catch(() => {})`, so it was
