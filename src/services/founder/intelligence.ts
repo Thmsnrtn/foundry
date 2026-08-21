@@ -583,31 +583,83 @@ export async function getActivityTimeline(limit: number = 50): Promise<Array<{
 
 // ─── Growth Signals ─────────────────────────────────────────────────────────
 
+/**
+ * WHAT FOUNDRY ACTUALLY RECORDS ABOUT ITS OWN GROWTH — and no more.
+ *
+ * This shape used to carry `activation_rate` and `trial_to_paid_rate` as two
+ * separate fields computed by the SAME expression: paid founders over all
+ * founders. The operator page printed them side by side as two independently
+ * measured numbers, and they could never disagree, because they were one
+ * number wearing two names.
+ *
+ * Neither was its label either. Nothing in this system records a founder
+ * activating — there is no activation event to rate — and a trial conversion
+ * whose denominator includes founders who never trialed is not a conversion
+ * rate. So the pair is gone, and what is left is what the `founders` table can
+ * actually answer:
+ *
+ *   `tier`             a paid tier is held, or it is not
+ *   `trial_ends_at`    a trial window existed, or it did not (migration 077)
+ *   `referred_by_code` the ONE acquisition fact captured at signup (073)
+ *
+ * NULL MEANS NOT MEASURED, never zero. A rate over an empty denominator is
+ * unknown, and printing `0%` on a fresh install is a measurement claim about
+ * founders who do not exist yet.
+ */
 export interface GrowthSignals {
   new_signups_7d: number;
   new_signups_30d: number;
-  activation_rate: number;
-  trial_to_paid_rate: number;
-  expansion_revenue: number;
+  /** Founders holding a paid tier, over all founders. Named for what it is,
+   *  which is neither activation nor a conversion rate. NULL with no founders. */
+  paid_share_pct: number | null;
+  /** Of the founders who ever had a trial window, the share now holding a
+   *  tier. NULL when nobody has trialed: an unknown rate, not a zero one. */
+  trial_to_paid_rate: number | null;
+  /** NULL BECAUSE NO TIER CHANGE IS RECORDED ANYWHERE. A founder moving from
+   *  growth to scale updates `founders.tier` in place and leaves no row behind
+   *  — there is no history to difference, and no migration adds one. The `0`
+   *  that used to sit here was read as a measured absence of expansion. */
+  expansion_revenue: number | null;
+  /** From `founders.referred_by_code`, the only attribution captured at
+   *  signup. A founder without one is `unattributed`, NOT `direct`: arriving
+   *  by an unrecorded route is not the same fact as arriving directly. */
   top_acquisition_channels: Array<{ channel: string; count: number }>;
 }
 
 export async function getGrowthSignals(): Promise<GrowthSignals> {
-  const signups7d = await safeQuery("SELECT COUNT(*) as c FROM founders WHERE created_at > datetime('now', '-7 days')", []);
-  const signups30d = await safeQuery("SELECT COUNT(*) as c FROM founders WHERE created_at > datetime('now', '-30 days')", []);
-  const totalSignups = await safeQuery("SELECT COUNT(*) as c FROM founders", []);
-  const paidSignups = await safeQuery("SELECT COUNT(*) as c FROM founders WHERE tier IS NOT NULL", []);
+  const counts = await safeQuery(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN created_at > datetime('now','-7 days')  THEN 1 ELSE 0 END) AS signups_7d,
+            SUM(CASE WHEN created_at > datetime('now','-30 days') THEN 1 ELSE 0 END) AS signups_30d,
+            SUM(CASE WHEN tier IS NOT NULL THEN 1 ELSE 0 END) AS paid,
+            SUM(CASE WHEN trial_ends_at IS NOT NULL THEN 1 ELSE 0 END) AS trialed,
+            SUM(CASE WHEN trial_ends_at IS NOT NULL AND tier IS NOT NULL THEN 1 ELSE 0 END) AS trialed_paid,
+            SUM(CASE WHEN referred_by_code IS NOT NULL THEN 1 ELSE 0 END) AS referred
+       FROM founders`, []);
 
-  const total = (totalSignups.rows[0] as Record<string, number>)?.c ?? 1;
-  const paid = (paidSignups.rows[0] as Record<string, number>)?.c ?? 0;
+  const row = (counts.rows[0] ?? {}) as Record<string, unknown>;
+  const n = (key: string): number => Number(row[key] ?? 0);
+  const total = n('total');
+  const trialed = n('trialed');
+  const referred = n('referred');
+
+  // No founders means no channels to report. An empty list drawn from an empty
+  // table would read as "we looked and found none" rather than "nobody yet".
+  const channels = total === 0 ? [] : [
+    { channel: 'referral', count: referred },
+    { channel: 'unattributed', count: total - referred },
+  ].filter((c) => c.count > 0).sort((a, b) => b.count - a.count);
 
   return {
-    new_signups_7d: (signups7d.rows[0] as Record<string, number>)?.c ?? 0,
-    new_signups_30d: (signups30d.rows[0] as Record<string, number>)?.c ?? 0,
-    activation_rate: total > 0 ? Math.round((paid / total) * 100) : 0,
-    trial_to_paid_rate: total > 0 ? Math.round((paid / total) * 100) : 0,
-    expansion_revenue: 0,
-    top_acquisition_channels: [],
+    new_signups_7d: n('signups_7d'),
+    new_signups_30d: n('signups_30d'),
+    // Both denominators are checked rather than defaulted. The old code wrote
+    // `?? 1` to avoid dividing by zero, which turned "no founders" into a real
+    // denominator and reported a rate over an empty table.
+    paid_share_pct: total === 0 ? null : Math.round((n('paid') / total) * 100),
+    trial_to_paid_rate: trialed === 0 ? null : Math.round((n('trialed_paid') / trialed) * 100),
+    expansion_revenue: null,
+    top_acquisition_channels: channels,
   };
 }
 

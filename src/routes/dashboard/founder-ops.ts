@@ -38,7 +38,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
   const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_failing: 0, jobs_never_reported: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: 0, recent_actions: [] };
   const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: 0, at_risk_by_company: [], champions: 0, revenue_at_risk: 0 };
   const defaultWellbeing = { energy_score: 70, stress_signals: [], days_since_break: 0, override_count_7d: 0, burnout_trajectory: 'stable' as const, recommendation: null };
-  const defaultGrowth = { new_signups_7d: 0, new_signups_30d: 0, activation_rate: 0, trial_to_paid_rate: 0, expansion_revenue: 0, top_acquisition_channels: [] };
+  const defaultGrowth = { new_signups_7d: 0, new_signups_30d: 0, paid_share_pct: null, trial_to_paid_rate: null, expansion_revenue: null, top_acquisition_channels: [] };
   const defaultAICost = { total_tokens_24h: 0, total_cost_24h: 0, avg_latency_ms: null, calls_by_model: null, cost_per_founder: 0 };
 
   const [pulse, mrr, churn, automation, customerHealth, wellbeing, growth, aiCost] = await Promise.all([
@@ -229,8 +229,8 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
           ${metricBadge('Signups (7d)', growth.new_signups_7d)}
           ${metricBadge('Signups (30d)', growth.new_signups_30d)}
-          ${metricBadge('Activation Rate', growth.activation_rate + '%')}
-          ${metricBadge('Trial → Paid', growth.trial_to_paid_rate + '%')}
+          ${metricBadge('On a Paid Tier', growth.paid_share_pct == null ? 'no founders yet' : growth.paid_share_pct + '%')}
+          ${metricBadge('Trial → Paid', growth.trial_to_paid_rate == null ? 'nobody has trialed' : growth.trial_to_paid_rate + '%')}
         </div>
       </div>
     </div>
