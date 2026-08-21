@@ -22,6 +22,8 @@ import { createNotification } from './notifications.js';
 import { getFounderPulse, type PulseSignal } from '../wellbeing/pulse.js';
 import { log } from '../../lib/logger.js';
 import type { FounderPreferences } from '../../types/index.js';
+import { query } from '../../db/client.js';
+import { nanoid } from 'nanoid';
 
 export type Channel = 'log' | 'letter' | 'notification' | 'push';
 export type Importance = 'info' | 'attention' | 'action_needed' | 'critical';
@@ -174,28 +176,32 @@ export async function deliver(
       await createNotification(founderId, productId, 'system', event.title, event.body, event.actionUrl, event.actionLabel);
       return { channel, delivered: true };
     case 'letter':
-      // NO SIDE EFFECT, AND THAT IS ONLY SAFE FOR SOME EVENTS.
+    case 'log': {
+      // THE QUIET RUNGS LEAVE A RECORD.
       //
-      // This said "the Letter composes from the ledgers, so the event will
-      // appear there". The Letter composes from a specific list, not from the
-      // ledgers in general: completed executions, gate-0 decisions decided in
-      // the last day, the top pending decision, falsified premises, the memory
-      // digest, peer-radar warnings, the trust ledger and dissent
-      // (`letter/composer.ts`).
+      // These wrote nothing, excused by "the Letter composes from the ledgers,
+      // so the event will appear there". The Letter composes from a specific
+      // list — completed executions, gate-0 decisions decided in the last day,
+      // the top pending decision, falsified premises, the memory digest,
+      // peer-radar warnings, the trust ledger, dissent. An event whose fact is
+      // in that list survived. An event outside it was DROPPED, silently, by a
+      // founder setting a lower ceiling than they realised they were setting —
+      // which is why six notification paths could not be routed through this
+      // policy at all: obeying the ceiling would have cost the founder the fact.
       //
-      // So an event whose fact is in that list really does survive being
-      // quieted to the letter. An event whose fact is NOT — a Signal drop, a
-      // wellbeing pulse, drafts waiting for approval, a milestone, a billing
-      // failure — is DROPPED, silently, by a founder setting a lower ceiling
-      // than they realised they were setting.
-      //
-      // THE RULE FOR A CALLER: route through `deliver()` only when the Letter
-      // already carries the underlying fact. Otherwise the caller owns its own
-      // durable record and the ceiling cannot be applied by quieting alone.
-      // Fixing that properly means the letter rung recording something the
-      // Letter reads, which is a real piece of work and is frontier item 1.
-      return { channel, delivered: false };
-    case 'log':
-      return { channel, delivered: false };
+      // Migration 182 is what makes quieting safe. `log` is recorded too: it is
+      // the audit trail behind "why didn't you tell me?", which this module's
+      // own header promises always has an answer.
+      await query(
+        `INSERT INTO quieted_events
+           (id, product_id, founder_id, channel, importance, title, body, action_url, action_label)
+         VALUES (?,?,?,?,?,?,?,?,?)`,
+        [nanoid(), productId, founderId, channel, event.importance,
+          event.title, event.body, event.actionUrl ?? null, event.actionLabel ?? null]);
+      // `delivered` still means "a record the founder will be shown exists".
+      // The Letter shows the letter rung; `log` is findable but not surfaced,
+      // which is what the founder asked for by setting that ceiling.
+      return { channel, delivered: channel === 'letter' };
+    }
   }
 }

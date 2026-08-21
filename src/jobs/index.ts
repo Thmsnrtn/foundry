@@ -639,7 +639,19 @@ export async function navBadgeRefresh(): Promise<void> {
 // ─── 20. Signal Alert Check — Every 2 hours ───────────────────────────────────
 
 import { computeSignal } from '../services/signal.js';
-import { createNotification } from '../services/ux/notifications.js';
+
+/** The founder's interruption ceiling, for a job that needs to route an event
+ *  through `ux/interruption.ts`. Unset or unreadable preferences are no
+ *  ceiling, which is the same thing `decideChannel` assumes. */
+async function founderPrefs(founderId: string): Promise<Record<string, unknown> | null> {
+  try {
+    const row = (await query('SELECT preferences FROM founders WHERE id = ?', [founderId]))
+      .rows[0] as Record<string, unknown> | undefined;
+    return row?.preferences ? JSON.parse(String(row.preferences)) as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function signalAlertCheck(): Promise<void> {
   logger.info('signal_alert_check starting', { jobName: 'signal_alert_check' });
@@ -700,7 +712,14 @@ export async function signalAlertCheck(): Promise<void> {
           ? `${p.name} moved from ${prevTier} to ${signal.tier} tier (${prevScore} → ${signal.score}). Review stressors now.`
           : `${p.name} Signal dropped from ${prevScore} to ${signal.score} in the last 24 hours.`;
 
-        await createNotification(p.owner_id, p.id, 'signal_alert', title, body, '/dashboard', 'View Signal');
+        // Through the policy. A Signal falling is worth acting on, and the
+        // ceiling now costs the founder nothing: migration 182 records the
+        // quieted event and the Letter reads it back.
+        const { deliver } = await import('../services/ux/interruption.js');
+        await deliver(p.owner_id, p.id, {
+          importance: 'action_needed',
+          title, body, actionUrl: '/dashboard', actionLabel: 'View Signal',
+        }, await founderPrefs(p.owner_id) as never);
         logger.info(`signal_alert_check: alert created for ${p.name} — drop ${drop}pts, tier: ${prevTier} → ${signal.tier}`, { jobName: 'signal_alert_check' });
       }
     } catch (err) {
@@ -739,15 +758,18 @@ export async function decisionFollowUp(): Promise<void> {
       );
       if (alreadySent.rows.length > 0) continue;
 
-      await createNotification(
-        d.owner_id,
-        d.product_id,
-        'decision_followup',
-        'How did that decision go?',
-        `Time to log the outcome of: "${d.what}" — decision ID: ${d.id}. You chose: ${d.chosen_option}. What actually happened?`,
-        `/decisions/${d.id}`,
-        'Log outcome',
-      );
+      // Through the policy. Safe since migration 182: the letter rung records
+      // the event, so a founder who quieted their ceiling reads it in the
+      // Letter instead of losing it. Before that, this bell had to bypass the
+      // ceiling to avoid dropping the fact.
+      const { deliver } = await import('../services/ux/interruption.js');
+      await deliver(d.owner_id, d.product_id, {
+        // A decision whose outcome is unlogged is a question, not an alarm.
+        importance: 'attention',
+        title: 'How did that decision go?',
+        body: `Time to log the outcome of: "${d.what}" — decision ID: ${d.id}. You chose: ${d.chosen_option}. What actually happened?`,
+        actionUrl: `/decisions/${d.id}`, actionLabel: 'Log outcome',
+      }, await founderPrefs(d.owner_id) as never);
 
       // Push back follow_up_at by 7 days to prevent re-notifying immediately
       await query(
@@ -1376,16 +1398,14 @@ async function scpDecisionRetrospectives(): Promise<void> {
       const due = await getDecisionsDueForRetrospective(p.id as string);
       if (due.length === 0) continue;
 
-      const { createNotification } = await import('../services/ux/notifications.js');
-      await createNotification(
-        p.owner_id as string,
-        p.id as string,
-        'decision_retrospective',
-        `${due.length} decision${due.length > 1 ? 's' : ''} ready for retrospective`,
-        `Review outcomes for: ${due.slice(0, 2).map(d => `"${d.decision_title}"`).join(', ')}${due.length > 2 ? ` +${due.length - 2} more` : ''}. Rate how each decision played out to improve future judgment.`,
-        '/agents/decisions',
-        'Review decisions'
-      );
+      const { deliver } = await import('../services/ux/interruption.js');
+      await deliver(p.owner_id as string, p.id as string, {
+        // Rating past decisions improves future judgment; it is not urgent.
+        importance: 'attention',
+        title: `${due.length} decision${due.length > 1 ? 's' : ''} ready for retrospective`,
+        body: `Review outcomes for: ${due.slice(0, 2).map(d => `"${d.decision_title}"`).join(', ')}${due.length > 2 ? ` +${due.length - 2} more` : ''}. Rate how each decision played out to improve future judgment.`,
+        actionUrl: '/agents/decisions', actionLabel: 'Review decisions',
+      }, await founderPrefs(p.owner_id as string) as never);
       notified++;
     }
     logger.info(`scp_decision_retrospectives: Notified ${notified} products`, { jobName: 'scp_decision_retrospectives' });
@@ -1997,13 +2017,6 @@ export async function memoryPremiseCheck(): Promise<void> {
         // the condition that makes routing here safe. See the letter rung in
         // `ux/interruption.ts` for why that condition is not optional.
         const { deliver } = await import('../services/ux/interruption.js');
-        let prefs: Record<string, unknown> | null = null;
-        try {
-          const prow = (await query('SELECT preferences FROM founders WHERE id = ?', [p.owner_id]))
-            .rows[0] as Record<string, unknown> | undefined;
-          prefs = prow?.preferences ? JSON.parse(String(prow.preferences)) : null;
-        } catch { /* unset or unreadable preferences are no ceiling */ }
-
         await deliver(p.owner_id, p.id, {
           // A decision resting on a premise the company's own metrics now
           // contradict is something to act on, not something to be woken for.
@@ -2011,7 +2024,7 @@ export async function memoryPremiseCheck(): Promise<void> {
           title: 'A past decision now rests on a false premise',
           body: `${res.falsified} belief(s) behind decisions you made are now contradicted by your own metrics. Revisit them before they cost you.`,
           actionUrl: '/strategic-decisions', actionLabel: 'Review',
-        }, prefs as never);
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`memory_premise_check error for ${p.id}`, { jobName: 'memory_premise_check', error: String(err) });
@@ -2089,13 +2102,17 @@ export async function founderPulseCheck(): Promise<void> {
       const { getFounderPulse } = await import('../services/wellbeing/pulse.js');
       const pulse = await getFounderPulse(p.id);
       if (pulse.signal === 'overloaded') {
-        const { createNotification } = await import('../services/ux/notifications.js');
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          'A note about your week',
-          pulse.message,
-          '/dashboard', 'See the week',
-        );
+        // Through the policy. A note about the founder's own strain is the
+        // last thing that should arrive as an interruption — and the policy
+        // already quiets non-critical events for an overloaded founder, which
+        // is exactly who this is about.
+        const { deliver } = await import('../services/ux/interruption.js');
+        await deliver(p.owner_id, p.id, {
+          importance: 'info',
+          title: 'A note about your week',
+          body: pulse.message,
+          actionUrl: '/dashboard', actionLabel: 'See the week',
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`founder_pulse_check error for ${p.id}`, { jobName: 'founder_pulse_check', error: String(err) });
@@ -2123,13 +2140,6 @@ export async function networkRadarCheck(): Promise<void> {
         // `letter` loses the bell and still reads the warning, which is exactly
         // what they asked for. The bell used to ignore their ceiling entirely.
         const { deliver } = await import('../services/ux/interruption.js');
-        let prefs: Record<string, unknown> | null = null;
-        try {
-          const row = (await query('SELECT preferences FROM founders WHERE id = ?', [p.owner_id]))
-            .rows[0] as Record<string, unknown> | undefined;
-          prefs = row?.preferences ? JSON.parse(String(row.preferences)) : null;
-        } catch { /* unset or unreadable preferences are no ceiling */ }
-
         await deliver(p.owner_id, p.id, {
           // A peer signal in the danger tail is worth reading, not worth a
           // phone buzzing: the Letter is where it belongs and where it already
@@ -2138,7 +2148,7 @@ export async function networkRadarCheck(): Promise<void> {
           title: `Peer radar: ${warnings.length} vital${warnings.length > 1 ? 's' : ''} in the danger tail`,
           body: warnings[0].message + (warnings.length > 1 ? ` (+${warnings.length - 1} more in The Letter)` : ''),
           actionUrl: '/letter', actionLabel: 'Read The Letter',
-        }, prefs as never);
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`network_radar error for ${p.id}`, { jobName: 'network_radar', error: String(err) });
@@ -2160,14 +2170,18 @@ export async function autopilotTick(): Promise<void> {
       const { runAutopilotTick } = await import('../services/autopilot/policy.js');
       const result = await runAutopilotTick(p.id);
       if (result.acted > 0) {
-        const { createNotification } = await import('../services/ux/notifications.js');
+        const { deliver } = await import('../services/ux/interruption.js');
         const first = result.decisions[0];
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          `Second Self handled ${result.acted} decision${result.acted > 1 ? 's' : ''}`,
-          `"${first.what}" resolved to the team's recommendation (${first.category}). You have 24h to undo from the decision page — an undo also pulls that category back.`,
-          `/decisions/${first.id}`, 'Review / undo',
-        );
+        // ACTION NEEDED, and it earns that: something was decided FOR the
+        // founder and the window to undo it is twenty-four hours. The policy's
+        // floor keeps `action_needed` in the letter even for an overloaded
+        // founder, so the undo window is never quieted out of existence.
+        await deliver(p.owner_id, p.id, {
+          importance: 'action_needed',
+          title: `Second Self handled ${result.acted} decision${result.acted > 1 ? 's' : ''}`,
+          body: `"${first.what}" resolved to the team's recommendation (${first.category}). You have 24h to undo from the decision page — an undo also pulls that category back.`,
+          actionUrl: `/decisions/${first.id}`, actionLabel: 'Review / undo',
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`autopilot_tick error for ${p.id}`, { jobName: 'autopilot_tick', error: String(err) });
@@ -2191,13 +2205,15 @@ export async function customerSuccessSweep(): Promise<void> {
       proposed += res.proposed;
       sent += res.sent;
       if (res.proposed > 0) {
-        const { createNotification } = await import('../services/ux/notifications.js');
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          'Check-in drafts waiting for your approval',
-          `${res.proposed} at-risk customer(s) have a check-in drafted from their real account state. Approve or discard in the action queue.`,
-          '/agents/actions', 'Review drafts',
-        );
+        const { deliver } = await import('../services/ux/interruption.js');
+        // Drafts sit in the queue until approved; nothing reaches a customer
+        // while the founder is not looking. Action needed, not urgent.
+        await deliver(p.owner_id, p.id, {
+          importance: 'action_needed',
+          title: 'Check-in drafts waiting for your approval',
+          body: `${res.proposed} at-risk customer(s) have a check-in drafted from their real account state. Approve or discard in the action queue.`,
+          actionUrl: '/agents/actions', actionLabel: 'Review drafts',
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`customer_success_sweep error for ${p.id}`, { jobName: 'customer_success_sweep', error: String(err) });

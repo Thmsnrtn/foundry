@@ -22,6 +22,12 @@ export interface Letter {
   /** Where the one thing actually is. It is not always the decision queue. */
   needsYouHref: string;
   learned: string[];       // expired beliefs, vindications, radar warnings
+  /** What the interruption policy chose NOT to interrupt you for. An event
+   *  quieted to the letter rung is written to `quieted_events` and read back
+   *  here — before migration 182 those rungs wrote nothing, so a founder
+   *  lowering their ceiling silently lost the fact rather than receiving it
+   *  more quietly. */
+  noted: string[];
   trust: string[];         // graduation proposals + dissent record
   quiet: boolean;          // true when there is genuinely nothing needing you
   /** True for a brand-new product with no history yet: an empty Letter here
@@ -43,7 +49,7 @@ const ASK_WORDS: Record<string, string> = {
 };
 
 export async function composeLetter(productId: string, f: Fluency = 'balanced'): Promise<Letter> {
-  const [executions, gate0, pending, expired, digest, radar, ledger, dissent] = await Promise.all([
+  const [executions, gate0, pending, expired, digest, radar, ledger, dissent, quieted] = await Promise.all([
     query(
       `SELECT action_type, integration FROM action_executions
        WHERE product_id = ? AND status = 'completed'
@@ -76,6 +82,16 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
     scanForWarnings(productId),
     getTrustLedger(productId),
     getDissentRecord(productId),
+    // What the interruption policy quieted to this rung in the last day. Same
+    // window as the executions and gate-0 decisions above: a quieted event is a
+    // fact about a moment, and giving it a delivered flag would invent a second
+    // place for "did the founder see this" to be wrong.
+    query(
+      `SELECT title, body, importance FROM quieted_events
+        WHERE product_id = ? AND channel = 'letter'
+          AND datetime(created_at) >= datetime('now', '-1 day')
+        ORDER BY created_at DESC LIMIT 10`,
+      [productId]),
   ]);
 
   const handled: string[] = [
@@ -209,12 +225,19 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
       : `${dept}: ${row.n} shadowed action(s) in 24h — promotable in Controls.`);
   }
 
-  const quiet = handled.length === 0 && !needsYou && learned.length === 0 && trust.length === 0;
+  // What Foundry noticed and deliberately did not interrupt for. Rendered as
+  // the founder's own words about it, not as a policy decision: they do not
+  // need to know which rung it took, only what it was.
+  const noted: string[] = (quieted.rows as unknown as Array<Record<string, string>>)
+    .map((q) => f === 'plain' ? `${q.title} — ${q.body}` : `[${q.importance}] ${q.title}: ${q.body}`);
+
+  const quiet = handled.length === 0 && !needsYou && learned.length === 0
+    && trust.length === 0 && noted.length === 0;
   // First-run: a genuinely empty Letter on a product that has never had metrics
   // or a decision is a NEW founder, not an established one on a quiet day.
   const firstRun = quiet && digest.holding === 0 && digest.falsified === 0
     && !(await hasAnyHistory(productId));
-  return { handled, needsYou, needsYouHref, learned, trust, quiet, firstRun };
+  return { handled, needsYou, needsYouHref, learned, noted, trust, quiet, firstRun };
 }
 
 /** Has this product ever produced a metric snapshot or a decision? Distinguishes

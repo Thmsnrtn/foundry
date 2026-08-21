@@ -822,6 +822,7 @@ letterRoutes.get('/letter', async (c) => {
           </div>
           ${[...p.letter.handled.map((l) => ({ tag: 'handled', l })),
              ...p.letter.learned.map((l) => ({ tag: 'learned', l })),
+             ...p.letter.noted.map((l) => ({ tag: 'noted', l })),
              ...p.letter.trust.map((l) => ({ tag: 'trust', l }))].map((row) => html`
             <div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">
               <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-right:0.5rem;">${row.tag}</span>${row.l}
@@ -1028,6 +1029,7 @@ letterRoutes.get('/letter', async (c) => {
       </div>` : ''}
       ${section('Actions handled', letter.handled)}
       ${section('What I learned', letter.learned)}
+      ${section('Noticed, and not worth interrupting you for', letter.noted)}
       ${section('What I handled', responsibilitySummary.HANDLED.map((i) => `${i.title} — outcome recorded`))}
       ${section('What changed', responsibilitySummary.CHANGED.map((i) => `${i.title} — ${i.state}`))}
       ${section('What differed while I watched', shadowingExceptions.map((item) =>

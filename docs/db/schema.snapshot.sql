@@ -980,6 +980,7 @@
   -- The message must be this company's, and the responsibility on the plan must
   -- The observer may not see, cite, or echo the expectation it will be
   -- The plan must carry a real proposal, authored for that same message.
+  -- The rung the policy chose. 'log' is recorded too: an audit trail the
   -- The same generic operational vocabulary migration 126 established, mirrored
   -- The secret is the whole of the authentication, so its floor is set here and
   -- The signal that says "stop iterating" when yield drops below threshold.
@@ -1035,6 +1036,7 @@
   -- expectation it proves, which judgment it settles, which responsibility it
   -- field before its consumer exists is how orphans are made.
   -- for "it was independently checked".
+  -- founder can be shown if they ask why they were not told.
   -- from the fact that a write returned without throwing.
   -- from the message and the responsibility that owns its channel.
   -- governed effect kind is.
@@ -1209,6 +1211,7 @@
   ON products(entitlement_paused_at);
   ON push_subscriptions(founder_id, apns_device_token)
   ON push_subscriptions(founder_id, apns_device_token)
+  ON quieted_events(product_id, created_at);
   ON rate_limit_counters(window_start);
   ON reconstruction_claims(product_id,subject,predicate,created_at DESC);
   ON referral_conversions(referral_link_id, created_at DESC);
@@ -1562,6 +1565,7 @@
   action_execution_id TEXT, -- FK to action_executions if one was created
   action_items TEXT,
   action_label TEXT,
+  action_label TEXT,
   action_parameters TEXT NOT NULL,      -- JSON
   action_rate_pct REAL NOT NULL DEFAULT 0,
   action_required TEXT,
@@ -1582,6 +1586,7 @@
   action_type TEXT NOT NULL, -- 'post_slack' | 'create_ticket' | 'send_email' | 'custom_webhook'
   action_type TEXT NOT NULL, -- 'send_email' | 'create_ticket' | 'post_slack' | 'schedule_call' | 'update_crm' | 'custom_webhook'
   action_type TEXT,                    -- What kind of action generated this cost
+  action_url TEXT,
   action_url TEXT,
   action_url TEXT,                  -- deep link to the relevant page
   actionable_insight TEXT,
@@ -1763,6 +1768,7 @@
   body TEXT NOT NULL,
   body TEXT NOT NULL,
   body TEXT NOT NULL,
+  body TEXT NOT NULL,
   bot_token TEXT,                      -- encrypted
   branding TEXT,
   break_even_date TEXT,
@@ -1823,6 +1829,7 @@
   changed_by TEXT NOT NULL,
   changed_by_type TEXT NOT NULL CHECK(changed_by_type IN ('founder', 'system', 'job', 'api_key')),
   channel TEXT DEFAULT 'web',
+  channel TEXT NOT NULL CHECK (channel IN ('letter', 'log')),
   channel_id          TEXT NOT NULL REFERENCES support_channels(id),
   channel_id TEXT,
   channel_key        TEXT NOT NULL,
@@ -2118,6 +2125,7 @@
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -2542,6 +2550,7 @@
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL REFERENCES founders(id),
+  founder_id TEXT NOT NULL REFERENCES founders(id),
   founder_id TEXT NOT NULL UNIQUE,
   founder_id TEXT NOT NULL,
   founder_id TEXT NOT NULL,
@@ -2896,6 +2905,7 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
+  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -2904,6 +2914,7 @@
   impact_level TEXT DEFAULT 'medium',
   impact_score REAL NOT NULL,       -- 0-10 (higher = more impactful)
   impact_usd REAL,
+  importance TEXT NOT NULL CHECK (importance IN ('info', 'attention', 'action_needed', 'critical')),
   indicator_description TEXT NOT NULL,
   indicator_name TEXT NOT NULL,
   initiative_type TEXT NOT NULL,  -- 'proactive_check', 'message_response', 'event_reaction'
@@ -3520,6 +3531,7 @@
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
+  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -4204,6 +4216,7 @@
   title TEXT NOT NULL,
   title TEXT NOT NULL,
   title TEXT NOT NULL,
+  title TEXT NOT NULL,
   title TEXT NOT NULL,                 -- ≤120 chars
   title TEXT NOT NULL,              -- the one sentence action
   title TEXT,
@@ -4426,6 +4439,7 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
+);
 );
 );
 );
@@ -5114,6 +5128,7 @@ CREATE INDEX idx_push_log_founder ON push_log(founder_id, sent_at DESC);
 CREATE INDEX idx_push_log_type ON push_log(notification_type, sent_at DESC);
 CREATE INDEX idx_push_subscriptions_founder ON push_subscriptions(founder_id, active);
 CREATE INDEX idx_pwh_product
+CREATE INDEX idx_quieted_events_product_day
 CREATE INDEX idx_rate_limit_counters_window
 CREATE INDEX idx_rec_outcomes_agent ON recommendation_outcomes(product_id, agent_name, outcome);
 CREATE INDEX idx_rec_outcomes_product ON recommendation_outcomes(product_id, recommendation_date DESC);
@@ -5407,6 +5422,7 @@ CREATE TABLE product_voice_fingerprints (
 CREATE TABLE product_webhooks (
 CREATE TABLE products (
 CREATE TABLE push_subscriptions (
+CREATE TABLE quieted_events (
 CREATE TABLE rate_limit_counters (
 CREATE TABLE recommendation_outcomes (
 CREATE TABLE reconstruction_claims (
