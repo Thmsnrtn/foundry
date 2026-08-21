@@ -4,9 +4,7 @@
 // NOT a BaseAgent subclass — runs on demand during debate orchestration.
 // =============================================================================
 
-import { query } from '../../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
-import { nanoid } from 'nanoid';
 
 export interface AgentAssertion {
   agentName: string;
@@ -33,11 +31,10 @@ interface ChallengerResponse {
 /**
  * Run a challenger pass over a set of agent assertions.
  * Identifies the 3 biggest conflicts or unexamined assumptions.
- * Saves challenges to the agent_positions table.
+ * Returns them; the orchestrator persists them with the session.
  */
 export async function runChallengerPass(
   productId: string,
-  debateSessionId: string,
   assertions: AgentAssertion[]
 ): Promise<Challenge[]> {
   if (assertions.length === 0) return [];
@@ -88,24 +85,13 @@ Return exactly 3 challenges, ordered by severity (highest first).`;
     severity: c.severity,
   }));
 
-  // Persist challenges as agent_positions rows
-  for (const challenge of challenges) {
-    const targetAssertion = assertions.find((a) => a.agentName === challenge.targetAgent);
-    const positionId = nanoid();
-    await query(
-      `INSERT INTO agent_positions
-         (id, debate_session_id, agent_name, position_type, content, confidence, accuracy_weight, challenged_by, challenge_response)
-       VALUES (?, ?, ?, 'assertion', ?, ?, 1.0, 'challenger', ?)`,
-      [
-        positionId,
-        debateSessionId,
-        challenge.targetAgent,
-        challenge.assertion,
-        targetAssertion?.confidence ?? 0.7,
-        challenge.challengeText,
-      ]
-    );
-  }
+  // The challenges are the return value, and the orchestrator writes them to
+  // `debate_sessions.conflicts_json` — which is what the debate page reads.
+  // There used to be a second write here, one `agent_positions` row per
+  // challenge, and it was wrong: it inserted a COPY of the challenged assertion
+  // rather than marking the original, so a challenged assertion appeared twice
+  // and the row that was actually challenged still read as unchallenged.
+  // Retired in migration 186 along with the table.
 
   return challenges;
 }

@@ -1545,7 +1545,6 @@
   accuracy_score REAL
   accuracy_score REAL,
   accuracy_score REAL, -- 0.0-1.0: correct=1.0, partial=0.5, incorrect=0.0
-  accuracy_weight REAL NOT NULL DEFAULT 1.0, -- populated from agent_accuracy_scores
   achieved_at TEXT,
   acknowledged INTEGER DEFAULT 0,
   acknowledged INTEGER DEFAULT 0,
@@ -1638,7 +1637,6 @@
   agent_contributions TEXT,            -- JSON: {agent_name: {contribution, priority}}
   agent_id TEXT,                                  -- agent name; NULL for system actions
   agent_name TEXT NOT NULL CHECK(agent_name IN (
-  agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
@@ -1812,8 +1810,6 @@
   category TEXT,                            -- 'detractor'|'passive'|'promoter' computed for nps
   ceo_decision_needed TEXT,              -- What requires CEO input
   chain_description TEXT NOT NULL,
-  challenge_response TEXT,
-  challenged_by TEXT, -- agent_name that challenged this
   change_class          TEXT NOT NULL,
   change_description TEXT NOT NULL,    -- Human-readable summary
   change_id             TEXT NOT NULL,
@@ -1911,7 +1907,6 @@
   confidence REAL NOT NULL DEFAULT 0.5,
   confidence REAL NOT NULL DEFAULT 0.5,
   confidence REAL NOT NULL DEFAULT 0.5, -- 0-1, increases with repeated signal
-  confidence REAL NOT NULL DEFAULT 0.7,
   confidence REAL NOT NULL,
   confidence REAL NOT NULL, -- 0.0-1.0, agent's stated confidence
   confidence REAL,
@@ -1941,7 +1936,6 @@
   content          TEXT NOT NULL,
   content      TEXT NOT NULL,
   content TEXT NOT NULL DEFAULT '',
-  content TEXT NOT NULL,
   content TEXT NOT NULL,
   content TEXT NOT NULL,
   content TEXT NOT NULL,
@@ -2143,7 +2137,6 @@
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2224,7 +2217,6 @@
   days_since_last_rest INTEGER,  -- inferred
   deadline DATETIME,
   deadline_hours INTEGER,           -- how many hours until this becomes more urgent
-  debate_session_id TEXT NOT NULL REFERENCES debate_sessions(id),
   decided_at DATETIME,
   decided_by TEXT CHECK(decided_by IN ('founder', 'second_self')),
   decided_by_founder_id TEXT
@@ -2688,7 +2680,6 @@
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id         TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -3403,7 +3394,6 @@
   portfolio_id TEXT NOT NULL REFERENCES portfolios(id),
   portfolio_id TEXT NOT NULL,
   portfolio_id TEXT NOT NULL,
-  position_type TEXT NOT NULL, -- 'assertion' | 'recommendation' | 'risk_flag'
   positioning TEXT,
   positioning_feedback TEXT,
   positioning_history TEXT,
@@ -4648,7 +4638,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -5083,7 +5072,6 @@ CREATE INDEX idx_portfolio_alerts ON portfolio_alerts(portfolio_id, acknowledged
 CREATE INDEX idx_portfolio_members ON portfolio_memberships(portfolio_id, status);
 CREATE INDEX idx_portfolio_snapshots ON portfolio_snapshots(portfolio_id, snapshot_date);
 CREATE INDEX idx_portfolios_api ON portfolios(api_key);
-CREATE INDEX idx_positions_debate ON agent_positions(debate_session_id, agent_name);
 CREATE INDEX idx_prediction_accuracy_product ON prediction_accuracy(product_id, measured_at DESC);
 CREATE INDEX idx_predictions_pending ON agent_predictions(measure_by_date, outcome) WHERE outcome IS NULL;
 CREATE INDEX idx_predictions_product ON predictions(product_id, status);
@@ -5212,7 +5200,6 @@ CREATE TABLE agent_initiative_queue (
 CREATE TABLE agent_instances (
 CREATE TABLE agent_message_threads (
 CREATE TABLE agent_messages (
-CREATE TABLE agent_positions (
 CREATE TABLE agent_predictions (
 CREATE TABLE agent_remediations (
 CREATE TABLE agent_run_details (

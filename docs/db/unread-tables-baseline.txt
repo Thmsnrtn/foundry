@@ -1,4 +1,3 @@
-agent_positions
 board_decks
 causal_chains
 cofounder_alignment_scores

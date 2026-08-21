@@ -2,11 +2,6 @@ action_executions.approval_note
 agent_configs.parent_version
 agent_configs.updated_by
 agent_configs.word_count
-agent_positions.accuracy_weight
-agent_positions.challenge_response
-agent_positions.challenged_by
-agent_positions.debate_session_id
-agent_positions.position_type
 agent_sessions.agent_version
 agent_sessions.evolution_candidates
 ai_spend_reservations.actual_cents

@@ -15,7 +15,7 @@ export interface DebateSession {
   id: string;
   product_id: string;
   briefing_date: string;
-  status: 'pending' | 'running' | 'complete';
+  status: 'pending' | 'running' | 'complete' | 'failed';
   positions_json: string | null;
   conflicts_json: string | null;
   synthesis_json: string | null;
@@ -35,6 +35,9 @@ export interface DebateSession {
  * 5. Runs challenger pass (identifies conflicts)
  * 6. Runs synthesizer pass (unified output)
  * 7. Persists results and updates the daily briefing
+ *
+ * A run that throws, or whose synthesizer comes back with nothing, ends as
+ * 'failed' and does not touch the briefing. It used to end as 'complete'.
  */
 export async function runDebateForProduct(
   productId: string,
@@ -126,25 +129,11 @@ export async function runDebateForProduct(
       }
     }
 
-    // 5. Save all assertions as agent_positions
-    for (const assertion of assertions) {
-      const weight = accuracyWeights[assertion.agentName] ?? 1.0;
-      await query(
-        `INSERT INTO agent_positions
-           (id, debate_session_id, agent_name, position_type, content, confidence, accuracy_weight)
-         VALUES (?, ?, ?, 'assertion', ?, ?, ?)`,
-        [
-          nanoid(),
-          debateSessionId,
-          assertion.agentName,
-          assertion.content,
-          assertion.confidence,
-          weight,
-        ]
-      );
-    }
-
-    // Update debate session with positions
+    // 5. Update debate session with positions
+    //
+    // These used to be written twice: here, and as one `agent_positions` row
+    // per assertion. Only `positions_json` was ever read. Migration 186 retired
+    // the copy.
     await query(
       `UPDATE debate_sessions SET positions_json = ?, confidence_weights_json = ? WHERE id = ?`,
       [
@@ -155,7 +144,7 @@ export async function runDebateForProduct(
     );
 
     // 6. Run challenger pass
-    const challenges = await runChallengerPass(productId, debateSessionId, assertions);
+    const challenges = await runChallengerPass(productId, assertions);
 
     // Save conflicts to session
     await query(
@@ -166,32 +155,41 @@ export async function runDebateForProduct(
     // 7. Run synthesizer pass
     const synthesis: SynthesisOutput = await runSynthesizerPass(
       productId,
-      debateSessionId,
       assertions,
       challenges,
       accuracyWeights
     );
 
-    // 8. Update debate_sessions with synthesis and mark complete
+    // 8. Update debate_sessions with synthesis and record how it ended
     await query(
       `UPDATE debate_sessions
        SET synthesis_json = ?,
-           status = 'complete',
+           status = ?,
            completed_at = datetime('now')
        WHERE id = ?`,
-      [JSON.stringify(synthesis), debateSessionId]
+      [JSON.stringify(synthesis), synthesis.failure_reason ? 'failed' : 'complete', debateSessionId]
     );
 
-    // 9. Upsert synthesis into the daily briefing
-    await _upsertSynthesisIntoBriefing(productId, briefingDate, synthesis, debateSessionId);
+    // 9. Upsert synthesis into the daily briefing — only a real one. A failure
+    //    notice pasted into the founder's briefing under the heading
+    //    "[AGENT SYNTHESIS]" is worse than an absent section.
+    if (synthesis.failure_reason === null) {
+      await _upsertSynthesisIntoBriefing(productId, briefingDate, synthesis, debateSessionId);
+    }
   } catch (err) {
-    // Mark session as failed — non-fatal to the broader system
+    // Mark session as failed — non-fatal to the broader system. It used to be
+    // marked 'complete' here, which the debate page renders as a green
+    // "Complete" badge beside a conflict count of zero: indistinguishable from
+    // a debate in which the agents agreed.
     const errorMsg = err instanceof Error ? err.message : String(err);
     await query(
-      `UPDATE debate_sessions SET status = 'complete', completed_at = datetime('now'),
+      `UPDATE debate_sessions SET status = 'failed', completed_at = datetime('now'),
        synthesis_json = ? WHERE id = ?`,
       [
-        JSON.stringify({ error: errorMsg, executiveSummary: 'Debate synthesis failed.', keyConflicts: [], confidenceWeightedRecommendations: [], dissenting_view: null }),
+        JSON.stringify({
+          executiveSummary: '', keyConflicts: [], confidenceWeightedRecommendations: [],
+          dissenting_view: null, failure_reason: errorMsg,
+        }),
         debateSessionId,
       ]
     );
@@ -243,7 +241,7 @@ function _rowToSession(r: Record<string, unknown>): DebateSession {
     id: r.id as string,
     product_id: r.product_id as string,
     briefing_date: r.briefing_date as string,
-    status: r.status as 'pending' | 'running' | 'complete',
+    status: r.status as 'pending' | 'running' | 'complete' | 'failed',
     positions_json: r.positions_json as string | null,
     conflicts_json: r.conflicts_json as string | null,
     synthesis_json: r.synthesis_json as string | null,
