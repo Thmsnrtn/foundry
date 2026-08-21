@@ -104,6 +104,34 @@ describe('every other path to a phone', () => {
   });
 });
 
+describe('the letter rung is only safe for what the Letter carries', () => {
+  it('says which facts those are, rather than "the ledgers"', () => {
+    const src = readFileSync('src/services/ux/interruption.ts', 'utf8');
+    // It used to say "the Letter composes from the ledgers, so the event will
+    // appear there". The Letter composes from a specific list, and an event
+    // outside it is silently DROPPED by a founder quieting their ceiling.
+    expect(src).toMatch(/composes from a specific list, not from the/);
+    expect(src).toMatch(/route through `deliver\(\)` only when the Letter/);
+  });
+
+  it('matches what the Letter actually reads', () => {
+    const composer = stripComments(
+      readFileSync('src/services/letter/composer.ts', 'utf8'), { lineComments: true });
+    // The two facts converted to `deliver()` so far must really be in there.
+    expect(composer, 'peer radar').toMatch(/scanForWarnings\(/);
+    expect(composer, 'falsified premises').toMatch(/getExpiredBeliefs\(/);
+  });
+
+  it('routes the peer-radar bell through the policy', () => {
+    const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
+    const radar = src.slice(src.indexOf('network_radar starting'));
+    const body = radar.slice(0, radar.indexOf('network_radar complete'));
+    expect(body, 'the Letter carries this fact, so quieting it is safe')
+      .toMatch(/deliver\(p\.owner_id, p\.id/);
+    expect(body).not.toMatch(/createNotification\(/);
+  });
+});
+
 describe('the in-app bypass, pinned so it can only shrink', () => {
   function notificationCallers(): string[] {
     const out: string[] = [];
@@ -135,5 +163,12 @@ describe('the in-app bypass, pinned so it can only shrink', () => {
 
   it('has not grown', () => {
     expect(notificationCallers()).toEqual(KNOWN_BYPASSES);
+  });
+
+  it('is shrinking: the peer-radar bell has left it', () => {
+    const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
+    const calls = (src.match(/await createNotification\(/g) ?? []).length;
+    expect(calls, 'eight before the peer-radar bell moved to deliver()')
+      .toBeLessThanOrEqual(7);
   });
 });

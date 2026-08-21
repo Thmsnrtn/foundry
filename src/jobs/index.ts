@@ -2103,13 +2103,28 @@ export async function networkRadarCheck(): Promise<void> {
       const { scanForWarnings } = await import('../services/network/radar.js');
       const warnings = await scanForWarnings(p.id);
       if (warnings.length > 0) {
-        const { createNotification } = await import('../services/ux/notifications.js');
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          `Peer radar: ${warnings.length} vital${warnings.length > 1 ? 's' : ''} in the danger tail`,
-          warnings[0].message + (warnings.length > 1 ? ` (+${warnings.length - 1} more in The Letter)` : ''),
-          '/letter', 'Read The Letter',
-        );
+        // THROUGH THE INTERRUPTION POLICY, because the Letter carries this fact
+        // itself — `letter/composer.ts` calls `scanForWarnings` too. That is the
+        // condition which makes quieting safe: a founder whose ceiling is
+        // `letter` loses the bell and still reads the warning, which is exactly
+        // what they asked for. The bell used to ignore their ceiling entirely.
+        const { deliver } = await import('../services/ux/interruption.js');
+        let prefs: Record<string, unknown> | null = null;
+        try {
+          const row = (await query('SELECT preferences FROM founders WHERE id = ?', [p.owner_id]))
+            .rows[0] as Record<string, unknown> | undefined;
+          prefs = row?.preferences ? JSON.parse(String(row.preferences)) : null;
+        } catch { /* unset or unreadable preferences are no ceiling */ }
+
+        await deliver(p.owner_id, p.id, {
+          // A peer signal in the danger tail is worth reading, not worth a
+          // phone buzzing: the Letter is where it belongs and where it already
+          // is.
+          importance: 'attention',
+          title: `Peer radar: ${warnings.length} vital${warnings.length > 1 ? 's' : ''} in the danger tail`,
+          body: warnings[0].message + (warnings.length > 1 ? ` (+${warnings.length - 1} more in The Letter)` : ''),
+          actionUrl: '/letter', actionLabel: 'Read The Letter',
+        }, prefs as never);
       }
     } catch (err) {
       logger.error(`network_radar error for ${p.id}`, { jobName: 'network_radar', error: String(err) });

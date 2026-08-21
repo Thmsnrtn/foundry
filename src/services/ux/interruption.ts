@@ -174,8 +174,26 @@ export async function deliver(
       await createNotification(founderId, productId, 'system', event.title, event.body, event.actionUrl, event.actionLabel);
       return { channel, delivered: true };
     case 'letter':
-      // No side effect: the Letter composes from the ledgers, so the event
-      // will appear there. The decision itself is the record.
+      // NO SIDE EFFECT, AND THAT IS ONLY SAFE FOR SOME EVENTS.
+      //
+      // This said "the Letter composes from the ledgers, so the event will
+      // appear there". The Letter composes from a specific list, not from the
+      // ledgers in general: completed executions, gate-0 decisions decided in
+      // the last day, the top pending decision, falsified premises, the memory
+      // digest, peer-radar warnings, the trust ledger and dissent
+      // (`letter/composer.ts`).
+      //
+      // So an event whose fact is in that list really does survive being
+      // quieted to the letter. An event whose fact is NOT — a Signal drop, a
+      // wellbeing pulse, drafts waiting for approval, a milestone, a billing
+      // failure — is DROPPED, silently, by a founder setting a lower ceiling
+      // than they realised they were setting.
+      //
+      // THE RULE FOR A CALLER: route through `deliver()` only when the Letter
+      // already carries the underlying fact. Otherwise the caller owns its own
+      // durable record and the ceiling cannot be applied by quieting alone.
+      // Fixing that properly means the letter rung recording something the
+      // Letter reads, which is a real piece of work and is frontier item 1.
       return { channel, delivered: false };
     case 'log':
       return { channel, delivered: false };
