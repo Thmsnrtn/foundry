@@ -160,9 +160,19 @@ describe('primitive 4 — the operator brain sees aggregates only (Level-1/2 bou
     for (const s of customerSelects) {
       expect(s, 'and only ever in aggregate').toMatch(/COUNT\(|SUM\(|AVG\(/i);
     }
-    // The company a customer belongs to is Foundry's own customer and may be
-    // named; the customer may not.
-    expect(src).not.toMatch(/SELECT[^;]*\bname\b[^;]*FROM\s+customers/i);
+    // THE DISTINCTION, STATED PRECISELY. A first version of this forbade the
+    // word `name` anywhere in a customers select and flagged `p.name` — the
+    // COMPANY's name, which is exactly what the rule permits. The rule is about
+    // WHOSE name: Foundry's own customer may be named, that customer's
+    // customers may not. So the projection is read, and every column in it must
+    // be an aggregate or come from the joined `products` table.
+    for (const select of customerSelects) {
+      const projection = select.replace(/FROM[\s\S]*$/i, '').replace(/^SELECT/i, '');
+      for (const column of projection.split(',').map((x) => x.trim()).filter(Boolean)) {
+        expect(column, 'a customer column in an operator projection')
+          .toMatch(/COUNT\(|SUM\(|AVG\(|\bp\./i);
+      }
+    }
     expect(src, 'a company\'s account of why belongs to that company')
       .not.toMatch(/SELECT[^;]*\breasoning\b[^;]*FROM\s+audit_log/i);
   });
