@@ -115,6 +115,47 @@ describe('the word mrr means the level', () => {
   });
 });
 
+describe('a value the company reported and a value Foundry derived', () => {
+  it('keeps the company’s own figure and does not name the column twice', async () => {
+    const { productId, token } = await companyWithToken();
+    // `mrr_health_ratio` is both an accepted field and computed here from new
+    // and churned. Sending all three pushed the column onto the dynamic INSERT
+    // list TWICE; SQLite accepted it and kept one, so whose number survived was
+    // an artifact of push order rather than a decision.
+    const res = await post(token, { new_mrr: 1000, churned_mrr: 100, mrr_health_ratio: 0.9 });
+    expect(res.status).toBe(200);
+
+    const row = await snapshot(productId);
+    expect(Number(row.mrr_health_ratio), 'their reading of their own business')
+      .toBeCloseTo(0.9, 6);
+  });
+
+  it('derives one when the company did not say', async () => {
+    const { productId, token } = await companyWithToken();
+    await post(token, { new_mrr: 1000, churned_mrr: 100 });
+    const row = await snapshot(productId);
+    expect(Number(row.mrr_health_ratio), 'churned / new').toBeCloseTo(0.1, 6);
+  });
+
+  it('leaves it alone when there is nothing to derive it from', async () => {
+    const { productId, token } = await companyWithToken();
+    await post(token, { mrr: 52000 });
+    expect((await snapshot(productId)).mrr_health_ratio).toBeNull();
+  });
+
+  it('names the column once, which the behaviour above cannot prove', () => {
+    // SQLite ACCEPTS a duplicated column name in an INSERT and keeps one of
+    // them, so restoring the duplicate leaves every assertion above passing —
+    // measured, by putting the duplicate back and re-running them. The defect
+    // is latent rather than live, and the fix is that precedence is now decided
+    // instead of falling out of push order. Only the guard itself can be
+    // asserted, so it is asserted here.
+    const src = stripComments(readFileSync('src/routes/ingest/index.ts', 'utf8'),
+      { lineComments: true });
+    expect(src).toMatch(/!columns\.includes\('mrr_health_ratio'\)/);
+  });
+});
+
 describe('the two doors agree', () => {
   it('both write the level to the same column', () => {
     const publicApi = stripComments(readFileSync('src/api/v1/metrics.ts', 'utf8'),

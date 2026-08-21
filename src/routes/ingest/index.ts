@@ -177,10 +177,18 @@ ingestRoutes.post('/ingest/:token', async (c) => {
     return c.json({ error: 'No recognized metric fields in body', accepted_fields: Object.keys(FIELD_MAP) }, 400);
   }
 
-  // Compute MRR health ratio if both new and churned are being set
+  // DERIVED ONLY WHEN THE COMPANY DID NOT SAY.
+  //
+  // `mrr_health_ratio` is both an accepted field and a value computed here, and
+  // when a company sent all three the column was pushed onto the list TWICE.
+  // SQLite accepted the duplicate and kept one of them, so whose number
+  // survived was an artifact of which push happened first rather than a
+  // decision anybody made. The company's own figure wins — it is their
+  // reading of their own business — and Foundry derives one only in its
+  // absence.
   const newMrrIdx = columns.indexOf('new_mrr_cents');
   const churnedIdx = columns.indexOf('churned_mrr_cents');
-  if (newMrrIdx !== -1 && churnedIdx !== -1) {
+  if (newMrrIdx !== -1 && churnedIdx !== -1 && !columns.includes('mrr_health_ratio')) {
     const newMrr = values[newMrrIdx] as number;
     const churned = values[churnedIdx] as number;
     if (newMrr > 0) {
