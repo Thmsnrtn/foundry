@@ -117,6 +117,43 @@ describe('every gate refuses the defect it exists for', () => {
     expect(run('check-insert-columns.mjs').code).toBe(1);
   });
 
+  it('check-query-arity fails on a statement with more placeholders than arguments', () => {
+    // The shape that had never once run: `forecast_scenarios` was written with
+    // seven placeholders and six arguments, `generated_by` is NOT NULL, and
+    // both callers swallowed the throw. Every other gate passed it: the SQL is
+    // valid, the columns exist, the types check.
+    plant('src/services/_gate_fixture_arity.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`INSERT ', 'INTO products ',
+        '(id, name, owner_id) VALUES (?, ?, ?)`, [1, 2]);\n'));
+    const r = run('check-query-arity.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('3 placeholder(s), 2 argument(s)');
+  });
+
+  it('check-query-arity fails on a statement with more arguments than placeholders', () => {
+    plant('src/services/_gate_fixture_arity2.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`SELECT ', 'id FROM products ',
+        'WHERE id = ?`, [1, 2]);\n'));
+    expect(run('check-query-arity.mjs').code).toBe(1);
+  });
+
+  it('check-query-arity is not fooled by an apostrophe in a SQL comment', () => {
+    // The first version of the counter toggled string state on every quote, so
+    // a comment reading "the row's id" opened a string that never closed and
+    // every placeholder after it went uncounted. It reported five false
+    // positives against correct code — and the fix for a noisy gate is a
+    // baseline, which is where a gate goes to stop working.
+    plant('src/services/_gate_fixture_arity3.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`SELECT id FROM products\n',
+        "  -- the row's own id, not the owner's\n",
+        '  WHERE id = ? AND owner_id = ?`, [1, 2]);\n'));
+    const r = run('check-query-arity.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-check-vocabularies fails on a status the column will not accept', () => {
     plant('src/services/_gate_fixture_d.ts',
       'import { query } from "../db/client.js";\n'
