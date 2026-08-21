@@ -12,7 +12,7 @@ import {
   getCompanyCustomers, getCustomersAtRisk,
 } from '../../src/services/institution/company-customers.js';
 import { draftCheckIn, runSuccessSweep, CATEGORY } from '../../src/services/departments/success.js';
-import { getChampions, CHAMPION_MIN_HEALTH } from '../../src/services/institution/company-customers.js';
+import { getChampions, CHAMPION_MIN_HEALTH, getCustomerRevenue } from '../../src/services/institution/company-customers.js';
 import { setPolicy } from '../../src/services/autopilot/policy.js';
 
 // =============================================================================
@@ -44,11 +44,11 @@ import { setPolicy } from '../../src/services/autopilot/policy.js';
 const P = 'cip_product';
 const OWNER = 'cip_owner';
 
-const reported = (id: string, email: string, health: number, lastActive?: string) => query(
+const reported = (id: string, email: string, health: number, lastActive?: string, mrr = 0) => query(
   `INSERT INTO customer_intelligence
-     (id, product_id, external_customer_id, account_name, email, health_score, last_active_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  [id, P, `ext_${id}`, `Acct ${id}`, email, health, lastActive ?? null],
+     (id, product_id, external_customer_id, account_name, email, health_score, last_active_at, mrr_cents)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  [id, P, `ext_${id}`, `Acct ${id}`, email, health, lastActive ?? null, mrr],
 );
 
 const legacy = (id: string, email: string, churn: number) => query(
@@ -259,5 +259,44 @@ describe('a department asks the institution, not a table', () => {
       }
     }
     expect(offenders, 'a department that names a store has picked one').toEqual([]);
+  });
+});
+
+describe('what the company is worth, and the gap to where it is going', () => {
+  it('counts revenue a company reported the documented way', async () => {
+    await reported('r_pay', 'pays@buyer.example', 70, undefined, 50_000);
+    const revenue = await getCustomerRevenue(P);
+    expect(revenue.totalMrrCents, 'the reported store is not zero revenue').toBe(50_000);
+    expect(revenue.payingCount).toBe(1);
+  });
+
+  it('does not count one customer twice — the error that flatters', async () => {
+    await query(
+      `INSERT INTO customers (id, product_id, owner_id, external_id, name, email, mrr_cents, churn_risk)
+       VALUES ('l_dup', ?, ?, 'ext_dup', 'Dup', 'Same@Buyer.Example', 40000, 0.2)`, [P, OWNER]);
+    await reported('r_dup', 'same@buyer.example', 70, undefined, 50_000);
+
+    const revenue = await getCustomerRevenue(P);
+    expect(revenue.totalMrrCents, 'the reported figure wins; they are not added')
+      .toBe(50_000);
+    expect(revenue.payingCount).toBe(1);
+  });
+
+  it('reaches the north-star gap, which is computed from it', async () => {
+    await reported('r_pay', 'pays@buyer.example', 70, undefined, 50_000);
+    const { upsertNorthStar, computeGap } = await import(
+      '../../src/services/destination/north-star.js');
+    await upsertNorthStar(P, { arr_target_dollars: 100_000, target_date: '2027-01-01' });
+
+    const gap = await computeGap(P);
+    expect(gap, 'a north star was set, so a gap exists').not.toBeNull();
+    // 50,000 cents/month is $500/month, so $6,000 ARR. What matters is that it
+    // is not zero: before the accessor, a customer a company reported the
+    // documented way contributed nothing to the distance the founder is told
+    // they have left to travel.
+    expect(gap!.arr_current_dollars, 'a reported customer moves the gap').toBeCloseTo(6000);
+    expect(gap!.paying_accounts_current, 'and is counted as a paying account').toBe(1);
+    expect(gap!.arr_progress_pct, 'so progress toward the destination is not zero')
+      .toBeGreaterThan(0);
   });
 });

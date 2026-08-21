@@ -93,9 +93,13 @@ export async function buildProductGraph(productId: string): Promise<{
   let relationships = 0;
 
   // Add customers
-  const customers = await query('SELECT id, name, email, plan, churn_risk FROM customers WHERE product_id = ?', [productId]);
-  for (const row of customers.rows as unknown as Array<Record<string, unknown>>) {
-    await upsertEntity(productId, 'customer', row.id as string, (row.name as string) ?? (row.email as string) ?? 'Unknown', { plan: row.plan, churn_risk: row.churn_risk });
+  // Both stores, through the one accessor: a company that reported its
+  // customers the documented way had none of them in its own knowledge graph.
+  const { getCompanyCustomers } = await import('../institution/company-customers.js');
+  for (const customer of await getCompanyCustomers(productId)) {
+    await upsertEntity(productId, 'customer', customer.id,
+      customer.name ?? customer.email ?? 'Unknown',
+      { churn_risk: customer.churnRisk, source: customer.source });
     entities++;
   }
 

@@ -142,8 +142,9 @@ export async function deleteNorthStar(productId: string): Promise<void> {
 /**
  * Compute current-vs-target gap for the product's North Star.
  * Pulls current MRR and paying-account count from the customers table
- * (the canonical source: customers.mrr_cents). NRR is sourced from the most
- * recent metric_snapshots row when present.
+ * (through `institution/company-customers.ts`, which reads both customer
+ * stores). NRR is sourced from the most recent metric_snapshots row when
+ * present.
  *
  * Returns null if no North Star is set.
  */
@@ -151,17 +152,20 @@ export async function computeGap(productId: string): Promise<NorthStarGap | null
   const ns = await getNorthStar(productId);
   if (!ns) return null;
 
-  // Aggregate current customer state — canonical source for MRR + paying count
-  const customerStats = await query(
-    `SELECT
-       COALESCE(SUM(mrr_cents), 0) AS total_mrr_cents,
-       COUNT(CASE WHEN mrr_cents > 0 THEN 1 END) AS paying_count
-     FROM customers WHERE product_id = ?`,
-    [productId]
-  );
-  const statsRow = customerStats.rows[0] as Record<string, unknown> | undefined;
-  const totalMrrCents = Number(statsRow?.total_mrr_cents ?? 0);
-  const payingCurrent = Number(statsRow?.paying_count ?? 0);
+  // THE COMMENT HERE SAID "canonical source: customers.mrr_cents" AND IT WAS
+  // NOT. The documented external API — `POST /api/v1/customers`, with issued
+  // scoped credentials — writes `customer_intelligence`. A company that
+  // reported its customers the documented way had its ARR and paying count
+  // understated, and this gap, the distance to the destination the founder
+  // stated, computed against the understatement.
+  //
+  // Asked through the accessor, which reads both stores and deduplicates —
+  // counting one customer twice would overstate revenue, and that is the error
+  // that flatters.
+  const { getCustomerRevenue } = await import('../institution/company-customers.js');
+  const revenue = await getCustomerRevenue(productId);
+  const totalMrrCents = revenue.totalMrrCents;
+  const payingCurrent = revenue.payingCount;
   const arrCurrent = (totalMrrCents / 100) * 12;
 
   // NRR not directly computable here; fall back to most recent metric_snapshots

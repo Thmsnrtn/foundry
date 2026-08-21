@@ -271,6 +271,24 @@ response`. The test caught it. Classifying on message text is fragile; the
 mitigation is that the fallback is the least specific claim, never a confident
 wrong one.
 
+**One rule, two implementations, one enforced — on the operator boundary this
+time.** `protective-wrapper` states it ("the operator brain sees aggregates
+only") and holds `letter/operator-pack.ts` to it structurally. The OTHER
+operator surface, `founder/intelligence.ts`, selected the ten most at-risk
+CUSTOMERS across every company on the platform by name with no product scope,
+plus each company's audit `reasoning`. Both surfaces gate on `isFounder`, so
+operator-only rather than a leak between founders, and nothing rendered the
+names — they reached a clientless API response and stopped. Fixed at the source
+anyway. The principle it settles: **the operator administers the COMPANIES and
+bills them, so a company may be named; a company's customers belong to that
+company.**
+
+And the assertion I wrote to enforce it flagged `p.name` — the company's own
+name, the thing the rule permits. It now reads the projection and requires every
+column to be an aggregate or to come from the joined `products` table, which
+states the distinction instead of pattern-matching a word that appears on both
+sides of it.
+
 **A process failure worth keeping.** The commit before this cycle's work was
 pushed with five tests red: capping `customer_success` at 'suggest' was correct
 and the tests asserting the old behaviour were not updated with it. Validation

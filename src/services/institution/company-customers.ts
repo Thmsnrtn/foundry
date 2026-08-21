@@ -66,6 +66,9 @@ export interface CompanyCustomer {
    *  the same formula `computeCustomerHealth` uses, never invented. */
   churnRisk: number | null;
   lastActiveAt: string | null;
+  /** What this customer pays, in cents. Both stores hold it under the same
+   *  name; the north-star gap is computed from the sum. */
+  mrrCents: number;
 }
 
 /**
@@ -98,12 +101,12 @@ const num = (v: unknown): number | null => (v === null || v === undefined ? null
  */
 export async function getCompanyCustomers(productId: string): Promise<CompanyCustomer[]> {
   const reported = (await query(
-    `SELECT id, external_customer_id, account_name, email, health_score, last_active_at
+    `SELECT id, external_customer_id, account_name, email, health_score, last_active_at, mrr_cents
        FROM customer_intelligence WHERE product_id = ?`, [productId],
   ).catch(() => ({ rows: [] }))).rows as unknown as Array<Record<string, unknown>>;
 
   const legacy = (await query(
-    `SELECT id, external_id, name, email, health_score, churn_risk, last_active_at
+    `SELECT id, external_id, name, email, health_score, churn_risk, last_active_at, mrr_cents
        FROM customers WHERE product_id = ?`, [productId],
   ).catch(() => ({ rows: [] }))).rows as unknown as Array<Record<string, unknown>>;
 
@@ -124,6 +127,7 @@ export async function getCompanyCustomers(productId: string): Promise<CompanyCus
       healthScore: health,
       churnRisk: num(r.churn_risk) ?? churnRiskFromHealth(health),
       lastActiveAt: str(r.last_active_at),
+      mrrCents: num(r.mrr_cents) ?? 0,
     };
     out.set(key(record.email, record.externalId, record.id), record);
   }
@@ -141,6 +145,7 @@ export async function getCompanyCustomers(productId: string): Promise<CompanyCus
       // above — the same one the legacy store's writer applies.
       churnRisk: churnRiskFromHealth(health),
       lastActiveAt: str(r.last_active_at),
+      mrrCents: num(r.mrr_cents) ?? 0,
     };
     out.set(key(record.email, record.externalId, record.id), record);
   }
@@ -220,6 +225,30 @@ export async function getCustomerHealth(
     if (row && row.health !== null && row.health !== undefined) return Number(row.health);
   }
   return null;
+}
+
+/**
+ * What this company's customers pay, across both stores.
+ *
+ * `north-star.ts` computed this from `customers` alone, under a comment calling
+ * it "the canonical source: customers.mrr_cents". It is not: the documented
+ * external API writes `customer_intelligence`, so a company that reported its
+ * customers the documented way had its ARR and its paying count understated —
+ * and the NORTH-STAR GAP, the distance to the destination the founder stated,
+ * computed against the understatement.
+ *
+ * Deduplication matters here more than anywhere else: counting one customer
+ * twice would overstate revenue, which is the error that flatters. The shared
+ * accessor keys on email then external id, and the reported store wins.
+ */
+export async function getCustomerRevenue(productId: string): Promise<{
+  totalMrrCents: number; payingCount: number;
+}> {
+  const customers = await getCompanyCustomers(productId);
+  return {
+    totalMrrCents: customers.reduce((sum, c) => sum + c.mrrCents, 0),
+    payingCount: customers.filter((c) => c.mrrCents > 0).length,
+  };
 }
 
 /**

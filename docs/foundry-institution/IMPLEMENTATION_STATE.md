@@ -297,6 +297,25 @@ indistinguishable from one that has not run. The reason is a closed vocabulary
 enforced by CHECK, for the same reason migration 170 gave: a transcript is
 customer speech and an error message may quote it.
 
+## The operator boundary
+
+Foundry's owner reaches two operator surfaces, both gated on `isFounder`:
+`letter/operator-pack.ts` and `founder/intelligence.ts` (feeding `/founder-ops`
+and `/api/founder-intelligence`). The stated rule is that the operator brain
+sees aggregates only — the Level-1/Level-2 boundary — and it was enforced
+structurally on the first and not the second.
+
+**The distinction, now stated where it is enforced:** the operator administers
+the COMPANIES and bills them, so a company may be named; a company's customers
+belong to that company. Both surfaces are held to it by
+`protective-wrapper.test.ts`, which reads the projection of every operator
+select over `customers` and requires each column to be an aggregate or to come
+from the joined `products` table.
+
+This is separate from `OWNER_DECISIONS_PENDING` §12, which asks who holds the
+ecosystem key. That one is about a surface outside the member model; this is
+about Foundry's own operator view of its paying customers.
+
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope |
