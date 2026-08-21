@@ -38,7 +38,6 @@ execution_playbooks.last_evaluated_at
 expansion_analysis.strategic_fork_scenarios
 experiments.current_sample_size
 forecast_checkpoints.scenario_id
-forecast_checkpoints.variance_pct
 forecast_scenarios.generated_by
 founder_evidence_requests.answer_signal_id
 founder_focus_settings.focus_area

@@ -11,6 +11,7 @@ import { getLayoutContext } from './_shared.js';
 import { query } from '../../db/client.js';
 import {
   generateScenariosForProduct,
+  getForecastAccuracy,
   getLatestScenarios,
 } from '../../services/scp/forecasting/runway.js';
 import { getActiveTargetForecasts } from '../../services/scp/forecasting/targets.js';
@@ -159,10 +160,11 @@ scenarios.get('/scenarios', async (c) => {
 
   const productId = ctx.productId;
 
-  const [scenarioList, targetForecasts, position] = await Promise.all([
+  const [scenarioList, targetForecasts, position, accuracy] = await Promise.all([
     getLatestScenarios(productId),
     getActiveTargetForecasts(productId),
     getFinancialPosition(productId),
+    getForecastAccuracy(productId),
   ]);
 
   // ── Nothing to model ───────────────────────────────────────────────────────
@@ -288,6 +290,29 @@ scenarios.get('/scenarios', async (c) => {
         <summary style="font-size:0.78rem;color:var(--text-muted);cursor:pointer;">Update it</summary>
         <div style="margin-top:0.75rem;">${financialPositionForm(position)}</div>
       </details>
+    </div>
+
+    <!-- How right these have been -->
+    <div class="card" style="padding:1rem 1.25rem;margin-bottom:1.5rem;">
+      <div style="font-size:0.78rem;color:var(--text-dim);line-height:1.6;">
+        ${accuracy.resolved === 0 ? html`
+          <strong>No forecast has come due yet.</strong>
+          ${accuracy.pending > 0
+            ? `${accuracy.pending} prediction${accuracy.pending > 1 ? 's are' : ' is'} written down and waiting for the month to arrive.`
+            : 'Predictions are written down at one, three and six months so they can be checked against what actually happens.'}
+        ` : html`
+          <strong>Past forecasts have been out by a median of
+          ${accuracy.median_abs_variance_pct}%</strong> across ${accuracy.resolved}
+          prediction${accuracy.resolved > 1 ? 's' : ''} that have come due${
+            accuracy.median_signed_variance_pct === null ? '' :
+            accuracy.median_signed_variance_pct > 0
+              ? ' — running high, so the numbers above are probably optimistic'
+              : accuracy.median_signed_variance_pct < 0
+                ? ' — running low, so the numbers above are probably conservative'
+                : ''}.
+          ${accuracy.pending > 0 ? `${accuracy.pending} more are waiting.` : ''}
+        `}
+      </div>
     </div>
 
     <!-- Scenario Cards -->

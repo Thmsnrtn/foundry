@@ -13,6 +13,12 @@ import { getFinancialPosition } from '../../financial/position.js';
 export const DEFAULT_CHURN_ASSUMPTION = 0.03;
 export const DEFAULT_GROWTH_ASSUMPTION = 0.05;
 
+/** How far out a prediction is written down so it can be checked. Three
+ *  horizons rather than all twenty-four: a forecast checked at one, three and
+ *  six months tells you whether it was right, and twenty-four rows per weekly
+ *  regeneration would tell you the same thing at twenty-four times the noise. */
+export const CHECKPOINT_HORIZON_MONTHS = [1, 3, 6] as const;
+
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
 export interface RunwayScenario {
@@ -339,13 +345,35 @@ export async function generateScenariosForProduct(productId: string): Promise<{
       ]
     );
 
-    // Record a checkpoint for today's predicted runway
-    const today = new Date().toISOString().slice(0, 10);
-    await query(
-      `INSERT OR IGNORE INTO forecast_checkpoints (id, product_id, scenario_id, checkpoint_date, predicted_value, metric_name)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [nanoid(), productId, id, today, result.runway_months, 'runway_months']
-    );
+    // A CHECKPOINT IS DATED WHEN THE PREDICTION COMES DUE, not when it is made.
+    //
+    // This wrote one row per scenario dated TODAY, holding today's predicted
+    // runway. `recordCheckpointActual` looks up a checkpoint whose
+    // `checkpoint_date` is today and fills in the actual — so a checkpoint made
+    // today could only ever be compared against an actual recorded on the same
+    // day, which is the prediction being compared against itself. The
+    // comparison this table exists for could not happen, and `variance_pct`
+    // would have stayed NULL forever.
+    //
+    // Only the base case is checkpointed. The bear, bull, hiring and pricing
+    // scenarios are deliberate what-ifs about a world nobody claims is coming;
+    // scoring them against reality would score Foundry on questions it was
+    // asked rather than on answers it gave.
+    if (scenario.name === 'Base Case') {
+      for (const horizon of CHECKPOINT_HORIZON_MONTHS) {
+        const projected = result.monthly_projection.find((m) => m.month === horizon);
+        if (!projected) continue;
+        const due = new Date();
+        due.setMonth(due.getMonth() + horizon);
+        await query(
+          `INSERT OR IGNORE INTO forecast_checkpoints
+             (id, product_id, scenario_id, checkpoint_date, predicted_value, metric_name)
+           VALUES (?, ?, ?, ?, ?, 'mrr_cents')`,
+          [nanoid(), productId, id, due.toISOString().slice(0, 10),
+            projected.mrr_cents_median]
+        );
+      }
+    }
   }
 
   return {
@@ -402,6 +430,73 @@ export async function getLatestScenarios(productId: string): Promise<Array<{
   });
 }
 
+// ─── Public: how right the forecasts turned out to be ────────────────────────
+
+export interface ForecastAccuracy {
+  /** Checkpoints that have come due AND had an actual recorded. */
+  resolved: number;
+  /** Median absolute variance across those, as a percentage. NULL when none
+   *  has resolved yet — an unmeasured accuracy, not a perfect one. */
+  median_abs_variance_pct: number | null;
+  /** Signed median: positive means the forecasts ran HIGH. A reader deserves
+   *  the direction, because "20% out" is a different fact from "20% optimistic
+   *  every time". */
+  median_signed_variance_pct: number | null;
+  /** Predictions written down and not yet due. */
+  pending: number;
+  most_recent: Array<{
+    checkpoint_date: string; metric_name: string;
+    predicted_value: number; actual_value: number; variance_pct: number;
+  }>;
+}
+
+/**
+ * Whether Foundry's own forecasts have been right.
+ *
+ * `variance_pct` was written by `recordCheckpointActual` and read by nothing —
+ * and `recordCheckpointActual` itself had no caller, and the checkpoints were
+ * dated so the comparison could never happen. Three broken links in one loop,
+ * which is what makes a prediction that is never scored so easy to keep making.
+ */
+export async function getForecastAccuracy(productId: string): Promise<ForecastAccuracy> {
+  const rows = (await query(
+    `SELECT checkpoint_date, metric_name, predicted_value, actual_value, variance_pct
+       FROM forecast_checkpoints
+      WHERE product_id = ? AND actual_value IS NOT NULL AND variance_pct IS NOT NULL
+      ORDER BY checkpoint_date DESC`, [productId])).rows as unknown as
+    Array<Record<string, unknown>>;
+
+  const pendingRow = (await query(
+    `SELECT COUNT(*) AS c FROM forecast_checkpoints
+      WHERE product_id = ? AND actual_value IS NULL`, [productId])).rows[0] as
+    Record<string, unknown> | undefined;
+
+  const median = (values: number[]): number | null => {
+    if (values.length === 0) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? ((sorted[mid - 1]! + sorted[mid]!) / 2) : sorted[mid]!;
+  };
+
+  const variances = rows.map((r) => Number(r.variance_pct));
+  const round = (v: number | null) => v === null ? null : Math.round(v * 10) / 10;
+
+  return {
+    resolved: rows.length,
+    median_abs_variance_pct: round(median(variances.map(Math.abs))),
+    median_signed_variance_pct: round(median(variances)),
+    pending: Number(pendingRow?.c ?? 0),
+    most_recent: rows.slice(0, 5).map((r) => ({
+      checkpoint_date: String(r.checkpoint_date),
+      metric_name: String(r.metric_name),
+      predicted_value: Number(r.predicted_value),
+      actual_value: Number(r.actual_value),
+      variance_pct: Math.round(Number(r.variance_pct) * 10) / 10,
+    })),
+  };
+}
+
 // ─── Public: Record actual value for a checkpoint ────────────────────────────
 
 export async function recordCheckpointActual(
@@ -424,9 +519,11 @@ export async function recordCheckpointActual(
   const row = checkpointResult.rows[0] as Record<string, unknown>;
   const checkpointId = row.id as string;
   const predictedValue = row.predicted_value as number;
-  const variancePct = predictedValue !== 0
-    ? ((actualValue - predictedValue) / Math.abs(predictedValue)) * 100
-    : 0;
+  // A PREDICTION OF ZERO CANNOT BE OUT BY A PERCENTAGE. This returned 0,
+  // which is the variance of a perfect forecast, so predicting nothing scored
+  // the same as predicting exactly right. Nothing is recorded instead.
+  if (predictedValue === 0) return;
+  const variancePct = ((actualValue - predictedValue) / Math.abs(predictedValue)) * 100;
 
   await query(
     `UPDATE forecast_checkpoints

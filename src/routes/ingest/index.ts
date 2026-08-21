@@ -201,6 +201,36 @@ ingestRoutes.post('/ingest/:token', async (c) => {
       );
     }
 
+    // A FORECAST COMES DUE, AND THIS IS WHERE REALITY ARRIVES.
+    //
+    // `recordCheckpointActual` existed with no caller anywhere, so
+    // `forecast_checkpoints.actual_value` was never written and `variance_pct`
+    // was never computed. Foundry made predictions and never once looked at
+    // whether they came true. This is the only path by which a company's real
+    // MRR reaches Foundry, so it is where the comparison belongs.
+    //
+    // Same posture as the observation above: it must never fail the ingest.
+    try {
+      const mrrIdx = columns.indexOf('new_mrr_cents');
+      if (mrrIdx !== -1) {
+        const { recordCheckpointActual } = await import(
+          '../../services/scp/forecasting/runway.js'
+        );
+        const expansionIdx = columns.indexOf('expansion_mrr_cents');
+        const contractionIdx = columns.indexOf('contraction_mrr_cents');
+        const churnedIdx2 = columns.indexOf('churned_mrr_cents');
+        const at = (i: number) => (i === -1 ? 0 : Number(values[i]) || 0);
+        const netMrr = at(mrrIdx) + at(expansionIdx) - at(contractionIdx) - at(churnedIdx2);
+        await recordCheckpointActual(productId, 'mrr_cents', netMrr);
+      }
+    } catch (err) {
+      const { log } = await import('../../lib/logger.js');
+      log.error(
+        `forecast checkpoint reconciliation failed: ${err instanceof Error ? err.message : String(err)}`,
+        { productId },
+      );
+    }
+
     // Quantities this company declared it tracks. Before migration 135 these
     // arrived here, fell into `custom_metrics` as opaque JSON, and no
     // institutional path could ever read them — so a company whose reality is
