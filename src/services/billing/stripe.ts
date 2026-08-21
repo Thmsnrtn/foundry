@@ -299,6 +299,17 @@ export async function handleWebhook(payload: string, signature: string): Promise
         );
         if (pastDueFounder.rows.length > 0) {
           const founder = pastDueFounder.rows[0] as Record<string, string>;
+          // NOT THROUGH THE INTERRUPTION POLICY, AND DELIBERATELY.
+          //
+          // `preferences.max_channel` is an ATTENTION preference — how loudly
+          // Foundry may interrupt about the work. The owner's §14 decision
+          // draws the line this sits on: necessary service, billing, security
+          // and configuration state stays ungated and disclosed; optional
+          // product telemetry and celebration honour the preference. A founder
+          // whose card is failing must be told their service is about to lapse
+          // whatever they set about notification volume, and a company-scoped
+          // policy is the wrong instrument anyway — this is founder-scoped and
+          // carries no product id.
           await createNotification(
             founder.id,
             null,
@@ -362,6 +373,8 @@ export async function handleWebhook(payload: string, signature: string): Promise
       );
       if (founderResult.rows.length > 0) {
         const founder = founderResult.rows[0] as Record<string, string>;
+        // Ungated for the same reason as the past-due notice above: billing
+        // state is not attention, and the §14 line keeps it disclosed.
         await createNotification(
           founder.id,
           null,

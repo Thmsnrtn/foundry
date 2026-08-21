@@ -5,7 +5,6 @@
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
-import { createNotification } from './notifications.js';
 import { captureArtifact } from '../story/engine.js';
 import type { MilestoneEvent } from '../../types/index.js';
 
@@ -153,16 +152,25 @@ export async function checkAndAwardMilestones(
       };
       awarded.push(milestone);
 
-      // Create notification
-      await createNotification(
-        founderId,
-        productId,
-        'milestone',
-        `🏆 ${def.title}`,
-        def.description,
-        `/products/${productId}/journey`,
-        'View Journey',
-      );
+      // THROUGH THE INTERRUPTION POLICY. A milestone is a celebration, which
+      // is the most optional thing Foundry ever says — and the founder's
+      // ceiling is exactly where they get to say they would rather read it
+      // tomorrow. Since migration 182 the quiet rungs record the event, so
+      // honouring that costs them nothing.
+      const { deliver } = await import('./interruption.js');
+      let prefs: Record<string, unknown> | null = null;
+      try {
+        const prow = (await query('SELECT preferences FROM founders WHERE id = ?', [founderId]))
+          .rows[0] as Record<string, unknown> | undefined;
+        prefs = prow?.preferences ? JSON.parse(String(prow.preferences)) : null;
+      } catch { /* unset or unreadable preferences are no ceiling */ }
+
+      await deliver(founderId, productId, {
+        importance: 'info',
+        title: `🏆 ${def.title}`,
+        body: def.description,
+        actionUrl: `/products/${productId}/journey`, actionLabel: 'View Journey',
+      }, prefs as never);
 
       // Create Founding Story artifact for significant milestones
       if (STORY_MILESTONES.has(key)) {

@@ -218,15 +218,21 @@ describe('the in-app bypass, pinned so it can only shrink', () => {
     return out.sort();
   }
 
-  // These write an in-app notification without going through `deliver()`, so
-  // they skip the founder's ceiling and the strain quieting. Each needs an
-  // importance chosen for it — a judgment per call site, not a rewrite — and
-  // dropping the notification instead would cost the founder a record. The list
-  // is here so the number cannot grow while that work is outstanding.
-  const KNOWN_BYPASSES = [
-    'src/services/billing/stripe.ts',
-    'src/services/ux/milestones.ts',
-  ];
+  // ONE FILE REMAINS, AND IT IS RIGHT THAT IT DOES.
+  //
+  // `billing/stripe.ts` tells a founder their card failed and their service is
+  // about to lapse. `max_channel` is an ATTENTION preference — how loudly
+  // Foundry may interrupt about the work — and the owner's §14 decision draws
+  // the line this sits on: necessary service, billing, security and
+  // configuration state stays ungated and disclosed; optional product
+  // telemetry and celebration honour the preference. These notices are also
+  // founder-scoped and carry no product id, which a company-scoped policy
+  // cannot anchor.
+  //
+  // Anything ADDED to this list is a claim that some other message outranks a
+  // founder's stated wishes. The test exists to make somebody write that claim
+  // down.
+  const KNOWN_BYPASSES = ['src/services/billing/stripe.ts'];
 
   it('has not grown', () => {
     expect(notificationCallers()).toEqual(KNOWN_BYPASSES);
@@ -236,6 +242,21 @@ describe('the in-app bypass, pinned so it can only shrink', () => {
     const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
     expect((src.match(/createNotification\(/g) ?? []).length,
       'every scheduled bell now asks the ceiling').toBe(0);
+  });
+
+  it('celebrates through the policy, because a milestone is optional', () => {
+    const src = stripComments(
+      readFileSync('src/services/ux/milestones.ts', 'utf8'), { lineComments: true });
+    expect(src, 'the most optional thing Foundry ever says')
+      .toMatch(/deliver\(founderId, productId/);
+    expect(src).not.toMatch(/createNotification\(/);
+  });
+
+  it('says why billing is not subject to an attention preference', () => {
+    const src = readFileSync('src/services/billing/stripe.ts', 'utf8');
+    expect(src).toMatch(/NOT THROUGH THE INTERRUPTION POLICY, AND DELIBERATELY/);
+    expect(src, 'grounded in the owner decision, not in convenience')
+      .toMatch(/§14 decision/);
   });
 
   it('converted the premise bell, whose fact the Letter really does carry', () => {
