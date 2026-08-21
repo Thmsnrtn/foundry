@@ -154,6 +154,27 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.code, r.output).toBe(0);
   });
 
+  it('check-query-arity fails on an INSERT whose column list is a different length', () => {
+    // The sibling shape: valid SQL, real columns, correct types, and fatal.
+    plant('src/services/_gate_fixture_arity4.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`INSERT ', 'INTO products ',
+        '(id, name, owner_id) VALUES (?, ?)`, [1, 2]);\n'));
+    const r = run('check-query-arity.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('3 column(s), 2 value(s)');
+  });
+
+  it('check-query-arity counts a nested SQL call as one value', () => {
+    // `datetime('now')` and `COALESCE(?, x)` both carry parentheses and commas.
+    plant('src/services/_gate_fixture_arity5.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`INSERT ', 'INTO products ',
+        "(id, name, owner_id) VALUES (?, ?, COALESCE(?, 'x'))`, [1, 2, 3]);\n"));
+    const r = run('check-query-arity.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-check-vocabularies fails on a status the column will not accept', () => {
     plant('src/services/_gate_fixture_d.ts',
       'import { query } from "../db/client.js";\n'

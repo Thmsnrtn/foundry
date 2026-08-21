@@ -112,9 +112,55 @@ function matchBracket(src, open, closeChar, openChar) {
   return -1;
 }
 
+/**
+ * The sibling shape: an INSERT whose named column list is a different length
+ * from its VALUES list. Same class — wrong only in the relationship between two
+ * halves of one statement, valid to every other gate here, and fatal at
+ * runtime. Nothing in `src` has it today; this is here so that stays true.
+ */
+function checkInsertColumnCounts(src, file, findings) {
+  const re = /INSERT\s+(?:OR\s+\w+\s+)?INTO\s+([a-z_][a-z0-9_]*)\s*\(([^)]*)\)\s*VALUES\s*\(/gi;
+  let m, count = 0;
+  while ((m = re.exec(src)) !== null) {
+    const colsRaw = m[2];
+    if (colsRaw.includes('${')) continue;
+    const cols = splitTopLevel(colsRaw);
+    if (cols === null) continue;
+
+    // Walk to the close of the VALUES list, respecting nesting and quotes:
+    // `datetime('now')` and `COALESCE(?, x)` both carry parentheses.
+    let depth = 1, quote = null, end = -1;
+    for (let i = re.lastIndex; i < src.length; i++) {
+      const ch = src[i];
+      if (quote) {
+        if (ch === '\\') { i++; continue; }
+        if (ch === quote) quote = null;
+        continue;
+      }
+      if (ch === "'" || ch === '"' || ch === '`') { quote = ch; continue; }
+      if (ch === '(') depth++;
+      else if (ch === ')') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end === -1) continue;
+    const valsRaw = src.slice(re.lastIndex, end);
+    if (valsRaw.includes('${')) continue;
+    const vals = splitTopLevel(valsRaw);
+    if (vals === null) continue;
+
+    count++;
+    if (cols.length !== vals.length) {
+      const line = src.slice(0, m.index).split('\n').length;
+      findings.push(
+        `${file}:${line}  ${m[1]}: ${cols.length} column(s), ${vals.length} value(s)`);
+    }
+  }
+  return count;
+}
+
 const CALLERS = /\b(?:query|safeQuery|dbQuery|db)\s*\(\s*(`|')/g;
 const findings = [];
 let checked = 0;
+let insertsChecked = 0;
 
 for (const file of walk('src')) {
   // TYPESCRIPT COMMENTS GO FIRST, for the same reason SQL comments do inside
@@ -123,6 +169,7 @@ for (const file of walk('src')) {
   // high. `strip-comments.mjs` preserves whitespace, so reported lines are the
   // real ones.
   const src = stripComments(readFileSync(file, 'utf8'), { lineComments: true });
+  insertsChecked += checkInsertColumnCounts(src, file, findings);
   let m;
   CALLERS.lastIndex = 0;
   while ((m = CALLERS.exec(src)) !== null) {
@@ -166,10 +213,11 @@ for (const file of walk('src')) {
 }
 
 if (findings.length > 0) {
-  console.error('✗ parameterised statements whose argument count does not match:');
+  console.error('✗ statements whose two halves do not match:');
   for (const f of findings) console.error(`  ${f}`);
   console.error('\nA missing argument binds NULL, or the driver refuses the statement.');
   console.error('Either way it fails at runtime, in a path something may be catching.');
   process.exit(1);
 }
-console.log(`✓ query arity: ${checked} literal parameterised statements match their arguments`);
+console.log(`✓ query arity: ${checked} parameterised statements match their arguments, `
+  + `${insertsChecked} INSERTs match their value lists`);
