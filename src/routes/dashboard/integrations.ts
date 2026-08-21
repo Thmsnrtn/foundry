@@ -129,17 +129,33 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
   if (!ctx.product) return c.redirect('/products');
 
   const existing = await query(
-    `SELECT type, status, last_synced_at, last_error FROM integrations WHERE product_id = ?`,
+    `SELECT id, type, status, last_synced_at, last_error, COALESCE(error_count, 0) AS error_count
+       FROM integrations WHERE product_id = ?`,
     [ctx.product.id],
   );
 
-  const connectedTypes = new Map<string, { status: string; last_synced_at: string | null; last_error: string | null }>();
+  // `status`, `last_synced_at` and `last_error` describe this moment and forget
+  // everything before it — a successful sync clears the error, so an
+  // integration failing four nights in five looked perfectly healthy here. The
+  // attempt history was being recorded the whole time and nothing read it.
+  const { getSyncHealth, SYNC_HEALTH_WINDOW_DAYS } =
+    await import('../../services/integrations/health.js');
+  const { MAX_CONSECUTIVE_SYNC_FAILURES } =
+    await import('../../services/integrations/sync.js');
+  const health = await getSyncHealth(ctx.product.id);
+
+  const connectedTypes = new Map<string, {
+    status: string; last_synced_at: string | null; last_error: string | null;
+    error_count: number; health: import('../../services/integrations/health.js').SyncHealth | null;
+  }>();
   for (const row of existing.rows) {
-    const r = row as Record<string, string | null>;
+    const r = row as Record<string, string | number | null>;
     connectedTypes.set(r.type as string, {
       status: r.status as string,
-      last_synced_at: r.last_synced_at,
-      last_error: r.last_error,
+      last_synced_at: r.last_synced_at as string | null,
+      last_error: r.last_error as string | null,
+      error_count: Number(r.error_count ?? 0),
+      health: health.get(String(r.id)) ?? null,
     });
   }
 
@@ -154,6 +170,10 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
         const connected = connectedTypes.get(type);
         const isConnected = connected?.status === 'active';
         const hasError = connected?.status === 'error' || connected?.status === 'errored';
+        // Foundry has stopped retrying this one. Say so, rather than showing the
+        // same red badge it showed after the first failure — the two are very
+        // different facts, and only one of them needs the founder.
+        const givenUp = !!connected && connected.error_count >= MAX_CONSECUTIVE_SYNC_FAILURES;
 
         return html`
           <div class="integration-card ${isConnected ? 'connected' : ''} ${hasError ? 'error' : ''}">
@@ -168,7 +188,15 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
             </div>
             <p class="integration-description">${meta.description}</p>
             ${connected?.last_synced_at ? html`<p class="integration-sync-time">Last synced: ${new Date(connected.last_synced_at).toLocaleDateString()}</p>` : ''}
+            ${givenUp ? html`<p class="integration-error"><strong>Foundry has stopped syncing this.</strong> ${connected.error_count} syncs failed in a row, so it is no longer being tried. Its data is not updating. Reconnect to start again.</p>` : ''}
             ${hasError && connected?.last_error ? html`<p class="integration-error">${connected.last_error}</p>` : ''}
+            ${connected ? html`<p class="integration-sync-history">${
+              connected.health === null
+                ? html`No sync has been attempted in the last ${SYNC_HEALTH_WINDOW_DAYS} days.`
+                : connected.health.failed === 0 && connected.health.unfinished === 0
+                  ? html`${connected.health.succeeded} of ${connected.health.attempts} syncs succeeded in the last ${SYNC_HEALTH_WINDOW_DAYS} days.`
+                  : html`<span class="integration-sync-history-warn">${connected.health.failed} of ${connected.health.attempts} syncs failed in the last ${SYNC_HEALTH_WINDOW_DAYS} days${connected.health.unfinished > 0 ? html`, and ${connected.health.unfinished} never finished` : ''}.</span>${connected.health.last_success_at ? html` Last success: ${new Date(connected.health.last_success_at).toLocaleDateString()}.` : html` None have succeeded.`}`
+            }</p>` : ''}
             <div class="integration-actions">
               ${isConnected ? html`
                 <form method="POST" action="/integrations/${type}/disconnect">

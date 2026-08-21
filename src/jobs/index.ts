@@ -28,7 +28,16 @@ import { refreshFounderHealthMetrics } from '../services/intelligence/founder-he
 import { scanGeopoliticalRisks } from '../services/intelligence/global.js';
 import { scanRegulatoryChanges } from '../services/intelligence/regulatory.js';
 import { aggregateInsights } from '../services/wisdom/network.js';
-import { runAllDueSyncs } from '../services/integrations/framework.js';
+// `runAllDueSyncs` was imported here and never scheduled. It belongs to the
+// second integration subsystem — services/integrations/framework.ts — which
+// writes `integrations.last_sync_at` / `last_sync_status` / `error_count` while
+// the Integrations page reads `last_synced_at` / `last_error` / `status`. Two
+// generations of the same columns on one table, and only the first is
+// displayed. The scheduled job is `integration_sync`, which runs the OTHER
+// subsystem (services/integrations/sync.ts). Left as-is rather than wired up:
+// scheduling a second hourly sync over the same rows would double every
+// provider call, and reconciling the two vocabularies is a real piece of work,
+// not an import statement. Recorded in the frontier.
 import { generatePredictions } from '../services/intelligence/predictive.js';
 import { generateDraftsForPendingDecisions } from '../services/decisions/actions.js';
 import { refreshAllCustomerHealth } from '../services/customers/intelligence.js';

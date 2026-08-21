@@ -26,11 +26,31 @@ interface IntegrationRow {
 
 // ─── Sync All Active Integrations for One Product ────────────────────────────
 
+/**
+ * How many consecutive failures before Foundry stops trying an integration.
+ *
+ * There used to be no such number, because there was no retry. A single failed
+ * sync set `integrations.status = 'error'`, and this query selected
+ * `status = 'active'` — so the hourly job never touched that integration again.
+ * One timed-out request, one expired token, one bad night at the provider, and
+ * the company's revenue numbers quietly stopped updating until the founder
+ * happened to visit the Integrations page and press Connect again.
+ *
+ * Nothing announced it. The evidence of the stop was a red card on a page you
+ * only visit when you already suspect something.
+ */
+export const MAX_CONSECUTIVE_SYNC_FAILURES = 5;
+
 export async function syncProductIntegrations(productId: string): Promise<void> {
+  // An errored integration is retried, up to the limit above. Giving up is a
+  // decision, and a decision has to be taken deliberately and said out loud.
   const result = await query(
     `SELECT id, product_id, type, status, credentials_json, config_json, sync_cursor
-     FROM integrations WHERE product_id = ? AND status = 'active'`,
-    [productId],
+     FROM integrations
+      WHERE product_id = ?
+        AND status IN ('active', 'error')
+        AND COALESCE(error_count, 0) < ?`,
+    [productId, MAX_CONSECUTIVE_SYNC_FAILURES],
   );
 
   for (const row of result.rows) {
@@ -86,7 +106,7 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
       config = JSON.parse(integration.config_json) as Record<string, unknown>;
     }
   } catch {
-    await markSyncFailed(logId, integration.id, 'Failed to parse credentials or config');
+    await markSyncFailed(logId, integration, 'Failed to parse credentials or config');
     return;
   }
 
@@ -147,7 +167,7 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
       }
 
       default:
-        await markSyncFailed(logId, integration.id, `Integration type '${integration.type}' not yet implemented`);
+        await markSyncFailed(logId, integration, `Integration type '${integration.type}' not yet implemented`);
         return;
     }
 
@@ -160,15 +180,31 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
       [recordsProcessed, JSON.stringify(metricsUpdated), logId],
     );
 
+    // And return the integration to health. The per-provider modules each clear
+    // `last_error` on success, but none of them restored `status` — so an
+    // integration that failed once and has worked every hour since still read
+    // as errored, which is also why it was never retried.
+    await query(
+      `UPDATE integrations
+          SET status = 'active', last_error = NULL, error_count = 0,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`,
+      [integration.id],
+    );
+
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    await markSyncFailed(logId, integration.id, errorMessage);
+    await markSyncFailed(logId, integration, errorMessage);
   }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async function markSyncFailed(logId: string, integrationId: string, errorMessage: string): Promise<void> {
+async function markSyncFailed(
+  logId: string,
+  integration: Pick<IntegrationRow, 'id' | 'product_id' | 'type'>,
+  errorMessage: string,
+): Promise<void> {
   await query(
     `UPDATE integration_sync_log
      SET completed_at = CURRENT_TIMESTAMP, status = 'failed', error_message = ?
@@ -176,9 +212,47 @@ async function markSyncFailed(logId: string, integrationId: string, errorMessage
     [errorMessage, logId],
   );
   await query(
-    `UPDATE integrations SET last_error = ?, status = 'error' WHERE id = ?`,
-    [errorMessage, integrationId],
+    `UPDATE integrations
+        SET last_error = ?, status = 'error',
+            error_count = COALESCE(error_count, 0) + 1,
+            updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`,
+    [errorMessage, integration.id],
   );
+
+  const after = (await query(
+    'SELECT COALESCE(error_count, 0) AS n FROM integrations WHERE id = ?',
+    [integration.id],
+  )).rows[0] as Record<string, unknown> | undefined;
+  const failures = Number(after?.n ?? 0);
+
+  // Crossing the limit is the moment Foundry stops trying. Announce it exactly
+  // once — on the crossing, not on every subsequent skip, which would be noise
+  // about a thing that is no longer happening.
+  if (failures === MAX_CONSECUTIVE_SYNC_FAILURES) {
+    try {
+      const { emitSignalEvent } = await import('../scp/events/dispatcher.js');
+      await emitSignalEvent(integration.product_id, {
+        source: 'integrations',
+        event_type: 'integration_stopped',
+        severity: 'high',
+        // The provider's error text is external content. It is kept out of the
+        // payload and out of the summary; the founder reads it on the
+        // Integrations page, where it is already stored and already escaped.
+        payload: {
+          integration_id: integration.id,
+          integration_type: integration.type,
+          consecutive_failures: failures,
+        },
+        summary: `Foundry stopped syncing the ${integration.type} integration after `
+          + `${failures} consecutive failures. Its data is no longer updating.`,
+      });
+    } catch (err) {
+      logger.error('[integrations] could not announce a stopped integration', {
+        productId: integration.product_id, error: String(err),
+      });
+    }
+  }
 }
 
 async function createSupportSpikeStressor(productId: string): Promise<void> {

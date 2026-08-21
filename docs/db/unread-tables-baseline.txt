@@ -2,7 +2,6 @@ board_decks
 causal_chains
 cofounder_alignment_scores
 expansion_analysis
-integration_sync_log
 okr_progress_updates
 portfolio_alerts
 portfolio_snapshots
