@@ -565,20 +565,30 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    decided in the last day, the top pending decision, falsified premises, the
    memory digest, peer-radar warnings, the trust ledger, dissent.
 
-   - **Safe to convert** — the Letter has the fact: peer radar (**done**),
-     falsified premises (`getExpiredBeliefs`), pending/decided decisions
-     (decision follow-up, retrospective, autopilot).
-   - **NOT safe as-is** — the Letter does not carry it, so quieting DROPS it:
-     the Signal-drop alert, the wellbeing pulse, check-in drafts awaiting
-     approval, milestones, billing failures. Either give the letter rung
-     something durable the Letter reads, or leave these outside the policy and
-     say so at the site.
+   **Checked site by site, and the first version of this entry was wrong.** It
+   listed the decision bells as safe on the strength of "the Letter carries
+   decisions". The Letter carries the TOP PENDING decision and gate-0 decisions
+   decided IN THE LAST DAY — neither of which is a decision decided weeks ago
+   whose follow-up or retrospective has now come due. Verify against
+   `letter/composer.ts`, not against a summary of it; this entry is an example
+   of why.
+
+   - **Safe, and converted:** peer radar (`scanForWarnings`, called by the
+     composer itself) and falsified premises (`checkPremises` sets
+     `status='falsified'`, which is exactly what `getExpiredBeliefs` reads).
+   - **NOT safe** — the Letter does not carry the fact, so quieting DROPS it:
+     the Signal-drop alert, decision follow-up, decision retrospective, the
+     autopilot tick, the wellbeing pulse, check-in drafts awaiting approval,
+     milestones, billing failures. Six of these are the remaining direct calls.
+     Either give the letter rung something durable the Letter reads — the real
+     fix, and the larger one — or leave them outside the policy and say so at
+     each site.
 
    Do NOT put the ceiling check inside `createNotification`: that module is the
    RECORD primitive and `interruption.ts` is the POLICY, and the policy's own
    header separates detection from delivery.
 
-   Eight direct calls in `jobs/index.ts` became seven. A test pins the three
+   Eight direct calls in `jobs/index.ts` are now six. A test pins the three
    files and the direction.
 
 2. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving an

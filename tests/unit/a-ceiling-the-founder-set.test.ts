@@ -165,10 +165,39 @@ describe('the in-app bypass, pinned so it can only shrink', () => {
     expect(notificationCallers()).toEqual(KNOWN_BYPASSES);
   });
 
-  it('is shrinking: the peer-radar bell has left it', () => {
+  it('is shrinking, and only where the Letter carries the fact', () => {
     const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
     const calls = (src.match(/await createNotification\(/g) ?? []).length;
-    expect(calls, 'eight before the peer-radar bell moved to deliver()')
-      .toBeLessThanOrEqual(7);
+    expect(calls, 'eight before peer radar and falsified premises moved')
+      .toBeLessThanOrEqual(6);
+  });
+
+  it('converted the premise bell, whose fact the Letter really does carry', () => {
+    const kernel = stripComments(
+      readFileSync('src/services/memory/kernel.ts', 'utf8'), { lineComments: true });
+    expect(kernel, "getExpiredBeliefs reads exactly what checkPremises writes")
+      .toMatch(/status = 'falsified'/);
+
+    const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
+    const idx = src.indexOf('A past decision now rests on a false premise');
+    expect(idx).toBeGreaterThan(-1);
+    expect(src.slice(Math.max(0, idx - 900), idx), 'routed through the policy')
+      .toMatch(/deliver\(p\.owner_id, p\.id/);
+  });
+
+  it('left the decision bells alone, because the Letter does not carry them', () => {
+    // The Letter has the TOP PENDING decision and gate-0 decisions decided in
+    // the last day. A decision decided weeks ago whose follow-up has come due
+    // is neither, so quieting it to the letter would drop it.
+    const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
+    for (const bell of ['decision_followup', 'decision_retrospective']) {
+      // The type is the third argument, so the call opens BEFORE the literal;
+      // the first occurrence of the name is in the dedup query above it.
+      const idx = src.lastIndexOf(`'${bell}'`);
+      expect(idx, `${bell} should still exist`).toBeGreaterThan(-1);
+      expect(src.slice(Math.max(0, idx - 500), idx),
+        `${bell} must not be quieted while the Letter cannot carry it`)
+        .toMatch(/createNotification\(/);
+    }
   });
 });

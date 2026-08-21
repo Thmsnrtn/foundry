@@ -1991,13 +1991,27 @@ export async function memoryPremiseCheck(): Promise<void> {
       const res = await checkPremises(p.id);
       totalFalsified += res.falsified;
       if (res.falsified > 0) {
-        const { createNotification } = await import('../services/ux/notifications.js');
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          'A past decision now rests on a false premise',
-          `${res.falsified} belief(s) behind decisions you made are now contradicted by your own metrics. Revisit them before they cost you.`,
-          '/strategic-decisions', 'Review',
-        );
+        // THROUGH THE INTERRUPTION POLICY. `checkPremises` sets
+        // `status='falsified'`, and the Letter's `getExpiredBeliefs` reads
+        // exactly that status — so the fact survives being quieted, which is
+        // the condition that makes routing here safe. See the letter rung in
+        // `ux/interruption.ts` for why that condition is not optional.
+        const { deliver } = await import('../services/ux/interruption.js');
+        let prefs: Record<string, unknown> | null = null;
+        try {
+          const prow = (await query('SELECT preferences FROM founders WHERE id = ?', [p.owner_id]))
+            .rows[0] as Record<string, unknown> | undefined;
+          prefs = prow?.preferences ? JSON.parse(String(prow.preferences)) : null;
+        } catch { /* unset or unreadable preferences are no ceiling */ }
+
+        await deliver(p.owner_id, p.id, {
+          // A decision resting on a premise the company's own metrics now
+          // contradict is something to act on, not something to be woken for.
+          importance: 'action_needed',
+          title: 'A past decision now rests on a false premise',
+          body: `${res.falsified} belief(s) behind decisions you made are now contradicted by your own metrics. Revisit them before they cost you.`,
+          actionUrl: '/strategic-decisions', actionLabel: 'Review',
+        }, prefs as never);
       }
     } catch (err) {
       logger.error(`memory_premise_check error for ${p.id}`, { jobName: 'memory_premise_check', error: String(err) });
