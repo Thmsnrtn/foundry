@@ -119,9 +119,14 @@ beforeAll(async () => {
     derivationMethod: 'authenticated founder expectation', observedAt: new Date(),
   });
   await query(
+    // An `external_metric:%` expectation, so the channel is the one migration
+    // 127's trigger hardcodes. Named here rather than implied, which is what
+    // migration 191 requires of every expectation.
     `INSERT INTO responsibility_shadow_expectations
-       (id,responsibility_id,product_id,expected_event_type,expectation_evidence_ref,observation_source_evidence_ref)
-     VALUES ('sp_expect','sp_watching',?, 'external_metric:support_volume_7d:fell', ?, ?)`,
+       (id,responsibility_id,product_id,expected_event_type,expectation_evidence_ref,
+        observation_source_evidence_ref,observation_source_kind)
+     VALUES ('sp_expect','sp_watching',?, 'external_metric:support_volume_7d:fell', ?, ?,
+             'external_metric_ingest')`,
     [P, `reconstruction_claim:${claimId}`, `signal_event:${P}_sig`]);
   await query(
     `INSERT INTO responsibility_transitions (id,responsibility_id,from_state,to_state,evidence_ref,reason,actor_ref)

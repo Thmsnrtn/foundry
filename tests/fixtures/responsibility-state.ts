@@ -147,10 +147,20 @@ async function shadowProof(responsibilityId: string, productId: string): Promise
 
   const expectationId = nanoid();
   await query(
+    // `observation_source_kind` is the channel that may resolve this
+    // expectation. `recordSignal` writes `company_observation_baseline`, so that
+    // is what every observation this fixture goes on to compare against carries.
+    //
+    // This helper and `shadowWithVerdicts` both named no channel, and fourteen
+    // test files reach shadowing through this one. Neither was covered by
+    // migration 119's or 127's prefix-keyed guards: 'support_restored' matches
+    // neither LIKE. That is the hole migration 191 closes, and its size is the
+    // reason the fix was worth making general rather than adding a third
+    // special case.
     `INSERT INTO responsibility_shadow_expectations
        (id, responsibility_id, product_id, expected_event_type,
-        expectation_evidence_ref, observation_source_evidence_ref)
-     VALUES (?, ?, ?, 'support_restored', ?, ?)`,
+        expectation_evidence_ref, observation_source_evidence_ref, observation_source_kind)
+     VALUES (?, ?, ?, 'support_restored', ?, ?, 'company_observation_baseline')`,
     [expectationId, responsibilityId, productId, `reconstruction_claim:${claimId}`,
       await recordEvidence(productId, 'observation source')]);
 
