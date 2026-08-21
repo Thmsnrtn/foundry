@@ -223,7 +223,6 @@ const stripeAdapter: ProviderAdapter = {
       const subs = await subsResponse.json() as { data: Array<Record<string, unknown>> };
 
       let totalMRRCents = 0;
-      let customerCount = 0;
       for (const sub of subs.data ?? []) {
         const items = (sub.items as Record<string, unknown>)?.data as Array<Record<string, unknown>> ?? [];
         for (const item of items) {
@@ -232,31 +231,40 @@ const stripeAdapter: ProviderAdapter = {
           const interval = (price?.recurring as Record<string, string>)?.interval;
           totalMRRCents += interval === 'year' ? Math.round(amount / 12) : amount;
         }
-        customerCount++;
       }
 
-      // Fetch recent charges for churn calculation
-      const chargesResponse = await fetch('https://api.stripe.com/v1/charges?limit=100&created[gte]=' + Math.floor((Date.now() - 30 * 86400000) / 1000), {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      const charges = await chargesResponse.json() as { data: Array<Record<string, unknown>> };
-      const refundedCents = (charges.data ?? [])
-        .filter((c) => c.refunded === true)
-        .reduce((sum, c) => sum + ((c.amount as number) ?? 0), 0);
-
-      // Update metric snapshot
+      // THREE QUANTITIES, THREE WRONG COLUMNS.
+      //
+      // `totalMRRCents` is the sum over every ACTIVE subscription — the MRR
+      // LEVEL — and it was written into `new_mrr_cents`, which means the new
+      // business won this period. A company at $50k MRR with a flat month was
+      // recorded as having won $50k of new business, every sync.
+      //
+      // `refundedCents` — refunded charges over thirty days — was written into
+      // `churned_mrr_cents`. A refund is money returned; churned MRR is
+      // recurring revenue lost. One annual invoice refunded would have been
+      // reported as that much recurring revenue gone. The comment above it said
+      // "for churn calculation", naming a thing it did not compute.
+      //
+      // `customerCount` is a count of SUBSCRIPTIONS and was written into
+      // `active_users`, which means people using the product. One subscription
+      // can cover a team of two hundred.
+      //
+      // This adapter knows one thing for certain, so it now writes one thing.
+      // `metric_snapshots` has no column for a paying-customer level
+      // (`new_customers` and `churned_customers` are movements), so the count is
+      // not stored anywhere rather than stored somewhere close.
       const today = new Date().toISOString().split('T')[0];
       await query(
-        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, active_users, churned_mrr_cents)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents)
+         VALUES (?, ?, ?, ?)
          ON CONFLICT (product_id, snapshot_date) DO UPDATE SET
-           new_mrr_cents = excluded.new_mrr_cents, active_users = excluded.active_users,
-           churned_mrr_cents = excluded.churned_mrr_cents`,
-        [nanoid(), productId, today, totalMRRCents, customerCount, refundedCents]
+           mrr_cents = excluded.mrr_cents`,
+        [nanoid(), productId, today, totalMRRCents]
       );
 
-      records = (subs.data ?? []).length + (charges.data ?? []).length;
-      metrics.push('new_mrr_cents', 'active_users', 'churned_mrr_cents');
+      records = (subs.data ?? []).length;
+      metrics.push('mrr_cents');
     } catch (err) {
       return { records_processed: 0, metrics_updated: [], errors: [(err as Error).message], duration_ms: 0 };
     }
