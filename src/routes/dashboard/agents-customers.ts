@@ -17,6 +17,7 @@ import {
   type CustomerRecord,
 } from '../../services/customer/intelligence.js';
 import { getRules } from '../../services/customer/lifecycle.js';
+import { getFallingCustomers, FALLING_HEALTH_POINTS, TREND_WINDOW_DAYS } from '../../services/institution/company-customers.js';
 
 export const agentCustomerRoutes = new Hono<AuthEnv>();
 
@@ -83,12 +84,18 @@ agentCustomerRoutes.get('/agents/customers', async (c) => {
   if (!ctx.productId) return c.redirect('/dashboard');
   const productId = ctx.productId;
 
-  const [summary, atRisk, allCustomers, rules] = await Promise.all([
+  const [summary, atRisk, allCustomers, rules, falling] = await Promise.all([
     getLifecycleSummary(productId),
     getAtRiskCustomers(productId),
     getCustomersByStage(productId),
     getRules(productId),
+    // Customers moving the wrong way, whatever their current score. Read from
+    // `customer_health_snapshots`, which every health refresh has been writing
+    // and nothing had ever read.
+    getFallingCustomers(productId),
   ]);
+  const byId = new Map(
+    (allCustomers as CustomerRecord[]).map((c) => [String(c.id), c]));
 
   const stageOrder = ['trial', 'activated', 'paying', 'expansion', 'at_risk', 'churned', 'visitor', 'advocate'];
   const stageLabels: Record<string, string> = {
@@ -175,6 +182,44 @@ agentCustomerRoutes.get('/agents/customers', async (c) => {
               <td style="padding:10px 12px;color:#6b7280">${timeAgo(c.last_active_at)}</td>
               <td style="padding:10px 12px;color:#374151">${fmtMRR(c.mrr_cents)}</td>
             </tr>`)}
+          </tbody>
+        </table>
+      </div>` : ''}
+
+      <!-- Falling, whatever the current score -->
+      ${falling.length > 0 ? html`
+      <div style="background:#fff;border:1px solid #fcd34d;border-radius:8px;padding:20px;margin-bottom:24px">
+        <h2 style="font-size:14px;font-weight:700;color:#b45309;margin:0 0 6px">
+          ↓ Falling (${falling.length})</h2>
+        <p style="font-size:12px;color:#6b7280;margin:0 0 16px">
+          Health dropping ${FALLING_HEALTH_POINTS} points or more over the last
+          ${TREND_WINDOW_DAYS} days. Some of these are still above the at-risk
+          line — that is the point of showing them: a customer on the way down is
+          easier to keep than one already gone.
+        </p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="border-bottom:1px solid #e5e7eb">
+              <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">Customer</th>
+              <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">Was</th>
+              <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">Now</th>
+              <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">Change</th>
+              <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">Over</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${falling.map((t) => {
+              const c = byId.get(t.customerId);
+              return html`
+            <tr style="border-bottom:1px solid #f3f4f6">
+              <td style="padding:10px 12px;font-weight:600;color:#111">
+                ${c ? (c.account_name ?? c.external_customer_id) : t.customerId}</td>
+              <td style="padding:10px 12px;color:#6b7280">${Math.round(t.earliestScore)}</td>
+              <td style="padding:10px 12px;color:#111">${Math.round(t.latestScore)}</td>
+              <td style="padding:10px 12px;color:#b45309;font-weight:600">${t.deltaPoints}</td>
+              <td style="padding:10px 12px;color:#6b7280">${t.daysObserved} days</td>
+            </tr>`;
+            })}
           </tbody>
         </table>
       </div>` : ''}

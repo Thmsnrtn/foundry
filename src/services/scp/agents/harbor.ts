@@ -190,9 +190,24 @@ You also identify expansion signals — accounts showing power-user behavior tha
 You are direct, named, and specific. You do not hedge when customer data is clear.`
     );
 
+    // WHAT HARBOR SAYS IT DOES. Its system prompt above claims churn "is always
+    // telegraphed 30-60 days in advance by behavioral signals that nobody
+    // watched. Your job is to watch them." The signal was being written to
+    // `customer_health_snapshots` on every health refresh and read by nothing,
+    // so the one thing Harbor claims to be for was the one thing it could not
+    // see. It is told now, and told nothing when there is nothing to tell.
+    const { getFallingCustomers, TREND_WINDOW_DAYS } = await import(
+      '../../institution/company-customers.js');
+    const falling = await getFallingCustomers(productId);
+    const fallingLine = falling.length === 0
+      ? `No customer's health has fallen meaningfully in ${TREND_WINDOW_DAYS} days (or there is not enough history to say).`
+      : `Falling health, worst first: ${falling.slice(0, 5).map((t) =>
+        `${t.customerId} ${Math.round(t.earliestScore)}→${Math.round(t.latestScore)} over ${t.daysObserved}d`).join('; ')}.`;
+
     const userPrompt = `Activation rate: ${pctOfFraction(metrics?.activation_rate)}. Day-30 retention: ${pctOfFraction(metrics?.day_30_retention)}. Churn rate: ${pctOfFraction(metrics?.churn_rate)}. NPS: ${measured(metrics?.nps_score, 1)}.
 Cohort retention trend: ${cohortTrend}.
 Retention stressors: ${stressorList}.
+${fallingLine}
 Known at-risk customers (${atRiskRows.length}): ${atRiskSummary}.${stripeContext ? `\n${stripeContext}` : ''}
 
 Return JSON only (no markdown fences):

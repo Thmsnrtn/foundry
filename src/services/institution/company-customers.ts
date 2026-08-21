@@ -208,6 +208,96 @@ export async function getCustomersAtRisk(
     .slice(0, limit);
 }
 
+/**
+ * WHICH WAY A CUSTOMER IS MOVING, from the snapshots already being written.
+ *
+ * `customers.health_score` holds only where a customer IS. Every health refresh
+ * also writes a dated row to `customer_health_snapshots` — score, churn risk and
+ * the four components behind them — and NOTHING has ever read that table. So a
+ * customer sliding 90 → 70 → 55 looked identical, at 55, to one that had sat at
+ * 55 all year, and Foundry had the rows to tell them apart the whole time.
+ *
+ * Harbor's own system prompt says it: "churn is never a surprise — it's always
+ * telegraphed 30-60 days in advance by behavioral signals that nobody watched.
+ * Your job is to watch them." The watching was being recorded and discarded.
+ *
+ * NULL WHERE THERE IS NOTHING TO COMPARE. One snapshot is a position, not a
+ * direction, and two snapshots taken minutes apart are not a month's trend. A
+ * customer with too little history has an unknown trajectory, which is a
+ * different fact from a flat one.
+ */
+export interface CustomerHealthTrend {
+  customerId: string;
+  /** Points of health gained or lost across the window. Negative is falling. */
+  deltaPoints: number;
+  /** How far apart the two readings actually are, so a reader can weigh it. */
+  daysObserved: number;
+  earliestScore: number;
+  latestScore: number;
+}
+
+/** Health is a 0–100 score, so this is points, not per cent. Ten points across
+ *  a month is the smallest move worth calling a direction rather than noise —
+ *  chosen to be visible, and named so it can be argued with rather than found. */
+export const FALLING_HEALTH_POINTS = 10;
+
+/** The window a trend is measured over. Matches the 30-day horizon Harbor's
+ *  prompt talks in, so the number and the sentence agree. */
+export const TREND_WINDOW_DAYS = 30;
+
+export async function getCustomerHealthTrends(
+  productId: string, windowDays = TREND_WINDOW_DAYS,
+): Promise<CustomerHealthTrend[]> {
+  const rows = (await query(
+    `SELECT customer_id, snapshot_date, health_score
+       FROM customer_health_snapshots
+      WHERE product_id = ? AND health_score IS NOT NULL
+        AND date(snapshot_date) >= date('now', ?)
+      ORDER BY customer_id, snapshot_date`,
+    [productId, `-${windowDays} days`])).rows as unknown as Array<Record<string, unknown>>;
+
+  const byCustomer = new Map<string, Array<{ date: string; score: number }>>();
+  for (const row of rows) {
+    const id = String(row.customer_id);
+    if (!byCustomer.has(id)) byCustomer.set(id, []);
+    byCustomer.get(id)!.push({
+      date: String(row.snapshot_date), score: Number(row.health_score),
+    });
+  }
+
+  const out: CustomerHealthTrend[] = [];
+  for (const [customerId, points] of byCustomer) {
+    if (points.length < 2) continue;          // a position, not a direction
+    const first = points[0]!;
+    const last = points[points.length - 1]!;
+    const days = Math.round(
+      (Date.parse(`${last.date.slice(0, 10)}T00:00:00Z`)
+        - Date.parse(`${first.date.slice(0, 10)}T00:00:00Z`)) / 86_400_000);
+    if (days < 1) continue;                   // two readings the same day
+    out.push({
+      customerId, deltaPoints: Math.round((last.score - first.score) * 10) / 10,
+      daysObserved: days, earliestScore: first.score, latestScore: last.score,
+    });
+  }
+  return out.sort((a, b) => a.deltaPoints - b.deltaPoints);
+}
+
+/**
+ * Customers whose health is falling meaningfully, whatever it currently is.
+ *
+ * DELIBERATELY SEPARATE FROM `getCustomersAtRisk`, which is the set the outbound
+ * departments act on. A customer at 78 and falling ten points a month is not yet
+ * at risk by the threshold, and quietly folding them into that set would widen
+ * who Foundry writes to without anybody deciding it should. This is for the
+ * founder to look at.
+ */
+export async function getFallingCustomers(
+  productId: string, windowDays = TREND_WINDOW_DAYS,
+): Promise<CustomerHealthTrend[]> {
+  return (await getCustomerHealthTrends(productId, windowDays))
+    .filter((t) => t.deltaPoints <= -FALLING_HEALTH_POINTS);
+}
+
 /** A champion is healthy AND not at risk of leaving. Both halves matter: a
  *  high score on a customer whose risk is climbing is not somebody to ask for
  *  a referral. Stated once, in the units the accessor normalises to. */
