@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `2fcba31`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `15f7978`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-  **Migrations:** 219 files, highest **183**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `2fcba31` — **320 files / 2,776 tests**,
+  **Migrations:** 220 files, highest **184**. Ordering gated. Snapshot current.
+- **Validation:** full suite green at `15f7978` — **321 files / 2,783 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -669,10 +669,22 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    them to the set the outbound departments act on would widen who Foundry
    writes to with nobody deciding it should.
 
-   Two more are new information rather than restatements: **`board_decks`**
-   generates a draft nobody opens; **`web_audit_results`** holds the non-code
-   track's audit output — and that one is the founder's own onboarding audit, so
-   it is worth looking at next. `portfolio_snapshots` and `okr_progress_updates` are
+   **`web_audit_results` was the second one followed, and the finding was next
+   door rather than in the table.** Onboarding asks a founder for their website
+   and wrote the answer here as a bare row — url plus ids, every analysis column
+   NULL — while `products` had no website column at all. So the founder answered
+   a plain question about their own company and Foundry could not afterwards say
+   what the answer was. Migration 184 gives the company a `website_url`, the
+   settings page shows it, and the table keeps its real purpose. **It stays on
+   this baseline:** whether actual audit output should have a reader is item 2's
+   decision, since `runWebAudit` only runs through the clientless API.
+
+   The lesson generalises: an unread table is a place to start looking, not
+   necessarily the thing that is wrong. Here the table was fine and the fact was
+   being filed in the wrong drawer.
+
+   One more is new information: **`board_decks`** generates a draft nobody
+   opens. `portfolio_snapshots` and `okr_progress_updates` are
    items 2 and 3's problem, not their own. The rest —
    `agent_positions`, `auto_execution_log`, `causal_chains`,
    `cofounder_alignment_scores`, `expansion_analysis`, `integration_sync_log`,
