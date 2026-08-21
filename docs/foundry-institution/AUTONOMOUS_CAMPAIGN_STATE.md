@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `15f7978`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `d94f873`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 220 files, highest **184**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `15f7978` — **321 files / 2,783 tests**,
+- **Validation:** full suite green at `d94f873` — **322 files / 2,791 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -683,8 +683,33 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    necessarily the thing that is wrong. Here the table was fine and the fact was
    being filed in the wrong drawer.
 
-   One more is new information: **`board_decks`** generates a draft nobody
-   opens. `portfolio_snapshots` and `okr_progress_updates` are
+   **`board_decks` was the third followed, and the worst finding of the cycle.**
+   `POST /api/products/:id/board-deck` is mounted and authenticated. It asked a
+   model for eight slides including "Key Metrics (MRR, growth, churn, NPS)",
+   "Customer Health" and "Financial Overview (runway, unit economics)" — and
+   passed it the company's NAME, SECTOR AND STAGE. Nothing else. **Every number
+   on those slides was invented, in a document a founder takes to their
+   investors.**
+
+   Of every claim-without-evidence in this campaign that one has the furthest
+   reach: the others mislead the founder, and this one is handed onward BY the
+   founder to people deciding whether to fund them. The company's real figures
+   are passed now through `ai/measured.ts`, and the system prompt says unknown
+   must survive to the slide, with the reason attached so it is not trimmed as
+   boilerplate. The unread row stays on this baseline — the route returns the
+   deck to its caller, so retrievability is a product question, and the two
+   sibling functions retired from that file (migrations 164, 165) show what
+   happens when it is answered by writing a row and hoping.
+
+   **And a sweep it prompted.** Every prompt asking for facts about a company
+   was checked against what data it carries. `scp/agents/crucible.ts` had the
+   `|| 0` defect the earlier agent sweep missed because it reads `audit_scores`
+   rather than `metric_snapshots` — a never-audited company was shown to the QA
+   agent as 0/10 on three readiness dimensions. **Checked and already correct:**
+   `redteam/council.ts` filters null telemetry keys and says "no telemetry yet";
+   `scp/investor/investor-update.ts` handles every null. Recording those matters
+   as much as the fixes — a sweep that reports only what it broke tells the next
+   reader nothing about where not to look. `portfolio_snapshots` and `okr_progress_updates` are
    items 2 and 3's problem, not their own. The rest —
    `agent_positions`, `auto_execution_log`, `causal_chains`,
    `cofounder_alignment_scores`, `expansion_analysis`, `integration_sync_log`,

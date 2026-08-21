@@ -470,6 +470,15 @@ example — belongs in a shared function both call.
 `reconcileForecastsFromSnapshot` is that, and a test requires both doors to use
 it.
 
+**A prompt asking for facts about a company carries that company's figures.**
+Every one now does, through `ai/measured.ts`. The board-deck route was the
+extreme case: it asked for MRR, churn, NPS, cohort trends and runway while
+passing the company's name, sector and stage — so a founder's investor document
+was written from nothing. Where a figure is unknown the model is told, and told
+that unknown must survive to the output, with the reason attached so the
+instruction is not trimmed as boilerplate. Prose about plans stays free; the
+constraint is on FACTS about the company.
+
 **The general form, which is worth more than the instance:** when a doctrine
 sentence is written into a type, check every consumer before believing it. A
 rule in a comment protects the file it sits in; only a shared helper and an
