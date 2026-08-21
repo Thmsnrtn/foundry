@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `af4c5c6`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `649d0f9`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `af4c5c6` — **342 files / 3,013 tests**,
+- **Validation:** full suite green at `649d0f9` — **342 files / 3,015 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Read the exit code from the run that produced the log.**
   **Read the exit code from the run that produced the log**, and do not write

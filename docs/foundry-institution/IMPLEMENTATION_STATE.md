@@ -16,13 +16,13 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `af4c5c6` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `649d0f9` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **228 files**, highest number **192**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **342 files / 3,013 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
+| Validation | Full suite green: **342 files / 3,015 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
 | Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **26** · write-only columns **69** · tables written and never read **4** · **unscoped product-shaped routes 2** (new). |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
