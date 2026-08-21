@@ -618,6 +618,20 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      `gates-fail-when-they-should` plants real files into the working tree, so
      concurrent runs collide and produce failures that look like defects.
 
+     **What the collision looks like from the outside, so it is recognised
+     rather than investigated:** `npm run check` runs `ratchet` BEFORE
+     `test:ci`, so a fixture planted by a concurrent suite is read by the
+     reachability gate and reported as *"New modules nothing can reach:
+     src/services/_gate_fixture_b.ts"*. That reads as an architectural
+     regression, not as a collision. The `afterEach` cleanup then removes the
+     file, so by the time anybody looks it is gone and the tree is clean.
+     Check `ps aux | grep vitest` before believing it.
+
+     **Do NOT teach the reachability gate to ignore `_gate_fixture_*`.** Its own
+     planted-defect test works by planting exactly such a file and requiring the
+     gate to flag it; excluding them would blunt a gate to avoid an operational
+     annoyance of my own making. The discipline is the fix.
+
 5. **82 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
    read it rather than this line. Prose drifts from the ratchet — this entry has
    said 92 and 85 while the ratchet said otherwise, which is exactly the drift
