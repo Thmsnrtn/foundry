@@ -20,7 +20,9 @@ import { getSignalHistory } from '../signal.js';
 
 export interface FullConversationContext {
   // Core state
-  signal: number;
+  /** NULL when nothing was measured. See `services/signal.ts`: a first-run
+   *  default must not reach a model as a Signal. */
+  signal: number | null;
   riskState: string;
   currentPrompt: string;
   productName: string;
@@ -116,7 +118,10 @@ export async function buildConversationContext(
   }
 
   return {
-    signal: signal.score,
+    // NULL WHEN NOTHING WAS MEASURED. This object becomes a model's context for
+    // talking to the founder about their company; a default handed over as a
+    // Signal is a fact the model will reason from and repeat back.
+    signal: signal.hasData ? signal.score : null,
     riskState: signal.riskState,
     currentPrompt: (lifecycle.current_prompt as string) ?? 'prompt_1',
     productName,
@@ -173,7 +178,9 @@ export function formatContextForPrompt(ctx: FullConversationContext): string {
   const lines: string[] = [
     `=== BUSINESS CONTEXT ===`,
     `Product: ${ctx.productName}${ctx.marketCategory ? ` (${ctx.marketCategory})` : ''}`,
-    `Signal: ${ctx.signal}/100 (${ctx.riskState.toUpperCase()}) — ${ctx.signalTrend}${ctx.signalDelta7d !== null ? `, ${ctx.signalDelta7d > 0 ? '+' : ''}${ctx.signalDelta7d} pts in 7d` : ''}`,
+    ctx.signal === null
+      ? `Signal: not enough data yet (${ctx.riskState.toUpperCase()})`
+      : `Signal: ${ctx.signal}/100 (${ctx.riskState.toUpperCase()}) — ${ctx.signalTrend}${ctx.signalDelta7d !== null ? `, ${ctx.signalDelta7d > 0 ? '+' : ''}${ctx.signalDelta7d} pts in 7d` : ''}`,
     `Stage: ${ctx.currentPrompt.replace('_', ' ')} of 9`,
     '',
   ];

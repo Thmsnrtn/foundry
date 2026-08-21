@@ -94,8 +94,11 @@ mobileRoutes.get('/api/dashboard', async (c) => {
   return c.json({
     product_name: product.name,
     signal: {
-      score: signalData.score,
-      tier: signalData.tier,
+      // `has_data` travels with the score so a client cannot present a default
+      // as a measurement; `score` is null when there is nothing behind it.
+      score: signalData.hasData ? signalData.score : null,
+      tier: signalData.hasData ? signalData.tier : null,
+      has_data: signalData.hasData,
       prose: signalData.prose,
       risk_state: signalData.riskState,
     },

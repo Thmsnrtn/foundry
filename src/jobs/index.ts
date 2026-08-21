@@ -663,6 +663,18 @@ export async function signalAlertCheck(): Promise<void> {
 
       // Compute current Signal (also records today's snapshot)
       const signal = await computeSignal(p.id);
+
+      // NO ALERT ABOUT A COMPANY NOTHING IS KNOWN ABOUT. `computeSignal`
+      // returns a default when there is no metric snapshot, and that default
+      // used to be written into `signal_history` like any other score — so the
+      // first day a company actually reported something, the real score landed
+      // against a default baseline and the founder was told their Signal had
+      // "dropped 30 points" from a number their company was never at.
+      //
+      // `signal.ts` no longer records the default, so any row read above is a
+      // real measurement; this guard covers the other end.
+      if (!signal.hasData) continue;
+
       const drop = prevScore - signal.score;
 
       // Alert conditions: significant drop OR tier degradation

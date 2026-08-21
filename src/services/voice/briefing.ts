@@ -10,6 +10,7 @@ import { getMRRDecomposition } from '../intelligence/revenue.js';
 import { callOpus, callSonnet } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import type { VoiceSession, VoiceUpdate } from '../../types/index.js';
+import { signalText } from '../signal.js';
 
 // ─── Generate Morning Briefing ────────────────────────────────────────────────
 
@@ -58,7 +59,10 @@ export async function generateMorningBriefing(
 
   // Build context for Claude
   const contextParts = [
-    `Signal: ${signal.score}/100 (${signal.riskState.toUpperCase()})`,
+    // Spoken aloud to the founder. An unmeasured default read as a confident
+    // score is worse in speech than on a page — there is no colour, no
+    // asterisk and no second glance.
+    `Signal: ${signalText(signal)} (${signal.riskState.toUpperCase()})`,
     signal.prose,
     '',
   ];

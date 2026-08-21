@@ -80,7 +80,9 @@ apiAskRoutes.post('/api/ask', validateBody(askSchema), async (c) => {
 
     // Build data points for UI
     const dataPoints: Array<{ label: string; value: string }> = [];
-    if (ctx.signal) dataPoints.push({ label: 'Signal', value: String(ctx.signal) });
+    // `!== null`, not truthiness: a measured Signal of 0 is a real and alarming
+    // number, and it was the one score this line would not show.
+    if (ctx.signal !== null) dataPoints.push({ label: 'Signal', value: String(ctx.signal) });
     if (ctx.metrics.healthRatio !== null) dataPoints.push({ label: 'MRR Health', value: ctx.metrics.healthRatio.toFixed(2) });
     if (ctx.stressors.length > 0) dataPoints.push({ label: 'Stressors', value: `${ctx.stressors.length} active` });
     if (ctx.pendingDecisions.length > 0) dataPoints.push({ label: 'Decisions', value: `${ctx.pendingDecisions.length} pending` });
@@ -351,7 +353,8 @@ async function processMessage(
   // Build Anthropic-style messages array
   const anthropicMessages = [
     ...history.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
-    { role: 'user' as const, content: isFirstMessage ? message : `[Current context: Signal ${ctx.signal}/100, ${ctx.riskState.toUpperCase()}]\n\n${message}` },
+    { role: 'user' as const, content: isFirstMessage ? message
+      : `[Current context: Signal ${ctx.signal === null ? 'not enough data yet' : `${ctx.signal}/100`}, ${ctx.riskState.toUpperCase()}]\n\n${message}` },
   ];
 
   // 4. Call Claude

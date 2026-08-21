@@ -38,6 +38,29 @@ export interface SignalResult {
   hasData: boolean;
 }
 
+/**
+ * HOW A SIGNAL IS SPOKEN, WRITTEN OR PUT INTO A PROMPT.
+ *
+ * `hasData` is declared above with the Honesty Law and the sentence "First-run
+ * surfaces must say 'not enough data yet' rather than present a
+ * falsely-confident number". It was honoured by ONE of the ten places that
+ * compute a Signal. The other nine printed the default — a company Foundry had
+ * never measured appearing as a confident 85 out of 100 — on a public share
+ * link, in a spoken briefing, in two model prompts, in the fleet ranking, over
+ * the API, and as the baseline for a drop alert.
+ *
+ * The rule was written down. What was missing was one way to obey it, so this
+ * is that way, and a test requires every consumer to use it or say why not.
+ */
+export function signalText(signal: Pick<SignalResult, 'score' | 'tier' | 'hasData'>): string {
+  return signal.hasData ? `${signal.score}/100 (${signal.tier} tier)` : 'not enough data yet';
+}
+
+/** For a number beside a label, where the label already says "Signal". */
+export function signalNumber(signal: Pick<SignalResult, 'score' | 'hasData'>): string {
+  return signal.hasData ? String(signal.score) : '—';
+}
+
 // ─── Prose Cache ──────────────────────────────────────────────────────────────
 
 interface CacheEntry {
@@ -143,10 +166,26 @@ export async function computeSignal(productId: string): Promise<SignalResult> {
     watch,
   });
 
-  // Record history snapshot (UPSERT: one per product per day)
-  void recordSignalSnapshot(productId, score, tier, riskState, stressors.length, {
-    riskStatePenalty, stressorPenalty, mrrPenalty, backlogPenalty, lifecycleBonus,
-  });
+  // Record history snapshot (UPSERT: one per product per day).
+  //
+  // A DEFAULT IS NOT A MEASUREMENT AND DOES NOT ENTER THE RECORD. This wrote a
+  // row whatever `hasData` said, so a company with no metrics accumulated a
+  // history of defaults that later read as its past. Three things consumed
+  // that: the share page's 90-day sparkline drew a flat line nobody had
+  // measured; `conversation/context.ts` computed a 7-day trend from it; and
+  // `signalAlertCheck` compared today's first real score against yesterday's
+  // default and told the founder their Signal had fallen thirty points from a
+  // number their company was never at.
+  //
+  // Not writing is better than writing a flag, because every reader of
+  // `signal_history` then gets the guarantee for free rather than having to
+  // remember it. A gap in the history means nothing was known that day, which
+  // is what a gap should mean.
+  if (hasData) {
+    void recordSignalSnapshot(productId, score, tier, riskState, stressors.length, {
+      riskStatePenalty, stressorPenalty, mrrPenalty, backlogPenalty, lifecycleBonus,
+    });
+  }
 
   return {
     score,

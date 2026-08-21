@@ -159,6 +159,7 @@ import { nanoid } from 'nanoid';
 import { callOpus, parseJSONResponse } from '../../services/ai/client.js';
 import { computeSignal } from '../../services/signal.js';
 import { getActiveStressors, getLatestMetrics } from '../../db/client.js';
+import { signalText } from '../../services/signal.js';
 
 planRoutes.post('/plan/generate',
   requireCompanyCapability('can_trigger_actions'), async (c) => {
@@ -188,7 +189,7 @@ planRoutes.post('/plan/generate',
       .map((s) => `${s.title} (${s.severity})`).slice(0, 5).join('; ') || 'none';
     const pendingCount = (pendingResult.rows[0] as Record<string, number>)?.c ?? 0;
 
-    const prompt = `Signal score: ${signal.score} (${signal.tier} tier)
+    const prompt = `Signal score: ${signalText(signal)}
 Risk state: ${signal.riskState}
 Stage: ${ls.current_prompt ?? 'unknown'}
 Active stressors: ${stressorList}

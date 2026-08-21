@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { query } from '../../db/client.js';
 import { computeSignal, getSignalHistory } from '../../services/signal.js';
+import { signalNumber } from '../../services/signal.js';
 
 export const shareRoutes = new Hono();
 
@@ -350,8 +351,8 @@ shareRoutes.get('/share/:token', async (c) => {
     </div>
 
     <div class="share-signal">
-      <div class="share-number">${signal.score}</div>
-      <div class="share-label">Signal Score</div>
+      <div class="share-number">${signalNumber(signal)}</div>
+      <div class="share-label">${signal.hasData ? 'Signal Score' : 'Not enough data yet'}</div>
     </div>
 
     ${sparkline ? `
