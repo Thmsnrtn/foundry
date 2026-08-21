@@ -37,6 +37,9 @@ export async function isIntercomConnected(productId: string): Promise<boolean> {
  * Pull recent Intercom support metrics and store as normalized integration_events.
  * Called by the hourly cron job.
  */
+/** One page. Intercom reports its own `total_count`, which is used when present. */
+const CONVERSATION_PAGE = 50;
+
 export async function syncIntercomEvents(productId: string): Promise<{ synced: number; error?: string }> {
   const integration = await getIntegration(productId, 'intercom');
   if (!integration || integration.status !== 'active') {
@@ -54,24 +57,33 @@ export async function syncIntercomEvents(productId: string): Promise<{ synced: n
   try {
     // Fetch open conversations
     const openConvData = await intercomFetch<IntercomConversationList>(
-      '/conversations?open=true&per_page=50',
+      `/conversations?open=true&per_page=${CONVERSATION_PAGE}`,
       accessToken
     );
 
+    // `total_count` is Intercom's own total and is used when it is there —
+    // this file was already doing the right thing, and is worth reading before
+    // adding a fourth truncation idiom elsewhere.
     const openConversations = openConvData?.conversations?.length ?? 0;
     const totalCount = openConvData?.total_count ?? openConversations;
+    const openPageTruncated = openConvData?.total_count == null
+      && openConversations >= CONVERSATION_PAGE;
 
-    // Estimate opened today
+    // Opened today, counted WITHIN THE PAGE. The comment used to say "estimate"
+    // and the field did not, so a reader of the row saw a total. When the page
+    // is full the true figure is larger by an unknown amount and this is null
+    // rather than an undercount presented as a count.
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayStartUnix = Math.floor(todayStart.getTime() / 1000);
-    const openedToday = (openConvData?.conversations ?? []).filter(c =>
+    const openedTodayInPage = (openConvData?.conversations ?? []).filter(c =>
       c.created_at >= todayStartUnix
     ).length;
+    const openedToday = openPageTruncated ? null : openedTodayInPage;
 
     // Fetch recent conversations for response time calculation
     const recentConvData = await intercomFetch<IntercomConversationList>(
-      '/conversations?per_page=50&sort=updated_at&order=desc',
+      `/conversations?per_page=${CONVERSATION_PAGE}&sort=updated_at&order=desc`,
       accessToken
     );
 
