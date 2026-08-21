@@ -3,7 +3,6 @@ action_executions.approval_note
 agent_configs.parent_version
 agent_configs.updated_by
 agent_configs.word_count
-agent_cost_log.tokens_output
 agent_positions.accuracy_weight
 agent_positions.challenge_response
 agent_positions.challenged_by

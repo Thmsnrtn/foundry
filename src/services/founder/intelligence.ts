@@ -21,6 +21,45 @@ async function safeQuery(sql: string, args: unknown[] = []): Promise<{ rows: unk
   }
 }
 
+/**
+ * How the scheduler's jobs are actually doing, from what was recorded.
+ *
+ * TWO CALLERS HAD THE SAME FOUR HARDCODED NUMBERS. `getPulse` returned
+ * `{ healthy: 30, degraded: 0, failed: 0 }` under the comment "From job
+ * registry", and `getAutomationHealth` returned `total_jobs: 30,
+ * jobs_healthy: 30, jobs_degraded: 0, jobs_failed: 0`. Neither read anything.
+ * The registry has NINETY jobs, and migration 172 gave every one of them a way
+ * to say when it stops — `src/index.ts` records success and failure around each
+ * registry job, and the founder's Letter already renders the failing ones.
+ *
+ * So the founder was told the truth and the OPERATOR — the person who would fix
+ * a broken job — was told a constant. Computed once here so the two surfaces
+ * cannot disagree again.
+ *
+ * `neverReported` is not `healthy`. A job with no health row has never been
+ * observed, and `loop-health.ts` explains why that cannot be told apart from a
+ * deployment which has not had its first tick.
+ */
+async function jobHealthCounts(): Promise<{
+  total: number; healthy: number; failing: number; neverReported: number;
+}> {
+  const { JOB_REGISTRY } = await import('../../jobs/index.js');
+  const names = Object.keys(JOB_REGISTRY);
+  const rows = await safeQuery('SELECT job_name, consecutive_failures FROM job_health', []);
+  const observed = new Map<string, number>();
+  for (const row of rows.rows as unknown as Array<Record<string, unknown>>) {
+    observed.set(String(row.job_name), Number(row.consecutive_failures ?? 0));
+  }
+  const failing = names.filter((n) => (observed.get(n) ?? 0) > 0).length;
+  const neverReported = names.filter((n) => !observed.has(n)).length;
+  return {
+    total: names.length,
+    healthy: names.length - failing - neverReported,
+    failing,
+    neverReported,
+  };
+}
+
 const FOUNDER_EMAIL = 'thmsnrtn@gmail.com';
 
 export function isFounder(email: string): boolean {
@@ -61,6 +100,7 @@ export async function getPulse(): Promise<PulseData> {
     query("SELECT COUNT(*) as c FROM founders WHERE tier IS NULL AND created_at < datetime('now', '-7 days')", []),
   ]);
 
+  const jobs = await jobHealthCounts();
   const activeFounders = (foundersResult.rows[0] as Record<string, number>)?.c ?? 0;
   const activeProducts = (productsResult.rows[0] as Record<string, number>)?.c ?? 0;
   const pendingDecisions = (decisionsResult.rows[0] as Record<string, number>)?.c ?? 0;
@@ -98,7 +138,11 @@ export async function getPulse(): Promise<PulseData> {
     active_stressors: totalStressors,
     critical_stressors: criticalStressors,
     pending_decisions: pendingDecisions,
-    job_health: { healthy: 30, degraded: 0, failed: 0 }, // From job registry
+    // Was `{ healthy: 30, degraded: 0, failed: 0 }` under a comment claiming it
+    // came from the job registry. It did not; nothing was read.
+    job_health: {
+      healthy: jobs.healthy, degraded: jobs.neverReported, failed: jobs.failing,
+    },
     system_uptime: formatUptime(process.uptime()),
     last_audit_run: null,
     alerts,
@@ -208,10 +252,17 @@ export async function getChurnIntelligence(): Promise<ChurnIntelligence> {
 // ─── Automation Health ──────────────────────────────────────────────────────
 
 export interface AutomationHealth {
+  /** The scheduler's own registry size, not a number written here. */
   total_jobs: number;
+  /** Registry jobs whose last recorded run succeeded. */
   jobs_healthy: number;
-  jobs_degraded: number;
-  jobs_failed: number;
+  /** Registry jobs with at least one consecutive failure right now. This is the
+   *  operator-actionable number, and it was hardcoded to 0. */
+  jobs_failing: number;
+  /** Registry jobs with no health record at all — never observed, which is not
+   *  the same fact as healthy. `loop-health.ts` explains why this cannot be
+   *  told apart from a deployment that has not had its first tick. */
+  jobs_never_reported: number;
   auto_decisions_24h: number;
   escalated_decisions_24h: number;
   auto_execute_rate: number;
@@ -233,11 +284,16 @@ export async function getAutomationHealth(): Promise<AutomationHealth> {
   const escalatedCount = (escalated.rows[0] as Record<string, number>)?.c ?? 0;
   const total = autoCount + escalatedCount;
 
+  // Counted once, in `jobHealthCounts`, because this function and `getPulse`
+  // carried the same four hardcoded numbers and would drift apart if fixed
+  // twice.
+  const jobs = await jobHealthCounts();
+
   return {
-    total_jobs: 30,
-    jobs_healthy: 30,
-    jobs_degraded: 0,
-    jobs_failed: 0,
+    total_jobs: jobs.total,
+    jobs_healthy: jobs.healthy,
+    jobs_failing: jobs.failing,
+    jobs_never_reported: jobs.neverReported,
     auto_decisions_24h: autoCount,
     escalated_decisions_24h: escalatedCount,
     auto_execute_rate: total > 0 ? Math.round((autoCount / total) * 100) : 100,

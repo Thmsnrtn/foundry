@@ -35,7 +35,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
   const defaultPulse = { status: 'healthy' as const, mrr: 0, mrr_delta_pct: 0, active_products: 0, active_founders: 0, founders_this_month: 0, churn_this_month: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
   const defaultMRR = { current_mrr: 0, mrr_30d_ago: 0, mrr_trend: 'flat' as const, growth_rate_pct: 0, arr: 0, by_tier: {}, mrr_history: [], forecast_3m: 0, forecast_6m: 0 };
   const defaultChurn = { churn_rate_30d: 0, at_risk_count: 0, at_risk_products: [], churned_this_month: 0, rescue_opportunities: 0 };
-  const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_degraded: 0, jobs_failed: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: 0, recent_actions: [] };
+  const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_failing: 0, jobs_never_reported: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: 0, recent_actions: [] };
   const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: 0, at_risk_by_company: [], champions: 0, revenue_at_risk: 0 };
   const defaultWellbeing = { energy_score: 70, stress_signals: [], days_since_break: 0, override_count_7d: 0, burnout_trajectory: 'stable' as const, recommendation: null };
   const defaultGrowth = { new_signups_7d: 0, new_signups_30d: 0, activation_rate: 0, trial_to_paid_rate: 0, expansion_revenue: 0, top_acquisition_channels: [] };
@@ -214,7 +214,13 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
           ${metricBadge('Auto-Execute Rate', automation.auto_execute_rate + '%')}
           ${metricBadge('Auto Decisions (24h)', automation.auto_decisions_24h)}
           ${metricBadge('Escalated (24h)', automation.escalated_decisions_24h)}
-          ${metricBadge('Jobs Running', automation.total_jobs)}
+          <!-- "Jobs Running: 30" was a constant, and told the operator nothing
+               about whether anything was running. What is actionable is how many
+               are failing right now, and how many have never reported at all —
+               which is not the same fact as healthy. -->
+          ${metricBadge('Jobs Failing', automation.jobs_failing + ' of ' + automation.total_jobs)}
+          ${automation.jobs_never_reported > 0
+            ? metricBadge('Never Reported', automation.jobs_never_reported) : ''}
         </div>
       </div>
 
