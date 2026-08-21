@@ -372,6 +372,38 @@ seven placeholders and six arguments had never once succeeded — valid SQL, rea
 columns, clean types, both callers swallowing the throw, the nightly log reading
 "Generated scenarios for 0 products" and nobody finding out.
 
+## What Foundry records about itself, and reads
+
+The same reading turned around: a fact recorded and read by nobody. Three rules
+came out of it, each enforced.
+
+**One AI spend ledger, and it is `ai_daily_spend` at global scope.**
+`cost_events` has a single fire-and-forget writer covering agent sessions only;
+`ai/client.ts` reserves and settles every call into `ai_daily_spend`, which is
+also what the daily ceiling is enforced against. Read it **scoped to
+`'global'`** — migration 099's finish trigger writes the same amount to the
+global, product and founder rows, so an unscoped `SUM` counts each call up to
+three times.
+
+**Quiet is not broken.** `integration_health.last_successful_sync` says when a
+connection last WORKED; `last_event_at` says when data last ARRIVED. The status
+message distinguishes them, because a webhook source that has gone quiet and one
+that has died look identical otherwise. This is the same rule
+`institution/loop-health.ts` states for the scheduler.
+
+**Foundry's own forecasts are scored.** `forecast_checkpoints` are dated when
+the prediction comes due — one, three and six months, base case only —
+reconciled in the ingest path where a company's real MRR arrives, and the
+median variance and its DIRECTION are shown to the founder above the forecasts
+it judges. The institution asks companies to state what they expect and compares
+it against reality; its own predictions were exempt until now, which is the
+argument for keeping this wired.
+
+**And a caution about the instrument.** `check-write-only-columns` reported 84
+entries, of which 47 were reachable by a mechanism it cannot see — a literal
+`SELECT *`, a SQL trigger, or the export's dynamic `SELECT * FROM ${table}`. It
+is a question-asker, as its own header says. Check before building.
+
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope |

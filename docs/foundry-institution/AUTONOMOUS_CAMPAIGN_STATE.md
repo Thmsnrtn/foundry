@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `4f09568`. Pushed through `65ecd13`; anything after it is local
-  until the run that covers it is green.
+- **Head:** see `git log -1`. Pushed through `001e8ea`; anything after it is
+  local until the run that covers it is green.
   **Migrations:** 217 files, highest **181**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `65ecd13` — **307 files / 2,644 tests**,
+- **Validation:** full suite green — **309 files / 2,666 tests** at `95d188f`,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
@@ -37,7 +37,7 @@ inherited list because it was inherited.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **28** · write-only columns
-  **84** · id tiebreaks **18** · backticks in embedded comments **0** ·
+  **82** · id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** (1,886 statements) · INSERT value-list
   mismatches **0** (377).
 
@@ -206,6 +206,57 @@ toggled string state on every apostrophe, so a SQL comment reading "Migration
 correct code. The same bug in the argument splitter, on a TypeScript comment
 containing `'system'`, inflated a count by one. Both are tests now. **A noisy
 gate gets baselined, and a baseline is where a gate goes to stop working.**
+
+**And the mirror image, which is where the reading went next.** Every finding
+above is a claim made without a source. Turning the lens around — a fact
+RECORDED and read by nobody — found four more, and the last of them was the
+most valuable of the whole cycle.
+
+**Foundry's own AI spend, from two ledgers, both wrong.** The founder-ops badge
+read `cost_events`, under a comment written earlier in this same campaign
+calling it "the canonical spend ledger: real amounts, every cost type". It is
+not: `cost_events` has one writer, `scp/agents/base.ts`, fire-and-forget, agent
+sessions only. `ai/client.ts` reserves and settles EVERY call into
+`ai_daily_spend`, which is also the ledger the daily ceiling is enforced
+against — the one that decides whether Foundry may act. Meanwhile the Letter
+read that ledger and summed it across all scopes, and migration 099's finish
+trigger writes the same amount to the global, product and founder rows, so "AI
+spend today is X USD" counted every call up to three times.
+
+Correcting my own comment is the part to carry: **a wrong claim about which
+store is canonical outlives the number it justified**, and the next person to
+touch it would have believed it.
+
+**Quiet is not broken.** `integration_health.last_successful_sync` was written
+on every successful event and selected by nothing. The page showed
+`last_event_at` — when data last ARRIVED — so for a webhook source a quiet
+fortnight and a dead connection produced the identical line, "No data in 14
+days". `institution/loop-health.ts` already says exactly this about the
+scheduler: *"Nothing happened" and "nothing ran" are different facts.* One rule,
+stated in one place and not the other, over a column that had held the answer.
+
+**A forecast nobody ever scored, with three broken links in one loop.** The
+checkpoint was dated TODAY holding today's prediction, so the only actual it
+could match was one recorded the same day — the prediction compared against
+itself. `recordCheckpointActual` had no caller anywhere. And `variance_pct` was
+read by nothing. On top of which the insert creating the rows had never run at
+all. Predictions are now dated when they come due (1, 3, 6 months, base case
+only — scoring a bear case scores a question rather than an answer), reconciled
+in the ingest path where a company's real MRR arrives, and the founder is told
+the median variance AND ITS DIRECTION above the forecasts it judges.
+
+This one is worth the work rather than a curiosity for a specific reason:
+**Foundry asks companies to state what they expect and compares it against
+reality, and its own forecasts were exempt from that.**
+
+**The write-only list is a question-asker, not a work queue** — measured, not
+asserted. Of the 84 entries, 47 are reachable by a mechanism that ratchet
+cannot see: 22 through a literal `SELECT *`, 16 through a SQL trigger, 9
+through the export's dynamic `SELECT * FROM ${table}`. `ai_spend_reservations`,
+`gate_events` and `anomalies` each looked like findings and each turned out
+reachable by a different one of those three. The gate's own header says it is a
+false positive in the safe direction; believe it. **35 entries remain genuinely
+unread**, and the two taken from them this cycle were both real.
 
 **Checked and found correct — worth as much as the findings.**
 `scp/investor/fundraising-readiness.ts` awards no points for unknowns and prints
@@ -380,11 +431,22 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      `gates-fail-when-they-should` plants real files into the working tree, so
      concurrent runs collide and produce failures that look like defects.
 
-4. **84 write-only columns.** `check-write-only-columns.mjs` holds the count;
+4. **82 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
    read it rather than this line. Prose drifts from the ratchet — this entry has
    said 92 and 85 while the ratchet said otherwise, which is exactly the drift
    the ratchet exists to prevent in code and evidently not here.
-   Attributed by writing area rather than guessed at:
+
+   **MEASURED, NOT ASSERTED: 47 of the 84 were reachable by a mechanism the
+   ratchet cannot see** — 22 through a literal `SELECT *`, 16 through a SQL
+   trigger, 9 through the export's dynamic `SELECT * FROM ${table}`.
+   `ai_spend_reservations`, `gate_events` and `anomalies` each looked like
+   findings and each turned out reachable by a different one of those three.
+   The gate's own header says it is a false positive in the safe direction;
+   believe it, and check before building. **35 remain genuinely unread.** Two
+   were taken this cycle — `integration_health.last_successful_sync` and
+   `forecast_checkpoints.variance_pct` — and both were real.
+
+   The remaining attribution by writing area, which stands:
 
    - **20 are written by `services/institution`**, and those are the ones worth
      reading. The claim that they were all "answered where they are written"

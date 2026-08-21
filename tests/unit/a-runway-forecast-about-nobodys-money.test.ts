@@ -243,7 +243,7 @@ describe('a statement that had never once run', () => {
     }
   });
 
-  it('records a checkpoint for each, which also never ran', async () => {
+  it('records the checkpoints, which also never ran', async () => {
     const { productId, founderId } = await addCompany();
     await stateFinancialPosition({
       productId, cashOnHandDollars: 100_000, monthlyBurnDollars: 10_000,
@@ -251,9 +251,14 @@ describe('a statement that had never once run', () => {
     });
     await generateScenariosForProduct(productId);
 
+    // One per horizon for the base case — not one per scenario. The what-ifs
+    // are deliberately unscored; `a-forecast-nobody-ever-scored.test.ts` holds
+    // that rule and the reason for it. What this test is for is unchanged:
+    // before the argument count was fixed, no checkpoint reached the table at
+    // all, because the insert above it raised first.
     const checkpoints = await query(
       'SELECT metric_name FROM forecast_checkpoints WHERE product_id = ?', [productId]);
-    expect(checkpoints.rows.length).toBe(5);
+    expect(checkpoints.rows.length, 'zero before the insert was fixed').toBe(3);
   });
 });
 
