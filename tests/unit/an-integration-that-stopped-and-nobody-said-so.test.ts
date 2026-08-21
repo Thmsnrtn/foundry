@@ -107,16 +107,28 @@ describe('giving up is announced', () => {
   });
 
   it('says what stopped and what it means', () => {
-    expect(SYNC).toMatch(/event_type: 'integration_stopped'/);
-    expect(SYNC).toMatch(/Its data is no longer updating/);
+    expect(SYNC).toMatch(/Foundry stopped syncing \$\{integration\.type\}/);
+    expect(SYNC).toMatch(/has stopped updating/);
+    expect(SYNC).toMatch(/importance: 'action_needed'/);
   });
 
-  it('keeps the provider error text out of the signal', () => {
+  it('goes through the interruption ceiling, not through responsibility discovery', () => {
+    // `emitSignalEvent` is the single door into responsibility discovery and has
+    // exactly one caller by design — the company reporting something about
+    // itself. An integration timing out is Foundry's own plumbing. Reaching for
+    // that function here would admit internal failures into the responsibility
+    // ladder, which is precisely what
+    // `discovery-is-not-reachable-from-integrations.test.ts` forbids. It caught
+    // this on the first full run.
+    expect(SYNC).not.toMatch(/emitSignalEvent\s*\(/);
+    expect(SYNC).toMatch(/const \{ deliver \} = await import\('\.\.\/ux\/interruption\.js'\)/);
+  });
+
+  it('keeps the provider error text out of the notification', () => {
     // The provider's message is external content. It is already stored on the
-    // integration row and shown on the page; it does not need a second home in
-    // a payload that agents read.
-    const block = SYNC.slice(SYNC.indexOf("event_type: 'integration_stopped'"),
-                             SYNC.indexOf('summary:'));
+    // integration row and shown, escaped, on the page.
+    const block = SYNC.slice(SYNC.indexOf("importance: 'action_needed'"),
+                             SYNC.indexOf('actionUrl:'));
     expect(block).not.toMatch(/errorMessage/);
   });
 });

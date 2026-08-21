@@ -229,24 +229,40 @@ async function markSyncFailed(
   // Crossing the limit is the moment Foundry stops trying. Announce it exactly
   // once — on the crossing, not on every subsequent skip, which would be noise
   // about a thing that is no longer happening.
+  //
+  // NOT through `emitSignalEvent`. That function is the single door into
+  // responsibility discovery, and it has exactly one caller by design: the
+  // company reporting something about itself. A Foundry integration timing out
+  // is Foundry's own plumbing, not the company stating a fact, and admitting it
+  // through that door would let internal failures enter the responsibility
+  // ladder. `discovery-is-not-reachable-from-integrations.test.ts` holds that
+  // boundary, and it caught this.
+  //
+  // The interruption ladder is the right authority: it decides against the
+  // founder's own ceiling whether this reaches their phone, their Letter or
+  // only the log, and it leaves a record either way.
   if (failures === MAX_CONSECUTIVE_SYNC_FAILURES) {
     try {
-      const { emitSignalEvent } = await import('../scp/events/dispatcher.js');
-      await emitSignalEvent(integration.product_id, {
-        source: 'integrations',
-        event_type: 'integration_stopped',
-        severity: 'high',
-        // The provider's error text is external content. It is kept out of the
-        // payload and out of the summary; the founder reads it on the
-        // Integrations page, where it is already stored and already escaped.
-        payload: {
-          integration_id: integration.id,
-          integration_type: integration.type,
-          consecutive_failures: failures,
-        },
-        summary: `Foundry stopped syncing the ${integration.type} integration after `
-          + `${failures} consecutive failures. Its data is no longer updating.`,
-      });
+      const ownerRow = (await query(
+        'SELECT owner_id FROM products WHERE id = ?', [integration.product_id],
+      )).rows[0] as Record<string, unknown> | undefined;
+      const founderId = ownerRow?.owner_id == null ? null : String(ownerRow.owner_id);
+
+      if (founderId) {
+        const { deliver } = await import('../ux/interruption.js');
+        await deliver(founderId, integration.product_id, {
+          importance: 'action_needed',
+          title: `Foundry stopped syncing ${integration.type}`,
+          // The provider's error text is external content. It is already stored
+          // on the integration row and shown, escaped, on the Integrations page;
+          // it does not need a second home in a notification body.
+          body: `${failures} syncs failed in a row, so Foundry is no longer trying. `
+            + `Anything this integration supplies has stopped updating. `
+            + `Reconnect it to start again.`,
+          actionUrl: '/integrations',
+          actionLabel: 'Open integrations',
+        });
+      }
     } catch (err) {
       logger.error('[integrations] could not announce a stopped integration', {
         productId: integration.product_id, error: String(err),

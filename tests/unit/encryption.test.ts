@@ -107,8 +107,18 @@ describe('encryption service', () => {
       const { encrypt, decrypt } = await loadModule();
       const encrypted = encrypt('tamper test');
       const parts = encrypted.split(':');
-      // Flip a character in the ciphertext
-      const tampered = parts[0] + ':' + 'ff' + parts[1].slice(2) + ':' + parts[2];
+
+      // This used to overwrite the first two hex characters with the constant
+      // 'ff'. One ciphertext in 256 already starts with 'ff', so one run in 256
+      // "tampered" with nothing, decrypted cleanly, and failed — reading exactly
+      // like an authentication regression. A test that plants a defect has to
+      // check the defect landed; this one now flips a bit instead of asserting a
+      // value, which cannot coincide with what was already there.
+      const flipped = (nibble: string): string =>
+        (parseInt(nibble, 16) ^ 0x8).toString(16);
+      const tampered = parts[0] + ':' + flipped(parts[1][0]!) + parts[1].slice(1) + ':' + parts[2];
+      expect(tampered, 'the tampering must actually change the ciphertext')
+        .not.toBe(encrypted);
 
       expect(() => decrypt(tampered)).toThrow();
     });
@@ -117,8 +127,11 @@ describe('encryption service', () => {
       const { encrypt, decrypt } = await loadModule();
       const encrypted = encrypt('auth tag test');
       const parts = encrypted.split(':');
-      // Replace auth tag with different value
-      const tampered = parts[0] + ':' + parts[1] + ':' + '0'.repeat(32);
+      const flipped = (nibble: string): string =>
+        (parseInt(nibble, 16) ^ 0x8).toString(16);
+      const tampered = parts[0] + ':' + parts[1] + ':' + flipped(parts[2][0]!) + parts[2].slice(1);
+      expect(tampered, 'the tampering must actually change the auth tag')
+        .not.toBe(encrypted);
 
       expect(() => decrypt(tampered)).toThrow();
     });
