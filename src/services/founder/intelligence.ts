@@ -68,14 +68,39 @@ export function isFounder(email: string): boolean {
 
 // ─── Pulse: 5-Minute Health Scan ────────────────────────────────────────────
 
+/**
+ * TWO DIFFERENT BUSINESSES' MONEY WERE BOTH CALLED `mrr`.
+ *
+ * `PulseData.mrr` summed `metric_snapshots` across every product — that is the
+ * reported MRR MOVEMENT of the customer COMPANIES Foundry operates, added up.
+ * `MRRIntelligence.current_mrr` is Foundry's own subscription revenue. Both
+ * went out of `/api/founder/executive-dashboard` in one object, as `pulse.mrr`
+ * and `mrr.current_mrr`, and an alert read "MRR declined 14% this month" about
+ * whichever one the reader assumed.
+ *
+ * They are not the same quantity, not the same company, and not even the same
+ * KIND of quantity: one is a level, the other is a sum of movements. The
+ * portfolio number is worth having — it is what the operator of a portfolio
+ * would want — so it keeps its meaning and loses the name that was not its own.
+ */
 export interface PulseData {
   status: 'healthy' | 'warning' | 'critical';
-  mrr: number;
-  mrr_delta_pct: number;
+  /** Net reported MRR movement across ALL operated companies over 30 days —
+   *  new + expansion - contraction - churned. Not Foundry's revenue, and a
+   *  movement rather than a level. */
+  portfolio_mrr_movement_30d: number;
+  /** How that movement compares with the preceding 30 days. NULL when the
+   *  preceding window reported nothing to compare against. */
+  portfolio_mrr_movement_delta_pct: number | null;
   active_products: number;
   active_founders: number;
   founders_this_month: number;
-  churn_this_month: number;
+  /** Founders who signed up more than a week ago and never subscribed. NOT
+   *  churn — they never paid, so they cannot have left — and not scoped to a
+   *  month. It was called `churn_this_month`. Real founder churn is not
+   *  derivable: `tier` is set to NULL when a subscription is deleted
+   *  (`billing/stripe.ts`) and nothing records when. */
+  signups_never_converted: number;
   active_stressors: number;
   critical_stressors: number;
   pending_decisions: number;
@@ -101,15 +126,18 @@ export async function getPulse(): Promise<PulseData> {
   ]);
 
   const jobs = await jobHealthCounts();
+  const auditRow = (await safeQuery('SELECT MAX(created_at) AS last FROM audit_scores', []))
+    .rows[0] as Record<string, unknown> | undefined;
+  const lastAudit = auditRow?.last == null ? null : String(auditRow.last);
   const activeFounders = (foundersResult.rows[0] as Record<string, number>)?.c ?? 0;
   const activeProducts = (productsResult.rows[0] as Record<string, number>)?.c ?? 0;
   const pendingDecisions = (decisionsResult.rows[0] as Record<string, number>)?.c ?? 0;
   const foundersThisMonth = (recentFounders.rows[0] as Record<string, number>)?.c ?? 0;
-  const churnThisMonth = (recentChurn.rows[0] as Record<string, number>)?.c ?? 0;
+  const neverConverted = (recentChurn.rows[0] as Record<string, number>)?.c ?? 0;
 
   const currentMRR = ((metricsResult.rows[0] as Record<string, number>)?.total ?? 0) / 100;
   const priorMRR = ((priorMetricsResult.rows[0] as Record<string, number>)?.total ?? 0) / 100;
-  const mrrDelta = priorMRR > 0 ? ((currentMRR - priorMRR) / priorMRR) * 100 : 0;
+  const mrrDelta = priorMRR > 0 ? ((currentMRR - priorMRR) / priorMRR) * 100 : null;
 
   let criticalStressors = 0;
   let totalStressors = 0;
@@ -123,18 +151,26 @@ export async function getPulse(): Promise<PulseData> {
   const alerts: Array<{ severity: string; message: string }> = [];
   if (criticalStressors > 0) alerts.push({ severity: 'critical', message: `${criticalStressors} critical stressor(s) active` });
   if (pendingDecisions > 5) alerts.push({ severity: 'warning', message: `${pendingDecisions} decisions pending review` });
-  if (mrrDelta < -10) alerts.push({ severity: 'warning', message: `MRR declined ${Math.abs(mrrDelta).toFixed(1)}% this month` });
+  // NAMES WHOSE MONEY IT IS. "MRR declined 14%" beside Foundry's own MRR card
+  // read as Foundry's revenue falling; it is the operated companies' reported
+  // movement, which is a different alarm with a different response.
+  if (mrrDelta !== null && mrrDelta < -10) {
+    alerts.push({
+      severity: 'warning',
+      message: `Reported MRR movement across operated companies is down ${Math.abs(mrrDelta).toFixed(1)}% on the prior 30 days`,
+    });
+  }
 
   const status = criticalStressors > 0 ? 'critical' : alerts.length > 0 ? 'warning' : 'healthy';
 
   return {
     status,
-    mrr: Math.round(currentMRR),
-    mrr_delta_pct: Math.round(mrrDelta * 10) / 10,
+    portfolio_mrr_movement_30d: Math.round(currentMRR),
+    portfolio_mrr_movement_delta_pct: mrrDelta === null ? null : Math.round(mrrDelta * 10) / 10,
     active_products: activeProducts,
     active_founders: activeFounders,
     founders_this_month: foundersThisMonth,
-    churn_this_month: churnThisMonth,
+    signups_never_converted: neverConverted,
     active_stressors: totalStressors,
     critical_stressors: criticalStressors,
     pending_decisions: pendingDecisions,
@@ -144,40 +180,87 @@ export async function getPulse(): Promise<PulseData> {
       healthy: jobs.healthy, degraded: jobs.neverReported, failed: jobs.failing,
     },
     system_uptime: formatUptime(process.uptime()),
-    last_audit_run: null,
+    // THE MIRROR IMAGE OF EVERY OTHER DEFECT HERE. This was a hardcoded null
+    // while `audit_scores` has a real writer (`audit/engine.ts`) and a
+    // `created_at`. The fact existed and was thrown away, which is the same
+    // failure as inventing one — the operator could not tell "never audited"
+    // from "not looked up".
+    last_audit_run: lastAudit,
     alerts,
   };
 }
 
 // ─── MRR Intelligence ───────────────────────────────────────────────────────
 
+/**
+ * FOUNDRY'S OWN SUBSCRIPTION REVENUE — from founders who are actually paying.
+ *
+ * Two things were wrong here, in opposite directions.
+ *
+ * REVENUE WAS COUNTED BEFORE ANYONE PAID. The Stripe webhook sets
+ * `founders.tier` on `customer.subscription.created` including while the
+ * subscription's status is `trialing` — that is the very branch that records
+ * `trial_ends_at`. So a founder three days into the fourteen-day card-upfront
+ * trial (migration 077), who has paid nothing and may never, counted at full
+ * list price in `current_mrr`, in `arr`, in `by_tier`, and in every forecast
+ * compounded from them. They are counted separately now, as what they are.
+ *
+ * AND A SERIES ABOUT OTHER COMPANIES WAS PLOTTED AS FOUNDRY'S HISTORY.
+ * `mrr_history` summed `metric_snapshots` across all products: the customer
+ * COMPANIES' reported MRR movement, not Foundry's revenue and not a level.
+ * Renamed rather than deleted, because the portfolio series is worth having.
+ * Foundry's own MRR history does not exist at all — nothing records a
+ * founder's tier over time, only its current value.
+ *
+ * These are LIST prices. Stripe holds what is actually billed, and discounts,
+ * coupons and annual plans are invisible from here.
+ */
 export interface MRRIntelligence {
+  /** Founders on a paid tier whose trial has ended or who never had one,
+   *  at list price. */
   current_mrr: number;
+  /** Founders inside a trial window, and what they would be worth at list
+   *  price if every one of them converted. Never added to `current_mrr`. */
+  trialing: { count: number; list_price_mrr: number };
   mrr_30d_ago: number;
   mrr_trend: 'growing' | 'flat' | 'declining';
   growth_rate_pct: number;
   arr: number;
   by_tier: Record<string, { count: number; mrr: number }>;
-  mrr_history: Array<{ date: string; mrr: number }>;
+  /** The OPERATED COMPANIES' reported MRR movement by snapshot date — not
+   *  Foundry's revenue history, which is not recorded anywhere. */
+  portfolio_mrr_movement_history: Array<{ date: string; movement: number }>;
   forecast_3m: number;
   forecast_6m: number;
 }
 
 export async function getMRRIntelligence(): Promise<MRRIntelligence> {
+  // PAYING AND TRIALING SPLIT AT THE SOURCE, not netted off afterwards. A
+  // trial window that has not ended means nothing has been charged yet.
   const tiers = await safeQuery(
-    'SELECT tier, COUNT(*) as c FROM founders WHERE tier IS NOT NULL GROUP BY tier', []
+    `SELECT tier,
+            SUM(CASE WHEN trial_ends_at IS NULL OR trial_ends_at <= datetime('now')
+                     THEN 1 ELSE 0 END) AS paying,
+            SUM(CASE WHEN trial_ends_at > datetime('now') THEN 1 ELSE 0 END) AS trialing
+       FROM founders WHERE tier IS NOT NULL GROUP BY tier`, []
   );
 
   const byTier: Record<string, { count: number; mrr: number }> = {};
   let totalMRR = 0;
+  let trialingCount = 0;
+  let trialingMRR = 0;
+  // List prices, matching `billing/stripe.ts`. Stripe is what actually bills.
   const tierPricing: Record<string, number> = { solo: 79, growth: 199, investor_ready: 399 };
 
   for (const row of tiers.rows as unknown as Array<Record<string, unknown>>) {
     const tier = row.tier as string;
-    const count = row.c as number;
-    const mrr = count * (tierPricing[tier] ?? 0);
-    byTier[tier] = { count, mrr };
-    totalMRR += mrr;
+    const price = tierPricing[tier] ?? 0;
+    const paying = Number(row.paying ?? 0);
+    const trialing = Number(row.trialing ?? 0);
+    byTier[tier] = { count: paying, mrr: paying * price };
+    totalMRR += paying * price;
+    trialingCount += trialing;
+    trialingMRR += trialing * price;
   }
 
   // Historical MRR from metric snapshots (aggregate across all products)
@@ -187,14 +270,17 @@ export async function getMRRIntelligence(): Promise<MRRIntelligence> {
      GROUP BY snapshot_date ORDER BY snapshot_date`, []
   );
 
-  const mrrHistory = (history.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+  const movementHistory = (history.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
     date: r.snapshot_date as string,
-    mrr: ((r.mrr as number) ?? 0) / 100,
+    movement: ((r.mrr as number) ?? 0) / 100,
   }));
 
   // Simple growth rate from last 2 months
   const twoMonthsAgo = await safeQuery(
-    'SELECT COUNT(*) as c, tier FROM founders WHERE tier IS NOT NULL AND created_at < datetime("now", "-30 days") GROUP BY tier', []
+    `SELECT COUNT(*) as c, tier FROM founders
+      WHERE tier IS NOT NULL AND created_at < datetime('now', '-30 days')
+        AND (trial_ends_at IS NULL OR trial_ends_at <= datetime('now'))
+      GROUP BY tier`, []
   );
   let priorMRR = 0;
   for (const row of twoMonthsAgo.rows as unknown as Array<Record<string, unknown>>) {
@@ -207,12 +293,13 @@ export async function getMRRIntelligence(): Promise<MRRIntelligence> {
 
   return {
     current_mrr: totalMRR,
+    trialing: { count: trialingCount, list_price_mrr: trialingMRR },
     mrr_30d_ago: priorMRR,
     mrr_trend: trend,
     growth_rate_pct: Math.round(growthRate * 10) / 10,
     arr: totalMRR * 12,
     by_tier: byTier,
-    mrr_history: mrrHistory,
+    portfolio_mrr_movement_history: movementHistory,
     forecast_3m: Math.round(totalMRR * Math.pow(1 + monthlyGrowthDecimal, 3)),
     forecast_6m: Math.round(totalMRR * Math.pow(1 + monthlyGrowthDecimal, 6)),
   };
@@ -329,6 +416,9 @@ export async function getAutomationHealth(): Promise<AutomationHealth> {
   // carried the same four hardcoded numbers and would drift apart if fixed
   // twice.
   const jobs = await jobHealthCounts();
+  const auditRow = (await safeQuery('SELECT MAX(created_at) AS last FROM audit_scores', []))
+    .rows[0] as Record<string, unknown> | undefined;
+  const lastAudit = auditRow?.last == null ? null : String(auditRow.last);
 
   return {
     total_jobs: jobs.total,
@@ -433,39 +523,62 @@ export async function getCustomerHealthOverview(): Promise<CustomerHealthOvervie
 
 // ─── Forecast ───────────────────────────────────────────────────────────────
 
+/**
+ * A PROJECTION, SAID TO BE ONE.
+ *
+ * `runway_months: 999` sat here under the comment `// SaaS with low burn` —
+ * eighty-three years of runway, asserted by a code comment. Nothing in this
+ * system records burn: there is no cost side to Foundry's own books beyond
+ * `cost_events`, which is model spend alone. So runway is not a number that
+ * can be got wrong here; it is a number that cannot be got at all.
+ *
+ * The projections stay, because a projection is an honest thing to publish as
+ * long as it says it is one. Two changes: they are only produced when the
+ * growth rate they compound is itself measured — projecting from a rate of
+ * zero because nothing was known produced a flat line indistinguishable from a
+ * forecast of no growth — and the separate customer series is gone. It applied
+ * `monthlyGrowth * 0.8` to the founder count, and the 0.8 came from nowhere:
+ * not a retention curve, not an observation, a coefficient someone typed.
+ */
 export interface Forecast {
   current_mrr: number;
-  runway_months: number;
+  /** NULL: nothing records Foundry's burn, so runway cannot be derived. */
+  runway_months: number | null;
   break_even_month: string | null;
-  projections: Array<{ month: string; mrr: number; customers: number }>;
+  /** EMPTY when the growth rate is not measured — there is no 30-day-ago
+   *  paying MRR to compare against. Compounding an unmeasured zero twelve
+   *  times draws a flat line that looks like a finding. */
+  projections: Array<{ month: string; mrr: number }>;
+  /** What the projections were compounded from, so a reader can judge them. */
+  projected_from: { monthly_growth_pct: number; measured: boolean };
 }
 
 export async function getForecast(): Promise<Forecast> {
   const mrr = await getMRRIntelligence();
 
-  const projections: Array<{ month: string; mrr: number; customers: number }> = [];
+  // `mrr_30d_ago` of zero means there was nothing to compare against, which is
+  // the same condition that makes `growth_rate_pct` zero by default rather
+  // than by measurement.
+  const measured = mrr.mrr_30d_ago > 0;
   const monthlyGrowth = mrr.growth_rate_pct / 100;
-  const totalCustomers = Object.values(mrr.by_tier).reduce((s, t) => s + t.count, 0);
-  let runningMRR = mrr.current_mrr;
-  let runningCustomers = totalCustomers;
 
-  for (let i = 1; i <= 12; i++) {
-    runningMRR = Math.round(runningMRR * (1 + monthlyGrowth));
-    runningCustomers = Math.round(runningCustomers * (1 + monthlyGrowth * 0.8));
-    const date = new Date();
-    date.setMonth(date.getMonth() + i);
-    projections.push({
-      month: date.toISOString().slice(0, 7),
-      mrr: runningMRR,
-      customers: runningCustomers,
-    });
+  const projections: Array<{ month: string; mrr: number }> = [];
+  if (measured) {
+    let runningMRR = mrr.current_mrr;
+    for (let i = 1; i <= 12; i++) {
+      runningMRR = Math.round(runningMRR * (1 + monthlyGrowth));
+      const date = new Date();
+      date.setMonth(date.getMonth() + i);
+      projections.push({ month: date.toISOString().slice(0, 7), mrr: runningMRR });
+    }
   }
 
   return {
     current_mrr: mrr.current_mrr,
-    runway_months: 999, // SaaS with low burn
+    runway_months: null,
     break_even_month: null,
     projections,
+    projected_from: { monthly_growth_pct: mrr.growth_rate_pct, measured },
   };
 }
 
@@ -480,7 +593,8 @@ export async function generateMorningBriefing(): Promise<string> {
   const prompt = `Write a CEO morning briefing (5 bullets, max 25 words each) for a SaaS platform.
 
 Data:
-- MRR: $${pulse.mrr} (${pulse.mrr_delta_pct > 0 ? '+' : ''}${pulse.mrr_delta_pct}% MoM)
+- Foundry's own MRR: $${mrr.current_mrr} (${mrr.growth_rate_pct > 0 ? '+' : ''}${mrr.growth_rate_pct}% vs 30d ago)
+- Reported MRR movement across operated companies, last 30d: $${pulse.portfolio_mrr_movement_30d}${pulse.portfolio_mrr_movement_delta_pct === null ? ' (no prior window to compare)' : ` (${pulse.portfolio_mrr_movement_delta_pct > 0 ? '+' : ''}${pulse.portfolio_mrr_movement_delta_pct}% on the prior 30d)`}
 - Active founders: ${pulse.active_founders}, products: ${pulse.active_products}
 - New founders this month: ${pulse.founders_this_month}
 - ${pulse.active_stressors} active stressors (${pulse.critical_stressors} critical)

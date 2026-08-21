@@ -32,8 +32,8 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
     try { return await fn(); } catch { return fallback; }
   };
 
-  const defaultPulse = { status: 'healthy' as const, mrr: 0, mrr_delta_pct: 0, active_products: 0, active_founders: 0, founders_this_month: 0, churn_this_month: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
-  const defaultMRR = { current_mrr: 0, mrr_30d_ago: 0, mrr_trend: 'flat' as const, growth_rate_pct: 0, arr: 0, by_tier: {}, mrr_history: [], forecast_3m: 0, forecast_6m: 0 };
+  const defaultPulse = { status: 'healthy' as const, portfolio_mrr_movement_30d: 0, portfolio_mrr_movement_delta_pct: null, active_products: 0, active_founders: 0, founders_this_month: 0, signups_never_converted: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
+  const defaultMRR = { current_mrr: 0, trialing: { count: 0, list_price_mrr: 0 }, mrr_30d_ago: 0, mrr_trend: 'flat' as const, growth_rate_pct: 0, arr: 0, by_tier: {}, portfolio_mrr_movement_history: [], forecast_3m: 0, forecast_6m: 0 };
   const defaultChurn = { at_risk_share_pct: null, at_risk_count: 0, at_risk_products: [], churned_this_month: null, rescue_opportunities: 0 };
   const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_failing: 0, jobs_never_reported: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: 0, recent_actions: [] };
   const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: 0, at_risk_by_company: [], champions: 0, revenue_at_risk: 0 };
@@ -103,7 +103,11 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
           ${tierCard('Solo', mrr.by_tier.solo?.count ?? 0, '$' + (mrr.by_tier.solo?.mrr ?? 0))}
           ${tierCard('Growth', mrr.by_tier.growth?.count ?? 0, '$' + (mrr.by_tier.growth?.mrr ?? 0))}
           ${tierCard('Investor-Ready', mrr.by_tier.investor_ready?.count ?? 0, '$' + (mrr.by_tier.investor_ready?.mrr ?? 0))}
-          ${tierCard('Forecast 3mo', 0, '$' + mrr.forecast_3m.toLocaleString())}
+          ${tierCard('In trial', mrr.trialing.count, '$' + mrr.trialing.list_price_mrr.toLocaleString())}
+        </div>
+        <div style="font-size:0.75rem;color:#6b7280;margin-top:0.5rem;">
+          Trials are counted apart from revenue: nothing has been charged yet, and the
+          figure beside them is list price if every one converted.
         </div>
       </div>
 
