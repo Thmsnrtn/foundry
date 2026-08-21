@@ -268,10 +268,16 @@ export async function shadowWithVerdicts(
         JSON.stringify([{ kind: 'signal_event', id: await recordSignal(productId, 'claim basis') }])]);
     const expectationId = nanoid();
     await query(
+      // `observation_source_kind` names the channel that may resolve this
+      // expectation — `company_observation_baseline`, which is what
+      // `recordSignal` writes and therefore what the comparisons below carry.
+      // Migration 191 refuses an expectation that names no channel, and this
+      // fixture named none: it was one of the setups that proved a shadowing
+      // kind outside the two prefix-keyed triggers had no guard at all.
       `INSERT INTO responsibility_shadow_expectations
          (id, responsibility_id, product_id, expected_event_type,
-          expectation_evidence_ref, observation_source_evidence_ref)
-       VALUES (?, ?, ?, 'support_restored', ?, ?)`,
+          expectation_evidence_ref, observation_source_evidence_ref, observation_source_kind)
+       VALUES (?, ?, ?, 'support_restored', ?, ?, 'company_observation_baseline')`,
       [expectationId, responsibilityId, productId, `reconstruction_claim:${claimId}`,
         await recordEvidence(productId, 'observation source')]);
     expectationIds.push(expectationId);

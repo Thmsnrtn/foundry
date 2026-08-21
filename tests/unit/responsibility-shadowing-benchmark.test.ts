@@ -31,6 +31,11 @@ beforeAll(async()=>{
       evidenceRefs:[{kind:'signal_event',id:`${fixture.id}_channel`}],derivationMethod:'held-out bounded expectation',observedAt:new Date()});
     await beginResponsibilityShadowing({productId:'shadow_bench_product',responsibilityId:fixture.id,expectedEventType:fixture.expected,
       expectationClaimId:claim,observationSourceSignalId:`${fixture.id}_channel`,
+      // The channel that may resolve this expectation, named rather than inferred:
+      // here the channel signal is an 'observer' event and the actual is an
+      // 'external_actor' one, so no rule derived from the channel signal's own
+      // source could have worked. Migration 191 has the account.
+      observationSourceKind:'external_actor',
       validUntil:fixture.expired?new Date('2020-01-01'):new Date('2099-01-01')});
     const expectation=await query('SELECT id FROM responsibility_shadow_expectations WHERE responsibility_id=?',[fixture.id]);
     const expectationId=String((expectation.rows[0] as Record<string,unknown>).id); expectationIds.set(fixture.id,expectationId);

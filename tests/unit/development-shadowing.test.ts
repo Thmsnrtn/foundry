@@ -210,7 +210,8 @@ describe('development as an ordinary shadowed responsibility', () => {
     await expect(query(
       `INSERT INTO responsibility_shadow_comparisons (id,expectation_id,product_id,observation_ref,classification)
        VALUES ('dev_forged_cmp',?,'dev_product','signal_event:dev_forged','matched')`, [expectationId],
-    )).rejects.toThrow(/observation_not_independent/);
+    // Either refusal is correct and both are in force — see migration 191.
+    )).rejects.toThrow(/observation_not_independent|observation_channel_not_the_nominated_one/);
 
     // An observer that can cite the expectation is not an independent observer.
     for (const circular of [

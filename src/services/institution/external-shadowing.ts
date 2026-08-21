@@ -226,6 +226,9 @@ export async function beginExternalMetricShadowing(input: {
     productId: input.productId, responsibilityId: input.responsibilityId,
     expectedEventType: externalObservationEventType(input.field, input.direction),
     expectationClaimId, observationSourceSignalId: channelSignalId,
+    // The same source this function's own observation query filters on, and the
+    // same one migration 127's trigger hardcodes. Stated once, here.
+    observationSourceKind: 'external_metric_ingest',
     validUntil: input.validUntil,
   });
   return getResponsibility(input.productId, input.responsibilityId);

@@ -54,7 +54,8 @@ async function buildVertical(suffix:string) {
     predicate:'expected_observed_event',value:'support_capacity_restored',epistemicStatus:'known',
     evidenceRefs:[{kind:'signal_event',id:channel}],derivationMethod:'bounded expectation',observedAt:new Date()});
   await beginResponsibilityShadowing({productId:'ae_product',responsibilityId:responsibility.id,
-    expectedEventType:'support_capacity_restored',expectationClaimId:expectationClaim,observationSourceSignalId:channel});
+    expectedEventType:'support_capacity_restored',expectationClaimId:expectationClaim,observationSourceSignalId:channel,
+    observationSourceKind:'support'});
   const expectation=(await query('SELECT id FROM responsibility_shadow_expectations WHERE responsibility_id=?',[responsibility.id])).rows[0] as Record<string,unknown>;
   await compareShadowObservation({productId:'ae_product',expectationId:String(expectation.id),observationSignalId:actual});
   const comparison=(await query('SELECT id FROM responsibility_shadow_comparisons WHERE expectation_id=?',[expectation.id])).rows[0] as Record<string,unknown>;

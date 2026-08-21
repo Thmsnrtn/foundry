@@ -49,7 +49,13 @@ export async function beginDevelopmentShadowing(input: {
   const responsibility = await beginResponsibilityShadowing({
     productId: input.productId, responsibilityId: input.responsibilityId,
     expectedEventType, expectationClaimId: input.expectationClaimId,
-    observationSourceSignalId: input.observationSourceSignalId, validUntil: input.validUntil,
+    observationSourceSignalId: input.observationSourceSignalId,
+    // `development_verification`, not the source of the nominated signal. The
+    // signal that justifies entering Shadowing here is a `repository`
+    // observation of the NEED; the verification it will be tested against has
+    // not happened yet. Migration 191 has the full account.
+    observationSourceKind: 'development_verification',
+    validUntil: input.validUntil,
   });
   const created = await query(
     `SELECT id FROM responsibility_shadow_expectations

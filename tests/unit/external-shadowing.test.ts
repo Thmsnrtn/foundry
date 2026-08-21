@@ -226,7 +226,12 @@ describe('Shadowing against independently observed reality', () => {
         `INSERT INTO responsibility_shadow_comparisons (id,expectation_id,product_id,observation_ref,classification)
          VALUES ('xs_selfmark',?,?,?,'matched')`,
         [expectationId, PRODUCT, `signal_event:${founderStatement}`],
-      )).rejects.toThrow(/observation_not_independent/);
+      // Either refusal is correct and both are in force. Migration 191 added a
+      // general floor — the observation must come from the channel the
+      // expectation named — which fires before migration 127's prefix-keyed
+      // guard on the same attack. 127 is kept: it also refuses an observation
+      // that predates the expectation, which the general rule does not test.
+      )).rejects.toThrow(/observation_not_independent|observation_channel_not_the_nominated_one/);
     });
 
     it('refuses an observation that predates the expectation it resolves', async () => {
@@ -251,7 +256,7 @@ describe('Shadowing against independently observed reality', () => {
         `INSERT INTO responsibility_shadow_comparisons (id,expectation_id,product_id,observation_ref,classification)
          VALUES ('xs_cross',?,?,'signal_event:xs_foreign_obs','matched')`,
         [expectationId, PRODUCT],
-      )).rejects.toThrow(/observation_not_independent/);
+      )).rejects.toThrow(/observation_not_independent|observation_channel_not_the_nominated_one/);
 
       // And a stranger cannot start Foundry watching this company.
       expect(await beginExternalMetricShadowing({

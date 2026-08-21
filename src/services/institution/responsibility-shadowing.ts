@@ -2,14 +2,31 @@ import { nanoid } from 'nanoid';
 import { batch,query } from '../../db/client.js';
 import { getResponsibility,type Responsibility } from './responsibility.js';
 
+/**
+ * `observationSourceKind` is the `signal_events.source` that may resolve this
+ * expectation. It is required because the rule it states — an observation must
+ * come from the channel that made the shadowing legitimate — was previously
+ * enforced only by two triggers keyed on the expectation's TYPE PREFIX and by
+ * each caller filtering its own query. A third kind of shadowing would have had
+ * no guard at all. Migration 191 refuses an expectation that does not name one.
+ *
+ * It is NOT derivable from `observationSourceEvidenceRef`, which is the
+ * evidence that the channel exists and is current, and which means different
+ * things in the two callers: a signal FROM the ingest channel in external
+ * shadowing, and a `repository` signal recording the need in development
+ * shadowing, where the verification has not happened yet.
+ */
 export async function beginResponsibilityShadowing(input:{productId:string;responsibilityId:string;
-  expectedEventType:string;expectationClaimId:string;observationSourceSignalId:string;validUntil?:Date}):Promise<Responsibility> {
+  expectedEventType:string;expectationClaimId:string;observationSourceSignalId:string;
+  observationSourceKind:string;validUntil?:Date}):Promise<Responsibility> {
   const expectationId=nanoid();
   await batch([
     {sql:`INSERT INTO responsibility_shadow_expectations
-      (id,responsibility_id,product_id,expected_event_type,expectation_evidence_ref,observation_source_evidence_ref,valid_until)
-      VALUES (?,?,?,?,?,?,?)`,args:[expectationId,input.responsibilityId,input.productId,input.expectedEventType.trim(),
-      `reconstruction_claim:${input.expectationClaimId}`,`signal_event:${input.observationSourceSignalId}`,input.validUntil?.toISOString()??null]},
+      (id,responsibility_id,product_id,expected_event_type,expectation_evidence_ref,observation_source_evidence_ref,
+       observation_source_kind,valid_until)
+      VALUES (?,?,?,?,?,?,?,?)`,args:[expectationId,input.responsibilityId,input.productId,input.expectedEventType.trim(),
+      `reconstruction_claim:${input.expectationClaimId}`,`signal_event:${input.observationSourceSignalId}`,
+      input.observationSourceKind.trim(),input.validUntil?.toISOString()??null]},
     {sql:`INSERT INTO responsibility_transitions
       (id,responsibility_id,from_state,to_state,evidence_ref,reason,actor_ref)
       VALUES (?,?,'understood','shadowing',?,?,?)`,args:[nanoid(),input.responsibilityId,
@@ -44,10 +61,27 @@ export async function compareShadowObservation(input:{productId:string;expectati
   return classification;
 }
 
+/**
+ * WHERE FOUNDRY WAS WATCHING.
+ *
+ * This tells the founder what differed from what Foundry expected, and did not
+ * say what was doing the watching. "Your billing responsibility did not do what
+ * was expected" means one thing when the observation came from the company's
+ * own external metric feed and another when it came from somewhere else, and
+ * the founder could not tell which.
+ *
+ * `observationChannel` is the channel named when the expectation was created,
+ * which migration 191 also enforces the observation came from — so the sentence
+ * and the guard cannot drift apart. `channelEvidence` is the signal that showed
+ * the channel existed and was current: the reason Shadowing was allowed to
+ * begin at all, previously written and never read.
+ */
 export async function getMaterialShadowingExceptions(productId:string):Promise<Array<{
-  responsibilityId:string;title:string;expectedEventType:string;observedSummary:string;classification:'deviated'|'unresolved';
+  responsibilityId:string;title:string;expectedEventType:string;observedSummary:string;
+  observationChannel:string|null;channelEvidence:string|null;classification:'deviated'|'unresolved';
 }>> {
-  const result=await query(`SELECT r.id AS responsibility_id,r.title,x.expected_event_type,e.summary,c.classification
+  const result=await query(`SELECT r.id AS responsibility_id,r.title,x.expected_event_type,e.summary,c.classification,
+      x.observation_source_kind,x.observation_source_evidence_ref
     FROM responsibility_shadow_comparisons c
     JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
     JOIN institutional_responsibilities r ON r.id=x.responsibility_id
@@ -56,5 +90,9 @@ export async function getMaterialShadowingExceptions(productId:string):Promise<A
     ORDER BY c.created_at DESC`,[productId,productId]);
   return (result.rows as unknown as Array<Record<string,unknown>>).map((row)=>({responsibilityId:String(row.responsibility_id),
     title:String(row.title),expectedEventType:String(row.expected_event_type),observedSummary:String(row.summary),
+    // Null on rows written before migration 191 named the channel. Saying
+    // nothing is right for those; naming one we did not record would not be.
+    observationChannel:row.observation_source_kind==null?null:String(row.observation_source_kind),
+    channelEvidence:row.observation_source_evidence_ref==null?null:String(row.observation_source_evidence_ref),
     classification:row.classification as 'deviated'|'unresolved'}));
 }

@@ -167,6 +167,7 @@
         AND k.action_type = NEW.action_type
         AND k.integration_name = NEW.integration_name)
         AND r.authority_ref='autonomy_consent:' || a.id
+        ON NEW.observation_ref='signal_event:' || observed.id
         SELECT 1 FROM products p WHERE json_extract(ref.value,'$.kind')='product'
         SELECT 1 FROM reconstruction_claims c WHERE json_extract(ref.value,'$.kind')='reconstruction_claim'
         SELECT 1 FROM responsibility_candidates c WHERE c.id=NEW.candidate_id AND c.epistemic_status='known'
@@ -197,7 +198,11 @@
        AND d.product_id = NEW.product_id
        AND d.reason = NEW.disposition_reason
        AND from_state = OLD.state
+       AND observed.product_id=NEW.product_id
+       AND observed.source=x.observation_source_kind
        AND to_state = NEW.state
+       AND x.observation_source_kind IS NOT NULL
+       AND x.product_id=NEW.product_id
        AND x.responsibility_id = NEW.id AND c.product_id = NEW.product_id
        AND x.status = 'completed' AND x.verify_status = 'passed'
        AND x.status='completed' AND x.verify_status='passed'
@@ -273,6 +278,7 @@
       AND x.expected_event_type LIKE 'external_metric:%'
       AND x.expected_event_type LIKE 'external_metric:%'
       AND x.responsibility_id=NEW.responsibility_id
+      FROM responsibility_shadow_expectations x
       JOIN autonomy_consents a ON a.id=NEW.authority_consent_id
       JOIN governed_effect_kinds k ON k.scope_key=NEW.authority_scope
       JOIN institutional_responsibilities r ON r.id=x.responsibility_id
@@ -280,6 +286,7 @@
       JOIN products p ON p.id = s.product_id
       JOIN responsibility_shadow_expectations x ON x.id = c.expectation_id
       JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
+      JOIN signal_events observed
       NEW.actor_ref!='institution:deterministic_candidate_grounder' OR NOT EXISTS (
       ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
       OR NOT EXISTS (
@@ -337,6 +344,8 @@
      WHERE p.owner_id = NEW.due_stated_by);
      WHERE p.owner_id = NEW.due_stated_by);
      WHERE responsibility_id = NEW.id
+     WHERE x.id=NEW.expectation_id
+     WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
     'activation_playbook',     -- How we improve activation
     'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
     'activation_rate','day_30_retention','churn_rate','mrr_health_ratio',
@@ -580,6 +589,7 @@
     SELECT 'product', NEW.product_id, NEW.date, 0, NEW.reserved_cents, NEW.updated_at WHERE NEW.product_id IS NOT NULL
     SELECT 1
     SELECT 1
+    SELECT 1
     SELECT 1 FROM action_executions x
     SELECT 1 FROM action_executions x JOIN institutional_responsibilities r ON r.id=NEW.responsibility_id
     SELECT 1 FROM autonomy_consents a
@@ -630,6 +640,7 @@
     SELECT 1 FROM responsibility_shadow_comparisons c
     SELECT 1 FROM responsibility_shadow_comparisons c
     SELECT 1 FROM responsibility_shadow_comparisons c
+    SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x JOIN institutional_responsibilities r ON r.id=x.responsibility_id
@@ -763,6 +774,7 @@
    WHERE p.id = NEW.principal_id AND pr.owner_id = p.created_by
   ) AND NOT EXISTS (
   ) AND NOT EXISTS (
+  ) AND NOT EXISTS (
   )));
   )));
   )));
@@ -788,6 +800,7 @@
   )),
   )),
   )),
+  );
   );
   );
   );
@@ -1419,7 +1432,9 @@
   SELECT RAISE(ABORT,'responsibility_operating:not_earned');
   SELECT RAISE(ABORT,'shadowing:expectation_evidence_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'shadowing:expectation_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'shadowing:expectation_names_no_observation_channel');
   SELECT RAISE(ABORT,'shadowing:learning_invalid') WHERE NEW.learned_claim_id IS NOT NULL AND NOT EXISTS (
+  SELECT RAISE(ABORT,'shadowing:observation_channel_not_the_nominated_one') WHERE EXISTS (
   SELECT RAISE(ABORT,'shadowing:observation_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'shadowing:observation_source_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'shadowing:responsibility_invalid') WHERE NOT EXISTS (
@@ -4604,7 +4619,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -4622,6 +4636,7 @@
 , month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
 , name TEXT, secret_hash TEXT, is_active INTEGER DEFAULT 1, updated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);
+, observation_source_kind TEXT);
 , origin TEXT NOT NULL DEFAULT 'founder', review_id TEXT, effective_at DATETIME);
 , paid_through TEXT);
 , payload_json TEXT, attempt_count INTEGER, failed_at DATETIME, effect_certainty TEXT, provider_acknowledged_at TEXT, reconcile_after TEXT);
@@ -4680,6 +4695,8 @@ BEFORE INSERT ON responsibility_dispositions
 BEFORE INSERT ON responsibility_shadow_comparisons
 BEFORE INSERT ON responsibility_shadow_comparisons
 BEFORE INSERT ON responsibility_shadow_comparisons
+BEFORE INSERT ON responsibility_shadow_comparisons
+BEFORE INSERT ON responsibility_shadow_expectations
 BEFORE INSERT ON responsibility_shadow_expectations
 BEFORE INSERT ON responsibility_transitions
 BEFORE INSERT ON responsibility_transitions
@@ -4721,6 +4738,8 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5478,6 +5497,8 @@ CREATE TRIGGER responsibility_shadow_expectation_guard
 CREATE TRIGGER responsibility_state_requires_transition
 CREATE TRIGGER responsibility_transition_apply
 CREATE TRIGGER responsibility_transition_guard
+CREATE TRIGGER shadow_expectation_names_its_channel
+CREATE TRIGGER shadow_observation_matches_nominated_channel
 CREATE TRIGGER support_channel_guard
 CREATE TRIGGER system_identity_guard
 CREATE TRIGGER system_identity_immutable_delete
@@ -5605,6 +5626,8 @@ END;
 END;
 END;
 END;
+END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
@@ -5624,6 +5647,7 @@ WHEN NEW.disposition IS NOT OLD.disposition
 WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.evidence_ref IS NOT OLD.evidence_ref
+WHEN NEW.observation_source_kind IS NULL OR trim(NEW.observation_source_kind)=''
 WHEN NEW.processed_at IS NOT NULL AND NEW.analysis_failed_at IS NOT NULL
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'

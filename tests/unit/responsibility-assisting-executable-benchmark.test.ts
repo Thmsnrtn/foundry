@@ -57,7 +57,7 @@ async function admit(name:string) {
     predicate:'expected_observed_event',value:'support_capacity_restored',epistemicStatus:'known',
     evidenceRefs:[{kind:'signal_event',id:ids.channel}],derivationMethod:'held-out expectation',observedAt:new Date()});
   await beginResponsibilityShadowing({productId:'gate_product',responsibilityId:responsibility.id,expectedEventType:'support_capacity_restored',
-    expectationClaimId:expectation,observationSourceSignalId:ids.channel});
+    expectationClaimId:expectation,observationSourceSignalId:ids.channel,observationSourceKind:'support'});
   const expectationId=String(((await query('SELECT id FROM responsibility_shadow_expectations WHERE responsibility_id=?',[responsibility.id])).rows[0] as Record<string,unknown>).id);
   await compareShadowObservation({productId:'gate_product',expectationId,observationSignalId:ids.actual});
   const comparisonId=String(((await query('SELECT id FROM responsibility_shadow_comparisons WHERE expectation_id=?',[expectationId])).rows[0] as Record<string,unknown>).id);

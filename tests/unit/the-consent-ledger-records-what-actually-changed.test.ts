@@ -61,6 +61,7 @@ describe('an institution grant', () => {
       productId: P, responsibilityId,
       expectedEventType: 'company_observation_baseline:observed',
       expectationClaimId: expectationClaim, observationSourceSignalId: channel,
+      observationSourceKind: 'support',
     });
     const expectation = (await query(
       'SELECT id FROM responsibility_shadow_expectations WHERE responsibility_id=?',

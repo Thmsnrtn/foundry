@@ -81,6 +81,7 @@ async function assistedEffect(suffix: string): Promise<{ responsibilityId: strin
   await beginResponsibilityShadowing({
     productId: P, responsibilityId, expectedEventType: 'support_capacity_restored',
     expectationClaimId: expectationClaim, observationSourceSignalId: channel,
+    observationSourceKind: 'support',
   });
   const expectation = (await query(
     'SELECT id FROM responsibility_shadow_expectations WHERE responsibility_id=?', [responsibilityId])).rows[0] as Record<string, unknown>;
