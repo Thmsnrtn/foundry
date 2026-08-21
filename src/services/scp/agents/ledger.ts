@@ -40,7 +40,7 @@ interface LedgerClaudeResponse {
     confidence: number;
     attribution_type: 'direct' | 'contribution' | 'protective';
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -233,7 +233,9 @@ Return JSON only (no markdown fences):
       "attribution_type": "direct" | "contribution" | "protective"
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -377,7 +379,13 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      // No `?? 50`. The type says `domainHealthScore?: number` — "if provided" —
+      // and a model that did not return a score has not scored the domain. 50 is
+      // the middle of the bar the dashboard draws, so an unscored agent used to
+      // render as exactly average, in amber, next to agents that were measured.
+      // Migration-free fix: the column is already nullable and run-recorder
+      // already writes null.
+      domainHealthScore: parsed.domain_health_score,
       outboundActions,
       agentMessages,
     };

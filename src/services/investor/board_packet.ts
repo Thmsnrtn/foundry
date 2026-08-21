@@ -14,7 +14,8 @@ import type { BoardPacket, BoardPacketStatus } from '../../types/index.js';
 // ─── SCP Board Section ────────────────────────────────────────────────────────
 
 export interface SCPBoardSection {
-  health_score: number;
+  /** Null when nothing has scored the company. Not 0, which is the worst score. */
+  health_score: number | null;
   lifecycle_state: string;
   total_evolution_cycles: number;
   golden_suite_size: number;
@@ -40,11 +41,19 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
   const attributedRevenue = (prod.attributed_revenue_trailing_30d_usd as number) ?? 0;
   const roi = aiCost > 0 ? attributedRevenue / aiCost : null;
 
-  // Top 3 agents by domain_health_score
+  // Top 3 agents by domain_health_score.
+  //
+  // `IS NOT NULL` because this renders in an investor packet under the heading
+  // "Top Performing Agents", and an agent nothing has scored is not a top
+  // performer — it is unmeasured. The old query took whatever three rows came
+  // back and `?? 0` turned an unscored one into "Health: 0" in red, which is a
+  // worse claim than leaving it out: it says the agent was measured and found
+  // to be failing. If fewer than three have been scored, fewer than three are
+  // shown, and if none have been the section does not render at all.
   const agentsResult = await query(
     `SELECT display_name, agent_name, domain_health_score, version
      FROM agent_instances
-     WHERE product_id = ? AND status = 'active'
+     WHERE product_id = ? AND status = 'active' AND domain_health_score IS NOT NULL
      ORDER BY domain_health_score DESC LIMIT 3`,
     [productId]
   );
@@ -58,7 +67,7 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
     return {
       name: (r.display_name as string) ?? agentName,
       role: AGENT_ROLES[agentName as keyof typeof AGENT_ROLES] ?? agentName,
-      health: Math.round((r.domain_health_score as number) ?? 0),
+      health: Math.round(Number(r.domain_health_score)),
       version: (r.version as number) ?? 1,
     };
   });
@@ -79,7 +88,7 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
   }
 
   return {
-    health_score: Math.round((prod.health_score as number) ?? 0),
+    health_score: prod.health_score == null ? null : Math.round(Number(prod.health_score)),
     lifecycle_state: (prod.company_lifecycle_state as string) ?? 'setup',
     total_evolution_cycles: (prod.total_evolution_cycles as number) ?? 0,
     golden_suite_size: (prod.golden_suite_size as number) ?? 0,

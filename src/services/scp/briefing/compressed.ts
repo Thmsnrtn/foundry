@@ -104,8 +104,10 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
     // no decisions table
   }
 
-  // 7. Compute current health score
-  let healthScore = 50;
+  // 7. Compute current health score. Null when no agent has scored its domain —
+  //    it used to start at 50 and stay there, so a company nothing had assessed
+  //    opened its weekly brief with "Health score is 50/100 this week."
+  let healthScore: number | null = null;
   try {
     const { SCPInstance } = await import('../instance.js');
     healthScore = await new SCPInstance(productId).computeHealthScore();
@@ -181,7 +183,7 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
 
   const contextForAI = `
 Week: ${weekOf}
-Health Score: ${healthScore}/100 (${healthTrend})
+Health Score: ${healthScore === null ? 'not yet scored — do not invent one' : `${healthScore}/100`} (${healthTrend})
 MRR: ${mrrDisplay} (${mrrGrowth})
 Churn: ${churnDisplay}
 Activation Rate: ${activationDisplay}
@@ -193,7 +195,9 @@ ${recentHeadlines.join('\n') || 'No recent briefings.'}
   `.trim();
 
   // 11. Call Claude to synthesize
-  let oneSentenceStatus = `Health score is ${healthScore}/100 this week.`;
+  let oneSentenceStatus = healthScore === null
+    ? 'No agent has scored this company yet, so there is no health score this week.'
+    : `Health score is ${healthScore}/100 this week.`;
   let top3ThisWeek: string[] = ['Review key metrics', 'Check agent recommendations', 'Address pending decisions'];
   let agentConsensus: string | null = null;
   let oneDecisionToMake: string | null = null;

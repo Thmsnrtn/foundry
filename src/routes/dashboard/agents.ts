@@ -43,11 +43,36 @@ function timeAgo(dateStr: string | null): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-function successRate(instance: Record<string, unknown>): number {
+/**
+ * Null when the agent has never run. It used to return 0, so an agent that had
+ * never been asked to do anything read "0% success" beside agents that had run
+ * hundreds of times and failed sometimes — the worst score on the page, for the
+ * one that had not been measured.
+ */
+function successRate(instance: Record<string, unknown>): number | null {
   const total = (instance.total_sessions as number) ?? 0;
   const successful = (instance.successful_sessions as number) ?? 0;
-  if (total === 0) return 0;
+  if (total === 0) return null;
   return Math.round((successful / total) * 100);
+}
+
+/**
+ * Domain health, or null when nothing has scored it.
+ *
+ * `?? 50` put an unscored agent at the exact middle of the bar, in amber, which
+ * is a claim about a domain nobody looked at. The agents themselves no longer
+ * invent the number either — `AgentResult.domainHealthScore` has always been
+ * declared optional, "if provided", and five agents defeated that with `?? 50`
+ * before it reached the column.
+ */
+function domainHealth(instance: Record<string, unknown>): number | null {
+  const raw = instance.domain_health_score;
+  return raw == null ? null : Number(raw);
+}
+
+function healthColorOf(score: number | null): string {
+  if (score === null) return 'var(--text-muted)';
+  return score >= 70 ? '#4ecca3' : score >= 40 ? '#ffb347' : '#ff6b6b';
 }
 
 function authorityLabel(level: number): string {
@@ -158,8 +183,8 @@ agentRoutes.get('/', async (c) => {
 
   const agentCards = agents.map((agent) => {
     const rate = successRate(agent as unknown as Record<string, unknown>);
-    const healthScore = (agent.domain_health_score as number) ?? 50;
-    const healthColor = healthScore >= 70 ? '#4ecca3' : healthScore >= 40 ? '#ffb347' : '#ff6b6b';
+    const healthScore = domainHealth(agent as unknown as Record<string, unknown>);
+    const healthColor = healthColorOf(healthScore);
     const displayName = AGENT_DISPLAY_NAMES[agent.agent_name] ?? agent.display_name;
     const role = AGENT_ROLES[agent.agent_name] ?? agent.role_description ?? '';
 
@@ -190,15 +215,15 @@ agentRoutes.get('/', async (c) => {
       <div>
         <div style="display:flex;justify-content:space-between;margin-bottom:0.3rem;">
           <span style="font-size:0.7rem;color:var(--text-muted);letter-spacing:0.05em;text-transform:uppercase;">Domain Health</span>
-          <span style="font-size:0.7rem;font-weight:700;color:${healthColor};">${healthScore}</span>
+          <span style="font-size:0.7rem;font-weight:700;color:${healthColor};">${healthScore === null ? 'not scored' : healthScore}</span>
         </div>
         <div style="height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;">
-          <div style="height:100%;width:${healthScore}%;background:${healthColor};border-radius:2px;transition:width 0.3s;"></div>
+          <div style="height:100%;width:${healthScore ?? 0}%;background:${healthColor};border-radius:2px;transition:width 0.3s;"></div>
         </div>
       </div>
 
       <div style="font-size:0.75rem;color:var(--text-dim);">
-        ${agent.total_sessions} sessions · ${rate}% success
+        ${agent.total_sessions} sessions · ${rate === null ? 'never run' : `${rate}% success`}
       </div>
 
       <div style="font-size:0.72rem;color:var(--text-muted);">
@@ -303,8 +328,8 @@ agentRoutes.get('/:name', async (c) => {
   const rate = successRate(agent as unknown as Record<string, unknown>);
   const displayName = AGENT_DISPLAY_NAMES[agent.agent_name] ?? agent.display_name;
   const role = AGENT_ROLES[agent.agent_name] ?? agent.role_description ?? '';
-  const healthScore = (agent.domain_health_score as number) ?? 50;
-  const healthColor = healthScore >= 70 ? '#4ecca3' : healthScore >= 40 ? '#ffb347' : '#ff6b6b';
+  const healthScore = domainHealth(agent as unknown as Record<string, unknown>);
+  const healthColor = healthColorOf(healthScore);
 
   const ranToast = ranParam === '1'
     ? html`<div style="background:#4ecca322;border:1px solid #4ecca344;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1.5rem;color:#4ecca3;font-size:0.85rem;">Agent run triggered successfully.</div>`
@@ -389,7 +414,7 @@ agentRoutes.get('/:name', async (c) => {
 
     <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:2rem;">
       <div style="font-size:0.82rem;color:var(--text-dim);">${agent.total_sessions} sessions</div>
-      <div style="font-size:0.82rem;color:var(--text-dim);">${rate}% success</div>
+      <div style="font-size:0.82rem;color:var(--text-dim);">${rate === null ? 'Never run' : `${rate}% success`}</div>
       <div style="font-size:0.82rem;color:var(--text-dim);">v${agent.version}</div>
       <div style="font-size:0.82rem;color:var(--text-dim);">Level ${agent.authority_level} authority</div>
     </div>
@@ -397,12 +422,12 @@ agentRoutes.get('/:name', async (c) => {
     <!-- Domain Health Score -->
     <div class="card" style="padding:1.25rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:1.5rem;">
       <div style="text-align:center;">
-        <div style="font-size:2.5rem;font-weight:800;color:${healthColor};line-height:1;">${healthScore}</div>
+        <div style="font-size:${healthScore === null ? '1.1rem' : '2.5rem'};font-weight:800;color:${healthColor};line-height:1;">${healthScore === null ? 'not scored' : healthScore}</div>
         <div style="font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-top:0.25rem;">Domain Health</div>
       </div>
       <div style="flex:1;">
         <div style="height:8px;border-radius:4px;background:rgba(255,255,255,0.08);overflow:hidden;">
-          <div style="height:100%;width:${healthScore}%;background:${healthColor};border-radius:4px;transition:width 0.4s;"></div>
+          <div style="height:100%;width:${healthScore ?? 0}%;background:${healthColor};border-radius:4px;transition:width 0.4s;"></div>
         </div>
         <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">Last run: ${timeAgo(agent.last_run_at)}</div>
       </div>

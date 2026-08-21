@@ -471,7 +471,8 @@ export interface SCPInstanceStatus {
   companyName: string;
   lifecycleState: CompanyLifecycleState;
   scpStatus: SCPStatus;
-  healthScore: number;
+  /** Null when no weighted agent has scored its domain. Not 50, which is a score. */
+  healthScore: number | null;
   agents: Array<{
     name: AgentName;
     displayName: string;
@@ -479,8 +480,10 @@ export interface SCPInstanceStatus {
     authorityLevel: AgentAuthorityLevel;
     status: 'active' | 'paused' | 'error';
     totalSessions: number;
-    successRate: number;
-    domainHealthScore: number;
+    /** Null when the agent has never run. Zero means it ran and never succeeded. */
+    successRate: number | null;
+    /** Null when nothing has scored this domain. Not 50, which is a score. */
+    domainHealthScore: number | null;
     lastRunAt: string | null;
     nextRunAt: string | null;
   }>;

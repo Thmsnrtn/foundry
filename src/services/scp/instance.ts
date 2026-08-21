@@ -82,8 +82,11 @@ export class SCPInstance {
           authorityLevel: 2 as 0 | 1 | 2,
           status: 'active' as const,
           totalSessions: 0,
-          successRate: 0,
-          domainHealthScore: 50,
+          // An agent with no instance row has never run. `successRate: 0` said
+          // it fails every time, and `domainHealthScore: 50` said its domain is
+          // in exactly average health. Both are scores; neither was measured.
+          successRate: null,
+          domainHealthScore: null,
           lastRunAt: null,
           nextRunAt: null,
         };
@@ -91,7 +94,7 @@ export class SCPInstance {
 
       const total = (row.total_sessions as number) ?? 0;
       const successful = (row.successful_sessions as number) ?? 0;
-      const successRate = total > 0 ? successful / total : 0;
+      const successRate = total > 0 ? successful / total : null;
 
       return {
         name,
@@ -101,7 +104,8 @@ export class SCPInstance {
         status: (row.status as 'active' | 'paused' | 'error') ?? 'active',
         totalSessions: total,
         successRate,
-        domainHealthScore: (row.domain_health_score as number) ?? 50,
+        domainHealthScore: row.domain_health_score == null
+          ? null : Number(row.domain_health_score),
         lastRunAt: (row.last_run_at as string) ?? null,
         nextRunAt: (row.next_run_at as string) ?? null,
       };
@@ -117,7 +121,9 @@ export class SCPInstance {
       companyName: (prod.name as string) ?? 'Unknown',
       lifecycleState: (prod.company_lifecycle_state as CompanyLifecycleState) ?? 'setup',
       scpStatus: (prod.scp_status as SCPStatus) ?? 'provisioning',
-      healthScore: (prod.health_score as number) ?? 0,
+      // Null rather than 0: a company nothing has scored is not in the worst
+      // health there is.
+      healthScore: prod.health_score == null ? null : Number(prod.health_score),
       agents,
       totalEvolutionCycles: totalEvoCycles,
       goldenSuiteSize: (prod.golden_suite_size as number) ?? 0,
@@ -279,7 +285,28 @@ export class SCPInstance {
 
   // ─── Health score ─────────────────────────────────────────────────────────
 
-  async computeHealthScore(): Promise<number> {
+  /**
+   * THE COMPANY'S HEALTH, OR NOTHING.
+   *
+   * Every agent with no `domain_health_score` used to enter this weighted
+   * average AT 50, and a company whose agents had all never been scored came out
+   * at exactly 50 — which was then WRITTEN to `products.health_score` and shown
+   * to the founder and, through the board packet, to investors.
+   *
+   * `SCPBriefing.health_score` has always been declared `number | null`, and the
+   * briefing renders "N/A" for null. The reader was right the whole time; the
+   * producer could not return the value the type allowed.
+   *
+   * Unscored agents are skipped, not counted at 50. When no weighted agent has
+   * a score, this returns null and does NOT write `products.health_score` —
+   * writing a number would be the same claim one layer down, and the stored
+   * column is what everything else reads.
+   *
+   * `updateLifecycleState` only PROMOTES on `healthScore >= 75`, so the old 50
+   * never caused a false promotion. It erred conservative; that is why this was
+   * a reporting defect rather than an authority one.
+   */
+  async computeHealthScore(): Promise<number | null> {
     const result = await query(
       'SELECT agent_name, domain_health_score FROM agent_instances WHERE product_id=?',
       [this.productId]
@@ -290,17 +317,16 @@ export class SCPInstance {
 
     for (const row of result.rows) {
       const r = row as Record<string, unknown>;
+      if (r.domain_health_score == null) continue;
       const name = r.agent_name as AgentName;
-      const score = (r.domain_health_score as number) ?? 50;
       const weight = WEIGHTS[name] ?? 0;
-      weightedSum += score * weight;
+      weightedSum += Number(r.domain_health_score) * weight;
       weightUsed += weight;
     }
 
-    // If no weighted agents have run yet, return 50 as neutral
-    const healthScore = weightUsed > 0 ? Math.round(weightedSum / weightUsed) : 50;
+    if (weightUsed === 0) return null;
 
-    // Update products.health_score
+    const healthScore = Math.round(weightedSum / weightUsed);
     await query(
       `UPDATE products SET health_score=? WHERE id=?`,
       [healthScore, this.productId]

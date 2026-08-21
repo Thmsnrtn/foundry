@@ -123,7 +123,12 @@ export async function provisionSCP(productId: string, ownerId: string): Promise<
             activation_cadence_hours, status, total_sessions, successful_sessions,
             total_decisions_proposed, total_decisions_approved, total_evolution_cycles,
             domain_health_score, next_run_at)
-         VALUES (?, ?, ?, ?, 1, ?, ?, 'active', 0, 0, 0, 0, 0, 50, ?)
+         -- domain_health_score is NULL, not 50. An agent that has not run has
+         -- not scored its domain, and 50 is the middle of every bar this system
+         -- draws: it rendered as exactly average health for twelve agents of
+         -- every company from the moment the company was provisioned. Migration
+         -- 190 removes the column default that agreed with it.
+         VALUES (?, ?, ?, ?, 1, ?, ?, 'active', 0, 0, 0, 0, 0, NULL, ?)
          ON CONFLICT(product_id, agent_name) DO NOTHING`,
         args: [
           instanceId,

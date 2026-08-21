@@ -852,7 +852,6 @@
   -- Action
   -- Activity
   -- Actual outcomes (filled in after outcome_measured_at)
-  -- Agent configuration (versioned via agent_evolution_versions)
   -- An external sender may not tell Foundry what its message means. Which
   -- And deny dominates: the constitutional ring is refused here too, so a
   -- Authority without required verification would let "I changed it" stand in
@@ -915,6 +914,7 @@
   -- Negative and missing amounts. An absent amount is not zero spend; it is an
   -- No echo. An external observer cannot know what it is being compared
   -- No high-consequence development authority exists at this evidence level.
+  -- Nullable: null means nothing has scored this company, which is different
   -- Only a real institutional judgment of this product may be dispositioned.
   -- Only the hash. The secret is shown once, at issuance, and never again.
   -- Optional unit, again the founder's words: 'boats', 'classes', 'orders'.
@@ -959,7 +959,6 @@
   -- The channel must belong to the company the intake authenticated as. The
   -- The check is deny-dominant and bidirectional: a prefix inside the ring is
   -- The closed vocabulary. A purpose exists here only when a route actually
-  -- The compressed content
   -- The consequence class a consent must have been granted at to use this. Not
   -- The constitutional ring. Ordinary development authority may not reach the
   -- The date the founder says these were true, not the date they typed them.
@@ -1036,6 +1035,7 @@
   -- field before its consumer exists is how orphans are made.
   -- for "it was independently checked".
   -- founder can be shown if they ask why they were not told.
+  -- from a low score and must not be rendered as one.
   -- from the fact that a write returned without throwing.
   -- from the message and the responsibility that owns its channel.
   -- governed effect kind is.
@@ -1146,7 +1146,7 @@
   CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
   CHECK(disposition IN ('active','deliberately_not_done')), disposition_reason TEXT, disposition_evidence_ref TEXT, disposition_at DATETIME, capability TEXT NOT NULL DEFAULT 'general', discovery_evidence_ref TEXT, due_at DATETIME, due_stated_by TEXT);
-  CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, health_score INTEGER DEFAULT 0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME, website_url TEXT);
+  CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME, website_url TEXT, health_score INTEGER);
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
@@ -1631,7 +1631,7 @@
   added_at TEXT DEFAULT (datetime('now')),
   affected_area TEXT,
   affected_markets TEXT,
-  agent_consensus TEXT, -- what most agents agree on
+  agent_consensus TEXT,
   agent_context_json      TEXT NOT NULL DEFAULT '{}',
   agent_contributions TEXT,            -- JSON: {agent_name: {contribution, priority}}
   agent_id TEXT,                                  -- agent name; NULL for system actions
@@ -2312,7 +2312,6 @@
   dna_field TEXT NOT NULL,
   dna_fields_populated TEXT NOT NULL DEFAULT '[]', -- which DNA fields were set
   dna_sections_used TEXT,               -- JSON: string[] — which DNA fields contributed
-  domain_health_score INTEGER DEFAULT 50, -- 0-100, agent's domain health
   domain_health_score INTEGER,
   draft_content TEXT NOT NULL,
   draft_id TEXT,                            -- action_drafts.id once approved/rejected
@@ -2611,7 +2610,7 @@
   headline TEXT NOT NULL,    -- ≤120 chars: the one sentence founders wake up to
   headline TEXT,                       -- One-line summary of the day
   headline TEXT, -- agent's one-line summary
-  health_score INTEGER NOT NULL,
+  health_score INTEGER,
   health_score INTEGER,
   health_score REAL DEFAULT 50.0,
   health_score REAL,
@@ -3112,7 +3111,7 @@
   metric_name TEXT NOT NULL,
   metric_name TEXT NOT NULL,   -- e.g., 'health_score', 'approval_rate', 'evolution_cycles_per_month'
   metric_name TEXT NOT NULL, -- 'mrr', 'runway_months', 'churn_rate', etc.
-  metrics_delta_json TEXT NOT NULL DEFAULT '{}', -- { mrr_change_pct, churn_change, activation_change }
+  metrics_delta_json TEXT NOT NULL DEFAULT '{}',
   metrics_snapshot TEXT,
   metrics_updated TEXT,                -- JSON: {field: value} from voice
   metrics_updated TEXT,  -- JSON: array of column names updated in metric_snapshots
@@ -3229,8 +3228,8 @@
   okr_id          TEXT NOT NULL REFERENCES company_okrs(id),
   old_values TEXT,
   onboarding_completed_at DATETIME,
-  one_decision_to_make TEXT, -- the single most important decision this week
-  one_sentence_status TEXT NOT NULL, -- "You're growing 12% MoM but churn is rising — focus on retention this week."
+  one_decision_to_make TEXT,
+  one_sentence_status TEXT NOT NULL,
   operating_principles TEXT,           -- JSON: string[]
   option_chosen TEXT NOT NULL,
   option_chosen_category TEXT NOT NULL,
@@ -4186,7 +4185,7 @@
   too_simple INTEGER DEFAULT 0,
   too_technical INTEGER DEFAULT 0,
   tool_pattern TEXT NOT NULL,               -- exact tool name, or '*' for any on this server
-  top_3_this_week TEXT NOT NULL DEFAULT '[]', -- JSON array of 3 actionable items
+  top_3_this_week TEXT NOT NULL DEFAULT '[]',
   top_keywords TEXT DEFAULT '[]',        -- JSON: string[]
   top_opportunities TEXT NOT NULL,       -- JSON: [{opportunity, agent, impact, priority}]
   total_companies INTEGER,
@@ -4260,7 +4259,7 @@
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, domain_health_score INTEGER,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   updated_at TEXT DEFAULT (datetime('now'))
   updated_at TEXT DEFAULT (datetime('now'))
@@ -4338,8 +4337,8 @@
   warning_signals_json TEXT NOT NULL, -- JSON array of early warning signals
   webhook_id TEXT NOT NULL REFERENCES webhooks(id),
   website TEXT,
+  week_of TEXT NOT NULL,
   week_of TEXT NOT NULL,          -- ISO YYYY-Www (e.g. 2026-W10)
-  week_of TEXT NOT NULL, -- ISO week: '2026-W14'
   week_start TEXT NOT NULL, -- ISO date of Monday
   week_starting TEXT NOT NULL,                    -- 'YYYY-MM-DD' Monday
   week_starting TEXT NOT NULL,                  -- 'YYYY-MM-DD' Monday
@@ -5135,7 +5134,6 @@ CREATE INDEX idx_web_audit_product ON web_audit_results(product_id);
 CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
 CREATE INDEX idx_webhooks_founder ON webhooks(founder_id);
 CREATE INDEX idx_webhooks_product ON outbound_webhooks(product_id, is_active);
-CREATE INDEX idx_weekly_brief_product ON weekly_compressed_briefs(product_id, week_of);
 CREATE INDEX idx_weekly_plans ON weekly_plans(product_id, week_of DESC);
 CREATE INDEX idx_wiki_entries_product_section
 CREATE INDEX idx_wiki_reads_agent    ON agent_wiki_reads(agent_name);
@@ -5152,6 +5150,7 @@ CREATE TABLE IF NOT EXISTS "notifications" (
 CREATE TABLE IF NOT EXISTS "oauth_states" (
 CREATE TABLE IF NOT EXISTS "push_log" (
 CREATE TABLE IF NOT EXISTS "webhooks" (
+CREATE TABLE IF NOT EXISTS "weekly_compressed_briefs" (
 CREATE TABLE acquirer_signals (
 CREATE TABLE action_drafts (
 CREATE TABLE action_executions (
@@ -5399,7 +5398,6 @@ CREATE TABLE voice_memos (
 CREATE TABLE voice_sessions (
 CREATE TABLE web_audit_results (
 CREATE TABLE webhook_deliveries (
-CREATE TABLE weekly_compressed_briefs (
 CREATE TABLE weekly_plans (
 CREATE TABLE wisdom_patterns (
 CREATE TRIGGER ai_spend_reservation_apply

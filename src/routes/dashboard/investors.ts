@@ -326,7 +326,11 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
         <!-- Health Score -->
         <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
-          <div style="font-size:2rem;font-weight:700;color:${scpSection.health_score >= 70 ? '#4ecca3' : scpSection.health_score >= 40 ? '#ffb347' : '#ff6b6b'};">${scpSection.health_score}</div>
+          <div style="font-size:${scpSection.health_score === null ? '0.9rem' : '2rem'};font-weight:700;color:${
+            scpSection.health_score === null ? 'var(--text-muted,#64748b)'
+            : scpSection.health_score >= 70 ? '#4ecca3'
+            : scpSection.health_score >= 40 ? '#ffb347' : '#ff6b6b'};">${
+            scpSection.health_score === null ? 'not scored' : scpSection.health_score}</div>
           <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Company Health</div>
         </div>
         <!-- Lifecycle State -->

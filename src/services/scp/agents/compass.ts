@@ -35,8 +35,8 @@ interface CompassClaudeResponse {
     directive: string;
     priority: 'high' | 'normal';
   }>;
-  company_health_score: number;
-  domain_health_score: number;
+  company_health_score?: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -217,8 +217,11 @@ Return JSON only (no markdown fences):
       "priority": "high" | "normal"
     }
   ],
-  "company_health_score": number (0-100),
-  "domain_health_score": number (0-100),
+  "company_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have
+    no evidence to score the company on,
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -307,7 +310,8 @@ Return JSON only (no markdown fences):
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed strategic analysis: ${currentPrompt}, ${decisionCount} pending decisions, health=${parsed.company_health_score ?? 50}`,
+      description: `Completed strategic analysis: ${currentPrompt}, ${decisionCount} pending decisions, `
+        + `health=${parsed.company_health_score ?? 'not scored'}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -323,7 +327,13 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.company_health_score ?? parsed.domain_health_score ?? 50,
+      // No `?? 50`. The type says `domainHealthScore?: number` — "if provided" —
+      // and a model that did not return a score has not scored the domain. 50 is
+      // the middle of the bar the dashboard draws, so an unscored agent used to
+      // render as exactly average, in amber, next to agents that were measured.
+      // Migration-free fix: the column is already nullable and run-recorder
+      // already writes null.
+      domainHealthScore: parsed.company_health_score ?? parsed.domain_health_score,
       outboundActions,
       agentMessages,
       hypotheses,

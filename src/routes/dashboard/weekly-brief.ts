@@ -145,7 +145,7 @@ weeklyBrief.get('/brief', async (c) => {
 
         <!-- Health score -->
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.5rem;">
-          <span style="font-size:2rem;font-weight:800;color:${hColor};">${brief.health_score}</span>
+          <span style="font-size:${brief.health_score == null ? '0.95rem' : '2rem'};font-weight:800;color:${brief.health_score == null ? 'var(--text-muted)' : hColor};">${brief.health_score == null ? 'not scored' : brief.health_score}</span>
           <div>
             <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Health Score</div>
             <div style="font-size:0.9rem;font-weight:600;color:${trendColor(trend)};">${trendArrow(trend)} ${trend}</div>
