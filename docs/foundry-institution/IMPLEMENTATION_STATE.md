@@ -447,13 +447,14 @@ governs how loudly Foundry may interrupt THIS PERSON. `risk-state.ts` cited the
 first in place of the second, in a comment, and was right about the first.
 **Watch for a satisfied guard named where an absent one belongs.**
 
-**Quieting an event to the letter is only safe when the Letter carries it.**
-`deliver()`'s letter and log rungs write nothing. `letter/composer.ts` composes
-from a specific list — completed executions, gate-0 decisions decided in the
-last day, the top pending decision, falsified premises, the memory digest,
-peer-radar warnings, the trust ledger, dissent. An event outside that list is
-DROPPED by a founder lowering their ceiling, silently. Route a notification
-through `deliver()` only when the underlying fact is already in the Letter.
+**Quieting an event now records it.** `deliver()`'s letter and log rungs used to
+write nothing, so an event whose fact the Letter did not independently carry was
+dropped by a founder lowering their ceiling — which is why eight scheduled bells
+bypassed the policy rather than lose the fact. Migration 182 (`quieted_events`)
+holds them and `letter/composer.ts` reads the last day's back as `noted`. Route
+any founder-facing notification through `deliver()`; there is no longer a
+condition to check first. Two direct `createNotification` callers remain
+(`billing/stripe.ts`, `ux/milestones.ts`), pinned by a test.
 
 **And a company's MRR reaches Foundry through TWO doors**, not one: the
 founder's ingest token and `POST /api/v1/metrics`. Anything that must happen

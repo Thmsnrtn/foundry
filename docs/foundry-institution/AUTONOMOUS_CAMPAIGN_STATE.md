@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `b286983`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `c37ab56`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-  **Migrations:** 217 files, highest **181**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `b286983` — **315 files / 2,734 tests**,
+  **Migrations:** 218 files, highest **182**. Ordering gated. Snapshot current.
+- **Validation:** full suite green at `c37ab56` — **315 files / 2,740 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -553,43 +553,30 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    the wellbeing card proves it: that one was three `??` defaults about a
    person, with no metric in sight.
 
-1. **Eleven in-app notifications that skip the founder's ceiling.**
-   `createNotification` is called directly from `jobs/index.ts`,
-   `services/billing/stripe.ts` and `services/ux/milestones.ts` — eleven call
-   sites — so those bells skip both `max_channel` and the strain quieting that
-   `ux/interruption.ts` exists to apply.
+1. **CLOSED in `jobs`: the ceiling now costs the founder nothing.** Eleven
+   in-app bells bypassed `ux/interruption.ts`, and the reason turned out not to
+   be laziness — the policy's two quietest rungs WROTE NOTHING, excused by "the
+   Letter composes from the ledgers, so the event will appear there". It
+   composes from a specific list, so obeying a founder's ceiling would have
+   dropped any event outside it. **The code chose the fact and ignored the
+   ceiling; both halves were defensible alone, and together they told the
+   founder their preference was respected when it was not.**
 
-   **The condition is now known, and it decides each site.** `deliver()`'s
-   letter rung writes nothing, which is safe ONLY when the Letter already
-   carries the fact. It composes from: completed executions, gate-0 decisions
-   decided in the last day, the top pending decision, falsified premises, the
-   memory digest, peer-radar warnings, the trust ledger, dissent.
+   Migration 182 (`quieted_events`) gives the quiet rungs somewhere to put the
+   event; the Letter reads the last day's back as a `noted` section, on the same
+   24-hour window as its other sources, and it counts toward whether the day was
+   genuinely quiet. The `log` rung records too — that is the audit trail behind
+   "why didn't you tell me?", which the module's header already promised.
 
-   **Checked site by site, and the first version of this entry was wrong.** It
-   listed the decision bells as safe on the strength of "the Letter carries
-   decisions". The Letter carries the TOP PENDING decision and gate-0 decisions
-   decided IN THE LAST DAY — neither of which is a decision decided weeks ago
-   whose follow-up or retrospective has now come due. Verify against
-   `letter/composer.ts`, not against a summary of it; this entry is an example
-   of why.
+   All eight bells in `jobs/index.ts` now route through the policy with an
+   importance chosen for what each means to a founder; that file no longer
+   imports `createNotification`. **Two files remain and are pinned by a test:**
+   `services/billing/stripe.ts` and `services/ux/milestones.ts`. Both are now
+   ordinary conversions — the blocker is gone — needing only an importance each.
 
-   - **Safe, and converted:** peer radar (`scanForWarnings`, called by the
-     composer itself) and falsified premises (`checkPremises` sets
-     `status='falsified'`, which is exactly what `getExpiredBeliefs` reads).
-   - **NOT safe** — the Letter does not carry the fact, so quieting DROPS it:
-     the Signal-drop alert, decision follow-up, decision retrospective, the
-     autopilot tick, the wellbeing pulse, check-in drafts awaiting approval,
-     milestones, billing failures. Six of these are the remaining direct calls.
-     Either give the letter rung something durable the Letter reads — the real
-     fix, and the larger one — or leave them outside the policy and say so at
-     each site.
-
-   Do NOT put the ceiling check inside `createNotification`: that module is the
-   RECORD primitive and `interruption.ts` is the POLICY, and the policy's own
-   header separates detection from delivery.
-
-   Eight direct calls in `jobs/index.ts` are now six. A test pins the three
-   files and the direction.
+   Deliberately no delivered/undelivered flag on `quieted_events`: a quieted
+   event is a fact about a moment, and a lifecycle would invent a second place
+   for "did the founder see this" to be wrong.
 
 2. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving an
    archived unbuildable client, most of `tier1-4`). Deletion adds no capability
