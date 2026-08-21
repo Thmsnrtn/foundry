@@ -146,12 +146,13 @@ export async function generateWeeklyEmailDigest(productId: string): Promise<Emai
     if (res.rows.length > 0) {
       const latest = res.rows[0] as Record<string, unknown>;
       const prev = res.rows[1] as Record<string, unknown> | undefined;
-      const mrr = latest.mrr_cents ? `$${((latest.mrr_cents as number) / 100).toLocaleString()}` : 'unknown';
+      // `!= null`: a recorded $0 is pre-revenue, not unmeasured.
+      const mrr = latest.mrr_cents != null ? `$${((latest.mrr_cents as number) / 100).toLocaleString()}` : 'unknown';
       const churn = latest.churn_rate != null ? `${(latest.churn_rate as number).toFixed(1)}%` : 'unknown';
       const activation = latest.activation_rate != null ? `${(latest.activation_rate as number).toFixed(1)}%` : 'unknown';
 
       let mrrDelta = '';
-      if (prev?.mrr_cents && latest.mrr_cents) {
+      if (prev?.mrr_cents != null && latest.mrr_cents != null && (prev.mrr_cents as number) > 0) {
         const pct = (((latest.mrr_cents as number) - (prev.mrr_cents as number)) / (prev.mrr_cents as number)) * 100;
         mrrDelta = ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% WoW)`;
       }

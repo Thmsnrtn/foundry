@@ -161,7 +161,10 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
   }
 
   // 10. Build context for AI synthesis
-  const mrrDisplay = latestMetrics.mrr_cents
+  // `!= null`, NOT TRUTHINESS. A company that recorded exactly $0 of MRR — a
+  // pre-revenue company, which is most of them — reported as 'unknown', which
+  // is the same confusion as everything else in this area running backwards.
+  const mrrDisplay = latestMetrics.mrr_cents != null
     ? `$${((latestMetrics.mrr_cents as number) / 100).toLocaleString()}`
     : 'unknown';
   const mrrGrowth = latestMetrics.mrr_growth_pct != null

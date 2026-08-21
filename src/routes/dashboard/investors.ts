@@ -52,7 +52,7 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
       [ctx.product.id],
     ),
     query(
-      `SELECT score, verdict, narrative, key_gaps, created_at
+      `SELECT score, verdict, narrative, key_gaps, unmeasured, measured_components, created_at
        FROM funding_readiness WHERE product_id = ? ORDER BY created_at DESC LIMIT 1`,
       [ctx.product.id],
     ),
@@ -61,6 +61,11 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
   const investorRows = investors.rows as Array<Record<string, unknown>>;
   const packetRows = packets.rows as Array<Record<string, unknown>>;
   const readinessRow = readiness.rows[0] as Record<string, unknown> | undefined;
+  const unmeasured = readinessRow?.unmeasured
+    ? JSON.parse(readinessRow.unmeasured as string) as string[]
+    : [];
+  const measuredComponents = readinessRow?.measured_components == null
+    ? null : Number(readinessRow.measured_components);
   const keyGaps = readinessRow?.key_gaps
     ? JSON.parse(readinessRow.key_gaps as string) as string[]
     : [];
@@ -86,10 +91,23 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
           </form>
         </div>
         <p class="funding-narrative">${readinessRow.narrative as string}</p>
+        ${measuredComponents !== null && measuredComponents < 7 ? html`
+          <p style="font-size:0.8rem;color:var(--text-muted);">
+            ${measuredComponents} of 7 components had a real figure behind them. The rest
+            score a neutral 50, so this number is partly a placeholder — not a
+            middling assessment.
+          </p>
+        ` : ''}
         ${keyGaps.length > 0 ? html`
           <div class="key-gaps">
             <strong>Key gaps:</strong>
             <ul>${keyGaps.map((g) => html`<li>${g}</li>`)}</ul>
+          </div>
+        ` : ''}
+        ${unmeasured.length > 0 ? html`
+          <div class="key-gaps">
+            <strong>Not measured:</strong>
+            <ul>${unmeasured.map((u) => html`<li>${u}</li>`)}</ul>
           </div>
         ` : ''}
       </div>
@@ -398,18 +416,23 @@ investorRoutes.post('/investors/compute-readiness', async (c) => {
 
     await query(
       `INSERT INTO funding_readiness
-       (id, product_id, score, verdict, key_gaps, narrative,
+       (id, product_id, score, verdict, key_gaps, unmeasured, measured_components, narrative,
         mrr_trajectory_score, churn_score, activation_score,
         technical_debt_score, decision_track_record_score,
         team_completeness_score, market_clarity_score)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(product_id, date(created_at)) DO UPDATE SET
          score = excluded.score, verdict = excluded.verdict,
-         key_gaps = excluded.key_gaps, narrative = excluded.narrative`,
+         key_gaps = excluded.key_gaps, unmeasured = excluded.unmeasured,
+         measured_components = excluded.measured_components,
+         narrative = excluded.narrative`,
       [
         nanoid(), ctx.product.id,
         result.score, result.verdict,
-        JSON.stringify(result.key_gaps), result.narrative,
+        JSON.stringify(result.key_gaps),
+        JSON.stringify(result.unmeasured),
+        result.measured_components.measured,
+        result.narrative,
         result.component_scores.mrr_trajectory_score,
         result.component_scores.churn_score,
         result.component_scores.activation_score,
