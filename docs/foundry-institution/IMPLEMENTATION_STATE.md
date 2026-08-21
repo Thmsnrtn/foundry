@@ -337,6 +337,41 @@ typing. And **a column default is not an observation**: `founder_health.
 engagement_trend` carries `DEFAULT 'stable'`, so a row written for any other
 reason looked like a judgment that a person was doing fine.
 
+## What a company's own surfaces may say about its money
+
+The same reading was carried outward to the surfaces that speak to founders and
+investors, and it holds there with higher stakes. Three standing rules came out
+of it, and each is enforced rather than described.
+
+**A metric that reaches a model says `unknown`, not a number.**
+`ai/measured.ts` is the only place that decides, and a `0` passing through it
+means a snapshot really recorded zero. Five agents wrote
+`(Number(x) || 0) * 100` and put `Churn rate: 0.0%` into prompts for companies
+that had reported nothing — under a system prompt reading "You do not hedge when
+customer data is clear". Every threshold that a fabricated zero could cross is
+now guarded on null: `if (activationRate < 30)` was firing a founder-facing
+acquisition-quality warning at companies with no metrics.
+
+**Not knowing is its own answer, kept apart from knowing and finding fault.**
+`computeFundingReadiness` returns `unmeasured` beside `key_gaps` and
+`measured_components` beside the score, because 62-of-seven-measured and
+62-of-two read identically. It had been telling companies that had reported
+nothing that their churn was above threshold and their activation below
+benchmarks — findings about numbers that did not exist.
+
+**A cash balance is stated by the person who has one, or runway is unknown.**
+Migration 181 and `financial/position.ts`. **Do not add a default there**, and
+do not let either runway path derive cash from anything else: both used to, by
+two different formulas, and the results were rendered through a Monte Carlo with
+a P10–P90 band and a survival probability. Nobody mistakes a constant for a
+finding; everybody reads a confidence interval as one.
+
+**And one gate.** `check-query-arity.mjs` counts placeholders against arguments
+and INSERT columns against values. It exists because a statement written with
+seven placeholders and six arguments had never once succeeded — valid SQL, real
+columns, clean types, both callers swallowing the throw, the nightly log reading
+"Generated scenarios for 0 products" and nobody finding out.
+
 ## Evidence frontier (do not inflate)
 
 | Capability | Level | Scope |

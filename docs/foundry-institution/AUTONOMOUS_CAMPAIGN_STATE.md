@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `111b7b0`. Pushed through `af473cc`; the commits after it are local
-  until the run that covers them is green.
-  **Migrations:** 215 files, highest **179**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `af473cc` — **302 files / 2,574 tests**,
+- **Head:** `4f09568`. Pushed through `65ecd13`; anything after it is local
+  until the run that covers it is green.
+  **Migrations:** 217 files, highest **181**. Ordering gated. Snapshot current.
+- **Validation:** full suite green at `65ecd13` — **307 files / 2,644 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 3.
@@ -37,7 +37,9 @@ inherited list because it was inherited.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **28** · write-only columns
-  **84** · id tiebreaks **18** · backticks in embedded comments **0**.
+  **84** · id tiebreaks **18** · backticks in embedded comments **0** ·
+  query-argument mismatches **0** (1,886 statements) · INSERT value-list
+  mismatches **0** (377).
 
 ## Active work
 
@@ -125,6 +127,93 @@ because `decision_quality_scores` has no writer at all —
 `recordDecisionContext` is exported from `scp/founder/decision-tracker.ts` and
 called from nowhere, which is why the override rates over there are permanently
 zero too. A test now watches for a caller appearing.
+
+**Then the same lens on the surfaces beyond it, where the stakes are higher.**
+The operator page was read first because it was there; nothing about it was
+special. Carrying the lens outward found the same shapes pointed at people
+making bigger decisions, and one shape that had nothing to do with numbers.
+
+**Fabricated numbers handed to a model told not to hedge.** Five agents read a
+company's `metric_snapshots` into a prompt through
+`(Number(x) || 0) * 100`, so a company that had reported nothing produced
+`Churn rate: 0.0%. NPS: 0.0.` — a claim of excellent retention. Harbor's system
+prompt then says, in these words, *"You do not hedge when customer data is
+clear"*, and asks for named accounts and dollar amounts. The output reaches a
+founder as advice about their own company. It crossed thresholds too:
+`if (activationRate < 30)` fired a "Low activation rate (0.0%) — acquisition
+quality concern" message at companies with no metrics at all.
+
+Forge was the sharpest. `mrr_health_ratio` is defined by migration 001 as
+churned/new, *"null if new is 0"* — the null is documented as meaning the
+division could not be done — and the prompt explains the scale as
+`>1.0 = churn exceeds new MRR — critical`. So `|| 0` mapped "no new MRR at all"
+to the single most favourable value available.
+
+The rule already existed: `jobs/index.ts` writes `!= null ? … : 'unknown'` for
+the same columns from the same table. `ai/measured.ts` states it once, and a
+zero reaching a prompt through it means a snapshot really recorded zero.
+
+**The same defect inverted, condemning instead of flattering.**
+`computeFundingReadiness` has a neutral 50 branch for every null input, and it
+never ran: the row is read as `rows[0] ?? {}`, so a company with no snapshot
+produced `undefined`, the `=== null` check missed, and every comparison fell
+through to the final `: 10` / `: 20`. Then the gap list tested those against
+thresholds of 60, and told a company that had reported NOTHING — in a document
+it would fundraise on — that its churn was above threshold, its activation below
+benchmarks, its MRR health indicating churn exceeds new revenue, and its
+technical audit below threshold. Four findings about numbers that did not exist.
+
+Which direction a fabricated unknown lands is an accident of where somebody put
+a threshold. That is the transferable point: it is not that fallbacks flatter,
+it is that they *decide*, and nobody chose.
+
+**Statistics applied to an invented input.** `/scenarios` renders a Monte Carlo
+runway — median, P10–P90 band, probability of surviving eighteen months — and
+cash on hand was defined as `monthlyBurnCents * 12`, where burn was
+`products.operating_budget_monthly_usd`: the AI SPEND CAP, defaulting to fifty
+dollars a month. A founder who never touched it was modelled as a business
+burning $50 against $600 of cash, with the identity making base runway exactly
+twelve months. A second implementation in `financial/simulator.ts` invented cash
+as `revenue * 6`, so a company got two different runways depending which page it
+opened.
+
+This is worse than the bare `runway_months: 999` on the operator page, and the
+reason is worth carrying: **nobody mistakes a constant for a finding, and
+everybody reads a confidence interval as one.** Statistical machinery over a
+guess does not report uncertainty — it disguises the guess as measurement.
+
+Migration 181 lets the founder state cash, burn and the date they were true;
+`financial/position.ts` is the only way either path may learn it and has no
+default anywhere; both return null until a position exists, and the page asks
+in the founder's own terms. **Do not add a default here.** A default cash
+balance is a claim about a bank account, and no amount of modelling downstream
+makes it less of one.
+
+**And a statement that had never once run.** `forecast_scenarios` was written
+with seven placeholders and six arguments. `generated_by` is NOT NULL, so every
+insert raised — since it was written. Both callers swallow it: the refresh job
+catches per product, the route logs and redirects. So the page never showed a
+scenario that function produced, the nightly log read "Generated scenarios for
+0 products", and nobody found out. Every gate here passed it: the SQL is valid,
+the columns exist, the types check. It surfaced only when a test called the
+function for the first time.
+
+`check-query-arity.mjs` now counts placeholders against arguments (1,886
+statements) and INSERT columns against values (377), chained into
+`lint:columns`. Writing it taught the same lesson twice: the first counter
+toggled string state on every apostrophe, so a SQL comment reading "Migration
+178's trigger" opened a string that never closed — five false positives against
+correct code. The same bug in the argument splitter, on a TypeScript comment
+containing `'system'`, inflated a count by one. Both are tests now. **A noisy
+gate gets baselined, and a baseline is where a gate goes to stop working.**
+
+**Checked and found correct — worth as much as the findings.**
+`scp/investor/fundraising-readiness.ts` awards no points for unknowns and prints
+`N/A`. `scp/investor/investor-update.ts` handles every null. Both briefing
+surfaces already say "unknown" — though both used truthiness, so a company
+recording exactly $0 of MRR, which is most pre-revenue companies, reported as
+unmeasured. Read the code before writing the finding: this cycle's frontier
+entry named five suspect files and two of them were already right.
 
 **Method note that paid for itself twice.** Two findings were wrong on first
 read and were caught by checking rather than by writing them down. The tier
@@ -238,28 +327,27 @@ Provisional, recomputed each cycle. Not a backlog — if something better is
 found, this list loses. **Closed items are not kept here**; the git history is
 the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
 
-0. **The same lens, on the surfaces `founder/intelligence.ts` was not.** Eleven
-   findings came out of one file by reading each number and then looking for the
-   query behind it. Nothing about that file is special; it was read first. The
-   surfaces that have NOT had this treatment and carry the same shape — a
-   number, a person reading it, a fallback where the data is absent — are:
+0. **The same lens, further out.** `founder/intelligence.ts`, the five SCP
+   agents, `investor/board_packet.ts` and both runway implementations have been
+   read this way and are done. Two files this entry previously named as suspects
+   — `scp/investor/fundraising-readiness.ts` and the briefing surfaces — were
+   already correct, which is the reason to read before writing a finding.
 
-   - `scp/briefing/compressed.ts` and `email-digest.ts`, `investor/board_packet.ts`,
-     `scp/investor/fundraising-readiness.ts` and `investor-update.ts`. These read
-     `metric_snapshots` for a COMPANY and render rates to that company's founder,
-     and an investor-facing document is the highest-consequence place for a
-     number nothing measured.
-   - `scp/agents/{harbor,beacon,prism,oracle}.ts`, each of which does
-     `(Number(metrics.activation_rate) || 0) * 100` — the `|| 0` is the exact
-     fallback shape that produced most of this cycle's findings, and it is
-     written five times.
+   **What to look for, in the order it paid:** a fallback (`?? 0`, `|| 0`,
+   `: 0`, `?? 50`) standing where the absence of data should be; a denominator
+   that cannot be empty because somebody substituted 1; a count taken from
+   `rows.length` where the query carries a LIMIT; two fields whose expressions
+   are identical; a field name naming a window or a subject the query does not
+   touch; a hardcoded null where a writer actually exists; and a `=== null`
+   check against a row read as `rows[0] ?? {}`, which yields `undefined` and
+   never matches.
 
-   **What to look for, in order of how often it paid:** a fallback (`?? 0`,
-   `|| 0`, `: 0`, `?? 50`) standing where the absence of data should be; a
-   denominator that cannot be empty because someone substituted 1; a count taken
-   from `rows.length` where the query carries a LIMIT; two fields whose
-   expressions are identical; a field name naming a window or a subject the
-   query does not touch; and a hardcoded null where a writer actually exists.
+   **Where it has not been run.** `scp/agents/{compass,shield,sentinel,ledger,
+   scribe}.ts` and the remaining `routes/dashboard/*` pages. Lower expected
+   yield than what has been done — those five agents were picked first because
+   they read `metric_snapshots` — but the shape is not confined to metrics, and
+   the wellbeing card proves it: that one was three `??` defaults about a
+   person, with no metric in sight.
 
 1. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving an
    archived unbuildable client, most of `tier1-4`). Deletion adds no capability
