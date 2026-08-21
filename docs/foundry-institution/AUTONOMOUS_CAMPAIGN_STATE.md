@@ -25,13 +25,15 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `f8a1581`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `46a0ef3`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-  **Migrations:** 227 files, highest **191**. Ordering gated. Snapshot current.
-- **Validation:** **333 files / 2,944 tests.** The run at `f8a1581` had ONE
-  failure — a fixture set to the wrong observation channel by hand — fixed in
-  the commit that follows it, with the suite green there and all seven gates
-  EXIT=0. Every gate is chained and running in CI on this branch.
+  **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
+- **Validation:** **335 files / 2,966 tests.** The run at `46a0ef3` had ONE
+  failure, and it was a gate doing its job: `sql-prepares-against-schema` reads
+  literal SQL out of a file and cannot tell a statement in a COMMENT from one in
+  the code, so a comment quoting the statement it had just removed was parsed
+  and failed to prepare. Fixed by describing the statement instead of quoting
+  it. Every gate is chained and running in CI on this branch.
   **Read the exit code from the run that produced the log**, and do not write
   "green at <sha>" for a run that was not: a commit went out with five red tests
   in an earlier cycle because the code was read from a wrapper, and this line
@@ -43,8 +45,8 @@ inherited list because it was inherited.
   with five red tests this cycle because it was read from a wrapper.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
-  effects **0** · statically unreachable modules **27** · write-only columns
-  **69** · id tiebreaks **18** · backticks in embedded comments **0** ·
+  effects **0** · statically unreachable modules **26** · write-only columns
+  **69** · **unscoped product-shaped routes 2** (new gate) · id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** · INSERT value-list mismatches **0** ·
   tables written and never read **4** (220 written tables checked).
 
@@ -159,6 +161,30 @@ breadth was read as 100 and could never raise a stressor. `if (!m) return 0` gav
 a company with no snapshot a flat zero on "how effectively the product delivers
 value", and `assessTimeToFirstValue` read a missing measurement as 0 hours,
 which falls in its first branch: "Excellent — users get value within minutes."
+
+**AND THE SAME LENS, ONE LAYER UP, FOUND THE MOST SERIOUS DEFECT OF THE
+CYCLE.** `middleware/tenant.ts` was on the unreachable-modules baseline: the
+module that states tenant ownership ONCE, including the deliberate 404-rather-
+than-403, mounted nowhere. Eight idioms are in use instead. A rule with eight
+implementations has no floor, and `GET /packet/:id` was the route with nothing —
+**any authenticated founder could read any company's board packet**, the most
+sensitive document Foundry produces, while three of its neighbours in the same
+file scoped correctly and one carried a comment saying why. On the same surface
+sweep, two operator routes resolved a company's decisions and recorded
+`decided_by = 'founder'` about somebody else.
+
+**`check-tenant-scope.mjs` is the floor**, baseline 2, both entries earned. The
+body-and-query door was checked in the same pass and holds — recorded because a
+sweep that reports only what it broke tells the next reader nothing about where
+not to look.
+
+**A THIRD KIND OF SELF-INFLICTED SCANNER CONFUSION, and the pattern is now
+clear enough to name: PROSE THAT QUOTES CODE IS READ AS CODE.** Earlier this
+campaign my own scanners read SQL comments and TS comments as statements. This
+time it was the repository's scanner reading MY comment: a note explaining the
+statement it had just removed, quoted verbatim, was extracted by
+`sql-prepares-against-schema` and failed to prepare. Describe the statement, or
+expect the tools to believe you.
 
 **A flake that read as a security regression.** `encryption.test.ts` overwrote
 the first two hex characters of a ciphertext with the constant `'ff'`. One
@@ -638,10 +664,21 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    POST to it — which makes this a product decision rather than dead-code
    removal, and it is why it has not been taken.
 
-3. **Readers whose writers can never run.** One remains: `scribe.ts` reads
-   `agent_wiki_entries` and the only writer is a module nothing can reach.
-   Deleting a mounted page is a product decision, so it is recorded rather than
-   taken as collateral.
+3. **CLOSED: readers whose writers can never run.** Both halves are done, and
+   neither was closed by deleting the reader.
+
+   **The wiki was three halves and no wire.** Scribe's prompt has always asked
+   the model for `wiki_contributions` and its response type has always declared
+   them; nothing read the field, so the agent paid for those tokens every week
+   and threw the articles away. It also READS `agent_wiki_entries` to see what
+   the company knows, and the only module that could write that table was
+   imported by nothing. A producer, a store and a reader, all present, with no
+   wire between them — so the fix was the wire, not a feature.
+
+   **The lesson for the next one of these:** before deleting a reader whose
+   writer cannot run, check whether the writer's INPUT is already being produced
+   and discarded. Twice this cycle it was, and in both cases (this and the OKR
+   create form) connecting cost less than deleting and left more behind.
 
    **The OKR half is CLOSED, and how it closed is the useful part.** The
    unreachable module was `services/scp/okr.ts`, and deleting it made the

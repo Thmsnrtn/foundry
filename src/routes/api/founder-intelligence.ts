@@ -111,9 +111,13 @@ founderIntelRoutes.get('/api/founder/intelligence/decisions-inbox', async (c) =>
 });
 
 // THE OPERATOR APPROVED A COMPANY'S DECISION AND THE LEDGER SAID THE FOUNDER
-// DID. Two routes were here — approve and reject — each running
-// `UPDATE decisions SET status=…, decided_by='founder' WHERE id = ?` with no
-// scope of any kind. This surface is gated on `isFounder`, which is Foundry's
+// DID. Two routes were here — approve and reject — each updating a decision's
+// status and setting decided_by to 'founder', keyed on the id alone, with no
+// scope of any kind. (The statement is described rather than quoted: the
+// SQL-prepares-against-schema gate reads literal SQL out of this file and
+// cannot tell a statement in a comment from one in the code. It caught this
+// comment on the first full run, which is the gate working.)
+// This surface is gated on `isFounder`, which is Foundry's
 // OWNER, not the company's founder. So the operator could resolve any company's
 // decision, and `decisions.decided_by` recorded it as the act of the person
 // whose company it was.

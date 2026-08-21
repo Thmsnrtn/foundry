@@ -16,15 +16,15 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `b7f156b` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `46a0ef3` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
-| Migrations | **225 files**, highest number **189**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **327 files / 2,855 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
+| Migrations | **228 files**, highest number **192**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
+| Validation | Full suite green: **335 files / 2,966 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
-| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **27** · write-only columns **70** · tables written and never read **4**. |
+| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **26** · write-only columns **69** · tables written and never read **4** · **unscoped product-shaped routes 2** (new). |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
 | Public API | **Live.** Scoped, expiring, revocable keys issued from settings. Every v1 route needs a scope a founder can grant; the bidirectional gate enforces both directions. |
 | Consequential effects | Converge through `services/outbound/gateway.ts` — kill switch, classification, budget, idempotency, audit. Inventory in `CONSEQUENTIAL_EFFECTS.json`; untraced count ratcheted to zero. |
@@ -316,6 +316,18 @@ This is separate from `OWNER_DECISIONS_PENDING` §12, which asks who holds the
 ecosystem key. That one is about a surface outside the member model; this is
 about Foundry's own operator view of its paying customers.
 
+**AND WHAT THE OPERATOR MAY NOT DO.** Two routes on this surface resolved a
+company's decisions — approve and reject — keyed on the decision id alone, with
+`decided_by` set to `'founder'`. `isFounder` is FOUNDRY'S OWNER, so the operator
+could close any company's decision and the ledger recorded it as the act of the
+person whose company it was. `decisions.decided_by` admits `'founder'` or
+`'second_self'` and nothing else, because the operator resolving a company's
+decisions is not something this boundary describes: the operator administers the
+COMPANIES and bills them. The routes were removed rather than given a new
+vocabulary — adding an authority quietly is the one thing the constitutional
+invariant names. If it is ever wanted it comes back whole, with a value that
+says who acted and an owner decision behind it.
+
 **What the operator surface now says when it does not know.** Every number on
 `/founder-ops` was read against the query behind it, and most of them turned out
 to be constants, fallbacks, or a different quantity than the label claimed. The
@@ -336,6 +348,38 @@ is null, not a digit — `auto_execute_rate` fell back to 100 and
 typing. And **a column default is not an observation**: `founder_health.
 engagement_trend` carries `DEFAULT 'stable'`, so a row written for any other
 reason looked like a judgment that a person was doing fine.
+
+## Whose company is this
+
+**The rule:** a route that takes a company's id must establish that the id
+belongs to the caller, and answer 404 rather than 403 when it does not, so
+nothing leaks about a company the caller may not see. `middleware/tenant.ts`
+states it, including that choice, and is mounted NOWHERE — it sits on the
+unreachable-modules baseline while every route re-implements it inline.
+
+**Eight idioms are in use** for "is this company theirs": `getProductByOwner`,
+`hasProductAccess`, `requireOwner`, `requireCompanyCapability`,
+`verifyPortfolioOwnership`, `scopedTo` (the §12 portfolio principal),
+`validateApiKey` (a key acts as its issuer, bounded by scopes), and a plain
+WHERE on `products.owner_id` or the session's `ctx.product.id`.
+
+**A rule with eight implementations has no floor, and one route had nothing.**
+`GET /packet/:id` read any company's board packet by id — the executive summary,
+metrics, wins, risks, asks, next-quarter goals — with the founder loaded and
+unused, while three of its neighbours in the same file scoped correctly and one
+of them carried a comment saying why. Fixed, and `check-tenant-scope.mjs` is the
+floor: every handler whose path takes `:id` or `:productId` shows a recognised
+idiom or is baselined with a reason written on the route. **Baseline 2**, both
+earned — a published case study, and a Stripe webhook that has no founder
+session because Stripe authenticates by signature.
+
+**The body-and-query door was checked and holds.** Ten routes take a product id
+from a body or query string; the two that are not session-scoped —
+`/webhooks/voice-reply` and `/internal/conversion-signal` — are guarded by
+`validateApiKey` and `scopedTo` respectively, both added deliberately by earlier
+work. The remaining eight are founder-scoped writes where the product id is a
+label on the row. **The gate does not cover that door**, and the reason it does
+not is that there was nothing to catch, not that it was skipped.
 
 ## What a company's own surfaces may say about its money
 
