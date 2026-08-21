@@ -147,32 +147,23 @@ describe('primitive 4 — the operator brain sees aggregates only (Level-1/2 bou
     // ONE RULE, TWO IMPLEMENTATIONS, ONE ENFORCED. `founder/intelligence.ts`
     // feeds `/founder-ops` and `/api/founder-intelligence` — both gated on
     // `isFounder`, so operator-only and not a leak between founders — and it
-    // read the ten most at-risk CUSTOMERS across every company on the platform
-    // by name, with no product scope, plus each company's audit `reasoning`.
+    // selected the ten most at-risk CUSTOMERS across every company on the
+    // platform by name, with no product scope, plus each company's audit
+    // `reasoning`.
     //
-    // The operator is Foundry's owner: they administer the COMPANIES and bill
-    // them. A company's customers are that company's. Nothing rendered the
-    // names, so they crossed into a clientless API response and no further —
-    // removed at the source rather than relying on nobody looking.
+    // The operator administers the COMPANIES and bills them, so a company may
+    // be named; a company's customers belong to that company.
+    //
+    // THE RULE GOT STRONGER THAN THIS TEST FIRST ASSERTED. It began as "any
+    // customer select here must be an aggregate", with a guard requiring at
+    // least one such select so it could not pass vacuously. The surface now has
+    // NO customer SQL: it asks `institution/company-customers.ts`, the same
+    // accessor the departments use, so the guard was asserting the old shape.
+    // A department — or an operator view — that names a store has picked one.
     const src = readFileSync('src/services/founder/intelligence.ts', 'utf8');
-    const customerSelects = (src.match(/SELECT[\s\S]*?FROM\s+customers/gi) ?? []);
-    expect(customerSelects.length, 'the operator still asks about customers').toBeGreaterThan(0);
-    for (const s of customerSelects) {
-      expect(s, 'and only ever in aggregate').toMatch(/COUNT\(|SUM\(|AVG\(/i);
-    }
-    // THE DISTINCTION, STATED PRECISELY. A first version of this forbade the
-    // word `name` anywhere in a customers select and flagged `p.name` — the
-    // COMPANY's name, which is exactly what the rule permits. The rule is about
-    // WHOSE name: Foundry's own customer may be named, that customer's
-    // customers may not. So the projection is read, and every column in it must
-    // be an aggregate or come from the joined `products` table.
-    for (const select of customerSelects) {
-      const projection = select.replace(/FROM[\s\S]*$/i, '').replace(/^SELECT/i, '');
-      for (const column of projection.split(',').map((x) => x.trim()).filter(Boolean)) {
-        expect(column, 'a customer column in an operator projection')
-          .toMatch(/COUNT\(|SUM\(|AVG\(|\bp\./i);
-      }
-    }
+    expect(src, 'the operator asks the accessor, not a store')
+      .not.toMatch(/\b(FROM|INTO|UPDATE|JOIN)\s+customers?\b/i);
+    expect(src).not.toMatch(/customer_intelligence/);
     expect(src, 'a company\'s account of why belongs to that company')
       .not.toMatch(/SELECT[^;]*\breasoning\b[^;]*FROM\s+audit_log/i);
   });

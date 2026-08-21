@@ -274,43 +274,63 @@ export interface CustomerHealthOverview {
 }
 
 export async function getCustomerHealthOverview(): Promise<CustomerHealthOverview> {
-  const totals = await safeQuery(
-    `SELECT
-       COUNT(*) as total,
-       SUM(CASE WHEN health_score >= 70 THEN 1 ELSE 0 END) as healthy,
-       SUM(CASE WHEN health_score >= 40 AND health_score < 70 THEN 1 ELSE 0 END) as warning,
-       SUM(CASE WHEN health_score < 40 THEN 1 ELSE 0 END) as critical,
-       AVG(health_score) as avg_health,
-       SUM(CASE WHEN is_champion = 1 THEN 1 ELSE 0 END) as champions,
-       SUM(CASE WHEN churn_risk > 0.5 THEN mrr_cents ELSE 0 END) as mrr_at_risk
-     FROM customers`, []
-  );
-
-  const t = totals.rows[0] as Record<string, number> | undefined;
+  // COUNTED OVER BOTH STORES, THROUGH THE ONE ACCESSOR. This aggregated
+  // `customers` alone, so Foundry's own view of its platform excluded every
+  // customer a company reported through the documented external API. A UNION
+  // here would have double-counted anyone present in both stores, and
+  // overstating is the error that flatters — so the deduplication rule is run
+  // once, in `institution/company-customers.ts`, rather than copied into SQL.
+  const { getAllCustomers, AT_RISK_CHURN_RISK, CHAMPION_MIN_HEALTH, CHAMPION_MAX_CHURN_RISK } =
+    await import('../institution/company-customers.js');
+  const all = await getAllCustomers();
+  const scored = all.filter((c) => c.healthScore !== null);
+  const t = {
+    total: all.length,
+    healthy: scored.filter((c) => (c.healthScore ?? 0) >= 70).length,
+    warning: scored.filter((c) => (c.healthScore ?? 0) >= 40 && (c.healthScore ?? 0) < 70).length,
+    critical: scored.filter((c) => (c.healthScore ?? 0) < 40).length,
+    avg_health: scored.length
+      ? scored.reduce((sum, c) => sum + (c.healthScore ?? 0), 0) / scored.length : 0,
+    champions: all.filter((c) => (c.healthScore ?? 0) > CHAMPION_MIN_HEALTH
+      && c.churnRisk !== null && c.churnRisk < CHAMPION_MAX_CHURN_RISK).length,
+    // The at-risk line for money uses the same threshold the departments act on,
+    // rather than a second number written here.
+    mrr_at_risk: all
+      .filter((c) => c.churnRisk !== null && c.churnRisk > AT_RISK_CHURN_RISK)
+      .reduce((sum, c) => sum + c.mrrCents, 0),
+  };
 
   // Aggregated per company, so the operator learns which COMPANY needs looking
-  // at without learning who any of its customers are.
-  const atRisk = await safeQuery(
-    `SELECT p.name AS company, COUNT(*) AS n
-       FROM customers c JOIN products p ON p.id = c.product_id
-      WHERE c.churn_risk > 0.5
-      GROUP BY c.product_id, p.name
-      ORDER BY n DESC, p.name ASC
-      LIMIT 10`, []
-  );
+  // at without learning who any of its customers are. Company names come from
+  // one query keyed by product id; the customers themselves never leave the
+  // accessor as identities.
+  const atRiskByProduct = new Map<string, number>();
+  for (const c of all) {
+    if (c.churnRisk === null || c.churnRisk <= AT_RISK_CHURN_RISK) continue;
+    atRiskByProduct.set(c.productId, (atRiskByProduct.get(c.productId) ?? 0) + 1);
+  }
+  const productNames = new Map<string, string>();
+  for (const row of (await safeQuery('SELECT id, name FROM products', [])).rows as
+       unknown as Array<Record<string, unknown>>) {
+    productNames.set(String(row.id), String(row.name ?? 'Unknown'));
+  }
 
   return {
-    total_customers: t?.total ?? 0,
-    healthy: t?.healthy ?? 0,
-    warning: t?.warning ?? 0,
-    critical: t?.critical ?? 0,
-    avg_health_score: Math.round(t?.avg_health ?? 0),
-    at_risk_by_company: (atRisk.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
-      company: (r.company as string) ?? 'Unknown',
-      customers_at_risk: Number(r.n ?? 0),
-    })),
-    champions: t?.champions ?? 0,
-    revenue_at_risk: Math.round((t?.mrr_at_risk ?? 0) / 100),
+    total_customers: t.total,
+    healthy: t.healthy,
+    warning: t.warning,
+    critical: t.critical,
+    avg_health_score: Math.round(t.avg_health),
+    at_risk_by_company: [...atRiskByProduct.entries()]
+      .map(([productId, n]) => ({
+        company: productNames.get(productId) ?? 'Unknown',
+        customers_at_risk: n,
+      }))
+      .sort((a, b) => b.customers_at_risk - a.customers_at_risk
+        || a.company.localeCompare(b.company))
+      .slice(0, 10),
+    champions: t.champions,
+    revenue_at_risk: Math.round(t.mrr_at_risk / 100),
   };
 }
 

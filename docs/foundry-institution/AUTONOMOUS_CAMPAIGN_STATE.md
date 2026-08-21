@@ -397,11 +397,20 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    zero is the criterion that says the legacy read can go — the *compare* stage
    made measurable rather than asserted.
 
-   **What is left, deliberately.** Four read-only readers still query
-   `customers` directly (`north-star`, `founder/intelligence`, `graph/engine`,
-   and `customers/intelligence` itself). They analyse rather than act, so they
-   were not migrated in the same tranche; migrating them and deleting the
-   legacy read is the cutover. `customer_events` has one writer,
+   **Converged since:** `north-star` (its gap was computed from the legacy store
+   under a comment calling it canonical — a company that integrated properly
+   read `arr_current_dollars = 0`) and `graph/engine` (a company's own knowledge
+   graph contained none of its reported customers).
+
+   **What is left.** `customers/intelligence.ts` legitimately owns the legacy
+   table — it computes health and marks champions there, and is that store's
+   service. `founder/intelligence.ts` aggregates PLATFORM-WIDE across all
+   companies for the operator, so it cannot use the per-product accessor; its
+   totals, champion count and MRR-at-risk therefore still exclude every reported
+   customer. That is Foundry's own view of its platform being computed from one
+   store — lower stakes than a founder's own numbers, same class of error, and a
+   UNION away. Deleting the legacy read is the cutover, and
+   `customerStoreSplit(...).onlyLegacy` reaching zero is its criterion. `customer_events` has one writer,
    `routes/api/platform.ts`, part of the clientless API in item 1 — where that
    API is unused, `customers.churn_risk` reduces to `last_active_at` recency.
 

@@ -56,6 +56,9 @@ export interface CompanyCustomer {
   /** The row id in its own store. Callers key budgets and dedup on this, so it
    *  must stay the id the source table uses. */
   id: string;
+  /** Which company this customer belongs to. Carried because the platform-wide
+   *  read spans companies, and a customer is only ever a customer OF one. */
+  productId: string;
   source: CustomerSource;
   externalId: string | null;
   name: string | null;
@@ -100,26 +103,61 @@ const num = (v: unknown): number | null => (v === null || v === undefined ? null
  * it is the more recent statement of fact.
  */
 export async function getCompanyCustomers(productId: string): Promise<CompanyCustomer[]> {
+  return readCustomers('WHERE product_id = ?', [productId]);
+}
+
+/**
+ * The same list, for every company at once.
+ *
+ * The platform operator's totals were computed from the legacy store alone, so
+ * they excluded every customer a company reported the documented way — Foundry's
+ * own view of its platform, measured from one of two stores.
+ *
+ * A UNION would have been the obvious fix and the wrong one: a customer present
+ * in BOTH stores would be counted twice, and overstating is the error that
+ * flatters. So this is the same function with a wider scope, running the one
+ * deduplication rule rather than a second copy of it in SQL.
+ *
+ * Row-shaped, so a caller aggregating platform totals never sees a customer's
+ * identity it should not have — see `protective-wrapper`'s Level-1/2 assertion.
+ */
+export async function getAllCustomers(): Promise<CompanyCustomer[]> {
+  return readCustomers('', []);
+}
+
+/** One read, one deduplication, both scopes. */
+async function readCustomers(
+  whereClause: string, args: unknown[],
+): Promise<CompanyCustomer[]> {
   const reported = (await query(
-    `SELECT id, external_customer_id, account_name, email, health_score, last_active_at, mrr_cents
-       FROM customer_intelligence WHERE product_id = ?`, [productId],
+    `SELECT id, product_id, external_customer_id, account_name, email, health_score,
+            last_active_at, mrr_cents
+       FROM customer_intelligence ${whereClause}`, args,
   ).catch(() => ({ rows: [] }))).rows as unknown as Array<Record<string, unknown>>;
 
   const legacy = (await query(
-    `SELECT id, external_id, name, email, health_score, churn_risk, last_active_at, mrr_cents
-       FROM customers WHERE product_id = ?`, [productId],
+    `SELECT id, product_id, external_id, name, email, health_score, churn_risk,
+            last_active_at, mrr_cents
+       FROM customers ${whereClause}`, args,
   ).catch(() => ({ rows: [] }))).rows as unknown as Array<Record<string, unknown>>;
 
   const out = new Map<string, CompanyCustomer>();
 
-  const key = (email: string | null, externalId: string | null, id: string): string =>
-    (email ? `e:${email.toLowerCase().trim()}` : externalId ? `x:${externalId}` : `i:${id}`);
+  // KEYED WITHIN A COMPANY. Two companies can both have a customer at
+  // `billing@acme.example`, and they are two different people as far as either
+  // company is concerned. Without the product in the key, the platform-wide
+  // read would silently merge them and undercount.
+  const key = (
+    product: string, email: string | null, externalId: string | null, id: string,
+  ): string => `${product}|` + (email ? `e:${email.toLowerCase().trim()}`
+    : externalId ? `x:${externalId}` : `i:${id}`);
 
   // Legacy first, so a reported record overwrites it on a collision.
   for (const r of legacy) {
     const health = num(r.health_score);
     const record: CompanyCustomer = {
       id: String(r.id),
+      productId: String(r.product_id),
       source: 'legacy',
       externalId: str(r.external_id),
       name: str(r.name),
@@ -129,13 +167,14 @@ export async function getCompanyCustomers(productId: string): Promise<CompanyCus
       lastActiveAt: str(r.last_active_at),
       mrrCents: num(r.mrr_cents) ?? 0,
     };
-    out.set(key(record.email, record.externalId, record.id), record);
+    out.set(key(String(r.product_id), record.email, record.externalId, record.id), record);
   }
 
   for (const r of reported) {
     const health = num(r.health_score);
     const record: CompanyCustomer = {
       id: String(r.id),
+      productId: String(r.product_id),
       source: 'reported',
       externalId: str(r.external_customer_id),
       name: str(r.account_name),
@@ -147,7 +186,7 @@ export async function getCompanyCustomers(productId: string): Promise<CompanyCus
       lastActiveAt: str(r.last_active_at),
       mrrCents: num(r.mrr_cents) ?? 0,
     };
-    out.set(key(record.email, record.externalId, record.id), record);
+    out.set(key(String(r.product_id), record.email, record.externalId, record.id), record);
   }
 
   return [...out.values()];
