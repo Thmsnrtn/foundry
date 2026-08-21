@@ -343,8 +343,30 @@ platformApiRoutes.get('/api/products/:id/graph/causal-chains', async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
+  // This used to call Opus on every request, with a 4096-token budget, for a
+  // question the weekly graph_rebuild job had already answered and stored. Two
+  // payments for one answer, and the job's copy went to a log line.
+  //
+  // Read the stored batch. Compute only when none has ever been stored, so a
+  // product whose first rebuild has not run still gets an answer rather than an
+  // empty list that reads as "no causal chains exist".
+  const { getStoredCausalChains } = await import('../../services/graph/engine.js');
+  const stored = await getStoredCausalChains(productId);
+  if (stored.discovered_at !== null) {
+    return c.json({
+      causal_chains: stored.chains,
+      discovered_at: stored.discovered_at,
+      computed_now: false,
+    });
+  }
+
   const chains = await discoverCausalChains(productId);
-  return c.json({ causal_chains: chains });
+  const after = await getStoredCausalChains(productId);
+  return c.json({
+    causal_chains: chains,
+    discovered_at: after.discovered_at,
+    computed_now: true,
+  });
 });
 
 platformApiRoutes.get('/api/products/:id/graph/neighborhood/:entityId', async (c) => {

@@ -212,19 +212,97 @@ Return JSON:
     actionable_insight: string;
   }>>(response.content);
 
-  // Persist
+  // The model names entities by LABEL, because labels are what the prompt gave
+  // it. `root_cause_entity_id` and `effect_entity_id` used to be written as
+  // literal NULL and no other copy was kept, so every stored chain lost the two
+  // things a causal chain is about.
+  //
+  // Resolve by exact label against the entities that went into the prompt. A
+  // model may name something that is not in the graph; that chain keeps its
+  // label and gets no id, which is the honest outcome — better than pointing at
+  // whatever was nearest.
+  const idByLabel = new Map<string, string>();
+  for (const e of entities.rows as unknown as Array<Record<string, unknown>>) {
+    idByLabel.set(String(e.label), String(e.id));
+  }
+
   const results: CausalChain[] = [];
   for (const chain of chains) {
     const id = nanoid();
     await query(
-      `INSERT INTO causal_chains (id, product_id, chain_description, hops, root_cause_entity_id, effect_entity_id, confidence, actionable_insight)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, productId, chain.chain_description, JSON.stringify(chain.hops), null, null, chain.confidence, chain.actionable_insight]
+      `INSERT INTO causal_chains
+         (id, product_id, chain_description, hops, root_cause_entity_id, effect_entity_id,
+          root_cause_label, effect_label, confidence, actionable_insight)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [id, productId, chain.chain_description, JSON.stringify(chain.hops),
+       idByLabel.get(chain.root_cause) ?? null, idByLabel.get(chain.effect) ?? null,
+       chain.root_cause, chain.effect,
+       chain.confidence, chain.actionable_insight]
     );
     results.push({ id, ...chain });
   }
 
   return results;
+}
+
+/**
+ * READ THE CHAINS THE WEEKLY JOB ALREADY PAID FOR.
+ *
+ * `graph_rebuild` runs `discoverCausalChains` for every active product on
+ * Sunday and used the answer for a log line. The one route that serves chains
+ * called the model AGAIN on every request. Nothing read the table, so the
+ * institution paid Opus twice for the same question and delivered one of the
+ * answers to a log file.
+ *
+ * Returns the most recent discovery batch, or an empty array with a null
+ * timestamp when none has ever run — which the caller must report as "not yet
+ * discovered", never as "no causal chains exist".
+ */
+export async function getStoredCausalChains(productId: string): Promise<{
+  chains: CausalChain[];
+  discovered_at: string | null;
+}> {
+  const latest = (await query(
+    'SELECT MAX(discovered_at) AS at FROM causal_chains WHERE product_id = ?',
+    [productId],
+  )).rows[0] as Record<string, unknown> | undefined;
+  const at = latest?.at == null ? null : String(latest.at);
+  if (at === null) return { chains: [], discovered_at: null };
+
+  const rows = (await query(
+    `SELECT id, chain_description, hops, root_cause_label, effect_label,
+            confidence, actionable_insight
+       FROM causal_chains
+      WHERE product_id = ? AND discovered_at = ?
+      ORDER BY confidence DESC`,
+    [productId, at],
+  )).rows as unknown as Array<Record<string, unknown>>;
+
+  return {
+    discovered_at: at,
+    chains: rows.map((r) => ({
+      id: String(r.id),
+      chain_description: String(r.chain_description),
+      hops: parseHops(r.hops),
+      root_cause: r.root_cause_label == null ? '' : String(r.root_cause_label),
+      effect: r.effect_label == null ? '' : String(r.effect_label),
+      // `confidence` is the model's own rating of its answer, stored as given.
+      // Null when a row predates the column being written; not coerced to a
+      // number, because a missing confidence is not a low one.
+      confidence: r.confidence == null ? 0 : Number(r.confidence),
+      actionable_insight: r.actionable_insight == null ? '' : String(r.actionable_insight),
+    })),
+  };
+}
+
+function parseHops(raw: unknown): Array<{ from: string; to: string; relationship: string }> {
+  if (raw == null) return [];
+  try {
+    const parsed = JSON.parse(String(raw)) as unknown;
+    return Array.isArray(parsed) ? parsed as Array<{ from: string; to: string; relationship: string }> : [];
+  } catch {
+    return [];
+  }
 }
 
 /**

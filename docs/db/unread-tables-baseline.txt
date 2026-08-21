@@ -1,5 +1,4 @@
 board_decks
-causal_chains
 cofounder_alignment_scores
 expansion_analysis
 okr_progress_updates
