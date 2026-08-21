@@ -3675,7 +3675,6 @@
   product_id TEXT,
   product_id TEXT,                     -- nullable, no FK: created pre-product during onboarding
   product_lifecycle_stage TEXT NOT NULL,
-  progress_pct     INTEGER NOT NULL DEFAULT 0,  -- 0-100
   projections TEXT NOT NULL,
   promoted_at DATETIME,                -- NULL = pending, non-NULL = live
   prompt TEXT NOT NULL,

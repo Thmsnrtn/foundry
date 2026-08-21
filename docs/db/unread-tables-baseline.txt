@@ -1,7 +1,6 @@
 board_decks
 cofounder_alignment_scores
 expansion_analysis
-okr_progress_updates
 portfolio_alerts
 portfolio_snapshots
 web_audit_results

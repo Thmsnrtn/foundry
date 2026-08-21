@@ -44,8 +44,6 @@ institutional_judgment_evaluations.learned_claim_id
 integration_sync_log.sync_type
 intelligence_benchmarks.cohort_size
 introductions.declined_at
-okr_progress_updates.key_result_id
-okr_progress_updates.new_value
 operator_attention.item_kind
 operator_attention.item_ref
 outbound_actions.feedback_data_json
