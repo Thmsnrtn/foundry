@@ -114,7 +114,6 @@
                             CHECK (status IN ('active','reversed','succeeded','failed','inconclusive')),
                             ||'"src/services/institution/","src/services/outbound/","AGENTS.md"]') r
                           )),
-                          CHECK (briefing_format IN ('full','summary','critical_only')),
                           CHECK (status IN ('planned','claimed','applied','already_applied','refused','rolled_back')),
                           ||'"src/services/institution/","src/services/outbound/","AGENTS.md"]') r
                          ('accepted','rejected','deferred','alternative_selected')),
@@ -1776,7 +1775,6 @@
   briefing_contribution TEXT,       -- 2-3 sentences for CEO briefing
   briefing_date TEXT NOT NULL,
   briefing_date TEXT NOT NULL,         -- YYYY-MM-DD
-  briefing_format       TEXT NOT NULL DEFAULT 'full'
   briefing_headline TEXT,              -- ≤120 char hook sentence
   briefing_id TEXT NOT NULL,
   briefing_id TEXT NOT NULL,                -- snapshot reference
@@ -2000,7 +1998,6 @@
   count         INTEGER NOT NULL DEFAULT 0,
   country_code TEXT DEFAULT 'US',
   created_at             TEXT NOT NULL DEFAULT (datetime('now'))
-  created_at            TEXT NOT NULL DEFAULT (datetime('now')),
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -2517,8 +2514,6 @@
   fit_score REAL NOT NULL DEFAULT 0.5, -- 0-1 how good a fit
   fix_approach TEXT,
   fix_summary TEXT,
-  focus_area            TEXT,                   -- e.g. 'retention','acquisition','fundraising'
-  focus_ends_at         TEXT,                   -- NULL = no expiry
   follow_up_at DATETIME,
   forbidden_classes TEXT,                         -- JSON array: ['pii_strict','financial_secret']
   formality_level INTEGER DEFAULT 5, -- 1-10 (1=very casual, 10=very formal)
@@ -2663,7 +2658,6 @@
   icp_trigger TEXT,
   id                      TEXT PRIMARY KEY,
   id                     TEXT PRIMARY KEY,
-  id                    TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
   id                   TEXT PRIMARY KEY,
@@ -3115,7 +3109,6 @@
   matched_signals_json TEXT NOT NULL,
   max_attempts INTEGER DEFAULT 3,
   max_calls    INTEGER NOT NULL DEFAULT 25, -- hard cap for the grant's lifetime
-  max_decisions_per_day INTEGER NOT NULL DEFAULT 20,
   max_members INTEGER DEFAULT 8,
   max_per_day INTEGER DEFAULT 50,
   max_per_hour INTEGER DEFAULT 10,
@@ -3459,7 +3452,6 @@
   preferred_length TEXT DEFAULT 'medium',
   preferred_option TEXT,
   preferred_region TEXT NOT NULL DEFAULT 'us-east' CHECK (preferred_region IN ('us-east','us-west','eu-west','ap-southeast')),
-  preferred_timezone    TEXT NOT NULL DEFAULT 'UTC',
   premise         TEXT NOT NULL,               -- the belief, in the founder's words
   premise_type    TEXT NOT NULL DEFAULT 'qualitative'
   preview_text TEXT,          -- Human-readable preview for CEO approval UI
@@ -3500,7 +3492,6 @@
   product_direction TEXT,                -- Compass analysis
   product_id              TEXT NOT NULL,
   product_id             TEXT NOT NULL,
-  product_id            TEXT NOT NULL UNIQUE,   -- one settings row per product
   product_id            TEXT NOT NULL,
   product_id            TEXT NOT NULL,
   product_id           TEXT NOT NULL,
@@ -4290,7 +4281,6 @@
   unit TEXT,                                 -- 'count' | 'usd' | 'pct' | 'days' | other
   updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
@@ -4356,7 +4346,6 @@
   user_agent TEXT,
   user_agent TEXT,
   user_prompt_preview TEXT, -- first 500 chars of user prompt
-  vacation_mode_until   TEXT,                   -- NULL = not in vacation mode
   valid_until TEXT,
   valid_until TEXT,
   valid_until TEXT,
@@ -4439,7 +4428,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
 );
 );
 );
@@ -5334,7 +5322,6 @@ CREATE TABLE founder_ai_profile (
 CREATE TABLE founder_behavioral_signals (
 CREATE TABLE founder_evidence_requests (
 CREATE TABLE founder_feedback (
-CREATE TABLE founder_focus_settings (
 CREATE TABLE founder_health (
 CREATE TABLE founder_health_snapshots (
 CREATE TABLE founder_journal_entries (

@@ -28,7 +28,9 @@ async function safeQuery(sql: string, args: unknown[] = []): Promise<{ rows: unk
  * `{ healthy: 30, degraded: 0, failed: 0 }` under the comment "From job
  * registry", and `getAutomationHealth` returned `total_jobs: 30,
  * jobs_healthy: 30, jobs_degraded: 0, jobs_failed: 0`. Neither read anything.
- * The registry has NINETY jobs, and migration 172 gave every one of them a way
+ * The registry has EIGHTY-NINE jobs (it had ninety until migration 183 removed
+ * a nightly sweep over a table nobody could write to), and migration 172 gave
+ * every one of them a way
  * to say when it stops — `src/index.ts` records success and failure around each
  * registry job, and the founder's Letter already renders the failing ones.
  *

@@ -1448,29 +1448,6 @@ async function scpExpireOverdueDecisions(): Promise<void> {
   }
 }
 
-// ─── SCP v4: Wellbeing Focus Cleanup — Daily midnight ────────────────────────
-
-async function scpWellbeingFocusCleanup(): Promise<void> {
-  logger.info('scp_wellbeing_focus_cleanup starting', { jobName: 'scp_wellbeing_focus_cleanup' });
-  try {
-    const { query: dbQuery } = await import('../db/client.js');
-    // Clear expired focus areas
-    await dbQuery(
-      `UPDATE founder_focus_settings SET focus_area=NULL, focus_ends_at=NULL WHERE focus_ends_at IS NOT NULL AND focus_ends_at <= datetime('now')`
-    );
-    // Clear expired vacation modes
-    await dbQuery(
-      `UPDATE founder_focus_settings SET vacation_mode_until=NULL WHERE vacation_mode_until IS NOT NULL AND vacation_mode_until <= datetime('now')`
-    );
-    // The expired-snooze sweep that used to sit here deleted from
-    // `decision_snooze_log`, which nothing ever wrote a row into: there was no
-    // snooze button, no route and no API. A nightly job clearing an
-    // always-empty table is a moving part that describes a feature nobody has.
-    logger.info('scp_wellbeing_focus_cleanup: Cleaned up expired focus records', { jobName: 'scp_wellbeing_focus_cleanup' });
-  } catch (err) {
-    logger.error('scp_wellbeing_focus_cleanup: Error:', { jobName: 'scp_wellbeing_focus_cleanup', error: String(err) });
-  }
-}
 
 // ─── SCP v4: Webhook Delivery Cleanup — Sunday 4:00 UTC ─────────────────────
 
@@ -2396,7 +2373,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_benchmark_refresh: { fn: scpBenchmarkRefresh, schedule: '0 3 * * 0', description: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
   scp_decision_retrospectives: { fn: scpDecisionRetrospectives, schedule: '0 9 * * 1', description: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
   scp_expire_overdue_decisions: { fn: scpExpireOverdueDecisions, schedule: '5 0 * * *', description: 'Mark pending decisions past their deadline as expired (daily)' },
-  scp_wellbeing_focus_cleanup: { fn: scpWellbeingFocusCleanup, schedule: '0 0 * * *', description: 'Clear expired focus areas and vacation modes (daily midnight)' },
   scp_webhook_delivery_cleanup: { fn: scpWebhookDeliveryCleanup, schedule: '0 4 * * 0', description: 'Clean up old webhook delivery records (Sunday 4:00 UTC)' },
   // SCP v7: Event bus, ROI, founder intelligence, priority queue
   scp_signal_events:       { fn: scpSignalEvents,           schedule: '0 * * * *',   description: 'Process pending signal events and dispatch to target agents (hourly)' },

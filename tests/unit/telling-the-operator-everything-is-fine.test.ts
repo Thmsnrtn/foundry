@@ -15,7 +15,9 @@ import { JOB_REGISTRY } from '../../src/jobs/index.js';
 // `getAutomationHealth` returned `total_jobs: 30, jobs_healthy: 30,
 // jobs_degraded: 0, jobs_failed: 0`, and `getPulse` returned
 // `{ healthy: 30, degraded: 0, failed: 0 }` under the comment "From job
-// registry". Neither read anything. The registry has NINETY jobs.
+// registry". Neither read anything. The registry had NINETY jobs when this was
+// written and has eighty-nine now — which is why every assertion below counts it
+// rather than naming a number.
 //
 // The data was there the whole time. Migration 172 gave the loops a way to say
 // when they stop, `src/index.ts` records success and failure around EVERY

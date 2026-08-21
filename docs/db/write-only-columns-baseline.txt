@@ -40,7 +40,6 @@ experiments.current_sample_size
 forecast_checkpoints.scenario_id
 forecast_scenarios.generated_by
 founder_evidence_requests.answer_signal_id
-founder_focus_settings.focus_area
 gate_events.feature_key
 gate_events.tier_actual
 gate_events.tier_required
