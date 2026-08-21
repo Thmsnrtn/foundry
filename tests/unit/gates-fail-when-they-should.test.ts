@@ -175,6 +175,33 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.code, r.output).toBe(0);
   });
 
+  it('check-unread-tables fails on a table something writes and nothing reads', () => {
+    // `sector_remediation_templates` exists in the schema and is reached by
+    // nothing at all — no writer, no reader, no trigger, not in the erasure
+    // map. Giving it a writer is exactly the moment this gate exists to catch:
+    // a record starting to be kept that nobody looks at. (`onboarding_checklist`
+    // would NOT do here — it is in the erasure map, so the export's dynamic
+    // `SELECT * FROM ${table}` reads it and the gate is right to say so.)
+    plant('src/services/_gate_fixture_unread.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`INSERT ', 'INTO sector_remediation_templates ',
+        '(id) VALUES (?)`, [1]);\n'));
+    const r = run('check-unread-tables.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('sector_remediation_templates');
+  });
+
+  it('check-unread-tables counts a SQL trigger as a reader', () => {
+    // `ai_spend_reservations` is consumed entirely by migration 099's triggers,
+    // which roll `actual_cents` into `ai_daily_spend`. A real reader that is
+    // simply not TypeScript, and excluding it would put a working table on a
+    // list of broken ones.
+    const r = run('check-unread-tables.mjs');
+    expect(r.code, r.output).toBe(0);
+    expect(readFileSync(resolve(ROOT, 'docs/db/unread-tables-baseline.txt'), 'utf8'))
+      .not.toMatch(/ai_spend_reservations/);
+  });
+
   it('check-check-vocabularies fails on a status the column will not accept', () => {
     plant('src/services/_gate_fixture_d.ts',
       'import { query } from "../db/client.js";\n'

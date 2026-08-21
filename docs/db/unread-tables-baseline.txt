@@ -1,0 +1,13 @@
+agent_positions
+auto_execution_log
+board_decks
+causal_chains
+cofounder_alignment_scores
+customer_health_snapshots
+expansion_analysis
+integration_sync_log
+okr_progress_updates
+portfolio_alerts
+portfolio_snapshots
+switching_cost_analysis
+web_audit_results
