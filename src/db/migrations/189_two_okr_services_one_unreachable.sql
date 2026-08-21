@@ -31,3 +31,25 @@
 -- =============================================================================
 
 ALTER TABLE company_okrs DROP COLUMN progress_pct;
+
+-- ─── AND TWO PRODUCING HALVES WITH NOTHING AT THE OTHER END ──────────────────
+--
+-- `portfolio_alerts` held portfolio id, product id, alert type, severity,
+-- message and an `acknowledged` flag. `createPortfolioAlert` inserted into it
+-- and had no caller — no route, no job, no agent. Nothing read the table, and
+-- nothing ever set or read `acknowledged`. Both halves were absent: no alert
+-- was ever raised, and there was nowhere for one to appear. An investor
+-- alerting path also crosses portfolio isolation, which is an owner decision
+-- and not one to take by leaving a writer lying around.
+--
+-- `expansion_analysis` stored the output of `generateExpansionBrief`, which
+-- returns the brief to its caller. Nothing read a row. Its
+-- `tam_penetration_rate` column was filled with the literal 0 — not computed,
+-- not defaulted, a zero typed into the INSERT saying this company has captured
+-- none of its addressable market. Nobody saw it, which is the only reason it
+-- never misled anyone.
+--
+-- Both on the owner decision recorded at migration 157.
+
+DROP TABLE IF EXISTS portfolio_alerts;
+DROP TABLE IF EXISTS expansion_analysis;

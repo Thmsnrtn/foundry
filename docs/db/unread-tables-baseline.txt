@@ -1,6 +1,4 @@
 board_decks
 cofounder_alignment_scores
-expansion_analysis
-portfolio_alerts
 portfolio_snapshots
 web_audit_results

@@ -5,15 +5,11 @@
 
 import { query } from '../../db/client.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
-import { nanoid } from 'nanoid';
 
-export interface ExpansionAnalysis {
-  current_tam_estimate: number;
-  tam_penetration_rate: number;
-  years_to_saturation: number;
-  expansion_opportunities: ExpansionOpportunity[];
-  depth_vs_breadth_recommendation: string;
-}
+// `ExpansionAnalysis` was here. It was the shape of the `expansion_analysis`
+// row, nothing referenced it, and one of its fields — `tam_penetration_rate` —
+// only ever held the literal 0 that the INSERT typed into it. Retired with the
+// table in migration 189.
 
 interface ExpansionOpportunity {
   market: string;
@@ -226,25 +222,23 @@ Return JSON:
 /**
  * Generate a comprehensive expansion brief.
  */
-export async function generateExpansionBrief(productId: string, ownerId: string): Promise<string> {
+export async function generateExpansionBrief(productId: string): Promise<string> {
   const tam = await estimateTAMCeiling(productId);
   const saturation = await projectTAMSaturation(productId);
   const opportunities = await identifyExpansionOpportunities(productId);
   const dvb = await modelDepthVsBreadth(productId);
   const readiness = await assessExpansionReadiness(productId);
 
-  // Persist analysis
-  await query(
-    `INSERT INTO expansion_analysis (id, product_id, owner_id, current_tam_estimate, tam_penetration_rate, years_to_saturation, expansion_opportunities, depth_vs_breadth_recommendation, strategic_fork_scenarios)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      nanoid(), productId, ownerId,
-      tam, 0, saturation.pct_50,
-      JSON.stringify(opportunities),
-      dvb.recommendation,
-      JSON.stringify({ depth: dvb.depth_scenario, breadth: dvb.breadth_scenario }),
-    ]
-  );
+  // The row that used to be written here went into `expansion_analysis`, which
+  // nothing has ever read — this function returns the brief to its caller.
+  //
+  // Its `tam_penetration_rate` column was filled with the literal 0. Not
+  // computed, not defaulted: a zero typed into the INSERT, saying this company
+  // has captured none of its addressable market. Nobody saw it, which is the
+  // only reason it never misled anyone.
+  //
+  // Retired in migration 189 rather than given an invented reader, on the owner
+  // decision recorded at migration 157.
 
   const product = await query('SELECT name FROM products WHERE id = ?', [productId]);
   const name = (product.rows[0] as Record<string, string>)?.name ?? 'your product';

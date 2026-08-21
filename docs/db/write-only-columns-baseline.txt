@@ -28,7 +28,6 @@ evolved_prompts.base_prompt_hash
 evolved_prompts.predictions_after
 evolved_prompts.predictions_before
 execution_playbooks.last_evaluated_at
-expansion_analysis.strategic_fork_scenarios
 experiments.current_sample_size
 forecast_checkpoints.scenario_id
 forecast_scenarios.generated_by
@@ -52,7 +51,6 @@ portfolio_snapshots.avg_mrr
 portfolio_snapshots.companies_green
 portfolio_snapshots.companies_red
 portfolio_snapshots.companies_yellow
-portfolio_snapshots.median_mrr
 portfolio_snapshots.total_portfolio_mrr
 predictions.outcome_recorded_at
 priority_actions.dismissed_at

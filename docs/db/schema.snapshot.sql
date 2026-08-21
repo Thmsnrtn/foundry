@@ -1547,7 +1547,6 @@
   accuracy_score REAL, -- 0.0-1.0: correct=1.0, partial=0.5, incorrect=0.0
   achieved_at TEXT,
   acknowledged INTEGER DEFAULT 0,
-  acknowledged INTEGER DEFAULT 0,
   acquirer_name TEXT NOT NULL,
   acquirer_type TEXT NOT NULL, -- 'strategic' | 'financial' | 'pe'
   acquisition_channel TEXT,
@@ -1664,14 +1663,12 @@
   ai_calls_limit INTEGER NOT NULL DEFAULT 500,
   ai_calls_used INTEGER DEFAULT 0,
   ai_cost_pct_of_mrr  REAL,
-  alert_type TEXT NOT NULL,
   alignment_drop INTEGER NOT NULL DEFAULT 0,
   alignment_score INTEGER NOT NULL,   -- 0-100
   allowed_classes TEXT NOT NULL,                  -- JSON array: ['general','customer']
   amount_usd REAL NOT NULL,
   amount_usd REAL NOT NULL,
   analysis TEXT NOT NULL,
-  analyzed_at TEXT DEFAULT (datetime('now'))
   annotation_type TEXT CHECK(annotation_type IN (
   anonymize_customer_data INTEGER NOT NULL DEFAULT 0,
   answer_signal_id  TEXT REFERENCES signal_events(id),
@@ -2103,7 +2100,6 @@
   created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
-  created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
@@ -2171,7 +2167,6 @@
   current_prompt TEXT NOT NULL DEFAULT 'prompt_1',
   current_step  INTEGER NOT NULL DEFAULT 0,
   current_step INTEGER DEFAULT 1,
-  current_tam_estimate REAL,
   current_value   REAL NOT NULL DEFAULT 0,
   current_value REAL,
   current_value TEXT,
@@ -2258,7 +2253,6 @@
   demand_count INTEGER,
   demographic_fairness_score REAL,
   department TEXT, -- 'engineering' | 'sales' | 'marketing' | 'product' | 'support'
-  depth_vs_breadth_recommendation TEXT,
   derivation_method TEXT NOT NULL,
   derivation_method TEXT NOT NULL,
   description            TEXT,
@@ -2433,7 +2427,6 @@
   expansion_captured_dollars REAL NOT NULL DEFAULT 0,
   expansion_eligible INTEGER DEFAULT 0,  -- BOOLEAN
   expansion_mrr_cents INTEGER DEFAULT 0,
-  expansion_opportunities TEXT,
   expansion_potential REAL,
   expectation_evidence_ref TEXT NOT NULL,
   expectation_id TEXT NOT NULL REFERENCES responsibility_shadow_expectations(id),
@@ -2879,8 +2872,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -3098,7 +3089,6 @@
   median_time_to_action_hours REAL,
   meeting_cadence TEXT DEFAULT 'monthly',
   memory_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
-  message TEXT NOT NULL,
   message TEXT,
   message_count   INTEGER NOT NULL DEFAULT 0,
   message_count INTEGER DEFAULT 0,
@@ -3317,7 +3307,6 @@
   owner_id TEXT NOT NULL,
   owner_id TEXT NOT NULL,
   owner_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
   owner_id TEXT,
   p25              REAL,
   p25              REAL,
@@ -3385,7 +3374,6 @@
   playbook_id TEXT NOT NULL REFERENCES execution_playbooks(id),
   playbook_id TEXT NOT NULL REFERENCES playbooks(id) ON DELETE CASCADE,
   portfolio_id TEXT NOT NULL REFERENCES portfolios(id),
-  portfolio_id TEXT NOT NULL,
   portfolio_id TEXT NOT NULL,
   positioning TEXT,
   positioning_feedback TEXT,
@@ -3580,8 +3568,6 @@
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL UNIQUE REFERENCES products(id),
   product_id TEXT NOT NULL UNIQUE,
-  product_id TEXT NOT NULL,
-  product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
@@ -3933,7 +3919,6 @@
   severity TEXT NOT NULL DEFAULT 'medium',
   severity TEXT NOT NULL DEFAULT 'medium', -- 'low' | 'medium' | 'high' | 'critical'
   severity TEXT NOT NULL DEFAULT 'medium', -- 'low' | 'medium' | 'high' | 'critical'
-  severity TEXT NOT NULL,
   share_code TEXT NOT NULL UNIQUE,          -- short URL-safe token
   shared_with TEXT,                   -- JSON: investor_id[]
   signal TEXT NOT NULL,
@@ -4072,7 +4057,6 @@
   step        TEXT NOT NULL,
   step TEXT NOT NULL,
   step_label    TEXT NOT NULL DEFAULT 'Starting…',
-  strategic_fork_scenarios TEXT,
   strategic_rationale TEXT, -- why this acquirer would want us
   stress_case TEXT NOT NULL, -- JSON
   stressor_count INTEGER NOT NULL DEFAULT 0,
@@ -4120,7 +4104,6 @@
   tags TEXT,
   tags TEXT,                   -- JSON: string[]
   take_rate REAL,
-  tam_penetration_rate REAL,
   target TEXT NOT NULL,                     -- 'slack' | 'linear' | 'notion' | 'generic'
   target_acquirer_profile TEXT, -- what kind of acquirer would pay a premium
   target_customer TEXT NOT NULL,
@@ -4388,7 +4371,6 @@
   working_hours TEXT, -- "9am-5pm ET" or "async, check in mornings"
   workspace_name TEXT,
   writing_tone TEXT, -- 'formal', 'casual', 'technical', 'friendly', 'direct'
-  years_to_saturation REAL,
  AND COALESCE(json_type(NEW.config_json),'absent')='object'
  AND COALESCE(json_type(NEW.config_json),'absent')='object'
  SELECT RAISE(ABORT,'judgment_evaluation:evidence_invalid') WHERE json_valid(NEW.evidence_refs_json)=0 OR EXISTS (
@@ -4398,8 +4380,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
-);
 );
 );
 );
@@ -4965,7 +4945,6 @@ CREATE INDEX idx_exec_queue_status ON execution_queue(status, created_at);
 CREATE INDEX idx_exp_events ON experiment_events(experiment_id, variant);
 CREATE INDEX idx_exp_holdouts_product
 CREATE INDEX idx_exp_timeline_experiment
-CREATE INDEX idx_expansion_product ON expansion_analysis(product_id);
 CREATE INDEX idx_experiment_variants_experiment ON experiment_variants(experiment_id);
 CREATE INDEX idx_experiments_product ON experiments(product_id, status);
 CREATE INDEX idx_failure_log_category ON failure_log(product_id, category);
@@ -5057,7 +5036,6 @@ CREATE INDEX idx_phase_beta_freeze
 CREATE INDEX idx_phase_beta_product_status
 CREATE INDEX idx_playbook_exports_playbook ON playbook_exports(playbook_id);
 CREATE INDEX idx_playbooks_product ON playbooks(product_id, type, is_current);
-CREATE INDEX idx_portfolio_alerts ON portfolio_alerts(portfolio_id, acknowledged);
 CREATE INDEX idx_portfolio_members ON portfolio_memberships(portfolio_id, status);
 CREATE INDEX idx_portfolio_snapshots ON portfolio_snapshots(portfolio_id, snapshot_date);
 CREATE INDEX idx_portfolios_api ON portfolios(api_key);
@@ -5269,7 +5247,6 @@ CREATE TABLE event_stream (
 CREATE TABLE evolved_prompts (
 CREATE TABLE execution_playbooks (
 CREATE TABLE execution_queue (
-CREATE TABLE expansion_analysis (
 CREATE TABLE experiment_events (
 CREATE TABLE experiment_holdouts (
 CREATE TABLE experiment_results_timeline (
@@ -5356,7 +5333,6 @@ CREATE TABLE phase_beta_proposals (
 CREATE TABLE playbook_exports (
 CREATE TABLE playbook_trigger_log (
 CREATE TABLE playbooks (
-CREATE TABLE portfolio_alerts (
 CREATE TABLE portfolio_memberships (
 CREATE TABLE portfolio_snapshots (
 CREATE TABLE portfolios (
