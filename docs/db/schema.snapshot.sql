@@ -107,7 +107,6 @@
 
 
 
-
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -361,6 +360,7 @@
     'content_too_large',
     'correction',        -- Founder changed what the agent proposed
     'could_not_store'
+    'could_not_store'
     'decision_made', 'decision_outcome',
     'delivery','maintenance','development','operational_dependency');
     'delivery','maintenance','development','operational_dependency');
@@ -381,6 +381,7 @@
     'lead_investor', 'angel', 'advisor', 'board_member', 'observer'
     'llm_tokens','integration_api','email_send','compute','experiment','other'
     'milestone', 'integration_connected',
+    'model_unavailable',
     'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
     'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
     'not_configured'
@@ -400,6 +401,8 @@
     'recurring_work','customer_commitment','exception','revenue_collection',
     'refused_by_the_institution',
     'resource_demand'))
+    'response_out_of_bounds',
+    'response_unparseable',
     'retention','messaging','feature','operations','other'
     'risk_state_change', 'lifecycle_gate',
     'sent', 'delivered', 'failed', 'clicked',
@@ -410,6 +413,7 @@
     'timestamp_invalid'
     'too_large',
     'tool_preferences', 'error_recovery', 'shared_knowledge'
+    'transcript_empty',
     'unknown','visible','understood','shadowing','assisting','operating','mature','exception_owned'
     'validation',        -- Founder confirmed the agent was right
     'values_out_of_range',
@@ -425,13 +429,19 @@
     );
     );
     );
+    -- It returned JSON that the bounding refused. Also already paid for.
+    -- It returned something that is not JSON. The spend is already made.
     -- Never attempted: the platform's credentials are not configured. Not a
     -- Tested. The arms did not separate. Nothing was learned about the
     -- The action, the integration and the scope must be one DECLARED effect
+    -- The analysis was fine and the write was not.
+    -- The model call did not return. Reserved spend is released by the client.
+    -- There was nothing to read. Not a failure of the analysis so much as of
     -- failure, and not a delivery.
     -- kind, taken together. A caller cannot mix the action of one kind with the
     -- scope of another and land somewhere nobody authorised.
     -- statement either way, and the institution must not be told otherwise.
+    -- what arrived, and the founder should see which.
     ;
     ;
     ;
@@ -756,6 +766,7 @@
   ) AND NOT EXISTS (
   )));
   )));
+  )));
   )),
   )),
   )),
@@ -843,7 +854,6 @@
   -- Activity
   -- Actual outcomes (filled in after outcome_measured_at)
   -- Agent configuration (versioned via agent_evolution_versions)
-  -- Agent notes (append-only log)
   -- An external sender may not tell Foundry what its message means. Which
   -- And deny dominates: the constitutional ring is refused here too, so a
   -- Authority without required verification would let "I changed it" stand in
@@ -1126,6 +1136,7 @@
   -- ─── Meta ─────────────────────────────────────────────────────────────────
   -- ─── Recursive critique yield (Ambros Round 5) ────────────────────────────
   AND NOT EXISTS (
+  CHECK (analysis_failure_reason IS NULL OR analysis_failure_reason IN (
   CHECK (evidence_source IN ('observed', 'reference')));
   CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
   CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
@@ -1229,6 +1240,8 @@
   SELECT RAISE(ABORT, 'ai_spend_ceiling:founder') WHERE NEW.founder_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:global') WHERE COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
   SELECT RAISE(ABORT, 'ai_spend_ceiling:product') WHERE NEW.product_id IS NOT NULL AND COALESCE((SELECT spent_cents + reserved_cents FROM ai_daily_spend
+  SELECT RAISE(ABORT, 'call_transcript:analysed_and_failed');
+  SELECT RAISE(ABORT, 'call_transcript:failure_incomplete');
   SELECT RAISE(ABORT, 'candidate_status:no_decision') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'ecosystem_principal:company_not_in_issuers_portfolio');
   SELECT RAISE(ABORT, 'judgment_disposition:append_only') WHERE EXISTS (
@@ -2304,7 +2317,6 @@
   dna_field TEXT NOT NULL,
   dna_fields_populated TEXT NOT NULL DEFAULT '[]', -- which DNA fields were set
   dna_sections_used TEXT,               -- JSON: string[] — which DNA fields contributed
-  do_not_contact_until DATETIME,        -- Rate limiting
   domain_health_score INTEGER DEFAULT 50, -- 0-100, agent's domain health
   domain_health_score INTEGER,
   draft_content TEXT NOT NULL,
@@ -4632,8 +4644,8 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
+, analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
 , confidence_score REAL DEFAULT 0);
@@ -4730,6 +4742,8 @@ BEFORE UPDATE OF evidence_ref, authority_ref, outcome_ref
 BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE OF state ON institutional_responsibilities
 BEFORE UPDATE OF status ON responsibility_candidates
+BEFORE UPDATE ON call_transcripts
+BEFORE UPDATE ON call_transcripts
 BEFORE UPDATE ON company_observation_channels
 BEFORE UPDATE ON cost_events
 BEFORE UPDATE ON development_change_plans
@@ -4740,6 +4754,8 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5500,6 +5516,8 @@ CREATE TRIGGER support_channel_guard
 CREATE TRIGGER system_identity_guard
 CREATE TRIGGER system_identity_immutable_delete
 CREATE TRIGGER system_identity_immutable_update
+CREATE TRIGGER transcript_analysis_state_coherent
+CREATE TRIGGER transcript_failure_has_a_reason
 CREATE UNIQUE INDEX idx_assisted_action_message
 CREATE UNIQUE INDEX idx_assisted_effect_identity ON outbound_actions(product_id,effect_id) WHERE effect_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_benchmark_percentiles_unique
@@ -5615,11 +5633,14 @@ END;
 END;
 END;
 END;
+END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 ON institutional_responsibilities
 ON institutional_responsibilities
+WHEN (NEW.analysis_failed_at IS NULL) <> (NEW.analysis_failure_reason IS NULL)
 WHEN (NEW.due_at IS NOT NULL) <> (NEW.due_stated_by IS NOT NULL)
 WHEN (NEW.due_at IS NOT NULL) <> (NEW.due_stated_by IS NOT NULL)
 WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
@@ -5631,6 +5652,7 @@ WHEN NEW.disposition IS NOT OLD.disposition
 WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.evidence_ref IS NOT OLD.evidence_ref
+WHEN NEW.processed_at IS NOT NULL AND NEW.analysis_failed_at IS NOT NULL
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
 WHEN NEW.state <> OLD.state
