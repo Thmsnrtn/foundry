@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `10be3ab`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `2fcba31`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 219 files, highest **183**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `10be3ab` — **319 files / 2,766 tests**,
+- **Validation:** full suite green at `2fcba31` — **320 files / 2,776 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
@@ -39,7 +39,7 @@ inherited list because it was inherited.
   effects **0** · statically unreachable modules **28** · write-only columns
   **81** · id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** (1,886 statements) · INSERT value-list
-  mismatches **0** (377) · tables written and never read **13** (226 written
+  mismatches **0** (377) · tables written and never read **12** (226 written
   tables checked).
 
 ## Active work
@@ -642,7 +642,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      gate to flag it; excluding them would blunt a gate to avoid an operational
      annoyance of my own making. The discipline is the fix.
 
-5. **13 tables written and never read** — `check-unread-tables.mjs`, the mirror
+5. **12 tables written and never read** — `check-unread-tables.mjs`, the mirror
    of `check-writerless-tables`. That one found tables live code SELECTs from
    and nothing fills; this finds tables live code FILLS and nothing SELECTs
    from. A write on every path, an erasure obligation carried and schema
@@ -655,11 +655,24 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    reads those through a dynamic `SELECT * FROM ${table}` — `gate_events` and
    `referral_conversions` reach a person that way), and a plain `FROM`.
 
-   Three on the baseline are new information rather than restatements:
-   **`customer_health_snapshots`** records a customer's health history daily and
-   nothing reads it — a company sense captured and discarded; **`board_decks`**
+   **`customer_health_snapshots` is DONE and is the argument for the gate.**
+   Every health refresh had written the score, the churn risk and the four
+   components behind them since migration 027, and nothing read a row.
+   `customers.health_score` holds only where a customer IS, so a customer
+   sliding 90 → 70 → 55 looked identical, at 55, to one that had sat there all
+   year. Harbor's own prompt claims churn "is always telegraphed 30-60 days in
+   advance by behavioral signals that nobody watched" — the watching was being
+   recorded and discarded, so the one thing that agent is for was the one thing
+   it could not see. `getFallingCustomers` reads it now, the founder's page shows
+   it and Harbor is told. **Not folded into `getCustomersAtRisk`:** a customer at
+   78 falling ten points a month is not at risk by the threshold, and adding
+   them to the set the outbound departments act on would widen who Foundry
+   writes to with nobody deciding it should.
+
+   Two more are new information rather than restatements: **`board_decks`**
    generates a draft nobody opens; **`web_audit_results`** holds the non-code
-   track's audit output. `portfolio_snapshots` and `okr_progress_updates` are
+   track's audit output — and that one is the founder's own onboarding audit, so
+   it is worth looking at next. `portfolio_snapshots` and `okr_progress_updates` are
    items 2 and 3's problem, not their own. The rest —
    `agent_positions`, `auto_execution_log`, `causal_chains`,
    `cofounder_alignment_scores`, `expansion_analysis`, `integration_sync_log`,
