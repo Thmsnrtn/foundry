@@ -59,6 +59,35 @@ export function decideChannel(
   return ch;
 }
 
+/**
+ * MAY FOUNDRY REACH THIS PERSON'S PHONE RIGHT NOW.
+ *
+ * `deliver()` is the front door, and a caller that already knows which push
+ * TYPE the founder subscribed to should keep that knowledge rather than come
+ * through a door that flattens it. What such a caller must not do is skip the
+ * ceiling: `preferences.max_channel` is the founder saying how loudly Foundry
+ * may ever interrupt them, and push is the rung this module describes as "the
+ * only tier that interrupts life".
+ *
+ * This is that check on its own, so consulting it costs one call.
+ */
+export async function mayPush(
+  founderId: string,
+  productId: string,
+  importance: Importance,
+  prefs?: FounderPreferences | null,
+): Promise<boolean> {
+  const pulse = await getFounderPulse(productId).then((p) => p.signal)
+    .catch(() => 'steady' as PulseSignal);
+  const decided = decideChannel(importance, pulse, prefs);
+  if (decided !== 'push') {
+    log.info('interruption ceiling withheld a push', {
+      founderId, productId, importance, pulse, decided,
+    });
+  }
+  return decided === 'push';
+}
+
 export interface DeliverableEvent {
   importance: Importance;
   title: string;
