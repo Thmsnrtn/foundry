@@ -434,6 +434,19 @@ fails when one neither reads `hasData` nor uses them. A default is NOT written
 to `signal_history` — a gap there means nothing was known that day, which is
 what the sparkline, the 7-day trend and the drop alert all need it to mean.
 
+**Reaching a founder's phone asks the ceiling first.** `preferences.max_channel`
+is what the founder said about how loudly Foundry may EVER interrupt them, and
+`ux/interruption.ts` is the only thing that may decide. A caller with its own
+legitimate push type calls `mayPush()` rather than coming through `deliver()`,
+which flattens every type to `daily_briefing`; a test enumerates every caller of
+`notifyFounder` and fails when one does neither.
+
+**And the distinction that hid this one.** The outbound gateway governs whether
+an effect may LEAVE — paused company, kill switch, dedup, audit. The ceiling
+governs how loudly Foundry may interrupt THIS PERSON. `risk-state.ts` cited the
+first in place of the second, in a comment, and was right about the first.
+**Watch for a satisfied guard named where an absent one belongs.**
+
 **The general form, which is worth more than the instance:** when a doctrine
 sentence is written into a type, check every consumer before believing it. A
 rule in a comment protects the file it sits in; only a shared helper and an

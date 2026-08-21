@@ -25,13 +25,13 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `d6cb291`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `89f51d3`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 217 files, highest **181**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `d6cb291` — **314 files / 2,720 tests**,
+- **Validation:** full suite green at `89f51d3` — **315 files / 2,728 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Qualified:** the suite aborts natively about one run in three *before*
-  `closeDb` landed; over 30 consecutive clean runs since. See item 3.
+  `closeDb` landed; over 30 consecutive clean runs since. See item 4.
   **Read the exit code from the run that produced the log** — a commit went out
   with five red tests this cycle because it was read from a wrapper.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
@@ -344,6 +344,22 @@ a caller does not. Writing a rule into a comment protects the file it is in.
 `computeSignal` protects the other nine. **When a doctrine sentence appears in a
 type, check every consumer before believing it.**
 
+**The same shape on a consent boundary, which is where it bites hardest.**
+`preferences.max_channel` is declared as *"Interruption ceiling: the loudest
+channel Foundry may ever use. The policy can only quiet below this, never exceed
+it"*, and `ux/interruption.ts` opens with *"this module alone decides HOW LOUDLY
+to deliver"*. `intelligence/risk-state.ts` called `notifyFounder` directly,
+consulting none of it: a founder who set `letter` — do not interrupt my life —
+got a push on every risk-state change.
+
+Its comment said the send was "governed like every other outward effect", and
+that was TRUE AND BESIDE THE POINT. **The gateway governs whether an effect may
+LEAVE; the ceiling governs how loudly Foundry may interrupt THIS PERSON.**
+Passing the first says nothing about the second — and the comment treating them
+as one thing is how a control that WAS working became the reason nobody looked
+for the one that wasn't. Worth watching for generally: a satisfied guard cited
+in place of an absent one.
+
 **A gate that was measured and rejected.** The ghost-column class —
 `mrr_growth_pct` read off a `SELECT *` — is invisible to every column gate here,
 and looked like the next ratchet. Two attempts were measured: matching property
@@ -506,19 +522,37 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    the wellbeing card proves it: that one was three `??` defaults about a
    person, with no metric in sight.
 
-1. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving an
+1. **Eleven in-app notifications that skip the founder's ceiling.**
+   `createNotification` is called directly from `jobs/index.ts`,
+   `services/billing/stripe.ts` and `services/ux/milestones.ts` — eleven call
+   sites — so those bells skip both `max_channel` and the strain quieting that
+   `ux/interruption.ts` exists to apply.
+
+   **Not mechanical, which is why it is here rather than done.** Each site needs
+   an `importance` chosen for it, and that is a judgment about what the event
+   means to a founder. And routing them through `deliver()` means a ceiling
+   below `notification` DROPS the bell — which costs the founder a record they
+   currently get, unless the caller already writes its own durable row (most
+   do; check per site). Do not put the ceiling check inside
+   `createNotification` instead: that module is the RECORD primitive and
+   `interruption.ts` is the POLICY, and the policy's own header says detection
+   and delivery are separate concerns.
+
+   A test pins the three files so the list can only shrink.
+
+2. **~1,600 LOC of clientless API** (`founder-intelligence`, `mobile` serving an
    archived unbuildable client, most of `tier1-4`). Deletion adds no capability
    but makes the route count honest. Mounted, so a founder could in principle
    POST to it — which makes this a product decision rather than dead-code
    removal, and it is why it has not been taken.
 
-2. **Readers whose writers can never run.** Two remain, same shape:
+3. **Readers whose writers can never run.** Two remain, same shape:
    `/agents/okr` renders from `company_okrs`, `scribe.ts` reads
    `agent_wiki_entries`, and in both cases the only writer is a module nothing
    can reach. ~769 LOC. Deleting a mounted page is a product decision, so it is
    recorded rather than taken as collateral.
 
-3. **The suite aborts natively, and the cause is not established.** A Rust panic
+4. **The suite aborts natively, and the cause is not established.** A Rust panic
    out of the libsql binding (`PendingException` where `Ok` was expected) that
    takes the whole run with it. An abort is worse than a failure: "validation
    green" becomes a claim about a process that survived.
@@ -537,7 +571,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      `gates-fail-when-they-should` plants real files into the working tree, so
      concurrent runs collide and produce failures that look like defects.
 
-4. **82 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
+5. **82 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
    read it rather than this line. Prose drifts from the ratchet — this entry has
    said 92 and 85 while the ratchet said otherwise, which is exactly the drift
    the ratchet exists to prevent in code and evidently not here.
@@ -566,14 +600,14 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    - **22 are `services/scp`** and most of the rest are legacy verticals.
    - **Two are a company's SEASONALITY** (`business_model_profile.seasonal_*`),
      and the earlier note here overstated them: the only writer is
-     `routes/api/tier3.ts`, part of the clientless API in item 1. Nothing
+     `routes/api/tier3.ts`, part of the clientless API in item 2. Nothing
      *records* the shape of a company's year — an unreachable endpoint could,
-     and nothing would read it. That makes them item 1's problem, not their own.
+     and nothing would read it. That makes them item 2's problem, not their own.
 
    `signal_events.processing_session_id` accounts for eleven of the institution
    rows on its own and is one column, not eleven findings.
 
-5. **One concept, two canonical truths: `customers` and
+6. **One concept, two canonical truths: `customers` and
    `customer_intelligence`** — now in the COMPARE stage, with the live harm
    fixed and a measurable cutover criterion.
 
@@ -611,14 +645,14 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    on a judgment; it is waiting on data.
 
    `customer_events` has one writer, `routes/api/platform.ts`, part of the
-   clientless API in item 1 — where that API is unused, `customers.churn_risk`
+   clientless API in item 2 — where that API is unused, `customers.churn_risk`
    reduces to `last_active_at` recency.
 
    **Closed:** `customer_intelligence.do_not_contact_until` was a third,
    inert contact control beside the canonical one consulted at the boundary.
    Migration 179 dropped it.
 
-6. **The transcript sense: NOT a gap. Corrected before it was built on.**
+7. **The transcript sense: NOT a gap. Corrected before it was built on.**
 
    This list said a company's customer calls "reach one dashboard page and
    nothing else", and proposed wiring extracted commitments into responsibility
@@ -647,7 +681,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    That is a "where does a person read this" question about NOTICE, and it can
    be answered without inferring anything.
 
-7. **Two unread outcome predicates.** `shadow_expectation` and
+8. **Two unread outcome predicates.** `shadow_expectation` and
    `shadow_comparison` (`external-shadowing.ts`). Their table side IS consumed —
    `assisting-admission` reads the comparison rows — so these are redundant
    claims rather than lost learning. The resolution is to say so where they are
@@ -663,7 +697,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    external-metric twin, because having them wired in two places is how one of
    them came to be wired in none.
 
-8. **Adapters for the existing intakes.** The shape is proven; breadth is
+9. **Adapters for the existing intakes.** The shape is proven; breadth is
    missing and the owner's pilot decision gates on it.
 
    Related, and now decided rather than open: the same obligation reported
@@ -676,7 +710,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-9. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
+10. **CLOSED: the uncalled-export sweep.** 32 of the institution's exported
    functions had no caller anywhere in `src/`. They have been read. What is
    left is 26, and every one of them is accounted for:
 
