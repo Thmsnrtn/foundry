@@ -393,7 +393,9 @@ export interface AutomationHealth {
   jobs_never_reported: number;
   auto_decisions_24h: number;
   escalated_decisions_24h: number;
-  auto_execute_rate: number;
+  /** NULL when no decision was made in the window: a rate over nothing.
+   *  It defaulted to 100. */
+  auto_execute_rate: number | null;
   recent_actions: Array<{ action: string; outcome: string; timestamp: string }>;
 }
 
@@ -416,9 +418,6 @@ export async function getAutomationHealth(): Promise<AutomationHealth> {
   // carried the same four hardcoded numbers and would drift apart if fixed
   // twice.
   const jobs = await jobHealthCounts();
-  const auditRow = (await safeQuery('SELECT MAX(created_at) AS last FROM audit_scores', []))
-    .rows[0] as Record<string, unknown> | undefined;
-  const lastAudit = auditRow?.last == null ? null : String(auditRow.last);
 
   return {
     total_jobs: jobs.total,
@@ -427,9 +426,13 @@ export async function getAutomationHealth(): Promise<AutomationHealth> {
     jobs_never_reported: jobs.neverReported,
     auto_decisions_24h: autoCount,
     escalated_decisions_24h: escalatedCount,
-    auto_execute_rate: total > 0 ? Math.round((autoCount / total) * 100) : 100,
+    // NULL, NOT 100. "Auto-execute rate: 100%" was what an operator saw when
+    // no decision had been made at all in the last day — the most reassuring
+    // number on the panel, printed precisely when there was nothing to report.
+    auto_execute_rate: total > 0 ? Math.round((autoCount / total) * 100) : null,
     recent_actions: (recentActions.rows as unknown as Array<Record<string, string>>).map((r) => ({
-      action: r.action_type, outcome: r.outcome ?? 'completed', timestamp: r.created_at,
+      // An action whose outcome was never written did not necessarily complete.
+      action: r.action_type, outcome: r.outcome ?? 'not recorded', timestamp: r.created_at,
     })),
   };
 }
@@ -441,7 +444,9 @@ export interface CustomerHealthOverview {
   healthy: number;
   warning: number;
   critical: number;
-  avg_health_score: number;
+  /** NULL when no customer has been scored. `0` was the worst possible score,
+   *  printed for having measured nobody. */
+  avg_health_score: number | null;
   /** WHICH COMPANIES NEED ATTENTION, NEVER WHICH OF THEIR CUSTOMERS.
    *
    * This was `Array<{ name: string; health: number; churn_risk: number }>` —
@@ -476,8 +481,10 @@ export async function getCustomerHealthOverview(): Promise<CustomerHealthOvervie
     healthy: scored.filter((c) => (c.healthScore ?? 0) >= 70).length,
     warning: scored.filter((c) => (c.healthScore ?? 0) >= 40 && (c.healthScore ?? 0) < 70).length,
     critical: scored.filter((c) => (c.healthScore ?? 0) < 40).length,
+    // NULL over an empty set. `0` here rendered as "Avg health: 0/100", which
+    // is the worst possible score, printed when nobody had been scored at all.
     avg_health: scored.length
-      ? scored.reduce((sum, c) => sum + (c.healthScore ?? 0), 0) / scored.length : 0,
+      ? scored.reduce((sum, c) => sum + (c.healthScore ?? 0), 0) / scored.length : null,
     champions: all.filter((c) => (c.healthScore ?? 0) > CHAMPION_MIN_HEALTH
       && c.churnRisk !== null && c.churnRisk < CHAMPION_MAX_CHURN_RISK).length,
     // The at-risk line for money uses the same threshold the departments act on,
@@ -507,7 +514,7 @@ export async function getCustomerHealthOverview(): Promise<CustomerHealthOvervie
     healthy: t.healthy,
     warning: t.warning,
     critical: t.critical,
-    avg_health_score: Math.round(t.avg_health),
+    avg_health_score: t.avg_health === null ? null : Math.round(t.avg_health),
     at_risk_by_company: [...atRiskByProduct.entries()]
       .map(([productId, n]) => ({
         company: productNames.get(productId) ?? 'Unknown',
@@ -600,7 +607,7 @@ Data:
 - ${pulse.active_stressors} active stressors (${pulse.critical_stressors} critical)
 - ${pulse.pending_decisions} decisions pending
 - At-risk products: ${churn.at_risk_count}
-- Auto-execute rate: ${automation.auto_execute_rate}%
+- Auto-execute rate: ${automation.auto_execute_rate === null ? 'no decisions in the window' : `${automation.auto_execute_rate}%`}
 - System uptime: ${pulse.system_uptime}
 
 Format each bullet with an emoji:
