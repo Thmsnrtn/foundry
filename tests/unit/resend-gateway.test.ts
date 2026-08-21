@@ -105,9 +105,11 @@ async function insertAction(opts: {
   subject?: string;
   agentName?: string;
   approvedBy?: string;
+  /** Stored verbatim, so a test can seed a row that is malformed on purpose. */
+  rawParams?: Record<string, unknown>;
 }): Promise<string> {
   const id = nanoid();
-  const params = {
+  const params: Record<string, unknown> = opts.rawParams ?? {
     to: [opts.to ?? 'cust@example.com'],
     subject: opts.subject ?? 'Hi',
     html: '<p>hello</p>',
@@ -301,4 +303,52 @@ describe('send_email provider routing', () => {
     expect(result).toMatchObject({ message_id: 'sg_1' });
     expect(String(fetchSpy.mock.calls[0][0])).toContain('sendgrid.com');
   });
+});
+
+
+// ─── A coercion that manufactured a recipient ────────────────────────────────
+//
+// `[String(parameters.to)]` turned an ABSENT `to` into the one-element list
+// `["undefined"]`, and the gateway's `requireCustomerExternalId` is satisfied by
+// any non-empty string. So a row whose `parameters_json` PARSED but carried no
+// recipient reached the provider as an attempted send to the address
+// "undefined" — burning the dedup key and marking the action executed or
+// failed, rather than refusing it as malformed.
+//
+// The parse-FAILURE path was already safe, because it produces `to: []`. Valid
+// JSON missing a field was the gap, and it is the more likely of the two: a
+// caller that writes the row wrongly, rather than a row that is corrupt.
+
+describe('executeEmailSend: a row with no recipient', () => {
+  it('is refused rather than sent to the address "undefined"', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'test_key');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const id = await insertAction({ rawParams: { subject: 'Hi', html: '<p>hi</p>' } });
+    await executeEmailSend(id).catch(() => undefined);
+
+    expect(fetchSpy, 'no provider call may be attempted for a malformed row')
+      .not.toHaveBeenCalled();
+
+    const row = (await query('SELECT status FROM outbound_actions WHERE id = ?', [id]))
+      .rows[0] as Record<string, unknown>;
+    expect(String(row.status), 'executed or failed would both claim an attempt was made')
+      .not.toBe('executed');
+  });
+
+  it('is refused when every recipient is blank', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'test_key');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const id = await insertAction({ rawParams: { to: ['', '   '], subject: 'Hi', html: 'x' } });
+    await executeEmailSend(id).catch(() => undefined);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // No positive control here on purpose: the happy-path describes above already
+  // prove a well-formed row sends, and repeating it at the end of the file
+  // would couple this describe to whatever kill-switch state they leave behind.
 });

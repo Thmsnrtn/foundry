@@ -93,7 +93,20 @@ export async function executeEmailSend(
   } catch {
     parameters = { to: [], subject: '', html: '' };
   }
-  const toList = Array.isArray(parameters.to) ? parameters.to : [String(parameters.to)];
+  // A COERCION THAT MANUFACTURED A RECIPIENT.
+  //
+  // `[String(parameters.to)]` turned an ABSENT `to` into the one-element list
+  // `["undefined"]`, and the gateway's `requireCustomerExternalId` is satisfied
+  // by any non-empty string. So a row whose `parameters_json` parsed but
+  // carried no recipient reached the provider as an attempted send to the
+  // address "undefined" — burning the dedup key and marking the action executed
+  // or failed, rather than refusing it as malformed.
+  //
+  // The parse-FAILURE path was already safe: it produces `to: []`, so
+  // `primaryRecipient` is undefined and the gateway refuses. Valid JSON missing
+  // a field was the gap, which is the more likely of the two.
+  const toList = (Array.isArray(parameters.to) ? parameters.to : [parameters.to])
+    .filter((addr): addr is string => typeof addr === 'string' && addr.trim().length > 0);
   const primaryRecipient = toList[0];
 
   const now = new Date().toISOString();

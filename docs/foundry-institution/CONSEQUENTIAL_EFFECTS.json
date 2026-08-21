@@ -101,14 +101,14 @@
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 336,
+      "line": 349,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 359,
+      "line": 372,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
