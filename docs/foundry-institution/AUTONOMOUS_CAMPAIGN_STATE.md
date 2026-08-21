@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `0ee876e`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `10aacb7`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `0ee876e` — **339 files / 2,989 tests**,
+- **Validation:** full suite green at `10aacb7` — **341 files / 3,004 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Read the exit code from the run that produced the log.**
   **Read the exit code from the run that produced the log**, and do not write
@@ -640,10 +640,33 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    readers stopped substituting fallbacks. **Follow a missing writer to its end
    rather than patching each reader where it shows.**
 
+   **AND THEN THE OBSERVATION SIDE OF THE SAME LAYER, which was a different
+   shape: not a substituted value but a TRUNCATED one wearing the name of a
+   total.** Four summaries reported the length of a capped fetch as a count —
+   GitHub pull requests at `per_page=20`, GitHub issues at 50, Sentry unresolved
+   issues at `limit=25`, Intercom's `opened_today` within 50 — and these rows are
+   read by Atlas, Crucible and Sentinel. A repository with two hundred open pull
+   requests told the agent reasoning about engineering load that the backlog was
+   twenty.
+
+   Two more came out of the same reading: a value taken from a POSITION in a
+   response that specified no sort (`openPRs[length - 1]` as "the oldest"), and
+   an average over values that were never reported (`pr.additions || 0`, where
+   every absent size counted as a real zero).
+
+   **The half of that fix which is easy to miss: FOLLOW THE READERS.**
+   `getSentrySummary` read `data.open_count`, so naming the truncated case
+   honestly upstream would have made it read null and thrown the number away.
+   The truth arriving as an absence is its own defect.
+
+   **Where the right pattern already was:** `intercom.ts` reads Intercom's own
+   `total_count` and only falls back to a page length. Read it before inventing
+   a fifth truncation idiom.
+
    **Where it has not been run:** `services/intelligence/*` beyond
    value-delivery, founder-health, predictive, psychology and expansion, all of
-   which were read this cycle; and the remaining `integration/` (singular)
-   modules — `github.ts`, `sentry.ts`, `slack.ts`, `resend.ts`, `fabric.ts`.
+   which were read this cycle; and `integration/{slack,resend,fabric}.ts`.
+   `github.ts` and `sentry.ts` are done.
 
    **A map worth having before starting there.** There are TWO integration
    directories, `services/integration/` and `services/integrations/`, each with

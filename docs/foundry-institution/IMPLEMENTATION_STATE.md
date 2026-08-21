@@ -16,13 +16,13 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `0ee876e` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `10aacb7` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **228 files**, highest number **192**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **339 files / 2,989 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
+| Validation | Full suite green: **341 files / 3,004 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
 | Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **26** · write-only columns **69** · tables written and never read **4** · **unscoped product-shaped routes 2** (new). |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -533,6 +533,33 @@ company, read from there by the board deck, the value delivery index and the
 benchmark percentiles. Without the clamp it would have read 3.2 and somebody
 would have asked. **When a computed rate sits exactly on its bound, check the
 windows before trusting it.**
+
+**A COUNT FROM A CAPPED PAGE IS A FLOOR, AND MUST BE NAMED ONE.** Four
+integration summaries reported `length` of a limited fetch under the name of a
+total: GitHub pull requests (`per_page=20`), GitHub issues (50), Sentry
+unresolved issues (`limit=25`), and Intercom's `opened_today` (within 50). These
+rows are read by Atlas, Crucible and Sentinel — a repository with two hundred
+open pull requests told the agent reasoning about engineering load that the
+backlog was twenty. The convention now: an exact count keeps its name, a
+truncated one becomes `<name>_at_least` with `<name>_page_truncated: true`, and
+anything counted inside the page carries `_in_page`.
+
+**Two rules came out of that sweep and both generalise.** A value derived from a
+POSITION in a response that specified no sort carries no meaning — the oldest
+open pull request was `openPRs[length - 1]`. And an average over values that
+were never reported is not an average: `pr.additions || 0` counted every missing
+size as a real zero.
+
+**RENAMING A FIELD TO TELL THE TRUTH IS ONLY HALF THE CHANGE — FOLLOW THE
+READERS.** `getSentrySummary` read `data.open_count`; naming the truncated case
+honestly upstream would have made that read null and thrown the number away
+silently. It takes the floor when that is what exists and carries
+`openIssuesIsFloor` beside it. The truth arriving as an absence is its own
+defect.
+
+**Where the right pattern already was:** `intercom.ts` reads Intercom's own
+`total_count` and falls back to the page length only when there is none. Read it
+before inventing a fifth truncation idiom.
 
 **A percentile has a DIRECTION, and it belongs with the metric.** Portfolio
 benchmarking now returns a `performance_percentile` — the share of peers this
