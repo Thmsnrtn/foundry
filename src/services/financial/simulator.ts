@@ -6,16 +6,37 @@
 import { query } from '../../db/client.js';
 import { callOpus, callSonnet, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
+import { getFinancialPosition } from './position.js';
 
+/**
+ * THE SECOND RUNWAY MODEL, AND THE SECOND SET OF INVENTED INPUTS.
+ *
+ * `scp/forecasting/runway.ts` defined cash as twelve times a burn read from the
+ * AI spend cap. This file defined it as six times revenue, under the comment
+ * "would be explicit in full implementation", and defined burn as thirty per
+ * cent of revenue or five hundred dollars. Two implementations of one rule,
+ * both fabricated, disagreeing with each other — a company would have been
+ * given two different runways depending on which page it opened.
+ *
+ * Both now read the position the founder stated (`financial/position.ts`), and
+ * both return nothing when there is none. `runway_months: 999` for a profitable
+ * company is gone too: profitable-with-no-cash-figure is not infinite runway,
+ * it is an unanswered question about how much money is in the bank.
+ */
 export interface RunwayModel {
   monthly_burn: number;
   monthly_revenue: number;
   cash_on_hand: number;
-  runway_months: number;
+  /** NULL when the company is net cash-flow positive: the money does not run
+   *  out on the current trajectory, which is a different statement from a
+   *  number, and `999` was being stored and rendered as one. */
+  runway_months: number | null;
   break_even_date: string | null;
   break_even_mrr: number;
   personal_runway_months: number | null;
-  gap_months: number;
+  /** NULL when there is no break-even date to compare a personal runway with,
+   *  or no personal runway stated. It was 0, which reads as "they line up". */
+  gap_months: number | null;
 }
 
 export interface FinancialScenario {
@@ -44,7 +65,12 @@ interface MonthlyProjection {
 export async function computeRunwayModel(
   founderId: string,
   productId: string
-): Promise<RunwayModel> {
+): Promise<RunwayModel | null> {
+  // NULL WHEN THE COMPANY HAS NOT SAID WHAT IT HAS. Everything below depends on
+  // a cash balance, and Foundry has no way to observe one.
+  const position = await getFinancialPosition(productId);
+  if (position === null) return null;
+
   // Get latest metrics
   const metrics = await query(
     'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
@@ -67,19 +93,17 @@ export async function computeRunwayModel(
   const health = await query('SELECT personal_runway_months FROM founder_health WHERE founder_id = ?', [founderId]);
   const personalRunway = (health.rows[0] as Record<string, number> | undefined)?.personal_runway_months ?? null;
 
-  // Estimate monthly burn (revenue - COGS + estimated fixed costs)
-  // Fixed costs estimated from sector/stage if not provided
-  const estimatedFixedCosts = monthlyRevenue > 0 ? monthlyRevenue * 0.3 : 500; // 30% of revenue or $500
-  const monthlyBurn = totalCogs + estimatedFixedCosts;
+  // STATED, NOT ESTIMATED. Burn was `totalCogs + (30% of revenue, or $500)` and
+  // cash was `revenue * 6`. COGS is still added on top of the stated burn only
+  // where the founder's figure would not already include it — it would, so it
+  // does not: their burn is their burn.
+  const monthlyBurn = position.monthlyBurnCents / 100;
+  const cashOnHand = position.cashOnHandCents / 100;
   const netCashFlow = monthlyRevenue - monthlyBurn;
 
-  // Cash on hand: estimate from revenue trajectory (would be explicit in full implementation)
-  const cashOnHand = monthlyRevenue > 0 ? monthlyRevenue * 6 : 0; // Rough estimate
-
-  // Runway calculation
-  const runwayMonths = netCashFlow >= 0
-    ? 999 // Profitable — infinite runway
-    : cashOnHand / Math.abs(netCashFlow);
+  // Runway: null when the money is not running out. `999` was stored in
+  // `runway_models.runway_months` and rendered as eighty-three years.
+  const runwayMonths = netCashFlow >= 0 ? null : cashOnHand / Math.abs(netCashFlow);
 
   // Break-even calculation
   const growthRate = await estimateGrowthRate(productId);
@@ -95,22 +119,25 @@ export async function computeRunwayModel(
   }
 
   // Gap: difference between founder runway and product break-even
+  // NO BREAK-EVEN DATE MEANS NO GAP TO REPORT. This substituted 999 months to
+  // break even and then, if the founder had no personal runway on file, a gap
+  // of 0 — which reads as "your money lasts exactly as long as it needs to".
   const monthsToBreakEven = breakEvenDate
     ? Math.ceil((new Date(breakEvenDate).getTime() - Date.now()) / (30 * 86400000))
-    : 999;
-  const gap = personalRunway !== null
+    : null;
+  const gap = personalRunway !== null && monthsToBreakEven !== null
     ? monthsToBreakEven - personalRunway
-    : 0;
+    : null;
 
   const model: RunwayModel = {
     monthly_burn: Math.round(monthlyBurn),
     monthly_revenue: Math.round(monthlyRevenue),
     cash_on_hand: Math.round(cashOnHand),
-    runway_months: Math.round(runwayMonths * 10) / 10,
+    runway_months: runwayMonths === null ? null : Math.round(runwayMonths * 10) / 10,
     break_even_date: breakEvenDate,
     break_even_mrr: Math.round(breakEvenMrr),
     personal_runway_months: personalRunway,
-    gap_months: Math.round(gap * 10) / 10,
+    gap_months: gap === null ? null : Math.round(gap * 10) / 10,
   };
 
   // Persist
@@ -142,13 +169,21 @@ export async function runWhatIfScenario(
   }
 ): Promise<FinancialScenario> {
   const currentModel = await computeRunwayModel(ownerId, productId);
+  // A what-if needs a what-is. Modelling a scenario against invented cash was
+  // how this file produced twelve months of projections for companies whose
+  // balance nobody knew.
+  if (currentModel === null) {
+    throw new Error('financial_position_required');
+  }
 
   const prompt = `Model this financial scenario for a SaaS product.
 
 Current state:
 - Monthly revenue: $${currentModel.monthly_revenue}
 - Monthly burn: $${currentModel.monthly_burn}
-- Runway: ${currentModel.runway_months} months
+- Runway: ${currentModel.runway_months === null
+    ? 'not running out — net cash flow is positive at the stated burn'
+    : `${currentModel.runway_months} months`}
 - Break-even MRR: $${currentModel.break_even_mrr}
 
 Scenario: ${scenario.name}
@@ -209,22 +244,42 @@ Project 12 months forward. Return JSON:
  */
 export async function analyzeRunwayGap(founderId: string, productId: string): Promise<{
   has_gap: boolean;
-  gap_months: number;
-  severity: 'safe' | 'tight' | 'critical';
+  /** NULL when the gap could not be computed. It used to be 0 alongside
+   *  `severity: 'safe'`, which told a founder their runway was fine as the
+   *  answer to a question nobody could answer. */
+  gap_months: number | null;
+  severity: 'safe' | 'tight' | 'critical' | 'unknown';
   recommendation: string;
 }> {
   const model = await computeRunwayModel(founderId, productId);
 
+  if (model === null) {
+    return {
+      has_gap: false,
+      gap_months: null,
+      severity: 'unknown',
+      recommendation: 'Tell Foundry your cash on hand and monthly burn on the Scenarios page — a runway gap cannot be computed without them.',
+    };
+  }
+
   if (model.personal_runway_months === null) {
     return {
       has_gap: false,
-      gap_months: 0,
-      severity: 'safe',
+      gap_months: null,
+      severity: 'unknown',
       recommendation: 'Set your personal runway in Founder Health to enable runway gap analysis.',
     };
   }
 
   const gap = model.gap_months;
+  if (gap === null) {
+    return {
+      has_gap: false,
+      gap_months: null,
+      severity: 'unknown',
+      recommendation: 'No break-even date could be projected, so there is nothing to compare your personal runway against.',
+    };
+  }
 
   if (gap <= 0) {
     return {

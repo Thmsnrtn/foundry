@@ -345,6 +345,18 @@ superchargeApiRoutes.get('/api/products/:id/runway', async (c) => {
 
   const model = await computeRunwayModel(founder.id, productId);
   const gap = await analyzeRunwayGap(founder.id, productId);
+  if (model === null) {
+    // 200 with a null and a reason, not an error: the company is fine, it has
+    // simply never told Foundry what is in the bank, and the API says which of
+    // those two it is. Previously this returned a runway derived from cash
+    // invented as six times revenue.
+    return c.json({
+      runway: null,
+      gap_analysis: gap,
+      reason: 'no_financial_position',
+      detail: 'Cash on hand and monthly burn have not been stated for this company. They cannot be derived from anything Foundry holds.',
+    });
+  }
   return c.json({ runway: model, gap_analysis: gap });
 });
 
@@ -355,12 +367,24 @@ superchargeApiRoutes.post('/api/products/:id/financial-scenario', async (c) => {
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
   const body = await c.req.json() as Record<string, unknown>;
-  const scenario = await runWhatIfScenario(productId, founder.id, {
-    name: body.name as string ?? 'What-if scenario',
-    type: body.type as any ?? 'custom',
-    inputs: body.inputs as Record<string, unknown> ?? {},
-  });
-  return c.json({ scenario });
+  try {
+    const scenario = await runWhatIfScenario(productId, founder.id, {
+      name: body.name as string ?? 'What-if scenario',
+      type: body.type as any ?? 'custom',
+      inputs: body.inputs as Record<string, unknown> ?? {},
+    });
+    return c.json({ scenario });
+  } catch (err) {
+    // A what-if needs a what-is: without a stated cash position there is
+    // nothing to model against, and inventing one is how this used to answer.
+    if ((err as Error)?.message === 'financial_position_required') {
+      return c.json({
+        error: 'no_financial_position',
+        detail: 'State cash on hand and monthly burn for this company before modelling a scenario.',
+      }, 409);
+    }
+    throw err;
+  }
 });
 
 superchargeApiRoutes.get('/api/products/:id/financial-scenarios', async (c) => {

@@ -1512,14 +1512,21 @@ async function scpScenarioRefresh(): Promise<void> {
       `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
     );
     let generated = 0;
+    let awaitingPosition = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
-        await generateScenariosForProduct(productId);
-        generated++;
+        // Null means the company has not stated its cash position, which is a
+        // normal state and not a failure — counted apart so the log does not
+        // read as though every company were being modelled.
+        if (await generateScenariosForProduct(productId) === null) awaitingPosition++;
+        else generated++;
       } catch { /* non-fatal per product */ }
     }
-    logger.info(`scp_scenario_refresh: Generated scenarios for ${generated} products`, { jobName: 'scp_scenario_refresh' });
+    logger.info(
+      `scp_scenario_refresh: Generated scenarios for ${generated} products, `
+      + `${awaitingPosition} awaiting a stated cash position`,
+      { jobName: 'scp_scenario_refresh' });
   } catch (err) {
     logger.error('scp_scenario_refresh: Error:', { jobName: 'scp_scenario_refresh', error: String(err) });
   }

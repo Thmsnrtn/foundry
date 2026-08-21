@@ -963,6 +963,7 @@
   -- The compressed content
   -- The consequence class a consent must have been granted at to use this. Not
   -- The constitutional ring. Ordinary development authority may not reach the
+  -- The date the founder says these were true, not the date they typed them.
   -- The decision and the status it produces are not the same word for one of
   -- The decision this premise underpins. decision_source disambiguates which
   -- The effect must be this company's own, and must have actually executed. An
@@ -994,6 +995,7 @@
   -- What the agent saw
   -- When a send through this identity was last accepted by the provider.
   -- Which provider account the mail goes through. Closed vocabulary: adding a
+  -- Who said so. A financial position with no author is a number of unknown
   -- Who this was issued to, in words a person can check against reality.
   -- Widening the ring requires a new migration, which is itself inside the
   -- Writing a reply is not deciding what Foundry may do with it. A proposal
@@ -1064,6 +1066,7 @@
   -- nothing that could be mistaken for structure or a path.
   -- of adding an effect kind.
   -- or maturity is refused whole — every one of those is resolved server-side
+  -- origin, and this one drives what a founder is told about survival.
   -- outcome for something that never happened is not an outcome; a plan that
   -- policy) are deliberately absent until something consumes them; adding a
   -- provider is a code change in the send boundary, so it is a code change
@@ -1244,6 +1247,10 @@
   SELECT RAISE(ABORT, 'call_transcript:failure_incomplete');
   SELECT RAISE(ABORT, 'candidate_status:no_decision') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'ecosystem_principal:company_not_in_issuers_portfolio');
+  SELECT RAISE(ABORT, 'financial_position:as_of_date is when this was true, not a projection');
+  SELECT RAISE(ABORT, 'financial_position:as_of_date is when this was true, not a projection');
+  SELECT RAISE(ABORT, 'financial_position:cash and burn are amounts, not deltas');
+  SELECT RAISE(ABORT, 'financial_position:cash and burn are amounts, not deltas');
   SELECT RAISE(ABORT, 'judgment_disposition:append_only') WHERE EXISTS (
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
@@ -1694,6 +1701,7 @@
   artifact_type TEXT CHECK(artifact_type IN ('audit', 'remediation', 'beta_outcome', 'lifecycle_activation', 'risk_event', 'ecosystem_connection', 'recovery', 'milestone')),
   artifact_type TEXT NOT NULL,
   artifact_type TEXT NOT NULL,                -- 'email_draft'|'blog_draft'|'cs_message'|'pricing_copy'|'landing_block'|other
+  as_of_date TEXT NOT NULL,
   asked_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   asks TEXT,
   assessed_at TEXT DEFAULT (datetime('now'))
@@ -1790,6 +1798,7 @@
   capability_dependency TEXT,
   cascades_triggered TEXT,
   cash_on_hand REAL,
+  cash_on_hand_cents INTEGER NOT NULL,
   category              TEXT NOT NULL,
   category TEXT CHECK(category IN ('urgent', 'strategic', 'product', 'marketing', 'informational')),
   category TEXT NOT NULL CHECK(category IN (
@@ -2132,6 +2141,7 @@
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -3149,6 +3159,7 @@
   monitoring_active BOOLEAN DEFAULT TRUE,
   month TEXT NOT NULL,                        -- 'YYYY-MM'
   monthly_burn REAL,
+  monthly_burn_cents INTEGER NOT NULL,
   monthly_revenue REAL,
   mood             INTEGER CHECK (mood BETWEEN 1 AND 5),   -- optional
   morning_briefing INTEGER NOT NULL DEFAULT 1,
@@ -3674,6 +3685,7 @@
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
+  product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT PRIMARY KEY REFERENCES products(id),
   product_id TEXT PRIMARY KEY REFERENCES products(id),
   product_id TEXT REFERENCES products(id)
@@ -4030,6 +4042,7 @@
   state TEXT NOT NULL DEFAULT 'unknown' CHECK(state IN (
   state TEXT NOT NULL,  -- 'optimal' | 'watchful' | 'stressed' | 'degraded'
   state TEXT PRIMARY KEY,
+  stated_by TEXT REFERENCES founders(id),
   statement TEXT NOT NULL,
   status                  TEXT NOT NULL DEFAULT 'active'
   status                TEXT NOT NULL DEFAULT 'planned'
@@ -4303,6 +4316,7 @@
   updated_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -4643,6 +4657,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -4688,6 +4703,8 @@ BEFORE DELETE ON system_identities
 BEFORE INSERT ON ai_spend_reservations
 BEFORE INSERT ON autonomy_consents
 BEFORE INSERT ON autonomy_consents WHEN NEW.responsibility_id IS NOT NULL
+BEFORE INSERT ON company_financial_position
+BEFORE INSERT ON company_financial_position
 BEFORE INSERT ON company_observation_channels
 BEFORE INSERT ON cost_events
 BEFORE INSERT ON development_change_plans
@@ -4744,6 +4761,8 @@ BEFORE UPDATE OF state ON institutional_responsibilities
 BEFORE UPDATE OF status ON responsibility_candidates
 BEFORE UPDATE ON call_transcripts
 BEFORE UPDATE ON call_transcripts
+BEFORE UPDATE ON company_financial_position
+BEFORE UPDATE ON company_financial_position
 BEFORE UPDATE ON company_observation_channels
 BEFORE UPDATE ON cost_events
 BEFORE UPDATE ON development_change_plans
@@ -4754,6 +4773,10 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5242,6 +5265,7 @@ CREATE TABLE cohort_memberships (
 CREATE TABLE cohort_patterns (
 CREATE TABLE cohorts (
 CREATE TABLE communication_budgets (
+CREATE TABLE company_financial_position (
 CREATE TABLE company_observation_channels (
 CREATE TABLE company_okrs (
 CREATE TABLE competitive_signals (
@@ -5443,6 +5467,10 @@ CREATE TRIGGER ai_spend_reservation_finish
 CREATE TRIGGER ai_spend_reservation_guard
 CREATE TRIGGER assisted_action_plan_guard
 CREATE TRIGGER assisted_reply_plan_binding_guard
+CREATE TRIGGER cfp_amounts_are_not_negative_ins
+CREATE TRIGGER cfp_amounts_are_not_negative_upd
+CREATE TRIGGER cfp_as_of_is_not_in_the_future_ins
+CREATE TRIGGER cfp_as_of_is_not_in_the_future_upd
 CREATE TRIGGER company_observation_channel_guard
 CREATE TRIGGER company_observation_channel_immutable
 CREATE TRIGGER cost_event_attribution_guard
@@ -5635,6 +5663,10 @@ END;
 END;
 END;
 END;
+END;
+END;
+END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
@@ -5648,6 +5680,8 @@ WHEN COALESCE(OLD.product_id,'')    <> COALESCE(NEW.product_id,'')
 WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
+WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0
+WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0
 WHEN NEW.disposition IS NOT OLD.disposition
 WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.due_stated_by IS NOT NULL
@@ -5661,3 +5695,5 @@ WHEN NEW.status = 'approved' AND NEW.responsibility_id IS NULL
 WHEN NEW.status IS NOT OLD.status
 WHEN NOT EXISTS (
 WHEN OLD.status IN ('reserved','ambiguous') AND NEW.status IN ('settled','released','expired')
+WHEN date(NEW.as_of_date) > date('now')
+WHEN date(NEW.as_of_date) > date('now')

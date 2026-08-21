@@ -5,6 +5,13 @@
 
 import { query } from '../../../db/client.js';
 import { nanoid } from 'nanoid';
+import { getFinancialPosition } from '../../financial/position.js';
+
+/** Named, not buried. Both were inline literals, and an inline literal in a
+ *  survival model is indistinguishable from a measurement once it is three
+ *  function calls away from the reader. */
+export const DEFAULT_CHURN_ASSUMPTION = 0.03;
+export const DEFAULT_GROWTH_ASSUMPTION = 0.05;
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -134,13 +141,43 @@ export async function runMonteCarloSimulation(
 
 // ─── Public: Generate 5 scenarios for a product ──────────────────────────────
 
+/**
+ * Five runway scenarios, or NOTHING, depending on whether the company has said
+ * what its cash position is.
+ *
+ * This used to run unconditionally. Cash on hand was defined as twelve times
+ * monthly burn, and monthly burn was read from
+ * `products.operating_budget_monthly_usd` — which is the AI SPEND CAP, and
+ * defaults to fifty dollars a month. A founder who never changed it was shown a
+ * business burning $50 a month against $600 of cash, and the identity
+ * cash = 12 x burn made the base runway exactly twelve months before growth was
+ * applied.
+ *
+ * That went through a thousand-iteration Monte Carlo and reached the founder as
+ * a median, a p10-p90 band and a probability of surviving eighteen months. The
+ * statistics were real. Every input to them was invented, and the machinery
+ * made the invention look measured — which is worse than the bare constant
+ * doing the same job on the operator page, because nobody mistakes a constant
+ * for a finding.
+ *
+ * `null` means the company has not stated a position. There is nothing to
+ * model, and the page asks for it instead. See `financial/position.ts`.
+ */
 export async function generateScenariosForProduct(productId: string): Promise<{
   base_case: RunwayResult;
   bear_case: RunwayResult;
   bull_case: RunwayResult;
   hire_2_engineers: RunwayResult;
   raise_prices_20pct: RunwayResult;
-}> {
+} | null> {
+  const position = await getFinancialPosition(productId);
+  if (position === null) {
+    // Old scenarios are stood down rather than left on the page: they were
+    // computed from the invented figures, and a stale invented forecast beside
+    // a request for real numbers is the worst of both.
+    await query('UPDATE forecast_scenarios SET is_active = 0 WHERE product_id = ?', [productId]);
+    return null;
+  }
   // 1. Load latest metric snapshot
   const metricsResult = await query(
     `SELECT new_mrr_cents, expansion_mrr_cents, contraction_mrr_cents,
@@ -174,12 +211,17 @@ export async function generateScenariosForProduct(productId: string): Promise<{
   }
   const currentMrrCents = Math.max(0, cumulativeMrr);
 
-  const rawChurnRate = (latest.churn_rate as number) ?? 0.03;
-  // Derive monthly churn from metric snapshot (assumed monthly already)
-  const monthlyChurnRate = rawChurnRate > 0 ? rawChurnRate : 0.03;
+  // A REPORTED ZERO IS A REPORTED ZERO. This read `?? 0.03` and then
+  // `rawChurnRate > 0 ? rawChurnRate : 0.03`, so a company that genuinely
+  // reported no churn had it replaced with an invented 3% — the second clause
+  // overrode a measurement, not just an absence. Unreported churn still takes a
+  // stated assumption, because a scenario has to assume something; it is named
+  // in the return so the reader can see which numbers were theirs.
+  const reportedChurn = latest.churn_rate == null ? null : Number(latest.churn_rate);
+  const monthlyChurnRate = reportedChurn ?? DEFAULT_CHURN_ASSUMPTION;
 
   // Derive MRR growth rate from last 2 snapshots
-  let mrrGrowthRate = 0.05; // default 5% MoM
+  let mrrGrowthRate = DEFAULT_GROWTH_ASSUMPTION;
   if (rows.length >= 2) {
     const prevRow = rows[1] as Record<string, unknown>;
     const prevNet = ((prevRow.new_mrr_cents as number) ?? 0)
@@ -192,18 +234,10 @@ export async function generateScenariosForProduct(productId: string): Promise<{
     }
   }
 
-  // Load product to get operating budget as proxy for burn
-  const productResult = await query(
-    'SELECT operating_budget_monthly_usd FROM products WHERE id = ?',
-    [productId]
-  );
-  const productRow = (productResult.rows[0] as Record<string, unknown>) ?? {};
-  const monthlyBudgetUsd = (productRow.operating_budget_monthly_usd as number) ?? 15000;
-  const monthlyBurnCents = monthlyBudgetUsd * 100;
-
-  // Assume cash balance is 12x current burn as a reasonable default
-  // (founders can update via financial integrations)
-  const cashBalanceCents = monthlyBurnCents * 12;
+  // STATED BY THE PERSON WITH THE BANK ACCOUNT. Both were invented here: burn
+  // from the AI spend cap, cash from burn times twelve.
+  const monthlyBurnCents = position.monthlyBurnCents;
+  const cashBalanceCents = position.cashOnHandCents;
 
   // ─ Build 5 scenario assumptions ─────────────────────────────────────────────
 
@@ -276,6 +310,15 @@ export async function generateScenariosForProduct(productId: string): Promise<{
   for (const { scenario, result, type } of scenariosData) {
     const id = nanoid();
     await query(
+      // SEVEN PLACEHOLDERS, SIX ARGUMENTS — this statement had never once
+      // succeeded. `generated_by` bound to nothing, the column is NOT NULL, and
+      // every insert raised. Both callers swallow it: the refresh job catches
+      // per product and moves on, the route logs and redirects. So the page has
+      // never shown a scenario this function produced, the job's own log has
+      // read "Generated scenarios for 0 products" every night, and nobody found
+      // out. It surfaced only when a test called the function for the first
+      // time — which is the whole argument for testing a path rather than
+      // reading it.
       `INSERT INTO forecast_scenarios (id, product_id, name, scenario_type, assumptions_json, results_json, generated_by, is_active)
        VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
       [
@@ -292,6 +335,7 @@ export async function generateScenariosForProduct(productId: string): Promise<{
           probability_18_months: result.probability_18_months,
           monthly_projection: result.monthly_projection,
         }),
+        'system',
       ]
     );
 
