@@ -39,7 +39,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
   const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: 0, at_risk_by_company: [], champions: 0, revenue_at_risk: 0 };
   const defaultWellbeing = { energy_score: 70, stress_signals: [], days_since_break: 0, override_count_7d: 0, burnout_trajectory: 'stable' as const, recommendation: null };
   const defaultGrowth = { new_signups_7d: 0, new_signups_30d: 0, activation_rate: 0, trial_to_paid_rate: 0, expansion_revenue: 0, top_acquisition_channels: [] };
-  const defaultAICost = { total_tokens_24h: 0, total_cost_24h: 0, avg_latency_ms: 0, calls_by_model: {}, cost_per_founder: 0 };
+  const defaultAICost = { total_tokens_24h: 0, total_cost_24h: 0, avg_latency_ms: null, calls_by_model: null, cost_per_founder: 0 };
 
   const [pulse, mrr, churn, automation, customerHealth, wellbeing, growth, aiCost] = await Promise.all([
     safe(getPulse, defaultPulse),
@@ -237,7 +237,11 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
           ${metricBadge('Tokens (24h)', aiCost.total_tokens_24h.toLocaleString())}
           ${metricBadge('Cost (24h)', '$' + aiCost.total_cost_24h)}
           ${metricBadge('Cost/Founder', '$' + aiCost.cost_per_founder)}
-          ${metricBadge('Models', Object.keys(aiCost.calls_by_model).length)}
+          <!-- This counted the keys of a hardcoded three-key object, so the
+               badge read 3 whatever had actually run. No caller records which
+               model was used, so the honest answer is that it is not recorded. -->
+          ${metricBadge('Models', aiCost.calls_by_model
+            ? String(Object.keys(aiCost.calls_by_model).length) : 'not recorded')}
         </div>
       </div>
 

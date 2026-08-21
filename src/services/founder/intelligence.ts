@@ -559,29 +559,69 @@ export async function getGrowthSignals(): Promise<GrowthSignals> {
 
 export interface AICostData {
   total_tokens_24h: number;
+  /** Actually recorded spend, summed from `cost_events`. */
   total_cost_24h: number;
-  avg_latency_ms: number;
-  calls_by_model: Record<string, number>;
+  /** NULL means NOT MEASURED, never zero. Nothing in this system records
+   *  per-call latency, and a `0` here was rendered as a measurement. */
+  avg_latency_ms: number | null;
+  /** NULL for the same reason: no caller records which model was used.
+   *  `logCost` takes `details`, and the agent runner passes `{tokens, session}`
+   *  — the model is not in it. */
+  calls_by_model: Record<string, number> | null;
   cost_per_founder: number;
 }
 
+/**
+ * WHAT FOUNDRY'S OWN AI ACTUALLY COST, FROM WHAT WAS RECORDED.
+ *
+ * This estimated. It summed tokens from `chat_messages` — the founder-chat path
+ * only — and multiplied by a hardcoded blended rate:
+ *
+ *     const estimatedCost = totalTokens * 0.000005; // ~$5/M average
+ *
+ * while `cost_events` held the real amounts, written by the AI client that
+ * reserves against the spend ceilings before every dispatch. So the operator's
+ * "Cost (24h)" badge was a guess derived from a proxy, standing next to a
+ * ledger of what was actually spent.
+ *
+ * Two fields were worse than approximate. `avg_latency_ms: 0` and
+ * `calls_by_model: { 'claude-opus-4-8': 0, ... }` are not measurements — nothing
+ * records per-call latency, and no caller records the model. The dashboard
+ * rendered the second as `Models: 3`, which is the count of keys in a hardcoded
+ * object and would read as three models regardless of reality.
+ *
+ * THE RULE IS THIS SYSTEM'S OWN, stated in `institutional-economics.ts`:
+ * measured-and-zero is not the same fact as not-measured. Both are null now,
+ * and the surface says so rather than printing a number.
+ */
 export async function getAICostData(): Promise<AICostData> {
+  // The canonical spend ledger: real amounts, every cost type.
+  const spend = await safeQuery(
+    `SELECT COALESCE(SUM(amount_usd), 0) AS total FROM cost_events
+      WHERE created_at > datetime('now', '-1 day')`, []);
+  const totalCost = Number((spend.rows[0] as Record<string, unknown>)?.total ?? 0);
+
+  // Tokens from the two paths that record them, which do not overlap: agent
+  // sessions log to `agent_cost_log`, founder chat to `chat_messages`.
+  const agentTokens = await safeQuery(
+    `SELECT COALESCE(SUM(tokens_input + tokens_output), 0) AS total FROM agent_cost_log
+      WHERE logged_at > datetime('now', '-1 day')`, []);
   const chatTokens = await safeQuery(
-    "SELECT SUM(tokens_in + tokens_out) as total FROM chat_messages WHERE created_at > datetime('now', '-1 day')", []
-  );
-  const totalTokens = (chatTokens.rows[0] as Record<string, number>)?.total ?? 0;
+    `SELECT COALESCE(SUM(tokens_in + tokens_out), 0) AS total FROM chat_messages
+      WHERE created_at > datetime('now', '-1 day')`, []);
+  const totalTokens = Number((agentTokens.rows[0] as Record<string, unknown>)?.total ?? 0)
+    + Number((chatTokens.rows[0] as Record<string, unknown>)?.total ?? 0);
+
   const founders = await safeQuery("SELECT COUNT(*) as c FROM founders WHERE tier IS NOT NULL", []);
   const founderCount = Math.max(1, (founders.rows[0] as Record<string, number>)?.c ?? 1);
 
-  // Approximate cost: $3/M input, $15/M output for Opus; $0.80/$4 for Sonnet
-  const estimatedCost = totalTokens * 0.000005; // ~$5/M average
-
   return {
     total_tokens_24h: totalTokens,
-    total_cost_24h: Math.round(estimatedCost * 100) / 100,
-    avg_latency_ms: 0,
-    calls_by_model: { 'claude-opus-4-8': 0, 'claude-sonnet-5': 0, 'claude-haiku-4-5': 0 },
-    cost_per_founder: Math.round((estimatedCost / founderCount) * 100) / 100,
+    total_cost_24h: Math.round(totalCost * 100) / 100,
+    // Not measured. Not zero.
+    avg_latency_ms: null,
+    calls_by_model: null,
+    cost_per_founder: Math.round((totalCost / founderCount) * 100) / 100,
   };
 }
 
