@@ -154,15 +154,19 @@ onboardingRoutes.post('/onboarding/create-product', validateBody(createProductSc
 
   const productId = nanoid();
 
+  // THE WEBSITE GOES WITH THE COMPANY.
+  //
+  // It used to be written as a bare row into `web_audit_results` — url plus
+  // ids, every analysis column NULL — a table nothing reads, named for output
+  // that only `runWebAudit` produces and that only the clientless API can
+  // trigger. `products` had no website column, so the founder answered a
+  // question and Foundry could not afterwards say what the answer was.
   await query(
-    `INSERT INTO products (id, name, owner_id, build_platform, sector_profile, status) VALUES (?, ?, ?, ?, ?, 'active')`,
-    [productId, body.name, founder.id, body.build_platform ?? 'other', body.sector_profile ?? 'b2b_saas']
+    `INSERT INTO products (id, name, owner_id, build_platform, sector_profile, website_url, status)
+     VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+    [productId, body.name, founder.id, body.build_platform ?? 'other',
+      body.sector_profile ?? 'b2b_saas', body.url ?? null]
   );
-
-  if (body.url) {
-    await query(`INSERT INTO web_audit_results (id, product_id, owner_id, url) VALUES (?, ?, ?, ?)`,
-      [nanoid(), productId, founder.id, body.url]);
-  }
 
   await query(`INSERT INTO lifecycle_state (product_id, current_prompt, risk_state) VALUES (?, 'prompt_1', 'green')`, [productId]);
 

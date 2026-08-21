@@ -56,7 +56,7 @@ settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
 
-  const products = await query('SELECT id, name, github_repo_url, share_token, ingest_token, status, scp_status FROM products WHERE owner_id = ?', [founder.id]);
+  const products = await query('SELECT id, name, github_repo_url, website_url, share_token, ingest_token, status, scp_status FROM products WHERE owner_id = ?', [founder.id]);
 
   // Use the cookie-selected product (consistent with ctx.productId), fall back to first
   const cookieProductId = getCookie(c, 'foundry_product');
@@ -166,6 +166,7 @@ settingsRoutes.get('/settings', async (c) => {
           <div>
             <strong>${p.name}</strong>
             ${p.github_repo_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.github_repo_url}</span>` : ''}
+            ${p.website_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.website_url}</span>` : ''}
           </div>
           <a href="/products/${p.id}/audit" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">View</a>
         </div>`)}

@@ -1146,7 +1146,7 @@
   CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
   CHECK(disposition IN ('active','deliberately_not_done')), disposition_reason TEXT, disposition_evidence_ref TEXT, disposition_at DATETIME, capability TEXT NOT NULL DEFAULT 'general', discovery_evidence_ref TEXT, due_at DATETIME, due_stated_by TEXT);
-  CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, health_score INTEGER DEFAULT 0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME);
+  CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, health_score INTEGER DEFAULT 0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME, website_url TEXT);
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
