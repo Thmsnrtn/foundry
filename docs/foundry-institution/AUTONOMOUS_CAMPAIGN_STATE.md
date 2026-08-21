@@ -25,13 +25,18 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `b7f156b`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `f8a1581`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-  **Migrations:** 225 files, highest **189**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `b7f156b` — **330 files / 2,892 tests**,
-  `npm run check` EXIT=0, every gate chained and running in CI on this branch.
-  **Read the exit code from the run that produced the log** — a commit went out
-  with five red tests in an earlier cycle because it was read from a wrapper.
+  **Migrations:** 227 files, highest **191**. Ordering gated. Snapshot current.
+- **Validation:** **333 files / 2,944 tests.** The run at `f8a1581` had ONE
+  failure — a fixture set to the wrong observation channel by hand — fixed in
+  the commit that follows it, with the suite green there and all seven gates
+  EXIT=0. Every gate is chained and running in CI on this branch.
+  **Read the exit code from the run that produced the log**, and do not write
+  "green at <sha>" for a run that was not: a commit went out with five red tests
+  in an earlier cycle because the code was read from a wrapper, and this line
+  said "green at f8a1581" for about a minute before being corrected on the same
+  rule the rest of this file is about.
   **Qualified:** the suite aborts natively about one run in three *before*
   `closeDb` landed; over 30 consecutive clean runs since. See item 4.
   **Read the exit code from the run that produced the log** — a commit went out
@@ -39,10 +44,9 @@ inherited list because it was inherited.
 - **Ratchets:** unguarded mutating routes **114** · fabricated test schemas **4**
   · writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **27** · write-only columns
-  **70** · id tiebreaks **18** · backticks in embedded comments **0** ·
-  query-argument mismatches **0** (1,888 statements) · INSERT value-list
-  mismatches **0** (370) · tables written and never read **4** (221 written
-  tables checked).
+  **69** · id tiebreaks **18** · backticks in embedded comments **0** ·
+  query-argument mismatches **0** · INSERT value-list mismatches **0** ·
+  tables written and never read **4** (220 written tables checked).
 
 ## Active work
 
@@ -115,6 +119,46 @@ design: the company reporting something about itself.
 `discovery-is-not-reachable-from-integrations.test.ts` failed on the first full
 run. The test was right; the code was wrong. It goes through the interruption
 ladder now.
+
+**THE SHARPEST FINDING OF THE CYCLE CAME FROM A COLUMN NOBODY READ.**
+`responsibility_shadow_expectations.observation_source_evidence_ref` was on the
+write-only list. Entering Shadowing writes a transition whose reason is "A
+current independent observation channel can test a bounded expectation" — the
+entire justification for the state — and that rule was enforced three times,
+each keyed on the SHAPE OF THE EXPECTATION: two triggers matching
+`expected_event_type LIKE 'development_verified:%'` and `'external_metric:%'`
+with the source hardcoded, plus each caller filtering its own query.
+`beginResponsibilityShadowing` accepts any event type. **A rule enforced N times
+by special case has no floor: the (N+1)th case has nothing at all.** FOUR places
+in this repository — including the fixture fourteen test files reach Shadowing
+through — created expectations that neither trigger would match. Migration 191
+makes the caller name the channel and enforces it generically.
+
+**AND THE OBVIOUS FORM OF THAT FIX WAS WRONG, which is the part to carry.** The
+natural rule is "the observation must come from the same source as the signal in
+`observation_source_evidence_ref`". That column does not mean one thing: in
+external shadowing it holds a signal FROM the ingest channel, in development
+shadowing a `repository` signal recording the NEED. The first version refused
+every development comparison. **Before generalising a rule from a column, check
+that the column means the same thing at every writer.**
+
+**Fifty was in the schema, not only in the code.** Four agents wrote
+`parsed.domain_health_score ?? 50` into a field their own type declares optional;
+six layers read it; and underneath all of them
+`agent_instances.domain_health_score INTEGER DEFAULT 50`, with the provisioner
+writing the literal 50 for twelve agents of every company at creation.
+`products.health_score INTEGER DEFAULT 0` started every company at the worst
+health there is. **When one substitution appears in several files at once, read
+the schema before fixing any of them** — the application code was keeping faith
+with a column that already lied.
+
+**And the same silence scored twice, differently, in one file.** The Value
+Delivery Index substituted 0 for four components and 100 for the fifth, so a
+company reporting nothing scored 15/100; eighty lines away the same missing
+breadth was read as 100 and could never raise a stressor. `if (!m) return 0` gave
+a company with no snapshot a flat zero on "how effectively the product delivers
+value", and `assessTimeToFirstValue` read a missing measurement as 0 hours,
+which falls in its first branch: "Excellent — users get value within minutes."
 
 **A flake that read as a security regression.** `encryption.test.ts` overwrote
 the first two hex characters of a ciphertext with the constant `'ff'`. One
@@ -534,12 +578,25 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    check against a row read as `rows[0] ?? {}`, which yields `undefined` and
    never matches.
 
-   **Where it has not been run.** `scp/agents/{compass,shield,sentinel,ledger,
-   scribe}.ts` and the remaining `routes/dashboard/*` pages. Lower expected
-   yield than what has been done — those five agents were picked first because
-   they read `metric_snapshots` — but the shape is not confined to metrics, and
-   the wellbeing card proves it: that one was three `??` defaults about a
-   person, with no metric in sight.
+   **The last five agents have now been read, and the yield was not lower — it
+   was structural.** `parsed.domain_health_score ?? 50` appeared in four of
+   them, and following it down found the same substitution at six layers and,
+   underneath all of them, `agent_instances.domain_health_score INTEGER DEFAULT
+   50` with the provisioner writing the literal 50 for twelve agents of every
+   company at creation. **The `??` in the application code was keeping faith
+   with a column that already lied.** When a substitution appears in several
+   files at once, look at the schema before fixing any of them.
+
+   `ledger.ts` also invented a $50/month operating budget for a company that had
+   set none, and divided real AI spend by it.
+
+   **`routes/dashboard/*` swept for the same shape and it is thin there** — the
+   remaining `?? 0` occurrences are counts, where zero is the truth. The two
+   that were not (`agents.ts`) belonged to the health-score chain above.
+
+   **Where it has not been run:** `services/intelligence/*` beyond
+   value-delivery, founder-health, predictive and psychology, all four of which
+   were read this cycle.
 
 1. **CLOSED: the ceiling now costs the founder nothing.** Eleven
    in-app bells bypassed `ux/interruption.ts`, and the reason turned out not to
@@ -779,7 +836,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    writer, so `founder_focus_settings` was the only case of its kind and that
    shape is exhausted. Do not go looking for more.
 
-6. **70 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
+6. **69 write-only columns — a question-asker, not a work queue.** `check-write-only-columns.mjs` holds the count;
    read it rather than this line. Prose drifts from the ratchet — this entry has
    said 92 and 85 while the ratchet said otherwise, which is exactly the drift
    the ratchet exists to prevent in code and evidently not here.
@@ -815,11 +872,25 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      reading. The claim that they were all "answered where they are written"
      did not survive checking: `outbound_actions.outcome_evidence_ref` was one
      of them, and reading it turned out to be the fix for an outcome that could
-     never be reopened once settled. Remaining institution ones include
-     `provider_receipt_json` (the founder cannot see what the provider actually
-     said), `autonomy_consents.from_mode`, and
-     `responsibility_shadow_expectations.observation_source_evidence_ref` (the
-     letter says what differed, never where it was watching).
+     could never be reopened once settled.
+
+     **Two of the three this entry used to name are closed, and one of them was
+     already closed when it was written — check before believing this list.**
+     `provider_receipt_json` is read by `refusalSentence` in
+     `responsibility-assisted-email.ts`; the claim here was stale.
+     `observation_source_evidence_ref` now reaches the founder in the material
+     shadowing exceptions, and following it produced the largest finding of the
+     cycle (see the narrative above).
+
+     **`autonomy_consents.from_mode` stays, deliberately, as provenance.** An
+     earlier cycle found three writers putting three different things in it and
+     fixed the fiction; `the-consent-ledger-records-what-actually-changed`
+     pins the correctness. It is a field in a proof record, not an input to
+     code, which is the case the gate's own header says to baseline on purpose.
+     A founder-facing consent history — "you moved billing from observe to act
+     on 12 August, having read disclosure v3" — would give it a reader and does
+     not exist. That is a product question, not a defect: `disclosure_version`
+     IS read, and reaches audit reasoning, so the proof chain is live.
    - **22 are `services/scp`** and most of the rest are legacy verticals.
    - **Two are a company's SEASONALITY** (`business_model_profile.seasonal_*`),
      and the earlier note here overstated them: the only writer is
@@ -866,6 +937,19 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    **The cutover criterion is `customerStoreSplit(productId).onlyLegacy`
    reaching zero**, which says the legacy read can go. Nothing else is waiting
    on a judgment; it is waiting on data.
+
+   **Which makes this a DEPLOYMENT FACT, in the same class as §12, and it should
+   be read that way rather than as work sitting undone.** The legacy writer is
+   not dead code: `POST /api/products/:id/customers` is mounted and
+   session-authenticated, so a founder can populate `customers` today. Whether
+   any has is not observable from this repository. A steward cannot close this
+   by effort; someone who can see production can close it in a minute.
+
+   Checked while here: `legacy` and `onlyLegacy` really are the same number, and
+   correctly so — `readCustomers` deduplicates, so a legacy row with a reported
+   counterpart never appears with source 'legacy'. Two names for one number is
+   an invitation to believe they differ, and the only reason to keep both is
+   that the criterion reads better under its own name.
 
    `customer_events` has one writer, `routes/api/platform.ts`, part of the
    clientless API in item 2 — where that API is unused, `customers.churn_risk`
