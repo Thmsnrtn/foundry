@@ -25,15 +25,12 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `46a0ef3`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `0ee876e`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
-- **Validation:** **335 files / 2,966 tests.** The run at `46a0ef3` had ONE
-  failure, and it was a gate doing its job: `sql-prepares-against-schema` reads
-  literal SQL out of a file and cannot tell a statement in a COMMENT from one in
-  the code, so a comment quoting the statement it had just removed was parsed
-  and failed to prepare. Fixed by describing the statement instead of quoting
-  it. Every gate is chained and running in CI on this branch.
+- **Validation:** full suite green at `0ee876e` — **339 files / 2,989 tests**,
+  `npm run check` EXIT=0, every gate chained and running in CI on this branch.
+  **Read the exit code from the run that produced the log.**
   **Read the exit code from the run that produced the log**, and do not write
   "green at <sha>" for a run that was not: a commit went out with five red tests
   in an earlier cycle because the code was read from a wrapper, and this line
@@ -620,9 +617,41 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    remaining `?? 0` occurrences are counts, where zero is the truth. The two
    that were not (`agents.ts`) belonged to the health-score chain above.
 
+   **THEN THE SAME LENS AT THE INTEGRATION LAYER, which turned out to be where
+   it paid most, because that is where a company's numbers ENTER.** Four
+   consecutive findings, each depending on the one before it:
+
+   - **`metric_snapshots.mrr_cents` — the LEVEL — had no integration writing
+     it.** Two writers in the whole system, both the company reporting its own
+     numbers. `stripe.ts` computed the level on one line and left it out of the
+     column list twenty lines later. A company that connected Stripe left the
+     level permanently null while Foundry synced its subscriptions hourly.
+   - **`framework.ts`'s Stripe adapter put three quantities in three wrong
+     columns**: the level into `new_mrr_cents`, refunds into
+     `churned_mrr_cents`, and a subscription count into `active_users`.
+   - **`activation_rate` was a rate made of two windows** — thirty-day
+     activations over seven-day signups — with a `Math.max` in the denominator
+     that pinned it to exactly 1.0000 for every growing company.
+   - **ARPU was `new_mrr_cents / max(1, active_users)`**, so a flat month gave
+     $0 and a company with no user count had an ARPU equal to its whole revenue.
+
+   **The order matters and is the transferable part.** ARPU could not be fixed
+   until the level had a writer; the level's absence was invisible until the
+   readers stopped substituting fallbacks. **Follow a missing writer to its end
+   rather than patching each reader where it shows.**
+
    **Where it has not been run:** `services/intelligence/*` beyond
-   value-delivery, founder-health, predictive and psychology, all four of which
-   were read this cycle.
+   value-delivery, founder-health, predictive, psychology and expansion, all of
+   which were read this cycle; and the remaining `integration/` (singular)
+   modules — `github.ts`, `sentry.ts`, `slack.ts`, `resend.ts`, `fabric.ts`.
+
+   **A map worth having before starting there.** There are TWO integration
+   directories, `services/integration/` and `services/integrations/`, each with
+   its own stripe/posthog/intercom/linear. They are not duplicates in the
+   dead-code sense: the plural set is reached by the scheduled hourly
+   `integration_sync` job, the singular set by dashboard and webhook routes.
+   Both are live. Whether they should be one set is an engineering decision
+   nobody has taken, and taking it needs a reading of both, not a rename.
 
 1. **CLOSED: the ceiling now costs the founder nothing.** Eleven
    in-app bells bypassed `ux/interruption.ts`, and the reason turned out not to

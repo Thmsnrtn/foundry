@@ -16,13 +16,13 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `46a0ef3` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `0ee876e` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **228 files**, highest number **192**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **335 files / 2,966 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
+| Validation | Full suite green: **339 files / 2,989 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
 | Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **26** · write-only columns **69** · tables written and never read **4** · **unscoped product-shaped routes 2** (new). |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -65,6 +65,14 @@ Measured at `46a0ef3` on `claude/foundry-autonomous-continuation-0gents`.
   into The Letter.
 
 ## Reachability caveats that still hold
+
+**THE UNREACHABLE-MODULES BASELINE IS PER MODULE, AND CANNOT TELL YOU WHICH
+FUNCTION.** `framework.ts` is not on it, and its `runAllDueSyncs` is imported by
+nothing — but `runSync` in the same file is called by the supercharge route.
+`integration/stripe.ts` is not on it either, and its `getStripeMRRSummary` has no
+caller. Do not read "not on the unreachable list" as "all of this runs", and do
+not read "on the list" as "none of this matters": both files held real defects,
+one live and one latent.
 
 - ~~The reachability gate scans `src/services/institution` only~~ — **CLOSED.**
   `check-reachability.mjs` walks all of `src/` from the real entry points as a
@@ -502,6 +510,29 @@ out to the founder, because that is what somebody sends wrong.
 `day_30_retention`, `mrr_health_ratio` — the ingest validates that range and
 `ux/fluency.ts` names them. Use `ratePoints()` from `ai/measured.ts` to compare
 against a percentage threshold, and convert the value rather than the threshold.
+
+**THE LEVEL NOW HAS A WRITER THAT IS NOT THE COMPANY REPORTING IT.**
+`metric_snapshots.mrr_cents` had exactly two writers — the v1 metrics API and the
+ingest route — and both are the company stating its own numbers. Not one
+integration wrote it. `stripe.ts` computed the level on one line and left it out
+of the column list twenty lines later, so a company that connected Stripe left
+the level permanently null while Foundry synced its subscriptions every hour.
+Both Stripe paths and the framework adapter write it now.
+
+**It was invisible for as long as the readers substituted a fallback**, which is
+the argument for removing them: a zero looks like an answer, and a null asks a
+question. Every fix in this area since has depended on the one before it — the
+level had to be written before ARPU could be computed from it.
+
+**A CLAMP CAN PIN A RATE TO ITS BOUND, and the bound is not evidence.**
+`activation_rate` was activations over THIRTY days divided by signups over
+SEVEN, with `Math.max(signups, activated)` in the denominator so it could not
+exceed 1. For any growing company the max fired, the two cancelled, and the rate
+was exactly 1.0000 — a hundred percent activation for essentially every healthy
+company, read from there by the board deck, the value delivery index and the
+benchmark percentiles. Without the clamp it would have read 3.2 and somebody
+would have asked. **When a computed rate sits exactly on its bound, check the
+windows before trusting it.**
 
 **A percentile has a DIRECTION, and it belongs with the metric.** Portfolio
 benchmarking now returns a `performance_percentile` — the share of peers this
