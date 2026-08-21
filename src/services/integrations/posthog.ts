@@ -43,12 +43,30 @@ export async function syncPostHogMetrics(
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-  const [signupsResult, activationResult, activeUsersResult, retentionResult] = await Promise.allSettled([
-    fetchPostHogCount(host, headers, credentials.project_id, '$identify', sevenDaysAgo, today),
-    fetchPostHogCount(host, headers, credentials.project_id, config.activation_event, thirtyDaysAgo, today),
-    fetchPostHogCount(host, headers, credentials.project_id, config.active_user_event ?? '$pageview', sevenDaysAgo, today),
-    fetchPostHogRetention(host, headers, credentials.project_id, config.retention_event ?? config.activation_event, thirtyDaysAgo, today),
-  ]);
+  // A RATE MADE OF TWO DIFFERENT WINDOWS.
+  //
+  // `activation_rate` was `activations over THIRTY days / signups over SEVEN`,
+  // and then `Math.max(signups, activated)` in the denominator to stop it
+  // exceeding 1. For any company with steady growth the thirty-day numerator is
+  // larger than the seven-day denominator, so the max fires, the two cancel, and
+  // the rate is EXACTLY 1.0000 — a hundred percent activation, recorded for
+  // essentially every healthy company, and read from there by the board deck,
+  // the value delivery index and the portfolio benchmark percentiles.
+  //
+  // The clamp is what hid it. Without it the number would have been 3.2 and
+  // somebody would have asked.
+  //
+  // Signups are fetched over both windows now: the seven-day count is what
+  // `signups_7d` means and is kept, and the thirty-day count is the denominator
+  // for a thirty-day numerator.
+  const [signupsResult, signups30Result, activationResult, activeUsersResult, retentionResult] =
+    await Promise.allSettled([
+      fetchPostHogCount(host, headers, credentials.project_id, '$identify', sevenDaysAgo, today),
+      fetchPostHogCount(host, headers, credentials.project_id, '$identify', thirtyDaysAgo, today),
+      fetchPostHogCount(host, headers, credentials.project_id, config.activation_event, thirtyDaysAgo, today),
+      fetchPostHogCount(host, headers, credentials.project_id, config.active_user_event ?? '$pageview', sevenDaysAgo, today),
+      fetchPostHogRetention(host, headers, credentials.project_id, config.retention_event ?? config.activation_event, thirtyDaysAgo, today),
+    ]);
 
   const columns: string[] = [];
   const values: (number | null)[] = [];
@@ -58,12 +76,21 @@ export async function syncPostHogMetrics(
     values.push(signupsResult.value);
   }
 
-  if (activationResult.status === 'fulfilled' && signupsResult.status === 'fulfilled') {
-    const activated = activationResult.value ?? 0;
-    const signups = signupsResult.value ?? 0;
-    if (signups > 0) {
+  if (activationResult.status === 'fulfilled' && signups30Result.status === 'fulfilled') {
+    const activated = activationResult.value;
+    const signups30 = signups30Result.value;
+    // Both counts, both over thirty days. This is a PERIOD RATIO, not a cohort
+    // rate: the people who activated are not necessarily the people who signed
+    // up in the window. It is the closest honest thing these two counts can say,
+    // and it is what the column has always been fed.
+    //
+    // A ratio above 1 means more people activated than signed up in the same
+    // thirty days — real, and it says the two events are not in the relationship
+    // this column assumes. Nothing is written for that company rather than
+    // recording a hundred percent, which is what the old clamp did.
+    if (activated !== null && signups30 !== null && signups30 > 0 && activated <= signups30) {
       columns.push('activation_rate');
-      values.push(parseFloat((activated / Math.max(signups, activated)).toFixed(4)));
+      values.push(parseFloat((activated / signups30).toFixed(4)));
     }
   }
 
