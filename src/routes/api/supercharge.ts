@@ -136,6 +136,9 @@ function webhookStripe(): Stripe | null {
   return _whStripe;
 }
 
+// No founder session to scope against: Stripe authenticates itself by
+// signature, which is the check that matters here. On the tenant-scope
+// baseline for that reason, not by oversight.
 superchargeApiRoutes.post('/api/webhooks/stripe/:productId', async (c) => {
   const productId = c.req.param('productId');
   const secret = process.env.STRIPE_WEBHOOK_SECRET;

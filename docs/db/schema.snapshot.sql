@@ -2356,7 +2356,6 @@
   engagement_depth_score REAL,
   engagement_score REAL,
   engagement_trend TEXT DEFAULT 'stable' CHECK(engagement_trend IN ('improving','stable','declining')),
-  engagement_trend TEXT DEFAULT 'stable',
   engagement_trend TEXT,
   entity_id TEXT NOT NULL,
   entity_id TEXT,                      -- FK to the relevant entity
@@ -4285,7 +4284,7 @@
   updated_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')), engagement_trend TEXT,
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))

@@ -110,23 +110,23 @@ founderIntelRoutes.get('/api/founder/intelligence/decisions-inbox', async (c) =>
   return c.json({ decisions: decisions.rows, count: decisions.rows.length });
 });
 
-founderIntelRoutes.post('/api/founder/intelligence/decisions-inbox/:id/approve', async (c) => {
-  const id = c.req.param('id');
-  await query(
-    "UPDATE decisions SET status = 'approved', decided_at = datetime('now'), decided_by = 'founder' WHERE id = ?",
-    [id]
-  );
-  return c.json({ status: 'approved' });
-});
-
-founderIntelRoutes.post('/api/founder/intelligence/decisions-inbox/:id/reject', async (c) => {
-  const id = c.req.param('id');
-  await query(
-    "UPDATE decisions SET status = 'rejected', decided_at = datetime('now'), decided_by = 'founder' WHERE id = ?",
-    [id]
-  );
-  return c.json({ status: 'rejected' });
-});
+// THE OPERATOR APPROVED A COMPANY'S DECISION AND THE LEDGER SAID THE FOUNDER
+// DID. Two routes were here — approve and reject — each running
+// `UPDATE decisions SET status=…, decided_by='founder' WHERE id = ?` with no
+// scope of any kind. This surface is gated on `isFounder`, which is Foundry's
+// OWNER, not the company's founder. So the operator could resolve any company's
+// decision, and `decisions.decided_by` recorded it as the act of the person
+// whose company it was.
+//
+// `decided_by` admits 'founder' or 'second_self' and nothing else — there is no
+// value for the operator, because the operator resolving a company's decisions
+// is not a thing the boundary doctrine describes. Adding one would be adding an
+// authority, quietly, which is the one thing the constitutional invariant names.
+//
+// Removed rather than relabelled. The operator boundary is "administers the
+// COMPANIES and bills them"; resolving what a company decides is not
+// administering it. If it is ever wanted it comes back as a whole capability,
+// with a vocabulary that says who acted and an owner decision behind it.
 
 // ─── Stressor Overview ──────────────────────────────────────────────────────
 

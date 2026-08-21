@@ -403,7 +403,11 @@ boardPacket.get('/packet/:id', async (c) => {
   const id = c.req.param('id');
   const ctx = await getLayoutContext(founder, 'investors', 'Board Packet', undefined, c);
 
-  const data = await getBoardPacket(id).catch(() => null);
+  // Scoped to this founder. A packet belonging to another company now
+  // returns null and renders the same "not found" as a packet that does not
+  // exist — no information leak, which is the choice `middleware/tenant.ts`
+  // made and stated years before this route was written.
+  const data = await getBoardPacket(id, founder.id).catch(() => null);
 
   if (!data) {
     const content = html`

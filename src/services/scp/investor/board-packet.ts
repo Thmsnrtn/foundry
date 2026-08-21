@@ -322,8 +322,28 @@ Return a JSON object with this exact structure:
 
 // ─── getBoardPacket ───────────────────────────────────────────────────────────
 
+/**
+ * ANY AUTHENTICATED FOUNDER COULD READ ANY COMPANY'S BOARD PACKET.
+ *
+ * `SELECT * FROM board_packets WHERE id=?`, and the route above it loaded the
+ * founder and never used them. A board packet carries the executive summary,
+ * the key metrics, the wins, the risks, the asks and the next-quarter goals —
+ * the most sensitive document Foundry produces about a company.
+ *
+ * THE RULE WAS KNOWN AND APPLIED THREE TIMES IN THE SAME FILE'S NEIGHBOURS.
+ * `getInvestorUpdate(id, ownerId)` joins `products` and scopes on `owner_id`,
+ * with a comment saying exactly why; `markPacketFinalized` and `markUpdateSent`
+ * both take the founder. The READ of the most sensitive of the four was the one
+ * that was missed — which is what happens when a rule lives in each caller
+ * rather than in one place.
+ *
+ * An unguessable id is not an authorisation control. Ids leak — a shared URL, a
+ * log line, a screenshot — and deliberate sharing already has its own module
+ * with its own tokens.
+ */
 export async function getBoardPacket(
-  packetId: string
+  packetId: string,
+  ownerId: string,
 ): Promise<{
   packet: BoardPacketNarrative;
   quarter: string;
@@ -331,8 +351,10 @@ export async function getBoardPacket(
   status: string;
 } | null> {
   const result = await query(
-    'SELECT * FROM board_packets WHERE id=?',
-    [packetId]
+    `SELECT bp.* FROM board_packets bp
+     JOIN products p ON p.id = bp.product_id
+     WHERE bp.id=? AND p.owner_id=?`,
+    [packetId, ownerId]
   );
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as Record<string, unknown>;

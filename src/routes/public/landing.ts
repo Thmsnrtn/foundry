@@ -350,6 +350,9 @@ caseStudyRoutes.get('/case-studies', async (c) => {
   `));
 });
 
+// Public by design: a case study is published marketing, and the id in the
+// path is a case-study id rather than a company's. On the tenant-scope
+// baseline for that reason, not by oversight.
 caseStudyRoutes.get('/case-studies/:id', async (c) => {
   const id = c.req.param('id');
   const result = await query('SELECT * FROM founding_story_artifacts WHERE id = ? AND published = 1', [id]);
