@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `10aacb7`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `af4c5c6`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `10aacb7` — **341 files / 3,004 tests**,
+- **Validation:** full suite green at `af4c5c6` — **342 files / 3,013 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Read the exit code from the run that produced the log.**
   **Read the exit code from the run that produced the log**, and do not write
@@ -663,10 +663,33 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    `total_count` and only falls back to a page length. Read it before inventing
    a fifth truncation idiom.
 
+   **AND THE READERS OF THE LEVEL, once it had a writer.** Five so far, and the
+   pattern held every time: the level was absent, so every reader reached for a
+   movement that was present. `business-model.ts` divided net-new MRR by active
+   users to get ARPU and built LTV, CAC payback and the LTV:CAC ratio on it;
+   `expansion.ts` summed new + expansion and called it revenue, and answered 99
+   years to saturation for a company with fewer than two snapshots and 0 years
+   for one whose TAM could not be estimated.
+
+   **The sharpest single defect of the whole cycle came out of that reading, and
+   its tell is worth more than the fix.** `computeUnitEconomics` divided
+   `churn_rate` — a 0–1 fraction — by 100, inflating customer lifetime a
+   hundredfold. Its `?? 5` DEFAULT was written in percent and divided correctly,
+   so a company that reported its churn got a worse answer than one that
+   reported nothing. **When a fallback and the measurement it replaces disagree
+   about the arithmetic that follows, one of them is in the wrong unit.**
+
+   **Swept afterwards and clean:** every other reader of `churn_rate`,
+   `activation_rate`, `day_30_retention` and `mrr_health_ratio`. An earlier
+   cycle had already been through them — `failure-library.ts` carries the
+   comment. This was the survivor.
+
    **Where it has not been run:** `services/intelligence/*` beyond
-   value-delivery, founder-health, predictive, psychology and expansion, all of
-   which were read this cycle; and `integration/{slack,resend,fabric}.ts`.
-   `github.ts` and `sentry.ts` are done.
+   value-delivery, founder-health, predictive, psychology, expansion and
+   business-model, all read this cycle; and `integration/{slack,resend}.ts`.
+   `github.ts`, `sentry.ts`, `intercom.ts` and `fabric.ts` are done —
+   `fabric.ts`'s `relevance_scores[agent] ?? 0` is a deliberate routing map,
+   not a substitution, and `slack.ts` stores no counts.
 
    **A map worth having before starting there.** There are TWO integration
    directories, `services/integration/` and `services/integrations/`, each with
