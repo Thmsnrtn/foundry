@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `649d0f9`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `eec5785`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `649d0f9` — **342 files / 3,015 tests**,
+- **Validation:** full suite green at `eec5785` — **344 files / 3,039 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Read the exit code from the run that produced the log.**
   **Read the exit code from the run that produced the log**, and do not write
@@ -684,12 +684,36 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    cycle had already been through them — `failure-library.ts` carries the
    comment. This was the survivor.
 
-   **Where it has not been run:** `services/intelligence/*` beyond
-   value-delivery, founder-health, predictive, psychology, expansion and
-   business-model, all read this cycle; and `integration/{slack,resend}.ts`.
-   `github.ts`, `sentry.ts`, `intercom.ts` and `fabric.ts` are done —
-   `fabric.ts`'s `relevance_scores[agent] ?? 0` is a deliberate routing map,
-   not a substitution, and `slack.ts` stores no counts.
+   **AND THE COMPOSITES, which is where the shape does the most damage.** Four
+   of them were built by substituting a number for every component that had
+   none — the Value Delivery Index, the product health score, the marketplace
+   health score and unit economics — and in three of the four the substitutions
+   DISAGREED, so one absence read as excellent in one component and
+   catastrophic in the next. The product health score gave a brand-new company a
+   grade of C with a headline about "mixed signals"; the marketplace score told
+   a company that had reported nothing it had liquidity collapse, a trust
+   deficit and a supply imbalance at once.
+
+   **The pattern that fixes all four, and should be reached for on the fifth:** a
+   component contributes only when measured, weights renormalise over those that
+   did, `coverage` says what share of the full weighting the number rests on,
+   and the score is null when nothing was measured. A threshold is a FINDING, so
+   it fires only on a measured value.
+
+   **A gate was measured and deliberately NOT built.** The syntactic form
+   (`(x ?? 0) < threshold`) appears in 16 files and all but two are
+   `rowsAffected ?? 0 > 0`, where zero genuinely means none. It would be mostly
+   baseline. This stays a reading habit.
+
+   **Where it has not been run:** `services/intelligence/{global,peer-signal,
+   shippability,briefing-telemetry,cohort,regulatory}.ts` and
+   `integration/slack.ts`. Everything else in both directories is done.
+   **Checked and clean, recorded so nobody re-reads them:** `risk-state.ts`
+   (every input explicitly null-guarded before it contributes),
+   `scp/investor/fundraising-readiness.ts` (uses `ratePoints`, and its `?? 0`
+   is intended — not having measured activation genuinely is not being ready),
+   `stressor.ts`, `recovery.ts`, `scenario.ts`, `competitive.ts` and
+   `benchmarks.ts` (no substitutions at all).
 
    **A map worth having before starting there.** There are TWO integration
    directories, `services/integration/` and `services/integrations/`, each with
@@ -781,10 +805,11 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
      left hundreds of native handles to the garbage collector — including
      collection during the next file's queries, which is where both observed
      aborts landed. `closeDb()` exists and the suite closes after every file.
-   - **Evidence: 39 completed runs in the scratchpad, zero abort signatures**
-     (`grep -lEi "PendingException|rust panic|SIGABRT|Aborted"` over every
-     `g*.log`), on top of the 30+ counted when `closeDb` landed. Against the
-     prior rate of roughly one in three, that is a vanishing coincidence.
+   - **Evidence: 60 completed runs in this session's scratchpad, zero abort
+     signatures** (`grep -lEi "PendingException|rust panic|SIGABRT|Aborted"` over
+     every log), on top of the 39 counted before it and the 30+ when `closeDb`
+     landed. Against the prior rate of roughly one in three, that is a vanishing
+     coincidence.
 
      **Still not a diagnosis, and the distinction is not pedantry.** What is
      established is that the abort has not recurred since a specific change; the

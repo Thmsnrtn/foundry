@@ -16,13 +16,13 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `649d0f9` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `eec5785` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **228 files**, highest number **192**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **342 files / 3,015 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **It also aborts intermittently** — roughly one run in three — with a native libsql panic that takes the whole run with it. See the live frontier: a green run is currently a claim about a process that survived. |
+| Validation | Full suite green: **344 files / 3,039 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **The intermittent native abort has not recurred.** It ran at roughly one run in three before `closeDb` landed; 60 completed runs in this session's scratchpad carry zero abort signatures, on top of the 39 counted earlier. **The mechanism was never observed, so this is not a diagnosis** — see the live frontier item 4, which says what would eliminate the hypothesis and why not to spend more runs accumulating the same evidence. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
 | Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **26** · write-only columns **69** · tables written and never read **4** · **unscoped product-shaped routes 2** (new). |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -543,6 +543,26 @@ company, read from there by the board deck, the value delivery index and the
 benchmark percentiles. Without the clamp it would have read 3.2 and somebody
 would have asked. **When a computed rate sits exactly on its bound, check the
 windows before trusting it.**
+
+**A COMPOSITE SCORE MUST REST ONLY ON WHAT WAS MEASURED, AND SAY HOW MUCH THAT
+IS.** Four composites were built by substituting a number for every component
+that had none — the Value Delivery Index, the product health score, the
+marketplace health score, and unit economics — and in three of the four the
+substitutions disagreed with each other, so one absence read as excellent in one
+component and catastrophic in the next. The pattern each now follows: a
+component contributes only when measured, the weights renormalise over those
+that did, `coverage` reports the share of the full weighting the number rests
+on, and the score is null when nothing was measured.
+
+**AND A THRESHOLD IS A FINDING, SO IT NEEDS A MEASUREMENT.** Every marketplace
+stressor threshold is a "below", so an unmeasured zero tripped all three at
+once: a company that had reported nothing was told it had liquidity collapse, a
+trust deficit and a supply imbalance. A stressor fires only on a measured value.
+
+**Measured, and a gate NOT built:** the syntactic form of this
+(`(x ?? 0) < threshold`) appears in 16 files, and all but two are
+`rowsAffected ?? 0 > 0`, where zero genuinely means none. A gate would be mostly
+baseline. The lens stays a reading habit rather than a scanner.
 
 **A COUNT FROM A CAPPED PAGE IS A FLOOR, AND MUST BE NAMED ONE.** Four
 integration summaries reported `length` of a limited fetch under the name of a
