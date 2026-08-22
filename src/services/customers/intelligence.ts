@@ -7,15 +7,24 @@ import { query } from '../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 
+/**
+ * A customer's health, WHERE NULL MEANS NOT MEASURED.
+ *
+ * Every field was non-nullable, so a component nobody could measure had
+ * nowhere to go but a number — and the numbers chosen ran in opposite
+ * directions for the same absence. See `computeCustomerHealth`.
+ */
 export interface CustomerHealth {
-  health_score: number;
-  churn_risk: number;
-  expansion_potential: number;
+  /** Weighted over the components that were measured, renormalised. Null when
+   *  none of them were. */
+  health_score: number | null;
+  churn_risk: number | null;
+  expansion_potential: number | null;
   components: {
-    usage: number;
-    support: number;
-    payment: number;
-    engagement: number;
+    usage: number | null;
+    support: number | null;
+    payment: number | null;
+    engagement: number | null;
   };
 }
 
@@ -40,37 +49,89 @@ export async function computeCustomerHealth(customerId: string): Promise<Custome
 
   const customer = await query('SELECT * FROM customers WHERE id = ?', [customerId]);
   const c = customer.rows[0] as Record<string, unknown> | undefined;
-  if (!c) return { health_score: 0, churn_risk: 1, expansion_potential: 0, components: { usage: 0, support: 0, payment: 0, engagement: 0 } };
+  // A customer Foundry cannot find is not a customer certain to churn. This
+  // returned health 0 and churn risk 1 — the most alarming reading available,
+  // for a row that was not there.
+  if (!c) {
+    return {
+      health_score: null, churn_risk: null, expansion_potential: null,
+      components: { usage: null, support: null, payment: null, engagement: null },
+    };
+  }
+  const productId = c.product_id as string;
 
   const eventMap: Record<string, { count: number; latest: string }> = {};
   for (const row of events.rows as unknown as Array<Record<string, unknown>>) {
     eventMap[row.event_type as string] = { count: row.cnt as number, latest: row.latest as string };
   }
 
+  // ONE ABSENCE, SCORED IN OPPOSITE DIRECTIONS INSIDE ONE FUNCTION.
+  //
+  // Three of the four components read `customer_events`. That table has exactly
+  // one writer in the whole system, behind a session route, so a company that
+  // has not wired it has none — and the same nothing was read as CATASTROPHIC
+  // on usage (0) and PERFECT on support and payment (100 each, 35% of the
+  // weight). The composite then reduced to 35 + 0.35 x engagement: a number
+  // about nothing, written back to `customers.health_score` and inserted into
+  // `customer_health_snapshots` as a dated measurement, which `getFallingCustomers`
+  // later reads to tell a founder a customer is "falling".
+  //
+  // The discriminator is whether the product records these events AT ALL. If it
+  // does, zero tickets this month is a real finding and should read like one.
+  // If it does not, there is nothing to score.
+  const wired = (await query(
+    'SELECT 1 AS present FROM customer_events WHERE product_id = ? LIMIT 1',
+    [productId],
+  )).rows.length > 0;
+
   // Usage score (0-100): based on login/activity events
-  const logins = eventMap['login']?.count ?? 0;
-  const actions = eventMap['feature_used']?.count ?? 0;
-  const usage = Math.min(100, (logins * 5) + (actions * 2));
+  const usage = wired
+    ? Math.min(100, ((eventMap['login']?.count ?? 0) * 5) + ((eventMap['feature_used']?.count ?? 0) * 2))
+    : null;
 
   // Support score (0-100): fewer tickets = healthier (inverted)
-  const tickets = eventMap['support_ticket']?.count ?? 0;
-  const support = Math.max(0, 100 - tickets * 20);
+  const support = wired ? Math.max(0, 100 - (eventMap['support_ticket']?.count ?? 0) * 20) : null;
 
   // Payment score (0-100): on-time payments, no failed charges
   const failedPayments = eventMap['payment_failed']?.count ?? 0;
-  const payment = failedPayments === 0 ? 100 : Math.max(0, 100 - failedPayments * 30);
+  const payment = wired
+    ? (failedPayments === 0 ? 100 : Math.max(0, 100 - failedPayments * 30))
+    : null;
 
-  // Engagement score (0-100): recency of last activity
+  // Engagement score (0-100): recency of last activity.
+  //
+  // A NULL `last_active_at` scored 50, which is HIGHER than any customer whose
+  // inactivity was actually measured past fourteen days (50 is the 7–14 day
+  // band; 14–30 scores 25 and beyond 30 scores 10). So a customer never once
+  // recorded active outranked one last seen a month ago, and landed on the safe
+  // side of the at-risk line that decides who gets written to.
   const lastActive = c.last_active_at as string | null;
-  let engagement = 50;
+  let engagement: number | null = null;
   if (lastActive) {
     const daysSince = (Date.now() - new Date(lastActive).getTime()) / 86400000;
     engagement = daysSince < 1 ? 100 : daysSince < 3 ? 85 : daysSince < 7 ? 70 : daysSince < 14 ? 50 : daysSince < 30 ? 25 : 10;
   }
 
-  const healthScore = Math.round(usage * 0.30 + support * 0.15 + payment * 0.20 + engagement * 0.35);
-  const churnRisk = Math.round((100 - healthScore) / 100 * 100) / 100;
-  const expansionPotential = usage > 70 && engagement > 70 ? Math.min(100, usage * 0.5 + engagement * 0.5) : 0;
+  // Weighted over what was measured, renormalised over those weights, and null
+  // when nothing was.
+  const scored: Array<[number, number]> = [
+    ...(usage !== null ? [[usage, 0.30] as [number, number]] : []),
+    ...(support !== null ? [[support, 0.15] as [number, number]] : []),
+    ...(payment !== null ? [[payment, 0.20] as [number, number]] : []),
+    ...(engagement !== null ? [[engagement, 0.35] as [number, number]] : []),
+  ];
+  const weightUsed = scored.reduce((sum, [, w]) => sum + w, 0);
+  const healthScore = weightUsed === 0
+    ? null
+    : Math.round(scored.reduce((sum, [v, w]) => sum + v * w, 0) / weightUsed);
+  const churnRisk = healthScore === null
+    ? null
+    : Math.round((100 - healthScore) / 100 * 100) / 100;
+  // Expansion needs BOTH halves of its own test. Unmeasured is not "no
+  // potential"; it is no answer.
+  const expansionPotential = usage === null || engagement === null
+    ? null
+    : (usage > 70 && engagement > 70 ? Math.min(100, usage * 0.5 + engagement * 0.5) : 0);
 
   // Update customer record
   await query(
@@ -80,7 +141,6 @@ export async function computeCustomerHealth(customerId: string): Promise<Custome
 
   // Snapshot
   const today = new Date().toISOString().split('T')[0]!;
-  const productId = c.product_id as string;
   await query(
     `INSERT INTO customer_health_snapshots (id, customer_id, product_id, snapshot_date, health_score, churn_risk, usage_score, support_score, payment_score, engagement_score)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -238,13 +298,65 @@ export async function upsertCustomer(
     metadata?: Record<string, unknown>;
   }
 ): Promise<string> {
+  // IT NEVER UPSERTED. This was an unconditional INSERT with a fresh nanoid,
+  // on a table with no uniqueness constraint to catch the duplicate — while the
+  // name and the docstring promise idempotence, which is exactly what a caller
+  // syncing customers from a billing system relies on. Re-reporting the same
+  // customer created a second row.
+  //
+  // The cost is not just a duplicate. `detectRevenueConcentration` in this file
+  // sums `mrr_cents` over every row and reports "Top customer is N% of MRR.
+  // Losing them would be devastating." — a threshold fired on an inflated
+  // denominator. `refreshAllCustomerHealth` returns the duplicated count to the
+  // founder. And the customer-store cutover criterion counts the same customer
+  // twice on the legacy side.
+  //
+  // Matched on (product_id, external_id), because external_id is what a billing
+  // system knows the customer by. NO UNIQUE INDEX IS ADDED HERE ON PURPOSE:
+  // rows already written may contain duplicates, and a migration that created
+  // the index would either fail on live data or have to delete a founder's
+  // customers to succeed. The lookup is the fix; the constraint is a separate
+  // decision that needs the data in front of it.
+  const externalId = data.external_id ?? null;
+  if (externalId !== null) {
+    const existing = await query(
+      'SELECT id FROM customers WHERE product_id = ? AND external_id = ? ORDER BY created_at ASC LIMIT 1',
+      [productId, externalId],
+    );
+    const found = existing.rows[0] as Record<string, unknown> | undefined;
+    if (found) {
+      const id = found.id as string;
+      // COALESCE so a partial report updates what it carries and leaves the
+      // rest standing, rather than blanking fields the caller did not mention.
+      await query(
+        `UPDATE customers SET
+           name = COALESCE(?, name), email = COALESCE(?, email),
+           company = COALESCE(?, company), plan = COALESCE(?, plan),
+           mrr_cents = COALESCE(?, mrr_cents),
+           signed_up_at = COALESCE(?, signed_up_at),
+           last_active_at = COALESCE(?, last_active_at),
+           metadata = COALESCE(?, metadata),
+           updated_at = datetime('now')
+         WHERE id = ?`,
+        [
+          data.name ?? null, data.email ?? null, data.company ?? null,
+          data.plan ?? null, data.mrr_cents ?? null,
+          data.signed_up_at ?? null, data.last_active_at ?? null,
+          data.metadata ? JSON.stringify(data.metadata) : null,
+          id,
+        ],
+      );
+      return id;
+    }
+  }
+
   const id = nanoid();
   await query(
     `INSERT INTO customers (id, product_id, owner_id, external_id, name, email, company, plan, mrr_cents, signed_up_at, last_active_at, metadata)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id, productId, ownerId,
-      data.external_id ?? null, data.name ?? null, data.email ?? null,
+      externalId, data.name ?? null, data.email ?? null,
       data.company ?? null, data.plan ?? null, data.mrr_cents ?? 0,
       data.signed_up_at ?? null, data.last_active_at ?? null,
       data.metadata ? JSON.stringify(data.metadata) : null,

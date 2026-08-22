@@ -194,14 +194,24 @@ export async function addAgentNote(
     timestamp: new Date().toISOString(),
   });
 
+  // A NOTE IS NOT A CONTACT. This also stamped `last_contacted_at` and
+  // `last_contacted_by` — columns migration 022 files under "Communication" —
+  // for a function whose entire body reads and rewrites `agent_notes`. Nothing
+  // is sent, queued or executed anywhere above this line.
+  //
+  // So a model forming a private opinion about a customer marked that customer
+  // as having been written to, by a named agent, on a date. `GET /api/v1/
+  // customers/:customerId` serves the row to an external integrator holding a
+  // scoped credential — likely syncing into a CRM — who reads "last contacted
+  // today by harbor" for someone nobody wrote to. The sharpest case was
+  // `lifecycle.ts`, where the branch whose note SAYS "nothing was done" stamped
+  // a contact through this same function.
   await query(
     `UPDATE customer_intelligence
      SET agent_notes = ?,
-         last_contacted_at = datetime('now'),
-         last_contacted_by = ?,
          updated_at = datetime('now')
      WHERE id = ?`,
-    [JSON.stringify(notes), agentName, customerId]
+    [JSON.stringify(notes), customerId]
   );
 }
 
