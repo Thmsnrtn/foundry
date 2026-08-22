@@ -482,6 +482,35 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('raw ESC');
   });
 
+  it('check-backticks-in-embedded-comments sees inside a NESTED template', () => {
+    // The state was a boolean and template literals nest. A line like
+    // `${rows.map((r) => html` opens a second template inside the first — one
+    // backtick, odd — so the flag flipped OFF and everything inside the nested
+    // template was invisible. Which is where the HTML actually is. A real
+    // defect sailed through this gate while tsc reported the parse error.
+    plant('src/services/_gate_fixture_nest.ts',
+      j('export const page = (rows: string[]): string => `\n',
+        '  <div>\n',
+        '    ${rows.map((r) => `\n',
+        '      <', '!-- naming a ', '`', 'symbol', '`', ' in here --', '>\n',
+        '      <span>${r}</span>`)}\n',
+        '  </div>`;\n'));
+    const r = run('check-backticks-in-embedded-comments.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_nest');
+  });
+
+  it('check-backticks-in-embedded-comments does not read TypeScript prose as markup', () => {
+    // The first version of the simplification flagged the gate's own header,
+    // because a comment explaining the rule names the markup it is about. A
+    // line of TypeScript prose cannot be embedded markup.
+    plant('src/services/_gate_fixture_prose.ts',
+      j('// A note that mentions <', '!-- an HTML comment --', '> and a ', '`', 'symbol', '`', '.\n',
+        'export const x = 1;\n'));
+    const r = run('check-backticks-in-embedded-comments.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-id-tiebreak fails on a new ORDER BY that falls back to id', () => {
     // An id is not a clock. Three real defects in one campaign came from a
     // nanoid or a content hash deciding which row was current.

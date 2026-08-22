@@ -190,8 +190,13 @@ portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
       ${fleet.map(({ product, signal }) => html`
       <form method="POST" action="/switch-product" style="display:contents;">
         <input type="hidden" name="product_id" value="${product.id as string}" />
-        <button type="submit" class="portfolio-card tier-${signal.tier}" aria-label="Switch to ${product.name as string}">
-          <div class="portfolio-signal-number">${signal.score}</div>
+        <!-- The same hasData contract the table, the average and the sort in
+             this file all honour. Without it the card printed the default 80
+             at 3.5rem in the green tier colour for a company Foundry has never
+             measured, directly under a table row that said "no data" — which
+             is the failure services/signal.ts documents in so many words. -->
+        <button type="submit" class="portfolio-card ${signal.hasData ? `tier-${signal.tier}` : 'tier-unmeasured'}" aria-label="Switch to ${product.name as string}">
+          <div class="portfolio-signal-number">${signal.hasData ? signal.score : '—'}</div>
           <div class="portfolio-product-name">${product.name as string}</div>
           <div class="portfolio-product-status">${signal.prose.split('.')[0]}.</div>
         </button>

@@ -1211,6 +1211,9 @@ body.chamber-mode .main-full { max-width: 700px; padding: 2.5rem 2rem 4rem; }
 .portfolio-card.tier-high .portfolio-signal-number { color: var(--signal-high); }
 .portfolio-card.tier-mid  .portfolio-signal-number { color: var(--signal-mid); }
 .portfolio-card.tier-low  .portfolio-signal-number { color: var(--signal-low); }
+/* Nothing measured this company. Muted rather than any signal colour: a tier is
+   a verdict, and there is no verdict to render. */
+.portfolio-card.tier-unmeasured .portfolio-signal-number { color: var(--text-muted); }
 
 .portfolio-product-name   { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-top: 0.25rem; }
 .portfolio-product-status { font-size: 0.78rem; color: var(--text-muted); line-height: 1.4; }

@@ -142,7 +142,19 @@ export async function rebuildPriorityQueue(productId: string): Promise<number> {
     for (const row of churnRisk.rows as Record<string, unknown>[]) {
       const mrrCents = (row.mrr_cents as number | null) ?? 0;
       const customerName = (row.account_name as string | null) ?? (row.email as string | null) ?? 'Unknown customer';
-      const impactScore = Math.min(10, mrrCents / 100); // $1 MRR = 0.01 impact, capped at 10
+      // ONE HUNDRED TIMES THE SCALE IT DOCUMENTS. `mrrCents / 100` is DOLLARS,
+      // so a dollar of MRR contributed 1.0 impact, not the 0.01 the comment
+      // states, and the cap of 10 bound at $10/month instead of $1,000. The
+      // dimension collapsed to two values: 1 for an unrecorded MRR, 10 for
+      // anything at or above ten dollars.
+      //
+      // `priority_score` is urgency x impact, so every at-risk customer worth
+      // $10/mo scored 7 x 10 = 70 and outranked an unresolved HIGH-severity
+      // failure pattern at 8 x 8 = 64. The founder's "One Thing" banner — the
+      // single most important action right now — was ordered by a coefficient
+      // a hundred times its own definition, and a trivial account displaced a
+      // critical operational failure at the top of it.
+      const impactScore = Math.min(10, (mrrCents / 100) * 0.01);
       actions.push({
         title: `${customerName} is at churn risk`,
         description: `MRR: $${(mrrCents / 100).toFixed(0)}/mo. Health score: ${(row.health_score as number | null)?.toFixed(0) ?? 'N/A'}. Reach out now to understand and address their concerns.`,

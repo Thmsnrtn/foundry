@@ -12,8 +12,33 @@
 // already written the lesson down. A rule that keeps being broken by the person
 // who wrote it is not a rule, it is a wish. This is the mechanical version.
 //
-// WHAT IT CHECKS, exactly: a line inside a template literal that is part of a
-// SQL comment (`--`) or an HTML comment, and contains a backtick.
+// WHAT IT CHECKS, exactly: a line that is part of a SQL comment (`--`) or an
+// HTML comment and contains a backtick.
+//
+// IT USED TO ALSO REQUIRE "inside a template literal", AND THAT TRACKING WAS
+// WRONG. The state was a boolean toggled on any line with an odd number of
+// backticks — and template literals NEST. In `routes/dashboard/portfolio.ts`
+// the line `${fleet.map(({ product, signal }) => html\`` opens a second
+// template inside the first; one backtick, odd, so the flag flipped OFF. Every
+// line inside that nested template — which is where the HTML actually is — was
+// then invisible, and a backticked symbol in an HTML comment there sailed
+// through while tsc reported a parse error. Found the sixth time this campaign
+// put a symbol in backticks inside embedded markup.
+//
+// The condition is simply gone rather than repaired, because it was never
+// load-bearing. In a TypeScript or .mjs file, a line whose trimmed text opens
+// with a SQL comment marker, or sits inside an HTML comment, is only ever SQL
+// or HTML written inside a template literal — TypeScript's own comments start
+// with a double slash or a slash-star. Tracking template state to confirm what
+// the comment syntax already proves added a second thing that could be wrong,
+// and it was.
+//
+// A TYPESCRIPT COMMENT LINE IS SKIPPED OUTRIGHT, and that is not a hole. The
+// first version of this simplification flagged its own header, because these
+// very paragraphs name HTML comment syntax while explaining it — prose that
+// quotes markup read as markup, which is the same mistake one level up. A line
+// that is TypeScript prose cannot be embedded markup, so it is neither tested
+// nor allowed to change the HTML-comment state.
 //
 // CONTINUATION LINES COUNT, and that was a real miss. The first version tested
 // only whether a line BEGAN a comment, so a multi-line HTML comment hid the
@@ -48,25 +73,21 @@ const offences = [];
 for (const root of ROOTS) {
   for (const file of files(root)) {
     const source = readFileSync(file, 'utf8');
-    let inTemplate = false;
     let inHtmlComment = false;
     source.split('\n').forEach((line, index) => {
-      // A line's own comment status is decided BEFORE counting its backticks,
-      // so the offending line is reported rather than the one after it.
-      const wasInTemplate = inTemplate;
       const trimmed = line.trim();
+      // TypeScript prose. Not markup, and not allowed to open an HTML comment
+      // by talking about one.
+      if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
       const wasInHtmlComment = inHtmlComment;
       if (trimmed.includes('<!--')) inHtmlComment = true;
       // A SQL comment ends at the newline; an HTML one runs until its
       // terminator, so a continuation line is still inside it.
       const embeddedComment = trimmed.startsWith('--') || wasInHtmlComment || trimmed.includes('<!--');
       if (line.includes('-->')) inHtmlComment = false;
-      if (wasInTemplate && embeddedComment && line.includes('`')) {
+      if (embeddedComment && line.includes('`')) {
         offences.push(`${relative(ROOT, file)}:${index + 1}  ${trimmed.slice(0, 78)}`);
       }
-      // Backticks toggle template state. Escaped ones do not.
-      const ticks = (line.match(/(?<!\\)`/g) ?? []).length;
-      if (ticks % 2 === 1) inTemplate = !inTemplate;
     });
   }
 }
