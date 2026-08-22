@@ -6,10 +6,28 @@
 // least one NAMED source. Forgiving on phrasing, strict on numbers — a claim
 // citing "$79/mo" is unverifiable unless a source actually contains 79.
 //
-// Uses: (1) auditing public copy against code-derived sources in CI, so the
-// landing page can't drift from what the product actually is; (2) grounding
-// generated briefing claims against telemetry. The engine is the floor, not
-// the ceiling — human review still applies.
+// WHERE THIS ACTUALLY RUNS, AND WHERE IT DOES NOT.
+//
+// (1) Auditing public copy against code-derived sources HAPPENS, on every
+//     `npm run check`, through `scripts/audit-public-claims.mjs` — but not
+//     through this module. tsconfig includes only `src/**`, so a .mjs script
+//     cannot import a .ts one and `src/` must not reach into `scripts/`. The
+//     gate therefore carries a second copy, `scripts/lib/claim-tokenizer.mjs`.
+//
+//     THE TWO COPIES HAD ALREADY DRIFTED: the gate's had no quoted-phrase
+//     handling and a shorter stop-word list, so the gate enforcing the honesty
+//     law and this module documenting it disagreed about what a claim says.
+//     `the-gate-and-the-engine-agree.test.ts` now runs both over the same
+//     inputs. Two copies are fine when they are PINNED; two copies nobody
+//     compares are one rule with two answers.
+//
+// (2) Grounding generated briefing claims against telemetry DOES NOT HAPPEN.
+//     Nothing calls it, which is why this module is on the unreachable-modules
+//     baseline. It is kept rather than deleted because the capability is
+//     coherent and the gate's copy proves the algorithm works — but the sentence
+//     that used to list this as a "use" was describing an intention.
+//
+// The engine is the floor, not the ceiling — human review still applies.
 // =============================================================================
 
 export interface Source {

@@ -9,6 +9,7 @@
 // =============================================================================
 import { readFileSync, readdirSync } from 'fs';
 import { globSync } from 'glob';
+import { tokenizeClaim } from './lib/claim-tokenizer.mjs';
 
 // The claims currently made on public surfaces (landing.ts / legal.ts).
 const CLAIMS = [
@@ -43,14 +44,23 @@ const landing = readFileSync('src/routes/public/landing.ts', 'utf8');
 const slotsLine = landing.match(/Math\.max\(0,\s*30[^\n]*/)?.[0] ?? '';
 sources.push({ name: 'src/routes/public/landing.ts founding slots', content: `${slotsLine} founding-rate slots locked life month cost` });
 
-// ── Verify (inline port of src/services/truth/engine.ts, kept dependency-free) ─
+// ── Verify ───────────────────────────────────────────────────────────────────
+//
+// The algorithm used to be inlined here as a copy of
+// `src/services/truth/engine.ts`, and the two had drifted: this copy had no
+// quoted-phrase handling and a different stop-word list, so the gate enforcing
+// the honesty law and the module documenting it disagreed about what a claim
+// says. `scripts/lib/claim-tokenizer.mjs` is now the one implementation, and
+// `the-gate-and-the-engine-agree.test.ts` runs it against the TypeScript engine
+// over the same inputs. Two copies are acceptable when they are pinned; tsconfig
+// includes only `src/**`, so a .ts module cannot be imported from here and `src/`
+// must not reach into `scripts/`.
+//
+// The stop list stays specific to pricing copy — 'plan', 'costs' and 'month' are
+// connective words in these claims — and is PASSED IN rather than copied, so the
+// difference is a decision rather than an accident.
 const STOP = new Set(['the','a','an','and','or','for','with','that','this','all','plan','plans','costs','cost','month','monthly','include','includes']);
-function tokenize(claim) {
-  const tokens = [];
-  let rest = claim.replace(/\$?\d[\d,]*(?:\.\d+)?%?/g, (n) => { tokens.push(n.replace(/[$,%]/g, '')); return ' '; });
-  for (const w of rest.toLowerCase().split(/[^a-z0-9]+/)) if (w.length >= 4 && !STOP.has(w)) tokens.push(w);
-  return [...new Set(tokens)];
-}
+const tokenize = (claim) => tokenizeClaim(claim, STOP);
 let failures = 0;
 
 // Founder-facing claims are subject to the same honesty law as marketing.
