@@ -1,7 +1,13 @@
 // =============================================================================
 // FOUNDRY — Agent Wiki Service
 // Persistent cross-agent knowledge store for structured articles per product.
-// Based on migration 027 (agent_wiki_entries, agent_wiki_reads tables).
+// Backed by `agent_wiki_entries` (migration 027).
+//
+// This module is deliberately two functions wide. It used to export six, and
+// four of them had no caller: a second writer that bypassed the upsert's
+// (product, section, title) identity, a search, a single-entry fetch, and a
+// read-tracking pair whose ledger `agent_wiki_reads` nothing populated —
+// removed in migration 195. What is here is what runs.
 // =============================================================================
 
 import { nanoid } from 'nanoid';
@@ -97,72 +103,6 @@ export async function createWikiEntry(
   return ((existing.rows[0] as Record<string, unknown>)?.id as string) ?? id;
 }
 
-// ─── updateWikiEntry ──────────────────────────────────────────────────────────
-
-export async function updateWikiEntry(
-  entryId: string,
-  updates: { content?: string; tags?: string[]; confidence_score?: number }
-): Promise<void> {
-  const setParts: string[] = ["updated_at = datetime('now')", 'version = version + 1'];
-  const args: unknown[] = [];
-
-  if (updates.content !== undefined) {
-    setParts.push('content = ?');
-    args.push(updates.content);
-  }
-  if (updates.tags !== undefined) {
-    setParts.push('tags = ?');
-    args.push(JSON.stringify(updates.tags));
-  }
-  if (updates.confidence_score !== undefined) {
-    setParts.push('confidence_score = ?');
-    args.push(updates.confidence_score);
-  }
-
-  args.push(entryId);
-
-  await query(
-    `UPDATE agent_wiki_entries SET ${setParts.join(', ')} WHERE id = ?`,
-    args
-  );
-}
-
-// ─── searchWiki ───────────────────────────────────────────────────────────────
-
-export async function searchWiki(
-  productId: string,
-  searchQuery: string,
-  category?: string
-): Promise<WikiEntry[]> {
-  const like = `%${searchQuery}%`;
-  const conditions = ['product_id = ?', '(title LIKE ? OR content LIKE ? OR tags LIKE ?)'];
-  const args: unknown[] = [productId, like, like, like];
-
-  if (category) {
-    conditions.push('section = ?');
-    args.push(toSection(category));
-  }
-
-  const result = await query(
-    `SELECT * FROM agent_wiki_entries WHERE ${conditions.join(' AND ')}
-     ORDER BY updated_at DESC`,
-    args
-  );
-
-  return result.rows.map((row) => rowToEntry(row as Record<string, unknown>));
-}
-
-// ─── getWikiEntry ─────────────────────────────────────────────────────────────
-
-export async function getWikiEntry(entryId: string): Promise<WikiEntry | null> {
-  const result = await query(
-    `SELECT * FROM agent_wiki_entries WHERE id = ?`,
-    [entryId]
-  );
-  if (result.rows.length === 0) return null;
-  return rowToEntry(result.rows[0] as Record<string, unknown>);
-}
-
 // ─── listWikiEntries ──────────────────────────────────────────────────────────
 
 export async function listWikiEntries(
@@ -197,35 +137,4 @@ export async function listWikiEntries(
 
   const entries = dataResult.rows.map((row) => rowToEntry(row as Record<string, unknown>));
   return { entries, total };
-}
-
-// ─── markWikiRead ─────────────────────────────────────────────────────────────
-
-export async function markWikiRead(entryId: string, agentName: string): Promise<void> {
-  await query(
-    `INSERT INTO agent_wiki_reads (id, entry_id, agent_name) VALUES (?, ?, ?)`,
-    [nanoid(), entryId, agentName]
-  );
-}
-
-// ─── getUnreadWikiEntries ─────────────────────────────────────────────────────
-
-export async function getUnreadWikiEntries(
-  productId: string,
-  agentName: string,
-  limit = 20
-): Promise<WikiEntry[]> {
-  const result = await query(
-    `SELECT e.* FROM agent_wiki_entries e
-     WHERE e.product_id = ?
-       AND e.id NOT IN (
-         SELECT r.entry_id FROM agent_wiki_reads r
-         WHERE r.agent_name = ?
-       )
-     ORDER BY e.is_pinned DESC, e.updated_at DESC
-     LIMIT ?`,
-    [productId, agentName, limit]
-  );
-
-  return result.rows.map((row) => rowToEntry(row as Record<string, unknown>));
 }

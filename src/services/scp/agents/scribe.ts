@@ -85,10 +85,20 @@ export class ScribeAgent extends BaseAgent {
     );
 
     // ── 4. Query recent wiki entries ──────────────────────────────────────────
-    const wikiResult = await db(
-      `SELECT title, section AS category FROM agent_wiki_entries WHERE product_id=? ORDER BY created_at DESC LIMIT 5`,
-      [productId]
-    );
+    //
+    // ORDERED BY WHEN AN ARTICLE LAST CHANGED, NOT WHEN IT FIRST APPEARED.
+    // `createWikiEntry` upserts on (product, section, title) and bumps
+    // `updated_at`, so revising an article edits the row rather than adding
+    // one. Ordering by `created_at` meant that once five distinct titles
+    // existed, this list froze on those five forever and every revision Scribe
+    // made was invisible to Scribe's own next run.
+    //
+    // Through `listWikiEntries` rather than a second copy of the query here,
+    // which is also where the total comes from: five entries is a PAGE, and an
+    // agent asked to name knowledge gaps has to know whether it is looking at
+    // the whole wiki or the top of it.
+    const { listWikiEntries } = await import('../wiki.js');
+    const wikiPage = await listWikiEntries(productId, { limit: 5 });
 
     // ── 5. Handle no-data case ────────────────────────────────────────────────
     if (artifactsResult.rows.length === 0 && testimonialsResult.rows.length === 0 && dnaResult.rows.length === 0) {
@@ -136,10 +146,15 @@ export class ScribeAgent extends BaseAgent {
     const voicePrinciples = dna ? ((dna.voice_principles as string) ?? 'Not defined') : 'Not defined';
     const icp = dna ? ((dna.icp_description as string) ?? 'Not defined') : 'Not defined';
 
-    const wikiRows = wikiResult.rows as Record<string, unknown>[];
-    const wikiSummary = wikiRows.length > 0
-      ? wikiRows.map(w => `"${w.title as string}" [${w.category as string ?? 'general'}]`).join(', ')
-      : 'No wiki entries yet';
+    const wikiTitles = wikiPage.entries
+      .map((e) => `"${e.title}" [${e.category || 'general'}]`).join(', ');
+    // Named as a page of a known whole, so the model does not read five titles
+    // as the sum of what the company has written down.
+    const wikiSummary = wikiPage.total === 0
+      ? 'No wiki entries yet'
+      : wikiPage.total > wikiPage.entries.length
+        ? `${wikiTitles} (${wikiPage.entries.length} most recently updated of ${wikiPage.total})`
+        : wikiTitles;
 
     // ── 7. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
@@ -304,7 +319,9 @@ Return JSON only (no markdown fences):
     // `services/scp/wiki.ts` — was imported by nothing at all. So the wiki was
     // permanently empty, `wikiSummary` was permanently 'No wiki entries yet',
     // and this agent's stated purpose in its own header ("queries
-    // agent_wiki_entries table for knowledge gaps") could not be served.
+    // agent_wiki_entries table for knowledge gaps") could not be served. Step 4
+    // now goes through that module too, so there is one definition of what the
+    // wiki most recently says rather than two.
     //
     // Three halves existed — a producer, a store and a reader — with no wire
     // between them. This is the wire, not a new feature.

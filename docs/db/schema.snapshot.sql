@@ -1660,7 +1660,6 @@
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
-  agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,                   -- e.g. 'beacon', 'scribe', 'harbor'
   agent_name TEXT,                          -- nullable: aggregate streak across all agents
   agent_name TEXT,                       -- NULL for platform-level
@@ -2349,7 +2348,6 @@
   engagement_trend TEXT,
   entity_id TEXT NOT NULL,
   entity_type TEXT NOT NULL,
-  entry_id   TEXT NOT NULL,
   epistemic_status TEXT NOT NULL CHECK(epistemic_status IN ('known','inferred','unknown','conflicting','stale')),
   epistemic_status TEXT NOT NULL CHECK(epistemic_status IN ('known','inferred','unresolved')),
   equity_percentage REAL,
@@ -2667,7 +2665,6 @@
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
-  id         TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
@@ -3709,7 +3706,6 @@
   re_audit_completed_at DATETIME,
   re_audit_triggered_at DATETIME,
   reaction    TEXT NOT NULL CHECK(reaction IN ('opened', 'acted', 'dismissed')),
-  read_at    TEXT NOT NULL DEFAULT (datetime('now'))
   read_at DATETIME,
   read_at DATETIME,
   ready_to_be_acquired INTEGER NOT NULL DEFAULT 0, -- boolean
@@ -4596,7 +4592,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -5131,8 +5126,6 @@ CREATE INDEX idx_webhooks_founder ON webhooks(founder_id);
 CREATE INDEX idx_webhooks_product ON outbound_webhooks(product_id, is_active);
 CREATE INDEX idx_weekly_plans ON weekly_plans(product_id, week_of DESC);
 CREATE INDEX idx_wiki_entries_product_section
-CREATE INDEX idx_wiki_reads_agent    ON agent_wiki_reads(agent_name);
-CREATE INDEX idx_wiki_reads_entry    ON agent_wiki_reads(entry_id);
 CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
 CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
 CREATE TABLE IF NOT EXISTS "deal_rooms" (
@@ -5166,7 +5159,6 @@ CREATE TABLE agent_run_details (
 CREATE TABLE agent_scratchpad (
 CREATE TABLE agent_sessions (
 CREATE TABLE agent_wiki_entries (
-CREATE TABLE agent_wiki_reads (
 CREATE TABLE ai_daily_spend (
 CREATE TABLE ai_output_feedback (
 CREATE TABLE ai_spend_reservations (

@@ -798,7 +798,6 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   // refuses and should. Naming it here says that on purpose rather than relying
   // on the delete finding no rows.
   system_identities: 'names which product row is Foundry itself, not a customer\'s data',
-  agent_wiki_reads: 'which internal agent read which internal wiki entry',
   audit_trail: 'created by migration 007 and never written or read by any code path',
   benchmark_percentiles: 'percentiles over a cohort, naming no member',
   cohort_groups: 'the groups themselves, not who is in them',
