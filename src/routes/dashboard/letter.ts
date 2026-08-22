@@ -700,7 +700,9 @@ const permissionSection = (
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I've been watching this and have ${item.comparisons === 1 ? 'one check' : `${item.comparisons} checks`} to show for it.${item.deviations > 0 ? ` I got ${item.deviations === 1 ? 'one of them' : `${item.deviations} of them`} wrong.` : ''}</div>
         ${item.verifiedFailures > 0 ? html`
-        <div style="font-size:0.78rem;color:var(--danger, #ff6b6b);margin-top:0.15rem;">Last time I acted here it didn't work — ${item.verifiedFailures === 1 ? 'one attempt was' : `${item.verifiedFailures} attempts were`} checked afterwards and failed. Worth knowing before you decide.</div>` : ''}
+        <div style="font-size:0.78rem;color:var(--danger, #ff6b6b);margin-top:0.15rem;">${item.lastVerifiedOutcome === 'verified_failure'
+          ? `Last time I acted here it didn't work — ${item.verifiedFailures === 1 ? 'one attempt was' : `${item.verifiedFailures} attempts were`} checked afterwards and failed.`
+          : `${item.verifiedFailures === 1 ? 'One attempt' : `${item.verifiedFailures} attempts`} here ${item.verifiedFailures === 1 ? 'was' : 'were'} checked afterwards and failed, though the most recent one worked.`} Worth knowing before you decide.</div>` : ''}
         <div style="font-size:0.78rem;color:var(--text-primary);margin-top:0.35rem;">If you allow it, I may ${item.may}.</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I still may not ${item.mayNot}.</div>
         ${item.granted ? html`

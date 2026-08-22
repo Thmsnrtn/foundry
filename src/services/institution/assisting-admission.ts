@@ -71,6 +71,10 @@ export interface AssistingCandidate {
    *  could ask to keep helping with something its last action demonstrably
    *  broke, and the founder was not told while deciding. */
   verifiedFailures: number;
+  /** The most recent independently observed outcome, or null when none has
+   *  been. `verifiedFailures` is a LIFETIME count and cannot answer "what
+   *  happened last time", which is what the founder-facing sentence asked it. */
+  lastVerifiedOutcome: 'verified_success' | 'verified_failure' | null;
   granted: boolean;
   /**
    * Whether Foundry is ACTUALLY helping. A live grant and a responsibility in
@@ -126,14 +130,31 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
               WHERE x.responsibility_id=r.id AND c.classification='deviated'
                 AND claim.epistemic_status IN ('known','inferred')
                 AND (claim.valid_until IS NULL OR datetime(claim.valid_until)>datetime('now'))) AS deviations,
-            -- AND WHAT HAPPENED LAST TIME IT ACTED. Nothing consulted this.
-            -- Outcomes were recorded — verified_failure written, read by
-            -- nothing — so Foundry could ask to keep helping with a
-            -- responsibility whose last assisted action demonstrably failed,
-            -- and the founder was never told at the moment they were deciding.
+            -- HOW OFTEN IT FAILED. Outcomes were recorded and read by nothing,
+            -- so Foundry could ask to keep helping with a responsibility whose
+            -- assisted actions had been independently observed to fail, and the
+            -- founder was never told at the moment they were deciding.
+            --
+            -- THIS IS A LIFETIME COUNT AND IT IS NAMED LIKE ONE. The sentence
+            -- built on it opened "Last time I acted here it didn't work",
+            -- which is a claim about the MOST RECENT action, and this
+            -- subquery has no ordering, no limit and no time bound. The
+            -- expected steady state — one old failure followed by any number
+            -- of verified successes — printed that sentence in red at the
+            -- exact moment the founder decides whether to grant authority.
+            -- The failure was conservative, arguing against granting, which
+            -- is not a reason to leave it saying something untrue.
             (SELECT COUNT(*) FROM outbound_actions o
               WHERE o.responsibility_id=r.id AND o.product_id=r.product_id
                 AND o.outcome_status='verified_failure') AS verified_failures,
+            -- What DID happen last time, so the sentence can be the one the
+            -- evidence supports. Ordered by when the action went out, not when
+            -- the row was written.
+            (SELECT o.outcome_status FROM outbound_actions o
+              WHERE o.responsibility_id=r.id AND o.product_id=r.product_id
+                AND o.outcome_status IN ('verified_success','verified_failure')
+              ORDER BY COALESCE(o.executed_at, o.created_at) DESC
+              LIMIT 1) AS last_verified_outcome,
             (SELECT a.expires_at FROM autonomy_consents a
               WHERE a.responsibility_id=r.id AND a.product_id=r.product_id AND a.capability=r.capability
                 AND ${liveActGrant('a')}
@@ -154,6 +175,9 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
         comparisons: Number(r.comparisons),
         deviations: Number(r.deviations),
         verifiedFailures: Number(r.verified_failures),
+        lastVerifiedOutcome: r.last_verified_outcome === 'verified_failure' ? 'verified_failure'
+          : r.last_verified_outcome === 'verified_success' ? 'verified_success'
+          : null,
         granted: r.grant_expires_at != null,
         assisting: String(r.state) === 'assisting',
         grantExpiresAt: r.grant_expires_at == null ? null : String(r.grant_expires_at),

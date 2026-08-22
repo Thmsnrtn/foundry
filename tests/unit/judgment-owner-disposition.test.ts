@@ -254,12 +254,17 @@ describe('Foundry reads back how its own judgment has held up', () => {
     // next judgment is decided on it.
     const record = await getJudgmentRecord('jd_product');
     expect(record).not.toBeNull();
-    const claims = await query(
-      `SELECT id FROM reconstruction_claims
+    // ONE JUDGMENT COUNTS ONCE. This used to compare the total against the
+    // number of CLAIMS, which is the defect written down as an assertion: the
+    // observation pass writes a new claim on every tick that sees new evidence
+    // about the same judgment, so the count grew with the observing rather than
+    // with the judging.
+    const judgments = await query(
+      `SELECT DISTINCT subject FROM reconstruction_claims
         WHERE product_id='jd_product' AND predicate='later_reality_comparison'`, []);
-    expect(claims.rows.length).toBeGreaterThan(0);
+    expect(judgments.rows.length).toBeGreaterThan(0);
     expect(record!.borneOut + record!.contradicted + record!.unresolved)
-      .toBe(claims.rows.length);
+      .toBe(judgments.rows.length);
     // The earlier tests drove this judgment to contradicted, so at least one is.
     expect(record!.contradicted).toBeGreaterThan(0);
 
@@ -312,5 +317,62 @@ describe('Foundry reads back how its own judgment has held up', () => {
     const record = await getJudgmentRecord('jd_product');
     expect(record).toMatchObject({ borneOut: 0, contradicted: 0 });
     expect(record!.unresolved).toBeGreaterThan(0);
+  });
+});
+
+describe('one judgment, observed many times', () => {
+  // `evaluateInstitutionalJudgment` writes a NEW later_reality_comparison claim
+  // — fresh id, no upsert, and `reconstruction_claims` has no unique key on
+  // (subject, predicate) — on every six-hourly tick that sees new evidence about
+  // the same judgment. The record tallied one entry per CLAIM, so the letter's
+  // "Of the N judgments I have made about your company and since checked"
+  // counted observations, not judgments. And because a judgment's state
+  // legitimately moves, the earlier claims stayed behind and the SAME judgment
+  // was added to `unresolved` and to an outcome column at once.
+
+  it('does not count the same judgment again each time it is observed', async () => {
+    const before = await getJudgmentRecord('jd_product');
+    const total = (r: { borneOut: number; contradicted: number; unresolved: number } | null): number =>
+      r === null ? 0 : r.borneOut + r.contradicted + r.unresolved;
+
+    // The same judgment, observed twice more, moving as evidence arrives.
+    // The evidence refs are copied from the claim already on this subject: a
+    // trigger requires every claim to rest on something, which is exactly the
+    // rule that makes this record worth reading.
+    const seed = (await query(
+      `SELECT subject, evidence_refs_json FROM reconstruction_claims
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison' LIMIT 1`, []))
+      .rows[0] as unknown as { subject: string; evidence_refs_json: string };
+    const subject = seed.subject;
+    for (const [i, state] of [['a', 'partially_observed'], ['b', 'supported']] as const) {
+      await query(
+        `INSERT INTO reconstruction_claims
+           (id,product_id,subject,predicate,value_json,epistemic_status,confidence,
+            evidence_refs_json,derivation_method,observed_at)
+         VALUES (?, 'jd_product', ?, 'later_reality_comparison', ?, 'known', NULL,
+                 ?, 'bounded later-reality comparison', ?)`,
+        [`jr_${i}`, subject, JSON.stringify(state), seed.evidence_refs_json,
+         new Date(Date.now() + (state === 'supported' ? 2 : 1) * 60000).toISOString()]);
+    }
+
+    const after = await getJudgmentRecord('jd_product');
+    expect(total(after)).toBe(total(before));
+  });
+
+  it('reads the judgment\'s CURRENT state, not every state it has been in', async () => {
+    const subject = String((await query(
+      `SELECT subject FROM reconstruction_claims
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison' LIMIT 1`, []))
+      .rows[0]!.subject);
+    const record = await getJudgmentRecord('jd_product');
+
+    // The newest claim for that subject is 'supported', written above.
+    const newest = await query(
+      `SELECT value_json FROM reconstruction_claims
+        WHERE product_id='jd_product' AND subject=? AND predicate='later_reality_comparison'
+        ORDER BY observed_at DESC LIMIT 1`, [subject]);
+    expect(JSON.parse(String(newest.rows[0]!.value_json))).toBe('supported');
+    // So this judgment is borne out, and is NOT also sitting in unresolved.
+    expect(record!.borneOut).toBeGreaterThan(0);
   });
 });

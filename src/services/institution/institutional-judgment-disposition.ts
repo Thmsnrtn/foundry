@@ -259,8 +259,34 @@ export async function getJudgmentRecord(
     .filter((claim) => claim.predicate === 'later_reality_comparison');
   if (!claims.length) return null;
 
-  const tally: JudgmentRecord = { borneOut: 0, contradicted: 0, unresolved: 0 };
+  // ONE JUDGMENT, COUNTED ONCE. This tallied one entry per CLAIM, and the
+  // observation pass writes a NEW claim — fresh id, no upsert, and
+  // `reconstruction_claims` has no unique key on (subject, predicate) — every
+  // six-hourly tick that sees new evidence about the SAME judgment. So a company
+  // on which Foundry raised one judgment, observed across three ticks, was told
+  // in the letter "Of the 3 judgments I have made about your company and since
+  // checked" — three, for one.
+  //
+  // Worse than the inflated total: because a judgment's state legitimately MOVES
+  // (partially_observed → supported → contradicted), the earlier claims stay
+  // behind, so the same judgment was counted in `unresolved` AND in one of the
+  // outcome columns at the same time. The surface whose stated purpose is to let
+  // a founder decide how much weight to give Foundry's next judgment was adding
+  // the same judgment to two different answers.
+  //
+  // `subject` is `judgment:<id>`, so it identifies the judgment. The newest
+  // claim per subject is that judgment's current state; the ones before it are
+  // its history, not more judgments.
+  const latestPerJudgment = new Map<string, typeof claims[number]>();
   for (const claim of claims) {
+    const previous = latestPerJudgment.get(claim.subject);
+    if (!previous || claim.observedAt > previous.observedAt) {
+      latestPerJudgment.set(claim.subject, claim);
+    }
+  }
+
+  const tally: JudgmentRecord = { borneOut: 0, contradicted: 0, unresolved: 0 };
+  for (const claim of latestPerJudgment.values()) {
     const state = typeof claim.value === 'string' ? claim.value : null;
     const current = claim.epistemicStatus === 'known' || claim.epistemicStatus === 'inferred';
     // `conflicting` is evidence on both sides. It is not Foundry being right,

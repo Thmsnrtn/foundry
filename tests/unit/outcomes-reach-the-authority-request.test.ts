@@ -207,3 +207,54 @@ describe('a verified failure does not revoke what the owner granted', () => {
     expect(candidate.verifiedFailures).toBe(1);
   });
 });
+
+describe('what happened LAST time is a different question from how often', () => {
+  // `verifiedFailures` is an honest LIFETIME count, and the sentence built on it
+  // opened "Last time I acted here it didn't work" — a claim about the most
+  // recent action, from a subquery with no ordering, no limit and no time bound.
+  // The expected steady state is one old failure followed by verified
+  // successes, and that printed the false sentence in red at the exact moment
+  // the founder decides whether to grant authority. Conservative, in that it
+  // argued against granting, which is not a reason to leave it untrue.
+
+  async function actionAt(id: string, outcome: string, executedAt: string): Promise<void> {
+    await query(
+      `INSERT INTO outbound_actions
+         (id, product_id, responsibility_id, status, outcome_status, executed_at,
+          agent_name, integration_name, action_type, rationale)
+       VALUES (?, ?, ?, 'executed', ?, ?, 'atlas','resend','send_email','fixture')`,
+      [id, P, R, outcome, executedAt]);
+  }
+
+  it('says nothing about the last attempt when there has been none', async () => {
+    await shadowWithVerdicts(R, P, ['matched']);
+    const [candidate] = await getAssistingCandidates(P);
+    expect(candidate.verifiedFailures).toBe(0);
+    expect(candidate.lastVerifiedOutcome).toBeNull();
+  });
+
+  it('reports the last attempt as a failure when it was one', async () => {
+    await shadowWithVerdicts(R, P, ['matched']);
+    await actionAt('lv_old', 'verified_success', '2026-01-01T00:00:00.000Z');
+    await actionAt('lv_new', 'verified_failure', '2026-02-01T00:00:00.000Z');
+
+    const [candidate] = await getAssistingCandidates(P);
+    expect(candidate.verifiedFailures).toBe(1);
+    expect(candidate.lastVerifiedOutcome).toBe('verified_failure');
+  });
+
+  it('does not call an old failure the last one when the last one worked', async () => {
+    await shadowWithVerdicts(R, P, ['matched']);
+    await actionAt('lv_fail', 'verified_failure', '2026-01-01T00:00:00.000Z');
+    for (const [i, d] of [['s1', '02'], ['s2', '03'], ['s3', '04']] as const) {
+      await actionAt(`lv_${i}`, 'verified_success', `2026-${d}-01T00:00:00.000Z`);
+    }
+
+    const [candidate] = await getAssistingCandidates(P);
+
+    // The count stays honest — one attempt was checked and failed — and the
+    // recency claim is simply not made.
+    expect(candidate.verifiedFailures).toBe(1);
+    expect(candidate.lastVerifiedOutcome).toBe('verified_success');
+  });
+});
