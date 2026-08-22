@@ -167,7 +167,13 @@ export async function recordPredictionAccuracy(
   const predictedMrrDelta = baseCase.mrr_delta_pct as number | undefined;
   const predictedTimeframe = baseCase.timeframe_days as number | undefined;
 
-  const directionCorrect = predictedDirection === actualOutcomeDirection;
+  // Null when no direction was predicted. `undefined === 'positive'` is false,
+  // so a scenario that made no directional prediction was recorded as having
+  // predicted it WRONG — and that false then contributed zero at the heaviest
+  // weight in the composite below.
+  const directionCorrect = predictedDirection === undefined
+    ? null
+    : predictedDirection === actualOutcomeDirection;
 
   let magnitudeAccuracy: number | null = null;
   if (predictedMrrDelta !== undefined && actualMrrDeltaPct !== null) {
@@ -181,10 +187,40 @@ export async function recordPredictionAccuracy(
     timeframeAccuracy = Math.max(0, 1 - diff / Math.max(predictedTimeframe, 1));
   }
 
-  const compositeAccuracy =
-    (directionCorrect ? 0.5 : 0) +
-    (magnitudeAccuracy !== null ? magnitudeAccuracy * 0.3 : 0) +
-    (timeframeAccuracy !== null ? timeframeAccuracy * 0.2 : 0);
+  // A COMPOSITE THAT SCORED WHAT IT COULD NOT MEASURE AS ZERO.
+  //
+  // This summed `magnitudeAccuracy * 0.3` and `timeframeAccuracy * 0.2` when
+  // those were known and added NOTHING when they were not — so a forecast that
+  // got the direction exactly right, with no magnitude or timeframe to score
+  // against, recorded 0.5. Indistinguishable from a forecast that got the
+  // direction right AND was completely wrong on both of the others, which also
+  // records 0.5.
+  //
+  // The row is otherwise honest: `magnitude_accuracy` and `timeframe_accuracy`
+  // are stored NULL when unmeasured. Only the aggregate over them lied — the
+  // same shape as the value-delivery row that told the truth in five columns
+  // and a lie in the sixth.
+  //
+  // This is Foundry scoring ITS OWN forecasts, which is the one place the
+  // institution is its own subject, so an inflated-or-deflated self-score is
+  // worse here than anywhere else.
+  //
+  // The direction is the same case and the worst one: `undefined === 'positive'`
+  // is false, so a scenario that predicted no direction at all was recorded as
+  // having predicted it WRONG, and that false was worth zero at the heaviest
+  // weight of the three.
+  //
+  // Weighted over the components that were actually scored, renormalised, and
+  // null when none were.
+  const scored: Array<[number, number]> = [
+    ...(directionCorrect !== null ? [[directionCorrect ? 1 : 0, 0.5] as [number, number]] : []),
+    ...(magnitudeAccuracy !== null ? [[magnitudeAccuracy, 0.3] as [number, number]] : []),
+    ...(timeframeAccuracy !== null ? [[timeframeAccuracy, 0.2] as [number, number]] : []),
+  ];
+  const weightUsed = scored.reduce((sum, [, w]) => sum + w, 0);
+  const compositeAccuracy = weightUsed === 0
+    ? null
+    : scored.reduce((sum, [v, w]) => sum + v * w, 0) / weightUsed;
 
   await query(
     `INSERT INTO prediction_accuracy
@@ -198,7 +234,7 @@ export async function recordPredictionAccuracy(
       nanoid(), productId, scenario.id, decisionId, scenario.option_label,
       predictedDirection ?? null, predictedMrrDelta ?? null, predictedTimeframe ?? null,
       actualOutcomeDirection, actualMrrDeltaPct, actualTimeframeDays,
-      directionCorrect ? 1 : 0,
+      directionCorrect === null ? null : (directionCorrect ? 1 : 0),
       magnitudeAccuracy, timeframeAccuracy, compositeAccuracy,
     ],
   );
@@ -211,19 +247,29 @@ export async function recordPredictionAccuracy(
 }
 
 /**
- * Get prediction accuracy summary for a product.
- * Used in the "how accurate is Foundry" dashboard.
+ * How well Foundry's own forecasts have held up. Feeds the "how accurate is
+ * Foundry" dashboard.
+ *
+ * The rates are nullable: `AVG` over no rows is NULL, and `?? 0` turned that
+ * into "0% direction accuracy" — Foundry reporting that it has never once been
+ * right, for a company whose forecasts have never been scored. Null says the
+ * difference.
  */
 export async function getPredictionAccuracySummary(productId: string): Promise<{
   total_predictions: number;
-  direction_accuracy: number;
-  avg_composite_accuracy: number;
-  by_category: Array<{ direction: string; count: number; accuracy: number }>;
+  /** Null when no prediction has been scored. Zero means scored and never right. */
+  direction_accuracy: number | null;
+  avg_composite_accuracy: number | null;
+  by_category: Array<{ direction: string; count: number; accuracy: number | null }>;
 }> {
   const result = await query(
     `SELECT
        COUNT(*) as total,
-       AVG(CASE WHEN direction_correct THEN 1.0 ELSE 0.0 END) as dir_accuracy,
+       -- A NULL direction_correct means no direction was predicted, and AVG
+       -- skips NULLs. Without the first branch, CASE WHEN NULL falls to ELSE
+       -- and an unscored prediction counts as a wrong one.
+       AVG(CASE WHEN direction_correct IS NULL THEN NULL
+                WHEN direction_correct THEN 1.0 ELSE 0.0 END) as dir_accuracy,
        AVG(composite_accuracy) as avg_composite
      FROM prediction_accuracy WHERE product_id = ?`,
     [productId],
@@ -234,7 +280,8 @@ export async function getPredictionAccuracySummary(productId: string): Promise<{
   const byCategoryResult = await query(
     `SELECT actual_outcome_direction as direction,
             COUNT(*) as count,
-            AVG(CASE WHEN direction_correct THEN 1.0 ELSE 0.0 END) as accuracy
+            AVG(CASE WHEN direction_correct IS NULL THEN NULL
+                     WHEN direction_correct THEN 1.0 ELSE 0.0 END) as accuracy
      FROM prediction_accuracy WHERE product_id = ?
      GROUP BY actual_outcome_direction`,
     [productId],
@@ -242,8 +289,8 @@ export async function getPredictionAccuracySummary(productId: string): Promise<{
 
   return {
     total_predictions: row.total ?? 0,
-    direction_accuracy: row.dir_accuracy ?? 0,
-    avg_composite_accuracy: row.avg_composite ?? 0,
-    by_category: byCategoryResult.rows as unknown as Array<{ direction: string; count: number; accuracy: number }>,
+    direction_accuracy: row.dir_accuracy ?? null,
+    avg_composite_accuracy: row.avg_composite ?? null,
+    by_category: byCategoryResult.rows as unknown as Array<{ direction: string; count: number; accuracy: number | null }>,
   };
 }
