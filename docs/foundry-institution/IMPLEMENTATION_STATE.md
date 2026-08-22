@@ -316,6 +316,36 @@ id (`agents-actions.ts:258`). Both readers that interpret the field key on the
 one vocabulary written two ways, which is the shape that eventually produces a
 reader agreeing with only one of them.
 
+**HOW FOUNDRY EARNS THE RIGHT TO SUGGEST, and what it used to earn it on.**
+Promotion out of `shadow` needs ten clean cycles, past a quality hold and a
+calibration hold. Only `shadow → suggest` is ever automatic; `→ act` is founder
+consent, and that has not changed.
+
+What changed is what banks a clean cycle. In shadow mode FOUNDRY DECIDES
+NOTHING — every decision is the founder's — so banking on any positive outcome
+promoted Foundry for the founder deciding well, including on the ten occasions
+where the founder chose the opposite of what Foundry recommended. Foundry could
+leave shadow, marked `set_by = 'earned'`, by being overruled ten times.
+
+An outcome now banks a clean cycle only when Foundry's judgement is what was
+tested: the decision was Foundry's own, or Foundry named an option and the
+founder took that option. A founder decision carrying no recommendation banks
+nothing. **This is a narrowing.** Leaving shadow is harder, and a category where
+Foundry offers no recommendations cannot leave it at all — which is the right
+answer to how far to trust a judgement that was never expressed. The row is
+still claimed either way, so an unattributable outcome retires once instead of
+being rescanned forever.
+
+The comparison was already written and already correct: `getShadowStats` had
+been reading `recommendation` against `chosen_option` on exactly these rows and
+printing an agreement rate into the operator letter, the chat and the MCP loop,
+gating nothing. Pinning the promotion ledger's copy against it —
+`promoted-for-being-wrong.test.ts`, asserted against each other rather than
+against constants — immediately found the two disagreeing: the SQL side counted
+a whitespace-only recommendation matching an empty choice as AGREEMENT, so the
+letter credited Foundry for agreeing to a choice neither party made. That
+non-sample is now out of both numerator and denominator.
+
 **Do not turn this table into a policy engine.** Five of the seven terms are
 already structural and are enforced by machinery that exists for its own
 reasons. The value of the table is that it says which two were not, and it
