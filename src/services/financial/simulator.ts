@@ -73,15 +73,38 @@ export async function computeRunwayModel(
 
   // Get latest metrics
   const metrics = await query(
-    'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
+    'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 8',
     [productId]
   );
-  const m = metrics.rows[0] as Record<string, unknown> | undefined;
-  const mrrCents = m
-    ? ((m.new_mrr_cents as number) ?? 0) + ((m.expansion_mrr_cents as number) ?? 0) -
-      ((m.contraction_mrr_cents as number) ?? 0) - ((m.churned_mrr_cents as number) ?? 0)
-    : 0;
-  const monthlyRevenue = mrrCents / 100;
+  const rows = metrics.rows as unknown as Array<Record<string, unknown>>;
+  const m = rows[0];
+
+  // THE LEVEL, NOT A SUM OF MOVEMENTS. This summed ONE period's
+  // new + expansion − contraction − churned and called it monthly revenue,
+  // while `mrr_cents` — the column that means where MRR IS — sat unread in the
+  // same row. `types/index.ts` records this exact defect as fixed everywhere
+  // else, splitting the two into `net_new_cents` and `level_cents` so that "no
+  // reader can keep treating the movement as the level by accident". This was a
+  // surviving reader.
+  //
+  // Worse than an approximation: the daily job writes a placeholder snapshot
+  // carrying nothing but (id, product_id, snapshot_date), that row wins
+  // ORDER BY snapshot_date DESC, and the four movement columns are INTEGER
+  // DEFAULT 0 — so the sum was a confident 0. A company at $50k MRR, $60k burn
+  // and $600k cash was told ten months of runway instead of sixty, and "Monthly
+  // revenue: $0" went verbatim into the model prompt.
+  //
+  // The window widens to 8 so a placeholder row does not erase a level the
+  // company reported last week.
+  const level = rows
+    .map((r) => r.mrr_cents as number | null)
+    .find((c): c is number => typeof c === 'number');
+  if (level === undefined) {
+    // Same refusal as an unstated financial position: there is nothing to model
+    // and inventing a revenue is how the last version got it wrong.
+    return null;
+  }
+  const monthlyRevenue = level / 100;
 
   // Get business model for COGS
   const bm = await query('SELECT avg_cogs_per_customer FROM business_model_profile WHERE product_id = ?', [productId]);
@@ -325,18 +348,41 @@ export async function getSavedScenarios(productId: string): Promise<FinancialSce
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Stated, not measured: what growth to assume when the level has not moved
+ *  across two reported snapshots. Named so it reads as an assumption. */
+const DEFAULT_GROWTH_RATE = 0.05;
+
+/** Monthly growth of the MRR LEVEL, from the oldest and newest snapshots that
+ *  carry one.
+ *
+ *  Two errors, compounding. It grew `new + expansion` — a MOVEMENT, and only
+ *  the positive half of one, ignoring contraction and churn entirely — and then
+ *  raised the ratio to `1 / (rows.length - 1)`, treating each snapshot as one
+ *  month. Snapshots are written DAILY, so six rows spanning five days had their
+ *  five-day change reported as a five-MONTH compound rate. The result is
+ *  multiplied into a break-even projection.
+ *
+ *  The dates are in the rows, so the window is measured rather than assumed. */
 async function estimateGrowthRate(productId: string): Promise<number> {
   const metrics = await query(
-    'SELECT new_mrr_cents, expansion_mrr_cents FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 6',
+    'SELECT mrr_cents, snapshot_date FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 30',
     [productId]
   );
-  const rows = metrics.rows as unknown as Array<Record<string, number>>;
-  if (rows.length < 2) return 0.05; // Default 5% monthly
+  const levels = (metrics.rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => ({ cents: r.mrr_cents as number | null, date: String(r.snapshot_date ?? '') }))
+    .filter((r): r is { cents: number; date: string } => typeof r.cents === 'number');
+  if (levels.length < 2) return DEFAULT_GROWTH_RATE;
 
-  const revenues = rows.map((r) => (r.new_mrr_cents ?? 0) + (r.expansion_mrr_cents ?? 0));
-  const first = revenues[revenues.length - 1]!;
-  const last = revenues[0]!;
-  if (first <= 0) return 0.05;
+  const newest = levels[0]!;
+  const oldest = levels[levels.length - 1]!;
+  if (oldest.cents <= 0) return DEFAULT_GROWTH_RATE;
 
-  return Math.pow(last / first, 1 / (revenues.length - 1)) - 1;
+  const a = Date.parse(`${oldest.date}T00:00:00Z`);
+  const b = Date.parse(`${newest.date}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return DEFAULT_GROWTH_RATE;
+  const days = Math.round((b - a) / 86_400_000);
+  if (days <= 0) return DEFAULT_GROWTH_RATE;
+
+  const monthly = Math.pow(newest.cents / oldest.cents, 30 / days) - 1;
+  return Number.isFinite(monthly) ? monthly : DEFAULT_GROWTH_RATE;
 }

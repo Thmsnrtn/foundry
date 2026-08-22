@@ -53,8 +53,8 @@ async function companyWithForecasts(): Promise<string> {
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,?,?,'active')",
     [pid, 'C', owner]);
   await query(
-    `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, churn_rate)
-     VALUES (?,?, date('now'), 500000, 0.02)`, [nanoid(), pid]);
+    `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents, new_mrr_cents, churn_rate)
+     VALUES (?,?, date('now'), 500000, 50000, 0.02)`, [nanoid(), pid]);
   await stateFinancialPosition({
     productId: pid, cashOnHandDollars: 200_000, monthlyBurnDollars: 20_000,
     asOfDate: new Date().toISOString().slice(0, 10), statedBy: owner,

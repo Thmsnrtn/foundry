@@ -17,6 +17,15 @@ export const DEFAULT_GROWTH_ASSUMPTION = 0.05;
  *  horizons rather than all twenty-four: a forecast checked at one, three and
  *  six months tells you whether it was right, and twenty-four rows per weekly
  *  regeneration would tell you the same thing at twenty-four times the noise. */
+/** Whole days from `from` to `to`, both YYYY-MM-DD. 0 when either is
+ *  unparseable, which the caller reads as "no usable window". */
+function daysBetween(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
 export const CHECKPOINT_HORIZON_MONTHS = [1, 3, 6] as const;
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
@@ -184,10 +193,24 @@ export async function generateScenariosForProduct(productId: string): Promise<{
     await query('UPDATE forecast_scenarios SET is_active = 0 WHERE product_id = ?', [productId]);
     return null;
   }
-  // 1. Load latest metric snapshot
+  // 1. Load the recent snapshots
+  //
+  // THE LEVEL, NOT A SUM OF MOVEMENTS. `mrr_cents` is where MRR IS;
+  // `new_/expansion_/contraction_/churned_mrr_cents` are how it MOVED in one
+  // period. This selected only the four movements and summed them over the
+  // eight most recent rows, calling the result `currentMrrCents` — so a company
+  // at $500k MRR was modelled on its last eight periods of net new business,
+  // and a company reporting through the documented door (`mrr` → `mrr_cents`)
+  // was modelled at ZERO. Not through a NULL either: those four columns are
+  // INTEGER DEFAULT 0, so the `?? 0` fallbacks never fired and the sum was a
+  // genuine, confident 0. A going concern reported as a zero-revenue business.
+  //
+  // The rule is already written down in this repository, at
+  // `routes/ingest/index.ts`, where the forecast reconciliation says a
+  // projection of a LEVEL must not be scored against a sum of MOVEMENTS. This
+  // is the producing half of the same sentence.
   const metricsResult = await query(
-    `SELECT new_mrr_cents, expansion_mrr_cents, contraction_mrr_cents,
-            churned_mrr_cents, churn_rate, snapshot_date
+    `SELECT mrr_cents, churn_rate, snapshot_date
      FROM metric_snapshots
      WHERE product_id = ?
      ORDER BY snapshot_date DESC
@@ -198,24 +221,23 @@ export async function generateScenariosForProduct(productId: string): Promise<{
   const rows = metricsResult.rows as Array<Record<string, unknown>>;
   const latest = rows[0] ?? {};
 
-  // Derive current MRR as cumulative sum of net MRR movements
-  // If not available, fall back to a reasonable default
-  const newMrr = (latest.new_mrr_cents as number) ?? 0;
-  const expansionMrr = (latest.expansion_mrr_cents as number) ?? 0;
-  const contractionMrr = (latest.contraction_mrr_cents as number) ?? 0;
-  const churnedMrr = (latest.churned_mrr_cents as number) ?? 0;
+  // Only rows where the company actually reported a level. The daily
+  // placeholder job writes a row with nothing but (id, product_id,
+  // snapshot_date), and that row must not be read as "MRR is unknown today"
+  // overriding last week's real figure — nor as a zero.
+  const levels = rows
+    .map((r) => ({ cents: r.mrr_cents as number | null, date: String(r.snapshot_date ?? '') }))
+    .filter((r): r is { cents: number; date: string } => typeof r.cents === 'number');
 
-  // Compute net MRR: new + expansion - contraction - churned
-  // Use a running total from all available snapshots as a proxy for current MRR
-  let cumulativeMrr = 0;
-  for (const row of rows) {
-    const r = row as Record<string, unknown>;
-    cumulativeMrr += ((r.new_mrr_cents as number) ?? 0)
-      + ((r.expansion_mrr_cents as number) ?? 0)
-      - ((r.contraction_mrr_cents as number) ?? 0)
-      - ((r.churned_mrr_cents as number) ?? 0);
+  if (levels.length === 0) {
+    // Same treatment as an unstated financial position, for the same reason: a
+    // forecast seeded with an invented MRR is worse than no forecast, and a
+    // stale invented one beside a request for the real number is worst of all.
+    await query('UPDATE forecast_scenarios SET is_active = 0 WHERE product_id = ?', [productId]);
+    return null;
   }
-  const currentMrrCents = Math.max(0, cumulativeMrr);
+
+  const currentMrrCents = levels[0].cents;
 
   // A REPORTED ZERO IS A REPORTED ZERO. This read `?? 0.03` and then
   // `rawChurnRate > 0 ? rawChurnRate : 0.03`, so a company that genuinely
@@ -226,17 +248,29 @@ export async function generateScenariosForProduct(productId: string): Promise<{
   const reportedChurn = latest.churn_rate == null ? null : Number(latest.churn_rate);
   const monthlyChurnRate = reportedChurn ?? DEFAULT_CHURN_ASSUMPTION;
 
-  // Derive MRR growth rate from last 2 snapshots
+  // Derive the MONTHLY growth of the LEVEL from the two most recent snapshots
+  // that carry one.
+  //
+  // This was the same error twice over. It took the change in the MOVEMENT —
+  // (thisPeriodNetNew − lastPeriodNetNew) / lastPeriodNetNew — and handed it to
+  // a simulation that multiplies the LEVEL by it. A company whose net new MRR
+  // went from $10k to $12k was modelled as growing 20% a month whatever its
+  // actual revenue, and a company with flat net new was modelled as growing 0%
+  // while its MRR compounded.
+  //
+  // And it was a rate made of two windows: snapshots are written daily, so the
+  // gap between two rows is whatever the company's reporting cadence happens to
+  // be, and the result was used as a MONTHLY rate regardless. The gap is in the
+  // rows already, so it is normalised to thirty days rather than assumed.
   let mrrGrowthRate = DEFAULT_GROWTH_ASSUMPTION;
-  if (rows.length >= 2) {
-    const prevRow = rows[1] as Record<string, unknown>;
-    const prevNet = ((prevRow.new_mrr_cents as number) ?? 0)
-      + ((prevRow.expansion_mrr_cents as number) ?? 0)
-      - ((prevRow.contraction_mrr_cents as number) ?? 0)
-      - ((prevRow.churned_mrr_cents as number) ?? 0);
-    const currNet = newMrr + expansionMrr - contractionMrr - churnedMrr;
-    if (prevNet > 0) {
-      mrrGrowthRate = Math.max(-0.2, Math.min(0.5, (currNet - prevNet) / prevNet));
+  if (levels.length >= 2 && levels[1].cents > 0) {
+    const days = daysBetween(levels[1].date, levels[0].date);
+    if (days > 0) {
+      const perPeriod = levels[0].cents / levels[1].cents;
+      const monthly = Math.pow(perPeriod, 30 / days) - 1;
+      if (Number.isFinite(monthly)) {
+        mrrGrowthRate = Math.max(-0.2, Math.min(0.5, monthly));
+      }
     }
   }
 

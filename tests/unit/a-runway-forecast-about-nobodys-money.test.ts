@@ -62,8 +62,11 @@ async function addCompany(): Promise<{ productId: string; founderId: string }> {
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,?,?,'active')",
     [productId, 'Company', founderId]);
   await query(
-    `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, churn_rate)
-     VALUES (?,?, date('now'), 500000, 0.04)`, [nanoid(), productId]);
+    // `mrr_cents` is the LEVEL — where MRR is. `new_mrr_cents` is one period's
+    // movement. A company at $5,000/mo reports both; the forecast is seeded from
+    // the level, and used to be seeded from a sum of the movements.
+    `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents, new_mrr_cents, churn_rate)
+     VALUES (?,?, date('now'), 500000, 50000, 0.04)`, [nanoid(), productId]);
   return { productId, founderId };
 }
 
@@ -202,8 +205,8 @@ describe('a reported zero is a report', () => {
     const { productId, founderId } = await addCompany();
     await query('DELETE FROM metric_snapshots');
     await query(
-      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, churn_rate)
-       VALUES (?,?, date('now'), 500000, 0)`, [nanoid(), productId]);
+      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents, new_mrr_cents, churn_rate)
+       VALUES (?,?, date('now'), 500000, 50000, 0)`, [nanoid(), productId]);
     await stateFinancialPosition({
       productId, cashOnHandDollars: 100_000, monthlyBurnDollars: 10_000,
       asOfDate: new Date().toISOString().slice(0, 10), statedBy: founderId,
