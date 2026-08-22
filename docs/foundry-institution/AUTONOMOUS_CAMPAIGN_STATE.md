@@ -918,7 +918,36 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-8. **Thirteen tables no code can reach, one at a time against their successor.**
+8. **Three writers to `experiments`, and three vocabularies for "who won".**
+   The table carries both migration 023's schema and migration 028's — 028's
+   `CREATE TABLE IF NOT EXISTS` was a no-op and migration 056 reconciled the
+   columns by ALTER, so the live table is the union of two designs. Three paths
+   write it: `scp/experiments.ts` (hypothesis-driven), `experiments/engine.ts`
+   (variant-driven A/B), and `POST /v1/experiments` (the documented external
+   surface).
+
+   **The engine's crash is fixed** — it wrote a variant name into
+   `winner`, whose CHECK admits only `control`, `treatment`, `inconclusive`, so
+   the success path threw. **The remaining divergence is the documented one:**
+   `POST /v1/experiments/:id/conclude` writes `outcome` and
+   `winning_variant_id` and leaves `winner` NULL, and every institutional
+   reader — the board packet's `experimentOutcome`, the accuracy tracker, and
+   `WHERE e.winner = 'treatment'` — reads `winner`. **A company that concludes
+   an experiment the documented way is invisible to the surfaces that report
+   experiments**, which is the same shape as the customer-store split in item 5.
+
+   **NOT FIXED HERE, with the reason:** `experiment_variants` carries no
+   control/treatment marker, so `winning_variant_id` cannot be mapped to the
+   shared vocabulary without inventing a convention — and inventing one on a
+   documented external contract is a product decision, not a repair. **The
+   trigger that makes this buildable is a control marker on the variant**, at
+   which point conclude can write both and the split closes.
+
+   `experiments.holdout_id` (migration 035) and `experiment_holdouts` are both
+   dead: an experiments system with a holdout column nothing writes. On the
+   unreferenced-tables baseline in item 8.
+
+9. **Thirteen tables no code can reach, one at a time against their successor.**
    `check-unreferenced-tables.mjs` is the third side of the triangle the other
    two table gates leave open, and it is a RATCHET, not a work queue. The
    pattern in the thirteen is a superseded store left behind after its

@@ -26,10 +26,46 @@ interface ExperimentVariant {
 
 export interface ExperimentResult {
   winner: string | null;
-  confidence_level: number;
-  variant_metrics: Record<string, { sample_size: number; conversion: number; avg_value: number }>;
+  /** The real two-sided confidence that the two arms differ, or NULL when the
+   *  test could not be run at all. Zero used to mean both. */
+  confidence_level: number | null;
+  variant_metrics: Record<string, {
+    sample_size: number;
+    /** Null when nothing was exposed. Zero is a conversion rate; no exposures
+     *  is not a conversion rate. */
+    conversion: number | null;
+    avg_value: number | null;
+  }>;
   recommendation: string;
   significant: boolean;
+}
+
+/**
+ * The two-sided normal confidence for a z-score: the probability that a
+ * difference this large or larger would NOT have arisen by chance.
+ *
+ * WHAT THIS REPLACES, because it was reported to the founder as a percentage:
+ *
+ *     confidence = z >= 2.58 ? 0.99 : z >= 1.96 ? 0.95 : z >= 1.65 ? 0.90
+ *               : z / 1.96 * 0.95;
+ *
+ * The last branch is a straight line through the origin and has nothing to do
+ * with a normal distribution. At z = 1 it reported 48%, where the true
+ * two-sided confidence is 68%. The three bands above it are no better: they
+ * report 95% for everything between z = 1.96 and z = 2.58, so a result at
+ * z = 2.5 — genuinely 98.8% — was printed as 95%.
+ *
+ * A number labelled "% confidence" on a page that then says "Roll out to 100%"
+ * has to be the number it is labelled as. Abramowitz & Stegun 7.1.26 for erf,
+ * which is accurate to about 1.5e-7 — far beyond what any sample here supports.
+ */
+export function twoSidedConfidence(zScore: number): number {
+  const z = Math.abs(zScore) / Math.SQRT2;
+  // erf(z), A&S 7.1.26.
+  const t = 1 / (1 + 0.3275911 * z);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
+    - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z);
+  return Math.min(1, Math.max(0, y));
 }
 
 /**
@@ -164,7 +200,7 @@ export async function analyzeExperiment(experimentId: string): Promise<Experimen
   const variants = JSON.parse(exp.variants as string) as ExperimentVariant[];
   const primaryMetric = exp.primary_metric as string;
 
-  const variantMetrics: Record<string, { sample_size: number; conversion: number; avg_value: number }> = {};
+  const variantMetrics: ExperimentResult['variant_metrics'] = {};
 
   for (const variant of variants) {
     const total = await query(
@@ -178,26 +214,46 @@ export async function analyzeExperiment(experimentId: string): Promise<Experimen
 
     const sampleSize = (total.rows[0] as Record<string, number>)?.c ?? 0;
     const convCount = (conversions.rows[0] as Record<string, number>)?.c ?? 0;
-    const avgVal = (conversions.rows[0] as Record<string, number>)?.avg_val ?? 0;
+    // AVG over no rows is NULL. It is not an average of zero.
+    const rawAvg = (conversions.rows[0] as Record<string, number | null> | undefined)?.avg_val;
+    const avgVal = rawAvg === null || rawAvg === undefined ? null : Number(rawAvg);
 
     variantMetrics[variant.name] = {
       sample_size: sampleSize,
-      conversion: sampleSize > 0 ? convCount / sampleSize : 0,
+      // Nobody exposed is not a nought-percent conversion rate.
+      conversion: sampleSize > 0 ? convCount / sampleSize : null,
       avg_value: avgVal,
     };
   }
 
-  // Statistical significance: simplified two-proportion z-test
+  // Two-proportion z-test.
+  //
+  // EVERY REASON THE TEST CANNOT RUN USED TO REPORT "0% confidence", which
+  // reads as a measured absence of effect rather than an absence of a test.
+  // Three of them are ordinary, and the founder is told which one applies:
+  //
+  //   • not exactly two variants — the test is two-proportion, so a three-arm
+  //     experiment was never analysed at all and reported "Not yet significant
+  //     (0%). Need more data." forever, however much data arrived.
+  //   • fewer than thirty exposures in an arm — genuinely too thin.
+  //   • se = 0, which happens when BOTH arms converted at identical rates,
+  //     including both at zero. That is a finding, not a shortage: the data
+  //     said the variants do not differ, and the message said to collect more.
   const variantNames = Object.keys(variantMetrics);
   let winner: string | null = null;
-  let confidence = 0;
+  let confidence: number | null = null;
   let significant = false;
+  let notTested: string | null = null;
 
-  if (variantNames.length === 2) {
+  if (variantNames.length !== 2) {
+    notTested = `This test compares two variants and this experiment has ${variantNames.length}.`;
+  } else {
     const a = variantMetrics[variantNames[0]!]!;
     const b = variantMetrics[variantNames[1]!]!;
 
-    if (a.sample_size >= 30 && b.sample_size >= 30) {
+    if (a.sample_size < 30 || b.sample_size < 30 || a.conversion === null || b.conversion === null) {
+      notTested = `Not enough exposures yet — ${a.sample_size} and ${b.sample_size}, and the test needs 30 in each arm.`;
+    } else {
       const pA = a.conversion;
       const pB = b.conversion;
       const pPool = (pA * a.sample_size + pB * b.sample_size) / (a.sample_size + b.sample_size);
@@ -205,23 +261,62 @@ export async function analyzeExperiment(experimentId: string): Promise<Experimen
 
       if (se > 0) {
         const zScore = Math.abs(pA - pB) / se;
-        // z=1.65 → 90%, z=1.96 → 95%, z=2.58 → 99%
-        confidence = zScore >= 2.58 ? 0.99 : zScore >= 1.96 ? 0.95 : zScore >= 1.65 ? 0.90 : zScore / 1.96 * 0.95;
+        confidence = twoSidedConfidence(zScore);
         significant = confidence >= 0.95;
         winner = pA > pB ? variantNames[0]! : pB > pA ? variantNames[1]! : null;
+        // Equal rates with a usable standard error: measured, and identical.
+        if (winner === null) significant = false;
+      } else {
+        notTested = 'Both variants converted at exactly the same rate, so there is no difference to test.';
       }
     }
   }
 
-  const recommendation = significant
-    ? `${winner} wins with ${(confidence * 100).toFixed(0)}% confidence. Roll out to 100%.`
-    : `Not yet significant (${(confidence * 100).toFixed(0)}%). Need more data.`;
+  // EVERY LOOK IS A TEST. This function completes the experiment the first time
+  // it sees significance, and a founder can call it as often as they like — so
+  // the 5% false-positive rate a single test carries is the floor, not the
+  // figure, and repeatedly refreshing until it turns green is exactly how a
+  // null result becomes a winner. Said plainly rather than corrected for:
+  // sequential testing is a design decision, and a caveat the founder can read
+  // beats a number that quietly assumes they only looked once.
+  const recommendation = notTested !== null
+    ? `${notTested} No result yet.`
+    : significant
+      ? `${winner} wins at ${((confidence ?? 0) * 100).toFixed(1)}% confidence on a single look. `
+        + 'Checking repeatedly until a result appears makes a chance difference likely, so treat this as strong only if you had not been watching for it.'
+      : `Measured, and not significant yet — ${((confidence ?? 0) * 100).toFixed(1)}% confidence that the arms differ.`;
 
-  // Update experiment
+  // THE COLUMN HAS A VOCABULARY AND THIS WROTE A VARIANT NAME INTO IT.
+  //
+  // `experiments.winner` is `CHECK(winner IN ('control','treatment',
+  // 'inconclusive'))`, and every other reader speaks that language:
+  // `scp/experiments.ts` branches on `winner === 'control'` and selects
+  // `WHERE e.winner = 'treatment'`, and the board packet renders
+  // `winner === 'inconclusive'`. This wrote `variantNames[0]` — whatever the
+  // founder called their variant — so the CHECK refused the UPDATE and the
+  // whole request threw.
+  //
+  // WHICH MEANS THE SUCCESS PATH WAS THE BROKEN ONE. An experiment that never
+  // reached significance returned fine; the moment one produced a winner,
+  // `GET /api/experiments/:id/results` errored, the experiment was never
+  // completed, and the winner was never stored. `check-check-vocabularies`
+  // could not see it because the value is a variable, not a literal.
+  //
+  // The two are different things and conflating them is what caused it: the
+  // RESULT carries the variant's own name, because that is what a founder
+  // needs to read, and the STORED value carries the vocabulary, because that is
+  // what the other readers agree on. `variants[0]` is the control by this
+  // module's own convention at insert time.
+  //
+  // `results_json` rather than `results`: the 023 and 028 schemas both survive
+  // on this table, and `results` is the column only this module ever named.
+  const storedWinner = winner === null ? 'inconclusive'
+    : winner === variantNames[0] ? 'control' : 'treatment';
   if (significant) {
     await query(
-      `UPDATE experiments SET status = 'completed', ended_at = datetime('now'), results = ?, winner = ?, confidence_level = ? WHERE id = ?`,
-      [JSON.stringify(variantMetrics), winner, confidence, experimentId]
+      `UPDATE experiments SET status = 'completed', ended_at = datetime('now'),
+              results_json = ?, winner = ?, confidence_level = ? WHERE id = ?`,
+      [JSON.stringify(variantMetrics), storedWinner, confidence, experimentId]
     );
   }
 
