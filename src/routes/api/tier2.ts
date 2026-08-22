@@ -10,7 +10,7 @@ import { requireTier } from '../../middleware/tier-gate.js';
 import { runWebAudit, generateVendorRecommendations, assessMigrationReadiness } from '../../services/audit/intake-web.js';
 import { computeMarketplaceHealth, identifyMarketplaceStressors, auditTrustInfrastructure } from '../../services/intelligence/marketplace.js';
 import { getAlignmentScore, getDecisionAttribution, checkGateAgreement } from '../../services/wisdom/cofounder.js';
-import { scanGeopoliticalRisks, detectCurrencyErosion } from '../../services/intelligence/global.js';
+import { scanGeopoliticalRisks } from '../../services/intelligence/global.js';
 import { nanoid } from 'nanoid';
 
 export const tier2ApiRoutes = new Hono<AuthEnv>();
@@ -213,11 +213,9 @@ tier2ApiRoutes.get('/api/geopolitical-signals/:productId', requireTier('integrat
   return c.json({ signals: result.rows });
 });
 
-tier2ApiRoutes.get('/api/currency-health', requireTier('integrations'), async (c) => {
-  const founder = c.get('founder');
-  const erosion = await detectCurrencyErosion(founder.id);
-  return c.json({ currency_health: erosion });
-});
+// `GET /api/currency-health` was here. It reported FX erosion computed from two
+// columns nothing can write — see the account in services/intelligence/global.ts
+// and migration 193.
 
 tier2ApiRoutes.put('/api/settings/global', requireTier('integrations'), async (c) => {
   const founder = c.get('founder');

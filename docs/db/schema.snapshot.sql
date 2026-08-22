@@ -2084,7 +2084,7 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP, chat_session_id TEXT, extracted_decisions TEXT, extracted_actions TEXT, summary TEXT, audio_url TEXT, status TEXT DEFAULT 'active',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP, local_currency_mrr REAL, exchange_rate REAL DEFAULT 1.0, mrr_cents INTEGER, new_customers INTEGER, churned_customers INTEGER, updated_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP, mrr_cents INTEGER, new_customers INTEGER, churned_customers INTEGER, updated_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
