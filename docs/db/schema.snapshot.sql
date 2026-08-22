@@ -352,7 +352,6 @@
     'aggregate_insights',      -- receive insights derived from pool
     'ai_training_opt_out'      -- opt out of AI training on their data
     'atlas','compass','prism','beacon','scribe','forge',
-    'audit_completed', 'remediation_merged',
     'behavioral',        -- Observed pattern about how to behave
     'benchmark_contribution',  -- anonymous metrics shared to pool
     'body_unreadable',
@@ -360,7 +359,6 @@
     'capability_requirements','risks','failure_modes','stakeholder_obligations','financial_consequence',
     'churn_response',          -- What we do when churn spikes
     'co_founder', 'advisor', 'investor_observer'
-    'cohort_anomaly', 'competitive_signal'
     'competitive_response',    -- How we respond to competitive threats
     'concern', 'endorsement', 'question', 'context', 'precedent'
     'contact_required',
@@ -369,7 +367,6 @@
     'correction',        -- Founder changed what the agent proposed
     'could_not_store'
     'could_not_store'
-    'decision_made', 'decision_outcome',
     'delivery','maintenance','development','operational_dependency');
     'delivery','maintenance','development','operational_dependency');
     'dependencies','systems','current_carrier','commitments','authority_requirements',
@@ -388,7 +385,6 @@
     'inconclusive'
     'lead_investor', 'angel', 'advisor', 'board_member', 'observer'
     'llm_tokens','integration_api','email_send','compute','experiment','other'
-    'milestone', 'integration_connected',
     'model_unavailable',
     'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
     'new_mrr_cents','expansion_mrr_cents','contraction_mrr_cents','churned_mrr_cents',
@@ -412,12 +408,9 @@
     'response_out_of_bounds',
     'response_unparseable',
     'retention','messaging','feature','operations','other'
-    'risk_state_change', 'lifecycle_gate',
     'sent', 'delivered', 'failed', 'clicked',
-    'signal_spike', 'signal_drop',
     'signups_7d','active_users','support_volume_7d','nps_score')
     'signups_7d','active_users','support_volume_7d','nps_score');
-    'stressor_created', 'stressor_resolved',
     'timestamp_invalid'
     'too_large',
     'tool_preferences', 'error_recovery', 'shared_knowledge'
@@ -778,7 +771,6 @@
   )));
   )));
   )));
-  )),
   )),
   )),
   )),
@@ -2051,7 +2043,6 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2290,7 +2281,6 @@
   description TEXT,
   description TEXT,
   description TEXT,
-  description TEXT,
   description TEXT,                 -- 2-3 sentence context
   description_excerpt TEXT,
   designed_by TEXT DEFAULT 'oracle',
@@ -2358,9 +2348,7 @@
   engagement_trend TEXT DEFAULT 'stable' CHECK(engagement_trend IN ('improving','stable','declining')),
   engagement_trend TEXT,
   entity_id TEXT NOT NULL,
-  entity_id TEXT,                      -- FK to the relevant entity
   entity_type TEXT NOT NULL,
-  entity_type TEXT,                    -- 'decision', 'stressor', 'audit', etc.
   entry_id   TEXT NOT NULL,
   epistemic_status TEXT NOT NULL CHECK(epistemic_status IN ('known','inferred','unknown','conflicting','stale')),
   epistemic_status TEXT NOT NULL CHECK(epistemic_status IN ('known','inferred','unresolved')),
@@ -2392,10 +2380,8 @@
   event TEXT NOT NULL,
   event_count INTEGER NOT NULL DEFAULT 0,
   event_data TEXT,
-  event_date TEXT NOT NULL,            -- YYYY-MM-DD
   event_id TEXT PRIMARY KEY,
   event_type    TEXT NOT NULL,   -- e.g. 'action_executed','decision_approved','decision_rejected',
-  event_type TEXT NOT NULL CHECK(event_type IN (
   event_type TEXT NOT NULL,
   event_type TEXT NOT NULL,
   event_type TEXT NOT NULL,
@@ -2884,7 +2870,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -3112,7 +3097,6 @@
   metadata TEXT,
   metadata TEXT,
   metadata TEXT,
-  metadata TEXT,                       -- JSON: event-specific data
   metadata_json TEXT NOT NULL DEFAULT '{}',  -- arbitrary structured context
   metadata_json TEXT,                       -- referrer URL, UTM, etc.
   metadata_json TEXT, -- type-specific metadata
@@ -3558,7 +3542,6 @@
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL REFERENCES products(id),
@@ -3936,11 +3919,9 @@
   shared_with TEXT,                   -- JSON: investor_id[]
   signal TEXT NOT NULL,
   signal_at_briefing INTEGER,
-  signal_at_event INTEGER,             -- Signal score when event occurred
   signal_at_generation INTEGER,  -- Signal score when plan was made
   signal_consensus BOOLEAN,           -- do all founders agree on Signal interpretation?
   signal_delta INTEGER,
-  signal_delta INTEGER,                -- change from previous day
   signal_description TEXT NOT NULL,
   signal_description TEXT NOT NULL,
   signal_detail TEXT, -- JSON
@@ -4175,7 +4156,6 @@
   title TEXT NOT NULL,
   title TEXT NOT NULL,
   title TEXT NOT NULL,
-  title TEXT NOT NULL,                 -- ≤120 chars
   title TEXT NOT NULL,              -- the one sentence action
   title TEXT,
   title TEXT,                  -- auto-generated from first message
@@ -4393,7 +4373,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
 );
 );
 );
@@ -5133,8 +5112,6 @@ CREATE INDEX idx_team_invitations_product ON team_invitations(product_id);
 CREATE INDEX idx_team_invitations_token ON team_invitations(token);
 CREATE INDEX idx_team_members_founder ON team_members(founder_id);
 CREATE INDEX idx_team_members_product ON team_members(product_id, status);
-CREATE INDEX idx_temporal_events_product ON temporal_events(product_id, event_date DESC);
-CREATE INDEX idx_temporal_events_type ON temporal_events(product_id, event_type);
 CREATE INDEX idx_term_sheet_product ON term_sheet_models(product_id, created_at DESC);
 CREATE INDEX idx_transcripts_product ON call_transcripts(product_id, call_date DESC);
 CREATE INDEX idx_transcripts_type ON call_transcripts(product_id, call_type);
@@ -5406,7 +5383,6 @@ CREATE TABLE taste_journals (
 CREATE TABLE team_health_metrics (
 CREATE TABLE team_invitations (
 CREATE TABLE team_members (
-CREATE TABLE temporal_events (
 CREATE TABLE term_sheet_models (
 CREATE TABLE unit_economics_snapshots (
 CREATE TABLE usage_limits (

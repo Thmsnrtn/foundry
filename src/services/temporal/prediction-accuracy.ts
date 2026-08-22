@@ -1,140 +1,18 @@
 // =============================================================================
-// FOUNDRY — Temporal Intelligence: Signal Replay + Event Recording
-// Builds the enriched event timeline for Signal history replay.
-// Records temporal events as they occur throughout the system.
+// FOUNDRY — Prediction accuracy: how well Foundry's own forecasts held up.
+//
+// This module used to also hold Signal replay and temporal event recording.
+// Both were removed in migration 194: their table had never held a row, their
+// two functions had never had a caller, and the header claimed in the present
+// tense that events were recorded "throughout the system". The live event
+// stream is `signal_events`.
+//
+// What remains is the one thing here that runs: after a decision's outcome is
+// recorded, compare it to what the scenario model predicted.
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { getSignalHistory } from '../signal.js';
 import { nanoid } from 'nanoid';
-import type { TemporalEvent, TemporalEventType } from '../../types/index.js';
-
-// ─── Record a Temporal Event ──────────────────────────────────────────────────
-
-/**
- * Record a significant event in the temporal timeline.
- * Called throughout the system whenever something noteworthy happens.
- */
-export async function recordTemporalEvent(
-  productId: string,
-  eventType: TemporalEventType,
-  title: string,
-  options: {
-    description?: string;
-    entityType?: string;
-    entityId?: string;
-    metadata?: Record<string, unknown>;
-  } = {},
-): Promise<void> {
-  try {
-    // Get current Signal for context
-    const signalResult = await query(
-      `SELECT score FROM signal_history WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1`,
-      [productId],
-    );
-    const signalAtEvent = (signalResult.rows[0] as Record<string, number> | undefined)?.score ?? null;
-
-    // Compute delta from previous day
-    const prevResult = await query(
-      `SELECT score FROM signal_history WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1 OFFSET 1`,
-      [productId],
-    );
-    const prevScore = (prevResult.rows[0] as Record<string, number> | undefined)?.score ?? null;
-    const signalDelta = (signalAtEvent !== null && prevScore !== null) ? signalAtEvent - prevScore : null;
-
-    const today = new Date().toISOString().slice(0, 10);
-
-    await query(
-      `INSERT INTO temporal_events
-       (id, product_id, event_date, event_type, title, description,
-        entity_type, entity_id, signal_at_event, signal_delta, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        nanoid(),
-        productId,
-        today,
-        eventType,
-        title.slice(0, 120),
-        options.description ?? null,
-        options.entityType ?? null,
-        options.entityId ?? null,
-        signalAtEvent,
-        signalDelta,
-        options.metadata ? JSON.stringify(options.metadata) : null,
-      ],
-    );
-  } catch (err) {
-    // Non-critical: don't break the caller
-    console.error('[temporal] recordTemporalEvent failed:', err);
-  }
-}
-
-// ─── Build Replay Timeline ────────────────────────────────────────────────────
-
-export interface ReplayFrame {
-  date: string;
-  signal: number;
-  tier: string;
-  riskState: string;
-  events: Array<{
-    id: string;
-    type: TemporalEventType;
-    title: string;
-    description: string | null;
-    entity_type: string | null;
-    entity_id: string | null;
-    metadata: Record<string, unknown> | null;
-  }>;
-}
-
-/**
- * Build a day-by-day replay of the business timeline.
- * Returns Signal history enriched with events at each date.
- */
-export async function buildReplayTimeline(
-  productId: string,
-  days = 90,
-): Promise<ReplayFrame[]> {
-  const [history, events] = await Promise.all([
-    getSignalHistory(productId, days),
-    query(
-      `SELECT * FROM temporal_events
-       WHERE product_id = ? AND event_date >= date('now', ?)
-       ORDER BY event_date ASC`,
-      [productId, `-${days} days`],
-    ),
-  ]);
-
-  // Index events by date
-  const eventsByDate = new Map<string, TemporalEvent[]>();
-  for (const row of events.rows) {
-    const event = row as unknown as TemporalEvent;
-    const eventWithParsedMeta: TemporalEvent = {
-      ...event,
-      metadata: event.metadata ? (typeof event.metadata === 'string' ? JSON.parse(event.metadata as unknown as string) : event.metadata) : null,
-    };
-    if (!eventsByDate.has(event.event_date)) {
-      eventsByDate.set(event.event_date, []);
-    }
-    eventsByDate.get(event.event_date)!.push(eventWithParsedMeta);
-  }
-
-  return history.map((h) => ({
-    date: h.snapshot_date,
-    signal: h.score,
-    tier: h.tier,
-    riskState: h.risk_state,
-    events: (eventsByDate.get(h.snapshot_date) ?? []).map((e) => ({
-      id: e.id,
-      type: e.event_type,
-      title: e.title,
-      description: e.description,
-      entity_type: e.entity_type,
-      entity_id: e.entity_id,
-      metadata: e.metadata,
-    })),
-  }));
-}
 
 // ─── Prediction Accuracy Tracking ────────────────────────────────────────────
 

@@ -1033,7 +1033,7 @@ export async function predictionAccuracyJob(): Promise<void> {
     [],
   );
 
-  const { recordPredictionAccuracy } = await import('../services/temporal/replay.js');
+  const { recordPredictionAccuracy } = await import('../services/temporal/prediction-accuracy.js');
 
   for (const row of decisions.rows) {
     const d = row as Record<string, unknown>;

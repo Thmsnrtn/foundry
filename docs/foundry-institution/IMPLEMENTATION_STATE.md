@@ -85,6 +85,31 @@ caller. Do not read "not on the unreachable list" as "all of this runs", and do
 not read "on the list" as "none of this matters": both files held real defects,
 one live and one latent.
 
+**A TABLE WHOSE ONLY WRITER AND ONLY READER ARE BOTH UNREACHABLE PASSES BOTH
+GATES THAT EXIST TO CATCH IT.** `check-writerless-tables` asks whether every
+table live code READS has something that writes it; `check-unread-tables` asks
+whether every table live code WRITES has something that reads it. A sealed pair
+gives each gate the other's half, and each one stops there. Neither knows a
+function's callers — they read SQL. `temporal_events` sat that way from
+migration 012 until 194: guaranteed empty, never read, and green on both.
+
+Teaching those gates about call graphs was measured before being built and
+**deliberately not built**. Over the 236 tables `src/` touches, the check
+produced four candidates and two were false positives: `okr_progress_updates`
+(SQL inside a Hono handler attributed to the last named function above it) and
+`intelligence_benchmarks` (a string-stripper that swallowed a dynamic
+`await import`). The two real hits were `temporal_events`, now removed, and
+`agent_wiki_reads`. Half wrong is worse than blind, so the blind spot is
+written here and `one-event-store-not-two.test.ts` pins the instance that
+mattered. Do not re-derive this.
+
+**A FUNCTION THAT NAMES ITSELF IN ITS OWN LOG MESSAGE IS NOT ITS OWN CALLER.**
+The first version of that measurement counted `console.error('[temporal]
+recordTemporalEvent failed:', err)` as a reference and reported the function
+live. Any reference-counting over source must strip string literals first —
+which is the same rule as the four prose-quoting-code incidents, arriving from
+the other direction.
+
 - ~~The reachability gate scans `src/services/institution` only~~ — **CLOSED.**
   `check-reachability.mjs` walks all of `src/` from the real entry points as a
   ratchet (29 unreachable, may only fall), declares modules reached by a

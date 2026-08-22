@@ -1369,32 +1369,6 @@ export interface PlaybookEvidence {
   date: string;
 }
 
-// ─── Temporal Intelligence ────────────────────────────────────────────────────
-
-export type TemporalEventType =
-  | 'stressor_created' | 'stressor_resolved'
-  | 'decision_made' | 'decision_outcome'
-  | 'risk_state_change' | 'lifecycle_gate'
-  | 'audit_completed' | 'remediation_merged'
-  | 'signal_spike' | 'signal_drop'
-  | 'milestone' | 'integration_connected'
-  | 'cohort_anomaly' | 'competitive_signal';
-
-export interface TemporalEvent {
-  id: string;
-  product_id: string;
-  event_date: string;
-  event_type: TemporalEventType;
-  title: string;
-  description: string | null;
-  entity_type: string | null;
-  entity_id: string | null;
-  signal_at_event: number | null;
-  signal_delta: number | null;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-}
-
 export interface PredictionAccuracy {
   id: string;
   product_id: string;

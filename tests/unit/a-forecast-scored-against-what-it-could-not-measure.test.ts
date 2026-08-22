@@ -7,7 +7,7 @@ import { query } from '../../src/db/client.js';
 import {
   recordPredictionAccuracy,
   getPredictionAccuracySummary,
-} from '../../src/services/temporal/replay.js';
+} from '../../src/services/temporal/prediction-accuracy.js';
 
 // =============================================================================
 // A FORECAST SCORED AGAINST WHAT IT COULD NOT MEASURE.

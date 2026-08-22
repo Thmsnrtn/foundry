@@ -1,0 +1,47 @@
+-- =============================================================================
+-- A TIMELINE NOBODY RECORDED, READ BY NOBODY, ANNOUNCED IN THE PRESENT TENSE.
+--
+-- `temporal_events` arrived in migration 012 as the store behind Signal replay:
+-- a per-product timeline of typed events, each annotated with the Signal score
+-- at the moment it happened. It had exactly one writer, `recordTemporalEvent`,
+-- and exactly one reader, `buildReplayTimeline`, both in
+-- `services/temporal/replay.ts`.
+--
+-- NEITHER FUNCTION HAD A SINGLE CALLER. Not a route, not a job, not an agent,
+-- not a test, not a script. The table has been guaranteed empty since the day
+-- it was created, and the replay it existed to serve has never had a surface to
+-- render it.
+--
+-- The module said otherwise, in the present tense, in two places. Its header:
+-- "Records temporal events as they occur throughout the system." Its JSDoc:
+-- "Called throughout the system whenever something noteworthy happens." Both
+-- describe a system that does not exist. This is the law the campaign keeps
+-- arriving back at — the system must not claim a capability its real execution
+-- path cannot support — and a claim written in a comment is still a claim.
+--
+-- IT WAS ALSO INVISIBLE TO BOTH GATES THAT SHOULD HAVE FOUND IT, and that is
+-- worth writing down because the shape will recur. `check-writerless-tables`
+-- asks whether every table live code READS has something that writes it;
+-- `check-unread-tables` asks whether every table live code WRITES has something
+-- that reads it. This table had one of each, so both gates were satisfied. A
+-- table whose only writer and only reader are BOTH unreachable passes a pair of
+-- checks designed to catch exactly this, because each gate finds the other's
+-- half and stops. Neither gate can see a function's callers; they read SQL.
+--
+-- The successor is `signal_events`, from migration 051: sixteen writers, ten
+-- readers, and the single door into responsibility discovery. One concept, two
+-- stores, and the disagreement never surfaced only because one of the two was
+-- always empty. The live one stays; this one goes.
+--
+-- One latent defect goes with it, unfixed and unmourned, as the clearest
+-- evidence the code never ran: `signal_delta` was documented as "change from
+-- previous day" and computed as the difference between the two most recent
+-- snapshots, whatever dates those carried. For a company idle for a month it
+-- would have written a month's movement into a column named for a day's.
+--
+-- Nothing is preserved. There are no rows to preserve.
+-- =============================================================================
+
+DROP INDEX IF EXISTS idx_temporal_events_product;
+DROP INDEX IF EXISTS idx_temporal_events_type;
+DROP TABLE IF EXISTS temporal_events;
