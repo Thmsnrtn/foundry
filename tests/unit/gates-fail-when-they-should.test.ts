@@ -424,6 +424,34 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_m');
   });
 
+  it('check-unreferenced-tables fails on a table no code can reach', () => {
+    // The population neither sibling gate has: check-writerless-tables starts
+    // from tables that are read, check-unread-tables from tables that are
+    // written, and a table with neither half is in no population at all.
+    plant('src/db/migrations/998_gate_fixture_unreferenced.sql',
+      j('CREATE TABLE IF NOT EXISTS _gate_fixture_orphan_table (\n',
+        '  id TEXT PRIMARY KEY\n', ');\n'));
+    const r = run('check-unreferenced-tables.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_orphan_table');
+  });
+
+  it('check-unreferenced-tables follows a rebuild through its rename', () => {
+    // SQLite cannot alter a constraint in place, so a rebuild is CREATE x_new,
+    // copy, DROP x, RENAME x_new TO x. Reading only CREATE and DROP left twelve
+    // phantom `_new` tables on the first run of this gate — a false positive
+    // rate that would have made the baseline meaningless.
+    plant('src/db/migrations/999_gate_fixture_rebuild.sql',
+      j('CREATE TABLE IF NOT EXISTS _gate_fixture_rebuilt_new (\n',
+        '  id TEXT PRIMARY KEY\n', ');\n',
+        'ALTER TABLE _gate_fixture_rebuilt_new RENAME TO products;\n'));
+    const r = run('check-unreferenced-tables.mjs');
+    // The intermediate is gone, not reported, and the renamed target is a table
+    // live code reads, so the tree is still clean.
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).not.toContain('_gate_fixture_rebuilt_new');
+  });
+
   it('check-no-raw-control-bytes fails on a raw NUL in source', () => {
     // git calls a file binary if a NUL sits in its first 8000 bytes, and then
     // prints "Binary files differ" instead of the change — in git diff, in

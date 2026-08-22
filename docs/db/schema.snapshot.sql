@@ -1559,7 +1559,6 @@
   acquisition_channel TEXT,
   acquisition_period DATE NOT NULL,
   acquisition_source TEXT,
-  action TEXT NOT NULL CHECK(action IN ('INSERT', 'UPDATE', 'DELETE')),
   action TEXT,               -- optional: the one concrete thing to do today
   action_accuracy_pct REAL,                     -- 0-100 from agent_predictions
   action_agent TEXT NOT NULL,
@@ -1820,8 +1819,6 @@
   change_type TEXT NOT NULL,
   changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   changed_by TEXT DEFAULT 'evolution_engine',
-  changed_by TEXT NOT NULL,
-  changed_by_type TEXT NOT NULL CHECK(changed_by_type IN ('founder', 'system', 'job', 'api_key')),
   channel TEXT DEFAULT 'web',
   channel TEXT NOT NULL CHECK (channel IN ('letter', 'log')),
   channel_id          TEXT NOT NULL REFERENCES support_channels(id),
@@ -2014,7 +2011,6 @@
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at  TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -2866,7 +2862,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -3172,7 +3167,6 @@
   new_mrr_cents INTEGER DEFAULT 0,
   new_stressor INTEGER NOT NULL DEFAULT 1,
   new_value       REAL NOT NULL,
-  new_values TEXT,
   next_meeting_at TEXT,
   next_quarter_focus TEXT,             -- Forward-looking 90-day plan
   next_run_at DATETIME,
@@ -3221,7 +3215,6 @@
   observed_at TEXT NOT NULL,
   occurred_at TEXT NOT NULL DEFAULT (datetime('now')),
   okr_id          TEXT NOT NULL REFERENCES company_okrs(id),
-  old_values TEXT,
   onboarding_completed_at DATETIME,
   one_decision_to_make TEXT,
   one_sentence_status TEXT NOT NULL,
@@ -3749,7 +3742,6 @@
   relevant_agents_json TEXT,  -- JSON array of AgentName strings that should process this
   remediation_type TEXT NOT NULL,
   repository_ref        TEXT NOT NULL,
-  request_id TEXT,
   requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   required_sample_size INTEGER,
   requires_response INTEGER DEFAULT 0,  -- BOOLEAN
@@ -3836,7 +3828,6 @@
   root_cause_entity_id TEXT,
   rotated_at     TEXT,
   round_type TEXT NOT NULL, -- 'seed' | 'series_a' | 'series_b'
-  row_id TEXT NOT NULL,
   rule_id TEXT NOT NULL REFERENCES lifecycle_rules(id),
   run_completed_at TEXT,
   run_started_at TEXT NOT NULL,
@@ -4088,7 +4079,6 @@
   synthesis_json TEXT, -- final synthesized output
   system_prompt_core TEXT,
   system_prompt_preview TEXT, -- first 500 chars of system prompt
-  table_name TEXT NOT NULL,
   tags             TEXT NOT NULL DEFAULT '[]',              -- JSON array
   tags         TEXT NOT NULL DEFAULT '[]',    -- JSON array of tag strings
   tags TEXT,
@@ -4591,7 +4581,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -4840,9 +4829,6 @@ CREATE INDEX idx_audit_log_product_date ON audit_log(product_id, created_at);
 CREATE INDEX idx_audit_product ON audit_scores(product_id);
 CREATE INDEX idx_audit_product_date ON audit_scores(product_id, created_at);
 CREATE INDEX idx_audit_scores_product_verdict ON audit_scores(product_id, verdict);
-CREATE INDEX idx_audit_trail_changed_by ON audit_trail(changed_by);
-CREATE INDEX idx_audit_trail_created ON audit_trail(created_at);
-CREATE INDEX idx_audit_trail_table_row ON audit_trail(table_name, row_id);
 CREATE INDEX idx_autonomy_consents
 CREATE INDEX idx_autopilot_product ON autopilot_policies(product_id);
 CREATE INDEX idx_bdl_briefing
@@ -5167,7 +5153,6 @@ CREATE TABLE anomalies (
 CREATE TABLE api_keys (
 CREATE TABLE audit_log (
 CREATE TABLE audit_scores (
-CREATE TABLE audit_trail (
 CREATE TABLE autonomy_consents (
 CREATE TABLE autopilot_config (
 CREATE TABLE autopilot_policies (

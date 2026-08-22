@@ -85,23 +85,41 @@ caller. Do not read "not on the unreachable list" as "all of this runs", and do
 not read "on the list" as "none of this matters": both files held real defects,
 one live and one latent.
 
-**A TABLE WHOSE ONLY WRITER AND ONLY READER ARE BOTH UNREACHABLE PASSES BOTH
-GATES THAT EXIST TO CATCH IT.** `check-writerless-tables` asks whether every
-table live code READS has something that writes it; `check-unread-tables` asks
-whether every table live code WRITES has something that reads it. A sealed pair
-gives each gate the other's half, and each one stops there. Neither knows a
-function's callers — they read SQL. `temporal_events` sat that way from
-migration 012 until 194: guaranteed empty, never read, and green on both.
+**THE THREE TABLE GATES, AND THE ONE CASE STILL UNCOVERED.**
+`check-writerless-tables` starts from tables live code READS and asks what
+writes them. `check-unread-tables` starts from tables live code WRITES and asks
+what reads them. Each gate's population is defined by the half it starts from,
+so a table with NEITHER half is in no population at all — not passed,
+never considered. `check-unreferenced-tables` is that third side: any table no
+SQL statement, trigger body, or erasure-map entry names. Ratchet at **14**, may
+only fall. It found fifteen, of which `audit_trail` was removed rather than
+baselined (migration 196) because its name asserted a control — "every mutation
+traceable to a person or job" — over a table that had never held a row.
 
-Teaching those gates about call graphs was measured before being built and
-**deliberately not built**. Over the 236 tables `src/` touches, the check
-produced four candidates and two were false positives: `okr_progress_updates`
-(SQL inside a Hono handler attributed to the last named function above it) and
+The pattern in the remaining fourteen is a superseded store left behind after
+its successor arrived: `autopilot_config` beside a live `autopilot_policies`
+with eight writers, `outbound_webhooks` beside live `webhooks` and
+`product_webhooks`, `strategic_plans` beside live `strategic_syntheses`. Take
+them one at a time, each against its successor; do not sweep.
+
+Building that gate cost one real false-positive lesson, now encoded and
+mutation-tested: **follow a table rebuild through its rename.** SQLite cannot
+alter a constraint in place, so a rebuild is CREATE `x_new`, copy, DROP `x`,
+RENAME `x_new` TO `x`. Reading only CREATE and DROP reported twelve phantom
+`_new` tables — a false-positive rate that would have made the baseline
+meaningless on its first run.
+
+STILL UNCOVERED, deliberately: a table whose only writer and only reader are
+both **unreachable functions**. It has both halves, so all three gates pass.
+`temporal_events` sat that way from migration 012 until 194 and
+`agent_wiki_reads` from 027 until 195. Teaching the gates about call graphs was
+measured and **not built**: over the 236 tables `src/` touches it produced four
+candidates and two were false positives — `okr_progress_updates` (SQL inside a
+Hono handler attributed to the last named function above it) and
 `intelligence_benchmarks` (a string-stripper that swallowed a dynamic
-`await import`). The two real hits were `temporal_events`, now removed, and
-`agent_wiki_reads`. Half wrong is worse than blind, so the blind spot is
-written here and `one-event-store-not-two.test.ts` pins the instance that
-mattered. Do not re-derive this.
+`await import`). Half wrong is worse than blind. `one-event-store-not-two.test.ts`
+and `a-wiki-that-froze-on-its-first-five-articles.test.ts` pin the two instances
+that mattered. Do not re-derive this.
 
 **A FUNCTION THAT NAMES ITSELF IN ITS OWN LOG MESSAGE IS NOT ITS OWN CALLER.**
 The first version of that measurement counted `console.error('[temporal]

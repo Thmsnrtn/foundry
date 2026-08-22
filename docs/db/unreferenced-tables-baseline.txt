@@ -1,0 +1,14 @@
+agent_message_threads
+autopilot_config
+competitor_feature_tracking
+competitor_pricing_snapshots
+custom_webhook_sources
+experiment_holdouts
+experiment_results_timeline
+idea_validations
+investor_annotations
+leading_indicators
+outbound_webhooks
+playbook_exports
+sector_remediation_templates
+strategic_plans
