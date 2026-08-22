@@ -338,9 +338,11 @@ async function getMetricsContext(productId: string): Promise<MCPToolResult> {
 - NPS: ${m.nps_score ?? '?'}
 
 ## Revenue
+- MRR: ${mrr?.level_cents == null ? 'not reported' : `$${(mrr.level_cents / 100).toFixed(0)}`}
+- Net new this period: $${((mrr?.net_new_cents ?? 0) / 100).toFixed(0)}
 - New MRR: $${((mrr?.new_cents ?? 0) / 100).toFixed(0)}
 - Churned MRR: $${((mrr?.churned_cents ?? 0) / 100).toFixed(0)}
-- Health Ratio: ${health?.value.toFixed(2) ?? '?'} (${health?.indicator ?? '?'})`);
+- Health Ratio: ${health?.value == null ? 'unknown — no new MRR to divide by' : `${health.value.toFixed(2)} (${health.indicator})`}`);
 }
 
 async function getCompetitiveContext(productId: string): Promise<MCPToolResult> {

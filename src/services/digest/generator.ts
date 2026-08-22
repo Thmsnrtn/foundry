@@ -96,7 +96,12 @@ export async function generateDigest(
     stressor_report: { stressors, evaluation_context: { mrr_health_ratio: mrr?.health_ratio ?? null, mrr_health_trend: null, latest_cohort_retention_vs_avg: cohort?.vs_historical_average_14 ?? null, high_significance_competitive_signals: compResult.rows.length }, generated_at: new Date().toISOString() },
     competitive_context: competitiveContext,
     narrative: fullNarrative,
-    mrr: mrr ?? { new_cents: 0, expansion_cents: 0, contraction_cents: 0, churned_cents: 0, total_cents: 0, health_ratio: null },
+    // The fallback used to carry `total_cents: 0`, which the digest email then
+    // printed as "Total MRR: $0.00" for a company with no snapshot at all.
+    mrr: mrr ?? {
+      new_cents: 0, expansion_cents: 0, contraction_cents: 0, churned_cents: 0,
+      net_new_cents: 0, level_cents: null, health_ratio: null,
+    },
     mrr_health: mrrHealth,
     metrics,
     cohort_snapshot: cohort,

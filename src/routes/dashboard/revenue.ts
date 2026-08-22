@@ -60,11 +60,11 @@ revenueRoutes.get('/products/:id/revenue', async (c) => {
           <h3>Revenue Summary</h3>
           <div class="metrics-grid">
             <div class="metric-card">
-              <span class="metric-value">$${(totalMrr / 100).toFixed(0)}</span>
-              <span class="metric-label">Total MRR</span>
+              <span class="metric-value">${totalMrr === null ? 'Not reported' : `$${(totalMrr / 100).toFixed(0)}`}</span>
+              <span class="metric-label">MRR</span>
             </div>
             <div class="metric-card">
-              <span class="metric-value" style="color:${mrrHealth.indicator === 'red' ? '#dc2626' : mrrHealth.indicator === 'yellow' ? '#d97706' : '#059669'}">${mrrHealth.value > 0 ? mrrHealth.value.toFixed(2) : '—'}</span>
+              <span class="metric-value" style="color:${mrrHealth.indicator === 'red' ? '#dc2626' : mrrHealth.indicator === 'yellow' ? '#d97706' : mrrHealth.indicator === 'unknown' ? '#64748b' : '#059669'}">${mrrHealth.value === null ? '—' : mrrHealth.value.toFixed(2)}</span>
               <span class="metric-label">Health Ratio</span>
             </div>
           </div>

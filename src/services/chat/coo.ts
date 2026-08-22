@@ -240,7 +240,9 @@ async function buildConversationContext(
   const growthStage = (p?.growth_stage as GrowthStage) ?? 'growth';
 
   const mrrSummary = mrr
-    ? `MRR: $${(mrr.total_cents / 100).toFixed(0)}/mo, Health ratio: ${mrr.health_ratio?.toFixed(2) ?? 'N/A'}`
+    ? `MRR: ${mrr.level_cents === null ? 'not reported' : `$${(mrr.level_cents / 100).toFixed(0)}/mo`}`
+      + `, net new this period: $${(mrr.net_new_cents / 100).toFixed(0)}`
+      + `, health ratio: ${mrr.health_ratio?.toFixed(2) ?? 'unknown — no new MRR to divide by'}`
     : 'No MRR data yet.';
 
   const stressorSummary = stressors.rows.length > 0

@@ -17,7 +17,7 @@ export async function getMRRDecomposition(productId: string): Promise<MRRDecompo
   const expansion = (row.expansion_mrr_cents as number) ?? 0;
   const contraction = (row.contraction_mrr_cents as number) ?? 0;
   const churned = (row.churned_mrr_cents as number) ?? 0;
-  const total = newMrr + expansion - contraction - churned;
+  const netNew = newMrr + expansion - contraction - churned;
   const healthRatio = newMrr > 0 ? churned / newMrr : null;
 
   return {
@@ -25,7 +25,8 @@ export async function getMRRDecomposition(productId: string): Promise<MRRDecompo
     expansion_cents: expansion,
     contraction_cents: contraction,
     churned_cents: churned,
-    total_cents: total,
+    net_new_cents: netNew,
+    level_cents: row.mrr_cents == null ? null : Number(row.mrr_cents),
     health_ratio: healthRatio,
   };
 }
@@ -34,7 +35,14 @@ export async function getMRRDecomposition(productId: string): Promise<MRRDecompo
  * Compute MRR Health Ratio with color indicator.
  */
 export function computeHealthRatio(decomposition: MRRDecomposition): MRRHealthRatio {
-  const value = decomposition.health_ratio ?? 0;
+  // `?? 0` fell straight through to the first branch: a company with no new MRR
+  // to divide by got a ratio of 0 and an indicator of GREEN — the most
+  // reassuring answer available, for the absence of the measurement. It also
+  // reached `health-score.ts`, where `(1 - value) * 100` made it a revenue
+  // score of 100 out of 100.
+  const value = decomposition.health_ratio;
+  if (value === null) return { value: null, indicator: 'unknown' };
+
   let indicator: 'green' | 'yellow' | 'red';
   if (value < 0.5) indicator = 'green';
   else if (value < 0.8) indicator = 'yellow';
@@ -43,23 +51,20 @@ export function computeHealthRatio(decomposition: MRRDecomposition): MRRHealthRa
 }
 
 /**
- * Compute total MRR from prior period plus current decomposition.
+ * The company's MRR level, or null if nobody has supplied one.
+ *
+ * This summed the MOVEMENTS of the last two snapshots and returned that as the
+ * total, under a comment admitting it: "simplified — production would track
+ * running total". `metric_snapshots.mrr_cents` is that running total, and since
+ * this cycle the integrations write it, so there is nothing left to approximate.
  */
-export async function computeTotalMRR(productId: string): Promise<number> {
+export async function computeTotalMRR(productId: string): Promise<number | null> {
   const result = await query(
-    `SELECT new_mrr_cents, expansion_mrr_cents, contraction_mrr_cents, churned_mrr_cents
-     FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 2`,
+    `SELECT mrr_cents FROM metric_snapshots
+      WHERE product_id = ? AND mrr_cents IS NOT NULL
+      ORDER BY snapshot_date DESC LIMIT 1`,
     [productId]
   );
-
-  if (result.rows.length === 0) return 0;
-
-  // Sum all periods (simplified — production would track running total)
-  let total = 0;
-  for (const row of result.rows) {
-    const r = row as Record<string, number>;
-    total += (r.new_mrr_cents ?? 0) + (r.expansion_mrr_cents ?? 0)
-           - (r.contraction_mrr_cents ?? 0) - (r.churned_mrr_cents ?? 0);
-  }
-  return total;
+  const row = result.rows[0] as Record<string, unknown> | undefined;
+  return row?.mrr_cents == null ? null : Number(row.mrr_cents);
 }

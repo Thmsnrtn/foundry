@@ -116,8 +116,10 @@ export async function assessChurnRisk(productId: string): Promise<ChurnRiskAsses
   const signals: ChurnRiskAssessment['signals'] = [];
   let riskScore = 0;
 
-  // Signal 1: MRR Health Ratio
-  if (mrrHealth) {
+  // Signal 1: MRR Health Ratio. A null ratio used to arrive here as 0 and take
+  // the last branch — "Healthy churn-to-revenue ratio" asserted about a company
+  // with no new MRR to divide by.
+  if (mrrHealth?.value != null) {
     if (mrrHealth.value >= 1.0) {
       signals.push({ signal: 'Churn exceeds new revenue', weight: 30, direction: 'negative' });
       riskScore += 30;
@@ -176,7 +178,7 @@ export async function assessChurnRisk(productId: string): Promise<ChurnRiskAsses
 
   // Recommended actions
   const actions: string[] = [];
-  if (mrrHealth && mrrHealth.value >= 0.7) actions.push('Investigate top churn reasons — conduct exit surveys');
+  if (mrrHealth?.value != null && mrrHealth.value >= 0.7) actions.push('Investigate top churn reasons — conduct exit surveys');
   if (metricsRow?.day_30_retention != null && metricsRow.day_30_retention < 0.5) actions.push('Review onboarding flow — activation-to-retention gap detected');
   if (metricsRow?.activation_rate != null && metricsRow.activation_rate < 0.4) actions.push('Simplify time-to-value — reduce steps to first success');
   if (actions.length === 0) actions.push('No immediate action required — continue monitoring');

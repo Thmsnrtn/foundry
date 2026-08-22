@@ -84,7 +84,11 @@ export interface MRRData {
   expansion_cents: number;
   contraction_cents: number;
   churned_cents: number;
-  total_cents: number;
+  /** One period's net change. This was called `total_cents` and shown as
+   *  "Total MRR" — the headline number on this card. */
+  net_new_cents: number;
+  /** The MRR LEVEL, or null when nobody has supplied one. */
+  level_cents: number | null;
   health_ratio: number | null;
 }
 
@@ -96,8 +100,12 @@ export function mrrDecomposition(
   <div class="card">
     <h3>MRR Decomposition</h3>
     <div class="mrr-total">
-      <span class="mrr-amount">$${formatCents(mrr.total_cents)}</span>
-      <span class="mrr-label">Total MRR</span>
+      <span class="mrr-amount">${mrr.level_cents === null ? 'Not reported' : `$${formatCents(mrr.level_cents)}`}</span>
+      <span class="mrr-label">MRR</span>
+    </div>
+    <div class="mrr-total" style="margin-top:0.25rem;">
+      <span class="mrr-amount" style="font-size:0.9em;">$${formatCents(mrr.net_new_cents)}</span>
+      <span class="mrr-label">Net new this period</span>
     </div>
     <div class="mrr-grid">
       <div class="mrr-component mrr-new">
@@ -603,7 +611,7 @@ export function digestView(digests: Array<{
   product_name: string;
   risk_state: { state: string; reason: string; changed_at: string | null };
   stressors: Array<{ name: string; signal: string; timeframe_days: number; neutralizing_action: string; severity: string }>;
-  mrr: { new_cents: number; expansion_cents: number; contraction_cents: number; churned_cents: number; total_cents: number; health_ratio: number | null };
+  mrr: { new_cents: number; expansion_cents: number; contraction_cents: number; churned_cents: number; net_new_cents: number; level_cents: number | null; health_ratio: number | null };
   mrr_health: { value: number; indicator: string };
   metrics: Record<string, unknown> | null;
   cohort_snapshot: Record<string, unknown> | null;

@@ -388,7 +388,8 @@ async function processMessage(
   const dataPoints: Array<{ label: string; value: string }> = [];
   if (ctx.signal) dataPoints.push({ label: 'Signal', value: String(ctx.signal) });
   if (ctx.metrics.healthRatio !== null) dataPoints.push({ label: 'Health Ratio', value: ctx.metrics.healthRatio.toFixed(2) });
-  if (ctx.mrr) dataPoints.push({ label: 'MRR', value: `$${ctx.mrr.total.toLocaleString()}` });
+  if (ctx.mrr?.total != null) dataPoints.push({ label: 'MRR', value: `$${ctx.mrr.total.toLocaleString()}` });
+  if (ctx.mrr) dataPoints.push({ label: 'Net new MRR this period', value: `$${ctx.mrr.net_new.toLocaleString()}` });
   if (ctx.stressors.length > 0) dataPoints.push({ label: 'Active Stressors', value: String(ctx.stressors.length) });
 
   // 6. Save assistant message

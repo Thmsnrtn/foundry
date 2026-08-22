@@ -68,7 +68,14 @@ export async function generateMorningBriefing(
   ];
 
   if (mrr) {
-    contextParts.push(`MRR: $${Math.round(mrr.total_cents / 100).toLocaleString()}`);
+    // This said `MRR: $X` and X was `net_new_cents` — one period's net change.
+    // A company at $50k MRR with a flat month heard "MRR: $0" spoken aloud.
+    contextParts.push(mrr.level_cents === null
+      ? 'MRR: not reported — no integration or report has supplied a level'
+      : `MRR: $${Math.round(mrr.level_cents / 100).toLocaleString()}`);
+    contextParts.push(mrr.net_new_cents === 0
+      ? 'Net new MRR this period: flat'
+      : `Net new MRR this period: $${Math.round(mrr.net_new_cents / 100).toLocaleString()}`);
     if (mrr.health_ratio !== null) {
       contextParts.push(`Health ratio: ${mrr.health_ratio.toFixed(2)}`);
     }
@@ -194,7 +201,7 @@ function buildFallbackBriefing(
   riskState: string,
   stressors: Array<Record<string, string>>,
   decisions: Array<Record<string, unknown>>,
-  mrr: { total_cents: number; health_ratio: number | null } | null,
+  mrr: { level_cents: number | null; net_new_cents: number; health_ratio: number | null } | null,
 ): string {
   const lines: string[] = [];
 

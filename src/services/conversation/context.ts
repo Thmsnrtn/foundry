@@ -33,7 +33,13 @@ export interface FullConversationContext {
   pendingDecisions: Array<{ what: string; category: string; gate: number; created_at: string }>;
 
   // Metrics
-  mrr: { total: number; new: number; churned: number; expansion: number; contraction: number } | null;
+  mrr: {
+    /** The MRR LEVEL. Null when nobody has supplied one. It used to be the
+     *  period's net change, under this same name. */
+    total: number | null;
+    net_new: number;
+    new: number; churned: number; expansion: number; contraction: number;
+  } | null;
   metrics: {
     activationRate: number | null;
     day30Retention: number | null;
@@ -138,7 +144,9 @@ export async function buildConversationContext(
     }),
 
     mrr: mrrResult ? {
-      total: Math.round(mrrResult.total_cents / 100),
+      // The LEVEL, not the period's net change, which is what `total` said.
+      total: mrrResult.level_cents === null ? null : Math.round(mrrResult.level_cents / 100),
+      net_new: Math.round(mrrResult.net_new_cents / 100),
       new: Math.round(mrrResult.new_cents / 100),
       churned: Math.round(mrrResult.churned_cents / 100),
       expansion: Math.round(mrrResult.expansion_cents / 100),
@@ -188,7 +196,10 @@ export function formatContextForPrompt(ctx: FullConversationContext): string {
   if (ctx.mrr) {
     lines.push(
       'REVENUE:',
-      `  Total MRR: $${ctx.mrr.total.toLocaleString()}`,
+      ctx.mrr.total === null
+        ? '  MRR: not reported — no integration or report has supplied a level'
+        : `  MRR: $${ctx.mrr.total.toLocaleString()}`,
+      `  Net new this period: $${ctx.mrr.net_new.toLocaleString()}`,
       `  New: $${ctx.mrr.new.toLocaleString()} | Churned: $${ctx.mrr.churned.toLocaleString()} | Expansion: $${ctx.mrr.expansion.toLocaleString()}`,
     );
     if (ctx.metrics.healthRatio !== null) {

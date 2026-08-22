@@ -528,18 +528,35 @@ export interface CompetitiveSignal {
   linked_stressor_id: string | null;
 }
 
+/**
+ * THE FIELD CALLED `total_cents` WAS ONE PERIOD'S NET CHANGE.
+ *
+ * It was `new + expansion - contraction - churned` — the MOVEMENT — and it was
+ * displayed as "MRR" in the voice briefing, the weekly digest, the COO chat
+ * context, the conversation context and a dashboard component. A company at
+ * $50k MRR with a flat month was told its MRR was $0.
+ *
+ * It is `net_new_cents` now, which is what it is, and `level_cents` carries the
+ * actual MRR from `metric_snapshots.mrr_cents`. Renamed rather than fixed in
+ * place so that no reader can keep treating the movement as the level by
+ * accident: every call site had to be looked at.
+ */
 export interface MRRDecomposition {
   new_cents: number;
   expansion_cents: number;
   contraction_cents: number;
   churned_cents: number;
-  total_cents: number;
+  /** New + expansion - contraction - churned. One period's net change. */
+  net_new_cents: number;
+  /** The MRR LEVEL. Null when no integration or report has supplied one. */
+  level_cents: number | null;
   health_ratio: number | null;
 }
 
 export interface MRRHealthRatio {
-  value: number;
-  indicator: 'green' | 'yellow' | 'red';
+  /** Null when there was no new MRR to divide by. `?? 0` made that GREEN. */
+  value: number | null;
+  indicator: 'green' | 'yellow' | 'red' | 'unknown';
 }
 
 // ─── AI Interfaces ───────────────────────────────────────────────────────────
