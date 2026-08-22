@@ -16,11 +16,11 @@ Bootstrap from disk: verify the branch and a clean tree, read
 `DEVELOPMENT_INSTITUTION.md` and this file, skim `IMPLEMENTATION_STATE.md` and
 recent git history, then work. No chat history is required.
 
-**FIRST, CHECK THE REMOTE — THE CONTAINER'S CHECKOUT CAN BE BEHIND IT.** Twice in
-one session this working directory came up rolled back by fourteen and then by
-twenty commits, with `origin/<branch>` — the LOCAL TRACKING REF — agreeing with
-the stale HEAD, so `git status` said "up to date" and a whole cycle of work
-looked lost. It was not: it was on the remote the whole time.
+**FIRST, CHECK THE REMOTE — THE CONTAINER'S CHECKOUT CAN BE BEHIND IT.** THREE
+TIMES NOW this working directory has come up rolled back — by fourteen, by
+twenty, and by thirty-eight commits — with `origin/<branch>`, the LOCAL TRACKING
+REF, agreeing with the stale HEAD, so `git status` said "up to date" and a whole
+cycle of work looked lost. It was not: it was on the remote the whole time.
 
 ```
 git ls-remote origin claude/foundry-autonomous-continuation-0gents   # the truth
@@ -33,7 +33,13 @@ Do the ancestor check before the reset, every time. If HEAD is NOT an ancestor,
 something local is unique and a reset would destroy it — inspect `git reflog`
 first. A modified file in the tree after a rollback is usually the uncommitted
 half of work already committed on the remote; diff it against the remote version
-before discarding it, and do not re-apply it by hand.
+before discarding it, and do not re-apply it by hand. **On the third rollback
+that diff was the argument for discarding:** the modified file added a
+`customerCount` that the finished version on the remote had DELIBERATELY
+removed, under a comment explaining that it counted subscriptions and was being
+written into `active_users`. The stray edit is not always the unfinished half of
+something still wanted; sometimes it is the thing a later commit deleted on
+purpose. Read the remote version, not just the diff's shape.
 
 Then run the loop in `DEVELOPMENT_INSTITUTION.md` §2: orient, verify, locate
 the frontier from **current repository truth**, and act. Do not resume an
