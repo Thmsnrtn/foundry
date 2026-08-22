@@ -7,6 +7,7 @@ import type { Digest } from '../../types/index.js';
 import { invoke } from '../outbound/gateway.js';
 // Registers the canonical send_email capability and its trusted policy.
 import '../integration/resend.js';
+import { measured, pctOfFraction } from '../ai/measured.js';
 
 function dailyDedup(productId: string, kind: string, content: string): string {
   const date = new Date().toISOString().slice(0, 10);
@@ -52,7 +53,7 @@ export async function sendDigestEmail(
     ${digest.competitive_context ? `<h3>Competitive Context</h3><p>${digest.competitive_context}</p>` : ''}
     <h2>This Week</h2><p>${digest.narrative}</p>
     <h2>Revenue</h2><p>MRR: ${mrrTotal} | Net new this period: ${netNew} | Health Ratio: ${healthRatio}</p>
-    <h2>Key Metrics</h2><p>Signups: ${digest.metrics.signups_7d} | Active: ${digest.metrics.active_users} | Activation: ${(digest.metrics.activation_rate * 100).toFixed(1)}%</p>
+    <h2>Key Metrics</h2><p>Signups: ${measured(digest.metrics.signups_7d)} | Active: ${measured(digest.metrics.active_users)} | Activation: ${pctOfFraction(digest.metrics.activation_rate)}</p>
   </div>`;
   await sendGovernedEmail({ productId, to, subject, html, kind: `digest:${digest.digest_type}` });
 }

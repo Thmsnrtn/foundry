@@ -699,14 +699,23 @@ export interface Digest {
   digest_type: 'weekly' | 'yellow_pulse' | 'red_daily';
 }
 
+/**
+ * A company's latest reported metrics, WHERE NULL MEANS NOT REPORTED.
+ *
+ * Every field was non-nullable, so the digest generator's `?? 0` had nowhere
+ * else to put an absence — and the four columns behind them are nullable REAL
+ * with no default, filled in by a placeholder snapshot the daily job writes
+ * with nothing but a date. The same NULL became the BEST possible value for
+ * churn and the WORST for activation and retention, inside one object literal.
+ */
 export interface DashboardMetrics {
-  signups_7d: number;
-  active_users: number;
-  activation_rate: number;
-  day_30_retention: number;
-  support_volume_7d: number;
-  nps_score: number;
-  churn_rate: number;
+  signups_7d: number | null;
+  active_users: number | null;
+  activation_rate: number | null;
+  day_30_retention: number | null;
+  support_volume_7d: number | null;
+  nps_score: number | null;
+  churn_rate: number | null;
 }
 
 // ─── Dashboard Data (API) ────────────────────────────────────────────────────

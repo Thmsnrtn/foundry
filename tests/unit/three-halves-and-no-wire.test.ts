@@ -148,7 +148,13 @@ describe('what the model wrote is kept', () => {
 describe('the reader now has something to read', () => {
   it('scribe reads the table it writes', () => {
     const code = stripComments(readFileSync(SCRIBE, 'utf8'), { lineComments: true });
-    expect(code).toMatch(/SELECT title, section AS category FROM agent_wiki_entries/);
+    // Through the wiki module, not a second copy of the query. This used to
+    // assert the raw `SELECT title, section AS category FROM agent_wiki_entries`
+    // that lived here — ordered by `created_at`, which froze the list on the
+    // first five titles ever written once five existed, so Scribe could not see
+    // its own revisions. `listWikiEntries` orders by `updated_at` and returns
+    // the total, and there is now one definition of what the wiki says.
+    expect(code).toMatch(/listWikiEntries/);
     expect(code).toMatch(/createWikiEntry/);
   });
 

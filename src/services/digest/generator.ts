@@ -8,6 +8,7 @@ import { getLatestCohortSummary } from '../intelligence/cohort.js';
 import { getFounderHealthSummary, generateFounderHealthDigestSection } from '../intelligence/founder-health.js';
 import { getStageConfig } from '../lifecycle/stage-detection.js';
 import { query, getActiveStressors, getLatestMetrics } from '../../db/client.js';
+import { measured, pctOfFraction } from '../ai/measured.js';
 import type { Digest, RiskStateValue, StressorReportItem, DashboardMetrics, MRRDecomposition, MRRHealthRatio, CohortSummary, RiskState, GrowthStage } from '../../types/index.js';
 
 export async function generateDigest(
@@ -16,19 +17,44 @@ export async function generateDigest(
   digestType: 'weekly' | 'yellow_pulse' | 'red_daily'
 ): Promise<Digest> {
   const mrr = await getMRRDecomposition(productId);
-  const mrrHealth = mrr ? computeHealthRatio(mrr) : { value: 0, indicator: 'green' as const };
+  // A COMPANY WITH NO REVENUE DATA IS NOT A HEALTHY ONE. `computeHealthRatio`
+  // was deliberately changed to return `{ value: null, indicator: 'unknown' }`
+  // — its comment says "a company with no new MRR to divide by got a ratio of 0
+  // and an indicator of GREEN, the most reassuring answer available, for the
+  // absence of the measurement" — and this call site handed back green/0 anyway
+  // whenever there was no decomposition at all, re-introducing the defect one
+  // level up. `MRRHealthRatio.indicator` carries 'unknown' for exactly this.
+  const mrrHealth = mrr
+    ? computeHealthRatio(mrr)
+    : { value: null, indicator: 'unknown' as const };
   const cohort = await getLatestCohortSummary(productId);
   const metricsResult = await getLatestMetrics(productId);
   const metricsRow = metricsResult.rows[0] as Record<string, unknown> | undefined;
 
+  // ONE NULL, SUBSTITUTED IN OPPOSITE DIRECTIONS INSIDE ONE OBJECT LITERAL.
+  //
+  // These four columns are nullable REAL with no default, and the daily job
+  // writes a placeholder snapshot carrying only (id, product_id, snapshot_date)
+  // — which `getLatestMetrics` then returns as the latest row. So on the
+  // ordinary weekly path every one of them was NULL, and `?? 0` turned churn
+  // into FLAWLESS RETENTION while turning activation and day-30 retention into
+  // TOTAL PRODUCT FAILURE. The same absence, read as the best possible news and
+  // the worst possible news, in adjacent lines.
+  //
+  // It then went to a model as ground truth and to the founder's inbox as
+  // "Activation: 0.0%". `services/ai/measured.ts` exists because four agents did
+  // this with the same columns; its header says so. This was the fifth reader,
+  // and the only one whose output is emailed.
+  const n = (v: unknown): number | null =>
+    (v === null || v === undefined ? null : Number(v));
   const metrics: DashboardMetrics = {
-    signups_7d: (metricsRow?.signups_7d as number) ?? 0,
-    active_users: (metricsRow?.active_users as number) ?? 0,
-    activation_rate: (metricsRow?.activation_rate as number) ?? 0,
-    day_30_retention: (metricsRow?.day_30_retention as number) ?? 0,
-    support_volume_7d: (metricsRow?.support_volume_7d as number) ?? 0,
-    nps_score: (metricsRow?.nps_score as number) ?? 0,
-    churn_rate: (metricsRow?.churn_rate as number) ?? 0,
+    signups_7d: n(metricsRow?.signups_7d),
+    active_users: n(metricsRow?.active_users),
+    activation_rate: n(metricsRow?.activation_rate),
+    day_30_retention: n(metricsRow?.day_30_retention),
+    support_volume_7d: n(metricsRow?.support_volume_7d),
+    nps_score: n(metricsRow?.nps_score),
+    churn_rate: n(metricsRow?.churn_rate),
   };
 
   // Get stressors
@@ -129,7 +155,7 @@ async function generateNarrative(
 
   let prompt = `Write a 3-5 sentence COO summary of this product's week.
 Risk state: ${riskState}
-Metrics: ${JSON.stringify(metrics)}
+Metrics: signups (7d) ${measured(metrics.signups_7d)}, active users ${measured(metrics.active_users)}, activation ${pctOfFraction(metrics.activation_rate)}, day-30 retention ${pctOfFraction(metrics.day_30_retention)}, churn ${pctOfFraction(metrics.churn_rate)}, NPS ${measured(metrics.nps_score)}, support volume (7d) ${measured(metrics.support_volume_7d)}
 MRR: ${JSON.stringify(mrr)}
 Active stressors: ${stressors.length > 0 ? stressors.map((s) => s.name).join(', ') : 'None'}`;
 

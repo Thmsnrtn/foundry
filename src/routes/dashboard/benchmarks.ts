@@ -15,15 +15,40 @@ export const benchmarks = new Hono<AuthEnv>();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const BENCHMARK_METRICS: Array<{ key: string; label: string; unit: string; higherIsBetter: boolean }> = [
-  { key: 'mrr_growth_rate', label: 'MRR Growth Rate', unit: '%', higherIsBetter: true },
-  { key: 'churn_rate', label: 'Churn Rate', unit: '%', higherIsBetter: false },
-  { key: 'activation_rate', label: 'Activation Rate', unit: '%', higherIsBetter: true },
-  { key: 'cac_payback_months', label: 'CAC Payback', unit: 'mo', higherIsBetter: false },
-  { key: 'nrr', label: 'Net Revenue Retention', unit: '%', higherIsBetter: true },
+// THE UNIT IS THE STORED ONE, NOT THE DISPLAYED ONE. Every entry here carried
+// `unit: '%'`, and the formatter printed `value.toFixed(1) + '%'` — but
+// `metric_snapshots.churn_rate` and `.activation_rate` are 0–1 FRACTIONS, pinned
+// by the ingest validator's `z.number().min(0).max(1)` and converted with `* 100`
+// on every other surface in the product. So a company with a 65% activation rate
+// read "0.7%" here, and 5% churn read "0.1%", while the P25/Median/P75 row —
+// fed the same fractions from `benchmark_percentiles` — collapsed to
+// "0.0% / 0.1% / 0.1%". This one page contradicted the rest of the product about
+// the founder's own numbers.
+//
+// Declaring what the column HOLDS, rather than what the card should say, is what
+// stops the next metric inheriting a '%' that means something else.
+//
+// THREE METRICS WERE REMOVED rather than left rendering nothing: MRR Growth
+// Rate and Net Revenue Retention are not columns on `metric_snapshots` at all,
+// so `snap[key]` was `undefined` on every load, and CAC Payback lives on
+// `business_model_profile`, which this page does not read. None of the three is
+// ever submitted to the benchmark pool either (`jobs/index.ts` contributes churn
+// and activation only), so no peer band could exist for them. Three permanently
+// empty cards on a page whose whole purpose is comparison is a claim to
+// benchmark things Foundry does not benchmark. Each comes back when its value
+// and its pool contribution both do.
+export const BENCHMARK_METRICS: Array<{
+  key: string;
+  label: string;
+  /** The unit the COLUMN is in. `fraction` is 0–1 and is rendered as percent. */
+  stored: 'fraction';
+  higherIsBetter: boolean;
+}> = [
+  { key: 'churn_rate', label: 'Churn Rate', stored: 'fraction', higherIsBetter: false },
+  { key: 'activation_rate', label: 'Activation Rate', stored: 'fraction', higherIsBetter: true },
 ];
 
-function percentileLabel(pct: number, higherIsBetter: boolean): { label: string; color: string } {
+export function percentileLabel(pct: number, higherIsBetter: boolean): { label: string; color: string } {
   const good = higherIsBetter ? pct >= 75 : pct <= 25;
   const aboveMedian = higherIsBetter ? pct >= 50 : pct <= 50;
 
@@ -33,10 +58,44 @@ function percentileLabel(pct: number, higherIsBetter: boolean): { label: string;
   return { label: 'Below median', color: '#ffb347' };
 }
 
-function fmtMetricValue(value: number | null, unit: string): string {
+/**
+ * WHERE A COMPANY SITS AGAINST ITS PEERS, or null when that cannot be said.
+ *
+ * A RANK AGAINST PEERS IS A FINDING, SO IT NEEDS A VALUE TO FIND IT FROM. This
+ * was inline and started at 50, staying there whenever the company had not
+ * reported the metric or the pool had no bands — and `percentileLabel(50, …)`
+ * returns 'Above median' for BOTH directions. So a founder whose latest
+ * snapshot had `churn_rate = NULL` read "Churn Rate — · Above median · vs 40
+ * companies": the value column honestly saying nothing was measured, and the
+ * verdict beside it claiming they beat the median of forty peers on a number
+ * Foundry has never seen.
+ *
+ * Lifted out of the handler so the absent case can be run rather than read.
+ */
+export function rankAgainstPeers(
+  yourValue: number | null,
+  p25: number | null,
+  p50: number | null,
+  p75: number | null,
+  higherIsBetter: boolean,
+): number | null {
+  if (yourValue === null || p25 === null || p50 === null || p75 === null) return null;
+  if (higherIsBetter) {
+    if (yourValue >= p75) return 80;
+    if (yourValue >= p50) return 65;
+    if (yourValue >= p25) return 35;
+    return 15;
+  }
+  // Lower is better — invert.
+  if (yourValue <= p25) return 80;
+  if (yourValue <= p50) return 65;
+  if (yourValue <= p75) return 35;
+  return 15;
+}
+
+export function fmtMetricValue(value: number | null, stored: 'fraction'): string {
   if (value === null || value === undefined) return '—';
-  if (unit === '%') return `${value.toFixed(1)}%`;
-  if (unit === 'mo') return `${value.toFixed(1)} mo`;
+  if (stored === 'fraction') return `${(value * 100).toFixed(1)}%`;
   return String(value);
 }
 
@@ -93,7 +152,7 @@ benchmarks.get('/benchmarks', requireTier('benchmarks'), async (c) => {
           <div style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;">
             <div>
               <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.25rem;">${metric.label}</div>
-              <div style="font-size:1.3rem;font-weight:700;color:var(--text-primary);">${fmtMetricValue(yourValue, metric.unit)}</div>
+              <div style="font-size:1.3rem;font-weight:700;color:var(--text-primary);">${fmtMetricValue(yourValue, metric.stored)}</div>
             </div>
             <div style="font-size:0.8rem;color:var(--text-muted);">No benchmark data</div>
           </div>
@@ -106,34 +165,20 @@ benchmarks.get('/benchmarks', requireTier('benchmarks'), async (c) => {
     const p75 = bench.p75 as number | null;
     const sampleCount = bench.sample_count as number | null;
 
-    // Compute percentile rank for your value
-    let yourPercentile = 50;
-    if (yourValue !== null && p25 !== null && p50 !== null && p75 !== null) {
-      if (metric.higherIsBetter) {
-        if (yourValue >= p75) yourPercentile = 80;
-        else if (yourValue >= p50) yourPercentile = 65;
-        else if (yourValue >= p25) yourPercentile = 35;
-        else yourPercentile = 15;
-      } else {
-        // Lower is better — invert
-        if (yourValue <= p25) yourPercentile = 80;
-        else if (yourValue <= p50) yourPercentile = 65;
-        else if (yourValue <= p75) yourPercentile = 35;
-        else yourPercentile = 15;
-      }
-    }
+    const yourPercentile = rankAgainstPeers(yourValue, p25, p50, p75, metric.higherIsBetter);
 
-    const { label: pLabel, color: pColor } = percentileLabel(
-      yourPercentile,
-      metric.higherIsBetter
-    );
+    const ranked = yourPercentile === null
+      ? null
+      : percentileLabel(yourPercentile, metric.higherIsBetter);
+    const pLabel = ranked?.label ?? 'Not measured';
+    const pColor = ranked?.color ?? 'var(--text-muted)';
 
     return html`
       <div class="card" style="padding:1.25rem;margin-bottom:0.75rem;">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
           <div>
             <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.25rem;">${metric.label}</div>
-            <div style="font-size:1.5rem;font-weight:700;color:var(--text-primary);">${fmtMetricValue(yourValue, metric.unit)}</div>
+            <div style="font-size:1.5rem;font-weight:700;color:var(--text-primary);">${fmtMetricValue(yourValue, metric.stored)}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);">Your value</div>
           </div>
           <div style="text-align:right;">
@@ -152,13 +197,13 @@ benchmarks.get('/benchmarks', requireTier('benchmarks'), async (c) => {
             <!-- P75 marker -->
             ${p75 !== null ? html`<div style="position:absolute;top:-4px;bottom:-4px;left:75%;width:1px;background:rgba(255,255,255,0.2);"></div>` : ''}
             <!-- Your position indicator -->
-            ${yourValue !== null ? html`<div style="position:absolute;top:50%;left:${yourPercentile}%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:${pColor};border:2px solid var(--bg-card);z-index:1;"></div>` : ''}
+            ${yourPercentile !== null ? html`<div style="position:absolute;top:50%;left:${yourPercentile}%;transform:translate(-50%,-50%);width:14px;height:14px;border-radius:50%;background:${pColor};border:2px solid var(--bg-card);z-index:1;"></div>` : ''}
           </div>
           <!-- Labels -->
           <div style="display:flex;justify-content:space-between;margin-top:0.5rem;font-size:0.67rem;color:var(--text-muted);">
-            <span>P25: ${fmtMetricValue(p25, metric.unit)}</span>
-            <span>Median: ${fmtMetricValue(p50, metric.unit)}</span>
-            <span>P75: ${fmtMetricValue(p75, metric.unit)}</span>
+            <span>P25: ${fmtMetricValue(p25, metric.stored)}</span>
+            <span>Median: ${fmtMetricValue(p50, metric.stored)}</span>
+            <span>P75: ${fmtMetricValue(p75, metric.stored)}</span>
           </div>
         </div>
       </div>

@@ -276,7 +276,11 @@ Be specific: use actual numbers when available.`,
  * Get the most recent weekly compressed brief for a product.
  */
 export async function getLatestCompressedBrief(productId: string): Promise<{
-  health_score: number;
+  /** Null when nothing has scored this company. Migration 190 made the column
+   *  nullable for this reason and the writer 200 lines above stores NULL; this
+   *  reader turned it back into 50 before anyone could see it, so the route's
+   *  "not scored" branch could never execute. */
+  health_score: number | null;
   health_trend: string;
   one_sentence_status: string;
   top_3: string[];
@@ -314,7 +318,7 @@ export async function getLatestCompressedBrief(productId: string): Promise<{
   }
 
   return {
-    health_score: (r.health_score as number) ?? 50,
+    health_score: (r.health_score as number | null) ?? null,
     health_trend: (r.health_trend as string) ?? 'stable',
     one_sentence_status: (r.one_sentence_status as string) ?? '',
     top_3: top3,

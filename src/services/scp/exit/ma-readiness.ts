@@ -5,6 +5,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { ratePoints } from '../../ai/measured.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,7 +41,9 @@ function parseJSONSafe<T>(value: string | null | undefined, fallback: T): T {
 
 // ─── Dimension Scorers ────────────────────────────────────────────────────────
 
-function scoreRevenueQuality(
+/** Exported for the units test: the churn band is compared in percentage
+ *  points and the column is a fraction, which is only checkable by running it. */
+export function scoreRevenueQuality(
   nrr: number | null,
   churnRate: number | null,
   mrrGrowthHistory: number[],
@@ -56,11 +59,27 @@ function scoreRevenueQuality(
     points += 2; // neutral if unknown
   }
 
-  // Churn
-  if (churnRate !== null) {
-    if (churnRate <= 2) points += 3;
-    else if (churnRate <= 3) points += 2;
-    else if (churnRate <= 5) points += 1;
+  // Churn. THE THRESHOLDS ARE PERCENTAGE POINTS AND THE COLUMN IS A FRACTION.
+  //
+  // `metric_snapshots.churn_rate` is stored 0–1 — the ingest validator pins it
+  // with `z.number().min(0).max(1)` and every display path multiplies by 100.
+  // Compared raw against 2/3/5, EVERY measured churn rate cleared the best
+  // band, including a company churning 100% of its revenue a month, which
+  // arrives here as 1.
+  //
+  // The tell was inside the branch. A MEASURED churn scored 3 of 3
+  // unconditionally while an UNKNOWN one scored 1: the fallback and the
+  // measurement disagreed about the arithmetic that follows, which is what a
+  // units bug looks like from the outside. NRR two branches up is converted to
+  // percentage points before its own 110/100/90 comparison, so churn was the
+  // odd one out in its own function.
+  //
+  // `ratePoints` exists for exactly this and carries the same explanation.
+  const churnPct = ratePoints(churnRate);
+  if (churnPct !== null) {
+    if (churnPct <= 2) points += 3;
+    else if (churnPct <= 3) points += 2;
+    else if (churnPct <= 5) points += 1;
   } else {
     points += 1;
   }
