@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `eec5785`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `d06c000`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `eec5785` — **344 files / 3,039 tests**,
+- **Validation:** full suite green at `d06c000` — **345 files / 3,044 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Read the exit code from the run that produced the log.**
   **Read the exit code from the run that produced the log**, and do not write
@@ -705,9 +705,30 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    `rowsAffected ?? 0 > 0`, where zero genuinely means none. It would be mostly
    baseline. This stays a reading habit.
 
-   **Where it has not been run:** `services/intelligence/{global,peer-signal,
-   shippability,briefing-telemetry,cohort,regulatory}.ts` and
-   `integration/slack.ts`. Everything else in both directories is done.
+   **A SECOND gate was measured and also not built** — the mirror of
+   `check-write-only-columns`: columns that are READ and written by nothing,
+   which is what `local_currency_mrr` was. A rough scan returns **347**, and the
+   list is swamped by columns written by SQL triggers, by `ON CONFLICT … DO
+   UPDATE SET`, and by column DEFAULTs — none of which an INSERT/UPDATE regex
+   sees. Making it precise is real work for a signal that reading already
+   finds. **Both measurements are recorded so the next steward does not
+   re-derive them**, and the instructive part is that the one real instance was
+   found by reading a file, not by either scanner.
+
+   **`services/intelligence/` IS NOW DONE, and `global.ts` held the last
+   finding — a new shape worth naming: A COLUMN NOTHING CAN WRITE, WITH A READER
+   THAT FALLS BACK.** `GET /api/currency-health` reported FX erosion from
+   `local_currency_mrr` and `exchange_rate`, two columns migration 011 added and
+   nothing has ever filled — no ingest field, no integration, no route, no job.
+   The `?? 0` on both sides was therefore the ENTIRE input, and zero-minus-zero
+   reads as a flat local trend, which against a declining USD one IS the erosion
+   condition. It fired whenever the other series fell, and that series was
+   `new_mrr_cents` — a movement compared against what would have been a level.
+   Retired with both columns in migration 193.
+
+   **`{peer-signal,shippability,briefing-telemetry,cohort,regulatory}.ts` are
+   clean:** their `?? 0` are on SQL COUNT aggregates, where zero rows genuinely
+   is zero. `integration/slack.ts` stores no counts.
    **Checked and clean, recorded so nobody re-reads them:** `risk-state.ts`
    (every input explicitly null-guarded before it contributes),
    `scp/investor/fundraising-readiness.ts` (uses `ratePoints`, and its `?? 0`

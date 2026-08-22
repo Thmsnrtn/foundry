@@ -16,13 +16,13 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `eec5785` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `d06c000` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **228 files**, highest number **192**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **344 files / 3,039 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **The intermittent native abort has not recurred.** It ran at roughly one run in three before `closeDb` landed; 60 completed runs in this session's scratchpad carry zero abort signatures, on top of the 39 counted earlier. **The mechanism was never observed, so this is not a diagnosis** — see the live frontier item 4, which says what would eliminate the hypothesis and why not to spend more runs accumulating the same evidence. |
+| Validation | Full suite green: **345 files / 3,044 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **The intermittent native abort has not recurred.** It ran at roughly one run in three before `closeDb` landed; 60 completed runs in this session's scratchpad carry zero abort signatures, on top of the 39 counted earlier. **The mechanism was never observed, so this is not a diagnosis** — see the live frontier item 4, which says what would eliminate the hypothesis and why not to spend more runs accumulating the same evidence. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
 | Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **26** · write-only columns **69** · tables written and never read **4** · **unscoped product-shaped routes 2** (new). |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -563,6 +563,21 @@ trust deficit and a supply imbalance. A stressor fires only on a measured value.
 (`(x ?? 0) < threshold`) appears in 16 files, and all but two are
 `rowsAffected ?? 0 > 0`, where zero genuinely means none. A gate would be mostly
 baseline. The lens stays a reading habit rather than a scanner.
+
+**A COLUMN NOTHING CAN WRITE, WITH A READER THAT FALLS BACK.** The sharpest form
+of the substitution problem, because the fallback is not a stand-in for missing
+data — it is the ONLY value the expression can ever have.
+`metric_snapshots.local_currency_mrr` and `exchange_rate` were added by migration
+011 and never written by anything, and `GET /api/currency-health` reported FX
+erosion computed entirely from their `?? 0`. Retired with both columns in
+migration 193. **When a fallback's branch is the only branch, the feature is not
+degraded — it does not exist.**
+
+**Measured, and this gate not built either:** a mirror of
+`check-write-only-columns` — columns READ and written by nothing — returns 347,
+swamped by columns written by SQL triggers, by `ON CONFLICT … DO UPDATE SET`, and
+by DEFAULTs, none of which an INSERT/UPDATE regex sees. The one real instance was
+found by reading a file, not by a scanner.
 
 **A COUNT FROM A CAPPED PAGE IS A FLOOR, AND MUST BE NAMED ONE.** Four
 integration summaries reported `length` of a limited fetch under the name of a
