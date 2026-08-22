@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `e0ceb91`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `cb7fbeb`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `e0ceb91` — **346 files / 3,050 tests**,
+- **Validation:** full suite green at `cb7fbeb` — **347 files / 3,060 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Read the exit code from the run that produced the log.**
   **Read the exit code from the run that produced the log**, and do not write
@@ -620,11 +620,23 @@ different answers.** Read end to end this cycle so nobody re-reads it:
   Attributing in either direction would manufacture the number. **Do not "fix"
   this by wiring an attribution; it is open because closing it honestly needs a
   price nobody records.**
-- **`briefing-share.ts`, `taste-journal.ts`, `ai/composer.ts`, `views/numbers.ts`,
-  `lib/{env,request}.ts`, `mcp/cli.ts`, `prompts/voice-judge.ts`,
-  `support-pilot-readiness.ts`, `intelligence/{benchmarks,shippability}.ts`**
-  are unexamined. Each is a product question of the same kind as item 2, not a
-  defect: a feature whose reading half exists and whose calling half does not.
+- **`views/numbers.ts` was worth reading even though it stays unreachable.** It
+  calls itself the contract for how every number on the dashboard is rendered,
+  and it ENCODED THE TWO AMBIGUITIES this cycle spent its time removing:
+  `formatPct(n)` would have rendered a 0–1 rate as "0.05%", and
+  `formatUsdK(amount)` would have rendered `mrr_cents` as "$5000K". Fixed before
+  it has a caller, which is the cheapest that fix will ever be. **The unit
+  belongs in the name, because the name is the only thing that survives a
+  copy-paste.**
+- **`taste-journal.ts` is a whole feature, not a missing wire.** Both halves —
+  the founder rating and the agent reading it as ground truth — live inside the
+  one unreachable module; no route writes and no agent reads. Unlike the OKR
+  form and the Scribe wiki, there is nothing here to connect. Owner's call.
+- **`briefing-share.ts`, `ai/composer.ts`, `lib/{env,request}.ts`, `mcp/cli.ts`,
+  `prompts/voice-judge.ts`, `support-pilot-readiness.ts`,
+  `intelligence/{benchmarks,shippability}.ts`** are unexamined. Each is a
+  product question of the same kind as item 2, not a defect: a feature whose
+  reading half exists and whose calling half does not.
 
 ## Highest-value current opportunities
 

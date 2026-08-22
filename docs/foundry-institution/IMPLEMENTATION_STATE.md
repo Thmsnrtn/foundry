@@ -16,13 +16,13 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `e0ceb91` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `cb7fbeb` on `claude/foundry-autonomous-continuation-0gents`.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **228 files**, highest number **192**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **346 files / 3,050 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **The intermittent native abort has not recurred.** It ran at roughly one run in three before `closeDb` landed; 60 completed runs in this session's scratchpad carry zero abort signatures, on top of the 39 counted earlier. **The mechanism was never observed, so this is not a diagnosis** — see the live frontier item 4, which says what would eliminate the hypothesis and why not to spend more runs accumulating the same evidence. |
+| Validation | Full suite green: **347 files / 3,060 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **The intermittent native abort has not recurred.** It ran at roughly one run in three before `closeDb` landed; 60 completed runs in this session's scratchpad carry zero abort signatures, on top of the 39 counted earlier. **The mechanism was never observed, so this is not a diagnosis** — see the live frontier item 4, which says what would eliminate the hypothesis and why not to spend more runs accumulating the same evidence. |
 | CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
 | Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **26** · write-only columns **69** · tables written and never read **4** · **unscoped product-shaped routes 2** (new). |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -526,6 +526,14 @@ reported nothing. **When a fallback and the measurement it replaces disagree
 about the arithmetic that follows them, one of them is in the wrong unit.**
 Swept afterwards: every other reader of `churn_rate`, `activation_rate`,
 `day_30_retention` and `mrr_health_ratio` handles the fraction correctly.
+
+**AND THE UNIT BELONGS IN THE NAME, because the name is the only thing that
+survives a copy-paste.** `views/numbers.ts` — the proposed contract for rendering
+every dashboard number — offered `formatPct(n)` and `formatUsdK(amount)`, either
+of which would have handed the fraction-versus-points and dollars-versus-cents
+ambiguity to every caller that adopted it. They are `formatPctPoints`,
+`formatUsdFromDollars` and `formatUsdFromCents` now, fixed before the contract
+has a single caller.
 
 **Rates are stored as 0–1 fractions.** `activation_rate`, `churn_rate`,
 `day_30_retention`, `mrr_health_ratio` — the ingest validates that range and
