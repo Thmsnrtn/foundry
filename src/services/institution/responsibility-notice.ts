@@ -50,11 +50,37 @@ export type NoticeRefusal =
   | 'recipient_required' | 'content_required' | 'content_too_large'
   | 'responsibility_invalid' | 'not_assisting' | 'no_authority';
 
-/** Stable identity for one authored notice, so re-submitting the same words to
- * the same person converges instead of queueing a second one. */
-function noticeId(productId: string, responsibilityId: string, recipient: string, body: string): string {
+/**
+ * Stable identity for one authored notice, so re-submitting the same words to
+ * the same person converges instead of queueing a second one.
+ *
+ * THE SUBJECT IS PART OF THE SAME WORDS, and it was outside this hash. It is
+ * founder-authored, required on the form, validated with the body, and it is
+ * the first thing the recipient reads. Two notices to the same person with the
+ * same body under different headings therefore collapsed into one: the second
+ * came back `duplicate: true`, was never stored, and the route — which ignores
+ * `duplicate` — redirected as success. If "Send it for me" was ticked, the
+ * planner re-read the STORED notice and dispatched the FIRST subject. A founder
+ * correcting a typo in a heading watched the old one go out, under a form that
+ * says "I send your words exactly as written".
+ *
+ * The sibling path is the asymmetry that showed it was a defect rather than a
+ * design: `support-reply.ts` hashes only the body too, but its route supplies
+ * no subject at all — the subject is derived server-side there. This was the
+ * only path putting a founder-authored field outside its own identity.
+ *
+ * One transition cost, stated rather than hidden: notices stored before this
+ * change hashed without the subject, so re-submitting one of those exact
+ * notices creates a second row once instead of converging. That is a duplicate
+ * a founder can see and delete; the alternative was sending the wrong heading.
+ */
+function noticeId(
+  productId: string, responsibilityId: string, recipient: string,
+  subject: string, body: string,
+): string {
   return 'notice_' + createHash('sha256')
-    .update([productId, responsibilityId, recipient, body].join('\n')).digest('hex').slice(0, 32);
+    .update([productId, responsibilityId, recipient, subject, body].join('\n'))
+    .digest('hex').slice(0, 32);
 }
 
 /**
@@ -81,7 +107,7 @@ export async function proposeResponsibilityNotice(input: {
   )).rows[0] as Record<string, unknown> | undefined;
   if (!owned) return { refused: 'responsibility_invalid' };
 
-  const id = noticeId(input.productId, input.responsibilityId, recipient, body);
+  const id = noticeId(input.productId, input.responsibilityId, recipient, subject, body);
   const existing = await findNotice(input.productId, id);
   if (existing) return { notice: existing, duplicate: true };
 

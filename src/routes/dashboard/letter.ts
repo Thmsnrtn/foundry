@@ -342,6 +342,10 @@ const customerMessageSection = (
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">Your reply was sent. Whether it settled anything is a separate question, and still open.</div>
         ` : item.state === 'failed' ? html`
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">The send did not complete. Nothing was silently retried.</div>
+        ` : item.state === 'refused' ? html`
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">I did not send this. Permission for this responsibility was withdrawn before it went out, so I closed it rather than carrying it anyway. Give permission again and write it once more if you still want it sent.</div>
+        ` : item.state === 'sending' ? html`
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">This one is mid-send and I do not yet know how it ended. I will not retry it behind your back.</div>
         ` : item.state === 'planned' ? html`
           <div style="font-size:0.78rem;color:var(--text-primary);margin-top:0.4rem;">Ready to send, in your words:</div>
           <div style="font-size:0.82rem;color:var(--text-muted);white-space:pre-wrap;">${item.proposal}</div>

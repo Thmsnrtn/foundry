@@ -25,6 +25,7 @@ import { query } from '../../db/client.js';
 import { buildInsert } from '../../db/schema/kernel.js';
 import { resolveDecision } from '../decisions/queue.js';
 import { log } from '../../lib/logger.js';
+import { foundryJudgementTestedSql, foundryJudgementWasTested } from '../decisions/foundry-proposed.js';
 
 export type AutopilotMode = 'shadow' | 'suggest' | 'act';
 export const AUTOPILOT_GRACE_HOURS = 12;
@@ -151,6 +152,10 @@ export async function getShadowStats(productId: string): Promise<ShadowStats[]> 
        AND recommendation IS NOT NULL AND chosen_option IS NOT NULL
        AND TRIM(recommendation) != ''
      GROUP BY category`,
+    // The agreement test above is the same rule as
+    // `foundryJudgementTestedSql`, restricted to founder-resolved rows because
+    // a shadow ledger is by definition about decisions Foundry did not make.
+
     [productId],
   );
   return (r.rows as unknown as Array<Record<string, unknown>>).map((row) => {
@@ -167,18 +172,6 @@ export async function getShadowStats(productId: string): Promise<ShadowStats[]> 
 
 // ── The feedback edge (AcreOS experienceLog semantics): autonomy is earned on
 // RESOLVED outcomes only — pending banks nothing. ─────────────────────────────
-
-/** Was this outcome a test of FOUNDRY's judgement, rather than of the
- *  founder's? Either Foundry decided it, or Foundry named an option and the
- *  founder chose that one. Compared the same way `getShadowStats` compares
- *  them, so the ledger and the letter cannot disagree about what agreement is. */
-function foundrysJudgementWasTested(r: Record<string, string | number | null>): boolean {
-  if (r.decided_by === 'second_self') return true;
-  const recommended = typeof r.recommendation === 'string' ? r.recommendation.trim().toLowerCase() : '';
-  const chosen = typeof r.chosen_option === 'string' ? r.chosen_option.trim().toLowerCase() : '';
-  // An empty recommendation is not agreement with an empty choice.
-  return recommended.length > 0 && recommended === chosen;
-}
 
 /** Count each measured decision outcome into the ledger exactly once:
  *  positive AND attributable to Foundry's judgement → clean cycle (progress
@@ -226,7 +219,7 @@ export async function processOutcomeFeedback(productId: string): Promise<{ clean
     const category = (r.category as string) ?? 'uncategorized';
     // outcome_valence is an INTEGER column: 1 positive, -1 negative, 0 mixed.
     const valence = Number(r.outcome_valence);
-    if (valence === 1 && foundrysJudgementWasTested(r)) {
+    if (valence === 1 && foundryJudgementWasTested(r)) {
       cleanCycles++;
       await recordCleanCycle(productId, category);
     } else if (valence === -1 && r.decided_by === 'second_self') {

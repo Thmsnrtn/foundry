@@ -10,11 +10,16 @@ import { query } from '../../../db/client.js';
 
 export interface DecisionQualityTrends {
   average_quality_score: number | null;
-  decisions_with_full_context_pct: number;
+  /** Null when nothing has been scored. `decision_quality_scores` has no
+   *  writer today, so this is the ordinary case, and 0 rendered red as a
+   *  finding about how carelessly the founder decides. */
+  decisions_with_full_context_pct: number | null;
   best_decision_time_of_day: string;
   worst_decision_time_of_day: string;
-  override_rate_30d: number;
-  override_rate_90d: number;
+  /** Null when nothing has been scored. The same empty table read as 0 here
+   *  rendered GREEN — a compliment — beside the red one above. */
+  override_rate_30d: number | null;
+  override_rate_90d: number | null;
   trend: 'improving' | 'declining' | 'stable';
 }
 
@@ -55,7 +60,16 @@ export async function getDecisionQualityTrends(productId: string): Promise<Decis
   const contextRow = contextResult.rows[0] as Record<string, unknown> | undefined;
   const ctxTotal = (contextRow?.total as number) ?? 0;
   const ctxFull = (contextRow?.full_context as number) ?? 0;
-  const decisions_with_full_context_pct = ctxTotal > 0 ? ctxFull / ctxTotal : 0;
+  // A RATE OVER NO DECISIONS IS NOT ZERO PERCENT. `decision_quality_scores`
+  // has no writer — `recordDecisionContext` in this file is called from nowhere
+  // — so this was permanently the substituted 0, rendered by
+  // /founder-intelligence as "Full Context 0%" in RED: a threshold firing on a
+  // value nobody measured, presented to the founder as a finding about how
+  // carelessly they decide. `average_quality_score` twenty lines above already
+  // returns null for the same empty table, and the sibling module
+  // `founder/intelligence.ts` already types these as `number | null` and says
+  // why. This was the last reader still substituting.
+  const decisions_with_full_context_pct = ctxTotal > 0 ? ctxFull / ctxTotal : null;
 
   // Best and worst time of day by average quality score
   const timeResult = await query(
@@ -88,8 +102,12 @@ export async function getDecisionQualityTrends(productId: string): Promise<Decis
   const overrides30d = (overrideRow?.overrides_30d as number) ?? 0;
   const total90d = (overrideRow?.total_90d as number) ?? 0;
   const overrides90d = (overrideRow?.overrides_90d as number) ?? 0;
-  const override_rate_30d = total30d > 0 ? overrides30d / total30d : 0;
-  const override_rate_90d = total90d > 0 ? overrides90d / total90d : 0;
+  // The same empty table, and this 0 rendered GREEN — "Override Rate 0%" as a
+  // compliment about how rarely the founder overrides their agents, beside the
+  // red one above. One absence, presented as a criticism and a compliment on
+  // the same page.
+  const override_rate_30d = total30d > 0 ? overrides30d / total30d : null;
+  const override_rate_90d = total90d > 0 ? overrides90d / total90d : null;
 
   // Trend: compare average quality in last 30d vs prior 30d
   const trendResult = await query(

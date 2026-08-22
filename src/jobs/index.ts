@@ -2287,7 +2287,10 @@ export async function fleetLetterNotify(): Promise<void> {
           : 'info',
         title: top ? `Your letter: ${top.what} needs you` : 'Your letter is ready',
         body: top
-          ? `Top of ${letter.needsYou.length} across ${letter.products.length} companies: ${top.what} (${top.productName}).`
+          // `needsYou` is capped at MAX_NEEDS_YOU for the page, so this read
+          // `Top of 5` whatever the real number of asks was — a count of the
+          // cap, printed as a count of the fleet.
+          ? `Top of ${letter.needsYouTotal} across ${letter.products.length} companies: ${top.what} (${top.productName}).`
           : `What ran across your ${letter.products.length} companies while you were away.`,
         actionUrl: '/letter',
         actionLabel: 'Read the letter',

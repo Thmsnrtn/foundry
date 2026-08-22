@@ -206,10 +206,30 @@ export async function planProposedReply(input: {
 }
 
 export type SupportReplyState =
-  'message_only' | 'proposed' | 'planned' | 'sent' | 'failed';
+  'message_only' | 'proposed' | 'planned' | 'sending' | 'refused' | 'sent' | 'failed';
 
-/** What the founder is looking at, as distinct states that must never collapse
- * into one another on screen. */
+/**
+ * What the founder is looking at, as distinct states that must never collapse
+ * into one another on screen.
+ *
+ * THEY COLLAPSED. Every status that was not `executed` or `failed` mapped to
+ * 'planned', and two of them are neither planned nor sendable:
+ *
+ *   `rejected`  — the dispatch path found the authority withdrawn in the race
+ *                 window and closed it before sending. `executeAssistedSupportEmail`
+ *                 claims the plan `WHERE status='approved'`, which now matches
+ *                 nothing, so pressing "Send it" returns dispatched:false and
+ *                 the route redirects in silence. Meanwhile `planProposedReply`
+ *                 sees the row as live and returns duplicate:true, so nothing
+ *                 re-plans it either. The founder was shown "Ready to send, in
+ *                 your words:" over a reply no path could send and no path
+ *                 could explain.
+ *   `executing` — left behind when the send throws mid-flight. Shown as ready
+ *                 to send, with a button that would try to claim it again.
+ *
+ * The docstring above this function already said this must not happen. The
+ * states are named now, so the screen has somewhere to put them.
+ */
 export async function getSupportReplyState(
   productId: string, messageId: string,
 ): Promise<{
@@ -224,7 +244,11 @@ export async function getSupportReplyState(
   if (action) {
     const status = String(action.status);
     return {
-      state: status === 'executed' ? 'sent' : status === 'failed' ? 'failed' : 'planned',
+      state: status === 'executed' ? 'sent'
+        : status === 'failed' ? 'failed'
+        : status === 'rejected' ? 'refused'
+        : status === 'executing' ? 'sending'
+        : 'planned',
       actionId: String(action.id),
       outcome: action.outcome_status == null ? null : String(action.outcome_status),
       proposalId: action.reply_proposal_id == null ? null : String(action.reply_proposal_id),

@@ -161,3 +161,47 @@ describe('founder-authored responsibility notices', () => {
     expect(source).not.toMatch(/\bcomposer\b|anthropic|openai/i);
   });
 });
+
+describe('a subject the founder wrote is part of what they wrote', () => {
+  // The identity hashed (product, responsibility, recipient, body) and left the
+  // SUBJECT out — a founder-authored field, required on the form, validated with
+  // the body, and the first thing the recipient reads. Two notices to the same
+  // person with the same body under different headings collapsed into one: the
+  // second came back duplicate, was never stored, and the route ignores
+  // `duplicate` and redirects as success. With "Send it for me" ticked, the
+  // planner re-read the STORED notice and dispatched the FIRST subject — under a
+  // form that says "I send your words exactly as written".
+
+  it('does not treat a corrected subject as a duplicate of the old one', async () => {
+    const first = await proposeResponsibilityNotice({
+      productId: P, founderId: OWNER, responsibilityId: RESP,
+      recipient: 'teacher@example.com',
+      subject: 'Cover needed Thursady', body: 'Can you cover Thursday 6pm?',
+    });
+    const corrected = await proposeResponsibilityNotice({
+      productId: P, founderId: OWNER, responsibilityId: RESP,
+      recipient: 'teacher@example.com',
+      subject: 'Cover needed Thursday', body: 'Can you cover Thursday 6pm?',
+    });
+
+    expect('notice' in first && !first.duplicate).toBe(true);
+    expect('notice' in corrected && corrected.duplicate).toBe(false);
+    expect('notice' in corrected && corrected.notice.subject).toBe('Cover needed Thursday');
+    expect('notice' in first && 'notice' in corrected
+      && first.notice.id !== corrected.notice.id).toBe(true);
+  });
+
+  it('still converges when the same words are submitted twice', async () => {
+    const args = {
+      productId: P, founderId: OWNER, responsibilityId: RESP,
+      recipient: 'teacher2@example.com',
+      subject: 'Same heading', body: 'Same body.',
+    };
+    const once = await proposeResponsibilityNotice(args);
+    const twice = await proposeResponsibilityNotice(args);
+
+    expect('notice' in twice && twice.duplicate).toBe(true);
+    expect('notice' in once && 'notice' in twice
+      && once.notice.id === twice.notice.id).toBe(true);
+  });
+});

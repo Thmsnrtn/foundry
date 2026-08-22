@@ -83,8 +83,13 @@ export interface FleetLetter {
   founderId: string;
   composedAt: string;
   products: FleetProductLetter[];
-  /** Ranked across the whole fleet — [0] is THE one thing. */
+  /** Ranked across the fleet — [0] is THE one thing. Capped at
+   *  MAX_NEEDS_YOU for the page; `needsYouTotal` is how many asks there were. */
   needsYou: FleetNeedsYou[];
+  /** Every ask that entered the ranking, before the page cap. Printed to the
+   *  founder in the push, where `needsYou.length` was reporting the cap itself
+   *  and so read "Top of 5" whatever the real number was. */
+  needsYouTotal: number;
   /** Operator pack (Foundry's own operator only): the machine's health lines,
    *  riding the same letter — never a separate surface (no-fork rule). */
   system: string[];
@@ -145,6 +150,21 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
   );
 
   // Structured cross-fleet ranking — provenance-carrying, verifier-checkable.
+  //
+  // THE CAP USED TO KEEP THE WRONG 50. This read `ORDER BY d.created_at ASC
+  // LIMIT 50` — the fifty OLDEST pending decisions — and the score was then
+  // computed only over the rows that survived. Nothing that missed the cut could
+  // win, however high it would have scored, so a portfolio founder with fifty
+  // undated pending decisions had a gate-4 decision on a red-risk company
+  // created yesterday silently absent from an artifact whose type says "ranked
+  // across the whole fleet". The single-product letter, which orders by gate
+  // with no cap, WOULD have surfaced it — so the two letters disagreed and the
+  // fleet one, the one the job actually delivers, was the one that dropped it.
+  //
+  // The pending queue grows without bound (the expiry job only touches rows
+  // with a passed deadline), so a cap is right. It now orders by the terms that
+  // dominate the score — gate first, then deadline — so the cap keeps the
+  // candidates that could win, and it is four times larger.
   const pending = (await query(
     `SELECT d.id, d.product_id, d.what, d.gate, d.deadline, p.name as product_name,
             COALESCE(ls.risk_state, 'green') as risk_state
@@ -152,7 +172,8 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
        JOIN products p ON p.id = d.product_id
        LEFT JOIN lifecycle_state ls ON ls.product_id = d.product_id
       WHERE p.owner_id = ? AND d.status = 'pending' AND p.status != 'archived'
-      ORDER BY d.created_at ASC LIMIT 50`,
+      ORDER BY d.gate DESC, (d.deadline IS NULL) ASC, d.deadline ASC, d.created_at ASC
+      LIMIT 200`,
     [founderId],
   )).rows as unknown as Array<Record<string, unknown>>;
 
@@ -223,9 +244,10 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
   const openJudgments = judgmentItems.filter(
     (j) => j.kind === 'judgment' && j.evaluationState !== 'contradicted');
 
-  const needsYou: FleetNeedsYou[] = [
+  const allAsks: FleetNeedsYou[] = [
     ...overdue, ...contradicted, ...decisionItems, ...otherAsks, ...openJudgments,
-  ].slice(0, MAX_NEEDS_YOU);
+  ];
+  const needsYou: FleetNeedsYou[] = allAsks.slice(0, MAX_NEEDS_YOU);
 
   // Operator pack: system-health lines join the operator's letter only.
   let system: string[] = [];
@@ -247,6 +269,7 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
     composedAt: new Date().toISOString(),
     products: letters,
     needsYou,
+    needsYouTotal: allAsks.length,
     system,
     quiet,
   };

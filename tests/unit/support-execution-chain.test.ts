@@ -314,3 +314,60 @@ describe('the first production-facing support execution chain', () => {
     expect(callers('executeAssistedSupportEmail', 'responsibility-assisted-email.ts')).not.toEqual([]);
   });
 });
+
+/** A fresh inbound message with an approved reply plan against it, so each
+ *  state test can move one row without disturbing the chain above. */
+async function aPlannedReply(contact: string): Promise<{ messageId: string; actionId: string }> {
+  const ingested = await ingestCustomerMessage({
+    intakeKey, externalMessageId: `provider-${contact}`, contactEmail: contact,
+    subject: 'Another order', body: 'Any news on my order?',
+  });
+  if ('refused' in ingested) throw new Error(`fixture: ${ingested.refused}`);
+  const proposed = await proposeSupportReply({
+    productId: PRODUCT, founderId: OWNER, messageId: ingested.message.id,
+    body: 'On its way — tracking follows shortly.',
+  });
+  if ('refused' in proposed) throw new Error(`fixture: ${proposed.refused}`);
+  const planned = await planProposedReply({
+    productId: PRODUCT, founderId: OWNER, proposalId: proposed.proposal.id,
+  });
+  if (!planned.actionId) throw new Error('fixture: no plan');
+  return { messageId: ingested.message.id, actionId: planned.actionId };
+}
+
+describe('the states that must never collapse into one another', () => {
+  // Everything that was not `executed` or `failed` mapped to 'planned', which
+  // the letter renders as "Ready to send, in your words:" over a Send button.
+  // Two statuses are neither planned nor sendable, and both are real:
+  //
+  //   `rejected`  — the dispatch path found the authority withdrawn in the race
+  //                 window and closed it before sending. `executeAssistedSupportEmail`
+  //                 then claims `WHERE status='approved'`, matching nothing, so
+  //                 pressing Send returns dispatched:false and redirects in
+  //                 silence; and `planProposedReply` sees the row as live and
+  //                 returns duplicate, so nothing re-plans it. The founder was
+  //                 told a reply was queued that no path could send and no path
+  //                 could explain.
+  //   `executing` — left behind when the send throws mid-flight, shown as ready
+  //                 to send with a button that would try to claim it again.
+
+  it('shows a refused plan as refused, not as ready to send', async () => {
+    const { messageId, actionId } = await aPlannedReply('refused@example.com');
+    await query("UPDATE outbound_actions SET status='rejected' WHERE id=?", [actionId]);
+
+    expect(await getSupportReplyState(PRODUCT, messageId)).toMatchObject({ state: 'refused' });
+  });
+
+  it('shows a mid-flight send as mid-flight, not as ready to send', async () => {
+    const { messageId, actionId } = await aPlannedReply('inflight@example.com');
+    await query("UPDATE outbound_actions SET status='executing' WHERE id=?", [actionId]);
+
+    expect(await getSupportReplyState(PRODUCT, messageId)).toMatchObject({ state: 'sending' });
+  });
+
+  it('still shows an approved plan as ready to send', async () => {
+    const { messageId } = await aPlannedReply('ready@example.com');
+
+    expect(await getSupportReplyState(PRODUCT, messageId)).toMatchObject({ state: 'planned' });
+  });
+});
