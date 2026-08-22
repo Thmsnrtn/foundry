@@ -3397,7 +3397,6 @@
   preference_type TEXT NOT NULL, -- 'detail_level' | 'framing' | 'agent_trust' | 'override_pattern'
   preference_value TEXT NOT NULL,
   preference_waterfall_json TEXT, -- JSON: how liquidation preferences stack
-  preferences TEXT NOT NULL DEFAULT '{}',
   preferences TEXT,
   preferred_channel TEXT DEFAULT 'email',
   preferred_length TEXT DEFAULT 'medium',
@@ -3635,7 +3634,6 @@
   product_id TEXT NOT NULL,
   product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
-  product_id TEXT PRIMARY KEY REFERENCES products(id),
   product_id TEXT PRIMARY KEY REFERENCES products(id),
   product_id TEXT REFERENCES products(id)
   product_id TEXT REFERENCES products(id),
@@ -4231,7 +4229,6 @@
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -4359,7 +4356,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
 );
 );
 );
@@ -5154,7 +5150,6 @@ CREATE TABLE api_keys (
 CREATE TABLE audit_log (
 CREATE TABLE audit_scores (
 CREATE TABLE autonomy_consents (
-CREATE TABLE autopilot_config (
 CREATE TABLE autopilot_policies (
 CREATE TABLE benchmark_contributions (
 CREATE TABLE benchmark_percentiles (

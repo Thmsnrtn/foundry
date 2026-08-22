@@ -13,7 +13,7 @@ import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { getCategoryCalibration, calibrationHold } from '../../src/services/autopilot/calibration.js';
-import { runSelfAudit, deferenceLine } from '../../src/services/autopilot/self-audit.js';
+import { runFleetSelfAudit, deferenceLine } from '../../src/services/autopilot/self-audit.js';
 
 beforeAll(async () => {
   await runMigrations();
@@ -112,7 +112,7 @@ describe('self-audit catches over-deference', () => {
   });
 
   it('flags permission-seeking and menu-handing in system output only', async () => {
-    const audit = await runSelfAudit();
+    const audit = await runFleetSelfAudit();
     const kinds = audit.findings.map((f) => f.kind).sort();
     expect(kinds).toContain('permission_seeking');
     expect(kinds).toContain('menu_handing');

@@ -1,5 +1,4 @@
 agent_message_threads
-autopilot_config
 competitor_feature_tracking
 competitor_pricing_snapshots
 custom_webhook_sources

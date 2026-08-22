@@ -9,6 +9,19 @@
 //
 // Detection-only (never edits behavior); results surface in the operator
 // letter so the drift is visible and fixable. Deterministic — no model.
+//
+// FLEET-WIDE, AND THE NAME SAYS SO. This samples assistant output and
+// notifications across every company on the install, with no tenant filter, and
+// that is correct: it measures the machine, not a company, and its one caller
+// is the operator pack, which `letter/fleet.ts` reaches only for the operator
+// of Foundry-the-business. The scope is in the name because a scope that lives
+// only in a comment is one refactor away from being a cross-tenant read — the
+// same reason a rate carries its unit in its name.
+//
+// `findings` carry a 160-character excerpt of a real assistant message, which
+// is customer content. Nothing renders them today; `deferenceLine` emits counts
+// only. DO NOT put an excerpt on a founder-facing surface: the count is about
+// the fleet, and one company must never read another's words out of it.
 // =============================================================================
 
 import { query } from '../../db/client.js';
@@ -42,8 +55,10 @@ export interface DeferenceFinding {
 export interface SelfAuditResult {
   sampled: number;
   findings: DeferenceFinding[];
-  /** 0..1 — share of sampled system utterances that over-defer. */
-  deferenceRate: number;
+  /** 0..1 — share of sampled system utterances that over-defer. Null when
+   *  nothing was sampled: no output to read is not the same as output that
+   *  never over-defers, and only one of those two is good news. */
+  deferenceRate: number | null;
 }
 
 function detect(text: string): DeferenceFinding['kind'] | null {
@@ -56,8 +71,9 @@ function excerpt(text: string): string {
   return text.length > 160 ? text.slice(0, 157) + '…' : text;
 }
 
-/** Sample recent founder-facing system output and score deference drift. */
-export async function runSelfAudit(sampleSize = 100): Promise<SelfAuditResult> {
+/** Sample recent system output ACROSS THE FLEET and score deference drift.
+ *  `sampleSize` is per source, so the ceiling is twice it. */
+export async function runFleetSelfAudit(sampleSize = 100): Promise<SelfAuditResult> {
   const findings: DeferenceFinding[] = [];
   let sampled = 0;
 
@@ -90,14 +106,14 @@ export async function runSelfAudit(sampleSize = 100): Promise<SelfAuditResult> {
   return {
     sampled,
     findings,
-    deferenceRate: sampled > 0 ? findings.length / sampled : 0,
+    deferenceRate: sampled > 0 ? findings.length / sampled : null,
   };
 }
 
 /** One-line summary for the operator letter, or null when drift is negligible. */
 export async function deferenceLine(): Promise<string | null> {
-  const audit = await runSelfAudit();
-  if (audit.findings.length === 0) return null;
+  const audit = await runFleetSelfAudit();
+  if (audit.findings.length === 0 || audit.deferenceRate === null) return null;
   const pct = Math.round(audit.deferenceRate * 100);
   return `Self-audit: ${audit.findings.length} of ${audit.sampled} recent messages asked your permission instead of acting or recommending (${pct}%). The autopilot is drifting toward over-deference — the opposite of its job.`;
 }

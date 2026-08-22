@@ -1,0 +1,29 @@
+-- =============================================================================
+-- A SECOND PLACE TO CONFIGURE WHAT FOUNDRY IS ALLOWED TO DO.
+--
+-- `autopilot_config` (migration 008) is one row per product holding a single
+-- untyped `preferences` JSON blob. `autopilot_policies` (migration 090) is the
+-- real thing: one row per (product, category), a mode from the closed ladder
+-- shadow → suggest → act, who set it, the clean-cycle counter, and the
+-- promotion and demotion timestamps and reasons.
+--
+-- Nothing has ever read or written `autopilot_config`. No TypeScript, no
+-- trigger, no job. It was found by asking which tables no code can reach in
+-- either direction, and it is the one out of the fifteen that is worth removing
+-- on its own terms rather than waiting on the ratchet.
+--
+-- THE REASON IS CONSTITUTIONAL. Autopilot policy is the record of how much
+-- authority Foundry has been granted, per category, and every grant in it is
+-- either a founder's explicit consent or a promotion earned against a threshold
+-- with a quality hold and a calibration hold. A second store for the same
+-- subject — schemaless, unconstrained, with no CHECK, no ladder and no set_by —
+-- is a place where that authority could be widened without any of it. Foundry
+-- may operate Foundry and Foundry may improve Foundry, but Foundry may not
+-- silently redefine what Foundry is allowed to do, and a JSON blob named
+-- `preferences` next to the authority ledger is exactly the silence to remove
+-- before anyone reaches for it.
+--
+-- Nothing is preserved. There are no rows to preserve.
+-- =============================================================================
+
+DROP TABLE IF EXISTS autopilot_config;
