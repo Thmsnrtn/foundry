@@ -7,6 +7,6 @@
   ],
   "includePath": "\\.ts$",
   "excludePath": "(\\.test\\.ts$|lib/logger\\.ts$)",
-  "baseline": 212,
+  "baseline": 211,
   "direction": "down"
 }

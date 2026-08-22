@@ -913,3 +913,388 @@ cross-tenant flaw** — a useful negative result — but did find that the
 platform-admin boundary was made of array order: `founders.email` decides who
 reaches an unscoped cross-tenant surface, and both provisioning paths wrote it
 from `emailAddresses[0]`, neither necessarily primary nor verified.
+
+---
+
+## One page, read line by line
+
+**One page, read line by line, and almost every number on it was a claim
+nothing measured.** `founder/intelligence.ts` is what the operator of Foundry
+looks at. The lens was the plainest available — read the number, then find the
+query that produced it — and it held for eleven consecutive findings. They are
+worth listing together because the SHAPES repeat, and a steward who recognises
+the shapes will find them faster elsewhere than by reading files.
+
+**The constant wearing a measurement's name.** `total_jobs: 30, jobs_healthy:
+30` under the comment "From job registry", when the registry has ninety and
+nothing was read. `runway_months: 999` under "SaaS with low burn" —
+eighty-three years, asserted by a comment, where nothing records burn at all.
+`churned_this_month: 0`, `expansion_revenue: 0`, `override_count_7d: 0`,
+`days_since_break: 0` under "Would track from activity gaps",
+`top_acquisition_channels: []`. Each read as a measured absence.
+
+**The quotient with an empty denominator, answered anyway.** The same mistake
+twice over, and worth seeing in both directions: `auto_execute_rate` fell back
+to **100** — the most reassuring number on the automation panel, printed
+precisely when no decision had been made — and `avg_health_score` fell to **0**,
+the worst possible score, printed for having scored nobody. Whether the fallback
+flatters or alarms is an accident of which digit was typed. The same shape wrote
+`?? 1` as a denominator, turning "no founders" into a real division.
+
+**The default that makes an unobserved subject scoreable.** The Founder
+Wellbeing card is colour-coded green above 60. A founder with no health record
+took `motivation ?? 50` and `engagement ?? 'stable'` and scored **70** — a green
+card about a person Foundry had never observed once. This is the one to
+remember: it is about a person, a person reads it, and the reassurance is the
+harm. Note the second-order trap found while fixing it — `engagement_trend`
+carries `DEFAULT 'stable'` in migration 006, so a row written for any other
+reason *looks* like an observation. A written default is not evidence.
+
+**The page limit that became the measurement.** At-risk companies were read with
+`LIMIT 20` and then every number derived from `rows.length`. The headline card
+read "At Risk: 20" for any portfolio with twenty or more, and the rate divided
+that capped numerator by an uncapped denominator, so it FELL as the real problem
+grew.
+
+**Two labels over one expression.** "Activation Rate" and "Trial → Paid" sat
+side by side on the growth card as two measurements; they were the same line of
+code twice. Two numbers that can never disagree are one number, and a reader
+comparing them believes they have corroborated something.
+
+**The name that belongs to someone else's money.** `PulseData.mrr` summed
+`metric_snapshots` across all products — the operated COMPANIES' reported MRR
+movement — and went out of the executive dashboard beside `mrr.current_mrr`,
+Foundry's own subscription revenue. An alert read "MRR declined 14% this month"
+about whichever the reader assumed. `mrr_history` was the same portfolio series
+plotted as Foundry's own history. Not the same quantity, not the same company,
+not even the same KIND: one a level, one a sum of movements.
+
+**Revenue counted before anyone paid.** The Stripe webhook sets `founders.tier`
+on `customer.subscription.created` *including* while status is `trialing` — that
+is the branch that records `trial_ends_at`. Every trialist counted at full list
+price in `current_mrr`, `arr`, `by_tier` and every forecast compounded from them.
+
+**The label that is not the thing.** `churn_rate_30d` had no 30-day window and
+was computed entirely from companies that were still active. `churn_this_month`
+counted founders who signed up over a week ago and never subscribed — they never
+paid, so they cannot have left. `activation_rate` rated an activation event that
+does not exist.
+
+**And the mirror image, which is the one a steward will miss.**
+`last_audit_run: null` was hardcoded while `audit_scores` has a real writer and a
+`created_at`. The fact existed and was thrown away, leaving the operator unable
+to tell "never audited" from "not looked up". Discarding a fact is the same
+failure as inventing one, and it does not look like a defect on the page.
+
+**What could NOT be fixed, and why that matters more than what could.** Several
+of these are null now rather than computed, and each null carries its reason in
+the type: no tier-change history exists, so Foundry's own expansion revenue
+cannot be derived; nothing records when a company churns, and the only archive
+path that leaves a timestamp is ERASURE — a person exercising a deletion right
+is not a customer leaving, and counting the first as the second would have been
+the worst guess available; nothing records burn; nothing records founder
+activity gaps. `override_count_7d` would still be null if it were wired up,
+because `decision_quality_scores` has no writer at all —
+`recordDecisionContext` is exported from `scp/founder/decision-tracker.ts` and
+called from nowhere, which is why the override rates over there are permanently
+zero too. A test now watches for a caller appearing.
+
+**Then the same lens on the surfaces beyond it, where the stakes are higher.**
+The operator page was read first because it was there; nothing about it was
+special. Carrying the lens outward found the same shapes pointed at people
+making bigger decisions, and one shape that had nothing to do with numbers.
+
+**Fabricated numbers handed to a model told not to hedge.** Five agents read a
+company's `metric_snapshots` into a prompt through
+`(Number(x) || 0) * 100`, so a company that had reported nothing produced
+`Churn rate: 0.0%. NPS: 0.0.` — a claim of excellent retention. Harbor's system
+prompt then says, in these words, *"You do not hedge when customer data is
+clear"*, and asks for named accounts and dollar amounts. The output reaches a
+founder as advice about their own company. It crossed thresholds too:
+`if (activationRate < 30)` fired a "Low activation rate (0.0%) — acquisition
+quality concern" message at companies with no metrics at all.
+
+Forge was the sharpest. `mrr_health_ratio` is defined by migration 001 as
+churned/new, *"null if new is 0"* — the null is documented as meaning the
+division could not be done — and the prompt explains the scale as
+`>1.0 = churn exceeds new MRR — critical`. So `|| 0` mapped "no new MRR at all"
+to the single most favourable value available.
+
+The rule already existed: `jobs/index.ts` writes `!= null ? … : 'unknown'` for
+the same columns from the same table. `ai/measured.ts` states it once, and a
+zero reaching a prompt through it means a snapshot really recorded zero.
+
+**The same defect inverted, condemning instead of flattering.**
+`computeFundingReadiness` has a neutral 50 branch for every null input, and it
+never ran: the row is read as `rows[0] ?? {}`, so a company with no snapshot
+produced `undefined`, the `=== null` check missed, and every comparison fell
+through to the final `: 10` / `: 20`. Then the gap list tested those against
+thresholds of 60, and told a company that had reported NOTHING — in a document
+it would fundraise on — that its churn was above threshold, its activation below
+benchmarks, its MRR health indicating churn exceeds new revenue, and its
+technical audit below threshold. Four findings about numbers that did not exist.
+
+Which direction a fabricated unknown lands is an accident of where somebody put
+a threshold. That is the transferable point: it is not that fallbacks flatter,
+it is that they *decide*, and nobody chose.
+
+**Statistics applied to an invented input.** `/scenarios` renders a Monte Carlo
+runway — median, P10–P90 band, probability of surviving eighteen months — and
+cash on hand was defined as `monthlyBurnCents * 12`, where burn was
+`products.operating_budget_monthly_usd`: the AI SPEND CAP, defaulting to fifty
+dollars a month. A founder who never touched it was modelled as a business
+burning $50 against $600 of cash, with the identity making base runway exactly
+twelve months. A second implementation in `financial/simulator.ts` invented cash
+as `revenue * 6`, so a company got two different runways depending which page it
+opened.
+
+This is worse than the bare `runway_months: 999` on the operator page, and the
+reason is worth carrying: **nobody mistakes a constant for a finding, and
+everybody reads a confidence interval as one.** Statistical machinery over a
+guess does not report uncertainty — it disguises the guess as measurement.
+
+Migration 181 lets the founder state cash, burn and the date they were true;
+`financial/position.ts` is the only way either path may learn it and has no
+default anywhere; both return null until a position exists, and the page asks
+in the founder's own terms. **Do not add a default here.** A default cash
+balance is a claim about a bank account, and no amount of modelling downstream
+makes it less of one.
+
+**And a statement that had never once run.** `forecast_scenarios` was written
+with seven placeholders and six arguments. `generated_by` is NOT NULL, so every
+insert raised — since it was written. Both callers swallow it: the refresh job
+catches per product, the route logs and redirects. So the page never showed a
+scenario that function produced, the nightly log read "Generated scenarios for
+0 products", and nobody found out. Every gate here passed it: the SQL is valid,
+the columns exist, the types check. It surfaced only when a test called the
+function for the first time.
+
+`check-query-arity.mjs` now counts placeholders against arguments (1,886
+statements) and INSERT columns against values (377), chained into
+`lint:columns`. Writing it taught the same lesson twice: the first counter
+toggled string state on every apostrophe, so a SQL comment reading "Migration
+178's trigger" opened a string that never closed — five false positives against
+correct code. The same bug in the argument splitter, on a TypeScript comment
+containing `'system'`, inflated a count by one. Both are tests now. **A noisy
+gate gets baselined, and a baseline is where a gate goes to stop working.**
+
+**And the mirror image, which is where the reading went next.** Every finding
+above is a claim made without a source. Turning the lens around — a fact
+RECORDED and read by nobody — found four more, and the last of them was the
+most valuable of the whole cycle.
+
+**Foundry's own AI spend, from two ledgers, both wrong.** The founder-ops badge
+read `cost_events`, under a comment written earlier in this same campaign
+calling it "the canonical spend ledger: real amounts, every cost type". It is
+not: `cost_events` has one writer, `scp/agents/base.ts`, fire-and-forget, agent
+sessions only. `ai/client.ts` reserves and settles EVERY call into
+`ai_daily_spend`, which is also the ledger the daily ceiling is enforced
+against — the one that decides whether Foundry may act. Meanwhile the Letter
+read that ledger and summed it across all scopes, and migration 099's finish
+trigger writes the same amount to the global, product and founder rows, so "AI
+spend today is X USD" counted every call up to three times.
+
+Correcting my own comment is the part to carry: **a wrong claim about which
+store is canonical outlives the number it justified**, and the next person to
+touch it would have believed it.
+
+**Quiet is not broken.** `integration_health.last_successful_sync` was written
+on every successful event and selected by nothing. The page showed
+`last_event_at` — when data last ARRIVED — so for a webhook source a quiet
+fortnight and a dead connection produced the identical line, "No data in 14
+days". `institution/loop-health.ts` already says exactly this about the
+scheduler: *"Nothing happened" and "nothing ran" are different facts.* One rule,
+stated in one place and not the other, over a column that had held the answer.
+
+**A forecast nobody ever scored, with three broken links in one loop.** The
+checkpoint was dated TODAY holding today's prediction, so the only actual it
+could match was one recorded the same day — the prediction compared against
+itself. `recordCheckpointActual` had no caller anywhere. And `variance_pct` was
+read by nothing. On top of which the insert creating the rows had never run at
+all. Predictions are now dated when they come due (1, 3, 6 months, base case
+only — scoring a bear case scores a question rather than an answer), reconciled
+in the ingest path where a company's real MRR arrives, and the founder is told
+the median variance AND ITS DIRECTION above the forecasts it judges.
+
+This one is worth the work rather than a curiosity for a specific reason:
+**Foundry asks companies to state what they expect and compares it against
+reality, and its own forecasts were exempt from that.**
+
+**Then the same reading found the two things underneath every number on those
+surfaces: what the words mean, and what the units are.**
+
+**MRR the level and MRR the movement, under one name.** The founder's own
+ingest endpoint mapped the field `mrr` to the column `new_mrr_cents`. A company
+POSTing `{"mrr": 50000}` — meaning "our MRR is fifty thousand dollars", which is
+what the word means — had that recorded as NEW BUSINESS WON THIS PERIOD,
+alongside its real expansion, contraction and churn. `mrr_health_ratio` is
+computed at ingest as churned/new, so a level in the denominator made the
+company look healthy; the operator's portfolio figure was adding a level to a
+sum of movements; Forge and Oracle put `new=$50,000.00` into their prompts.
+
+Meanwhile `metric_snapshots.mrr_cents` — the column that MEANS the level, and
+the one every investor-facing surface reads — had no writer on that door at all,
+so those companies read "N/A" for MRR everywhere. `POST /api/v1/metrics`, the
+public API, has always written the level correctly. **The same company got a
+different answer depending which door it used.**
+
+**A fraction compared against a percentage.** `activation_rate`, `churn_rate`,
+`day_30_retention` and `mrr_health_ratio` are stored as 0–1 fractions — the
+ingest validates that range and `ux/fluency.ts` says so in words. Five readers
+treated them as percentage points, and the failure mode is the thing to
+remember: **every "higher is better" test fails (`0.68 >= 40`) and every "lower
+is better" test passes (`0.02 <= 3`)**. A company scored zero for excellent
+retention and full marks for catastrophic churn, and nothing looked broken from
+either side.
+
+In `fundraising-readiness.ts` six of the ten points in `scoreTraction` were
+unreachable by anybody. Two of those were unreachable twice over:
+`mrr_growth_pct` and `customer_count` are NOT COLUMNS on `metric_snapshots`,
+read off a `SELECT *` row and `undefined` forever, and `d30_retention` is not
+one either — the real column is `day_30_retention`, sitting there with the data
+in it. In `network/failure-library.ts`, `{ churn_rate_gt: 8 }` means eight per
+cent, so no failure pattern keyed on churn could match for any company; the
+library kept matching on its other criteria and simply never fired on that one.
+And both briefings and the investor update told a company churning 2% a month
+that its churn was 0.0%.
+
+`ratePoints()` states the conversion once. It converts the VALUE, not the
+threshold: `>= 40` reads as forty per cent to a person and `>= 0.4` reads as a
+bug waiting to be "fixed". `nps_score` is left alone — already on its own
+-100..100 scale, and scaling it would be this same mistake reversed.
+
+**A product telling its customer it delivered nothing.** `/roi` is mounted and
+authenticated and headlined "Value Delivered This Month". It reported **$0** and
+a 0% action rate for every company, always, because `recommendation_outcomes`
+has no writer — `recordRecommendation` and `markActedOn` are exported from
+`roi/outcome-tracker.ts` and called from nowhere. The line underneath read
+"Foundry is tracking recommendations — value will appear as outcomes are
+measured", and nothing was tracking anything.
+
+**It is deliberately still not wired, and that is the interesting part.** The
+obvious move is to call `recordRecommendation` from every agent run. It would be
+worse than doing nothing: recommendations would accumulate while `markActedOn`
+still had no caller, turning an UNMEASURED action rate into a MEASURED 0%. **A
+loop that records its denominator and never its numerator produces a confident
+wrong answer, which is harder to notice than an honest blank.** Wiring the other
+half needs a real answer to "what counts as acting on a recommendation"; a test
+now fails if a caller appears for one without the other.
+
+**And the sharpest instance of all of it: a rule Foundry had already written
+down, and obeyed once.** `SignalResult.hasData` is declared in
+`services/signal.ts` with the Honesty Law and this sentence: *"the score is a
+default, not a measurement. First-run surfaces must say 'not enough data yet'
+rather than present a falsely-confident number."*
+
+Ten places compute a Signal. **One honoured it.** The other nine printed the
+default, so a company Foundry had never measured appeared as a confident 85 out
+of 100: on a public share link under a badge reading "LIVE SIGNAL"; spoken aloud
+in the voice briefing, where there is no colour and no second glance; twice into
+a model, which reasons from it and repeats it back; in Fleet Triage, where it
+sorted among real companies and pulled the fleet average on a page whose whole
+purpose is choosing what to look at first; over the mobile API; and as the
+baseline for a drop alert.
+
+That last one had teeth. The default was written into `signal_history` like any
+other score, so the first day a company actually reported something, the real
+score landed against a default baseline and the founder was told their Signal
+had fallen thirty points **from a number their company was never at**. The same
+history feeds the share page's sparkline and the 7-day trend in conversation
+context.
+
+**A default no longer enters the record at all**, and not-writing beats writing
+a flag: every reader of `signal_history` gets the guarantee for free instead of
+having to remember it, and a gap means nothing was known that day, which is what
+a gap should mean.
+
+**The lesson is about instruments, not about Signal.** The rule did not need to
+be discovered — it was already written, in the codebase's own words, in the type
+itself. What was missing was ONE WAY TO OBEY IT and something that notices when
+a caller does not. Writing a rule into a comment protects the file it is in.
+`signalText`/`signalNumber` plus a test that enumerates every caller of
+`computeSignal` protects the other nine. **When a doctrine sentence appears in a
+type, check every consumer before believing it.**
+
+**The same shape on a consent boundary, which is where it bites hardest.**
+`preferences.max_channel` is declared as *"Interruption ceiling: the loudest
+channel Foundry may ever use. The policy can only quiet below this, never exceed
+it"*, and `ux/interruption.ts` opens with *"this module alone decides HOW LOUDLY
+to deliver"*. `intelligence/risk-state.ts` called `notifyFounder` directly,
+consulting none of it: a founder who set `letter` — do not interrupt my life —
+got a push on every risk-state change.
+
+Its comment said the send was "governed like every other outward effect", and
+that was TRUE AND BESIDE THE POINT. **The gateway governs whether an effect may
+LEAVE; the ceiling governs how loudly Foundry may interrupt THIS PERSON.**
+Passing the first says nothing about the second — and the comment treating them
+as one thing is how a control that WAS working became the reason nobody looked
+for the one that wasn't. Worth watching for generally: a satisfied guard cited
+in place of an absent one.
+
+**And then the same lens on sentences I had written myself.** Two commits after
+wiring the forecast reconciliation into the ingest route, under a comment of
+mine reading *"This is the only path by which a company's real MRR reaches
+Foundry"*, it turned out not to be: `POST /api/v1/metrics` — the documented
+public API with issued scoped credentials, the path this very file calls the one
+a real company integrates against — also writes `mrr_cents`. So a company
+integrating the DOCUMENTED way had forecasts recorded and never scored. Same
+shape as the customer-store split, introduced while closing that very loop.
+
+**And on the interruption module's own justification**, after using it to find
+the module's bypass. Its quiet rungs write nothing, excused by *"the Letter
+composes from the ledgers, so the event will appear there"*. The Letter composes
+from a SPECIFIC LIST — completed executions, gate-0 decisions, the top pending
+decision, falsified premises, the memory digest, peer-radar warnings, the trust
+ledger, dissent. An event in that list survives being quieted; one outside it
+(a Signal drop, a wellbeing pulse, drafts awaiting approval, a milestone, a
+billing failure) would be **dropped silently by a founder setting a lower
+ceiling than they realised they were setting**.
+
+That is why the eleven direct notification calls were not converted wholesale,
+and the rule now sits where somebody would read it before doing exactly that:
+route through `deliver()` only when the Letter already carries the fact. The
+peer-radar bell is converted as proof and as the unambiguous case —
+`letter/composer.ts` calls `scanForWarnings` itself.
+
+**The rule for the whole cycle, stated plainly:** a claim in a comment is
+evidence of what somebody believed when they wrote it, and nothing else — and
+that includes claims written five minutes ago by whoever is reading. Three of
+this cycle's findings came from checking such sentences against their consumers;
+one of them was mine.
+
+**A gate that was measured and rejected.** The ghost-column class —
+`mrr_growth_pct` read off a `SELECT *` — is invisible to every column gate here,
+and looked like the next ratchet. Two attempts were measured: matching property
+casts against the file's single starred table gave 48 findings, mostly
+properties belonging to other queries in the same file; binding variables to
+their query through `.rows[0]` gave 108, still leaky because generic names like
+`r` and `row` are reused across queries. **Real scope analysis is the price of
+this one**, and a gate that cries wolf gets baselined into uselessness. Not
+built. The specific findings were verified by hand against the built schema
+instead.
+
+**The write-only list is a question-asker, not a work queue** — measured, not
+asserted. Of the 84 entries, 47 are reachable by a mechanism that ratchet
+cannot see: 22 through a literal `SELECT *`, 16 through a SQL trigger, 9
+through the export's dynamic `SELECT * FROM ${table}`. `ai_spend_reservations`,
+`gate_events` and `anomalies` each looked like findings and each turned out
+reachable by a different one of those three. The gate's own header says it is a
+false positive in the safe direction; believe it. **35 entries remain genuinely
+unread**, and the two taken from them this cycle were both real.
+
+**Checked and found correct — worth as much as the findings.**
+`scp/investor/fundraising-readiness.ts` awards no points for unknowns and prints
+`N/A`. `scp/investor/investor-update.ts` handles every null. Both briefing
+surfaces already say "unknown" — though both used truthiness, so a company
+recording exactly $0 of MRR, which is most pre-revenue companies, reported as
+unmeasured. Read the code before writing the finding: this cycle's frontier
+entry named five suspect files and two of them were already right.
+
+**Method note that paid for itself twice.** Two findings were wrong on first
+read and were caught by checking rather than by writing them down. The tier
+price map `{solo: 79, growth: 199, investor_ready: 399}` looked like it could
+never match migration 001's `('founding_cohort','growth','scale')` CHECK —
+migration 080 had already fixed that, and the map is correct. And a wellbeing
+test failed on the `DEFAULT 'stable'` column rather than on the code, which is
+what surfaced the second-order trap above. Read the migration before writing the
+finding.

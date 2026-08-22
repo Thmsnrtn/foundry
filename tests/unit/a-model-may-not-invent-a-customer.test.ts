@@ -102,7 +102,13 @@ describe('a customer the company really has', () => {
     expect(Number(row.support_sentiment_score)).toBe(20);
     expect(String(row.agent_notes)).toContain('March incident');
     expect(String(row.agent_notes), 'attributed to the agent that said it').toContain('harbor');
-    expect(row.last_contacted_by).toBe('harbor');
+    // AND NOT RECORDED AS A CONTACT. This used to assert `last_contacted_by`
+    // was stamped — the defect written down as an expectation. `addAgentNote`
+    // sends nothing; a model forming a private opinion marked the customer as
+    // having been written to, by a named agent, on a date, and the v1 API
+    // serves that row to an integrator likely syncing it into a CRM.
+    expect(row.last_contacted_by, 'a note is not a contact').toBeNull();
+    expect(row.last_contacted_at, 'a note is not a contact').toBeNull();
   });
 
   it('keeps its identity and its money, which are not the agent to state', async () => {
