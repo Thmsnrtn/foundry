@@ -44,10 +44,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `873aba2`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `d52afa8`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 233 files, highest **197**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **348 files / 2,983 tests**, `SUITE_EXIT=0`
+- **Validation:** full suite green — **349 files / 2,992 tests**, `SUITE_EXIT=0`
   read from the run that wrote the log. Every gate in `npm run check` run
   individually and green: ratchets, kernel boundary, NULL-safety, truth audit,
   effects audit, `lint:columns`, AI attribution. The **Head** sha above is the
