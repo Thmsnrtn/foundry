@@ -306,7 +306,10 @@ interface OpenRouterResponse {
 // events, messages, scratchpad, date). The client marks everything up to the
 // sentinel with Anthropic prompt caching (cache_control: ephemeral), which
 // OpenRouter passes through — a 60–90% input-cost cut on repeated agent runs.
-export const CACHE_BREAKPOINT = ' __FOUNDRY_CACHE_BREAKPOINT__ ';
+// The delimiters are NUL, escaped rather than written as raw bytes: a raw
+// NUL in the first 8000 bytes of a file makes git call the whole file binary
+// and print "Binary files differ" instead of a diff, and makes grep skip it.
+export const CACHE_BREAKPOINT = '\u0000__FOUNDRY_CACHE_BREAKPOINT__\u0000';
 
 /**
  * Build the system message content. When the prompt contains a cache

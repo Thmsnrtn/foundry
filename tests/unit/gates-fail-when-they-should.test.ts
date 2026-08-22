@@ -424,6 +424,36 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_m');
   });
 
+  it('check-no-raw-control-bytes fails on a raw NUL in source', () => {
+    // git calls a file binary if a NUL sits in its first 8000 bytes, and then
+    // prints "Binary files differ" instead of the change — in git diff, in
+    // git show, and in a pull request review. Two real files here had one, both
+    // deliberate, both correct in intent and wrong in encoding.
+    //
+    // The byte is built at runtime so this file does not contain the defect it
+    // plants: the gate scans tests/ too.
+    plant('src/services/_gate_fixture_n.ts',
+      j('export const SENTINEL = ', "'", String.fromCharCode(0), 'marker', "'", ';\n'));
+    const r = run('check-no-raw-control-bytes.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_n');
+    expect(r.output).toContain('raw NUL');
+    // And it says WHY it matters, because the cost is invisible otherwise.
+    expect(r.output).toContain('binary');
+  });
+
+  it('check-no-raw-control-bytes fails on a control byte that git would tolerate', () => {
+    // A NUL past the 8000-byte mark still leaves git willing to diff the file,
+    // so the gate cannot key on git's own threshold. An ESC or a stray CR costs
+    // no diff at all and is still not something source has a reason to carry.
+    plant('src/services/_gate_fixture_esc.ts',
+      j('export const S = ', "'", String.fromCharCode(0x1b), '[0m', "'", ';\n'));
+    const r = run('check-no-raw-control-bytes.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_esc');
+    expect(r.output).toContain('raw ESC');
+  });
+
   it('check-id-tiebreak fails on a new ORDER BY that falls back to id', () => {
     // An id is not a clock. Three real defects in one campaign came from a
     // nanoid or a content hash deciding which row was current.
