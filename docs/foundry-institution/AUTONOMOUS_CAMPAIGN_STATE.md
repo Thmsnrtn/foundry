@@ -25,10 +25,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `d06c000`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `e0ceb91`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
   **Migrations:** 228 files, highest **192**. Ordering gated. Snapshot current.
-- **Validation:** full suite green at `d06c000` — **345 files / 3,044 tests**,
+- **Validation:** full suite green at `e0ceb91` — **346 files / 3,050 tests**,
   `npm run check` EXIT=0, every gate chained and running in CI on this branch.
   **Read the exit code from the run that produced the log.**
   **Read the exit code from the run that produced the log**, and do not write
@@ -579,6 +579,52 @@ Moved to `history/SEAM_CAMPAIGN_HISTORY.md` — "The owner answered §10, §14 a
 §12". The decisions themselves are load-bearing and are recorded in the
 migrations that implement them and in **Blocked — owner** below; only the
 narrative moved.
+
+## The unreachable-modules list, read module by module
+
+**26 entries, and the list is not a work queue — it is a set of questions with
+different answers.** Read end to end this cycle so nobody re-reads it:
+
+- **Nine `*-benchmark.ts` files** are reached only from tests, which is what a
+  held-out benchmark is. Correctly baselined; leave them.
+- **`truth/engine.ts` was the one that mattered**, and the finding was not that
+  it is unreachable. `scripts/audit-public-claims.mjs` — a gate that runs on
+  every `npm run check` — carried an INLINE COPY of it, and the two had drifted:
+  no quoted-phrase handling on the gate's side and a different stop-word list.
+  The gate enforcing the honesty law and the module documenting it disagreed
+  about what a claim says. Now one implementation in
+  `scripts/lib/claim-tokenizer.mjs`, pinned by a test that runs both.
+  **Two copies are fine when they are pinned; two copies nobody compares are one
+  rule with two answers.**
+- **`middleware/tenant.ts`** is the written statement of a rule now enforced by
+  `check-tenant-scope.mjs`. Specification, not dead code.
+- **`foundry/recursive-institution-contract.ts`** says in its own header that it
+  is a prospective contract frozen before the behaviour it governs. Deliberate.
+- **`financial/institutional-economics.ts` is the best-written cost accounting
+  in the repository and runs nowhere** — it names its unmeasured components
+  rather than zeroing them, which is the doctrine the rest of this cycle spent
+  its time enforcing elsewhere.
+
+  **Following migration 134's attribution to its end is worth doing once and not
+  again.** The migration added `responsibility_id` and `capability` to
+  `cost_events` so cost could be attributed to a responsibility. The only writer
+  is `base.ts`'s agent-session logging, which passes neither — deliberately, and
+  its comment says why: "booking their spend against an invented responsibility
+  would be worse than leaving it unattributed."
+
+  **THE GAP IS PRINCIPLED, NOT AN OVERSIGHT.** Every path that knows a
+  responsibility does not know a price — the module's own
+  `UNMEASURED_COMPONENTS` lists `provider_send_price` as unobserved, because the
+  email provider bills out of band. The one path that knows a price, LLM spend,
+  is a per-agent-session cost and an agent persona is not a responsibility.
+  Attributing in either direction would manufacture the number. **Do not "fix"
+  this by wiring an attribution; it is open because closing it honestly needs a
+  price nobody records.**
+- **`briefing-share.ts`, `taste-journal.ts`, `ai/composer.ts`, `views/numbers.ts`,
+  `lib/{env,request}.ts`, `mcp/cli.ts`, `prompts/voice-judge.ts`,
+  `support-pilot-readiness.ts`, `intelligence/{benchmarks,shippability}.ts`**
+  are unexamined. Each is a product question of the same kind as item 2, not a
+  defect: a feature whose reading half exists and whose calling half does not.
 
 ## Highest-value current opportunities
 
