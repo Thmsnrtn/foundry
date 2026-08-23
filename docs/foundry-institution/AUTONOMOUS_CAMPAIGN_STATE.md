@@ -57,10 +57,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `c2b53e1`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `5a93e3c`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 235 files, highest **199**. Ordering gated. Snapshot current.
-- **Validation:** `npm run check` green end to end — **382 files / 3,358 tests**,
+- **Migrations:** 237 files, highest **201**. Ordering gated. Snapshot current.
+- **Validation:** `npm run check` green end to end — **382 files / 3,357 tests**,
   read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
   bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
@@ -71,10 +71,12 @@ inherited list because it was inherited.
   belonged to, and two ledgers seeded with decisions the FOUNDER had made
   claiming to prove what FOUNDRY had earned. A validation claim is a claim like
   any other, and this one had a bigger execution path than the run behind it.
-  **Run `npm run check`, not `vitest run tests/unit`, before writing this line.** Every gate in `npm run check` run
-  individually and green: ratchets, kernel boundary, NULL-safety, truth audit,
-  effects audit, `lint:columns`, AI attribution. The **Head** sha above is the
-  commit that tree became; documentation edits after the run touch no code.
+  **Run `npm run check`, not `vitest run tests/unit`, before writing this line.**
+  That single command IS the gate chain — typecheck, ratchets, kernel boundary,
+  NULL-safety, truth audit, effects audit, `lint:columns`, AI attribution, then
+  every test — and `CHECK_EXIT=0` was read from the run that wrote the log. The
+  **Head** sha above is the commit that tree became; documentation edits after
+  the run touch no code.
   **READ THE EXIT CODE FROM THE RUN THAT PRODUCED THE LOG.** A commit once went
   out with five red tests because the code was read from a wrapper, and this
   line said "green at f8a1581" for about a minute before being corrected on the
@@ -84,8 +86,12 @@ inherited list because it was inherited.
   `closeDb` landed; many consecutive clean runs since. See item 2.
   **`console-in-src` fell 212 → 211** and the ratchet refused to pass until the
   gain was locked in, which is the behaviour that makes a ratchet worth having.
-- **Ratchets:** unguarded mutating routes **112** (baseline 114) · fabricated
-  test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced
+- **Ratchets:** unguarded mutating routes **113** (baseline 113 — two stale
+  entries removed, one added: the founder's own interruption ceiling, which
+  only bounds what Foundry may do) · fabricated test schemas **4** ·
+  writer-less tables **0** · SELECT drift **0** (the gate now reads
+  single-table queries THROUGH their alias, which is where the public API's
+  broken list-customers query was hiding) · untraced
   consequential effects **0** · statically unreachable modules **26** ·
   write-only columns **69** · unscoped product-shaped routes **2** ·
   id tiebreaks **18** · backticks in embedded comments **0** ·
