@@ -272,6 +272,18 @@ instead of removing text. The four columns got a reader in the same batch: the
 falling-customers table names WHICH of usage, support, payment or engagement
 dropped, which is the only part of that answer that says what to do.
 
+**Two tables removed, and the trap that made one of them possible.**
+`leading_indicators` held the columns that would have made the failure-pattern
+library evidential — `confidence`, `sample_size`, `lead_time_days` — and nothing
+ever wrote one, because Foundry has never had a way to establish those numbers.
+The library itself was stating four frequencies as though something had counted
+them ("typically see churn double within 60 days"), on a card headed by the
+founder's own match score; the directions are kept, the numbers are gone, and
+the card now says which half is editorial. `outbound_webhooks` was a third table
+for a concept the product implements twice — and reading it surfaced that TEN
+`CREATE TABLE IF NOT EXISTS` statements across seven migrations never ran.
+Three of them have cost this campaign real time. Each now says so in the file.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
