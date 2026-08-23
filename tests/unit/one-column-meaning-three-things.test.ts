@@ -29,7 +29,10 @@ beforeAll(async () => {
   await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_d','c_d','d@example.com')");
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Acme','f_d','active')", [P]);
 });
-beforeEach(async () => { await query('DELETE FROM integrations'); });
+beforeEach(async () => {
+  await query('DELETE FROM integrations');
+  await query('DELETE FROM integration_sync_log');
+});
 
 describe('the database', () => {
   it('refuses a direction that is not one of the three', async () => {
@@ -71,7 +74,10 @@ describe('which way a provider points', () => {
 });
 
 describe('the sync', () => {
-  it('takes inbound and bidirectional rows and leaves outbound alone', async () => {
+  it('attempts inbound and bidirectional rows and leaves outbound alone', async () => {
+    // THE REAL FUNCTION, not a copy of its query. A first version of this test
+    // restated the SELECT inline and passed with the defect restored — a test
+    // that reproduces the code cannot see the code change.
     await query(
       `INSERT INTO integrations (id, product_id, name, provider, type, direction, status)
        VALUES ('i_in', ?, 'stripe', 'stripe', 'stripe', 'inbound', 'active'),
@@ -79,15 +85,40 @@ describe('the sync', () => {
               ('i_out', ?, 'weather', 'mcp', 'outbound', 'outbound', 'active'),
               ('i_unknown', ?, 'x', 'x', 'x', NULL, 'active')`, [P, P, P, P]);
 
-    // The query the sync runs, kept in step with `syncProductIntegrations`.
-    const rows = await query(
-      `SELECT id FROM integrations
-        WHERE product_id = ? AND status IN ('active','error')
-          AND direction IN ('inbound','bidirectional')
-          AND COALESCE(error_count, 0) < 5
-        ORDER BY id`, [P]);
-    expect((rows.rows as unknown as Array<{ id: string }>).map((r) => r.id))
-      .toEqual(['i_bi', 'i_in']);
+    const { syncProductIntegrations } = await import('../../src/services/integrations/sync.js');
+    await syncProductIntegrations(P);
+
+    // Every attempt opens a row in the sync log, whatever it then does.
+    const attempted = (await query(
+      'SELECT DISTINCT integration_id FROM integration_sync_log WHERE product_id = ? ORDER BY integration_id',
+      [P])).rows as unknown as Array<{ integration_id: string }>;
+    expect(attempted.map((r) => r.integration_id)).toEqual(['i_bi', 'i_in']);
+  });
+});
+
+describe('the dispatch', () => {
+  it('sends a fabric-written row to its provider, not to its direction', async () => {
+    // The row shape the fabric writes: `type` holds a DIRECTION and `provider`
+    // holds who it is. Dispatching on `type` looks for an adapter called
+    // 'inbound' and finds none — the row fails with "no adapter", every cycle,
+    // for a provider that has one.
+    await query(
+      `INSERT INTO integrations (id, product_id, name, provider, type, direction, status, credentials_json)
+       VALUES ('i_fab', ?, 'stripe', 'stripe', 'inbound', 'inbound', 'active', ?)`,
+      [P, JSON.stringify({ access_token: 'sk_test' })]);
+
+    const { syncProductIntegrations } = await import('../../src/services/integrations/sync.js');
+    await syncProductIntegrations(P);
+
+    const row = (await query(
+      "SELECT status, error_message FROM integration_sync_log WHERE integration_id = 'i_fab'"))
+      .rows[0] as unknown as { status: string; error_message: string | null };
+    // Dispatching on `type` finds no adapter called 'inbound' and fails the
+    // row — every cycle, for a provider that has one. The message it writes
+    // names `provider ?? type`, so it reads "no adapter for provider 'stripe'":
+    // an error that names the thing that would have worked. The status is what
+    // separates the two paths.
+    expect(row?.status, 'it looked for an adapter named after a direction').toBe('success');
   });
 });
 
