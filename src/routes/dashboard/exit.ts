@@ -101,6 +101,12 @@ exitRoutes.get('/exit', requireTier('investor_layer'), async (c) => {
             <span class="score-label">/ 10</span>
             ${readinessBadge(maScore.overall_score)}
           </div>
+          ${maScore.customer_concentration_score === null ? html`
+            <p class="text-muted text-sm" style="margin:0.35rem 0 0;">
+              Scored over four of five dimensions: Foundry knows of no paying
+              customers for this company, so customer concentration is not part
+              of this number.
+            </p>` : ''}
           ${maScore.estimated_multiple_range ? html`
             <div class="multiple-range">
               <span class="text-muted">Estimated multiple:</span>
@@ -118,8 +124,10 @@ exitRoutes.get('/exit', requireTier('investor_layer'), async (c) => {
           ].map(([label, score]) => html`
             <div class="dimension-row">
               <span class="dimension-label">${label}</span>
-              ${scoreBar(score as number)}
-              <span class="dimension-score">${(score as number).toFixed(1)}</span>
+              ${score === null
+                ? html`<span class="dimension-score text-muted">not scored</span>`
+                : html`${scoreBar(score as number)}
+              <span class="dimension-score">${(score as number).toFixed(1)}</span>`}
             </div>
           `)}
         </div>

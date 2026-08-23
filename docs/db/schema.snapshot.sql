@@ -882,7 +882,6 @@
   -- Decision-making style (learned from patterns, but founder can override)
   -- Declaring a channel is a company assertion and must carry provenance. The
   -- Did the bytes actually on disk match what was intended? Never inferred
-  -- Dimension scores
   -- Each agent writes its key finding as it completes (JSON object, agent_name -> finding)
   -- Every absence coalesced, as always: `X NOT IN (...)` is NULL when X is
   -- Every absence is coalesced. `X NOT IN (...)` is NULL when X is missing, and
@@ -911,6 +910,7 @@
   -- Meta
   -- Meta
   -- Meta
+  -- NULL = Foundry knows of no paying customer for this company, so the
   -- NULL means "connected but never used" — distinct from "connected and
   -- NULL never fires, which is how absent values have repeatedly slipped past
   -- NULL never fires, which is how missing values have repeatedly walked past
@@ -924,7 +924,6 @@
   -- Only the hash. The secret is shown once, at issuance, and never again.
   -- Optional unit, again the founder's words: 'boats', 'classes', 'orders'.
   -- Outcome fields (populated when measured)
-  -- Output
   -- Output
   -- Performance
   -- Personal context (helps Foundry be a better advisor)
@@ -1034,6 +1033,7 @@
   -- compared against. Verification that can read the expectation is
   -- conclusions — never claims a message can carry.
   -- deliberately rather than shared: widening it means editing a migration,
+  -- dimension was not scored. Not the same as a middling concentration.
   -- evidence provenance this contract governs.
   -- evidence row must be this company's own — a channel justified by another
   -- evidence, so its shape is bounded: lower-case, starts with a letter, and
@@ -1199,6 +1199,7 @@
   ON institutional_responsibilities(product_id, state, updated_at);
   ON integration_secret_quarantine(product_id, rotated_at);
   ON integrations(product_id, provider);
+  ON ma_readiness_scores(product_id, assessed_at DESC);
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);
   ON operator_attention(founder_id, product_id, created_at);
   ON outbound_actions(product_id, inbound_message_id)
@@ -2176,7 +2177,7 @@
   custom_domain TEXT,
   custom_instructions TEXT,
   custom_metrics TEXT,
-  customer_concentration_score REAL NOT NULL, -- no single customer > 20% revenue
+  customer_concentration_score REAL,
   customer_external_id TEXT NOT NULL,             -- stable id (email, stripe id, etc.)
   customer_id TEXT NOT NULL REFERENCES customers(id),
   customer_id TEXT NOT NULL,
@@ -3258,7 +3259,7 @@
   overall_alignment REAL,
   overall_ethics_score REAL,
   overall_score REAL NOT NULL, -- 0-10
-  overall_score REAL NOT NULL, -- 0-10
+  overall_score REAL NOT NULL, -- 0-10, over the dimensions that were measured
   overnight_actions TEXT,              -- JSON: AgentAction[] (already executed)
   override_rate_pct REAL,                       -- 0-100
   owner_agent     TEXT,                    -- agent name, or NULL for founder-owned
@@ -4967,7 +4968,7 @@ CREATE INDEX idx_key_results_okr ON key_results(okr_id);
 CREATE INDEX idx_lifecycle_cond_product ON lifecycle_conditions(product_id);
 CREATE INDEX idx_lifecycle_risk ON lifecycle_state(risk_state);
 CREATE INDEX idx_lifecycle_rules_product ON lifecycle_rules(product_id, enabled);
-CREATE INDEX idx_ma_readiness_product ON ma_readiness_scores(product_id, assessed_at DESC);
+CREATE INDEX idx_ma_readiness_product
 CREATE INDEX idx_mcp_grants_lookup ON mcp_grants(product_id, server_name, revoked_at);
 CREATE INDEX idx_memory_edges_from ON memory_edges(from_node_id);
 CREATE INDEX idx_memory_edges_to ON memory_edges(to_node_id);
@@ -5109,6 +5110,7 @@ CREATE TABLE IF NOT EXISTS "decisions" (
 CREATE TABLE IF NOT EXISTS "founders" (
 CREATE TABLE IF NOT EXISTS "hypotheses" (
 CREATE TABLE IF NOT EXISTS "integrations" (
+CREATE TABLE IF NOT EXISTS "ma_readiness_scores" (
 CREATE TABLE IF NOT EXISTS "metric_snapshots" (
 CREATE TABLE IF NOT EXISTS "notifications" (
 CREATE TABLE IF NOT EXISTS "oauth_states" (
@@ -5263,7 +5265,6 @@ CREATE TABLE lifecycle_conditions (
 CREATE TABLE lifecycle_rule_triggers (
 CREATE TABLE lifecycle_rules (
 CREATE TABLE lifecycle_state (
-CREATE TABLE ma_readiness_scores (
 CREATE TABLE marketplace_metrics (
 CREATE TABLE marketplace_trust_audit (
 CREATE TABLE mcp_grants (

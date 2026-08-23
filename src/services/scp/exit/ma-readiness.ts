@@ -6,6 +6,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { ratePoints } from '../../ai/measured.js';
+import { getCompanyCustomers } from '../../institution/company-customers.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,7 +17,10 @@ export interface MAReadinessScore {
   ip_clarity_score: number;
   team_retention_score: number;
   integration_complexity_score: number;
-  customer_concentration_score: number;
+  /** NULL when Foundry knows of no paying customer for this company: the
+   *  dimension is unmeasured, which is not the same as middling. It drops out
+   *  of `overall_score` rather than contributing a stand-in. */
+  customer_concentration_score: number | null;
   ready_to_be_acquired: boolean;
   key_gaps: string[];
   target_acquirer_profile: string;
@@ -149,20 +153,24 @@ function scoreIntegrationComplexity(integrationCount: number): number {
   return 4.0; // No integrations — uncertain acquirability
 }
 
-function scoreCustomerConcentration(
-  topCustomerMrrPct: number | null,
-  customerCount: number,
-): number {
-  // Good: no single customer > 20% of MRR
-  if (customerCount === 0) return 5.0; // no data
-
-  if (topCustomerMrrPct === null) {
-    // Estimate from customer count — many customers = lower concentration risk
-    if (customerCount >= 50) return 8.0;
-    if (customerCount >= 20) return 7.0;
-    if (customerCount >= 10) return 6.0;
-    return 5.0;
-  }
+/**
+ * Null when nothing is known about who pays this company.
+ *
+ * It used to return 5.0 for "no data" — a middling score, indistinguishable
+ * from a company measured at moderate concentration, and it went into the
+ * weighted average at the heaviest weight in the report. AN UNMEASURED
+ * DIMENSION IS NOT A MIDDLING ONE.
+ */
+/** The largest customer's share of what this company's customers pay, banded.
+ *
+ *  NULL IN, NULL OUT, and there is no third branch. The version this replaces
+ *  had one: when the share was unknown it estimated a score from the number of
+ *  customers — 50+ customers scored 8.0, "many customers = lower concentration
+ *  risk". That is a rule of thumb, and it was displayed beside four measured
+ *  dimensions as if it were one of them. A share Foundry cannot compute is a
+ *  dimension it did not measure. */
+function scoreCustomerConcentration(topCustomerMrrPct: number | null): number | null {
+  if (topCustomerMrrPct === null) return null;
 
   if (topCustomerMrrPct <= 10) return 9.0;
   if (topCustomerMrrPct <= 20) return 7.0;
@@ -178,7 +186,7 @@ function identifyGaps(scores: {
   ip_clarity: number;
   team_retention: number;
   integration_complexity: number;
-  customer_concentration: number;
+  customer_concentration: number | null;
 }): string[] {
   const gaps: string[] = [];
 
@@ -200,7 +208,12 @@ function identifyGaps(scores: {
   if (scores.integration_complexity < 7) {
     gaps.push('Limited integration ecosystem — building an API-first product and key integrations increases strategic value');
   }
-  if (scores.customer_concentration < 7) {
+  if (scores.customer_concentration === null) {
+    // The same rule as the vesting line above: a gap in Foundry's records,
+    // stated as one. A concentration score of 5 used to appear here as a
+    // finding about the company when it was a finding about the data.
+    gaps.push('Foundry knows of no paying customers for this company, so customer concentration is not scored — report your top-customer revenue share separately before diligence');
+  } else if (scores.customer_concentration < 7) {
     gaps.push('Customer concentration risk — reduce dependency on top customers, target no single customer > 20% of MRR');
   }
 
@@ -266,7 +279,6 @@ export async function assessMAReadiness(productId: string): Promise<MAReadinessS
 
   const mrr = metricsRow.mrr_cents != null ? (metricsRow.mrr_cents as number) / 100 : 0;
   const churnRate = metricsRow.churn_rate as number | null;
-  const customerCount = (metricsRow.customer_count as number) ?? 0;
 
   // ── 2. Load historical MRR growth for consistency check ──
   // `mrr_growth_pct` is not a column and never has been. This query raised on
@@ -377,9 +389,30 @@ export async function assessMAReadiness(productId: string): Promise<MAReadinessS
     integrationCount = ((res.rows[0] as Record<string, unknown>)?.cnt as number) ?? 0;
   } catch { /* ok */ }
 
-  // ── 7. Customer concentration (top customer MRR % if available) ──
-  // We don't have per-customer MRR in our schema — estimate from count
-  const topCustomerMrrPct: number | null = null;
+  // ── 7. Customer concentration, from the customers this company actually has ──
+  //
+  // A QUARTER OF THIS SCORE WAS A CONSTANT. `topCustomerMrrPct` was a hardcoded
+  // `null` under a comment saying per-customer MRR is not in the schema, and
+  // `customerCount` read `metric_snapshots.customer_count` — a column that has
+  // never existed, so `?? 0` made it zero for every company. Both inputs dead
+  // meant `scoreCustomerConcentration` returned exactly 5.0 every time, and it
+  // carries weight 0.25 — joint-heaviest with revenue quality. A fifth of the
+  // report's dimensions, shown to the founder with its own bar beside the
+  // others, was a fixed number wearing the shape of a finding, on a page that
+  // tells them whether they are ready to be acquired.
+  //
+  // Per-customer MRR IS in the schema, in both customer stores, and
+  // `institution/company-customers.ts` is the accessor that reads both and
+  // deduplicates. Concentration is what that data is for.
+  const customers = await getCompanyCustomers(productId);
+  const paying = customers.filter((c) => c.mrrCents > 0);
+  const totalCustomerMrr = paying.reduce((sum, c) => sum + c.mrrCents, 0);
+  // The largest customer's share of what the customers pay. Null when no
+  // customer is known to pay anything — an unmeasured dimension, not a middling
+  // one.
+  const topCustomerMrrPct: number | null = totalCustomerMrr > 0
+    ? (Math.max(...paying.map((c) => c.mrrCents)) / totalCustomerMrr) * 100
+    : null;
 
   // ── 8. Score each dimension ──
   const revenue_quality_score = parseFloat(
@@ -394,18 +427,31 @@ export async function assessMAReadiness(productId: string): Promise<MAReadinessS
   const integration_complexity_score = parseFloat(
     scoreIntegrationComplexity(integrationCount).toFixed(1)
   );
-  const customer_concentration_score = parseFloat(
-    scoreCustomerConcentration(topCustomerMrrPct, customerCount).toFixed(1)
-  );
+  const concentrationRaw = scoreCustomerConcentration(topCustomerMrrPct);
+  const customer_concentration_score = concentrationRaw === null
+    ? null
+    : parseFloat(concentrationRaw.toFixed(1));
 
-  // Weighted average (revenue quality and customer concentration weighted higher)
-  const overall_score = parseFloat((
-    (revenue_quality_score * 0.25) +
-    (ip_clarity_score * 0.15) +
-    (team_retention_score * 0.20) +
-    (integration_complexity_score * 0.15) +
-    (customer_concentration_score * 0.25)
-  ).toFixed(1));
+  // A WEIGHTED AVERAGE OVER THE DIMENSIONS THAT WERE SCORED, renormalised.
+  //
+  // Customer concentration carries 0.25 — joint-heaviest — and was a constant
+  // 5.0 for every company, because both of its inputs were dead. Now that it
+  // can be genuinely absent, adding it as a zero would swing the overall score
+  // down by a quarter for a company whose customers Foundry has simply never
+  // been told about, and adding a middling 5.0 would call the unmeasured
+  // average. The dimension drops out and the remaining weights renormalise —
+  // the same rule this campaign applies to every other composite.
+  const dimensions: Array<[number | null, number]> = [
+    [revenue_quality_score, 0.25],
+    [ip_clarity_score, 0.15],
+    [team_retention_score, 0.20],
+    [integration_complexity_score, 0.15],
+    [customer_concentration_score, 0.25],
+  ];
+  const scored = dimensions.filter((d): d is [number, number] => d[0] !== null);
+  const weightUsed = scored.reduce((sum, [, w]) => sum + w, 0);
+  const overall_score = parseFloat(
+    (scored.reduce((sum, [v, w]) => sum + v * w, 0) / weightUsed).toFixed(1));
 
   const ready_to_be_acquired = overall_score >= 7.0;
 
@@ -508,7 +554,7 @@ function rowToScore(row: Record<string, unknown>): MAReadinessScore {
     ip_clarity_score: row.ip_clarity_score as number,
     team_retention_score: row.team_retention_score as number,
     integration_complexity_score: row.integration_complexity_score as number,
-    customer_concentration_score: row.customer_concentration_score as number,
+    customer_concentration_score: (row.customer_concentration_score ?? null) as number | null,
     ready_to_be_acquired: (row.ready_to_be_acquired as number) === 1,
     key_gaps: parseJSONSafe<string[]>(row.key_gaps_json as string, []),
     target_acquirer_profile: (row.target_acquirer_profile as string) ?? '',
