@@ -33,7 +33,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
   };
 
   const defaultPulse = { status: 'healthy' as const, portfolio_mrr_movement_30d: 0, portfolio_mrr_movement_delta_pct: null, active_products: 0, active_founders: 0, founders_this_month: 0, signups_never_converted: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
-  const defaultMRR = { current_mrr: 0, trialing: { count: 0, list_price_mrr: 0 }, mrr_30d_ago: 0, mrr_trend: 'flat' as const, growth_rate_pct: 0, arr: 0, by_tier: {}, portfolio_mrr_movement_history: [], forecast_3m: 0, forecast_6m: 0 };
+  const defaultMRR = { current_mrr: 0, trialing: { count: 0, list_price_mrr: 0 }, mrr_30d_ago: null, mrr_trend: 'unknown' as const, growth_rate_pct: null, arr: 0, by_tier: {}, portfolio_mrr_movement_history: [], forecast_3m: null, forecast_6m: null };
   const defaultChurn = { at_risk_share_pct: null, at_risk_count: 0, at_risk_products: [], churned_this_month: null, rescue_opportunities: 0 };
   const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_failing: 0, jobs_never_reported: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: null, recent_actions: [] };
   const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: null, at_risk_by_company: [], champions: 0, revenue_at_risk: 0 };
@@ -87,7 +87,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
 
     <!-- KPI Row -->
     <div class="dashboard-grid" style="margin-bottom:1.5rem;">
-      ${kpiCard('MRR', '$' + mrr.current_mrr.toLocaleString(), mrr.growth_rate_pct > 0 ? '+' + mrr.growth_rate_pct + '%' : mrr.growth_rate_pct + '%')}
+      ${kpiCard('MRR', '$' + mrr.current_mrr.toLocaleString(), mrr.growth_rate_pct === null ? 'no 30d level recorded' : (mrr.growth_rate_pct > 0 ? '+' : '') + mrr.growth_rate_pct + '%')}
       ${kpiCard('ARR', '$' + mrr.arr.toLocaleString(), null)}
       ${kpiCard('Founders', pulse.active_founders.toString(), pulse.founders_this_month > 0 ? '+' + pulse.founders_this_month + ' this mo' : null)}
       ${kpiCard('At Risk', churn.at_risk_count.toString(), churn.at_risk_count > 0 ? '$' + customerHealth.revenue_at_risk + ' MRR' : 'None')}

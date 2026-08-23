@@ -88,14 +88,18 @@ describe('a founder inside a trial window', () => {
     expect(mrr.trialing.count).toBe(0);
   });
 
-  it('is excluded from the prior-period comparison too', async () => {
-    // One paying founder now; one who signed up 60 days ago but is still in a
-    // trial. If trialists counted in the prior window, growth would go negative.
+  it('is excluded from revenue, and there is no prior window to be excluded from', async () => {
+    // This used to assert that a trialist was left out of `mrr_30d_ago` as well
+    // as out of `current_mrr`. The prior window was itself unsound: it was
+    // today's roster filtered by signup date, a strict SUBSET of today's
+    // payers, so the growth rate could not be negative for anyone. Nothing
+    // records what Foundry's MRR was thirty days ago, so it says so.
     await addFounder({ tier: 'growth' });
     await addFounder({ tier: 'growth', trialEndsAt: '2099-01-01', createdDaysAgo: 60 });
     const mrr = await getMRRIntelligence();
-    expect(mrr.mrr_30d_ago, 'one paying founder, 30+ days old').toBe(199);
-    expect(mrr.growth_rate_pct).toBe(0);
+    expect(mrr.current_mrr, 'the trialist is not revenue').toBe(199);
+    expect(mrr.mrr_30d_ago).toBeNull();
+    expect(mrr.growth_rate_pct).toBeNull();
   });
 
   it('leaves no list-price total that includes trials', () => {
@@ -182,14 +186,17 @@ describe('the two ends of the range', () => {
     expect(forecast.projected_from.measured).toBe(false);
   });
 
-  it('projects, and says what it compounded, when the rate is measured', async () => {
+  it('projects nothing even when there are older founders to compare against', async () => {
+    // The branch this used to exercise was reached by comparing today's payers
+    // against today's payers-who-signed-up-earlier — a subset, so "growth" was
+    // whatever the newer cohort added and never less. Two founders, one 60 days
+    // old, produced "+100% a month" and a twelve-month curve built on it.
     await addFounder({ tier: 'growth', createdDaysAgo: 60 });
     await addFounder({ tier: 'growth', createdDaysAgo: 2 });
     const forecast = await getForecast();
-    expect(forecast.projected_from.measured).toBe(true);
-    expect(forecast.projected_from.monthly_growth_pct, '199 -> 398').toBe(100);
-    expect(forecast.projections.length).toBe(12);
-    expect(forecast.projections[0].mrr).toBe(796);
+    expect(forecast.projected_from.measured).toBe(false);
+    expect(forecast.projected_from.monthly_growth_pct).toBeNull();
+    expect(forecast.projections).toEqual([]);
   });
 
   it('carries no invented damping coefficient', () => {

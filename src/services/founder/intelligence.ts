@@ -224,16 +224,32 @@ export interface MRRIntelligence {
   /** Founders inside a trial window, and what they would be worth at list
    *  price if every one of them converted. Never added to `current_mrr`. */
   trialing: { count: number; list_price_mrr: number };
-  mrr_30d_ago: number;
-  mrr_trend: 'growing' | 'flat' | 'declining';
-  growth_rate_pct: number;
+  /**
+   * NULL, BECAUSE FOUNDRY'S OWN REVENUE HISTORY IS NOT RECORDED ANYWHERE.
+   *
+   * This used to be "today's roster, filtered to founders who signed up more
+   * than thirty days ago, priced at today's tiers". That set is a SUBSET of the
+   * set behind `current_mrr` — a founder who cancelled has no tier and is
+   * absent from both — so `prior <= total` always held and the growth rate was
+   * arithmetically incapable of being negative. The trend badge could say
+   * 'growing' or 'flat' and never 'declining', and the forecasts compounded a
+   * rate that could only point one way.
+   *
+   * A level thirty days ago needs a record made thirty days ago.
+   * `founders.tier` holds one value and no history, and nothing else in the
+   * schema keeps Foundry's own subscription state over time.
+   */
+  mrr_30d_ago: number | null;
+  mrr_trend: 'growing' | 'flat' | 'declining' | 'unknown';
+  growth_rate_pct: number | null;
   arr: number;
   by_tier: Record<string, { count: number; mrr: number }>;
   /** The OPERATED COMPANIES' reported MRR movement by snapshot date — not
    *  Foundry's revenue history, which is not recorded anywhere. */
   portfolio_mrr_movement_history: Array<{ date: string; movement: number }>;
-  forecast_3m: number;
-  forecast_6m: number;
+  /** Null when there is no growth rate to compound. */
+  forecast_3m: number | null;
+  forecast_6m: number | null;
 }
 
 export async function getMRRIntelligence(): Promise<MRRIntelligence> {
@@ -277,33 +293,35 @@ export async function getMRRIntelligence(): Promise<MRRIntelligence> {
     movement: ((r.mrr as number) ?? 0) / 100,
   }));
 
-  // Simple growth rate from last 2 months
-  const twoMonthsAgo = await safeQuery(
-    `SELECT COUNT(*) as c, tier FROM founders
-      WHERE tier IS NOT NULL AND created_at < datetime('now', '-30 days')
-        AND (trial_ends_at IS NULL OR trial_ends_at <= datetime('now'))
-      GROUP BY tier`, []
-  );
-  let priorMRR = 0;
-  for (const row of twoMonthsAgo.rows as unknown as Array<Record<string, unknown>>) {
-    priorMRR += (row.c as number) * (tierPricing[row.tier as string] ?? 0);
-  }
-
-  const growthRate = priorMRR > 0 ? ((totalMRR - priorMRR) / priorMRR) * 100 : 0;
-  const monthlyGrowthDecimal = growthRate / 100;
-  const trend = growthRate > 2 ? 'growing' : growthRate < -2 ? 'declining' : 'flat';
+  // A GROWTH RATE THAT COULD NOT BE NEGATIVE.
+  //
+  // The prior level was computed as today's roster filtered to founders who
+  // signed up more than thirty days ago, priced at today's tiers — a strict
+  // SUBSET of the set behind `totalMRR`, since a founder who cancelled has no
+  // tier and is missing from both. So `priorMRR <= totalMRR` always held: the
+  // growth rate was arithmetically incapable of being negative, the trend badge
+  // could never read 'declining', and the three- and six-month forecasts
+  // compounded a rate that only pointed one way.
+  //
+  // Nothing records what Foundry's own MRR was thirty days ago. `founders.tier`
+  // holds one value and no history. So the answer is that it is not known, and
+  // the forecast built on it is not made.
+  const priorMRR: number | null = null;
+  const growthRate: number | null = null;
+  const trend: MRRIntelligence['mrr_trend'] = 'unknown';
 
   return {
     current_mrr: totalMRR,
     trialing: { count: trialingCount, list_price_mrr: trialingMRR },
     mrr_30d_ago: priorMRR,
     mrr_trend: trend,
-    growth_rate_pct: Math.round(growthRate * 10) / 10,
+    growth_rate_pct: growthRate,
     arr: totalMRR * 12,
     by_tier: byTier,
     portfolio_mrr_movement_history: movementHistory,
-    forecast_3m: Math.round(totalMRR * Math.pow(1 + monthlyGrowthDecimal, 3)),
-    forecast_6m: Math.round(totalMRR * Math.pow(1 + monthlyGrowthDecimal, 6)),
+    // A forecast is the growth rate compounded. There is no growth rate.
+    forecast_3m: null,
+    forecast_6m: null,
   };
 }
 
@@ -559,34 +577,31 @@ export interface Forecast {
    *  times draws a flat line that looks like a finding. */
   projections: Array<{ month: string; mrr: number }>;
   /** What the projections were compounded from, so a reader can judge them. */
-  projected_from: { monthly_growth_pct: number; measured: boolean };
+  /** Null: nothing records Foundry's own MRR at a past date. */
+  projected_from: { monthly_growth_pct: number | null; measured: boolean };
 }
 
 export async function getForecast(): Promise<Forecast> {
   const mrr = await getMRRIntelligence();
 
-  // `mrr_30d_ago` of zero means there was nothing to compare against, which is
-  // the same condition that makes `growth_rate_pct` zero by default rather
-  // than by measurement.
-  const measured = mrr.mrr_30d_ago > 0;
-  const monthlyGrowth = mrr.growth_rate_pct / 100;
-
-  const projections: Array<{ month: string; mrr: number }> = [];
-  if (measured) {
-    let runningMRR = mrr.current_mrr;
-    for (let i = 1; i <= 12; i++) {
-      runningMRR = Math.round(runningMRR * (1 + monthlyGrowth));
-      const date = new Date();
-      date.setMonth(date.getMonth() + i);
-      projections.push({ month: date.toISOString().slice(0, 7), mrr: runningMRR });
-    }
-  }
+  // `measured` was already the right idea, resting on a number that could not
+  // be zero for the right reason: `mrr_30d_ago` was today's roster filtered by
+  // signup date, so it was positive whenever Foundry had any customer at all,
+  // and the twelve-month projection compounded a growth rate that was
+  // arithmetically incapable of being negative.
+  //
+  // Nothing records what Foundry's own MRR was at any past date, so the rate is
+  // null and the compounding loop below it was unreachable. A branch that
+  // cannot run is not a feature waiting for data; it is code that will be read
+  // as evidence the projection exists. When a level is recorded over time, the
+  // projection comes back as a whole thing, against a history that is real.
+  const measured = mrr.growth_rate_pct !== null;
 
   return {
     current_mrr: mrr.current_mrr,
     runway_months: null,
     break_even_month: null,
-    projections,
+    projections: [],
     projected_from: { monthly_growth_pct: mrr.growth_rate_pct, measured },
   };
 }
@@ -602,7 +617,7 @@ export async function generateMorningBriefing(): Promise<string> {
   const prompt = `Write a CEO morning briefing (5 bullets, max 25 words each) for a SaaS platform.
 
 Data:
-- Foundry's own MRR: $${mrr.current_mrr} (${mrr.growth_rate_pct > 0 ? '+' : ''}${mrr.growth_rate_pct}% vs 30d ago)
+- Foundry's own MRR: $${mrr.current_mrr}${mrr.growth_rate_pct === null ? ' (no recorded level 30d ago to compare against)' : ` (${mrr.growth_rate_pct > 0 ? '+' : ''}${mrr.growth_rate_pct}% vs 30d ago)`}
 - Reported MRR movement across operated companies, last 30d: $${pulse.portfolio_mrr_movement_30d}${pulse.portfolio_mrr_movement_delta_pct === null ? ' (no prior window to compare)' : ` (${pulse.portfolio_mrr_movement_delta_pct > 0 ? '+' : ''}${pulse.portfolio_mrr_movement_delta_pct}% on the prior 30d)`}
 - Active founders: ${pulse.active_founders}, products: ${pulse.active_products}
 - New founders this month: ${pulse.founders_this_month}
