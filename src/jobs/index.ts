@@ -1557,6 +1557,47 @@ async function scpWebhookDeliveryCleanup(): Promise<void> {
   }
 }
 
+// ─── Per-subject work, and what failed ───────────────────────────────────────
+//
+// ELEVEN SCHEDULED JOBS SHARED ONE SHAPE: a loop over products or founders,
+// `catch { /* non-fatal per product */ }`, and a closing line reporting only
+// the successes. So a run in which EVERY company failed logged the same
+// sentence as a run with nothing to do. "Generated 0 compressed briefs" was
+// both "no companies" and "every company's weekly brief threw", and nothing
+// anywhere distinguished them — the outer try/catch never fires, because the
+// loop completes.
+//
+// `institution/loop-health.ts` exists precisely to separate "nothing happened"
+// from "nothing ran", and it cannot see this — correctly, and by design. It
+// records the JOB, and the job succeeded; and it scopes itself deliberately to
+// the two loops whose silence changes the founder's own page, saying so in its
+// header. These eleven belong to the operator log, which is exactly where their
+// failures were invisible.
+//
+// `scp_scenario_refresh` shows what was intended: someone had already separated
+// "awaiting a stated cash position" from "generated" — two non-failure outcomes
+// told apart — while the failure path stayed uncounted beside them.
+//
+// Nothing here changes what any job DOES.
+
+/** One subject's failure, named, at error level. The message is for the
+ *  operator's log, not for `job_health`, which stores an error CLASS only.
+ *  Exported so the behaviour can be RUN in a test rather than read. */
+export function logSubjectFailure(jobName: string, subjectId: string, err: unknown): void {
+  logger.error(
+    `${jobName}: ${subjectId} failed: ${err instanceof Error ? err.message : String(err)}`,
+    { jobName },
+  );
+}
+
+/** A job's closing line, said so that a failure cannot read as an empty day.
+ *  Exported for the same reason as above. */
+export function reportRun(jobName: string, sentence: string, failed: number): void {
+  const line = failed > 0 ? `${jobName}: ${sentence}, and ${failed} failed` : `${jobName}: ${sentence}`;
+  if (failed > 0) logger.error(line, { jobName });
+  else logger.info(line, { jobName });
+}
+
 // ─── SCP v5: Prediction Accuracy Check — Daily 6:00 UTC ──────────────────────
 
 async function scpPredictionAccuracyCheck(): Promise<void> {
@@ -1566,14 +1607,18 @@ async function scpPredictionAccuracyCheck(): Promise<void> {
     const { query: dbQuery } = await import('../db/client.js');
     const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let totalMeasured = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         const result = await measurePendingPredictions(productId);
         totalMeasured += result.measured;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_prediction_accuracy', productId, err);
+      }
     }
-    logger.info(`scp_prediction_accuracy: Measured ${totalMeasured} predictions`, { jobName: 'scp_prediction_accuracy' });
+    reportRun('scp_prediction_accuracy', `Measured ${totalMeasured} predictions`, failed);
   } catch (err) {
     logger.error('scp_prediction_accuracy: Error:', { jobName: 'scp_prediction_accuracy', error: String(err) });
   }
@@ -1588,14 +1633,18 @@ async function scpCompressedBrief(): Promise<void> {
     const { query: dbQuery } = await import('../db/client.js');
     const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let generated = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         await generateCompressedWeeklyBrief(productId);
         generated++;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_compressed_brief', productId, err);
+      }
     }
-    logger.info(`scp_compressed_brief: Generated ${generated} compressed briefs`, { jobName: 'scp_compressed_brief' });
+    reportRun('scp_compressed_brief', `Generated ${generated} compressed briefs`, failed);
   } catch (err) {
     logger.error('scp_compressed_brief: Error:', { jobName: 'scp_compressed_brief', error: String(err) });
   }
@@ -1613,6 +1662,7 @@ async function scpScenarioRefresh(): Promise<void> {
     );
     let generated = 0;
     let awaitingPosition = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
@@ -1621,12 +1671,14 @@ async function scpScenarioRefresh(): Promise<void> {
         // read as though every company were being modelled.
         if (await generateScenariosForProduct(productId) === null) awaitingPosition++;
         else generated++;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_scenario_refresh', productId, err);
+      }
     }
-    logger.info(
-      `scp_scenario_refresh: Generated scenarios for ${generated} products, `
-      + `${awaitingPosition} awaiting a stated cash position`,
-      { jobName: 'scp_scenario_refresh' });
+    reportRun('scp_scenario_refresh',
+      `Generated scenarios for ${generated} products, `
+      + `${awaitingPosition} awaiting a stated cash position`, failed);
   } catch (err) {
     logger.error('scp_scenario_refresh: Error:', { jobName: 'scp_scenario_refresh', error: String(err) });
   }
@@ -1644,15 +1696,19 @@ async function scpDebateRun(): Promise<void> {
         WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     const today = new Date().toISOString().slice(0, 10);
     let ran = 0;
+    let failed = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
       try {
         const { runDebateForProduct } = await import('../services/scp/debate/orchestrator.js');
         await runDebateForProduct(productId, today);
         ran++;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_debate_run', productId, err);
+      }
     }
-    logger.info(`scp_debate_run: Ran debate for ${ran} products`, { jobName: 'scp_debate_run' });
+    reportRun('scp_debate_run', `Ran debate for ${ran} products`, failed);
   } catch (err) {
     logger.error('scp_debate_run: Error:', { jobName: 'scp_debate_run', error: String(err) });
   }
@@ -1667,6 +1723,7 @@ async function scpFailurePatternScan(): Promise<void> {
          JOIN products p ON p.id = ai.product_id
         WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let scanned = 0;
+    let failed = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
       try {
@@ -1674,9 +1731,12 @@ async function scpFailurePatternScan(): Promise<void> {
         await seedDefaultPatterns();
         await scanForFailurePatterns(productId);
         scanned++;
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_failure_pattern_scan', productId, err);
+      }
     }
-    logger.info(`scp_failure_pattern_scan: Scanned ${scanned} products`, { jobName: 'scp_failure_pattern_scan' });
+    reportRun('scp_failure_pattern_scan', `Scanned ${scanned} products`, failed);
   } catch (err) {
     logger.error('scp_failure_pattern_scan: Error:', { jobName: 'scp_failure_pattern_scan', error: String(err) });
   }
@@ -1691,6 +1751,7 @@ async function scpPromptEvolution(): Promise<void> {
          JOIN products p ON p.id = ai.product_id
         WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let evolved = 0;
+    let failed = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
       try {
@@ -1698,9 +1759,12 @@ async function scpPromptEvolution(): Promise<void> {
         await recordMutationOutcome(productId, '');  // update outcome stats for active mutations
         await generatePromptMutations(productId);
         evolved++;
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_prompt_evolution', productId, err);
+      }
     }
-    logger.info(`scp_prompt_evolution: Processed ${evolved} products`, { jobName: 'scp_prompt_evolution' });
+    reportRun('scp_prompt_evolution', `Processed ${evolved} products`, failed);
   } catch (err) {
     logger.error('scp_prompt_evolution: Error:', { jobName: 'scp_prompt_evolution', error: String(err) });
   }
@@ -1715,15 +1779,19 @@ async function scpExecutionPlaybookEval(): Promise<void> {
          JOIN products p ON p.id = ai.product_id
         WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let triggered = 0;
+    let failed = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
       try {
         const { evaluatePlaybooksForProduct } = await import('../services/scp/playbooks/execution-engine.js');
         const result = await evaluatePlaybooksForProduct(productId);
         triggered += result.triggered;
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_playbook_eval', productId, err);
+      }
     }
-    logger.info(`scp_playbook_eval: Triggered ${triggered} playbook actions`, { jobName: 'scp_playbook_eval' });
+    reportRun('scp_playbook_eval', `Triggered ${triggered} playbook actions`, failed);
   } catch (err) {
     logger.error('scp_playbook_eval: Error:', { jobName: 'scp_playbook_eval', error: String(err) });
   }
@@ -1738,14 +1806,18 @@ async function scpSignalEvents(): Promise<void> {
     const { processPendingSignalEvents } = await import('../services/scp/events/dispatcher.js');
     const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let total = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         const processed = await processPendingSignalEvents(productId);
         total += processed;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_signal_events', productId, err);
+      }
     }
-    logger.info(`scp_signal_events: Processed ${total} signal events`, { jobName: 'scp_signal_events' });
+    reportRun('scp_signal_events', `Processed ${total} signal events`, failed);
   } catch (err) {
     logger.error('scp_signal_events: Error:', { jobName: 'scp_signal_events', error: String(err) });
   }
@@ -1762,14 +1834,18 @@ async function scpROIMonthly(): Promise<void> {
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let computed = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         await computeMonthlyROI(productId, month);
         computed++;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_roi_monthly', productId, err);
+      }
     }
-    logger.info(`scp_roi_monthly: Computed ROI for ${computed} products`, { jobName: 'scp_roi_monthly' });
+    reportRun('scp_roi_monthly', `Computed ROI for ${computed} products`, failed);
   } catch (err) {
     logger.error('scp_roi_monthly: Error:', { jobName: 'scp_roi_monthly', error: String(err) });
   }
@@ -1789,15 +1865,19 @@ async function scpFounderStateAssessment(): Promise<void> {
        LIMIT 100`
     );
     let assessed = 0;
+    let failed = 0;
     for (const row of founders.rows) {
       const founderId = (row as Record<string, unknown>).id as string;
       try {
         await detectBehavioralSignals(founderId);
         await assessFounderState(founderId);
         assessed++;
-      } catch { /* non-fatal per founder */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_founder_state', founderId, err);
+      }
     }
-    logger.info(`scp_founder_state: Assessed ${assessed} founders`, { jobName: 'scp_founder_state' });
+    reportRun('scp_founder_state', `Assessed ${assessed} founders`, failed);
   } catch (err) {
     logger.error('scp_founder_state: Error:', { jobName: 'scp_founder_state', error: String(err) });
   }
@@ -1812,14 +1892,18 @@ async function scpPriorityRebuild(): Promise<void> {
     const { rebuildPriorityQueue } = await import('../services/scp/priority/ranker.js');
     const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let total = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         const inserted = await rebuildPriorityQueue(productId);
         total += inserted;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_priority_rebuild', productId, err);
+      }
     }
-    logger.info(`scp_priority_rebuild: Rebuilt ${total} priority actions`, { jobName: 'scp_priority_rebuild' });
+    reportRun('scp_priority_rebuild', `Rebuilt ${total} priority actions`, failed);
   } catch (err) {
     logger.error('scp_priority_rebuild: Error:', { jobName: 'scp_priority_rebuild', error: String(err) });
   }
