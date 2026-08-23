@@ -83,6 +83,12 @@ INSERT OR IGNORE INTO role_permissions (id, role, permission) VALUES
 -- api_keys: programmatic access tokens scoped to a product
 -- key_hash stores a bcrypt/SHA-256 hash — raw key is never stored
 -- key_prefix (e.g. "fnd_live_abc123") is shown in UI for identification
+-- THIS STATEMENT DID NOT RUN. `api_keys` was created by `006_api_keys_webhooks.sql`, and
+-- `CREATE TABLE IF NOT EXISTS` over an existing table does nothing — so the
+-- columns below are a PROPOSAL, not the schema. The live shape is the earlier
+-- one plus whatever later migrations added by ALTER; read
+-- `docs/db/schema.snapshot.sql` for what the database actually has.
+-- `tests/unit/only-the-first-create-is-the-schema.test.ts` pins the full list.
 CREATE TABLE IF NOT EXISTS api_keys (
   id           TEXT PRIMARY KEY,
   product_id   TEXT NOT NULL,

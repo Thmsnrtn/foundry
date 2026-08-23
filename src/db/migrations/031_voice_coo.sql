@@ -3,6 +3,12 @@
 -- Voice sessions, transcripts, voice memos with extracted actions.
 -- =============================================================================
 
+-- THIS STATEMENT DID NOT RUN. `voice_sessions` was created by `013_voice_push.sql`, and
+-- `CREATE TABLE IF NOT EXISTS` over an existing table does nothing — so the
+-- columns below are a PROPOSAL, not the schema. The live shape is the earlier
+-- one plus whatever later migrations added by ALTER; read
+-- `docs/db/schema.snapshot.sql` for what the database actually has.
+-- `tests/unit/only-the-first-create-is-the-schema.test.ts` pins the full list.
 CREATE TABLE IF NOT EXISTS voice_sessions (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL,

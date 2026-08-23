@@ -1,4 +1,10 @@
 -- board_packets: generated board meeting materials
+-- THIS STATEMENT DID NOT RUN. `board_packets` was created by `011_investor.sql`, and
+-- `CREATE TABLE IF NOT EXISTS` over an existing table does nothing — so the
+-- columns below are a PROPOSAL, not the schema. The live shape is the earlier
+-- one plus whatever later migrations added by ALTER; read
+-- `docs/db/schema.snapshot.sql` for what the database actually has.
+-- `tests/unit/only-the-first-create-is-the-schema.test.ts` pins the full list.
 CREATE TABLE IF NOT EXISTS board_packets (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -26,6 +32,12 @@ CREATE TABLE IF NOT EXISTS fundraising_scores (
 CREATE INDEX IF NOT EXISTS idx_fundraising_product ON fundraising_scores(product_id, target_round, generated_at);
 
 -- investor_updates: monthly investor update drafts
+-- THIS STATEMENT DID NOT RUN. `investor_updates` was created by `030_investor_automation.sql`, and
+-- `CREATE TABLE IF NOT EXISTS` over an existing table does nothing — so the
+-- columns below are a PROPOSAL, not the schema. The live shape is the earlier
+-- one plus whatever later migrations added by ALTER; read
+-- `docs/db/schema.snapshot.sql` for what the database actually has.
+-- `tests/unit/only-the-first-create-is-the-schema.test.ts` pins the full list.
 CREATE TABLE IF NOT EXISTS investor_updates (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,

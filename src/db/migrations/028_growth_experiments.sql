@@ -3,6 +3,12 @@
 -- A/B test framework with statistical significance detection.
 -- =============================================================================
 
+-- THIS STATEMENT DID NOT RUN. `experiments` was created by `023_experiments_strategy.sql`, and
+-- `CREATE TABLE IF NOT EXISTS` over an existing table does nothing — so the
+-- columns below are a PROPOSAL, not the schema. The live shape is the earlier
+-- one plus whatever later migrations added by ALTER; read
+-- `docs/db/schema.snapshot.sql` for what the database actually has.
+-- `tests/unit/only-the-first-create-is-the-schema.test.ts` pins the full list.
 CREATE TABLE IF NOT EXISTS experiments (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,

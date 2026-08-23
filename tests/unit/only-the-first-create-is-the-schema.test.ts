@@ -74,42 +74,60 @@ describe('the third table', () => {
 });
 
 describe('the shape of the trap', () => {
-  it('names every table created by more than one migration', () => {
-    // Not a failure — a list. Each of these has a file that reads like a schema
-    // and did not run, and `experiments` is the other one this campaign has
-    // been bitten by. Anything new here is a place where the same mistake is
-    // available.
+  it('names every CREATE that did not run, and each one says so', () => {
+    // A `CREATE TABLE IF NOT EXISTS` over a table that already exists is a
+    // no-op. A `DROP` followed by a `CREATE` is a rebuild and DID run — the
+    // first version of this test counted both and called `network_benchmarks` a
+    // trap when migration 086 genuinely rebuilt it. Replay the statements in
+    // order and ask which creates met a table that was already there.
     const dir = 'src/db/migrations';
-    const creators = new Map<string, string[]>();
+    const live = new Set<string>();
+    const noops: Array<{ file: string; table: string }> = [];
     for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
       const sql = readFileSync(join(dir, file), 'utf8').replace(/--[^\n]*/g, '');
-      for (const m of sql.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)/gi)) {
-        const name = m[1];
-        if (name.endsWith('_new')) continue;            // table rebuilds, by design
-        creators.set(name, [...(creators.get(name) ?? []), file]);
+      const statements =
+        /(DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?(\w+))|(CREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?(\w+))|(ALTER\s+TABLE\s+(\w+)\s+RENAME\s+TO\s+(\w+))/gi;
+      for (const m of sql.matchAll(statements)) {
+        if (m[2]) { live.delete(m[2].toLowerCase()); continue; }
+        if (m[5]) {
+          const table = m[5].toLowerCase();
+          if (live.has(table)) { if (m[4]) noops.push({ file, table }); }
+          else live.add(table);
+          continue;
+        }
+        if (m[7] && m[8]) { live.delete(m[7].toLowerCase()); live.add(m[8].toLowerCase()); }
       }
     }
-    const twice = [...creators.entries()].filter(([, files]) => files.length > 1)
-      .map(([name]) => name).sort();
-    // ELEVEN, and this campaign has been bitten by three of them: `integrations`
-    // (`outbound_webhooks` stays on the list even though migration 206 drops
-    // the table: the two CREATE statements are still in the history, and this
-    // counts files rather than live tables.)
-    // (created by THREE migrations), `experiments`, and `webhook_deliveries`.
-    // The number may shrink and must not grow: a new duplicate CREATE is a new
-    // file that reads like a schema and will not run.
-    expect(twice, 'a table created twice: only the first CREATE is the schema').toEqual([
-      'api_keys',
-      'board_packets',
-      'experiments',
-      'integration_sync_log',
-      'integrations',
-      'investor_updates',
-      'network_benchmarks',
-      'network_contributions',
-      'outbound_webhooks',
-      'voice_sessions',
-      'webhook_deliveries',
+
+    // TEN, and this campaign has been bitten by three: `integrations` — created
+    // by two later migrations after 008 — cost a cycle; `experiments` carries
+    // the union of two designs; `webhook_deliveries` declares a foreign key to
+    // a table that was dropped as unused. The list may shrink and must not
+    // grow: a new duplicate CREATE is a new file that reads like a schema and
+    // will not run.
+    expect(noops.map((n) => `${n.table} <- ${n.file}`).sort()).toEqual([
+      'api_keys <- 024_rbac.sql',
+      'board_packets <- 039_investor_layer.sql',
+      'experiments <- 028_growth_experiments.sql',
+      'integration_sync_log <- 021_data_ingestion.sql',
+      'integrations <- 021_data_ingestion.sql',
+      'integrations <- 021_integration_fabric.sql',
+      'investor_updates <- 039_investor_layer.sql',
+      'outbound_webhooks <- 033_api_webhooks.sql',
+      'voice_sessions <- 031_voice_coo.sql',
+      'webhook_deliveries <- 033_api_webhooks.sql',
     ]);
+
+    // AND EVERY ONE OF THEM SAYS SO IN THE FILE. A list in a test is read by
+    // whoever runs the test; a marker above the statement is read by whoever
+    // opens the migration, which is the person about to trust it.
+    for (const { file, table } of noops) {
+      const sql = readFileSync(join(dir, file), 'utf8');
+      const at = sql.indexOf(`CREATE TABLE IF NOT EXISTS ${table} (`);
+      expect(at, `${file}: ${table} not found`).toBeGreaterThan(-1);
+      expect(sql.slice(Math.max(0, at - 700), at),
+        `${file}: the CREATE of ${table} does not say it did not run`)
+        .toContain('THIS STATEMENT DID NOT RUN');
+    }
   });
 });
