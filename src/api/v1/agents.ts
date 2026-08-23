@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
+import { logger } from '../../services/logger.js';
 import { requireScope } from '../middleware/auth.js';
 import type { ApiAuthEnv } from '../middleware/auth.js';
 
@@ -29,21 +30,48 @@ agentsApi.get('/', requireScope('agents:read'), async (c) => {
   }
 });
 
-// GET /:agentName/briefings — last 10 briefings for this agent
+// GET /:agentName/briefings — this agent's contribution to the last 10
+// briefings it took part in.
+//
+// THE QUERY HAD NO AGENT PREDICATE AT ALL. It selected the company-wide
+// `scp_briefings` rows — one per day, shared by every agent — and stamped
+// `meta.agent` with whatever was in the path. Every agent name returned the
+// same ten rows, and so did every name that is not an agent: `/nobody/briefings`
+// answered with the company's briefings and a label saying they were nobody's.
+//
+// The per-agent fact exists: `agent_contributions` is JSON keyed by agent name.
+// So the endpoint now returns what this agent contributed, from the briefings
+// where it contributed something, and 404s for a name this product has no agent
+// for — rather than answering for a name it has never heard of.
 agentsApi.get('/:agentName/briefings', requireScope('agents:read'), async (c) => {
   const productId = c.get('productId');
   const agentName = c.req.param('agentName');
   try {
+    const known = await query(
+      'SELECT 1 AS present FROM agent_instances WHERE product_id = ? AND agent_name = ?',
+      [productId, agentName]
+    );
+    if (known.rows.length === 0) {
+      return c.json({ error: `No agent named '${agentName}' for this product` }, 404);
+    }
+
+    // Filtered in SQL, so the ten rows returned are the ten most recent
+    // briefings THIS AGENT contributed to — not the ten most recent briefings,
+    // some of which may not mention it.
     const result = await query(
-      `SELECT id, briefing_date, headline, health_score, signal_score, risk_state, created_at
+      `SELECT id, briefing_date, headline, created_at,
+              json_extract(agent_contributions, '$."' || ? || '"') AS contribution
        FROM scp_briefings
        WHERE product_id = ?
+         AND json_extract(agent_contributions, '$."' || ? || '"') IS NOT NULL
        ORDER BY briefing_date DESC
        LIMIT 10`,
-      [productId]
+      [agentName, productId, agentName]
     );
     return c.json({ data: result.rows, meta: { agent: agentName, total: result.rows.length } });
   } catch (err) {
+    logger.error(`v1 agent briefings failed: ${err instanceof Error ? err.message : String(err)}`,
+      { productId });
     return c.json({ error: 'Failed to fetch briefings' }, 500);
   }
 });

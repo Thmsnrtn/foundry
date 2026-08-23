@@ -18,10 +18,25 @@
 // difference between an endpoint being MOUNTED and being LIVE.
 //
 // So this checks exactly the tractable case and skips the rest honestly:
-//   • single-table SELECT only — anything with a JOIN or an alias is skipped;
+//   • single-table SELECT only — anything with a JOIN is skipped;
 //   • `SELECT *` is skipped, it names no columns;
 //   • aliases introduced by `AS` are skipped, they are output names;
 //   • SQL keywords and functions are skipped.
+//
+// A TABLE ALIAS IS NOT AMBIGUITY WHEN THERE IS ONE TABLE. The first version
+// skipped `FROM customer_intelligence ci` along with the JOINs, and the public
+// API's list-customers endpoint sat behind exactly that shape: `ci.name`,
+// `ci.company` and `ci.lifecycle_stage` against a table that has
+// `account_name`, `stage`, and no company — a documented endpoint that threw on
+// every request since it was written, hidden behind a catch that returned a
+// fixed sentence. `customer_intelligence.name` is named in the paragraph above
+// as one of the defects this gate found, and this file could not see the copy
+// of it that mattered.
+//
+// So a single-table SELECT with an alias is now read: the alias prefix is
+// stripped and the columns are checked like any other. A reference qualified by
+// anything else still skips the query — that is real ambiguity, and this
+// remains a gate that would rather say nothing than say something wrong.
 //
 // Run: node scripts/check-select-columns.mjs   (CI, beside lint:columns)
 // =============================================================================
@@ -42,6 +57,20 @@ for (const line of execSync(`sqlite3 ${DB} "SELECT name FROM sqlite_master WHERE
     execSync(`sqlite3 ${DB} "PRAGMA table_info('${line}')"`).toString().trim().split('\n')
       .map((l) => l.split('|')[1]?.toLowerCase()).filter(Boolean)));
 }
+
+/**
+ * Words that can follow a table name without being its alias.
+ *
+ * `FROM outbound_actions WHERE …` and `FROM outbound_actions oa WHERE …` differ
+ * by one token, and reading the first as an alias named "where" would make the
+ * query look aliased and be skipped — which is how the previous version, whose
+ * test was "any short word after the table", skipped queries it could have read.
+ */
+const NOT_AN_ALIAS = new Set([
+  'where', 'order', 'group', 'limit', 'offset', 'having', 'union', 'join',
+  'left', 'inner', 'outer', 'cross', 'natural', 'on', 'using', 'set', 'values',
+  'returning', 'window', 'except', 'intersect',
+]);
 
 /** SQL words that are never column names. */
 const NOT_A_COLUMN = new Set([
@@ -93,8 +122,14 @@ for (const file of tsFiles(join(ROOT, 'src'))) {
       const [, selectList, table, rest] = m;
       if (selectList.includes('*')) continue;                 // names no columns
       if (/\bJOIN\b/i.test(rest) || /\bJOIN\b/i.test(selectList)) continue;
-      if (/^\s*[a-z]{1,3}\b/i.test(rest)) continue;             // aliased table: `FROM x t`
       if (/\bSELECT\b/i.test(rest)) continue;                  // subquery: not single-table
+      // `FROM <table> <alias>` and `FROM <table> AS <alias>`, where the next
+      // token is not a clause keyword. One table, so the alias resolves to it.
+      let alias = null;
+      const aliasMatch = rest.match(/^\s+(?:as\s+)?([a-z_][a-z0-9_]*)/i);
+      if (aliasMatch && !NOT_AN_ALIAS.has(aliasMatch[1].toLowerCase())) {
+        alias = aliasMatch[1].toLowerCase();
+      }
       const columns = tables.get(table);
       if (!columns) continue;                                  // phantom tables have their own gate
       // Created by the migration runner itself, before any migration has run,
@@ -107,10 +142,14 @@ for (const file of tsFiles(join(ROOT, 'src'))) {
       //   'now', '-7 days', 'approved'   SQL string literals
       //   ${column}                      interpolated identifiers
       //   AS total                       output names, not columns
-      const cleaned = selectList
+      let cleaned = selectList
         .replace(/'(?:[^'\\]|\\.)*'/g, ' ')
         .replace(/\$\{[^}]*\}/g, ' ')
         .replace(/\bAS\s+\w+/gi, ' ');
+      if (alias) cleaned = cleaned.replace(new RegExp(`\\b${alias}\\.`, 'gi'), ' ');
+      // Anything still qualified is qualified by something this query does not
+      // name. That is the ambiguity the gate refuses to guess at.
+      if (/\b[a-z_][a-z0-9_]*\s*\./i.test(cleaned)) continue;
       for (const raw of cleaned.matchAll(/\b([a-z_][a-z0-9_]{2,})\b/gi)) {
         const col = raw[1].toLowerCase();
         if (NOT_A_COLUMN.has(col) || columns.has(col)) continue;

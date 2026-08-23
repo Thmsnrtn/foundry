@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
+import { logger } from '../../services/logger.js';
 import { requireScope } from '../middleware/auth.js';
 import type { ApiAuthEnv } from '../middleware/auth.js';
 
@@ -131,18 +132,55 @@ metricsApi.get('/health', requireScope('agents:read'), async (c) => {
       [productId]
     );
 
-    const latestSnapshot = snapshotResult.rows[0] ?? null;
+    const latestSnapshot = (snapshotResult.rows[0] ?? null) as
+      { snapshot_date?: string; mrr_cents?: number | null; active_users?: number | null;
+        churn_rate?: number | null } | null;
+
+    // IS_STALE WAS COMPUTED FROM THE ROW'S EXISTENCE, NOT FROM ITS DATE.
+    //
+    // The comment beside it said `snapshot_date` was the whole answer, and then
+    // the expression read `latestSnapshot == null`. A daily job inserts an
+    // EMPTY placeholder snapshot for every active product, so a row exists for
+    // today for every company from its first day — which made `is_stale`
+    // structurally false, for everyone, forever, no matter how long ago a
+    // number was last reported.
+    //
+    // Two different questions were also wearing one name. "When was the last
+    // snapshot?" and "does that snapshot contain anything?" are not the same,
+    // and the placeholder is precisely the row where the answers diverge.
+    const ageDays = latestSnapshot?.snapshot_date == null
+      ? null
+      : Math.floor(
+        (Date.now() - new Date(`${latestSnapshot.snapshot_date}T00:00:00Z`).getTime())
+        / 86_400_000);
+
+    // The snapshot job runs daily at midnight UTC, so yesterday's date is
+    // normal operation and anything older than that means a day was missed.
+    const STALE_AFTER_DAYS = 2;
+
+    const hasMeasurements = latestSnapshot != null && (
+      latestSnapshot.mrr_cents != null
+      || latestSnapshot.active_users != null
+      || latestSnapshot.churn_rate != null
+    );
 
     return c.json({
       data: {
         latest_snapshot: latestSnapshot,
-        // `snapshot_date` is the whole answer to "is this current?", which is
-        // the only data-quality question this endpoint has ever been able to
-        // answer.
-        is_stale: latestSnapshot == null,
+        snapshot_age_days: ageDays,
+        // Null when there is no snapshot at all: absent data is not stale data,
+        // and an integrator reading `is_stale === false` should not be told
+        // "current" about a company that has never reported anything.
+        is_stale: ageDays == null ? null : ageDays > STALE_AFTER_DAYS,
+        stale_after_days: STALE_AFTER_DAYS,
+        // Whether the newest snapshot carries any measurement at all. The
+        // placeholder carries none.
+        has_measurements: hasMeasurements,
       },
     });
   } catch (err) {
+    logger.error(`v1 metrics health failed: ${err instanceof Error ? err.message : String(err)}`,
+      { productId });
     return c.json({ error: 'Failed to fetch health data' }, 500);
   }
 });

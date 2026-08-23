@@ -109,6 +109,21 @@ describe('every gate refuses the defect it exists for', () => {
     expect(run('check-select-columns.mjs').code).toBe(1);
   });
 
+  it('check-select-columns fails on the same column behind a table alias', () => {
+    // The alias was the hiding place. The gate skipped `FROM products p`
+    // along with the JOINs, and the public API's list-customers endpoint sat
+    // behind exactly that shape — three columns the table does not have,
+    // throwing on every request since it was written, behind a catch that
+    // returned a fixed sentence. One table is one table, alias or not.
+    plant('src/services/_gate_fixture_b2.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`SELECT ', 'p.zz_not_a_column FROM ',
+        'products p WHERE p.id = ?`, []);\n'));
+    const r = run('check-select-columns.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('zz_not_a_column');
+  });
+
   it('check-insert-columns fails on an INSERT naming a column that does not exist', () => {
     plant('src/services/_gate_fixture_c.ts',
       'import { query } from "../db/client.js";\n'
