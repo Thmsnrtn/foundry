@@ -924,7 +924,35 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-8. **Three writers to `experiments`, and three vocabularies for "who won".**
+8. **`integrations.type` means three different things, and five writers
+   disagree.** Everything found in this area came out of it, so the column is
+   worth stating plainly:
+
+   | writer | `name` | `type` holds |
+   |---|---|---|
+   | `dashboard/integrations.ts` connect form | set (as of migration 199) | the PROVIDER KEY |
+   | `integration/fabric.ts` `connectIntegration` | set | a CATEGORY from a `typeMap` |
+   | `integrations/framework.ts` | not set | a CATEGORY from `providerType()` |
+   | `integrations/stripe-sync.ts` | 'stripe' | a DIRECTION, 'inbound' |
+   | `dashboard/connections.ts` | the server's label | a DIRECTION, 'outbound' |
+
+   `sync.ts` selects by `type` and DISPATCHES on it as a provider key;
+   `getIntegration(productId, name)` — the lookup all six event syncs use —
+   matches on `name`. Three live defects came from that single ambiguity: a row
+   visible to one sync and invisible to the other, an outbound MCP connection
+   dragged into the inbound sync until Foundry told the founder it had
+   "stopped syncing outbound", and a repair migration that would have invented
+   an integration called "outbound" had it copied `type` wholesale.
+
+   **All three are fixed and none of them is the fix.** The column still holds
+   three kinds of value. The real repair is a `direction` column and a
+   `provider` column that every writer sets, with `type` retired — which is a
+   schema change across five writers and two founder-facing connect pages, and
+   should be done when someone can carry it end to end rather than in the
+   margins of a defect. **The trigger:** the next time a reader has to guess
+   what `type` means, do this instead of guessing again.
+
+9. **Three writers to `experiments`, and three vocabularies for "who won".**
    The table carries both migration 023's schema and migration 028's — 028's
    `CREATE TABLE IF NOT EXISTS` was a no-op and migration 056 reconciled the
    columns by ALTER, so the live table is the union of two designs. Three paths
@@ -953,7 +981,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    dead: an experiments system with a holdout column nothing writes. On the
    unreferenced-tables baseline in item 8.
 
-9. **Thirteen tables no code can reach, one at a time against their successor.**
+10. **Thirteen tables no code can reach, one at a time against their successor.**
    `check-unreferenced-tables.mjs` is the third side of the triangle the other
    two table gates leave open, and it is a RATCHET, not a work queue. The
    pattern in the thirteen is a superseded store left behind after its

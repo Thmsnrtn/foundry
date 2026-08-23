@@ -44,11 +44,31 @@ export const MAX_CONSECUTIVE_SYNC_FAILURES = 5;
 export async function syncProductIntegrations(productId: string): Promise<void> {
   // An errored integration is retried, up to the limit above. Giving up is a
   // decision, and a decision has to be taken deliberately and said out loud.
+  // OUTBOUND CONNECTIONS ARE NOT DATA SOURCES, AND THIS SYNC IS FOR DATA
+  // SOURCES. `integrations` is shared by writers that mean different things by
+  // `type`: this page's connect form and the switch below treat it as a
+  // PROVIDER KEY, while `connections.ts` writes `type = 'outbound'` for an MCP
+  // server the founder connected for Foundry to CALL, and `stripe-sync.ts`
+  // writes `type = 'inbound'` as a direction.
+  //
+  // So an MCP connection was selected here every cycle, fell through the switch
+  // to the default, and was recorded as a failed sync — "Integration type
+  // 'outbound' not yet implemented" — with `status` set to 'error' and
+  // `error_count` incremented. Five cycles later it crossed
+  // MAX_CONSECUTIVE_SYNC_FAILURES and the founder's phone received an
+  // `action_needed` interruption reading "Foundry stopped syncing outbound":
+  // a sentence about a direction, announcing that Foundry had given up on
+  // something it was never supposed to be pulling from.
+  //
+  // The default branch stays, because it is right for its own case — a real
+  // provider whose adapter is not written yet, like 'mixpanel'. What did not
+  // belong in this query is a row that is not a provider at all.
   const result = await query(
     `SELECT id, product_id, type, status, credentials_json, config_json, sync_cursor
      FROM integrations
       WHERE product_id = ?
         AND status IN ('active', 'error')
+        AND COALESCE(type, '') != 'outbound'
         AND COALESCE(error_count, 0) < ?`,
     [productId, MAX_CONSECUTIVE_SYNC_FAILURES],
   );
