@@ -57,10 +57,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `670de45`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `14f60d1`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 240 files, highest **204**. Ordering gated. Snapshot current.
-- **Validation:** `npm run check` green end to end — **392 files / 3,414 tests**,
+- **Validation:** `npm run check` green end to end — **393 files / 3,421 tests**,
   read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
   bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
