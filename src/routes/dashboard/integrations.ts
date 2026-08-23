@@ -14,6 +14,7 @@ import type { IntegrationType } from '../../types/index.js';
 import { requireTier } from '../../middleware/tier-gate.js';
 import { encryptCredentialPayload } from '../../services/encryption.js';
 import { requireCompanyCapability } from '../../middleware/rbac.js';
+import { directionOf } from '../../services/integration/direction.js';
 
 export const integrationsRoutes = new Hono<AuthEnv>();
 
@@ -352,18 +353,23 @@ export async function saveConnectedIntegration(input: {
     // started writing one.
     await query(
       `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
-       name = COALESCE(name, ?), last_error = NULL, updated_at = CURRENT_TIMESTAMP
+       name = COALESCE(name, ?), provider = COALESCE(provider, ?), direction = ?,
+       last_error = NULL, updated_at = CURRENT_TIMESTAMP
        WHERE product_id = ? AND type = ?`,
       [input.credentialsCiphertext, JSON.stringify(input.config), input.type,
-       input.productId, input.type],
+       input.type, directionOf(input.type), input.productId, input.type],
     );
     return;
   }
 
+  // `input.type` IS A PROVIDER KEY — that is what this form collects and what
+  // `INTEGRATION_META` is keyed by. It goes into `provider` as well now, and
+  // the direction that provider actually has goes into `direction`
+  // (migration 203). `type` keeps the same value until the retirement commit.
   await query(
-    `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json)
-     VALUES (?, ?, ?, ?, 'active', ?, ?)`,
-    [nanoid(), input.productId, input.type, input.type,
+    `INSERT INTO integrations (id, product_id, name, provider, type, direction, status, credentials_json, config_json)
+     VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+    [nanoid(), input.productId, input.type, input.type, input.type, directionOf(input.type),
      input.credentialsCiphertext, JSON.stringify(input.config)],
   );
 }

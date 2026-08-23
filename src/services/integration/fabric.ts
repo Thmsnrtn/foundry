@@ -6,6 +6,7 @@
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { decryptCredentialPayload, encryptCredentialPayload } from '../encryption.js';
+import { DIRECTION_BY_PROVIDER } from './direction.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -167,7 +168,10 @@ function rowToIntegration(row: Record<string, unknown>): IntegrationRecord {
     id: row.id as string,
     product_id: row.product_id as string,
     name: row.name as string,
-    type: row.type as string,
+    // The DIRECTION, from the column that means direction since migration 203.
+    // This field has always carried a direction on this path — `type` is what
+    // it was stored in, and two other writers put a provider key there.
+    type: (row.direction ?? row.type) as string,
     status: row.status as string,
     config_json: (() => {
       try { return JSON.parse(row.config_json as string || '{}'); } catch { return {}; }
@@ -253,17 +257,13 @@ export async function connectIntegration(
 ): Promise<void> {
   const existing = await getIntegration(productId, name);
 
-  // Determine integration type based on name
-  const typeMap: Record<string, string> = {
-    stripe: 'inbound',
-    posthog: 'inbound',
-    plausible: 'inbound',
-    resend: 'outbound',
-    github: 'bidirectional',
-    sentry: 'inbound',
-    linear: 'bidirectional',
-  };
-  const type = typeMap[name] ?? 'inbound';
+  // WHICH WAY THIS CONNECTION POINTS. This map has always been a DIRECTION, and
+  // it was being written into `type` — a column two other writers fill with a
+  // provider key and one with a category. `direction` is its own column now
+  // (migration 203) with a database trigger holding the vocabulary, and `type`
+  // keeps the same value only until the retirement commit removes it.
+  const direction = DIRECTION_BY_PROVIDER[name] ?? 'inbound';
+  const type = direction;
 
   const configJson = JSON.stringify(config.config_json ?? {});
   const authorizedAgents = JSON.stringify(config.authorized_agents ?? ['all']);
@@ -280,18 +280,21 @@ export async function connectIntegration(
       `UPDATE integrations SET
         status = 'active',
         type = ?,
+        direction = ?,
+        provider = COALESCE(provider, ?),
         credentials_json = COALESCE(?, credentials_json),
         config_json = ?,
         authorized_agents = ?,
         updated_at = ?
        WHERE product_id = ? AND name = ?`,
-      [type, credentialsCiphertext, configJson, authorizedAgents, now, productId, name],
+      [type, direction, name, credentialsCiphertext, configJson, authorizedAgents, now, productId, name],
     );
   } else {
     await query(
-      `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
-      [nanoid(), productId, name, type, credentialsCiphertext, configJson, authorizedAgents, now, now],
+      `INSERT INTO integrations (id, product_id, name, provider, type, direction, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+      [nanoid(), productId, name, name, type, direction, credentialsCiphertext, configJson,
+       authorizedAgents, now, now],
     );
   }
 }

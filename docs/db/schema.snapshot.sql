@@ -1259,6 +1259,8 @@
   SELECT RAISE(ABORT, 'financial_position:as_of_date is when this was true, not a projection');
   SELECT RAISE(ABORT, 'financial_position:cash and burn are amounts, not deltas');
   SELECT RAISE(ABORT, 'financial_position:cash and burn are amounts, not deltas');
+  SELECT RAISE(ABORT, 'integration:direction is inbound, outbound or bidirectional');
+  SELECT RAISE(ABORT, 'integration:direction is inbound, outbound or bidirectional');
   SELECT RAISE(ABORT, 'judgment_disposition:append_only') WHERE EXISTS (
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
@@ -4356,6 +4358,8 @@
   writing_tone TEXT, -- 'formal', 'casual', 'technical', 'friendly', 'direct'
  AND COALESCE(json_type(NEW.config_json),'absent')='object'
  AND COALESCE(json_type(NEW.config_json),'absent')='object'
+ AND NEW.direction NOT IN ('inbound', 'outbound', 'bidirectional')
+ AND NEW.direction NOT IN ('inbound', 'outbound', 'bidirectional')
  AND datetime(NEW.approved_at) > datetime('now', '+5 minutes')
  AND datetime(NEW.approved_at) > datetime('now', '+5 minutes')
  SELECT RAISE(ABORT,'judgment_evaluation:evidence_invalid') WHERE json_valid(NEW.evidence_refs_json)=0 OR EXISTS (
@@ -4585,7 +4589,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -4593,6 +4596,7 @@
 , confidence_score REAL DEFAULT 0);
 , contributor_hash TEXT);
 , deleted_at DATETIME, platform_dependency_risk REAL, incumbent_response_probability REAL, moat_erosion_rate REAL);
+, direction TEXT);
 , disposition TEXT NOT NULL DEFAULT 'active'
 , disposition TEXT, disposition_evidence_json TEXT);
 , dna_completion_pct INTEGER DEFAULT 0, wisdom_layer_active BOOLEAN DEFAULT FALSE, unread_competitive_signals INTEGER DEFAULT 0, audit_age_days INTEGER DEFAULT 0, unread_milestones INTEGER DEFAULT 0, open_remediation_prs INTEGER DEFAULT 0, pending_decisions_count INTEGER DEFAULT 0);
@@ -4649,6 +4653,7 @@ BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON integrations
+BEFORE INSERT ON integrations
 BEFORE INSERT ON job_health
 BEFORE INSERT ON outbound_actions
 BEFORE INSERT ON outbound_actions
@@ -4686,6 +4691,7 @@ BEFORE INSERT ON system_identities
 BEFORE UPDATE OF approved_at ON outbound_actions
 BEFORE UPDATE OF config_json ON integrations
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
+BEFORE UPDATE OF direction ON integrations
 BEFORE UPDATE OF disposition, disposition_reason, disposition_evidence_ref, disposition_at
 BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
 BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
@@ -4707,6 +4713,8 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5423,6 +5431,8 @@ CREATE TRIGGER institutional_judgment_non_authorizing_guard
 CREATE TRIGGER institutional_judgment_observation_guard
 CREATE TRIGGER integration_config_no_secrets_insert
 CREATE TRIGGER integration_config_no_secrets_update
+CREATE TRIGGER integration_direction_vocabulary_insert
+CREATE TRIGGER integration_direction_vocabulary_update
 CREATE TRIGGER job_health_error_name_guard
 CREATE TRIGGER job_health_error_name_update_guard
 CREATE TRIGGER judgment_conflict_identity_guard
@@ -5592,6 +5602,8 @@ END;
 END;
 END;
 END;
+END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
@@ -5609,6 +5621,8 @@ WHEN NEW.approved_at IS NOT NULL
 WHEN NEW.approved_at IS NOT NULL
 WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0
 WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0
+WHEN NEW.direction IS NOT NULL
+WHEN NEW.direction IS NOT NULL
 WHEN NEW.disposition IS NOT OLD.disposition
 WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.due_stated_by IS NOT NULL

@@ -6,6 +6,7 @@
 import { query } from '../../db/client.js';
 import { encryptToken, getPlaintextToken } from '../../lib/crypto.js';
 import { nanoid } from 'nanoid';
+import { directionOf } from '../integration/direction.js';
 
 export type ProviderType = 'stripe' | 'github' | 'posthog' | 'mixpanel' | 'intercom' | 'plausible' | 'google_analytics';
 
@@ -51,14 +52,15 @@ export async function registerIntegration(
     // first was an `ON CONFLICT` target with no matching unique index
     // (migration 141). A route with two unrelated fatal defects is a route
     // nobody has ever called.
-    `INSERT INTO integrations (id, product_id, owner_id, provider, type, status, credentials, config, sync_frequency_minutes)
-     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
+    `INSERT INTO integrations (id, product_id, owner_id, provider, type, direction, status, credentials, config, sync_frequency_minutes)
+     VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
      ON CONFLICT (product_id, provider) DO UPDATE SET
        credentials = excluded.credentials, config = excluded.config,
        status = 'active', sync_frequency_minutes = excluded.sync_frequency_minutes,
        updated_at = datetime('now')`,
     [
       id, productId, ownerId, config.provider, providerType(config.provider),
+      directionOf(config.provider),
       // Encrypted, like every other writer of this column. `connections.ts`
       // has always written it through `encryptToken` and `mcp-client.ts` reads
       // it back through `getPlaintextToken`; this writer stored the JSON in the

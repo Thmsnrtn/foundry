@@ -232,8 +232,10 @@ connectionRoutes.post('/connections/add',
     );
   } else {
     await query(
-      `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
-       VALUES (?, ?, ?, ?, 'mcp', 'outbound', 'active', ?, ?)`,
+      // An MCP server is something Foundry CALLS. It has always been outbound;
+      // that fact was in `type`, which two other writers use for a provider key.
+      `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, direction, status, credentials, config)
+       VALUES (?, ?, ?, ?, 'mcp', 'outbound', 'outbound', 'active', ?, ?)`,
       [nanoid(), ctx.productId, founder.id, name, credentials, config],
     );
   }

@@ -17,6 +17,10 @@ import type { IntegrationType } from '../../types/index.js';
 interface IntegrationRow {
   id: string;
   product_id: string;
+  /** Who the integration is with. The column that means that, since 203. */
+  provider: string | null;
+  /** Historical: held a provider key, a direction or a category depending on
+   *  the writer. Read only as a fallback while it is being retired. */
   type: IntegrationType;
   status: string;
   credentials_json: string | null;
@@ -63,12 +67,21 @@ export async function syncProductIntegrations(productId: string): Promise<void> 
   // The default branch stays, because it is right for its own case — a real
   // provider whose adapter is not written yet, like 'mixpanel'. What did not
   // belong in this query is a row that is not a provider at all.
+  // TWO QUESTIONS, TWO COLUMNS. This asked `type != 'outbound'` and then
+  // dispatched on `type` as a provider key — one column answering "which way
+  // does this point" and "who is it" in the same breath, which is exactly the
+  // ambiguity that dragged an MCP connection into the inbound sync. Since
+  // migration 203 the direction is `direction` and the provider is `provider`.
+  //
+  // A row whose direction is NULL is one the backfill could not classify. It is
+  // excluded: a connection that might SEND is not something to start pulling
+  // from on the strength of a guess.
   const result = await query(
-    `SELECT id, product_id, type, status, credentials_json, config_json, sync_cursor
+    `SELECT id, product_id, provider, type, status, credentials_json, config_json, sync_cursor
      FROM integrations
       WHERE product_id = ?
         AND status IN ('active', 'error')
-        AND COALESCE(type, '') != 'outbound'
+        AND direction IN ('inbound', 'bidirectional')
         AND COALESCE(error_count, 0) < ?`,
     [productId, MAX_CONSECUTIVE_SYNC_FAILURES],
   );
@@ -134,7 +147,11 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
     let metricsUpdated: string[] = [];
     let recordsProcessed = 0;
 
-    switch (integration.type) {
+    // WHO IT IS, from the column that means who it is. `provider` is backfilled
+    // for every row whose provider key was hiding in `type`, and every writer
+    // sets it. `type` is still read as the fallback until the retirement commit
+    // removes the column, and a row with neither is a row this cannot dispatch.
+    switch (integration.provider ?? integration.type) {
       case 'stripe': {
         const result = await syncStripeMetrics(
           integration.product_id,
@@ -187,7 +204,8 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
       }
 
       default:
-        await markSyncFailed(logId, integration, `Integration type '${integration.type}' not yet implemented`);
+        await markSyncFailed(logId, integration,
+          `No sync adapter for provider '${integration.provider ?? integration.type}'`);
         return;
     }
 
@@ -222,7 +240,7 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
 
 async function markSyncFailed(
   logId: string,
-  integration: Pick<IntegrationRow, 'id' | 'product_id' | 'type'>,
+  integration: Pick<IntegrationRow, 'id' | 'product_id' | 'type' | 'provider'>,
   errorMessage: string,
 ): Promise<void> {
   await query(
@@ -272,7 +290,7 @@ async function markSyncFailed(
         const { deliver } = await import('../ux/interruption.js');
         await deliver(founderId, integration.product_id, {
           importance: 'action_needed',
-          title: `Foundry stopped syncing ${integration.type}`,
+          title: `Foundry stopped syncing ${integration.provider ?? integration.type}`,
           // The provider's error text is external content. It is already stored
           // on the integration row and shown, escaped, on the Integrations page;
           // it does not need a second home in a notification body.
