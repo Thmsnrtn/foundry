@@ -1612,7 +1612,6 @@
   activation_score INTEGER,            -- Is activation rate above baseline?
   active BOOLEAN DEFAULT TRUE,
   active BOOLEAN DEFAULT TRUE,
-  active BOOLEAN DEFAULT TRUE,
   active INTEGER DEFAULT 1,
   active INTEGER DEFAULT 1,
   active INTEGER DEFAULT 1,
@@ -2042,7 +2041,6 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2390,7 +2388,6 @@
   event_type TEXT NOT NULL,   -- 'churn_detected' | 'expansion_signal' | 'nps_drop' | 'activation_failure' | 'revenue_milestone' | 'competitor_signal' | 'support_spike' | 'payment_failed'
   event_types_json TEXT NOT NULL,           -- JSON array of WebhookEventType
   events TEXT NOT NULL,
-  events TEXT NOT NULL,                -- JSON: string[] of event types
   evidence        TEXT,                         -- what falsified it (the observed value)
   evidence TEXT NOT NULL,
   evidence TEXT,
@@ -2454,7 +2451,6 @@
   external_id TEXT,
   external_message_id TEXT NOT NULL,
   extracted_context_json TEXT NOT NULL DEFAULT '{}',
-  failure_count INTEGER DEFAULT 0,
   failure_count INTEGER DEFAULT 0,
   failure_count INTEGER DEFAULT 0,
   failure_count INTEGER DEFAULT 0,
@@ -2862,7 +2858,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -2975,13 +2970,11 @@
   last_contacted_at DATETIME,
   last_contacted_by TEXT,               -- Agent name
   last_delivered_at DATETIME,
-  last_delivered_at DATETIME,
   last_delivery_at DATETIME,
   last_demoted_at       DATETIME,
   last_demotion_reason  TEXT,
   last_dispatch_at TEXT,
   last_editor  TEXT,                          -- updated on each revision
-  last_error TEXT,
   last_error TEXT,
   last_error TEXT,
   last_error_name      TEXT,
@@ -3529,7 +3522,6 @@
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL REFERENCES products(id),
@@ -3860,7 +3852,6 @@
   secret        TEXT NOT NULL UNIQUE,
   secret TEXT NOT NULL,
   secret TEXT,                              -- HMAC signing secret (optional)
-  secret TEXT,                         -- HMAC signing secret
   secret_key     TEXT NOT NULL,
   section      TEXT NOT NULL CHECK (section IN (
   sections_completed TEXT DEFAULT '[]',
@@ -4264,7 +4255,6 @@
   url TEXT NOT NULL,
   url TEXT NOT NULL,
   url TEXT NOT NULL,
-  url TEXT NOT NULL,
   url TEXT,
   usage_score REAL,
   used_count    INTEGER NOT NULL DEFAULT 0,
@@ -4591,7 +4581,6 @@
 , last_refused_at DATETIME, refusal_count INTEGER NOT NULL DEFAULT 0, last_refusal_reason TEXT
 , last_refused_at TEXT, refusal_count INTEGER NOT NULL DEFAULT 0, last_refusal_reason TEXT
 , month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
-, name TEXT, secret_hash TEXT, is_active INTEGER DEFAULT 1, updated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);
 , observation_source_kind TEXT);
 , origin TEXT NOT NULL DEFAULT 'founder', review_id TEXT, effective_at DATETIME);
@@ -5001,7 +4990,6 @@ CREATE INDEX idx_operator_attention
 CREATE INDEX idx_outbound_actions_pending ON outbound_actions(product_id, status) WHERE status = 'pending_approval';
 CREATE INDEX idx_outbound_actions_product ON outbound_actions(product_id, status, created_at DESC);
 CREATE INDEX idx_outbound_rate_limits ON outbound_rate_limits(product_id, agent_name);
-CREATE INDEX idx_outbound_webhooks_product ON outbound_webhooks(product_id, active);
 CREATE INDEX idx_outcome_trees_parent
 CREATE INDEX idx_outcome_trees_product
 CREATE INDEX idx_outcome_trees_run
@@ -5111,7 +5099,6 @@ CREATE INDEX idx_voice_sessions_product ON voice_sessions(product_id, session_da
 CREATE INDEX idx_web_audit_product ON web_audit_results(product_id);
 CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
 CREATE INDEX idx_webhooks_founder ON webhooks(founder_id);
-CREATE INDEX idx_webhooks_product ON outbound_webhooks(product_id, is_active);
 CREATE INDEX idx_weekly_plans ON weekly_plans(product_id, week_of DESC);
 CREATE INDEX idx_wiki_entries_product_section
 CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
@@ -5296,7 +5283,6 @@ CREATE TABLE onboarding_tour (
 CREATE TABLE operator_attention (
 CREATE TABLE outbound_actions (
 CREATE TABLE outbound_rate_limits (
-CREATE TABLE outbound_webhooks (
 CREATE TABLE outcome_trees (
 CREATE TABLE outreach_suppressions (
 CREATE TABLE pattern_matches (

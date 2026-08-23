@@ -6,7 +6,6 @@ experiment_holdouts
 experiment_results_timeline
 idea_validations
 investor_annotations
-outbound_webhooks
 playbook_exports
 sector_remediation_templates
 strategic_plans

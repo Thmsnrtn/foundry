@@ -1,0 +1,34 @@
+-- =============================================================================
+-- Migration 206: `outbound_webhooks` — a third table for a concept with two
+--
+-- Foundry sends webhooks two ways, and both are real:
+--
+--   `webhooks` (006)          the documented API. `POST /v1/webhooks` writes it,
+--                             `lib/webhooks.ts` dispatches from it, and
+--                             `webhook_deliveries` records what happened.
+--   `product_webhooks` (072)  the dashboard's Slack/Linear/Notion targets,
+--                             dispatched through the outbound gateway by
+--                             `distribution/outbound-webhooks.ts`.
+--
+-- `outbound_webhooks` is neither. It was created by migration 013 and created
+-- AGAIN by migration 033 with a different shape — the second was a no-op,
+-- because `CREATE TABLE IF NOT EXISTS` over an existing table does nothing —
+-- and no code has ever written a row or read one.
+--
+-- WORTH KNOWING BEFORE YOU READ MIGRATION 033: none of its three CREATE TABLE
+-- statements took effect. The live `webhook_deliveries` is 006's — its
+-- `webhook_id` REFERENCES `webhooks`, not `outbound_webhooks` as 033's text
+-- says — with 033's extra columns added later by ALTER. The file reads like a
+-- schema and is a proposal. `experiments` has the same history, and the live
+-- table there is likewise the union of two designs. **When two migrations
+-- create the same table, only the first one is the schema.**
+--
+-- Dropping this is safe in the strict sense: nothing in the codebase names it,
+-- and no live table's DDL references it — the only DDL that mentions it is its
+-- own. A table named for what the product does, which the product does
+-- elsewhere twice, is a place for the next person to write code that nothing
+-- will ever read.
+-- =============================================================================
+
+DROP INDEX IF EXISTS idx_outbound_webhooks_product;
+DROP TABLE IF EXISTS outbound_webhooks;
