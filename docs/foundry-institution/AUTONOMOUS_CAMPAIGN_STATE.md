@@ -16,11 +16,14 @@ Bootstrap from disk: verify the branch and a clean tree, read
 `DEVELOPMENT_INSTITUTION.md` and this file, skim `IMPLEMENTATION_STATE.md` and
 recent git history, then work. No chat history is required.
 
-**FIRST, CHECK THE REMOTE — THE CONTAINER'S CHECKOUT CAN BE BEHIND IT.** FOUR
+**FIRST, CHECK THE REMOTE — THE CONTAINER'S CHECKOUT CAN BE BEHIND IT.** FIVE
 TIMES NOW this working directory has come up rolled back — by fourteen, twenty,
-thirty-eight and fifty-two commits — with `origin/<branch>`, the LOCAL TRACKING
-REF, agreeing with the stale HEAD, so `git status` said "up to date" and a whole
-cycle of work looked lost. It was not: it was on the remote the whole time.
+thirty-eight, fifty-two and eighty-one commits — with `origin/<branch>`, the
+LOCAL TRACKING REF, agreeing with the stale HEAD, so `git status` said "up to
+date" and a whole cycle of work looked lost. It was not: it was on the remote
+the whole time. **The fifth time it followed a container restart mid-suite**,
+which is the closest thing to a cause anyone has seen: the restart notice and
+the rollback are worth treating as the same event.
 
 **THE SIGNATURE IS IDENTICAL EVERY TIME**, which is worth knowing before you
 start diagnosing: HEAD lands on `0e85a11` ("The level was computed, and thrown
