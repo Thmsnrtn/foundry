@@ -495,10 +495,16 @@ export interface Cohort {
 export interface CohortSummary {
   period: string;
   channel: string | null;
-  retention_day_14: number;
-  retention_day_30: number;
-  vs_historical_average_14: number;
-  vs_historical_average_30: number;
+  /** Null when the cohort has no founders in it. A cohort of nobody has no
+   *  retention; 0% is a measurement, and a bad one. */
+  retention_day_14: number | null;
+  retention_day_30: number | null;
+  /** Points above or below the historical average, or NULL when there is no
+   *  average to compare against — which needs at least two cohorts. Zero here
+   *  is the specific claim "exactly at the average", and it was what a company
+   *  with a single cohort was told. */
+  vs_historical_average_14: number | null;
+  vs_historical_average_30: number | null;
 }
 
 export interface Competitor {

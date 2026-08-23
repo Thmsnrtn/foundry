@@ -71,12 +71,22 @@ export async function identifyStressors(inputs: StressorInputs): Promise<Stresso
   }
 
   // 2. Cohort retention deviation (skip if stage suppresses)
-  if (!stageConfig.suppressedStressors.includes('cohort_retention') && inputs.latestCohort && inputs.historicalAvgRetention) {
-    const deviation14 = inputs.historicalAvgRetention.day_14 - inputs.latestCohort.retention_day_14;
+  //
+  // A COHORT WITH NOBODY IN IT HAS NO RETENTION TO HAVE DROPPED. This guarded
+  // the historical average but not the cohort's own figure, and that figure was
+  // a substituted 0 whenever `founder_count` was zero — so the deviation came
+  // out as the whole average and this raised "Severe cohort retention drop" at
+  // CRITICAL severity about a cohort that had no one to retain. The measurement
+  // says null now, and a stressor is a finding, so it needs one.
+  if (!stageConfig.suppressedStressors.includes('cohort_retention')
+      && inputs.latestCohort?.retention_day_14 != null
+      && inputs.historicalAvgRetention) {
+    const latestDay14 = inputs.latestCohort.retention_day_14;
+    const deviation14 = inputs.historicalAvgRetention.day_14 - latestDay14;
     if (deviation14 >= thresholds.cohortRetentionDeviation) {
       items.push({
         name: 'Severe cohort retention drop',
-        signal: `Latest cohort day-14 retention ${inputs.latestCohort.retention_day_14.toFixed(1)}% vs average ${inputs.historicalAvgRetention.day_14.toFixed(1)}% (${deviation14.toFixed(0)}pt gap)`,
+        signal: `Latest cohort day-14 retention ${latestDay14.toFixed(1)}% vs average ${inputs.historicalAvgRetention.day_14.toFixed(1)}% (${deviation14.toFixed(0)}pt gap)`,
         timeframe_days: 30,
         neutralizing_action: 'Investigate acquisition channel quality shift. Check onboarding completion rates for latest cohort.',
         severity: 'critical',

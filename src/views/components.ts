@@ -464,7 +464,7 @@ export interface CohortData {
 export function cohortTable(
   cohorts: CohortData[],
   historicalAvg: { retention_day_7: number | null; retention_day_14: number | null; retention_day_30: number | null } | null,
-  byChannel: Record<string, { count: number; avgRetention14: number }> | null,
+  byChannel: Record<string, { count: number; avgRetention14: number | null }> | null,
 ): HtmlContent {
   if (cohorts.length === 0) {
     return emptyState('No cohort data yet. Cohorts are created as users sign up.');
@@ -502,7 +502,7 @@ export function cohortTable(
   ${byChannel ? channelBreakdown(byChannel) : ''}`;
 }
 
-function channelBreakdown(byChannel: Record<string, { count: number; avgRetention14: number }>): HtmlContent {
+function channelBreakdown(byChannel: Record<string, { count: number; avgRetention14: number | null }>): HtmlContent {
   const entries = Object.entries(byChannel);
   if (entries.length === 0) return html``;
   return html`
@@ -511,7 +511,9 @@ function channelBreakdown(byChannel: Record<string, { count: number; avgRetentio
     <div class="metrics-grid">
       ${entries.map(([ch, data]) => html`
       <div class="metric-card">
-        <span class="metric-value">${data.avgRetention14.toFixed(0)}%</span>
+        <!-- Null when no cohort on this channel had anyone in it. "0%" there
+             is a verdict on the channel rather than an absence of one. -->
+        <span class="metric-value">${data.avgRetention14 === null ? '—' : `${data.avgRetention14.toFixed(0)}%`}</span>
         <span class="metric-label">${ch} (${data.count} users)</span>
       </div>`)}
     </div>
