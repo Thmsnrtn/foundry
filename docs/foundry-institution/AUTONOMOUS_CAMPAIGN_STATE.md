@@ -989,6 +989,35 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    teaches something about the successor; do not sweep the list to get the
    number down.
 
+12. **Three things the security ledger left, each a whole feature rather than a
+    fix.** None is blocked; each is stated so that the next person does not
+    reach for a guard that looks like the thing and is not.
+
+    **A per-tenant Stripe binding.** One webhook secret serves every company, so
+    anyone holding it can mint an event for any of them. The replay is closed
+    (globally unique event ids) and the route now refuses a product that is not
+    operating, but the BINDING needs the company's own Stripe account id on the
+    product row, captured in the connect flow, plus a per-account secret. It
+    cannot be verified against real Stripe from here, which is the reason it is
+    not half-built. **Trigger:** the first company connecting its own Stripe
+    account through a Connect flow.
+
+    **A nonce-based CSP.** `script-src` still carries `'unsafe-inline'`. Doing
+    it properly means a per-request nonce on 14 inline `<script>` blocks AND
+    rewriting 37 inline event handlers, which nonces do not cover. Half of it is
+    worse than none: a policy that looks strict and still admits the sink.
+    **Trigger:** do it as one piece, with a test that fails on a new inline
+    handler.
+
+    **A consent that cannot be granted.** `cross_company_patterns` gates the
+    write to `decision_patterns` and is in the TypeScript union but NOT in
+    migration 041's CHECK, so `recordConsent` throws for it and nothing has
+    written that table since the gate landed. Making it grantable OPENS A
+    CROSS-COMPANY DATA FLOW, and the owner's answer on §13 keeps cross-company
+    contribution explicitly opt-in with broad release as counsel debt. **This is
+    an owner decision, not a repair** — and until it is taken, the readers are
+    correct to find an empty table.
+
 ## What keeps working, for whoever comes next
 
 These lenses produced almost everything found in the last two cycles. They are
