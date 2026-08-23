@@ -284,6 +284,18 @@ for a concept the product implements twice — and reading it surfaced that TEN
 `CREATE TABLE IF NOT EXISTS` statements across seven migrations never ran.
 Three of them have cost this campaign real time. Each now says so in the file.
 
+**A capped page with no order, six times, and one of them was Foundry grading
+itself.** `scenario.ts` writes one forecast PER OPTION — a decision with three
+options has three, one of which may be the ghost — and the accuracy scorer took
+`LIMIT 1` with no ORDER BY, so an outcome that followed the founder raising
+prices could be scored against the prediction for leaving them alone, then
+recorded that option as the one chosen and stamped the untaken forecast with the
+result. `decisions.chosen_option` holds the answer and the calling job already
+selected it, one call short of the code that needed it. The other five: what
+needs you next, the red team's five risks, the briefing's three stressors, an
+agent's five OKRs, the verifier's hundred. **A biased sample nobody knows is a
+sample is worse than a short list.**
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
