@@ -303,7 +303,31 @@ platformApiRoutes.get('/api/voice/digest/:productId', async (c) => {
 platformApiRoutes.post('/api/voice/session/start', async (c) => {
   const founder = c.get('founder');
   const body = await c.req.json() as Record<string, unknown>;
-  const session = await startVoiceSession(founder.id, body.product_id as string);
+  // RT02-04: Verify founder owns the product before starting a voice session.
+  //
+  // THIS SAT BETWEEN TWO ROUTES THAT BOTH CHECK, and both cite the ticket that
+  // made them: `/api/voice/memo` above (RT02-03) and `/api/voice/session/:id/end`
+  // below (RT02-02). The audit that raised all three recorded this one as
+  // RT02-04 with the remediation spelled out — "Add product ownership
+  // verification before startVoiceSession" — and it was the one not applied.
+  //
+  // It was not only a write. `startVoiceSession` calls `startSession`, which
+  // INSERTs a `chat_sessions` row carrying the CALLER as `founder_id` and the
+  // named product as `product_id`, and returns the chat session id. `sendMessage`
+  // then authorises on `(id, founder_id)` alone — which the caller's own planted
+  // row satisfies — and takes `productId` from that row to build the COO
+  // context: the product, its lifecycle state, its wisdom DNA, its MRR
+  // decomposition and its five active stressors, none of them ownership-scoped,
+  // narrated back by the model under an instruction not to hedge.
+  //
+  // Product ids are not secret to non-owners: `getVisibleProducts` hands every
+  // active team member ids that `getProductByOwner` refuses, so this needed no
+  // guessing. `POST /api/chat/sessions` already calls `getProductByOwner` before
+  // `startSession`; this was a second, unguarded door onto the same capability.
+  const productId = body.product_id as string;
+  const prodCheck = await getProductByOwner(productId, founder.id);
+  if (prodCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  const session = await startVoiceSession(founder.id, productId);
   return c.json(session);
 });
 
