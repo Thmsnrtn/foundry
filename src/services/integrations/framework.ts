@@ -108,13 +108,45 @@ export async function getIntegrations(productId: string): Promise<Array<{
 }
 
 /**
- * Run sync for a specific integration.
+ * On whose behalf a sync is being run.
+ *
+ * AN INTEGRATION ID IS NOT A CAPABILITY. This function used to resolve the
+ * integration by id alone — `WHERE id = ?` — and then sync whatever product and
+ * credentials that row named. The route above it,
+ * `POST /api/products/:id/integrations/:integrationId/sync`, checked that the
+ * founder owned `:id` and then passed `:integrationId` straight through: two
+ * identifiers, one checked, and the unchecked one deciding everything. A
+ * founder who owned any product at all could name another company's
+ * integration and make Foundry call a third-party provider with that company's
+ * credentials, write the results into that company's metrics, and return the
+ * record count and provider error text in the response body.
+ *
+ * The ownership check was in the route, and the row it governed was fetched
+ * here. A RULE THAT DECIDES AUTHORITY MUST HAVE EXACTLY ONE HOME: so the scope
+ * travels with the call and is applied to the query that loads the row. There
+ * is no default — a caller has to say which it is.
  */
-export async function runSync(integrationId: string): Promise<SyncResult> {
+export type SyncCaller =
+  /** A request made for a founder who has been shown to own this product. */
+  | { onBehalfOfProduct: string }
+  /** The cron path, which acts for no caller and sweeps every due row. */
+  | 'scheduled';
+
+/**
+ * Run sync for a specific integration.
+ *
+ * Returns null when no integration with this id is visible to this caller —
+ * which is both "no such integration" and "not yours", deliberately
+ * indistinguishable to the caller.
+ */
+export async function runSync(integrationId: string, caller: SyncCaller): Promise<SyncResult | null> {
   const start = Date.now();
-  const integration = await query('SELECT * FROM integrations WHERE id = ?', [integrationId]);
+  const integration = caller === 'scheduled'
+    ? await query('SELECT * FROM integrations WHERE id = ?', [integrationId])
+    : await query('SELECT * FROM integrations WHERE id = ? AND product_id = ?',
+        [integrationId, caller.onBehalfOfProduct]);
   const row = integration.rows[0] as Record<string, unknown> | undefined;
-  if (!row) return { records_processed: 0, metrics_updated: [], errors: ['Integration not found'], duration_ms: 0 };
+  if (!row) return null;
 
   const provider = row.provider as ProviderType;
   const productId = row.product_id as string;
@@ -180,8 +212,9 @@ export async function runAllDueSyncs(): Promise<number> {
 
   let synced = 0;
   for (const row of due.rows as unknown as Array<Record<string, string>>) {
-    await runSync(row.id);
-    synced++;
+    // A row that vanished between the query and the sync is not a sync.
+    const result = await runSync(row.id, 'scheduled');
+    if (result !== null) synced++;
   }
   return synced;
 }
@@ -426,7 +459,10 @@ export async function processStripeWebhookEvent(
       [productId]
     );
     if (integration.rows.length > 0) {
-      await runSync((integration.rows[0] as Record<string, string>).id);
+      // The integration was just selected by `product_id`, and the product id
+      // came from the verified webhook — so the scope is the one already known.
+      await runSync((integration.rows[0] as Record<string, string>).id,
+        { onBehalfOfProduct: productId });
     }
   }
 

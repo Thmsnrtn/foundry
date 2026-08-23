@@ -141,7 +141,7 @@ describe('a sync is actually logged', () => {
        VALUES (?, ?, 'analytics', 'zz_no_adapter', 'active', '{}')`,
       [integrationId, P]);
     const { runSync } = await import('../../src/services/integrations/framework.js');
-    await runSync(integrationId).catch(() => undefined);
+    await runSync(integrationId, 'scheduled').catch(() => undefined);
 
     const row = (await query(
       `SELECT started_at, completed_at FROM integration_sync_log WHERE integration_id = ?`,

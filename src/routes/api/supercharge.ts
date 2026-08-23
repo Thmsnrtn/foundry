@@ -120,7 +120,12 @@ superchargeApiRoutes.post('/api/products/:id/integrations/:integrationId/sync', 
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const result = await runSync(integrationId);
+  // `:id` was checked above and `:integrationId` was not, so the integration
+  // is loaded inside the scope of the product that WAS checked. An integration
+  // belonging to another company is not found here, exactly as if it did not
+  // exist.
+  const result = await runSync(integrationId, { onBehalfOfProduct: productId });
+  if (result === null) return c.json({ error: 'Not found' }, 404);
   return c.json({ sync_result: result });
 });
 

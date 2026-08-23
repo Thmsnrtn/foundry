@@ -72,7 +72,7 @@ function stripeSays(): void {
 describe('the framework Stripe adapter', () => {
   it('records the level as the level', async () => {
     stripeSays();
-    await runSync('int_fw');
+    await runSync('int_fw', 'scheduled');
 
     const row = (await query('SELECT * FROM metric_snapshots WHERE product_id = ?', [P]))
       .rows[0] as Record<string, unknown>;
@@ -81,7 +81,7 @@ describe('the framework Stripe adapter', () => {
 
   it('does not report the level as new business', async () => {
     stripeSays();
-    await runSync('int_fw');
+    await runSync('int_fw', 'scheduled');
 
     const row = (await query('SELECT * FROM metric_snapshots WHERE product_id = ?', [P]))
       .rows[0] as Record<string, unknown>;
@@ -91,7 +91,7 @@ describe('the framework Stripe adapter', () => {
 
   it('does not report a refund as churned recurring revenue', async () => {
     stripeSays();
-    await runSync('int_fw');
+    await runSync('int_fw', 'scheduled');
 
     const row = (await query('SELECT * FROM metric_snapshots WHERE product_id = ?', [P]))
       .rows[0] as Record<string, unknown>;
@@ -101,7 +101,7 @@ describe('the framework Stripe adapter', () => {
 
   it('does not report a subscription count as active users', async () => {
     stripeSays();
-    await runSync('int_fw');
+    await runSync('int_fw', 'scheduled');
 
     const row = (await query('SELECT * FROM metric_snapshots WHERE product_id = ?', [P]))
       .rows[0] as Record<string, unknown>;
@@ -110,7 +110,7 @@ describe('the framework Stripe adapter', () => {
 
   it('reports which metric it actually updated', async () => {
     stripeSays();
-    const result = await runSync('int_fw');
+    const result = await runSync('int_fw', 'scheduled');
     expect(result.metrics_updated).toEqual(['mrr_cents']);
   });
 });
