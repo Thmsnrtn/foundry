@@ -7,6 +7,7 @@ import { query } from '../../db/client.js';
 import { callSonnet, callOpus, parseJSONResponse } from '../ai/client.js';
 import { sendMessage, startSession } from '../chat/coo.js';
 import { nanoid } from 'nanoid';
+import { wrapDataBlock, dataBlockInstruction, sanitizeForPrompt } from '../ai/sanitize.js';
 
 /**
  * Process a voice memo: transcribe, extract actions, create decisions, respond.
@@ -25,11 +26,22 @@ export async function processVoiceMemo(
 }> {
   const id = nanoid();
 
-  // Use Claude to extract structure from the transcript
+  // A TRANSCRIPT IS DATA, AND IT IS NOT ONLY THE FOUNDER'S WORDS.
+  //
+  // This interpolated the transcript raw, at the boundary between the prompt's
+  // instructions and its content, three times in this file. A voice memo is
+  // dictated by the founder — but a memo can be recorded in a meeting, read
+  // aloud from an email, or pasted in as text by whatever produced the
+  // transcript, so the words are not guaranteed to be theirs. The extraction
+  // below creates DECISIONS in the founder's queue from what comes back.
+  //
+  // The block is the defence: the content sits inside a named tag and the
+  // system prompt says what a tag means. The words are not rewritten — see
+  // `wrapDataBlock` for why a denylist is the wrong instrument for somebody's
+  // own dictation.
   const prompt = `A founder just recorded a voice memo. Extract the key content.
 
-Transcript:
-${transcript}
+${wrapDataBlock('transcript', transcript)}
 
 Return JSON:
 {
@@ -41,7 +53,8 @@ Return JSON:
 }`;
 
   const extraction = await callSonnet(
-    'You are extracting structured data from a founder\'s stream-of-consciousness voice memo. Be perceptive.',
+    'You are extracting structured data from a founder\'s stream-of-consciousness voice memo. Be perceptive. '
+    + dataBlockInstruction('transcript'),
     prompt,
     2048, productId
   );
@@ -69,7 +82,9 @@ Return JSON:
   // Generate COO response
   const sessionId = await startSession(founderId, productId, 'Voice memo response');
   const cooResponse = await sendMessage(sessionId, founderId,
-    `[Voice memo transcript]\n\n${transcript}\n\n[Extracted topics: ${extracted.key_topics.join(', ')}]\n\nRespond to what the founder said. Address their concerns directly.`
+    `${dataBlockInstruction('transcript')}\n\n${wrapDataBlock('transcript', transcript)}\n\n`
+    + `[Extracted topics: ${extracted.key_topics.map((t) => sanitizeForPrompt(t)).join(', ')}]\n\n`
+    + 'Respond to what the founder said. Address their concerns directly.'
   );
 
   // Persist
@@ -169,8 +184,7 @@ export async function endVoiceSession(
   const prompt = `Extract key decisions and action items from this voice conversation transcript.
 Return JSON: {"decisions": ["decision questions"], "actions": ["action items"], "summary": "2 sentence summary"}
 
-Transcript:
-${transcript.slice(0, 5000)}`;
+${wrapDataBlock('transcript', transcript, 5000)}`;
 
   // The session row carries the company. Without it this call is charged to
   // nobody, which means no per-product ceiling applies to it.
@@ -186,7 +200,8 @@ ${transcript.slice(0, 5000)}`;
   }
 
   const response = await callSonnet(
-    'Extract structured data from a conversation transcript.', prompt, 1024, sessionProductId);
+    `Extract structured data from a conversation transcript. ${dataBlockInstruction('transcript')}`,
+    prompt, 1024, sessionProductId);
   const extracted = parseJSONResponse<{ decisions: string[]; actions: string[]; summary: string }>(response.content);
 
   await query(

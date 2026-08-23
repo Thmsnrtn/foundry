@@ -210,6 +210,33 @@ skipped every aliased query along with the JOINs, and the broken endpoint above
 was `FROM customer_intelligence ci`. One table is one table, alias or not; it
 reads them now, and replanting the original defect fails the build.
 
+**And the red-team ledger, worked to the end of what is engineering.** Four
+more tickets closed, and in three of them the ticket was not the worst of it:
+
+- **RT02-14 asked for nonces.** The enforced `script-src` named neither origin
+  the product's own pages load Clerk from — `cdn.jsdelivr.net` on sign-up,
+  sign-in and sign-out, `unpkg.com` on the landing page — so an enforcing
+  browser blocks authentication entirely. And a SECOND policy sat in
+  `middleware/security.ts` that nothing imported, allowing unpkg but not
+  jsdelivr and carrying two directives the live one lacked: two answers to one
+  question, and the dead one looked stricter. A test now reads the origins the
+  pages actually load from and requires the policy to name each.
+- **RT02-15 asked for opt-out filtering on reads.** The consent that gates the
+  WRITE cannot be granted at all — `cross_company_patterns` is in the union and
+  not in migration 041's CHECK — so nothing has written the table since. What
+  the readers could still serve was pre-gate and seed rows, and the one reader
+  that counted ROWS rather than companies had no production caller and one test
+  asserting the defect as its expected behaviour. Deleted.
+- **RT02-16 asked for LIKE escaping** on one query; the same shape was in three
+  more, and on the `resolve_stressor` path it reached a WRITE — a `%` matched
+  the company's first active stressor and marked it resolved.
+- **RT02-13** was the error rendering on the auth pages, and is now nodes and
+  `textContent`.
+
+**What is left of that audit is not engineering:** RT02-07 and RT02-08 (prompt
+injection through transcripts and competitor names) and the RT02-09 binding
+half, which needs a Stripe Connect account id on the product row.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the

@@ -8,6 +8,7 @@ import { query, insertAuditLog } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import type { CompetitiveSignal, CompetitiveSignalType, CompetitiveSignificance } from '../../types/index.js';
 import type { CompetitorRow } from '../../types/database.js';
+import { wrapDataBlock, dataBlockInstruction } from '../ai/sanitize.js';
 
 interface ScanResult {
   competitor_name: string;
@@ -43,19 +44,27 @@ For each significant change, output:
 If no significant changes detected, return an empty array.
 Respond in JSON: array of signal objects.`;
 
+  // A COMPETITOR'S NAME IS TYPED BY SOMEBODY AND READ BY A MODEL. These four
+  // fields per competitor, and the product's own name and category, were
+  // interpolated straight into the prompt — so an onboarding form was a way to
+  // put text at the instruction boundary of a weekly scan whose output becomes
+  // signals and STRESSORS in the founder's queue. They are company-scoped, so
+  // this is not a cross-tenant path; it is a person writing into their own
+  // company's prompts, which still deserves a boundary rather than trust.
   const competitorContext = competitors.map((c) =>
-    `${c.name} (${c.website ?? 'no website'}): ${c.positioning ?? 'unknown positioning'}, pricing: ${c.pricing_model ?? 'unknown'}`
+    `${c.name} (${c.website ?? 'no website'}): ${c.positioning ?? 'unknown positioning'}, `
+    + `pricing: ${c.pricing_model ?? 'unknown'}`
   ).join('\n');
 
-  const userPrompt = `Product: ${product.name as string}
-Market category: ${product.market_category as string ?? 'SaaS'}
+  const userPrompt = `${wrapDataBlock('product', `${product.name as string}\nMarket category: ${product.market_category as string ?? 'SaaS'}`)}
 
-Competitors:
-${competitorContext}
+${wrapDataBlock('competitors', competitorContext)}
 
 Identify any competitive changes worth noting. Be conservative — only flag genuine signal.`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 4096, productId);
+  const response = await callSonnet(
+    `${systemPrompt}\n\n${dataBlockInstruction('product')} ${dataBlockInstruction('competitors')}`,
+    userPrompt, 4096, productId);
   const signals = parseJSONResponse<ScanResult[]>(response.content);
 
   const persisted: CompetitiveSignal[] = [];
