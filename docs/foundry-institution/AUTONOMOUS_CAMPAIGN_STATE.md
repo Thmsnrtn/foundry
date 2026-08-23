@@ -60,10 +60,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `14f60d1`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `bf19a3f`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 240 files, highest **204**. Ordering gated. Snapshot current.
-- **Validation:** `npm run check` green end to end — **393 files / 3,421 tests**,
+- **Migrations:** 242 files, highest **206**. Ordering gated. Snapshot current.
+- **Validation:** `npm run check` green end to end — **395 files / 3,432 tests**,
   read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
   bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
@@ -101,7 +101,7 @@ inherited list because it was inherited.
   query-argument mismatches **0** · INSERT value-list mismatches **0** ·
   tables written and never read **4** (218 written tables checked) ·
   **raw control bytes 0** (new gate) ·
-  **tables no code can reach 13** ·
+  **tables no code can reach 11** ·
   **permitted `'connected'` literals 1** (new gate: the integration status
   nothing reads, written twice after being retired).
 
