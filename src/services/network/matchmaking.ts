@@ -70,7 +70,21 @@ export async function findMatches(founderId: string, limit: number = 5): Promise
   const me = myProfile.rows[0] as Record<string, unknown> | undefined;
   if (!me) return [];
 
-  // Find founders in same sector/stage who are visible and not already introduced
+  // A SHORTLIST OF TWENTY, AND THE RANKING BELOW ONLY SEES THOSE TWENTY.
+  //
+  // This took twenty candidates in storage order and then scored and sorted
+  // them, so the best match in the network could not win if it was not among
+  // the arbitrary twenty the database happened to return first. That is the
+  // same shape as the fleet letter that ranked only the fifty oldest pending
+  // decisions: naming a page a page is not enough when the ranking that follows
+  // is the thing that decides.
+  //
+  // The full score needs JSON overlap between two founders' expertise and needs,
+  // which SQL here cannot compute — so the page is ordered by the part of the
+  // score it CAN: a candidate matching both sector and stage starts 25 points
+  // ahead of one matching neither. The residual is real and is said out loud
+  // rather than left in the shape of the query: this returns the best matches
+  // among a shortlist of twenty, not the best matches in the network.
   const candidates = await query(
     `SELECT np.* FROM network_profiles np
      WHERE np.founder_id != ?
@@ -80,8 +94,9 @@ export async function findMatches(founderId: string, limit: number = 5): Promise
        SELECT founder_b_id FROM introductions WHERE founder_a_id = ?
        UNION SELECT founder_a_id FROM introductions WHERE founder_b_id = ?
      )
+     ORDER BY (np.sector = ?) DESC, (np.growth_stage = ?) DESC, np.founder_id ASC
      LIMIT 20`,
-    [founderId, me.sector, me.growth_stage, founderId, founderId]
+    [founderId, me.sector, me.growth_stage, founderId, founderId, me.sector, me.growth_stage]
   );
 
   if (candidates.rows.length === 0) return [];

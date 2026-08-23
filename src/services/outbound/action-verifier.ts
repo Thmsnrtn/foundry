@@ -90,6 +90,7 @@ export async function verifyDueActions(): Promise<VerifySweepResult> {
     `SELECT id, product_id, status, error_message, approved_by, verify_criteria
        FROM action_executions
       WHERE verify_status = 'pending' AND verify_after <= datetime('now')
+      ORDER BY verify_after ASC
       LIMIT 100`,
     // DELIBERATELY NOT NARROWED TO OPERATING COMPANIES, unlike the bounded
     // queues that feed paid model calls. The effect has already gone out; what

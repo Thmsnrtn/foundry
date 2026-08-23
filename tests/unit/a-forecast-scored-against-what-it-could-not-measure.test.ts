@@ -61,9 +61,13 @@ beforeEach(async () => {
 
 /** A decision with one scenario model whose base case is exactly `baseCase`. */
 async function decisionForecasting(id: string, baseCase: Record<string, unknown>): Promise<void> {
+  // THE OPTION THE FOUNDER TOOK, stated. The scorer grades the forecast for the
+  // chosen path — a decision has one scenario model per option, and grading an
+  // arbitrary one scored a prediction nobody acted on. This fixture has always
+  // meant "the forecast for what was done"; now it says so.
   await query(
-    `INSERT INTO decisions (id, product_id, what, why_now, category, decided_by)
-     VALUES (?, ?, 'Ship the thing', 'The window is open', 'product', 'second_self')`,
+    `INSERT INTO decisions (id, product_id, what, why_now, category, decided_by, chosen_option)
+     VALUES (?, ?, 'Ship the thing', 'The window is open', 'product', 'second_self', 'ship')`,
     [id, P],
   );
   await query(
@@ -84,7 +88,7 @@ describe('a composite scored over what it actually measured', () => {
   it('scores a direction-only forecast that was right as fully right, not half right', async () => {
     await decisionForecasting('d_dir', { outcome_direction: 'positive' });
 
-    await recordPredictionAccuracy(P, 'd_dir', 'positive', null, null);
+    await recordPredictionAccuracy(P, 'd_dir', 'positive', null, null, 'ship');
 
     const row = await scoredRow();
     expect(row.magnitude_accuracy).toBeNull();
@@ -97,7 +101,7 @@ describe('a composite scored over what it actually measured', () => {
   it('scores a direction-only forecast that was wrong as fully wrong', async () => {
     await decisionForecasting('d_wrong', { outcome_direction: 'positive' });
 
-    await recordPredictionAccuracy(P, 'd_wrong', 'negative', null, null);
+    await recordPredictionAccuracy(P, 'd_wrong', 'negative', null, null, 'ship');
 
     const row = await scoredRow();
     expect(row.direction_correct).toBe(0);
@@ -109,7 +113,7 @@ describe('a composite scored over what it actually measured', () => {
     // to score. Renormalised over 0.7 of weight, that is 1.0 — not 0.7.
     await decisionForecasting('d_two', { outcome_direction: 'positive', timeframe_days: 30 });
 
-    await recordPredictionAccuracy(P, 'd_two', 'positive', null, 30);
+    await recordPredictionAccuracy(P, 'd_two', 'positive', null, 30, 'ship');
 
     const row = await scoredRow();
     expect(row.magnitude_accuracy).toBeNull();
@@ -124,7 +128,7 @@ describe('a composite scored over what it actually measured', () => {
       outcome_direction: 'positive', mrr_delta_pct: 10, timeframe_days: 30,
     });
 
-    await recordPredictionAccuracy(P, 'd_all', 'positive', 15, 45);
+    await recordPredictionAccuracy(P, 'd_all', 'positive', 15, 45, 'ship');
 
     const row = await scoredRow();
     expect(row.magnitude_accuracy).toBeCloseTo(0.5, 10);
@@ -137,7 +141,7 @@ describe('a composite scored over what it actually measured', () => {
     // direction, so it cannot have got the direction wrong.
     await decisionForecasting('d_nodir', { mrr_delta_pct: 10 });
 
-    await recordPredictionAccuracy(P, 'd_nodir', 'positive', 10, null);
+    await recordPredictionAccuracy(P, 'd_nodir', 'positive', 10, null, 'ship');
 
     const row = await scoredRow();
     expect(row.direction_correct).toBeNull();
@@ -149,7 +153,7 @@ describe('a composite scored over what it actually measured', () => {
   it('leaves the composite null when nothing in the forecast could be scored', async () => {
     await decisionForecasting('d_none', { rationale: 'vibes' });
 
-    await recordPredictionAccuracy(P, 'd_none', 'positive', null, null);
+    await recordPredictionAccuracy(P, 'd_none', 'positive', null, null, 'ship');
 
     const row = await scoredRow();
     expect(row.direction_correct).toBeNull();
@@ -174,7 +178,7 @@ describe('reporting how accurate Foundry has been', () => {
 
   it('reports zero when forecasts were scored and none of them were right', async () => {
     await decisionForecasting('d_r1', { outcome_direction: 'positive' });
-    await recordPredictionAccuracy(P, 'd_r1', 'negative', null, null);
+    await recordPredictionAccuracy(P, 'd_r1', 'negative', null, null, 'ship');
 
     const summary = await getPredictionAccuracySummary(P);
 
@@ -185,10 +189,10 @@ describe('reporting how accurate Foundry has been', () => {
 
   it('averages the direction rate over predictions that made one', async () => {
     await decisionForecasting('d_r2', { outcome_direction: 'positive' });
-    await recordPredictionAccuracy(P, 'd_r2', 'positive', null, null);
+    await recordPredictionAccuracy(P, 'd_r2', 'positive', null, null, 'ship');
     // This one never predicted a direction. It must not drag the rate down.
     await decisionForecasting('d_r3', { mrr_delta_pct: 10 });
-    await recordPredictionAccuracy(P, 'd_r3', 'positive', 10, null);
+    await recordPredictionAccuracy(P, 'd_r3', 'positive', 10, null, 'ship');
 
     const summary = await getPredictionAccuracySummary(P);
 

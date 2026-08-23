@@ -102,3 +102,28 @@ describe('the sources', () => {
     }
   });
 });
+
+describe('two more pages the same scan found', () => {
+  it('the verifier takes the executions whose window elapsed first', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+    const src = stripComments(
+      readFileSync('src/services/outbound/action-verifier.ts', 'utf8'), { lineComments: true });
+    expect(src).toMatch(/verify_after <= datetime\('now'\)\s*\n\s*ORDER BY verify_after ASC/);
+  });
+
+  it('the matchmaker orders the shortlist its ranking can only see', async () => {
+    // The full score needs JSON overlap SQL cannot compute here, so the page is
+    // ordered by the part it can — and the residual is stated in the source
+    // rather than left in the shape of the query.
+    const { readFileSync } = await import('node:fs');
+    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+    const code = stripComments(
+      readFileSync('src/services/network/matchmaking.ts', 'utf8'), { lineComments: true });
+    expect(code).toMatch(/ORDER BY \(np\.sector = \?\) DESC, \(np\.growth_stage = \?\) DESC/);
+
+    const prose = readFileSync('src/services/network/matchmaking.ts', 'utf8');
+    expect(prose, 'the cap and its effect are said out loud')
+      .toContain('not the best matches in the network');
+  });
+});
