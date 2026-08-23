@@ -67,7 +67,12 @@ describe('the table is gone', () => {
     expect(Object.keys(JOB_REGISTRY)).not.toContain('scp_wellbeing_focus_cleanup');
     // A job that succeeds at doing nothing counts as healthy on the operator's
     // panel, which is its own small dishonesty.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety before, eighty-nine now').toBe(89);
+    // The count moves whenever a job is deliberately added or removed, and it
+    // is here to catch the accidental kind. `metric_snapshot` — the daily
+    // placeholder writer whose empty rows four readers took for measurements —
+    // was removed after the two ingest paths that depended on it were made to
+    // upsert. Ninety, then eighty-nine, now eighty-eight.
+    expect(Object.keys(JOB_REGISTRY).length, 'eighty-nine before, eighty-eight now').toBe(88);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

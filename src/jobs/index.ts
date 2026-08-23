@@ -213,26 +213,31 @@ export async function sloCheck(): Promise<void> {
   logger.info('slo_check complete', { jobName: 'slo_check', breachCount: breaches.length });
 }
 
-// ─── 6. Metric Snapshot — Daily midnight UTC ──────────────────────────────────
-export async function metricSnapshot(): Promise<void> {
-  logger.info('metric_snapshot starting', { jobName: 'metric_snapshot' });
-  // This job is a no-op if metrics are pushed via API.
-  // It serves as a fallback to ensure daily snapshots exist.
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    const today = new Date().toISOString().split('T')[0];
-    const existing = await query(
-      'SELECT id FROM metric_snapshots WHERE product_id = ? AND snapshot_date = ?', [p.id, today]);
-    if (existing.rows.length === 0) {
-      // Create empty snapshot as placeholder
-      await query(
-        'INSERT INTO metric_snapshots (id, product_id, snapshot_date) VALUES (?, ?, ?)',
-        [nanoid(), p.id, today]);
-    }
-  }
-  logger.info('metric_snapshot complete', { jobName: 'metric_snapshot' });
-}
+// ─── 6. THE DAILY PLACEHOLDER SNAPSHOT, AND WHY IT IS GONE ───────────────────
+//
+// `metricSnapshot` inserted an EMPTY `metric_snapshots` row for every active
+// product at midnight UTC, "to ensure daily snapshots exist". Nothing needed
+// them to exist, and their existence was read as measurement all over the
+// codebase:
+//
+//   • `getMRRDecomposition` read the LATEST row — the placeholder — and
+//     returned a confident decomposition of zeros to ten importers, because
+//     the four movement columns are `INTEGER DEFAULT 0` and cannot say
+//     "not reported". It now selects the newest row that reports SOMETHING,
+//     which was a workaround for this job.
+//   • `/v1/metrics/health` computed `is_stale` from the EXISTENCE of a row, so
+//     every company was fresh from its first day forever.
+//   • `assessMigrationReadiness` and several intelligence readers took the
+//     latest row and found a company with no revenue.
+//
+// The two ingest paths that genuinely depended on the row — the GitHub and
+// Intercom adapters, which wrote into today's snapshot with a bare UPDATE and
+// reported success when it matched nothing — upsert now. The Stripe webhook
+// path always called `ensureSnapshot` for itself. So nothing is left that needs
+// a row it did not write.
+//
+// WHAT THE ABSENCE OF A ROW NOW MEANS: this company reported nothing that day.
+// That is a fact worth being able to state, and a row of zeros cannot state it.
 
 // ─── 7. Slot Enforcement — Daily 9:00 UTC ────────────────────────────────────
 export async function slotEnforcement(): Promise<void> {
@@ -2498,7 +2503,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
   digest_generate:      { fn: digestGenerate,       schedule: '0 7 * * 1',       description: 'Generate and send weekly digests (Monday)' },
   behavioral_triggers:  { fn: behavioralTriggers,   schedule: '0 */6 * * *',     description: 'Evaluate behavioral trigger emails (every 6h)' },
-  metric_snapshot:      { fn: metricSnapshot,       schedule: '0 0 * * *',       description: 'Ensure daily metric snapshots exist' },
   slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
   slot_enforcement:     { fn: slotEnforcement,      schedule: '0 9 * * *',       description: 'Enforce founding cohort activation window' },
   cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },

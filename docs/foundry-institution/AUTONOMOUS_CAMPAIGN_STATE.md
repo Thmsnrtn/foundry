@@ -902,16 +902,22 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    showing a historical decomposition has to say which era a row is from. **The
    trigger:** do it when a reader needs to distinguish the two, not before.
 
-   **What the placeholder writer turned out to be holding up.** The daily job
-   (`metricSnapshot`, `jobs/index.ts`) inserts an empty row per active product
-   so that "daily snapshots exist" — and that row is what several ingest paths
-   UPDATE rather than insert: `integrations/framework.ts` writes
-   `custom_metrics` and `support_volume_7d` with a bare
-   `UPDATE ... WHERE product_id = ? AND snapshot_date = ?`. Deleting the
-   placeholder would make those writes silently affect zero rows. So the
-   placeholder is not simply noise to remove; the order is **make the ingest
-   paths upsert, then stop writing the placeholder, then make the columns
-   nullable** — and each step is verifiable on its own.
+   **The placeholder writer is gone, and the first two steps are done.** The
+   daily job inserted an empty row per active product so that "daily snapshots
+   exist"; two ingest paths depended on it, writing `custom_metrics` and
+   `support_volume_7d` with a bare
+   `UPDATE ... WHERE product_id = ? AND snapshot_date = ?` — which affected zero
+   rows whenever the job had not run for that company, while returning
+   `records_processed: N` and a green sync log. Those upsert now, the Stripe
+   webhook path always created its own row, and the job is deleted. **The
+   absence of a row now says what a row of zeros could not: this company
+   reported nothing that day.**
+
+   **Step three is what remains:** the four movement columns nullable, with both
+   ingest doors writing NULL for what was not supplied. That is the table
+   rebuild described above, and the caveat stands — rows already written can
+   never be repaired, because the information that would tell a reported 0 from
+   an unreported movement was never stored.
 
 9. **`integrations.type` means three different things, and five writers
    disagree.** Everything found in this area came out of it, so the column is
