@@ -20,16 +20,13 @@ import type { MRRDecomposition, MRRHealthRatio } from '../../types/index.js';
  * and the voice briefing SAID OUT LOUD "Net new MRR this period: flat" —
  * which is a statement about the month, from a row that recorded nothing.
  *
- * WHAT THIS DOES NOT FIX, because a query cannot. The four movement columns are
- * `INTEGER DEFAULT 0`, so a company that reported a genuine zero and a company
- * that reported no movement at all store the same value. Selecting a row that
- * reported SOMETHING removes the systematic daily fabrication; it does not make
- * the movements on that row distinguishable from unreported. The end state is
- * those four columns nullable with the ingest doors writing NULL for what was
- * not supplied — a table rebuild plus every reader that adds them up, and one
- * honest caveat: rows already written cannot be repaired, because the
- * information that would tell 0 from unknown was never stored. Recorded on the
- * frontier with that trigger rather than half-done here.
+ * AND THE COLUMNS CAN SAY IT NOW. Migration 202 made the four movements
+ * nullable, so a row that reported a genuine zero and a row nobody wrote a
+ * movement into are finally different values, and this returns null for the
+ * second. One caveat that cannot be fixed: rows written BEFORE that migration
+ * keep whatever they stored, and their zeros stay ambiguous — the information
+ * that would tell 0 from unknown was never recorded. New rows are honest;
+ * history is what it is.
  */
 export async function getMRRDecomposition(productId: string): Promise<MRRDecomposition | null> {
   const result = await query(
@@ -47,12 +44,25 @@ export async function getMRRDecomposition(productId: string): Promise<MRRDecompo
   if (result.rows.length === 0) return null;
 
   const row = result.rows[0] as Record<string, unknown>;
-  const newMrr = (row.new_mrr_cents as number) ?? 0;
-  const expansion = (row.expansion_mrr_cents as number) ?? 0;
-  const contraction = (row.contraction_mrr_cents as number) ?? 0;
-  const churned = (row.churned_mrr_cents as number) ?? 0;
-  const netNew = newMrr + expansion - contraction - churned;
-  const healthRatio = newMrr > 0 ? churned / newMrr : null;
+  /** The stored value, or null for a movement nobody reported. */
+  const reported = (key: string): number | null => {
+    const v = row[key];
+    return v === null || v === undefined ? null : Number(v);
+  };
+  const newMrr = reported('new_mrr_cents');
+  const expansion = reported('expansion_mrr_cents');
+  const contraction = reported('contraction_mrr_cents');
+  const churned = reported('churned_mrr_cents');
+  // A SUM MISSING A TERM IS NOT A SMALLER SUM. Net new is the four movements
+  // together; with any one unreported the answer is that it is not known.
+  const netNew = [newMrr, expansion, contraction, churned].every((v) => v !== null)
+    ? (newMrr as number) + (expansion as number) - (contraction as number) - (churned as number)
+    : null;
+  // The ratio needs both terms measured. `new === 0` stays null — dividing by
+  // it is undefined, which is a different unknown with the same answer.
+  const healthRatio = newMrr !== null && churned !== null && newMrr > 0
+    ? churned / newMrr
+    : null;
 
   return {
     new_cents: newMrr,

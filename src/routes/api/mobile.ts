@@ -92,10 +92,12 @@ mobileRoutes.get('/api/dashboard', async (c) => {
   // zeros cannot tell "a flat month" from "we have never been told".
   const mrr = mrrData ? {
     level: mrrData.level_cents === null ? null : Math.round(mrrData.level_cents / 100),
-    new: Math.round(mrrData.new_cents / 100),
-    churned: Math.round(mrrData.churned_cents / 100),
-    expansion: Math.round(mrrData.expansion_cents / 100),
-    contraction: Math.round(mrrData.contraction_cents / 100),
+    // Null for a movement nobody reported. A client reading zeros cannot tell
+    // a flat month from a company that has never been asked.
+    new: mrrData.new_cents === null ? null : Math.round(mrrData.new_cents / 100),
+    churned: mrrData.churned_cents === null ? null : Math.round(mrrData.churned_cents / 100),
+    expansion: mrrData.expansion_cents === null ? null : Math.round(mrrData.expansion_cents / 100),
+    contraction: mrrData.contraction_cents === null ? null : Math.round(mrrData.contraction_cents / 100),
     health_ratio: mrrData.health_ratio,
   } : null;
 

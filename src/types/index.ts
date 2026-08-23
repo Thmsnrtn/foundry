@@ -548,12 +548,24 @@ export interface CompetitiveSignal {
  * accident: every call site had to be looked at.
  */
 export interface MRRDecomposition {
-  new_cents: number;
-  expansion_cents: number;
-  contraction_cents: number;
-  churned_cents: number;
-  /** New + expansion - contraction - churned. One period's net change. */
-  net_new_cents: number;
+  /**
+   * The four movements, in cents, or NULL for one nobody reported.
+   *
+   * They were `number`, over columns that were `INTEGER DEFAULT 0`, so a
+   * company that reported a genuine zero and one that reported nothing gave the
+   * same answer — and ten importers stated it as fact. Migration 202 made the
+   * columns nullable; these follow, so a reader has to decide what to say about
+   * an absence instead of being handed a zero.
+   */
+  new_cents: number | null;
+  expansion_cents: number | null;
+  contraction_cents: number | null;
+  churned_cents: number | null;
+  /**
+   * New + expansion - contraction - churned. One period's net change, and NULL
+   * unless all four parts are known: a sum missing a term is not a smaller sum.
+   */
+  net_new_cents: number | null;
   /** The MRR LEVEL. Null when no integration or report has supplied one. */
   level_cents: number | null;
   health_ratio: number | null;

@@ -977,6 +977,7 @@
   -- The founder's own API key for that provider, encrypted at rest exactly as
   -- The founder's own words for it, for founder-facing surfaces only.
   -- The founder's own words for which system holds this.
+  -- The four. No DEFAULT: absent means absent.
   -- The grounding must be this product's own current claims. A disposition
   -- The kernel's identifier for the quantity. Company-defined, never parsed.
   -- The key becomes part of an event type and is matched against stored
@@ -1838,7 +1839,8 @@
   churn_risk REAL,
   churn_score INTEGER,                 -- Is churn acceptable for stage?
   churned_count INTEGER DEFAULT 0,
-  churned_mrr_cents INTEGER DEFAULT 0,
+  churned_customers INTEGER,
+  churned_mrr_cents INTEGER,
   claims_substantiation_score REAL,
   classification TEXT NOT NULL CHECK(classification IN ('matched','deviated','unresolved')),
   clean_cycles          INTEGER NOT NULL DEFAULT 0,
@@ -1957,7 +1959,7 @@
   context_snapshot TEXT,       -- JSON: {signal, riskState, stressors, metrics} at thread start
   context_summary_json TEXT NOT NULL DEFAULT '{}',
   context_used TEXT,
-  contraction_mrr_cents INTEGER DEFAULT 0,
+  contraction_mrr_cents INTEGER,
   contributed_at      TEXT NOT NULL DEFAULT (datetime('now'))
   contributed_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   contributing_factors TEXT, -- JSON
@@ -2071,8 +2073,8 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP, chat_session_id TEXT, extracted_decisions TEXT, extracted_actions TEXT, summary TEXT, audio_url TEXT, status TEXT DEFAULT 'active',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP, mrr_cents INTEGER, new_customers INTEGER, churned_customers INTEGER, updated_at DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2175,7 +2177,7 @@
   current_value TEXT,
   custom_domain TEXT,
   custom_instructions TEXT,
-  custom_metrics TEXT, -- JSON
+  custom_metrics TEXT,
   customer_concentration_score REAL NOT NULL, -- no single customer > 20% revenue
   customer_external_id TEXT NOT NULL,             -- stable id (email, stripe id, etc.)
   customer_id TEXT NOT NULL REFERENCES customers(id),
@@ -2421,7 +2423,7 @@
   exit_valuation REAL, -- null for current state
   expansion_captured_dollars REAL NOT NULL DEFAULT 0,
   expansion_eligible INTEGER DEFAULT 0,  -- BOOLEAN
-  expansion_mrr_cents INTEGER DEFAULT 0,
+  expansion_mrr_cents INTEGER,
   expansion_potential REAL,
   expectation_evidence_ref TEXT NOT NULL,
   expectation_id TEXT NOT NULL REFERENCES responsibility_shadow_expectations(id),
@@ -3134,8 +3136,9 @@
   mrr_bucket          TEXT NOT NULL CHECK (mrr_bucket IN ('0-1k','1k-10k','10k-50k','50k-200k','200k+')),
   mrr_cents INTEGER DEFAULT 0,
   mrr_cents INTEGER DEFAULT 0,
+  mrr_cents INTEGER,
   mrr_contribution_cents INTEGER DEFAULT 0,
-  mrr_health_ratio REAL, -- churned_mrr_cents / new_mrr_cents; null if new is 0
+  mrr_health_ratio REAL,
   mrr_narrative TEXT,                  -- Revenue story
   mrr_trajectory_score INTEGER,       -- Is revenue trending right?
   mutation_type TEXT NOT NULL, -- 'emphasis_shift' | 'context_addition' | 'framing_change'
@@ -3164,9 +3167,10 @@
   network_opt_in INTEGER NOT NULL DEFAULT 0,
   neutralizing_action TEXT NOT NULL,
   new_config TEXT NOT NULL,            -- JSON: snapshot of config after change
+  new_customers INTEGER,
   new_decision INTEGER NOT NULL DEFAULT 1,
   new_dilution_pct REAL NOT NULL,
-  new_mrr_cents INTEGER DEFAULT 0,
+  new_mrr_cents INTEGER,
   new_stressor INTEGER NOT NULL DEFAULT 1,
   new_value       REAL NOT NULL,
   next_meeting_at TEXT,
@@ -4240,6 +4244,7 @@
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, domain_health_score INTEGER,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at DATETIME,
   updated_at TEXT DEFAULT (datetime('now'))
   updated_at TEXT DEFAULT (datetime('now'))
   updated_at TEXT DEFAULT (datetime('now'))
@@ -5124,6 +5129,7 @@ CREATE TABLE IF NOT EXISTS "decisions" (
 CREATE TABLE IF NOT EXISTS "founders" (
 CREATE TABLE IF NOT EXISTS "hypotheses" (
 CREATE TABLE IF NOT EXISTS "integrations" (
+CREATE TABLE IF NOT EXISTS "metric_snapshots" (
 CREATE TABLE IF NOT EXISTS "notifications" (
 CREATE TABLE IF NOT EXISTS "oauth_states" (
 CREATE TABLE IF NOT EXISTS "push_log" (
@@ -5284,7 +5290,6 @@ CREATE TABLE marketplace_trust_audit (
 CREATE TABLE mcp_grants (
 CREATE TABLE memory_edges (
 CREATE TABLE memory_nodes (
-CREATE TABLE metric_snapshots (
 CREATE TABLE milestone_events (
 CREATE TABLE network_benchmarks (
 CREATE TABLE network_contributions (

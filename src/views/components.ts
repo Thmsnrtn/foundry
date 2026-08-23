@@ -80,16 +80,29 @@ export function stressorReport(stressors: StressorData[]): HtmlContent {
 // ─── MRR Decomposition ──────────────────────────────────────────────────────
 
 export interface MRRData {
-  new_cents: number;
-  expansion_cents: number;
-  contraction_cents: number;
-  churned_cents: number;
+  /** Null for a movement nobody reported — see `MRRDecomposition`. */
+  new_cents: number | null;
+  expansion_cents: number | null;
+  contraction_cents: number | null;
+  churned_cents: number | null;
   /** One period's net change. This was called `total_cents` and shown as
-   *  "Total MRR" — the headline number on this card. */
-  net_new_cents: number;
+   *  "Total MRR" — the headline number on this card. Null unless all four
+   *  movements are known: a sum missing a term is not a smaller sum. */
+  net_new_cents: number | null;
   /** The MRR LEVEL, or null when nobody has supplied one. */
   level_cents: number | null;
   health_ratio: number | null;
+}
+
+/**
+ * Dollars, or the words for not having been told.
+ *
+ * Every one of these cells printed `$0` for a movement nobody reported, on the
+ * same card whose headline already said "Not reported" for the level. The
+ * columns can say it since migration 202; this is the card saying it.
+ */
+function dollarsOrNotReported(cents: number | null): string {
+  return cents === null ? 'Not reported' : `$${formatCents(cents)}`;
 }
 
 export function mrrDecomposition(
@@ -104,25 +117,25 @@ export function mrrDecomposition(
       <span class="mrr-label">MRR</span>
     </div>
     <div class="mrr-total" style="margin-top:0.25rem;">
-      <span class="mrr-amount" style="font-size:0.9em;">$${formatCents(mrr.net_new_cents)}</span>
+      <span class="mrr-amount" style="font-size:0.9em;">${dollarsOrNotReported(mrr.net_new_cents)}</span>
       <span class="mrr-label">Net new this period</span>
     </div>
     <div class="mrr-grid">
       <div class="mrr-component mrr-new">
         <span class="mrr-comp-label">New</span>
-        <span class="mrr-comp-value">$${formatCents(mrr.new_cents)}</span>
+        <span class="mrr-comp-value">${dollarsOrNotReported(mrr.new_cents)}</span>
       </div>
       <div class="mrr-component mrr-expansion">
         <span class="mrr-comp-label">Expansion</span>
-        <span class="mrr-comp-value">$${formatCents(mrr.expansion_cents)}</span>
+        <span class="mrr-comp-value">${dollarsOrNotReported(mrr.expansion_cents)}</span>
       </div>
       <div class="mrr-component mrr-contraction">
         <span class="mrr-comp-label">Contraction</span>
-        <span class="mrr-comp-value">$${formatCents(mrr.contraction_cents)}</span>
+        <span class="mrr-comp-value">${dollarsOrNotReported(mrr.contraction_cents)}</span>
       </div>
       <div class="mrr-component mrr-churned">
         <span class="mrr-comp-label">Churned</span>
-        <span class="mrr-comp-value">$${formatCents(mrr.churned_cents)}</span>
+        <span class="mrr-comp-value">${dollarsOrNotReported(mrr.churned_cents)}</span>
       </div>
     </div>
     <div class="mrr-health">

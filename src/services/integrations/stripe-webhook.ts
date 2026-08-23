@@ -211,7 +211,7 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
       const sub = event.data.object as Stripe.Subscription;
       const mrrCents = computeSubscriptionMRR(sub);
       await query(
-        `UPDATE metric_snapshots SET new_mrr_cents = new_mrr_cents + ?, active_users = active_users + 1
+        `UPDATE metric_snapshots SET new_mrr_cents = COALESCE(new_mrr_cents, 0) + ?, active_users = COALESCE(active_users, 0) + 1
          WHERE product_id = ? AND snapshot_date = ?`,
         [mrrCents, productId, today]
       );
@@ -224,7 +224,7 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
       const sub = event.data.object as Stripe.Subscription;
       const mrrCents = computeSubscriptionMRR(sub);
       await query(
-        `UPDATE metric_snapshots SET churned_mrr_cents = churned_mrr_cents + ?, active_users = MAX(0, active_users - 1)
+        `UPDATE metric_snapshots SET churned_mrr_cents = COALESCE(churned_mrr_cents, 0) + ?, active_users = MAX(0, COALESCE(active_users, 0) - 1)
          WHERE product_id = ? AND snapshot_date = ?`,
         [mrrCents, productId, today]
       );
@@ -243,12 +243,12 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
         const delta = newMRR - oldMRR;
         if (delta > 0) {
           await query(
-            `UPDATE metric_snapshots SET expansion_mrr_cents = expansion_mrr_cents + ? WHERE product_id = ? AND snapshot_date = ?`,
+            `UPDATE metric_snapshots SET expansion_mrr_cents = COALESCE(expansion_mrr_cents, 0) + ? WHERE product_id = ? AND snapshot_date = ?`,
             [delta, productId, today]
           );
         } else if (delta < 0) {
           await query(
-            `UPDATE metric_snapshots SET contraction_mrr_cents = contraction_mrr_cents + ? WHERE product_id = ? AND snapshot_date = ?`,
+            `UPDATE metric_snapshots SET contraction_mrr_cents = COALESCE(contraction_mrr_cents, 0) + ? WHERE product_id = ? AND snapshot_date = ?`,
             [Math.abs(delta), productId, today]
           );
         }
@@ -262,7 +262,7 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
       const charge = event.data.object as Stripe.Charge;
       const refundAmount = charge.amount_refunded ?? 0;
       await query(
-        `UPDATE metric_snapshots SET churned_mrr_cents = churned_mrr_cents + ? WHERE product_id = ? AND snapshot_date = ?`,
+        `UPDATE metric_snapshots SET churned_mrr_cents = COALESCE(churned_mrr_cents, 0) + ? WHERE product_id = ? AND snapshot_date = ?`,
         [refundAmount, productId, today]
       );
       await ensureSnapshot(productId, today);
@@ -285,6 +285,11 @@ function computeSubscriptionMRR(sub: Stripe.Subscription): number {
   return total;
 }
 
+// NULL + 5 IS NULL. Migration 202 made the four movement columns nullable, so
+// "we were not told" is expressible — and every `col = col + ?` above would have
+// discarded its event against a column nobody had written yet. `COALESCE(col, 0)`
+// is the right arithmetic for the first movement we have been told about, and
+// it is the ONLY place a zero may be substituted for one of these columns.
 async function ensureSnapshot(productId: string, date: string): Promise<void> {
   const existing = await query(
     'SELECT id FROM metric_snapshots WHERE product_id = ? AND snapshot_date = ?',
@@ -300,8 +305,16 @@ async function ensureSnapshot(productId: string, date: string): Promise<void> {
 
 async function recomputeHealthRatio(productId: string, date: string): Promise<void> {
   await query(
-    `UPDATE metric_snapshots SET mrr_health_ratio = CASE WHEN new_mrr_cents > 0 THEN CAST(churned_mrr_cents AS REAL) / new_mrr_cents ELSE NULL END
-     WHERE product_id = ? AND snapshot_date = ?`,
+    // NULL means the movement was never reported, and a ratio over an
+    // unreported denominator is not zero — it is unknown, which is what the
+    // ELSE branch already says. `COALESCE(churned, 0)` is right in the
+    // numerator only because this branch has already established that new_mrr
+    // was reported and is positive.
+    `UPDATE metric_snapshots
+        SET mrr_health_ratio = CASE WHEN COALESCE(new_mrr_cents, 0) > 0
+              THEN CAST(COALESCE(churned_mrr_cents, 0) AS REAL) / new_mrr_cents
+              ELSE NULL END
+      WHERE product_id = ? AND snapshot_date = ?`,
     [productId, date]
   );
 }

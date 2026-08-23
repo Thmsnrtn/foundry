@@ -73,9 +73,13 @@ export async function generateMorningBriefing(
     contextParts.push(mrr.level_cents === null
       ? 'MRR: not reported — no integration or report has supplied a level'
       : `MRR: $${Math.round(mrr.level_cents / 100).toLocaleString()}`);
-    contextParts.push(mrr.net_new_cents === 0
-      ? 'Net new MRR this period: flat'
-      : `Net new MRR this period: $${Math.round(mrr.net_new_cents / 100).toLocaleString()}`);
+    // "Flat" is a statement about the month. It is only true of a reported
+    // zero, and until migration 202 the column could not tell one from silence.
+    contextParts.push(mrr.net_new_cents === null
+      ? 'Net new MRR this period: not reported'
+      : mrr.net_new_cents === 0
+        ? 'Net new MRR this period: flat'
+        : `Net new MRR this period: $${Math.round(mrr.net_new_cents / 100).toLocaleString()}`);
     if (mrr.health_ratio !== null) {
       contextParts.push(`Health ratio: ${mrr.health_ratio.toFixed(2)}`);
     }
@@ -201,7 +205,7 @@ function buildFallbackBriefing(
   riskState: string,
   stressors: Array<Record<string, string>>,
   decisions: Array<Record<string, unknown>>,
-  mrr: { level_cents: number | null; net_new_cents: number; health_ratio: number | null } | null,
+  mrr: { level_cents: number | null; net_new_cents: number | null; health_ratio: number | null } | null,
 ): string {
   const lines: string[] = [];
 

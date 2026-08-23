@@ -37,8 +37,11 @@ export interface FullConversationContext {
     /** The MRR LEVEL. Null when nobody has supplied one. It used to be the
      *  period's net change, under this same name. */
     total: number | null;
-    net_new: number;
-    new: number; churned: number; expansion: number; contraction: number;
+    /** Null for a movement nobody reported; the four columns can say so since
+     *  migration 202, and a zero here was read as a month in which nothing
+     *  happened. */
+    net_new: number | null;
+    new: number | null; churned: number | null; expansion: number | null; contraction: number | null;
   } | null;
   metrics: {
     activationRate: number | null;
@@ -146,11 +149,14 @@ export async function buildConversationContext(
     mrr: mrrResult ? {
       // The LEVEL, not the period's net change, which is what `total` said.
       total: mrrResult.level_cents === null ? null : Math.round(mrrResult.level_cents / 100),
-      net_new: Math.round(mrrResult.net_new_cents / 100),
-      new: Math.round(mrrResult.new_cents / 100),
-      churned: Math.round(mrrResult.churned_cents / 100),
-      expansion: Math.round(mrrResult.expansion_cents / 100),
-      contraction: Math.round(mrrResult.contraction_cents / 100),
+      // Null for a movement nobody reported — the same rule the level has
+      // followed since it was corrected. A zero here was read as a month in
+      // which nothing happened.
+      net_new: mrrResult.net_new_cents === null ? null : Math.round(mrrResult.net_new_cents / 100),
+      new: mrrResult.new_cents === null ? null : Math.round(mrrResult.new_cents / 100),
+      churned: mrrResult.churned_cents === null ? null : Math.round(mrrResult.churned_cents / 100),
+      expansion: mrrResult.expansion_cents === null ? null : Math.round(mrrResult.expansion_cents / 100),
+      contraction: mrrResult.contraction_cents === null ? null : Math.round(mrrResult.contraction_cents / 100),
     } : null,
 
     metrics: {
@@ -182,6 +188,11 @@ export async function buildConversationContext(
 /**
  * Format the context into a system prompt string for injection into Claude.
  */
+/** Dollars, or the words for not having been told. */
+function dollars(amount: number | null): string {
+  return amount === null ? 'not reported' : `$${amount.toLocaleString()}`;
+}
+
 export function formatContextForPrompt(ctx: FullConversationContext): string {
   const lines: string[] = [
     `=== BUSINESS CONTEXT ===`,
@@ -199,8 +210,8 @@ export function formatContextForPrompt(ctx: FullConversationContext): string {
       ctx.mrr.total === null
         ? '  MRR: not reported — no integration or report has supplied a level'
         : `  MRR: $${ctx.mrr.total.toLocaleString()}`,
-      `  Net new this period: $${ctx.mrr.net_new.toLocaleString()}`,
-      `  New: $${ctx.mrr.new.toLocaleString()} | Churned: $${ctx.mrr.churned.toLocaleString()} | Expansion: $${ctx.mrr.expansion.toLocaleString()}`,
+      `  Net new this period: ${ctx.mrr.net_new === null ? 'not reported' : `$${ctx.mrr.net_new.toLocaleString()}`}`,
+      `  New: ${dollars(ctx.mrr.new)} | Churned: ${dollars(ctx.mrr.churned)} | Expansion: ${dollars(ctx.mrr.expansion)}`,
     );
     if (ctx.metrics.healthRatio !== null) {
       lines.push(`  Health Ratio: ${ctx.metrics.healthRatio.toFixed(2)} (${ctx.metrics.healthRatio > 1 ? 'churning faster than growing' : 'growing faster than churning'})`);

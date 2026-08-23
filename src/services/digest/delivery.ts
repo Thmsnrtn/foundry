@@ -41,7 +41,9 @@ export async function sendDigestEmail(
   const mrrTotal = digest.mrr.level_cents === null
     ? 'not reported'
     : `$${(digest.mrr.level_cents / 100).toFixed(2)}`;
-  const netNew = `$${(digest.mrr.net_new_cents / 100).toFixed(2)}`;
+  const netNew = digest.mrr.net_new_cents === null
+    ? 'not reported'
+    : `$${(digest.mrr.net_new_cents / 100).toFixed(2)}`;
   const healthRatio = digest.mrr_health.value === null
     ? 'unknown — no new MRR to divide by'
     : digest.mrr_health.value.toFixed(2);
