@@ -66,9 +66,15 @@ describe('a principal reference', () => {
   it('has exactly one member that carries no id, and it is not a person', () => {
     expect(isPrincipalRef(AUTO_PRINCIPAL)).toBe(true);
     expect(parsePrincipal(AUTO_PRINCIPAL)).toEqual({ kind: 'auto', id: null });
+    // Still not a person — and no longer a claim about a window. This read
+    // 'automatically, after the notice window' until the two writers of the
+    // value were examined: one stamped it an hour before its own timestamp on a
+    // proposal nothing would execute, the other used it as the default for an
+    // action nobody was ever asked about. Nothing writes it now; the sentence
+    // exists for the rows that already carry it.
     expect(describePrincipal(AUTO_PRINCIPAL, OWNER),
       '"nobody stopped it" is not "somebody chose it"')
-      .toBe('automatically, after the notice window');
+      .toBe('automatically, with no approver recorded');
   });
 });
 

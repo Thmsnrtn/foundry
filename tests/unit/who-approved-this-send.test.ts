@@ -76,7 +76,11 @@ describe('the approver a person reads', () => {
       '../../src/routes/dashboard/agents-integrations.js');
     expect(__approverTextForTest(`founder:${OWNER}`, OWNER)).toBe('you');
     expect(__approverTextForTest('founder:somebody-else', OWNER)).toBe('another owner');
-    expect(__approverTextForTest('auto', OWNER)).toContain('after the notice window');
+    // 'auto' is a legacy value now: it is read, never written. It used to
+    // render "automatically, after the notice window", and there was no window
+    // — every row carrying it was stamped either an hour before its own
+    // timestamp by a proposal, or at execution under a standing authority.
+    expect(__approverTextForTest('auto', OWNER)).toContain('no approver recorded');
     expect(__approverTextForTest('institution:assisting', OWNER)).toContain('permission you gave');
     expect(__approverTextForTest(null, OWNER)).toBe('-');
     // Storing the truth made the old rendering unreadable; both halves matter.

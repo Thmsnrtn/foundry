@@ -59,8 +59,42 @@ export type PrincipalKind = keyof typeof PRINCIPAL_KINDS;
  * It is not a person and must never be written where one is meant — "nobody
  * stopped it" and "somebody chose it" are different facts, and the surface
  * below says so in those words.
+ *
+ * LEGACY: READ, NEVER WRITTEN. No notice window exists. The two writers of this
+ * value were `proposeAction`, which stamped it at authority level 1 together
+ * with an `approved_at` an hour in the FUTURE and no scheduler to make it true,
+ * and the email executor, which used it as the default for a level-0 action
+ * nobody was ever asked about. Both now say what actually happened. The value
+ * stays parseable and renderable because rows written before that are still in
+ * the table, and a record of an approval nobody gave should not become
+ * unreadable — but nothing in the codebase writes it, and a test holds that.
  */
 export const AUTO_PRINCIPAL = 'auto';
+
+/**
+ * The kinds that are A PERSON DECIDING, as opposed to a mechanism acting under
+ * a permission.
+ *
+ * The distinction is load-bearing wherever a record is read as evidence about
+ * the FOUNDER: `decision-quality` counts approvals granted within ten seconds
+ * of the proposal as "approved without reading" and reports it as a signal
+ * about how the founder is doing. An autopilot sweep approves instantly by
+ * construction, so before this list existed, switching autopilot on generated
+ * evidence that the founder was rubber-stamping decisions they had never seen.
+ */
+export const PERSON_PRINCIPAL_KINDS: readonly PrincipalKind[] = ['founder', 'voice'];
+
+/**
+ * SQL fragment for "this row was approved by a person", for a named column.
+ *
+ * The column name is code, the kinds are a closed literal set, and neither
+ * comes from a request — but the point is not the string: it is that the list
+ * of what counts as a person lives HERE, next to the vocabulary, rather than
+ * being spelled out again in each query that needs it.
+ */
+export function approvedByPersonSql(column: string): string {
+  return `(${PERSON_PRINCIPAL_KINDS.map((k) => `${column} LIKE '${k}:%'`).join(' OR ')})`;
+}
 
 /** Build a principal reference. The only way one should be constructed. */
 export function principalRef(kind: PrincipalKind, id: string): string {
@@ -113,7 +147,11 @@ export function describePrincipal(
 
   switch (principal.kind) {
     case 'auto':
-      return 'automatically, after the notice window';
+      // Legacy rows only — see AUTO_PRINCIPAL. This used to read "automatically,
+      // after the notice window", which was a sentence about a mechanism that
+      // did not exist: every row carrying this value was stamped either an hour
+      // before its own timestamp or at execution under a standing authority.
+      return 'automatically, with no approver recorded';
     case 'founder':
     case 'voice':
       return principal.id === viewerId

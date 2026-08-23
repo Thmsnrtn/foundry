@@ -136,8 +136,13 @@ function statusBadge(status: string) {
 }
 
 function authorityBadge(level: number) {
+  // Level 1 read "1-hour window", which told the founder this action would go
+  // out by itself after an hour unless they stopped it. Nothing counted an hour
+  // and nothing executed: the proposal stamped a future approval timestamp and
+  // then sat there. A badge is a statement about what the system will do, so it
+  // now says the same thing the row does — this is waiting for you.
   if (level === 0) return html`<span class="badge badge-success">Auto-execute</span>`;
-  if (level === 1) return html`<span class="badge badge-warn">1-hour window</span>`;
+  if (level === 1) return html`<span class="badge badge-warn">Your approval</span>`;
   return html`<span class="badge badge-error">CEO approval</span>`;
 }
 

@@ -1395,6 +1395,8 @@
   SELECT RAISE(ABORT,'observation_channel:key_invalid')
   SELECT RAISE(ABORT,'observation_channel:label_invalid')
   SELECT RAISE(ABORT,'observation_channel:reserved_key')
+  SELECT RAISE(ABORT,'outbound_action:approved_in_the_future');
+  SELECT RAISE(ABORT,'outbound_action:approved_in_the_future');
   SELECT RAISE(ABORT,'outbound_action:born_approved')
   SELECT RAISE(ABORT,'reconstruction_claim:conflict_requires_multiple_sources')
   SELECT RAISE(ABORT,'reconstruction_claim:derivation_required') WHERE trim(NEW.derivation_method)='';
@@ -4349,6 +4351,8 @@
   writing_tone TEXT, -- 'formal', 'casual', 'technical', 'friendly', 'direct'
  AND COALESCE(json_type(NEW.config_json),'absent')='object'
  AND COALESCE(json_type(NEW.config_json),'absent')='object'
+ AND datetime(NEW.approved_at) > datetime('now', '+5 minutes')
+ AND datetime(NEW.approved_at) > datetime('now', '+5 minutes')
  SELECT RAISE(ABORT,'judgment_evaluation:evidence_invalid') WHERE json_valid(NEW.evidence_refs_json)=0 OR EXISTS (
  SELECT RAISE(ABORT,'judgment_evaluation:tenant_invalid') WHERE NOT EXISTS (
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -4642,6 +4646,7 @@ BEFORE INSERT ON institutional_responsibilities
 BEFORE INSERT ON integrations
 BEFORE INSERT ON job_health
 BEFORE INSERT ON outbound_actions
+BEFORE INSERT ON outbound_actions
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
 BEFORE INSERT ON products
@@ -4673,6 +4678,7 @@ BEFORE INSERT ON strategic_decisions_log WHEN NEW.conflict_identity IS NOT NULL
 BEFORE INSERT ON strategic_decisions_log WHEN NEW.responsibility_refs_json IS NOT NULL
 BEFORE INSERT ON support_channels
 BEFORE INSERT ON system_identities
+BEFORE UPDATE OF approved_at ON outbound_actions
 BEFORE UPDATE OF config_json ON integrations
 BEFORE UPDATE OF conflict_identity ON strategic_decisions_log
 BEFORE UPDATE OF disposition, disposition_reason, disposition_evidence_ref, disposition_at
@@ -4696,6 +4702,8 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5414,6 +5422,8 @@ CREATE TRIGGER job_health_error_name_guard
 CREATE TRIGGER job_health_error_name_update_guard
 CREATE TRIGGER judgment_conflict_identity_guard
 CREATE TRIGGER judgment_conflict_identity_immutable
+CREATE TRIGGER outbound_action_approval_not_in_the_future_insert
+CREATE TRIGGER outbound_action_approval_not_in_the_future_update
 CREATE TRIGGER outbound_action_birth_guard
 CREATE TRIGGER products_status_is_lifecycle_only_insert
 CREATE TRIGGER products_status_is_lifecycle_only_update
@@ -5575,6 +5585,8 @@ END;
 END;
 END;
 END;
+END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
@@ -5588,6 +5600,8 @@ WHEN COALESCE(OLD.product_id,'')    <> COALESCE(NEW.product_id,'')
 WHEN COALESCE(OLD.responsibility_id,'') <> COALESCE(NEW.responsibility_id,'')
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
+WHEN NEW.approved_at IS NOT NULL
+WHEN NEW.approved_at IS NOT NULL
 WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0
 WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0
 WHEN NEW.disposition IS NOT OLD.disposition

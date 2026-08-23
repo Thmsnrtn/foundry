@@ -187,17 +187,29 @@ export async function proposeAction(params: {
     }
   }
 
-  // Authority level 1: auto-approve after notification window (1 hour)
-  // In production this would be handled by a background job. For now, queue it.
-  if (params.authorityLevel === 1) {
-    // Update approved_by to 'auto' and approved_at to +1 hour
-    // The actual execution would be triggered by a scheduler
-    const autoApproveAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    await query(
-      `UPDATE outbound_actions SET approved_by = 'auto', approved_at = ? WHERE id = ?`,
-      [autoApproveAt, id],
-    );
-  }
+  // AUTHORITY LEVEL 1 WAITS FOR A PERSON, AND THE RECORD SAYS SO.
+  //
+  // This used to stamp `approved_by = 'auto'` and `approved_at` ONE HOUR IN THE
+  // FUTURE the moment the action was proposed — while `status` stayed
+  // 'pending_approval' and no scheduler existed to execute it. Three untruths in
+  // four lines: an approval that had not happened, a timestamp for a moment that
+  // had not arrived, and a window nothing was counting down.
+  //
+  // `approved_by = 'auto'` has one meaning in this codebase — see
+  // `acting-principal.ts`: an action that reached its notice window without
+  // anybody objecting. There was no notice (nothing tells the founder a level-1
+  // action is pending except the dashboard they may not open) and no window.
+  //
+  // So nothing is written here. A level-1 action is pending approval, exactly
+  // like a level-2 one, and the difference between them survives in
+  // `authority_level` rather than in a claim about what has been authorised.
+  //
+  // WHETHER FOUNDRY MAY SEND ON A SILENT TIMER IS NOT AN ENGINEERING QUESTION.
+  // A working version needs a notice the founder actually receives, a window
+  // that is counted, and a sweep that executes — and that is Foundry acting
+  // outward, at a customer, because a person did not answer in time. It is with
+  // the owner as OWNER_DECISIONS_PENDING §14. It does not come back as a
+  // timestamp written in advance.
 
   return { action_id: id, status };
 }

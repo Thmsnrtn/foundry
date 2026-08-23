@@ -435,6 +435,59 @@ and §11, which are already with counsel on data lawfulness.
 
 ---
 
+## PENDING 14 — May Foundry send because nobody answered? **OWNER**
+
+`outbound_actions.authority_level` has three values. Level 0 executes on a
+standing grant written into the code. Level 2 waits for the founder. Level 1 was
+meant to be the middle: notify, wait an hour, then act unless someone objects.
+
+**What was there.** `proposeAction` stamped `approved_by = 'auto'` and
+`approved_at` one hour in the FUTURE the moment a level-1 action was proposed,
+left `status` at 'pending_approval', and returned. No scheduler existed to
+execute it, nothing counted the hour, and the only notice was a dashboard the
+founder might not open. The action history rendered that value as
+"automatically, after the notice window". The Pending Actions page badged every
+level-1 action "1-hour window" — a promise, to the founder, about what the
+system would do by itself.
+
+So the record asserted an approval that had not happened, at a time that had not
+arrived, by a mechanism that did not exist. All of it is now removed: a level-1
+action is pending approval, the row says nothing about who approved it, the
+badge says "Your approval", and migration 201 refuses any `approved_at` more
+than five minutes ahead of the database's clock so the next version of that code
+cannot write a deadline into a past participle.
+
+**What only the owner can answer.** A working version of level 1 is Foundry
+sending something to a customer BECAUSE A PERSON DID NOT ANSWER IN TIME. That is
+a different kind of authority from a standing grant the founder configured, and
+it is not an engineering choice:
+
+1. **Is silence consent, at this company, for this class of action?** An hour is
+   an hour of a founder's day; it can be a flight, a meeting, or a night's
+   sleep.
+2. **What has to reach the founder for the window to start?** A window that
+   begins when a row is inserted, and a window that begins when a notification
+   is delivered and shown to have arrived, are different promises. Only the
+   second can honestly be called notice.
+3. **Which action types, if any?** The same door serves an internal note and an
+   email to a paying customer, and the case for a timer is not the same for
+   both.
+4. **Who is on the record afterwards?** `acting-principal.ts` keeps 'auto' for
+   "reached its notice window without anybody objecting" and nothing writes it
+   any more. If level 1 comes back, that value comes back with it — and it has
+   to remain distinguishable from "somebody chose this".
+
+**Until it is answered.** Level 1 behaves exactly as level 2: it waits for a
+person. The distinction survives in `authority_level`, where a future
+implementation can find it, rather than in a claim about what has been
+authorised. Nothing in the product tells a founder an action will go out on its
+own.
+
+*What this forbids:* building the sweep, the timer, or the notice as an
+engineering convenience, and stamping any approval that has not happened.
+
+---
+
 ## RESOLVED 10 — Foundry's own analytics: **SPLIT ANALYTICS**
 
 The owner's answer: *"Adopt split analytics. Necessary

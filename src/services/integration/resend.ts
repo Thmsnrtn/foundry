@@ -6,6 +6,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { principalRef } from '../outbound/acting-principal.js';
 import { nanoid } from 'nanoid';
 import { getIntegration } from './fabric.js';
 import { withRetry } from '../resilience.js';
@@ -110,9 +111,18 @@ export async function executeEmailSend(
   const primaryRecipient = toList[0];
 
   const now = new Date().toISOString();
+  // WHAT AUTHORISED THIS, WHEN NOBODY APPROVED IT.
+  //
+  // The default here was 'auto', which `acting-principal.ts` defines as an
+  // action that reached its notice window without anybody objecting — and which
+  // the founder's action history renders in those words. A row arrives here
+  // with no approver only when it was born at authority level 0: no window was
+  // ever offered and nobody was asked, because the code says this class of
+  // action does not need asking. That is a standing authority, not silence
+  // after a notice, and the two are different facts about who is responsible.
   await query(
-    `UPDATE outbound_actions SET status = 'executing', approved_by = COALESCE(approved_by, 'auto'), approved_at = COALESCE(approved_at, ?), executed_at = ? WHERE id = ?`,
-    [now, now, actionId],
+    `UPDATE outbound_actions SET status = 'executing', approved_by = COALESCE(approved_by, ?), approved_at = COALESCE(approved_at, ?), executed_at = ? WHERE id = ?`,
+    [principalRef('system', 'standing_authority'), now, now, actionId],
   );
 
   const req: GatewayRequest = {
