@@ -60,8 +60,8 @@ beforeEach(async () => {
 async function outboundConnection(label: string): Promise<string> {
   const id = nanoid();
   await query(
-    `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
-     VALUES (?, ?, 'f_o', ?, 'mcp', 'outbound', 'active', ?, '{}')`,
+    `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, direction, status, credentials, config)
+     VALUES (?, ?, 'f_o', ?, 'mcp', 'outbound', 'outbound', 'active', ?, '{}')`,
     [id, P, label, 'ciphertext']);
   return id;
 }
@@ -73,9 +73,15 @@ async function unimplementedProvider(type: string): Promise<string> {
     // A parseable payload, so the sync reaches the dispatch switch rather than
     // failing earlier on decryption — which is a different failure and would
     // have made this test pass for the wrong reason.
-    `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json)
-     VALUES (?, ?, ?, ?, 'active', '{}', '{}')`,
-    [id, P, type, type]);
+    // A DATA SOURCE, which is what this fixture means. Since migration 203 the
+    // direction is its own column and the sync selects on it, so a row that
+    // says nothing about which way it points is one the sync leaves alone —
+    // deliberately, because a connection that might SEND is not something to
+    // start pulling from on a guess. This fixture is a provider the founder
+    // connected to pull FROM, and now it says so.
+    `INSERT INTO integrations (id, product_id, name, provider, type, direction, status, credentials_json, config_json)
+     VALUES (?, ?, ?, ?, ?, 'inbound', 'active', '{}', '{}')`,
+    [id, P, type, type, type]);
   return id;
 }
 

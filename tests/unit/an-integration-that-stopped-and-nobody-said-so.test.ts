@@ -107,7 +107,9 @@ describe('giving up is announced', () => {
   });
 
   it('says what stopped and what it means', () => {
-    expect(SYNC).toMatch(/Foundry stopped syncing \$\{integration\.type\}/);
+    // `type` held a provider key, a direction or a category depending on the
+    // writer; the sentence names WHO, so it reads the column that means who.
+    expect(SYNC).toMatch(/Foundry stopped syncing \$\{integration\.provider \?\? integration\.type\}/);
     expect(SYNC).toMatch(/has stopped updating/);
     expect(SYNC).toMatch(/importance: 'action_needed'/);
   });
