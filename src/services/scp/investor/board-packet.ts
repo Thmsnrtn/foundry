@@ -83,10 +83,17 @@ export function experimentOutcome(row: {
 }): string {
   const winner = row.winner == null ? null : String(row.winner);
   const stopped = row.early_stop_reason == null ? null : String(row.early_stop_reason);
+  const status = String(row.status ?? 'pending');
   if (winner === 'inconclusive') return 'inconclusive — the arms did not separate';
   if (winner) return `${winner} won`;
   if (stopped) return `stopped early: ${stopped}`;
-  return String(row.status ?? 'pending');
+  // CONCLUDED IS NOT AN OUTCOME. An experiment concluded through the documented
+  // API can carry `outcome` and `winning_variant_id` without a `winner`, and
+  // this used to fall through to the status — so "completed" appeared in the
+  // outcome column of a board packet, reading like a result. It is a state, and
+  // what it means here is that nobody told us which arm won.
+  if (status === 'completed') return 'concluded — the winning arm was not recorded';
+  return status;
 }
 
 // ─── generateBoardPacket ──────────────────────────────────────────────────────

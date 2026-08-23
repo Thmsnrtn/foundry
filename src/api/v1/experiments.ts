@@ -190,14 +190,40 @@ experimentsApi.post('/:experimentId/conclude', requireScope('experiments:write')
       return c.json({ error: 'Experiment not found' }, 404);
     }
 
-    const { outcome, winning_variant_id } = body;
+    const { outcome, winning_variant_id, winner } = body;
+
+    // THE DOCUMENTED DOOR COULD NOT SAY THE ONE THING THE INSTITUTION READS.
+    //
+    // Concluding through this endpoint wrote `outcome` and
+    // `winning_variant_id` and left `winner` NULL — and every institutional
+    // reader (the board packet, the investor update, the accuracy tracker,
+    // `WHERE winner = 'treatment'`) reads `winner`. A company that concluded an
+    // experiment the documented way was invisible to every surface that reports
+    // experiments.
+    //
+    // The mapping cannot be inferred: `experiment_variants` carries no
+    // control/treatment marker, so `winning_variant_id` cannot be turned into
+    // the shared vocabulary without inventing a convention — and inventing one
+    // on a documented contract is a product decision, not a repair. What CAN be
+    // done is let the caller state it, in the vocabulary the column already
+    // has. A value outside it is refused rather than stored and dropped by the
+    // CHECK later.
+    const WINNER_VALUES = ['control', 'treatment', 'inconclusive'];
+    if (winner !== undefined && winner !== null
+        && !WINNER_VALUES.includes(String(winner))) {
+      return c.json({
+        error: `winner must be one of ${WINNER_VALUES.join(', ')}`,
+      }, 400);
+    }
 
     await query(
       `UPDATE experiments
        SET status = 'completed', outcome = ?, winning_variant_id = ?,
+           winner = COALESCE(?, winner),
            concluded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND product_id = ?`,
-      [outcome ?? null, winning_variant_id ?? null, experimentId, productId]
+      [outcome ?? null, winning_variant_id ?? null,
+       winner == null ? null : String(winner), experimentId, productId]
     );
 
     const result = await query(`SELECT * FROM experiments WHERE id = ?`, [experimentId]);

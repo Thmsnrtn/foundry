@@ -954,12 +954,21 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    an experiment the documented way is invisible to the surfaces that report
    experiments**, which is the same shape as the customer-store split in item 5.
 
-   **NOT FIXED HERE, with the reason:** `experiment_variants` carries no
-   control/treatment marker, so `winning_variant_id` cannot be mapped to the
-   shared vocabulary without inventing a convention — and inventing one on a
-   documented external contract is a product decision, not a repair. **The
-   trigger that makes this buildable is a control marker on the variant**, at
-   which point conclude can write both and the split closes.
+   **THE HALF THAT NEEDED NO INVENTION IS DONE.** The documented door now
+   ACCEPTS `winner`, validated against the column's own vocabulary and refused
+   with a 400 rather than stored and dropped — so a caller can state the one
+   thing every institutional reader consults, and `outcome` and
+   `winning_variant_id` stay theirs. And "completed" is a STATE: the board
+   packet used to fall through to it, printing "completed" in the outcome column
+   of an investor document, so a conclusion whose winner nobody recorded read
+   like a result. It says what it is now.
+
+   **STILL NOT INFERRED, with the reason:** `experiment_variants` carries no
+   control/treatment marker, so `winning_variant_id` cannot be MAPPED to the
+   vocabulary without inventing a convention, and inventing one on a documented
+   external contract is a product decision. **The trigger that makes that
+   buildable is a control marker on the variant** — at which point conclude can
+   derive what the caller did not say.
 
    `experiments.holdout_id` (migration 035) and `experiment_holdouts` are both
    dead: an experiments system with a holdout column nothing writes. On the
