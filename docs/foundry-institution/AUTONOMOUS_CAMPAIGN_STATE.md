@@ -247,6 +247,16 @@ Stripe Connect account id on the product row — a schema and connect-flow chang
 not the worst of it, and implementing the remediation as proposed would have
 made a false claim more robust. Read the code the ticket points at.
 
+**And the writer four repairs had been working around.** A job inserted an
+EMPTY `metric_snapshots` row for every active company every day, so that "daily
+snapshots exist". The decomposition that returned a confident zero, the
+staleness flag computed from a row's existence, the readiness assessment that
+found no revenue, the mobile dashboard reporting a month in which nothing moved
+— four fixes in this campaign, each correct, each a workaround for this one
+writer. Two ingest paths depended on the row and reported success when their
+bare UPDATE matched nothing; they upsert now, and the job is deleted. WHEN TWO
+READERS NEED THE SAME WORKAROUND, THE DEFECT IS UPSTREAM OF BOTH.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
