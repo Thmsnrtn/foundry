@@ -77,7 +77,7 @@ by whatever mechanism, not necessarily the one the ticket proposed.
 | RT02-13 | **open** | `e.message` still concatenated into `.innerHTML` on the signup and login pages |
 | RT02-14 | **open** | CSP still carries `script-src 'unsafe-inline'` |
 | RT02-15 | partial | The write path now checks the opt-out; **no read path filters on it** |
-| RT02-16 | **open** | LIKE wildcards in an AI-extracted stressor name are still unescaped |
+| RT02-16 | fixed | `lib/sql-like.ts` escapes `%`, `_` and `\` and the four queries that search for a person- or model-supplied substring name `ESCAPE '\'`. A bare `%` used to resolve whichever active stressor came first. **Was open until this cycle** |
 
 **Keep this table honest by re-verifying it, not by trusting it.** A row saying
 "fixed" is a claim about code that changes; the only thing that makes it true is
@@ -218,6 +218,7 @@ somebody reading the code again.
 - **Reproduction:** In `src/routes/api/ask.ts` lines 437-441, when the AI classifies a message as a `resolve_stressor` action, the `stressor_name` extracted by Claude is used in a SQL `LIKE` pattern: `AND stressor_name LIKE ? LIMIT 1` with value `%${classified.entities.stressor_name}%`. The stressor name comes from Claude's JSON response to a user message. An attacker can craft a message like "resolve the stressor named `%`" which would cause Claude to extract `stressor_name: "%"`. The resulting query would be `LIKE %%%` which matches any stressor, potentially resolving the wrong stressor. While this is a parameterized query (no SQL injection risk), the LIKE wildcards allow the attacker to influence which row is matched.
 - **Evidence:** `src/routes/api/ask.ts` lines 439-441: `AND stressor_name LIKE ? LIMIT 1`, `[productId, \`%${classified.entities.stressor_name}%\`]`.
 - **Remediation:** Escape LIKE wildcards (`%` and `_`) in the stressor name before using it in the query. Use `LIKE ? ESCAPE '\'` and replace `%` with `\%` and `_` with `\_`.
+- **Resolution:** Done, and at four sites rather than one — the same shape was in `scp/memory/graph.ts` (a founder's own search text), and twice in `scp/accuracy/tracker.ts` (an experiment name and a customer id parsed out of prediction criteria). `lib/sql-like.ts` owns the escaping so the pattern and its `ESCAPE` clause cannot drift apart. Worth stating plainly: the query was always parameterised and there was never an SQL injection here. The injection was into the PATTERN, and on the `resolve_stressor` path it reached a WRITE — the row it matched was marked resolved. Covered by `tests/unit/a-wildcard-the-model-chose.test.ts`.
 
 ## Status: HAS P0-P1
 

@@ -22,6 +22,7 @@ import { callOpus, callSonnet } from '../../services/ai/client.js';
 import { buildConversationContext, formatContextForPrompt } from '../../services/conversation/context.js';
 import { classifyIntent, buildSystemPromptForIntent } from '../../services/conversation/intent.js';
 import type { ConversationIntent } from '../../types/index.js';
+import { likeContains } from '../../lib/sql-like.js';
 
 export const apiAskRoutes = new Hono<AuthEnv>();
 
@@ -443,10 +444,15 @@ async function executeAction(
 
     case 'resolve_stressor': {
       if (!classified.entities.stressor_name) return null;
+      // The name comes from a MODEL reading a founder's message, and the row
+      // this finds is the row that gets marked resolved. A `%` in that name —
+      // "the 20% churn stressor", or a message that talks the classifier into
+      // answering `%` — matched the company's first active stressor, whatever
+      // it was. The wildcards belong to the query, not to the value.
       const result = await query(
         `SELECT id FROM stressor_history WHERE product_id = ? AND status = 'active'
-         AND stressor_name LIKE ? LIMIT 1`,
-        [productId, `%${classified.entities.stressor_name}%`],
+         AND stressor_name LIKE ? ESCAPE '\\' LIMIT 1`,
+        [productId, likeContains(classified.entities.stressor_name)],
       );
       if (result.rows.length === 0) return null;
       const stressorId = (result.rows[0] as Record<string, string>).id;

@@ -7,6 +7,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { likeContains } from '../../../lib/sql-like.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -169,11 +170,13 @@ export async function searchMemory(
   productId: string,
   query_str: string
 ): Promise<MemoryNode[]> {
-  const like = `%${query_str}%`;
+  // A founder searching for "50% week" is searching for that text, not for a
+  // wildcard in the middle of it.
+  const like = likeContains(query_str);
   const result = await query(
     `SELECT * FROM memory_nodes
      WHERE product_id = ?
-       AND (title LIKE ? OR content LIKE ?)
+       AND (title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')
      ORDER BY occurred_at DESC
      LIMIT 50`,
     [productId, like, like]
