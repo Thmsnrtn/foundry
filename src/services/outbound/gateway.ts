@@ -8,9 +8,10 @@
 // classification and execution identity.
 // =============================================================================
 
+import { query } from '../../db/client.js';
 import { checkKillSwitch } from './kill-switch.js';
 import { checkAllowed } from './classification.js';
-import { checkAndIncrement } from './budget.js';
+import { checkAndIncrement, confirmSend, releaseHold, operatorBudgetKey, OPERATOR_WEEKLY_CAP, DEFAULT_CAP } from './budget.js';
 import { checkAndReserve, storeResult, releaseReservation } from './idempotency.js';
 import { recordGatewayInvocation, newInvocationId } from './audit.js';
 
@@ -271,10 +272,30 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     }
   };
 
-  // 5. Communication budget (only when a customer key is provided)
+  // 5. Communication budget (only when a recipient key is provided)
+  //
+  // WHO THE CEILING IS FOR. The cap of three a week exists so Foundry's agents
+  // cannot nag a company's CUSTOMER. Every founder-bound send passes the
+  // founder's own address as the recipient key — the daily briefing, the weekly
+  // digest, the welcome sequence and the billing account notice all drew on one
+  // budget of three — so a founder on daily digests was over the cap by
+  // Wednesday and the next thing refused was whatever came next, including
+  // "your card was declined and the account will be paused".
+  //
+  // The answer is NOT a field the caller sets. This file's rule is that a
+  // caller cannot skip or downgrade a control by declaring a safer fact, and a
+  // bigger allowance is a downgrade. So the gateway asks the database who this
+  // address belongs to: an operator of THIS product — its owner, or a team
+  // member — gets the operator ceiling, and everyone else gets the customer
+  // one. Nothing at any call site changed, and nothing at any call site can
+  // change the answer.
+  let heldBudgetKey: string | null = null;
+  const week = currentWeekStart();
   if (req.customerExternalId) {
-    const week = currentWeekStart();
-    const budget = await checkAndIncrement(req.productId, req.customerExternalId, week);
+    const operator = await recipientIsOperator(req.productId, req.customerExternalId);
+    const budgetKey = operator ? operatorBudgetKey(req.customerExternalId) : req.customerExternalId;
+    const cap = operator ? OPERATOR_WEEKLY_CAP : DEFAULT_CAP;
+    const budget = await checkAndIncrement(req.productId, budgetKey, week, cap);
     if (!budget.allowed) {
       await releaseIfReserved();
       await recordGatewayInvocation({
@@ -293,12 +314,23 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
         reason: `cap ${budget.cap} reached for week ${week}`,
       };
     }
+    // Taken as a HOLD. Every path below that does not reach the provider gives
+    // it back; the caller owes the recipient that much.
+    heldBudgetKey = budgetKey;
   }
+
+  const releaseBudgetHold = async () => {
+    if (heldBudgetKey) {
+      await releaseHold(req.productId, heldBudgetKey, week).catch(() => {});
+      heldBudgetKey = null;
+    }
+  };
 
   // 6. Dispatch to registered handler
   const handler = handlers.get(req.tool);
   if (!handler) {
     await releaseIfReserved();
+    await releaseBudgetHold();
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,
@@ -328,8 +360,12 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
       typeof err === 'object' && err !== null
       && (err as { notAttempted?: unknown }).notAttempted === true;
     // Release the reservation: a failed attempt must not convert every
-    // subsequent retry into a fake cached success for the TTL window.
+    // subsequent retry into a fake cached success for the TTL window. The
+    // budget hold goes back with it — including, and especially, for a
+    // `notAttempted` refusal, which the next two lines classify as definitively
+    // never having reached the provider.
     await releaseIfReserved();
+    await releaseBudgetHold();
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,
@@ -350,6 +386,11 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   // 7. Cache result + audit
   if (req.dedupKey) {
     await storeResult(req.productId, req.tool, req.dedupKey, result);
+  }
+  // The hold becomes a send. `last_sent_at` is written here and nowhere else.
+  if (heldBudgetKey) {
+    await confirmSend(req.productId, heldBudgetKey, week);
+    heldBudgetKey = null;
   }
   await recordGatewayInvocation({
     invocation_id: invocationId,
@@ -377,6 +418,33 @@ async function refusePolicy(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Whether this address belongs to somebody who OPERATES this company.
+ *
+ * The owner of the product, or a team member of it. Asked of the database
+ * rather than of the caller, because the answer decides which ceiling applies
+ * and this file does not let a caller choose its own ceiling.
+ *
+ * Anything that is not an email address is not an operator: the recipient key
+ * is a Stripe customer id on some paths, and a lookup by email would never
+ * match one anyway — this only says so in one place instead of by accident.
+ */
+async function recipientIsOperator(productId: string, recipientKey: string): Promise<boolean> {
+  if (!recipientKey.includes('@')) return false;
+  const result = await query(
+    `SELECT 1 AS present FROM products p
+       JOIN founders f ON f.id = p.owner_id
+      WHERE p.id = ? AND lower(f.email) = lower(?)
+      UNION ALL
+     SELECT 1 AS present FROM team_members tm
+       JOIN founders f2 ON f2.id = tm.founder_id
+      WHERE tm.product_id = ? AND lower(f2.email) = lower(?)
+      LIMIT 1`,
+    [productId, recipientKey, productId, recipientKey],
+  );
+  return result.rows.length > 0;
+}
 
 function currentWeekStart(d: Date = new Date()): string {
   const copy = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));

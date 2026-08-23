@@ -31,7 +31,7 @@ import { getCustomersAtRisk } from '../institution/company-customers.js';
 import { getEffectiveMode } from '../autopilot/policy.js';
 import { createExecution, approveAndExecute } from '../scp/actions/executor.js';
 import { checkAndConsume, weekStarting } from '../outbound/envelopes.js';
-import { checkAndIncrement } from '../outbound/budget.js';
+import { remainingFor } from '../outbound/budget.js';
 import { insertAuditLog } from '../../db/client.js';
 import { log } from '../../lib/logger.js';
 
@@ -145,8 +145,21 @@ export async function runSuccessSweep(productId: string): Promise<SuccessSweepRe
     if (!envelope.allowed) { result.skipped++; continue; }
 
     // The per-customer budget: nobody gets nagged (default 3 msgs/week).
-    const budget = await checkAndIncrement(productId, String(c.externalId ?? customerId), weekStarting());
-    if (!budget.allowed) { result.skipped++; continue; }
+    //
+    // A LOOK, NOT A SEND. This called `checkAndIncrement`, which TAKES a hold —
+    // and then the send might not happen at all: no live consent downgrades the
+    // act to a proposal, and the boundary may refuse it afterwards. Every one of
+    // those spent a message from a real person's weekly allowance and none of
+    // them gave it back. The cap itself is enforced where the send happens, at
+    // the gateway; this is only here to skip work that would be refused.
+    //
+    // Keyed on the ADDRESS, because that is what the gateway meters. This read
+    // `externalId ?? customerId` — a CRM identity — so the department and the
+    // gateway kept two separate counts of messages to the same person, each
+    // with its own ceiling of three, and neither was the number of messages
+    // that person received.
+    const budget = await remainingFor(productId, String(c.email), weekStarting());
+    if (budget.remaining <= 0) { result.skipped++; continue; }
 
     const draft = draftCheckIn(c, productName);
     const execId = await createExecution(productId, null, {

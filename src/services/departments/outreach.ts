@@ -20,7 +20,7 @@ import { nanoid } from 'nanoid';
 import { getEffectiveMode } from '../autopilot/policy.js';
 import { createExecution } from '../scp/actions/executor.js';
 import { checkAndConsume, weekStarting } from '../outbound/envelopes.js';
-import { checkAndIncrement } from '../outbound/budget.js';
+import { remainingFor } from '../outbound/budget.js';
 import { ensurePolicyVisible, recordShadowWork } from './shared.js';
 import { log } from '../../lib/logger.js';
 
@@ -125,8 +125,13 @@ export async function runOutreachSweep(productId: string): Promise<OutreachSweep
 
     const envelope = await checkAndConsume(productId, ENVELOPE_SCOPE);
     if (!envelope.allowed) { result.skipped++; continue; }
-    const budget = await checkAndIncrement(productId, String(c.externalId ?? customerId), weekStarting());
-    if (!budget.allowed) { result.skipped++; continue; }
+    // A LOOK, NOT A SEND — and this path never sends: rail 2 keeps a human eye
+    // on every outreach message, so what follows is a DRAFT. Taking a hold here
+    // spent a customer's weekly allowance on a proposal nobody had approved,
+    // and three sweeps could exhaust the budget of somebody who had received
+    // nothing. Keyed on the address the gateway meters, not the CRM id.
+    const budget = await remainingFor(productId, email, weekStarting());
+    if (budget.remaining <= 0) { result.skipped++; continue; }
 
     const draft = draftReferralAsk(c, productName);
     await createExecution(productId, null, {
