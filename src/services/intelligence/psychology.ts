@@ -21,7 +21,18 @@ export interface PsychologyInsight {
   id: string;
   pattern_type: PatternType;
   description: string;
-  confidence: number;
+  /**
+   * How sure the producer said it was, or NULL when it did not say.
+   *
+   * The deterministic detectors below state a fixed prior — 0.7 for
+   * perfectionism, 0.65 for scope creep — which is a number the DETECTOR
+   * stands behind, not something measured about this founder. The model-driven
+   * one reports its own. A model that returned none used to get 0.5 written in
+   * for it: the exact middle of the scale, stored and served indistinguishably
+   * from a model that had actually said "half sure" about a claim regarding
+   * someone's mind.
+   */
+  confidence: number | null;
   evidence: string[];
   intervention_suggestion: string;
   status: string;
@@ -77,13 +88,35 @@ If no overcorrection detected:
 
   if (!result.detected) return null;
 
+  // A CLAIM ABOUT SOMEONE'S MIND NEEDS SOMETHING BEHIND IT.
+  //
+  // Every field here had a fallback, so a model that answered `{"detected":
+  // true}` and nothing else produced a stored insight reading "Overcorrection
+  // pattern detected", with an empty evidence array and a confidence of 0.5 —
+  // and `GET /api/psychology-insights` returns the row verbatim to the founder.
+  // The header of this file promises insights that are "non-judgmental,
+  // actionable and dismissable"; an observation about a person with no
+  // description of what was noticed and nothing it was noticed from is a
+  // judgement they cannot act on or argue with.
+  //
+  // It also travels further than the page: `ai/calibration.ts` reads the
+  // pattern_type of active insights and changes how Foundry speaks to this
+  // founder. A substituted insight quietly re-tunes the whole relationship.
+  //
+  // So the substance is required and the confidence is not invented. A detector
+  // that finds something and cannot say what it found has not found anything.
+  const description = result.description?.trim();
+  const evidence = (result.evidence ?? []).map((e) => String(e).trim()).filter((e) => e.length > 0);
+  if (!description || evidence.length === 0) return null;
+
   const insight: PsychologyInsight = {
     id: nanoid(),
     pattern_type: 'overcorrection',
-    description: result.description ?? 'Overcorrection pattern detected',
-    confidence: result.confidence ?? 0.5,
-    evidence: result.evidence ?? [],
-    intervention_suggestion: result.suggestion ?? 'Consider whether your current approach is balanced.',
+    description,
+    confidence: result.confidence ?? null,
+    evidence,
+    intervention_suggestion: result.suggestion?.trim()
+      ?? 'Consider whether your current approach is balanced.',
     status: 'active',
   };
 
