@@ -16,9 +16,9 @@ Bootstrap from disk: verify the branch and a clean tree, read
 `DEVELOPMENT_INSTITUTION.md` and this file, skim `IMPLEMENTATION_STATE.md` and
 recent git history, then work. No chat history is required.
 
-**FIRST, CHECK THE REMOTE — THE CONTAINER'S CHECKOUT CAN BE BEHIND IT.** FIVE
+**FIRST, CHECK THE REMOTE — THE CONTAINER'S CHECKOUT CAN BE BEHIND IT.** SIX
 TIMES NOW this working directory has come up rolled back — by fourteen, twenty,
-thirty-eight, fifty-two and eighty-one commits — with `origin/<branch>`, the
+thirty-eight, fifty-two, eighty-one and ninety-four commits — with `origin/<branch>`, the
 LOCAL TRACKING REF, agreeing with the stale HEAD, so `git status` said "up to
 date" and a whole cycle of work looked lost. It was not: it was on the remote
 the whole time. **The fifth time it followed a container restart mid-suite**,
