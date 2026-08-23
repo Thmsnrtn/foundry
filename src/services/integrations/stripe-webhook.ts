@@ -66,8 +66,34 @@ export async function processStripeEventChain(
     actions_generated: 0,
   };
 
-  // 1. Persist raw event
-  await processStripeWebhookEvent(productId, event.id, event.type, event.data.object as Record<string, unknown>);
+  // 1. Persist raw event — and STOP IF IT IS NOT NEW.
+  //
+  // RT02-09. This ran the whole chain whether or not the event had been seen,
+  // because `processStripeWebhookEvent` returned void. Everything below mutates
+  // the named company: `updateMetricsFromEvent` rewrites its MRR movement
+  // columns and active users from amounts in the event body, a stressor row is
+  // inserted, `transitionRiskState` is called, the founder receives a COO
+  // message quoting a customer email lifted from the event, and a gate-1 urgent
+  // decision plus an AI action draft are created on their budget.
+  //
+  // The dedupe that stops it was already there and is GLOBAL on
+  // `stripe_event_id`, with no product predicate — so it knows an event has
+  // been seen for ANY product. A captured genuine delivery replayed N times
+  // drove that chain N times; replayed at a DIFFERENT product id it drove it
+  // against a company the event had nothing to do with. The row that would have
+  // refused it was in the table the whole time and nobody asked.
+  //
+  // WHAT THIS DOES NOT CLOSE, stated rather than implied: the signature proves
+  // the event came from Stripe, not which product it belongs to, and there is
+  // one STRIPE_WEBHOOK_SECRET for every tenant. Someone holding that secret can
+  // mint fresh event ids, and a replay that arrives BEFORE the genuine delivery
+  // still wins the race. Binding an event to a product needs an identifier the
+  // event carries and the product owns — a Connect account id stored when the
+  // integration is connected — which is schema and a connect-flow change, and
+  // is recorded on the frontier rather than guessed at here.
+  const { recorded } = await processStripeWebhookEvent(
+    productId, event.id, event.type, event.data.object as Record<string, unknown>);
+  if (!recorded) return result;
 
   // 2. Update metrics based on event type
   const metricsUpdated = await updateMetricsFromEvent(productId, event);

@@ -371,12 +371,27 @@ const intercomAdapter: ProviderAdapter = {
 /**
  * Process a Stripe webhook event and auto-update metrics.
  */
+/**
+ * Record one Stripe event against a product, once.
+ *
+ * RETURNS WHETHER IT WAS NEW, and that return is the point. The dedupe below
+ * is global on `stripe_event_id` — it has no product predicate — so it already
+ * knows when an event has been seen before, for ANY product. It returned void,
+ * so `processStripeEventChain` could not tell, and ran the whole intelligence
+ * chain regardless: metric mutation, stressor insert, risk-state transition, a
+ * COO message to the founder, a gate-1 decision and an AI action draft.
+ *
+ * That is RT02-09's amplification. A captured genuine delivery replayed N times
+ * drove those N times over; replayed at a DIFFERENT product id it drove them
+ * against a company the event had nothing to do with. The row that would have
+ * stopped it was already in the table.
+ */
 export async function processStripeWebhookEvent(
   productId: string,
   eventId: string,
   eventType: string,
   data: Record<string, unknown>
-): Promise<void> {
+): Promise<{ recorded: boolean }> {
   // THE COMPANY IS CHECKED HERE, NOT ONLY AT THE DOOR.
   //
   // This trusted `productId` outright: it inserted an event row for any
@@ -396,7 +411,7 @@ export async function processStripeWebhookEvent(
 
   // Deduplicate
   const existing = await query('SELECT id FROM stripe_events WHERE stripe_event_id = ?', [eventId]);
-  if (existing.rows.length > 0) return;
+  if (existing.rows.length > 0) return { recorded: false };
 
   await query(
     `INSERT INTO stripe_events (id, product_id, stripe_event_id, event_type, data) VALUES (?, ?, ?, ?, ?)`,
@@ -416,4 +431,5 @@ export async function processStripeWebhookEvent(
   }
 
   await query('UPDATE stripe_events SET processed = 1 WHERE stripe_event_id = ?', [eventId]);
+  return { recorded: true };
 }

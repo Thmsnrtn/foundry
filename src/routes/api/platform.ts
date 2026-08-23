@@ -452,7 +452,11 @@ platformApiRoutes.get('/api/portfolios/:id/benchmark/:productId', async (c) => {
   const founder = c.get('founder');
   const portfolioId = c.req.param('id');
   if (!(await verifyPortfolioOwnership(portfolioId, founder.email))) return c.json({ error: 'Not found' }, 404);
+  // RT02-05: null means the product is not a member of this portfolio. Owning
+  // the portfolio is not permission to benchmark an arbitrary company against
+  // it — see the note on `benchmarkProduct`.
   const result = await benchmarkProduct(portfolioId, c.req.param('productId'));
+  if (result === null) return c.json({ error: 'Not found' }, 404);
   return c.json(result);
 });
 

@@ -258,7 +258,41 @@ export async function benchmarkProduct(
   /** Metrics that could not be compared, and why. */
   not_comparable: Array<{ metric: string; reason: string }>;
   recommendations: string[];
-}> {
+} | null> {
+  // RT02-05: THE PEER SET WAS SCOPED TO THE PORTFOLIO AND THE SUBJECT WAS NOT.
+  //
+  // `allMetrics` below joins `portfolio_memberships`, so the companies compared
+  // AGAINST are always the portfolio's own. The company being compared was read
+  // straight out of `metric_snapshots` by the id in the URL, and the route
+  // checks only that the caller owns the PORTFOLIO. So any authenticated
+  // founder could mint a portfolio — `POST /api/portfolios` is unrestricted —
+  // and benchmark any product id in the system against it.
+  //
+  // The response does not echo the subject's raw numbers, which is why this
+  // survived a reading: what it returns is a percentile. But the caller
+  // controls both sides. Seed the portfolio with one product of your own, set
+  // that product's metrics through `POST /api/products/:id/metrics` (an upsert
+  // on (product_id, snapshot_date), so it can be rewritten all day), and the
+  // percentile becomes a strict inequality against a threshold you choose —
+  // a comparison oracle that recovers another company's exact `active_users`,
+  // `churn_rate`, `activation_rate` and `nps_score` by bisection.
+  //
+  // RT02-06's fix does not close this: the attacker never needed the victim IN
+  // the portfolio, only their own product as the yardstick.
+  //
+  // Scoped here rather than at the route, for the same reason `addToPortfolio`
+  // was: a service that cannot be asked the unscoped question is safer than a
+  // route that has to remember to ask the scoped one. NULL rather than the
+  // "never reported a metric snapshot" branch below, because a company that is
+  // not in this portfolio and a company that has reported nothing are different
+  // facts, and that branch is a statement about the company.
+  const member = await query(
+    `SELECT 1 AS present FROM portfolio_memberships
+      WHERE portfolio_id = ? AND product_id = ? AND status = 'active'`,
+    [portfolioId, productId],
+  );
+  if (member.rows.length === 0) return null;
+
   const allMetrics = await query(
     `SELECT ms.* FROM metric_snapshots ms
      JOIN portfolio_memberships pm ON ms.product_id = pm.product_id

@@ -48,6 +48,41 @@ The following SEC findings from the prior audit have been addressed:
 
 ## Findings
 
+## Status ledger — verified against the code, not remembered
+
+**An audit with no ledger is a list of things somebody may have done.** These
+sixteen tickets were recorded with remediations and then partly applied; nothing
+said which, and three of the sixteen happened to cite themselves in the code
+while the rest did not. RT02-04 sat between two routes that BOTH cite their
+ticket, unfixed, for that reason alone.
+
+Each line below was checked by reading the code as it is, not the ticket's line
+numbers, which are stale. "Fixed" means the described attack no longer works —
+by whatever mechanism, not necessarily the one the ticket proposed.
+
+| Ticket | State | How |
+|---|---|---|
+| RT02-01 | fixed | CSRF middleware rewritten; the blanket JSON exemption is gone |
+| RT02-02 | fixed | `voice_sessions` joined to `products` on `owner_id` at the route |
+| RT02-03 | fixed | `getProductByOwner` before `processVoiceMemo` |
+| RT02-04 | fixed | `getProductByOwner` before `startVoiceSession`. **Was open until this cycle** |
+| RT02-05 | fixed | `benchmarkProduct` requires the subject to be an active member of the portfolio, and returns null otherwise. **Was open until this cycle** |
+| RT02-06 | fixed | `addToPortfolio` resolves the target's owner and refuses a company the caller does not own |
+| RT02-07 | **open** | The voice transcript still reaches three prompts undelimited. Same-tenant only since RT02-03/04 closed; the residual case is that a transcript carries words spoken by third parties in a recorded meeting |
+| RT02-08 | **open** | Competitor and product names still interpolated into prompts with no sanitisation layer |
+| RT02-09 | partial | The replay is closed: the chain now honours the global `stripe_event_id` dedupe, so a captured delivery replayed — at the same product or another — does nothing. **The binding is still open**: the signature proves the event came from Stripe, not which product it belongs to, and one secret serves every tenant |
+| RT02-10 | **open** | Portfolio API keys (`pfk_*`) still stored and compared in plaintext, while the main API keys are SHA-256 hashed |
+| RT02-11 | fixed | `encryptCredentialPayload`/`decryptCredentialPayload` at both connect surfaces |
+| RT02-12 | fixed | `getProductIdForApiKey` hashes before comparing |
+| RT02-13 | **open** | `e.message` still concatenated into `.innerHTML` on the signup and login pages |
+| RT02-14 | **open** | CSP still carries `script-src 'unsafe-inline'` |
+| RT02-15 | partial | The write path now checks the opt-out; **no read path filters on it** |
+| RT02-16 | **open** | LIKE wildcards in an AI-extracted stressor name are still unescaped |
+
+**Keep this table honest by re-verifying it, not by trusting it.** A row saying
+"fixed" is a claim about code that changes; the only thing that makes it true is
+somebody reading the code again.
+
 ### RT02-01 CSRF Bypass via JSON Content-Type on Cookie-Authenticated Routes
 - **Severity:** P0
 - **Reproduction:** The CSRF middleware (`src/middleware/csrf.ts` lines 52-57) completely skips CSRF validation for any request with `Content-Type: application/json`. The comment says "Skip CSRF for JSON API routes -- they use Bearer auth, not cookies." This is wrong. The dashboard routes at `/api/*` use Clerk session cookies (set by `authMiddleware` via `__session` cookie), not Bearer tokens. An attacker can craft a page that sends a `fetch()` POST to any `/api/*` endpoint with `Content-Type: application/json` and the `credentials: include` option. The victim's `__session` cookie will be sent automatically. CORS will block the response, but the side-effecting POST will already have executed. This bypasses CSRF protection for every JSON API endpoint, including:
