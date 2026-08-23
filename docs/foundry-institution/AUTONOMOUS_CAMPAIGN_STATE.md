@@ -257,6 +257,18 @@ writer. Two ingest paths depended on the row and reported success when their
 bare UPDATE matched nothing; they upsert now, and the job is deleted. WHEN TWO
 READERS NEED THE SAME WORKAROUND, THE DEFECT IS UPSTREAM OF BOTH.
 
+**And the gate that could not see four columns until an unrelated writer was
+deleted.** Removing the daily placeholder made the write-only-column gate report
+four `customer_health_snapshots` columns it had never mentioned. They had always
+been write-only: the gate blanked write contexts by REMOVING their text, and
+`INSERT INTO metric_snapshots (id, product_id, snapshot_date)` is a leading
+substring of that table's column list, so blanking the short one left the long
+one unable to match itself. **When a gate's verdict changes after a change that
+could not have affected it, the gate is the finding.** It records ranges now
+instead of removing text. The four columns got a reader in the same batch: the
+falling-customers table names WHICH of usage, support, payment or engagement
+dropped, which is the only part of that answer that says what to do.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
