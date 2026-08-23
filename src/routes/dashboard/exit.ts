@@ -492,17 +492,28 @@ exitRoutes.post('/exit/cap-table', async (c) => {
       <h1>${scenarioName} — Exit Proceeds</h1>
     </div>
     <table class="data-table" style="max-width:600px">
-      <thead><tr><th>Exit Valuation</th><th>Founder Proceeds</th><th>Founder %</th></tr></thead>
+      <thead><tr><th>Exit Valuation</th><th>Founder Proceeds</th><th>Founder %</th><th>Converts to common</th></tr></thead>
       <tbody>
         ${exitScenarios.map(s => html`
           <tr>
             <td><strong>${s.label}</strong></td>
             <td>$${(s.founder_proceeds / 1_000_000).toFixed(2)}M</td>
             <td>${s.founder_pct.toFixed(1)}%</td>
+            <td class="text-muted text-sm">${s.converting_investors.length > 0
+              ? s.converting_investors.join(', ')
+              : '—'}</td>
           </tr>
         `)}
       </tbody>
     </table>
+    <p class="text-muted text-sm" style="max-width:600px;margin-top:10px">
+      A non-participating investor takes whichever is larger: their liquidation
+      preference, or their shares converted to common. The last column names the
+      ones who do better converting at that valuation — which is why the
+      founder's share falls as the exit grows rather than approaching 100%.
+      Not modelled: participation caps, seniority stacks, accrued dividends,
+      option-pool refresh at close.
+    </p>
     <div style="margin-top:16px">
       <a href="/exit/cap-table" class="btn btn-secondary">Back</a>
     </div>
