@@ -32,7 +32,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
     try { return await fn(); } catch { return fallback; }
   };
 
-  const defaultPulse = { status: 'healthy' as const, portfolio_mrr_movement_30d: 0, portfolio_mrr_movement_delta_pct: null, active_products: 0, active_founders: 0, founders_this_month: 0, signups_never_converted: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
+  const defaultPulse = { status: 'healthy' as const, portfolio_mrr_movement_30d: null, portfolio_mrr_movement_delta_pct: null, active_products: 0, active_founders: 0, founders_this_month: 0, signups_never_converted: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
   const defaultMRR = { current_mrr: 0, trialing: { count: 0, list_price_mrr: 0 }, mrr_30d_ago: null, mrr_trend: 'unknown' as const, growth_rate_pct: null, arr: 0, by_tier: {}, portfolio_mrr_movement_history: [], forecast_3m: null, forecast_6m: null };
   const defaultChurn = { at_risk_share_pct: null, at_risk_count: 0, at_risk_products: [], churned_this_month: null, rescue_opportunities: 0 };
   const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_failing: 0, jobs_never_reported: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: null, recent_actions: [] };

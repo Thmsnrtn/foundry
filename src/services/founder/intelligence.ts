@@ -88,9 +88,11 @@ export function isFounder(email: string): boolean {
 export interface PulseData {
   status: 'healthy' | 'warning' | 'critical';
   /** Net reported MRR movement across ALL operated companies over 30 days —
-   *  new + expansion - contraction - churned. Not Foundry's revenue, and a
-   *  movement rather than a level. */
-  portfolio_mrr_movement_30d: number;
+   *  new + expansion - contraction - churned, each term summed over the rows
+   *  that reported it. Not Foundry's revenue, and a movement rather than a
+   *  level. NULL when no company reported any movement in the window: a
+   *  portfolio that reported nothing did not move by zero. */
+  portfolio_mrr_movement_30d: number | null;
   /** How that movement compares with the preceding 30 days. NULL when the
    *  preceding window reported nothing to compare against. */
   portfolio_mrr_movement_delta_pct: number | null;
@@ -121,8 +123,28 @@ export async function getPulse(): Promise<PulseData> {
     query("SELECT COUNT(*) as c FROM products WHERE status = 'active'", []),
     query("SELECT severity, COUNT(*) as c FROM stressor_history WHERE status = 'active' GROUP BY severity", []),
     query("SELECT COUNT(*) as c FROM decisions WHERE status = 'pending'", []),
-    query("SELECT SUM(new_mrr_cents + expansion_mrr_cents - contraction_mrr_cents - churned_mrr_cents) as total FROM metric_snapshots WHERE snapshot_date >= date('now', '-30 days')", []),
-    query("SELECT SUM(new_mrr_cents + expansion_mrr_cents - contraction_mrr_cents - churned_mrr_cents) as total FROM metric_snapshots WHERE snapshot_date >= date('now', '-60 days') AND snapshot_date < date('now', '-30 days')", []),
+    // A ROW-WISE SUM DROPS EVERY ROW THAT DID NOT REPORT ALL FOUR. Migration 202
+    // made the movement columns nullable, and `a + b - c - d` is NULL when any
+    // one of them is — so `SUM(...)` silently skipped every company that
+    // reported, say, new business and churn but nothing about expansion. The
+    // number that came out was not smaller for a reason anyone could see.
+    //
+    // Summed TERM BY TERM instead: each is the total of what was reported for
+    // that movement, and a company that reported nothing contributes nothing.
+    // `reported` counts the rows behind it, so "no movement" and "nobody told
+    // us" stay different answers.
+    query(`SELECT COALESCE(SUM(new_mrr_cents), 0) + COALESCE(SUM(expansion_mrr_cents), 0)
+                - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) AS total,
+                COUNT(new_mrr_cents) + COUNT(expansion_mrr_cents)
+                + COUNT(contraction_mrr_cents) + COUNT(churned_mrr_cents) AS reported
+             FROM metric_snapshots WHERE snapshot_date >= date('now', '-30 days')`, []),
+    query(`SELECT COALESCE(SUM(new_mrr_cents), 0) + COALESCE(SUM(expansion_mrr_cents), 0)
+                - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) AS total,
+                COUNT(new_mrr_cents) + COUNT(expansion_mrr_cents)
+                + COUNT(contraction_mrr_cents) + COUNT(churned_mrr_cents) AS reported
+             FROM metric_snapshots
+            WHERE snapshot_date >= date('now', '-60 days')
+              AND snapshot_date <  date('now', '-30 days')`, []),
     query("SELECT COUNT(*) as c FROM founders WHERE created_at > datetime('now', '-30 days')", []),
     query("SELECT COUNT(*) as c FROM founders WHERE tier IS NULL AND created_at < datetime('now', '-7 days')", []),
   ]);
@@ -137,9 +159,17 @@ export async function getPulse(): Promise<PulseData> {
   const foundersThisMonth = (recentFounders.rows[0] as Record<string, number>)?.c ?? 0;
   const neverConverted = (recentChurn.rows[0] as Record<string, number>)?.c ?? 0;
 
-  const currentMRR = ((metricsResult.rows[0] as Record<string, number>)?.total ?? 0) / 100;
-  const priorMRR = ((priorMetricsResult.rows[0] as Record<string, number>)?.total ?? 0) / 100;
-  const mrrDelta = priorMRR > 0 ? ((currentMRR - priorMRR) / priorMRR) * 100 : null;
+  const currentRow = metricsResult.rows[0] as Record<string, number> | undefined;
+  const priorRow = priorMetricsResult.rows[0] as Record<string, number> | undefined;
+  // Null when no company reported any movement in the window: a portfolio that
+  // reported nothing did not move by zero.
+  const currentMRR = Number(currentRow?.reported ?? 0) === 0
+    ? null : Number(currentRow?.total ?? 0) / 100;
+  const priorMRR = Number(priorRow?.reported ?? 0) === 0
+    ? null : Number(priorRow?.total ?? 0) / 100;
+  const mrrDelta = currentMRR !== null && priorMRR !== null && priorMRR > 0
+    ? ((currentMRR - priorMRR) / priorMRR) * 100
+    : null;
 
   let criticalStressors = 0;
   let totalStressors = 0;
@@ -167,7 +197,7 @@ export async function getPulse(): Promise<PulseData> {
 
   return {
     status,
-    portfolio_mrr_movement_30d: Math.round(currentMRR),
+    portfolio_mrr_movement_30d: currentMRR === null ? null : Math.round(currentMRR),
     portfolio_mrr_movement_delta_pct: mrrDelta === null ? null : Math.round(mrrDelta * 10) / 10,
     active_products: activeProducts,
     active_founders: activeFounders,
@@ -283,7 +313,11 @@ export async function getMRRIntelligence(): Promise<MRRIntelligence> {
 
   // Historical MRR from metric snapshots (aggregate across all products)
   const history = await safeQuery(
-    `SELECT snapshot_date, SUM(new_mrr_cents + expansion_mrr_cents - contraction_mrr_cents - churned_mrr_cents) as mrr
+    // Term by term, for the same reason as the pulse above: a row-wise sum
+    // drops every snapshot that did not report all four movements.
+    `SELECT snapshot_date,
+            COALESCE(SUM(new_mrr_cents), 0) + COALESCE(SUM(expansion_mrr_cents), 0)
+          - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) as mrr
      FROM metric_snapshots WHERE snapshot_date > date('now', '-90 days')
      GROUP BY snapshot_date ORDER BY snapshot_date`, []
   );
@@ -618,7 +652,7 @@ export async function generateMorningBriefing(): Promise<string> {
 
 Data:
 - Foundry's own MRR: $${mrr.current_mrr}${mrr.growth_rate_pct === null ? ' (no recorded level 30d ago to compare against)' : ` (${mrr.growth_rate_pct > 0 ? '+' : ''}${mrr.growth_rate_pct}% vs 30d ago)`}
-- Reported MRR movement across operated companies, last 30d: $${pulse.portfolio_mrr_movement_30d}${pulse.portfolio_mrr_movement_delta_pct === null ? ' (no prior window to compare)' : ` (${pulse.portfolio_mrr_movement_delta_pct > 0 ? '+' : ''}${pulse.portfolio_mrr_movement_delta_pct}% on the prior 30d)`}
+- Reported MRR movement across operated companies, last 30d: ${pulse.portfolio_mrr_movement_30d === null ? 'no company reported any movement' : `$${pulse.portfolio_mrr_movement_30d}${pulse.portfolio_mrr_movement_delta_pct === null ? ' (no prior window to compare)' : ` (${pulse.portfolio_mrr_movement_delta_pct > 0 ? '+' : ''}${pulse.portfolio_mrr_movement_delta_pct}% on the prior 30d)`}`}
 - Active founders: ${pulse.active_founders}, products: ${pulse.active_products}
 - New founders this month: ${pulse.founders_this_month}
 - ${pulse.active_stressors} active stressors (${pulse.critical_stressors} critical)

@@ -138,3 +138,41 @@ describe('an increment against a column nobody has written', () => {
     expect(src).not.toMatch(/SET contraction_mrr_cents = contraction_mrr_cents \+/);
   });
 });
+
+describe('a sum across companies', () => {
+  it('does not drop a company that reported only some of the four', async () => {
+    // `a + b - c - d` is NULL when any one of them is, and SUM skips NULLs —
+    // so a row-wise sum silently dropped every snapshot that did not report all
+    // four movements, and the number that came out was not smaller for a reason
+    // anyone could see. Each term is summed over the rows that reported it.
+    await query(
+      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, churned_mrr_cents)
+       VALUES ('ms_sum', ?, date('now','-3 days'), 500000, 100000)`, [P]);
+
+    const row = (await query(
+      `SELECT COALESCE(SUM(new_mrr_cents), 0) + COALESCE(SUM(expansion_mrr_cents), 0)
+            - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) AS total,
+              COUNT(new_mrr_cents) + COUNT(expansion_mrr_cents)
+            + COUNT(contraction_mrr_cents) + COUNT(churned_mrr_cents) AS reported
+         FROM metric_snapshots WHERE product_id = ?`, [P]))
+      .rows[0] as unknown as { total: number; reported: number };
+
+    expect(Number(row.total)).toBe(400000);
+    expect(Number(row.reported), 'two of the four terms were reported').toBe(2);
+  });
+
+  it('counts nothing reported as nothing reported', async () => {
+    await query(
+      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents)
+       VALUES ('ms_sum2', ?, date('now','-3 days'), 8000000)`, [P]);
+
+    const row = (await query(
+      `SELECT COUNT(new_mrr_cents) + COUNT(expansion_mrr_cents)
+            + COUNT(contraction_mrr_cents) + COUNT(churned_mrr_cents) AS reported
+         FROM metric_snapshots WHERE product_id = ?`, [P]))
+      .rows[0] as unknown as { reported: number };
+
+    // A portfolio that reported nothing did not move by zero.
+    expect(Number(row.reported)).toBe(0);
+  });
+});

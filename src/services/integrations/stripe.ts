@@ -193,6 +193,10 @@ export async function handleStripeIntegrationEvent(
 ): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
 
+  // NULL + 5 IS NULL. Migration 202 made the movement columns nullable, so an
+  // accumulate-in-place increment against a row another writer created without
+  // mentioning this column would discard the event — the row is touched, the
+  // number stays unknown, and nothing reports a failure.
   if (eventType === 'customer.subscription.deleted') {
     const sub = eventData.object as StripeSubscription;
     const churnedCents = getSubscriptionMonthlyCents(sub);
@@ -201,7 +205,7 @@ export async function handleStripeIntegrationEvent(
       `INSERT INTO metric_snapshots (id, product_id, snapshot_date, churned_mrr_cents)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(product_id, snapshot_date) DO UPDATE SET
-         churned_mrr_cents = churned_mrr_cents + ?`,
+         churned_mrr_cents = COALESCE(churned_mrr_cents, 0) + ?`,
       [nanoid(), productId, today, churnedCents, churnedCents],
     );
     invalidateSignalCache(productId);
@@ -215,7 +219,7 @@ export async function handleStripeIntegrationEvent(
       `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(product_id, snapshot_date) DO UPDATE SET
-         new_mrr_cents = new_mrr_cents + ?`,
+         new_mrr_cents = COALESCE(new_mrr_cents, 0) + ?`,
       [nanoid(), productId, today, newCents, newCents],
     );
     invalidateSignalCache(productId);
