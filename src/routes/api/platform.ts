@@ -18,7 +18,7 @@ import { assessFundraisingReadiness } from '../../services/scp/investor/fundrais
 import { generateInvestorUpdate } from '../../services/scp/investor/investor-update.js';
 import { processVoiceMemo, generateSpokenDigest, startVoiceSession, endVoiceSession } from '../../services/voice/processor.js';
 import { buildProductGraph, discoverCausalChains, queryNeighborhood } from '../../services/graph/engine.js';
-import { createPortfolio, addToPortfolio, getPortfolioOverview, benchmarkProduct, generatePortfolioSnapshot, authenticatePortfolioKey } from '../../services/portfolio/manager.js';
+import { createPortfolio, addToPortfolio, getPortfolioOverview, benchmarkProduct, generatePortfolioSnapshot } from '../../services/portfolio/manager.js';
 
 export const platformApiRoutes = new Hono<AuthEnv>();
 

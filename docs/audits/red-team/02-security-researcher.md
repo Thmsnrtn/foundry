@@ -71,7 +71,7 @@ by whatever mechanism, not necessarily the one the ticket proposed.
 | RT02-07 | **open** | The voice transcript still reaches three prompts undelimited. Same-tenant only since RT02-03/04 closed; the residual case is that a transcript carries words spoken by third parties in a recorded meeting |
 | RT02-08 | **open** | Competitor and product names still interpolated into prompts with no sanitisation layer |
 | RT02-09 | partial | The replay is closed: the chain now honours the global `stripe_event_id` dedupe, so a captured delivery replayed — at the same product or another — does nothing. **The binding is still open**: the signature proves the event came from Stripe, not which product it belongs to, and one secret serves every tenant |
-| RT02-10 | **open** | Portfolio API keys (`pfk_*`) still stored and compared in plaintext, while the main API keys are SHA-256 hashed |
+| RT02-10 | fixed | The key is gone rather than hashed: `authenticatePortfolioKey` had no caller, so the `pfk_` string was minted, stored in the clear and handed to the customer while authenticating nothing. Minting removed, reader removed, migration 200 nulls the stored secrets. **Was open until this cycle** |
 | RT02-11 | fixed | `encryptCredentialPayload`/`decryptCredentialPayload` at both connect surfaces |
 | RT02-12 | fixed | `getProductIdForApiKey` hashes before comparing |
 | RT02-13 | **open** | `e.message` still concatenated into `.innerHTML` on the signup and login pages |
@@ -178,6 +178,7 @@ somebody reading the code again.
 - **Reproduction:** Portfolio API keys (`pfk_*`) are stored as plaintext in the `portfolios.api_key` column. Authentication (`authenticatePortfolioKey`) does a direct plaintext comparison: `SELECT id FROM portfolios WHERE api_key = ?`. A database compromise leaks all portfolio API keys. Compare with the main API keys which are properly SHA-256 hashed before storage.
 - **Evidence:** `src/services/portfolio/manager.ts` line 29: `const apiKey = \`pfk_${nanoid(32)}\``; line 32: stored as plaintext; lines 236-238: `authenticatePortfolioKey` queries plaintext.
 - **Remediation:** Hash portfolio API keys with SHA-256 before storage (same pattern as `src/services/rbac/permissions.ts`). Store only the hash. Return the raw key only once at creation time.
+- **Resolution:** Not hashed — removed. Reading the code for the fix found what the ticket had not: `authenticatePortfolioKey` **had no caller**. It was imported by `src/routes/api/platform.ts` and never invoked. So the key was minted, stored as a plaintext secret, returned to the portfolio owner, and authenticated nothing anywhere. Hashing would have shrunk the blast radius of a database leak and left the worse half standing: an API key handed to a customer says a door exists. `createPortfolio` no longer mints or returns a key, `authenticatePortfolioKey` is deleted, and migration `200_a_key_that_opened_nothing.sql` nulls the secrets already written — the part a code change cannot do. The column stays (dropping it needs a table rebuild) and is now visible to the write-only-column ratchet. If portfolio-key authentication is wanted it comes back whole: minted, hashed, accepted by a documented route, revocable. Covered by `tests/unit/a-key-that-opened-nothing.test.ts`.
 
 ### RT02-11 Integration Credentials Still Stored in Plaintext
 - **Severity:** P1

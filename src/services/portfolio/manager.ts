@@ -53,17 +53,33 @@ export async function createPortfolio(
   orgType: 'vc' | 'accelerator' | 'incubator' | 'angel_group',
   ownerEmail: string,
   branding?: { logo_url?: string; primary_color?: string; name?: string }
-): Promise<{ id: string; api_key: string }> {
+): Promise<{ id: string }> {
+  // NO `pfk_` KEY IS MINTED, BECAUSE NOTHING ACCEPTS ONE.
+  //
+  // RT02-10 raised this as plaintext storage: the key went into
+  // `portfolios.api_key` in the clear and `authenticatePortfolioKey` compared
+  // it in the clear, while the main API keys are SHA-256 hashed. Reading it
+  // again found something the ticket did not: `authenticatePortfolioKey` had no
+  // caller. It was imported by the routes file and never invoked.
+  //
+  // So this minted a credential, stored it as a plaintext secret, and RETURNED
+  // it to the portfolio owner — who was handed an API key that opens nothing.
+  // Hashing it would have reduced the blast radius of a database leak while
+  // leaving the claim intact, and the claim is the worse half: an API key given
+  // to a customer says a door exists.
+  //
+  // If portfolio-key authentication is wanted, it comes back whole — minted,
+  // hashed, accepted by a documented route, and revocable — rather than as a
+  // string that has been sitting in a UNIQUE column being called a key.
   const id = nanoid();
-  const apiKey = `pfk_${nanoid(32)}`;
 
   await query(
-    `INSERT INTO portfolios (id, name, organization_type, owner_email, branding, api_key)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [id, name, orgType, ownerEmail, branding ? JSON.stringify(branding) : null, apiKey]
+    `INSERT INTO portfolios (id, name, organization_type, owner_email, branding)
+     VALUES (?, ?, ?, ?, ?)`,
+    [id, name, orgType, ownerEmail, branding ? JSON.stringify(branding) : null]
   );
 
-  return { id, api_key: apiKey };
+  return { id };
 }
 
 /**
@@ -416,10 +432,6 @@ export async function generatePortfolioSnapshot(portfolioId: string): Promise<vo
 // crosses portfolio isolation, which is an owner decision and not one to take
 // by leaving a writer lying around.
 
-/**
- * Authenticate a portfolio API request.
- */
-export async function authenticatePortfolioKey(apiKey: string): Promise<string | null> {
-  const result = await query('SELECT id FROM portfolios WHERE api_key = ?', [apiKey]);
-  return (result.rows[0] as Record<string, string> | undefined)?.id ?? null;
-}
+// `authenticatePortfolioKey` is gone with the key it read. It compared a raw
+// `pfk_` string against a plaintext column and had no caller anywhere — a guard
+// on a value nothing writes, standing next to a credential nothing accepts.
