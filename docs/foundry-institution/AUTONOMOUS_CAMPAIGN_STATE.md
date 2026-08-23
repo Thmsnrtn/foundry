@@ -50,10 +50,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `d52afa8`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `48590af`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 233 files, highest **197**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **349 files / 2,992 tests**, `SUITE_EXIT=0`
+- **Migrations:** 235 files, highest **199**. Ordering gated. Snapshot current.
+- **Validation:** full suite green — **353 files / 3,018 tests**, `SUITE_EXIT=0`
   read from the run that wrote the log. Every gate in `npm run check` run
   individually and green: ratchets, kernel boundary, NULL-safety, truth audit,
   effects audit, `lint:columns`, AI attribution. The **Head** sha above is the
@@ -75,7 +75,9 @@ inherited list because it was inherited.
   query-argument mismatches **0** · INSERT value-list mismatches **0** ·
   tables written and never read **4** (218 written tables checked) ·
   **raw control bytes 0** (new gate) ·
-  **tables no code can reach 13** (new gate, was 15).
+  **tables no code can reach 13** ·
+  **permitted `'connected'` literals 1** (new gate: the integration status
+  nothing reads, written twice after being retired).
 
 ## Active work
 
