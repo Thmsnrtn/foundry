@@ -55,7 +55,21 @@ beforeAll(async () => {
   await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_ue','c_ue','u@example.com')");
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Acme','f_ue','active')", [P]);
 });
-beforeEach(async () => { await query('DELETE FROM metric_snapshots'); });
+beforeEach(async () => {
+  await query('DELETE FROM metric_snapshots');
+  await query('DELETE FROM business_model_profile WHERE product_id = ?', [P]);
+});
+
+/** A COGS the company actually stated. This test used to rely on an UNSTATED
+ *  one being read as zero, which made the contribution margin a perfect 1.0 —
+ *  the substitution that has since been removed, because a company that never
+ *  said what its costs are is not a company with no costs. A stated zero gives
+ *  the same arithmetic and says where it came from. */
+async function statesCogs(cogs: number): Promise<void> {
+  await query(
+    `INSERT INTO business_model_profile (id, product_id, owner_id, revenue_model, avg_cogs_per_customer)
+     VALUES (?, ?, 'f_ue', 'subscription', ?)`, [nanoid(), P, cogs]);
+}
 
 async function snap(cols: Record<string, number>, daysAgo = 0) {
   const keys = Object.keys(cols);
@@ -68,9 +82,10 @@ async function snap(cols: Record<string, number>, daysAgo = 0) {
 describe('customer lifetime', () => {
   it('reads churn as the fraction it is stored as', async () => {
     // 5% monthly churn → a twenty-month average lifetime. The lifetime is
-    // internal, so it is read through the LTV it produces: ARPU $100, no COGS
-    // recorded so the contribution margin is 1, twenty months → $2,000.
+    // internal, so it is read through the LTV it produces: ARPU $100, a STATED
+    // COGS of zero so the contribution margin is 1, twenty months → $2,000.
     await snap({ mrr_cents: 1_000_000, active_users: 100, churn_rate: 0.05 });
+    await statesCogs(0);
     const e = await computeUnitEconomics(P);
     expect(e).not.toBeNull();
     expect(e!.ltv, 'dividing the fraction by 100 made this $200,000').toBeCloseTo(2000, 2);

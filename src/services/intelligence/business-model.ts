@@ -8,15 +8,40 @@ import { callOpus, callSonnet, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import type { StressorReportItem } from '../../types/index.js';
 
+/**
+ * A company's unit economics, WHERE NULL MEANS THE COMPANY HAS NOT STATED THE
+ * INPUT IT DEPENDS ON.
+ *
+ * `avg_cogs_per_customer` and `avg_cac` are optional columns on
+ * `business_model_profile` — most companies have neither. Every field below was
+ * non-nullable, so both absences had nowhere to go but zero, and zero means
+ * something different in each one:
+ *
+ *   • COGS 0 makes `contribution_margin` (arpu − 0) / arpu = 1.0 — a PERFECT
+ *     100% margin for a company that never said what its costs are, which then
+ *     multiplies into LTV.
+ *   • CAC 0 makes `cac_payback_months` 0 — the BEST possible answer — and
+ *     `ltv_cac_ratio` 0, the WORST possible answer, in adjacent lines from the
+ *     same missing number.
+ *
+ * `identifyBusinessModelStressors` already worked around this: it tests
+ * `ltv_cac_ratio > 0 && < 3` rather than `< 3`, which is a reader remembering
+ * that a value is unreliable. Stating it in the type is what stops the next
+ * reader having to.
+ */
 export interface UnitEconomics {
+  /** Always known: the level and the active-user count are both required above. */
   arpu: number;
-  cogs_per_customer: number;
-  contribution_margin: number;
-  cac: number;
-  cac_payback_months: number;
-  ltv: number;
-  ltv_cac_ratio: number;
-  gross_margin: number;
+  cogs_per_customer: number | null;
+  /** Null when COGS was never stated. */
+  contribution_margin: number | null;
+  cac: number | null;
+  /** Null when CAC or the margin is unknown. */
+  cac_payback_months: number | null;
+  /** Null when the margin is unknown, since LTV is arpu x margin x lifetime. */
+  ltv: number | null;
+  ltv_cac_ratio: number | null;
+  gross_margin: number | null;
 }
 
 export interface BusinessModelProfile {
@@ -84,9 +109,13 @@ export async function computeUnitEconomics(productId: string): Promise<UnitEcono
   if (mrrLevel === null) return null;
   const arpu = mrrLevel / activeUsers / 100; // Convert cents to dollars
 
-  const cogsPerCustomer = (p?.avg_cogs_per_customer as number) ?? 0;
-  const contributionMargin = arpu > 0 ? (arpu - cogsPerCustomer) / arpu : 0;
-  const cac = (p?.avg_cac as number) ?? 0;
+  // Both of these are optional columns most companies have never filled in.
+  // See the note on `UnitEconomics` for what zero claimed in each case.
+  const cogsPerCustomer = p?.avg_cogs_per_customer == null ? null : Number(p.avg_cogs_per_customer);
+  const contributionMargin = cogsPerCustomer === null || arpu <= 0
+    ? null
+    : (arpu - cogsPerCustomer) / arpu;
+  const cac = p?.avg_cac == null ? null : Number(p.avg_cac);
 
   // A HUNDREDFOLD, AND ONLY FOR COMPANIES THAT REPORTED THEIR CHURN.
   //
@@ -110,22 +139,28 @@ export async function computeUnitEconomics(productId: string): Promise<UnitEcono
   const avgLifetimeMonths = monthlyChurn > 0 ? 1 / monthlyChurn : null;
   if (avgLifetimeMonths === null) return null;
 
-  const ltv = arpu * contributionMargin * avgLifetimeMonths;
-  const cacPaybackMonths = cac > 0 && (arpu * contributionMargin) > 0
-    ? cac / (arpu * contributionMargin)
-    : 0;
-  const ltvCacRatio = cac > 0 ? ltv / cac : 0;
+  const ltv = contributionMargin === null
+    ? null
+    : arpu * contributionMargin * avgLifetimeMonths;
+  const marginPerCustomer = contributionMargin === null ? null : arpu * contributionMargin;
+  const cacPaybackMonths = cac === null || cac <= 0 || marginPerCustomer === null || marginPerCustomer <= 0
+    ? null
+    : cac / marginPerCustomer;
+  const ltvCacRatio = cac === null || cac <= 0 || ltv === null ? null : ltv / cac;
   const grossMargin = contributionMargin; // Simplified
+
+  const round = (v: number | null, places: number): number | null =>
+    v === null ? null : Math.round(v * places) / places;
 
   const economics: UnitEconomics = {
     arpu: Math.round(arpu * 100) / 100,
     cogs_per_customer: cogsPerCustomer,
-    contribution_margin: Math.round(contributionMargin * 1000) / 1000,
+    contribution_margin: round(contributionMargin, 1000),
     cac,
-    cac_payback_months: Math.round(cacPaybackMonths * 10) / 10,
-    ltv: Math.round(ltv * 100) / 100,
-    ltv_cac_ratio: Math.round(ltvCacRatio * 100) / 100,
-    gross_margin: Math.round(grossMargin * 1000) / 1000,
+    cac_payback_months: round(cacPaybackMonths, 10),
+    ltv: round(ltv, 100),
+    ltv_cac_ratio: round(ltvCacRatio, 100),
+    gross_margin: round(grossMargin, 1000),
   };
 
   // Snapshot
@@ -220,7 +255,12 @@ export async function identifyBusinessModelStressors(productId: string): Promise
   const economics = await computeUnitEconomics(productId);
 
   if (economics) {
-    if (economics.contribution_margin < 0) {
+    // A THRESHOLD IS A FINDING, so each of these needs a measured value. They
+    // used to fire — or not fire — on substituted zeros: an unknown COGS made
+    // the margin 1.0 so the first never triggered, an unknown CAC made payback
+    // 0 so the second never triggered, and the third carried a `> 0` guard that
+    // was a reader working around the same substitution by hand.
+    if (economics.contribution_margin !== null && economics.contribution_margin < 0) {
       items.push({
         name: 'Negative unit economics',
         signal: `Contribution margin is ${(economics.contribution_margin * 100).toFixed(1)}% — losing money on every customer`,
@@ -231,7 +271,7 @@ export async function identifyBusinessModelStressors(productId: string): Promise
       });
     }
 
-    if (economics.cac_payback_months > 18) {
+    if (economics.cac_payback_months !== null && economics.cac_payback_months > 18) {
       items.push({
         name: 'CAC payback excessive',
         signal: `${economics.cac_payback_months.toFixed(0)} months to recover customer acquisition cost`,
@@ -242,7 +282,7 @@ export async function identifyBusinessModelStressors(productId: string): Promise
       });
     }
 
-    if (economics.ltv_cac_ratio > 0 && economics.ltv_cac_ratio < 3) {
+    if (economics.ltv_cac_ratio !== null && economics.ltv_cac_ratio > 0 && economics.ltv_cac_ratio < 3) {
       items.push({
         name: 'LTV:CAC ratio below threshold',
         signal: `LTV:CAC ratio is ${economics.ltv_cac_ratio.toFixed(1)}x (healthy is 3x+)`,
