@@ -74,7 +74,7 @@ by whatever mechanism, not necessarily the one the ticket proposed.
 | RT02-10 | fixed | The key is gone rather than hashed: `authenticatePortfolioKey` had no caller, so the `pfk_` string was minted, stored in the clear and handed to the customer while authenticating nothing. Minting removed, reader removed, migration 200 nulls the stored secrets. **Was open until this cycle** |
 | RT02-11 | fixed | `encryptCredentialPayload`/`decryptCredentialPayload` at both connect surfaces |
 | RT02-12 | fixed | `getProductIdForApiKey` hashes before comparing |
-| RT02-13 | **open** | `e.message` still concatenated into `.innerHTML` on the signup and login pages |
+| RT02-13 | fixed | Both pages build the error as nodes and set `textContent`; neither assigns `.innerHTML` at all. The message comes from a module fetched from a third-party CDN, so any markup in it was being parsed on the page that takes a password. **Was open until this cycle** |
 | RT02-14 | **open** | CSP still carries `script-src 'unsafe-inline'` |
 | RT02-15 | partial | The write path now checks the opt-out; **no read path filters on it** |
 | RT02-16 | fixed | `lib/sql-like.ts` escapes `%`, `_` and `\` and the four queries that search for a person- or model-supplied substring name `ESCAPE '\'`. A bare `%` used to resolve whichever active stressor came first. **Was open until this cycle** |
@@ -200,6 +200,8 @@ somebody reading the code again.
 - **Reproduction:** The signup and login pages inject the Clerk publishable key into inline JavaScript via raw template strings. More critically, the error handler concatenates `e.message` into HTML without escaping. If Clerk JS throws an error containing HTML/JS (e.g., from a crafted CDN response or error), it would be rendered as HTML.
 - **Evidence:** `src/routes/auth/clerk.ts` line 36: `const pk = "${publishableKey}";` inside inline script. Lines 47-49: `'<p style="color:#ef4444;">Failed to load...</p><p style="color:#64748b;font-size:0.8rem;">' + e.message + '</p>'` -- string concatenation with unescaped error message inserted via `.innerHTML`.
 - **Remediation:** Use `textContent` instead of `.innerHTML` for error messages. Move the publishable key to a `data-` attribute on a DOM element.
+
+- **Resolution:** Both handlers now build two `<p>` elements and set `textContent`, so nothing on either page assigns `innerHTML` — the failure mode is removed by construction rather than by escaping. The publishable key interpolation stays: it is a server-side constant, it is public by design (that is what "publishable" means), and it is not attacker-controlled. Covered by `tests/unit/an-error-message-rendered-as-html.test.ts`.
 
 ### RT02-14 CSP Allows 'unsafe-inline' for Scripts
 - **Severity:** P2

@@ -47,7 +47,22 @@ authRoutes.get('/auth/signup', (c) => {
       });
     }
     initClerk().catch(e => {
-      document.getElementById("sign-up").innerHTML = '<p style="color:#ef4444;">Failed to load authentication. Please refresh the page.</p><p style="color:#64748b;font-size:0.8rem;">' + e.message + '</p>';
+      // THE ERROR TEXT IS BUILT AS NODES, NOT AS HTML. This concatenated
+      // the error message into innerHTML, and the error comes from a third-party
+      // module loaded over the network: any markup in it — from a crafted CDN
+      // response, a proxy error page, or a message that happens to contain
+      // angle brackets — was rendered as HTML on the sign-in page.
+      const box = document.getElementById("sign-up");
+      box.textContent = "";
+      const headline = document.createElement("p");
+      headline.style.color = "#ef4444";
+      headline.textContent = "Failed to load authentication. Please refresh the page.";
+      const detail = document.createElement("p");
+      detail.style.color = "#64748b";
+      detail.style.fontSize = "0.8rem";
+      detail.textContent = String(e && e.message ? e.message : e);
+      box.appendChild(headline);
+      box.appendChild(detail);
     });
   </script>
 </body>
@@ -90,7 +105,22 @@ authRoutes.get('/auth/login', (c) => {
       });
     }
     initClerk().catch(e => {
-      document.getElementById("sign-in").innerHTML = '<p style="color:#ef4444;">Failed to load authentication. Please refresh the page.</p><p style="color:#64748b;font-size:0.8rem;">' + e.message + '</p>';
+      // THE ERROR TEXT IS BUILT AS NODES, NOT AS HTML. This concatenated
+      // the error message into innerHTML, and the error comes from a third-party
+      // module loaded over the network: any markup in it — from a crafted CDN
+      // response, a proxy error page, or a message that happens to contain
+      // angle brackets — was rendered as HTML on the sign-in page.
+      const box = document.getElementById("sign-in");
+      box.textContent = "";
+      const headline = document.createElement("p");
+      headline.style.color = "#ef4444";
+      headline.textContent = "Failed to load authentication. Please refresh the page.";
+      const detail = document.createElement("p");
+      detail.style.color = "#64748b";
+      detail.style.fontSize = "0.8rem";
+      detail.textContent = String(e && e.message ? e.message : e);
+      box.appendChild(headline);
+      box.appendChild(detail);
     });
   </script>
 </body>
