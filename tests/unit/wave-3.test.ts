@@ -10,8 +10,6 @@ import { nanoid } from 'nanoid';
 import { query, executeRaw } from '../../src/db/client.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import {
-  computePeerSignal,
-  decorateForDisplay,
   topPeerValidatedDecisionTypes,
 } from '../../src/services/intelligence/peer-signal.js';
 import {
@@ -72,54 +70,25 @@ beforeEach(async () => {
 // ─── Peer signal ─────────────────────────────────────────────────────────────
 
 describe('peer-signal', () => {
-  it('returns null when no patterns match', async () => {
-    const r = await computePeerSignal({
-      decision_type: 'pricing_change',
-      product_lifecycle_stage: 'growth',
-    });
-    expect(r).toBeNull();
-  });
-
-  it('aggregates positive_outcome_rate across matching rows', async () => {
-    // 4 rows: 3 positive, 1 negative
-    for (const dir of ['positive', 'positive', 'positive', 'negative']) {
-      await query(
-        `INSERT INTO decision_patterns
-          (id, decision_type, product_lifecycle_stage, risk_state_at_decision,
-           key_metrics_context, option_chosen_category, outcome_direction,
-           outcome_timeframe_days)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nanoid(), 'pricing_change', 'growth', 'green', '{}', 'increase', dir, 30]
-      );
-    }
-    const r = await computePeerSignal({
-      decision_type: 'pricing_change',
-      product_lifecycle_stage: 'growth',
-    });
-    expect(r).not.toBeNull();
-    expect(r!.sample_size).toBe(4);
-    expect(r!.positive_outcome_rate).toBeCloseTo(0.75, 2);
-  });
-
-  it('decorateForDisplay flags worth_surfacing only when n >= 5', () => {
-    const small = decorateForDisplay({
-      decision_type: 'x',
-      approval_rate: 1,
-      positive_outcome_rate: 0.8,
-      sample_size: 3,
-      median_outcome_days: 10,
-    });
-    expect(small.worth_surfacing).toBe(false);
-
-    const big = decorateForDisplay({
-      decision_type: 'x',
-      approval_rate: 1,
-      positive_outcome_rate: 0.8,
-      sample_size: 12,
-      median_outcome_days: 10,
-    });
-    expect(big.worth_surfacing).toBe(true);
-    expect(big.headline).toMatch(/80%/);
+  it('has one implementation, and it is the one that counts companies', async () => {
+    // `computePeerSignal` and `decorateForDisplay` were deleted with the tests
+    // that pinned them. They counted ROWS — no contributor floor, and rows with
+    // no `contributor_hash` (the seed writes one) counted too — and then said
+    // "Founders like you who acted on this saw positive outcomes 75% of the
+    // time (n=4)" about what could be one company deciding four times. The test
+    // here asserted `sample_size === 4` on four unattributed rows: the defect,
+    // recorded as the expected behaviour.
+    //
+    // Neither had a production caller. The correct reader is below.
+    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+    const { readFileSync } = await import('node:fs');
+    const src = stripComments(
+      readFileSync('src/services/intelligence/peer-signal.ts', 'utf8'), { lineComments: true });
+    expect(src).not.toMatch(/export async function computePeerSignal/);
+    expect(src).toContain('COUNT(DISTINCT contributor_hash)');
+    // `decorateForDisplay` survives — its only caller counts companies — and
+    // its floor is now the shared constant rather than a second literal 5.
+    expect(src).toContain('signal.sample_size >= PEER_SIGNAL_MIN_SAMPLE');
   });
 
   it('topPeerValidatedDecisionTypes counts COMPANIES, not rows', async () => {

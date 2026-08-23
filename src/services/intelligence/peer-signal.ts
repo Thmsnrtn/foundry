@@ -28,72 +28,38 @@ export interface PeerSignalForDecision extends PeerSignal {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-/**
- * Compute the peer signal for a given decision shape (decision_type +
- * lifecycle stage). Returns null if no patterns table data exists.
- */
-export async function computePeerSignal(opts: {
-  decision_type: string;
-  product_lifecycle_stage: string;
-  market_category?: string | null;
-}): Promise<PeerSignal | null> {
-  // Build a flexible filter — match on type + stage; market_category is
-  // an optional bonus filter.
-  const filters = ['decision_type = ?', 'product_lifecycle_stage = ?'];
-  const args: unknown[] = [opts.decision_type, opts.product_lifecycle_stage];
-  if (opts.market_category) {
-    filters.push('market_category = ?');
-    args.push(opts.market_category);
-  }
-  const whereClause = filters.join(' AND ');
-
-  const r = await query(
-    `SELECT
-       COUNT(*) AS n,
-       SUM(CASE WHEN outcome_direction = 'positive' THEN 1 ELSE 0 END) AS positive,
-       AVG(outcome_timeframe_days) AS avg_days
-     FROM decision_patterns
-    WHERE ${whereClause}`,
-    args
-  );
-
-  const row = r.rows[0] as Record<string, number | null> | undefined;
-  if (!row) return null;
-  const n = Number(row.n ?? 0);
-  if (n === 0) return null;
-
-  // We don't have a separate "approved vs rejected" column — the table is
-  // populated only when a decision has been ACTED on. So approval_rate
-  // here is effectively 1.0 when patterns exist; the actionable signal is
-  // the positive_outcome_rate.
-  const positive = Number(row.positive ?? 0);
-  const positiveRate = n === 0 ? 0 : positive / n;
-  const medianDays = row.avg_days != null ? Math.round(row.avg_days) : null;
-
-  return {
-    decision_type: opts.decision_type,
-    approval_rate: 1.0,
-    positive_outcome_rate: positiveRate,
-    sample_size: n,
-    median_outcome_days: medianDays,
-  };
-}
+// `computePeerSignal` WAS HERE, AND WAS THE WRONG COPY OF THE READER BELOW.
+//
+// It counted ROWS — `COUNT(*)` with no contributor floor and no exclusion of
+// rows carrying no `contributor_hash` — and `decorateForDisplay` then wrote
+// "Founders like you who acted on this saw positive outcomes X% of the time
+// (n=4)". One company contributing four similar decisions read as four
+// companies; a demo row from the seed, which carries no hash at all, read as a
+// company too. The reader below documents that exact defect as fixed on ITSELF,
+// in this same file, and this one kept it.
+//
+// It had no production caller: it was reached only from tests, and one of those
+// asserted the row count as the expected behaviour. A wrong function beside the
+// right one, in the same file, under a friendlier name, is a trap for whoever
+// needs a peer signal next.
 
 /**
- * Decorate a peer signal for dashboard display. Computes the headline
- * string and the worth_surfacing flag.
+ * Decorate a peer signal for dashboard display. Computes the headline string
+ * and the worth_surfacing flag.
+ *
+ * `sample_size` here is COMPANIES, because the only caller counts distinct
+ * contributor hashes. The floor is the shared constant rather than a second
+ * literal 5 — one number, one home.
  */
 export function decorateForDisplay(signal: PeerSignal): PeerSignalForDecision {
-  const worthSurfacing = signal.sample_size >= 5;
+  const worthSurfacing = signal.sample_size >= PEER_SIGNAL_MIN_SAMPLE;
   const pct = Math.round(signal.positive_outcome_rate * 100);
   const headline = worthSurfacing
-    ? `Founders like you who acted on this saw positive outcomes ${pct}% of the time (n=${signal.sample_size})`
-    : `Not enough peer data yet (n=${signal.sample_size}). The pattern needs ≥5 datapoints.`;
-  return {
-    ...signal,
-    worth_surfacing: worthSurfacing,
-    headline,
-  };
+    ? `Founders like you who acted on this saw positive outcomes ${pct}% of the time `
+      + `(${signal.sample_size} companies)`
+    : `Not enough peer data yet (${signal.sample_size} companies). `
+      + `The pattern needs at least ${PEER_SIGNAL_MIN_SAMPLE}.`;
+  return { ...signal, worth_surfacing: worthSurfacing, headline };
 }
 
 /**
