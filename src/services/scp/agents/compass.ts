@@ -90,8 +90,14 @@ export class CompassAgent extends BaseAgent {
       // something creates one. The founder-facing page said "Agents will create
       // objectives as your strategy evolves"; nothing does, and it no longer
       // says so.
+      // Ordered, so the five an agent sees are the five most at risk rather
+      // than five arbitrary ones. (The table has no writer — see above — so
+      // this returns nothing today; the order is here for when it does.)
       `SELECT objective_text AS objective, status FROM company_okrs
-        WHERE product_id=? AND status IN ('on_track','at_risk','off_track') LIMIT 5`,
+        WHERE product_id=? AND status IN ('on_track','at_risk','off_track')
+        ORDER BY CASE status WHEN 'off_track' THEN 1 WHEN 'at_risk' THEN 2 ELSE 3 END,
+                 created_at ASC
+        LIMIT 5`,
       [productId]
     );
 

@@ -120,8 +120,13 @@ export async function generateSpokenDigest(
   const ls = await query('SELECT risk_state FROM lifecycle_state WHERE product_id = ?', [productId]);
   const riskState = (ls.rows[0] as Record<string, string> | undefined)?.risk_state ?? 'green';
 
+  // The three most severe. Spoken aloud in a briefing, an arbitrary three is
+  // indistinguishable from the three that matter most.
   const stressors = await query(
-    "SELECT stressor_name FROM stressor_history WHERE product_id = ? AND status = 'active' LIMIT 3",
+    `SELECT stressor_name FROM stressor_history
+      WHERE product_id = ? AND status = 'active'
+      ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'elevated' THEN 2 ELSE 3 END, identified_at ASC
+      LIMIT 3`,
     [productId]
   );
 
