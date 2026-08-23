@@ -1295,22 +1295,54 @@ async function scpIntegrationFabricSync(): Promise<void> {
   const { syncPostHogEvents } = await import('../services/integration/posthog.js');
   const { syncGitHubEvents } = await import('../services/integration/github.js');
 
-  let posthogSynced = 0;
-  let githubSynced = 0;
+  // The same shape as the extended sync below: both of these return
+  // `{ synced, error? }`, the `error` was never read, a throw was swallowed per
+  // product, and neither wrote `integration_sync_log` — so the integrations
+  // page said no sync had been attempted while this ran hourly.
+  const { recordSyncAttempt } = await import('../services/integrations/health.js');
+  const providers: Array<{ name: string; run: (p: string) => Promise<{ synced: number; error?: string }> }> = [
+    { name: 'posthog', run: syncPostHogEvents },
+    { name: 'github', run: syncGitHubEvents },
+  ];
+
+  const recorded = new Map<string, number>(providers.map((p) => [p.name, 0]));
+  let failed = 0;
 
   for (const row of products.rows) {
     const productId = (row as Record<string, unknown>).id as string;
-    try {
-      const ph = await syncPostHogEvents(productId);
-      posthogSynced += ph.synced;
-    } catch { /* non-fatal per product */ }
-    try {
-      const gh = await syncGitHubEvents(productId);
-      githubSynced += gh.synced;
-    } catch { /* non-fatal per product */ }
+    for (const { name, run } of providers) {
+      const startedAt = new Date().toISOString();
+      try {
+        const result = await run(productId);
+        await recordSyncAttempt({
+          productId, provider: name, startedAt,
+          recordsProcessed: result.synced ?? 0, error: result.error ?? null,
+        });
+        if (result.error) {
+          failed += 1;
+          logger.error(`scp_integration_fabric_sync: ${name} failed for ${productId}: ${result.error}`,
+            { jobName: 'scp_integration_fabric_sync' });
+        } else {
+          recorded.set(name, (recorded.get(name) ?? 0) + (result.synced ?? 0));
+        }
+      } catch (err) {
+        failed += 1;
+        const message = err instanceof Error ? err.message : String(err);
+        await recordSyncAttempt({
+          productId, provider: name, startedAt, recordsProcessed: 0, error: message,
+        }).catch(() => { /* the throw above is the finding */ });
+        logger.error(`scp_integration_fabric_sync: ${name} threw for ${productId}: ${message}`,
+          { jobName: 'scp_integration_fabric_sync' });
+      }
+    }
   }
 
-  logger.info(`scp_integration_fabric_sync: PostHog: ${posthogSynced} events, GitHub: ${githubSynced} events`, { jobName: 'scp_integration_fabric_sync' });
+  // Summaries stored, not raw provider events: each run writes a handful of
+  // trend rows.
+  const line = `scp_integration_fabric_sync: PostHog ${recorded.get('posthog') ?? 0} summaries, `
+    + `GitHub ${recorded.get('github') ?? 0} summaries, ${failed} provider sync(s) failed`;
+  if (failed > 0) logger.error(line, { jobName: 'scp_integration_fabric_sync' });
+  else logger.info(line, { jobName: 'scp_integration_fabric_sync' });
 }
 
 // ─── SCP v4: Extended Integrations Sync — Every 2h ───────────────────────────
@@ -1320,32 +1352,82 @@ async function scpExtendedIntegrationsSync(): Promise<void> {
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
 
-  let total = 0;
+  // FIVE WAYS THIS LOST A FAILURE, and one number that could not tell "nothing
+  // to sync" from "everything broken".
+  //
+  //  1. Each import was wrapped in `.catch(() => ({ syncXEvents: async () =>
+  //     ({ synced: 0 }) }))`, so a module that could not be LOADED — a
+  //     deployment fault — became a function reporting a clean zero.
+  //  2. `allSettled` results were read as `r.status === 'fulfilled' ? synced :
+  //     0`, so a sync that THREW contributed zero and was never mentioned.
+  //  3. All six of these functions return `{ synced, error? }` and set
+  //     `integrations.last_error` themselves. The `error` field was never read.
+  //  4. A per-product `catch {}` swallowed whatever was left.
+  //  5. Nothing was written to `integration_sync_log`, so the integrations
+  //     page — which is careful and right — told the founder "No sync has been
+  //     attempted in the last 7 days" about integrations Foundry had been
+  //     syncing every two hours.
+  //
+  // The imports are hoisted out of the loop and no longer substituted: a module
+  // that will not load should fail this job once, loudly, rather than a hundred
+  // times silently. Each provider records its own attempt, so a failure reaches
+  // the founder's page rather than only this log line.
+  const [
+    { syncSentryEvents },
+    { syncLinearEvents },
+    { syncIntercomEvents },
+    { syncSlackEvents },
+  ] = await Promise.all([
+    import('../services/integration/sentry.js'),
+    import('../services/integration/linear.js'),
+    import('../services/integration/intercom.js'),
+    import('../services/integration/slack.js'),
+  ]);
+  const { recordSyncAttempt } = await import('../services/integrations/health.js');
+
+  const providers: Array<{ name: string; run: (p: string) => Promise<{ synced: number; error?: string }> }> = [
+    { name: 'sentry', run: syncSentryEvents },
+    { name: 'linear', run: syncLinearEvents },
+    { name: 'intercom', run: syncIntercomEvents },
+    { name: 'slack', run: syncSlackEvents },
+  ];
+
+  let recorded = 0;
+  let failed = 0;
   for (const row of products.rows) {
     const productId = (row as Record<string, unknown>).id as string;
-    try {
-      const [
-        { syncSentryEvents },
-        { syncLinearEvents },
-        { syncIntercomEvents },
-        { syncSlackEvents },
-      ] = await Promise.all([
-        import('../services/integration/sentry.js').catch(() => ({ syncSentryEvents: async () => ({ synced: 0 }) })),
-        import('../services/integration/linear.js').catch(() => ({ syncLinearEvents: async () => ({ synced: 0 }) })),
-        import('../services/integration/intercom.js').catch(() => ({ syncIntercomEvents: async () => ({ synced: 0 }) })),
-        import('../services/integration/slack.js').catch(() => ({ syncSlackEvents: async () => ({ synced: 0 }) })),
-      ]);
-      const results = await Promise.allSettled([
-        syncSentryEvents(productId),
-        syncLinearEvents(productId),
-        syncIntercomEvents(productId),
-        syncSlackEvents(productId),
-      ]);
-      const synced = results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? (r.value.synced ?? 0) : 0), 0);
-      total += synced;
-    } catch { /* non-fatal per product */ }
+    await Promise.all(providers.map(async ({ name, run }) => {
+      const startedAt = new Date().toISOString();
+      try {
+        const result = await run(productId);
+        await recordSyncAttempt({
+          productId, provider: name, startedAt,
+          recordsProcessed: result.synced ?? 0, error: result.error ?? null,
+        });
+        if (result.error) {
+          failed += 1;
+          logger.error(`scp_extended_integrations_sync: ${name} failed for ${productId}: ${result.error}`,
+            { jobName: 'scp_extended_integrations_sync' });
+        } else {
+          recorded += result.synced ?? 0;
+        }
+      } catch (err) {
+        failed += 1;
+        const message = err instanceof Error ? err.message : String(err);
+        await recordSyncAttempt({
+          productId, provider: name, startedAt, recordsProcessed: 0, error: message,
+        }).catch(() => { /* the throw above is the finding; do not mask it with a second one */ });
+        logger.error(`scp_extended_integrations_sync: ${name} threw for ${productId}: ${message}`,
+          { jobName: 'scp_extended_integrations_sync' });
+      }
+    }));
   }
-  logger.info(`scp_extended_integrations_sync: Synced ${total} events across ${products.rows.length} products`, { jobName: 'scp_extended_integrations_sync' });
+  // `recorded` counts summary rows the syncs wrote, not raw provider events —
+  // each of these functions stores a handful of trend summaries per run.
+  const line = `scp_extended_integrations_sync: recorded ${recorded} summaries across `
+    + `${products.rows.length} products, ${failed} provider sync(s) failed`;
+  if (failed > 0) logger.error(line, { jobName: 'scp_extended_integrations_sync' });
+  else logger.info(line, { jobName: 'scp_extended_integrations_sync' });
 }
 
 // ─── SCP v4: Benchmark Refresh — Sunday 3:00 UTC ────────────────────────────

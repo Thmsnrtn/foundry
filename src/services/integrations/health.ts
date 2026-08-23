@@ -23,6 +23,7 @@
 // no error, by either writer's spelling.
 // =============================================================================
 
+import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 
 export interface SyncHealth {
@@ -92,4 +93,62 @@ export async function getSyncHealth(
   }
 
   return out;
+}
+
+/**
+ * Record one sync attempt, in the vocabulary `getSyncHealth` above reads.
+ *
+ * THE SIX EVENT SYNCS NEVER WROTE THIS TABLE. `syncSentryEvents`,
+ * `syncLinearEvents`, `syncIntercomEvents`, `syncSlackEvents`,
+ * `syncPostHogEvents` and `syncGitHubEvents` each update
+ * `integrations.last_synced_at` and `last_error` — the three columns the header
+ * of this file describes as the ones that "describe THIS MOMENT and forget
+ * everything before it", and the reason `integration_sync_log` exists.
+ *
+ * So the integrations page, which is careful and right, told the founder "No
+ * sync has been attempted in the last 7 days" about integrations Foundry had
+ * been syncing every two hours. `getSyncHealth`'s own contract says an absent
+ * entry means no attempt was RECORDED and must be said as such — it was, and
+ * the sentence was still false, because the writer was missing rather than the
+ * attempt.
+ *
+ * `last_error` was equally invisible: the page shows it only when `status` is
+ * 'error', and none of the six touches `status`. A sync failing every night set
+ * a column nothing rendered.
+ *
+ * Written from the JOB rather than inside each module, because both jobs in
+ * `jobs/index.ts` are the only callers of all six, and the job is also where
+ * the `error` those functions return was being discarded.
+ *
+ * An integration that is not connected has no attempt to record: the sync
+ * returned zero for that reason, and inventing a row would make "no integration"
+ * look like a sync that found nothing.
+ */
+export async function recordSyncAttempt(input: {
+  productId: string;
+  /** `integrations.name` — what the six modules look themselves up by. */
+  provider: string;
+  /** ISO timestamp taken before the sync ran. */
+  startedAt: string;
+  recordsProcessed: number;
+  error?: string | null;
+}): Promise<void> {
+  const row = (await query(
+    'SELECT id FROM integrations WHERE product_id = ? AND name = ?',
+    [input.productId, input.provider],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!row) return;
+
+  await query(
+    `INSERT INTO integration_sync_log
+       (id, integration_id, product_id, started_at, completed_at, status,
+        records_processed, error_message)
+     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)`,
+    [
+      nanoid(), String(row.id), input.productId, input.startedAt,
+      input.error ? 'failed' : 'success',
+      input.recordsProcessed,
+      input.error ?? null,
+    ],
+  );
 }
