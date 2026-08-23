@@ -48,7 +48,7 @@ const webhookPayload: ActionPayload = {
 
 describe('approved action runtime effect certainty', () => {
   it('persists Linear provider acknowledgment without claiming outcome', async () => {
-    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    integration.mockResolvedValue({ status: 'active', config_json: { api_key: 'lin-secret' } });
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: { issueCreate: { success: true, issue: { id: 'i1', identifier: 'F-1' } } } }), { status: 200 }));
     const { result, row } = await run(linearPayload);
     expect(result.effect_certainty).toBe('provider_acknowledged');
@@ -57,14 +57,14 @@ describe('approved action runtime effect certainty', () => {
   });
 
   it('persists adversarial HTTP-200 Linear rejection', async () => {
-    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    integration.mockResolvedValue({ status: 'active', config_json: { api_key: 'lin-secret' } });
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ errors: [{ message: 'forbidden' }] }), { status: 200 }));
     const { row } = await run(linearPayload);
     expect(row.effect_certainty).toBe('provider_rejected');
   });
 
   it('preserves Linear transport ambiguity and never retries the claimed execution', async () => {
-    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    integration.mockResolvedValue({ status: 'active', config_json: { api_key: 'lin-secret' } });
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('timeout after write'));
     const { id, row } = await run(linearPayload);
     expect(row.effect_certainty).toBe('ambiguous');
@@ -95,5 +95,40 @@ describe('approved action runtime effect certainty', () => {
     expect(row.effect_certainty).toBe('ambiguous');
     expect(row.reconcile_after).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
+describe('the guard on the Linear executor', () => {
+  // These fixtures used to mock `status: 'connected'`, which is the value
+  // migration 074 retired: nothing writes it, nothing selects it, and every
+  // other adapter guards on 'active'. The tests passed because the guard was
+  // wrong in the same direction — a test written against the defect.
+  //
+  // In production the consequence was inverted: a correctly connected Linear
+  // integration is 'active', so every ticket Foundry tried to file came back
+  // "Linear integration not connected", and the only state that satisfied the
+  // guard was the broken one that cannot sync.
+
+  it('acts on an integration that is active', async () => {
+    integration.mockResolvedValue({ status: 'active', config_json: { api_key: 'lin-secret' } });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ data: { issueCreate: { success: true, issue: { id: 'i9', identifier: 'F-9' } } } }),
+      { status: 200 }));
+
+    const { result } = await run(linearPayload);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('refuses one still carrying the retired status', async () => {
+    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+    const { result } = await run(linearPayload);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('not connected');
+    // And nothing was dispatched on the strength of a status nothing writes.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
