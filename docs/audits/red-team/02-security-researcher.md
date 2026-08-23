@@ -238,12 +238,36 @@ somebody reading the code again.
 - **Remediation:** Escape LIKE wildcards (`%` and `_`) in the stressor name before using it in the query. Use `LIKE ? ESCAPE '\'` and replace `%` with `\%` and `_` with `\_`.
 - **Resolution:** Done, and at four sites rather than one — the same shape was in `scp/memory/graph.ts` (a founder's own search text), and twice in `scp/accuracy/tracker.ts` (an experiment name and a customer id parsed out of prediction criteria). `lib/sql-like.ts` owns the escaping so the pattern and its `ESCAPE` clause cannot drift apart. Worth stating plainly: the query was always parameterised and there was never an SQL injection here. The injection was into the PATTERN, and on the `resolve_stressor` path it reached a WRITE — the row it matched was marked resolved. Covered by `tests/unit/a-wildcard-the-model-chose.test.ts`.
 
-## Status: HAS P0-P1
+## Status as written, and status now
 
-**P0 findings:** 2 (RT02-02, RT02-03)
-**P1 findings:** 8 (RT02-01, RT02-04, RT02-05, RT02-06, RT02-07, RT02-08, RT02-09, RT02-10, RT02-11, RT02-12)
-**P2 findings:** 4 (RT02-13, RT02-14, RT02-15, RT02-16)
+**As the auditor left it:** 2 P0 (RT02-02, RT02-03), 8 P1 (RT02-01, RT02-04,
+RT02-05, RT02-06, RT02-07, RT02-08, RT02-09, RT02-10, RT02-11, RT02-12), 4 P2
+(RT02-13, RT02-14, RT02-15, RT02-16). The two P0s were IDOR in the voice
+endpoints, exploitable by changing an id in a request body. The P1 cluster had
+two themes: IDOR in the portfolio and benchmark layer, and no prompt-injection
+defence at any AI-ingesting surface.
 
-The two P0 findings are straightforward IDOR vulnerabilities in the voice endpoints that allow cross-tenant data manipulation and information leakage. These are exploitable by any authenticated user with zero sophistication -- just change the product_id or session_id in the request body.
+**Now: every ticket is closed except the binding half of RT02-09**, which needs
+a Stripe Connect account id on the product row and is a schema and connect-flow
+change rather than a fix. The table at the top of this file is the per-ticket
+record; four things are worth carrying out of it:
 
-The P1 cluster is dominated by two themes: (1) remaining IDOR gaps in the portfolio/benchmark layer that allow metric exfiltration, and (2) zero prompt injection defense across all AI-ingesting surfaces. The prompt injection risk is material because user-controlled strings (competitor names, product names, voice transcripts, conversation messages) are interpolated directly into Claude prompts with no sanitization, delimiting, or defense-in-depth.
+1. **In three tickets the ticket was not the worst of it.** RT02-10 asked for a
+   key to be hashed, and the key authenticated nothing. RT02-14 asked for
+   nonces, and the enforced policy forbade the product's own auth pages. RT02-15
+   asked for a read-path filter, and the consent that gates the write cannot be
+   granted at all. **Read the code the ticket points at before implementing the
+   remediation it proposes** — three times here the remediation would have made
+   a false claim more robust.
+2. **The prompt-injection theme was half solved before the audit ran.**
+   `ai/sanitize.ts` and `ai/prompt-shield.ts` existed and were used at three
+   boundaries; the transcript and competitor paths had never been wired to them.
+   "No defence exists" and "the defence is not applied here" call for different
+   work.
+3. **What a boundary claims.** Delimiting untrusted content and instructing the
+   model raises the bar. It is not a proof, and nothing in this repository says
+   otherwise: what bounds the blast radius is the gate system — pending
+   decisions, the outbound gateway, the authority ladder.
+4. **Two tests were testing what was not enforced** — the CSP middleware nobody
+   mounted, and a portfolio key reader with no caller. A green assertion about a
+   dead code path is worse than no assertion, because it is read as coverage.

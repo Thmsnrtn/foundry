@@ -233,9 +233,19 @@ more tickets closed, and in three of them the ticket was not the worst of it:
 - **RT02-13** was the error rendering on the auth pages, and is now nodes and
   `textContent`.
 
-**What is left of that audit is not engineering:** RT02-07 and RT02-08 (prompt
-injection through transcripts and competitor names) and the RT02-09 binding
-half, which needs a Stripe Connect account id on the product row.
+- **RT02-07 and RT02-08** wanted prompt-injection defence and said no
+  sanitisation layer existed. It had existed since Wave 1 and was used at three
+  boundaries; the transcript and competitor paths had never been wired to it.
+  They are wrapped in named data blocks now, with the instruction in the SYSTEM
+  prompt — and the words inside are NOT rewritten, because the denylist that is
+  right for a stranger's support message mangles a founder's own dictation.
+
+**One ticket is left, and it is not a fix:** the RT02-09 binding half needs a
+Stripe Connect account id on the product row — a schema and connect-flow change.
+
+**And the lesson the ledger itself teaches:** in three of these the ticket was
+not the worst of it, and implementing the remediation as proposed would have
+made a false claim more robust. Read the code the ticket points at.
 
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
