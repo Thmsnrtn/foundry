@@ -53,7 +53,7 @@ inherited list because it was inherited.
 - **Head:** `8d7ff74`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 235 files, highest **199**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **354 files / 3,028 tests**, `SUITE_EXIT=0`
+- **Validation:** full suite green — **356 files / 3,044 tests**, `SUITE_EXIT=0`
   read from the run that wrote the log. Every gate in `npm run check` run
   individually and green: ratchets, kernel boundary, NULL-safety, truth audit,
   effects audit, `lint:columns`, AI attribution. The **Head** sha above is the
