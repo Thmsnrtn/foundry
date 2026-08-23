@@ -41,8 +41,8 @@ export async function handleStripeOAuthCallback(code: string, state: string): Pr
   // read by services/integrations/framework.ts via product_id + provider +
   // status='active'). Credentials/config are the encrypted token + metadata.
   await query(
-    `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, direction, status, credentials, config)
-     VALUES (?, ?, ?, 'stripe', 'stripe', 'inbound', 'inbound', 'active', ?, ?)
+    `INSERT INTO integrations (id, product_id, owner_id, name, provider, direction, status, credentials, config)
+     VALUES (?, ?, ?, 'stripe', 'stripe', 'inbound', 'active', ?, ?)
      ON CONFLICT (product_id, name) DO UPDATE SET
        credentials = excluded.credentials,
        config = excluded.config,

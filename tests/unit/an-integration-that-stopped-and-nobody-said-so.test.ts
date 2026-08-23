@@ -59,8 +59,8 @@ beforeEach(async () => {
 async function integration(status: string, errorCount: number): Promise<string> {
   const id = `int_${nanoid(6)}`;
   await query(
-    `INSERT INTO integrations (id, product_id, type, status, error_count)
-     VALUES (?, 'p_sync', 'stripe', ?, ?)`, [id, status, errorCount]);
+    `INSERT INTO integrations (id, product_id, provider, direction, status, error_count)
+     VALUES (?, 'p_sync', 'stripe', 'inbound', ?, ?)`, [id, status, errorCount]);
   return id;
 }
 
@@ -109,7 +109,10 @@ describe('giving up is announced', () => {
   it('says what stopped and what it means', () => {
     // `type` held a provider key, a direction or a category depending on the
     // writer; the sentence names WHO, so it reads the column that means who.
-    expect(SYNC).toMatch(/Foundry stopped syncing \$\{integration\.provider \?\? integration\.type\}/);
+    // Migration 204 retired `type`, so the fallback is a word rather than the
+    // other column — a notification with no provider on it should say so, not
+    // name a direction.
+    expect(SYNC).toMatch(/Foundry stopped syncing \$\{integration\.provider \?\? 'an integration'\}/);
     expect(SYNC).toMatch(/has stopped updating/);
     expect(SYNC).toMatch(/importance: 'action_needed'/);
   });

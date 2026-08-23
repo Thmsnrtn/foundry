@@ -52,8 +52,8 @@ beforeEach(async () => {
   await query('DELETE FROM integration_sync_log');
   await query('DELETE FROM integrations');
   await query(
-    `INSERT INTO integrations (id, product_id, provider, type, status, credentials, error_count)
-     VALUES ('int_fw', ?, 'stripe', 'stripe', 'active', ?, 0)`,
+    `INSERT INTO integrations (id, product_id, provider, direction, status, credentials, error_count)
+     VALUES ('int_fw', ?, 'stripe', 'inbound', 'active', ?, 0)`,
     [P, JSON.stringify({ api_key: 'sk_test' })]);
 });
 afterEach(() => { vi.unstubAllGlobals(); });

@@ -137,8 +137,8 @@ describe('a sync is actually logged', () => {
     // LOG of that failure is the thing under test.
     const integrationId = nanoid();
     await query(
-      `INSERT INTO integrations (id, product_id, type, provider, status, config)
-       VALUES (?, ?, 'analytics', 'zz_no_adapter', 'active', '{}')`,
+      `INSERT INTO integrations (id, product_id, direction, provider, status, config)
+       VALUES (?, ?, 'inbound', 'zz_no_adapter', 'active', '{}')`,
       [integrationId, P]);
     const { runSync } = await import('../../src/services/integrations/framework.js');
     await runSync(integrationId, 'scheduled').catch(() => undefined);

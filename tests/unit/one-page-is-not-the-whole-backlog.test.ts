@@ -44,9 +44,9 @@ beforeAll(async () => {
     `INSERT INTO products (id, name, owner_id, status, github_repo_url)
      VALUES (?,'Acme','f_gh','active','https://github.com/acme/app')`, [P]);
   await query(
-    `INSERT INTO integrations (id, product_id, type, provider, name, status,
+    `INSERT INTO integrations (id, product_id, direction, provider, name, status,
                                credentials_json, config_json)
-     VALUES ('int_gh', ?, 'github', 'github', 'github', 'active', ?, ?)`,
+     VALUES ('int_gh', ?, 'bidirectional', 'github', 'github', 'active', ?, ?)`,
     [P, JSON.stringify({ access_token: 'ghp_test' }),
      JSON.stringify({ org: 'acme', repo: 'app' })]);
 });

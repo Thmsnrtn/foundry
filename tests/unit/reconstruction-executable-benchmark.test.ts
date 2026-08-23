@@ -21,11 +21,11 @@ beforeAll(async()=>{
     ('exe_commerce','Parcel Works','exe_owner'),('exe_sparse','Seedling Labs','exe_owner'),
     ('exe_portfolio_a','Northstar A','exe_owner'),('exe_portfolio_b','Northstar B','exe_owner'),
     ('exe_foreign','Foreign Company','exe_foreign_owner')`,[]);
-  await query(`INSERT INTO integrations (id,product_id,type,status,name,last_synced_at) VALUES
-    ('exe_git','exe_saas','inbound','active','github','2025-01-01'),
-    ('exe_dispatch','exe_service','inbound','active','dispatch',NULL),
-    ('exe_warehouse','exe_commerce','inbound','active','warehouse','2025-01-01'),
-    ('exe_foreign_system','exe_foreign','inbound','active','secret-system','2026-08-01')`,[]);
+  await query(`INSERT INTO integrations (id,product_id,direction,status,name,provider,last_synced_at) VALUES
+    ('exe_git','exe_saas','inbound','active','github','github','2025-01-01'),
+    ('exe_dispatch','exe_service','inbound','active','dispatch','dispatch',NULL),
+    ('exe_warehouse','exe_commerce','inbound','active','warehouse','warehouse','2025-01-01'),
+    ('exe_foreign_system','exe_foreign','inbound','active','secret-system','secret-system','2026-08-01')`,[]);
   await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state) VALUES
     ('exe_r_saas','exe_saas','Investigate failed deployments','development','visible'),
     ('exe_r_service','exe_service','Restore shift coverage','operations','visible'),

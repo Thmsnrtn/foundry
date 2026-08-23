@@ -59,7 +59,7 @@ async function firstConnect(type: string): Promise<string> {
   await saveConnectedIntegration({
     productId: P, type, credentialsCiphertext: 'ciphertext', config: {},
   });
-  const r = await query('SELECT id FROM integrations WHERE product_id = ? AND type = ?', [P, type]);
+  const r = await query('SELECT id FROM integrations WHERE product_id = ? AND provider = ?', [P, type]);
   return String((r.rows[0] as Record<string, unknown>).id);
 }
 
@@ -68,8 +68,8 @@ async function firstConnect(type: string): Promise<string> {
 async function plantWithStatus(type: string, status: string): Promise<string> {
   const id = nanoid();
   await query(
-    `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json)
-     VALUES (?, ?, ?, ?, ?, ?, '{}')`,
+    `INSERT INTO integrations (id, product_id, name, provider, direction, status, credentials_json, config_json)
+     VALUES (?, ?, ?, ?, 'inbound', ?, ?, '{}')`,
     [id, P, type, type, status, 'ciphertext']);
   return id;
 }

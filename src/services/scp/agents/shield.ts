@@ -81,7 +81,12 @@ export class ShieldAgent extends BaseAgent {
 
     // ── 3. Query integrations for credential expiry ───────────────────────────
     const integrationsResult = await db(
-      `SELECT type AS source, last_synced_at,
+      // WHO the credential belongs to, which is what "source" means here.
+      // `type` held a provider key on one path and a direction or a category on
+      // three others, so this named a direction as the source of a credential
+      // for every integration that came through the fabric. Migration 204
+      // retired it.
+      `SELECT provider AS source, last_synced_at,
               datetime(last_synced_at, '+90 days') as estimated_expiry
        FROM integrations
        WHERE product_id = ?

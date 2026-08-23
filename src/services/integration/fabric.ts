@@ -168,10 +168,10 @@ function rowToIntegration(row: Record<string, unknown>): IntegrationRecord {
     id: row.id as string,
     product_id: row.product_id as string,
     name: row.name as string,
-    // The DIRECTION, from the column that means direction since migration 203.
-    // This field has always carried a direction on this path — `type` is what
-    // it was stored in, and two other writers put a provider key there.
-    type: (row.direction ?? row.type) as string,
+    // The DIRECTION. This field has always carried one on this path; `type` is
+    // what it used to be stored in, and two other writers put a provider key
+    // there. Migration 204 retired that column.
+    type: row.direction as string,
     status: row.status as string,
     config_json: (() => {
       try { return JSON.parse(row.config_json as string || '{}'); } catch { return {}; }
@@ -263,7 +263,6 @@ export async function connectIntegration(
   // (migration 203) with a database trigger holding the vocabulary, and `type`
   // keeps the same value only until the retirement commit removes it.
   const direction = DIRECTION_BY_PROVIDER[name] ?? 'inbound';
-  const type = direction;
 
   const configJson = JSON.stringify(config.config_json ?? {});
   const authorizedAgents = JSON.stringify(config.authorized_agents ?? ['all']);
@@ -279,7 +278,6 @@ export async function connectIntegration(
     await query(
       `UPDATE integrations SET
         status = 'active',
-        type = ?,
         direction = ?,
         provider = COALESCE(provider, ?),
         credentials_json = COALESCE(?, credentials_json),
@@ -287,13 +285,13 @@ export async function connectIntegration(
         authorized_agents = ?,
         updated_at = ?
        WHERE product_id = ? AND name = ?`,
-      [type, direction, name, credentialsCiphertext, configJson, authorizedAgents, now, productId, name],
+      [direction, name, credentialsCiphertext, configJson, authorizedAgents, now, productId, name],
     );
   } else {
     await query(
-      `INSERT INTO integrations (id, product_id, name, provider, type, direction, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
-      [nanoid(), productId, name, name, type, direction, credentialsCiphertext, configJson,
+      `INSERT INTO integrations (id, product_id, name, provider, direction, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+      [nanoid(), productId, name, name, direction, credentialsCiphertext, configJson,
        authorizedAgents, now, now],
     );
   }

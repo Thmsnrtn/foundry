@@ -41,10 +41,10 @@ beforeAll(async () => {
     ['intercom', {}],
   ] as Array<[string, Record<string, unknown>]>) {
     await query(
-      `INSERT INTO integrations (id, product_id, type, provider, name, status,
+      `INSERT INTO integrations (id, product_id, direction, provider, name, status,
                                  credentials_json, config_json)
-       VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
-      [`int_${name}`, P, name, name, name,
+       VALUES (?, ?, 'inbound', ?, ?, 'active', ?, ?)`,
+      [`int_${name}`, P, name, name,
        JSON.stringify({ access_token: 't', auth_token: 't' }), JSON.stringify(cfg)]);
   }
 });

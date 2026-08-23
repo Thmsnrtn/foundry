@@ -60,8 +60,8 @@ beforeEach(async () => {
 async function outboundConnection(label: string): Promise<string> {
   const id = nanoid();
   await query(
-    `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, direction, status, credentials, config)
-     VALUES (?, ?, 'f_o', ?, 'mcp', 'outbound', 'outbound', 'active', ?, '{}')`,
+    `INSERT INTO integrations (id, product_id, owner_id, name, provider, direction, status, credentials, config)
+     VALUES (?, ?, 'f_o', ?, 'mcp', 'outbound', 'active', ?, '{}')`,
     [id, P, label, 'ciphertext']);
   return id;
 }
@@ -79,9 +79,9 @@ async function unimplementedProvider(type: string): Promise<string> {
     // deliberately, because a connection that might SEND is not something to
     // start pulling from on a guess. This fixture is a provider the founder
     // connected to pull FROM, and now it says so.
-    `INSERT INTO integrations (id, product_id, name, provider, type, direction, status, credentials_json, config_json)
-     VALUES (?, ?, ?, ?, ?, 'inbound', 'active', '{}', '{}')`,
-    [id, P, type, type, type]);
+    `INSERT INTO integrations (id, product_id, name, provider, direction, status, credentials_json, config_json)
+     VALUES (?, ?, ?, ?, 'inbound', 'active', '{}', '{}')`,
+    [id, P, type, type]);
   return id;
 }
 

@@ -55,7 +55,7 @@ beforeEach(async () => {
 async function connected(provider: string): Promise<string> {
   const id = nanoid();
   await query(
-    `INSERT INTO integrations (id, product_id, name, type, status) VALUES (?, ?, ?, ?, 'active')`,
+    `INSERT INTO integrations (id, product_id, name, provider, direction, status) VALUES (?, ?, ?, ?, 'inbound', 'active')`,
     [id, P, provider, provider]);
   return id;
 }

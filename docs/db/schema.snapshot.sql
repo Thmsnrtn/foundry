@@ -4211,7 +4211,6 @@
   type TEXT NOT NULL CHECK(type IN (
   type TEXT NOT NULL CHECK(type IN ('ab_test','before_after','cohort_comparison')),
   type TEXT NOT NULL CHECK(type IN ('insight','request','alert','handoff','question','report')),
-  type TEXT NOT NULL,                          -- CHECK dropped (app-validated; fabric uses direction)
   type TEXT NOT NULL,                          -- CHECK removed (app-validated)
   typical_lead_time_days INTEGER, -- how many days before failure these signals appear
   unit               TEXT,

@@ -60,7 +60,7 @@ export interface CompanyReconstruction {
 export async function reconstructCompany(productId: string, now: Date = new Date()): Promise<CompanyReconstruction> {
   const product = (await query('SELECT id,name,owner_id FROM products WHERE id=?',[productId])).rows[0] as Record<string,unknown> | undefined;
   if (!product) return { identity:null,systems:[],responsibilities:[],claims:[],unknowns:['company_identity'] };
-  const integrations = await query('SELECT id,COALESCE(name,provider,type) AS name,status,COALESCE(last_synced_at,last_sync_at) AS observed_at FROM integrations WHERE product_id=?',[productId]);
+  const integrations = await query('SELECT id,COALESCE(name,provider) AS name,status,COALESCE(last_synced_at,last_sync_at) AS observed_at FROM integrations WHERE product_id=?',[productId]);
   // AUTHORITY REPORTED THE WAY EXECUTION READS IT. This asked only for an
   // unrevoked act-grant for the same CAPABILITY, so an expired grant reported
   // as active, and a grant bound to one responsibility made every other

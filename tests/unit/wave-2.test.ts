@@ -202,7 +202,7 @@ describe('shippability', () => {
       [nanoid(), productId, nanoid(), productId]
     );
     await query(
-      `INSERT INTO integrations (id, product_id, type, status) VALUES (?, ?, 'github', 'active')`,
+      `INSERT INTO integrations (id, product_id, provider, direction, status) VALUES (?, ?, 'github', 'bidirectional', 'active')`,
       [nanoid(), productId]
     );
 

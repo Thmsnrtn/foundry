@@ -37,14 +37,14 @@ beforeEach(async () => {
 describe('the database', () => {
   it('refuses a direction that is not one of the three', async () => {
     await expect(query(
-      `INSERT INTO integrations (id, product_id, type, direction, status)
+      `INSERT INTO integrations (id, product_id, provider, direction, status)
        VALUES ('i_bad', ?, 'stripe', 'sideways', 'active')`, [P]))
       .rejects.toThrow(/direction is inbound, outbound or bidirectional/);
   });
 
   it('refuses one on update too', async () => {
     await query(
-      `INSERT INTO integrations (id, product_id, type, direction, status)
+      `INSERT INTO integrations (id, product_id, provider, direction, status)
        VALUES ('i_ok', ?, 'stripe', 'inbound', 'active')`, [P]);
     await expect(query("UPDATE integrations SET direction = 'upwards' WHERE id = 'i_ok'"))
       .rejects.toThrow(/direction is inbound, outbound or bidirectional/);
@@ -52,7 +52,7 @@ describe('the database', () => {
 
   it('allows null, which is a row the backfill could not classify', async () => {
     await query(
-      `INSERT INTO integrations (id, product_id, type, status) VALUES ('i_null', ?, 'mystery', 'active')`,
+      `INSERT INTO integrations (id, product_id, provider, status) VALUES ('i_null', ?, 'mystery', 'active')`,
       [P]);
     const row = (await query("SELECT direction FROM integrations WHERE id = 'i_null'"))
       .rows[0] as unknown as { direction: string | null };
@@ -79,11 +79,11 @@ describe('the sync', () => {
     // restated the SELECT inline and passed with the defect restored — a test
     // that reproduces the code cannot see the code change.
     await query(
-      `INSERT INTO integrations (id, product_id, name, provider, type, direction, status)
-       VALUES ('i_in', ?, 'stripe', 'stripe', 'stripe', 'inbound', 'active'),
-              ('i_bi', ?, 'github', 'github', 'github', 'bidirectional', 'active'),
-              ('i_out', ?, 'weather', 'mcp', 'outbound', 'outbound', 'active'),
-              ('i_unknown', ?, 'x', 'x', 'x', NULL, 'active')`, [P, P, P, P]);
+      `INSERT INTO integrations (id, product_id, name, provider, direction, status)
+       VALUES ('i_in', ?, 'stripe', 'stripe', 'inbound', 'active'),
+              ('i_bi', ?, 'github', 'github', 'bidirectional', 'active'),
+              ('i_out', ?, 'weather', 'mcp', 'outbound', 'active'),
+              ('i_unknown', ?, 'x', 'x', NULL, 'active')`, [P, P, P, P]);
 
     const { syncProductIntegrations } = await import('../../src/services/integrations/sync.js');
     await syncProductIntegrations(P);
@@ -98,13 +98,13 @@ describe('the sync', () => {
 
 describe('the dispatch', () => {
   it('sends a fabric-written row to its provider, not to its direction', async () => {
-    // The row shape the fabric writes: `type` holds a DIRECTION and `provider`
-    // holds who it is. Dispatching on `type` looks for an adapter called
-    // 'inbound' and finds none — the row fails with "no adapter", every cycle,
-    // for a provider that has one.
+    // The row shape the fabric writes. Before migration 204 its `type` held a
+    // DIRECTION while `provider` held who it is, so a dispatch on `type` looked
+    // for an adapter called 'inbound' and failed the row every cycle, for a
+    // provider that has one.
     await query(
-      `INSERT INTO integrations (id, product_id, name, provider, type, direction, status, credentials_json)
-       VALUES ('i_fab', ?, 'stripe', 'stripe', 'inbound', 'inbound', 'active', ?)`,
+      `INSERT INTO integrations (id, product_id, name, provider, direction, status, credentials_json)
+       VALUES ('i_fab', ?, 'stripe', 'stripe', 'inbound', 'active', ?)`,
       [P, JSON.stringify({ access_token: 'sk_test' })]);
 
     const { syncProductIntegrations } = await import('../../src/services/integrations/sync.js');

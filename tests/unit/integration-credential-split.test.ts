@@ -179,8 +179,8 @@ describe('secrets that were already in the clear', () => {
   it('are named for rotation and no longer usable', async () => {
     // A row as it would have existed before the migration ran.
     await query(
-      `INSERT INTO integrations (id,product_id,name,type,status,config_json)
-       VALUES ('ics_pre',?,'preexisting','inbound','active','{}')`, [P]);
+      `INSERT INTO integrations (id,product_id,name,provider,direction,status,config_json)
+       VALUES ('ics_pre',?,'preexisting','preexisting','inbound','active','{}')`, [P]);
     await query(
       `INSERT INTO integration_secret_quarantine
          (id,product_id,integration_id,integration_name,secret_key)
@@ -206,8 +206,8 @@ describe('secrets that were already in the clear', () => {
 
   it('are settled automatically by the ordinary connect path', async () => {
     await query(
-      `INSERT INTO integrations (id,product_id,name,type,status,config_json)
-       VALUES ('ics_pre2',?,'reconnected','inbound','active','{}')`, [P]);
+      `INSERT INTO integrations (id,product_id,name,provider,direction,status,config_json)
+       VALUES ('ics_pre2',?,'reconnected','reconnected','inbound','active','{}')`, [P]);
     await query(
       `INSERT INTO integration_secret_quarantine
          (id,product_id,integration_id,integration_name,secret_key)

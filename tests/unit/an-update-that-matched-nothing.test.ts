@@ -42,9 +42,9 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 const integration = (id: string, provider: string, creds: Record<string, string>) => query(
-  `INSERT INTO integrations (id, product_id, provider, type, status, credentials, error_count)
-   VALUES (?, ?, ?, ?, 'active', ?, 0)`,
-  [id, P, provider, provider, JSON.stringify(creds)]);
+  `INSERT INTO integrations (id, product_id, provider, direction, status, credentials, error_count)
+   VALUES (?, ?, ?, 'inbound', 'active', ?, 0)`,
+  [id, P, provider, JSON.stringify(creds)]);
 
 describe('the GitHub adapter', () => {
   it('writes the metrics even when today has no snapshot yet', async () => {

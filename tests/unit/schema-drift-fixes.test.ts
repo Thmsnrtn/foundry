@@ -149,7 +149,7 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
   });
 
   it('integrations (own-Stripe): canonical product_id/credentials/status + ON CONFLICT(product_id,name)', async () => {
-    const sql = `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
+    const sql = `INSERT INTO integrations (id, product_id, owner_id, name, provider, direction, status, credentials, config)
                  VALUES (?, ?, ?, 'stripe', 'stripe', 'inbound', 'active', ?, ?)
                  ON CONFLICT (product_id, name) DO UPDATE SET credentials = excluded.credentials, status = 'active'`;
     await db.execute({ sql, args: ['int1', 'p1', 'o1', 'enc1', '{}'] });

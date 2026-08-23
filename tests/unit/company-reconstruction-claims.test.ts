@@ -14,10 +14,10 @@ beforeAll(async () => {
     ('rc_signal_a','rc_product','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Support queue rising'),
     ('rc_signal_b','rc_product','company_observation_baseline','company_observation_baseline:support_capacity','low','{}','Support team says normal'),
     ('rc_foreign_signal','rc_foreign','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Foreign signal')`, []);
-  await query(`INSERT INTO integrations (id,product_id,type,status,name,last_synced_at) VALUES
-    ('rc_current_system','rc_product','inbound','active','stripe','2025-12-31'),
-    ('rc_stale_system','rc_product','inbound','active','github','2025-01-01'),
-    ('rc_foreign_system','rc_foreign','inbound','active','linear','2025-12-31')`, []);
+  await query(`INSERT INTO integrations (id,product_id,direction,status,name,provider,last_synced_at) VALUES
+    ('rc_current_system','rc_product','inbound','active','stripe','stripe','2025-12-31'),
+    ('rc_stale_system','rc_product','inbound','active','github','github','2025-01-01'),
+    ('rc_foreign_system','rc_foreign','inbound','active','linear','linear','2025-12-31')`, []);
   await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state)
     VALUES ('rc_responsibility','rc_product','Restore support capacity','customer_support','visible'),
            ('rc_foreign_responsibility','rc_foreign','Foreign work','customer_support','visible')`, []);

@@ -28,7 +28,7 @@ beforeAll(async () => {
   await query('PRAGMA foreign_keys=OFF', []);
   await query("INSERT INTO products (id, name, owner_id, status) VALUES ('mg_p','Co','o1','active')", []);
   await query(
-    `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
+    `INSERT INTO integrations (id, product_id, owner_id, name, provider, direction, status, credentials, config)
      VALUES ('mg_srv', 'mg_p', 'o1', 'books', 'mcp', 'outbound', 'active', ?, ?)`,
     [encryptToken('tok_secret'), JSON.stringify({ url: 'https://books.example/mcp' })],
   );

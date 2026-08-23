@@ -228,8 +228,8 @@ describe('an export that exports', () => {
     // A subject access request is a right to one's own data, not a mechanism
     // for extracting a live token to whoever holds the session right now.
     await query(
-      `INSERT INTO integrations (id, product_id, type, status, credentials_json)
-       VALUES ('ex_i','ex_p','slack','active','{"bot_token":"xoxb-REALSECRET"}')`);
+      `INSERT INTO integrations (id, product_id, provider, direction, status, credentials_json)
+       VALUES ('ex_i','ex_p','slack','outbound','active','{"bot_token":"xoxb-REALSECRET"}')`);
     const data = await exportProductData('ex_p', 'json');
     const rows = data.integrations as Array<Record<string, unknown>>;
     expect(rows.length, 'the row still appears, so the founder sees the connection exists')

@@ -107,7 +107,7 @@ export async function buildConversationContext(
       [productId],
     ),
     query(
-      `SELECT type FROM integrations WHERE product_id = ? AND status = 'active'`,
+      `SELECT provider FROM integrations WHERE product_id = ? AND status = 'active'`,
       [productId],
     ),
   ]);
@@ -181,7 +181,7 @@ export async function buildConversationContext(
       what: string; chosen_option: string | null; outcome: string | null; decided_at: string | null
     }),
 
-    connectedIntegrations: integrationsResult.rows.map((r) => (r as Record<string, string>).type),
+    connectedIntegrations: integrationsResult.rows.map((r) => (r as Record<string, string>).provider),
   };
 }
 

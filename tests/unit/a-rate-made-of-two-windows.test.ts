@@ -40,7 +40,7 @@ beforeAll(async () => {
   await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_ph','c_ph','ph@example.com')");
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Acme','f_ph','active')", [P]);
   await query(
-    `INSERT INTO integrations (id, product_id, type, status) VALUES ('int_ph', ?, 'posthog', 'active')`, [P]);
+    `INSERT INTO integrations (id, product_id, provider, direction, status) VALUES ('int_ph', ?, 'posthog', 'inbound', 'active')`, [P]);
 });
 beforeEach(async () => { await query('DELETE FROM metric_snapshots'); });
 afterEach(() => { vi.unstubAllGlobals(); });

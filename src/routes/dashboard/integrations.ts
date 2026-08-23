@@ -129,8 +129,14 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
 
+  // Keyed by PROVIDER, which is what `INTEGRATION_META` is keyed by and what
+  // this form collects. It read `type`, a column that held a provider key here
+  // and a direction or a category on three other paths; migration 204 retired
+  // it. A row written by the fabric — provider in `name`, direction in `type` —
+  // never matched a card on this page, so a connected integration could show as
+  // not connected depending on which door it came through.
   const existing = await query(
-    `SELECT id, type, status, last_synced_at, last_error, COALESCE(error_count, 0) AS error_count
+    `SELECT id, provider, status, last_synced_at, last_error, COALESCE(error_count, 0) AS error_count
        FROM integrations WHERE product_id = ?`,
     [ctx.product.id],
   );
@@ -151,7 +157,7 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
   }>();
   for (const row of existing.rows) {
     const r = row as Record<string, string | number | null>;
-    connectedTypes.set(r.type as string, {
+    connectedTypes.set(r.provider as string, {
       status: r.status as string,
       last_synced_at: r.last_synced_at as string | null,
       last_error: r.last_error as string | null,
@@ -344,7 +350,7 @@ export async function saveConnectedIntegration(input: {
   config: Record<string, unknown>;
 }): Promise<void> {
   const existing = await query(
-    `SELECT id FROM integrations WHERE product_id = ? AND type = ?`,
+    `SELECT id FROM integrations WHERE product_id = ? AND provider = ?`,
     [input.productId, input.type],
   );
 
@@ -355,7 +361,7 @@ export async function saveConnectedIntegration(input: {
       `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
        name = COALESCE(name, ?), provider = COALESCE(provider, ?), direction = ?,
        last_error = NULL, updated_at = CURRENT_TIMESTAMP
-       WHERE product_id = ? AND type = ?`,
+       WHERE product_id = ? AND provider = ?`,
       [input.credentialsCiphertext, JSON.stringify(input.config), input.type,
        input.type, directionOf(input.type), input.productId, input.type],
     );
@@ -363,13 +369,13 @@ export async function saveConnectedIntegration(input: {
   }
 
   // `input.type` IS A PROVIDER KEY — that is what this form collects and what
-  // `INTEGRATION_META` is keyed by. It goes into `provider` as well now, and
-  // the direction that provider actually has goes into `direction`
-  // (migration 203). `type` keeps the same value until the retirement commit.
+  // `INTEGRATION_META` is keyed by. The field keeps its name in this function's
+  // input because the route's path parameter is `:type`; what it means has
+  // never changed, and now it is stored in the column that means it.
   await query(
-    `INSERT INTO integrations (id, product_id, name, provider, type, direction, status, credentials_json, config_json)
-     VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
-    [nanoid(), input.productId, input.type, input.type, input.type, directionOf(input.type),
+    `INSERT INTO integrations (id, product_id, name, provider, direction, status, credentials_json, config_json)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
+    [nanoid(), input.productId, input.type, input.type, directionOf(input.type),
      input.credentialsCiphertext, JSON.stringify(input.config)],
   );
 }
@@ -383,7 +389,11 @@ integrationsRoutes.post('/integrations/:type/disconnect', async (c) => {
   if (!ctx.product) return c.redirect('/products');
 
   await query(
-    `UPDATE integrations SET status = 'revoked', credentials_json = NULL WHERE product_id = ? AND type = ?`,
+    // `:type` in this route's path is a PROVIDER KEY, and now it meets the
+    // column that means one. Against `type` this disconnected a row only if the
+    // row had come through this same form: a Stripe integration connected
+    // through the fabric or the OAuth flow ignored the button entirely.
+    `UPDATE integrations SET status = 'revoked', credentials_json = NULL WHERE product_id = ? AND provider = ?`,
     [ctx.product.id, type],
   );
 

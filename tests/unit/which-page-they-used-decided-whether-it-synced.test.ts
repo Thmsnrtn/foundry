@@ -5,7 +5,6 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { readFileSync } from 'node:fs';
 import { getIntegration } from '../../src/services/integration/fabric.js';
 import { saveConnectedIntegration } from '../../src/routes/dashboard/integrations.js';
 
@@ -59,16 +58,17 @@ async function connectViaIntegrationsPage(type: string): Promise<void> {
 /** What it used to write. */
 async function connectTheOldWay(type: string): Promise<void> {
   await query(
-    `INSERT INTO integrations (id, product_id, type, status, credentials_json, config_json)
-     VALUES (?, ?, ?, 'active', ?, '{}')`,
+    `INSERT INTO integrations (id, product_id, provider, direction, status, credentials_json, config_json)
+     VALUES (?, ?, ?, 'inbound', 'active', ?, '{}')`,
     [nanoid(), P, type, 'ciphertext']);
 }
 
-/** The selector `sync.ts` uses — matches on `type`, and always worked. */
-async function visibleToMetricsSync(type: string): Promise<boolean> {
+/** The selector `sync.ts` uses. It matched on `type` when this defect was
+ *  found; migration 204 retired that column and it matches on `provider`. */
+async function visibleToMetricsSync(provider: string): Promise<boolean> {
   const r = await query(
-    `SELECT id FROM integrations WHERE product_id = ? AND type = ? AND status IN ('active','error')`,
-    [P, type]);
+    `SELECT id FROM integrations WHERE product_id = ? AND provider = ? AND status IN ('active','error')`,
+    [P, provider]);
   return r.rows.length === 1;
 }
 
@@ -95,53 +95,41 @@ describe('an integration connected on the integrations page', () => {
   });
 });
 
-describe('the repair, run as the statement the migration actually contains', () => {
-  // Migrations run once, before any of this, so planting a row and re-running
-  // the FILE is what tests the statement rather than the timing. Read from
-  // disk so an edit to the migration moves the test.
-  const MIGRATION = readFileSync(
-    'src/db/migrations/199_an_integration_with_no_name.sql', 'utf8');
+describe('the repair that ran once, and what replaced it', () => {
+  // MIGRATION 199 CANNOT BE REPLAYED, AND THAT IS THE POINT. It read
+  // `SET name = type WHERE name IS NULL AND type IN (…nine provider keys…)`,
+  // and migration 204 retired `type` — the column that meant a provider key
+  // here, a direction in `connections.ts` and a category in `framework.ts`,
+  // which is why that repair had to be restricted to nine values in the first
+  // place.
+  //
+  // What the repair guarded is now guarded by the writers: every one of them
+  // sets `name` and `provider`, so there is no nameless row to repair. These
+  // assert the property against the CURRENT writers rather than replaying a
+  // statement whose column no longer exists — which is the stronger test, and
+  // the only one still possible.
 
-  async function applyTheRepair(): Promise<void> {
-    const statement = MIGRATION.split('\n')
-      .filter((line) => !line.trimStart().startsWith('--'))
-      .join('\n').trim();
-    await query(statement.replace(/;\s*$/, ''));
-  }
+  it('leaves no nameless row behind, from the page that used to', async () => {
+    await connectViaIntegrationsPage('posthog');
 
-  it('names a nameless row this page could have created', async () => {
-    await query(
-      `INSERT INTO integrations (id, product_id, type, status) VALUES (?, ?, 'posthog', 'active')`,
-      [nanoid(), P]);
-    expect(await getIntegration(P, 'posthog')).toBeNull();
-
-    await applyTheRepair();
-
-    expect(await getIntegration(P, 'posthog')).not.toBeNull();
+    const row = (await query(
+      "SELECT name, provider, direction FROM integrations WHERE product_id = ? AND provider = 'posthog'",
+      [P])).rows[0] as unknown as { name: string; provider: string; direction: string };
+    expect(row.name).toBe('posthog');
+    expect(row.provider).toBe('posthog');
+    expect(row.direction).toBe('inbound');
   });
 
-  it('does not invent a provider called after a direction', async () => {
-    // `connections.ts` writes type='outbound'. A blanket SET name = type would
-    // make `getIntegration(p, 'outbound')` resolve — an integration named
-    // after a direction, which no sync is looking for and every sync would
-    // then have to ignore.
+  it('never names an integration after a direction', async () => {
+    // `connections.ts` wrote `type = 'outbound'` for an MCP server, and a
+    // blanket `SET name = type` would have made `getIntegration(p, 'outbound')`
+    // resolve — an integration named after a direction, which no sync looks for
+    // and every sync would then have to ignore.
     await query(
-      `INSERT INTO integrations (id, product_id, provider, type, status)
-       VALUES (?, ?, 'mcp', 'outbound', 'active')`, [nanoid(), P]);
-
-    await applyTheRepair();
+      `INSERT INTO integrations (id, product_id, name, provider, direction, status)
+       VALUES (?, ?, 'my-mcp-server', 'mcp', 'outbound', 'active')`, [nanoid(), P]);
 
     expect(await getIntegration(P, 'outbound')).toBeNull();
-  });
-
-  it('leaves a row another writer already named alone', async () => {
-    await query(
-      `INSERT INTO integrations (id, product_id, name, type, status)
-       VALUES (?, ?, 'sentry', 'inbound', 'active')`, [nanoid(), P]);
-
-    await applyTheRepair();
-
-    expect(await getIntegration(P, 'sentry')).not.toBeNull();
-    expect(await getIntegration(P, 'inbound')).toBeNull();
+    expect(await getIntegration(P, 'my-mcp-server')).not.toBeNull();
   });
 });
