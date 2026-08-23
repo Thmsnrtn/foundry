@@ -888,46 +888,23 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-8. **Four MRR movement columns that cannot say "not reported".**
-   `metric_snapshots.new_/expansion_/contraction_/churned_mrr_cents` are
-   `INTEGER DEFAULT 0`, so a company that reported a genuine zero and one that
-   reported no movement at all store the same value. Every reader that adds them
-   up inherits the ambiguity, and the daily placeholder snapshot made it a
-   systematic daily fabrication — `getMRRDecomposition` read the LATEST row,
-   which is the placeholder, and returned a confident decomposition of zeros to
-   ten importers. The founder's chat context listed them as facts, the COO
-   prompt was told "net new this period: $0", and the voice briefing spoke
-   "Net new MRR this period: flat" aloud.
+8. **CLOSED — the four MRR movement columns can say "not reported".** Kept
+   here for one cycle because the caveat outlives the fix.
 
-   **The reader now selects the latest snapshot that reported ANY revenue**,
-   which removes the daily fabrication and is as far as a query can go.
+   `new_/expansion_/contraction_/churned_mrr_cents` were `INTEGER DEFAULT 0`, so
+   a reported zero and an unreported movement were the same value. Migration 202
+   rebuilt the table without the defaults; the three steps were (1) the two
+   ingest paths that wrote with a bare `UPDATE ... WHERE snapshot_date = today`
+   now upsert, (2) the job that inserted an empty row per company per day is
+   deleted, (3) the columns are nullable and seven surfaces say "not reported".
+   `NULL + 5` is NULL, so the webhook's five accumulate-in-place increments read
+   `COALESCE(col, 0) + ?` — the only place a zero may be substituted.
 
-   **THE END STATE, and why it is not done here:** those four columns nullable,
-   with both ingest doors and the v1 metrics API writing NULL for what was not
-   supplied. That is a table rebuild plus every reader that sums them — and it
-   comes with a caveat that should be stated before anyone starts: **rows
-   already written can never be repaired**, because the information that would
-   tell a reported 0 from an unreported movement was never stored. So the
-   migration makes new rows honest and leaves history ambiguous, and any surface
-   showing a historical decomposition has to say which era a row is from. **The
-   trigger:** do it when a reader needs to distinguish the two, not before.
-
-   **The placeholder writer is gone, and the first two steps are done.** The
-   daily job inserted an empty row per active product so that "daily snapshots
-   exist"; two ingest paths depended on it, writing `custom_metrics` and
-   `support_volume_7d` with a bare
-   `UPDATE ... WHERE product_id = ? AND snapshot_date = ?` — which affected zero
-   rows whenever the job had not run for that company, while returning
-   `records_processed: N` and a green sync log. Those upsert now, the Stripe
-   webhook path always created its own row, and the job is deleted. **The
-   absence of a row now says what a row of zeros could not: this company
-   reported nothing that day.**
-
-   **Step three is what remains:** the four movement columns nullable, with both
-   ingest doors writing NULL for what was not supplied. That is the table
-   rebuild described above, and the caveat stands — rows already written can
-   never be repaired, because the information that would tell a reported 0 from
-   an unreported movement was never stored.
+   **THE CAVEAT THAT DOES NOT EXPIRE:** rows written before migration 202 keep
+   their stored zeros, and nothing can tell those from reported zeros — the
+   information was never recorded. Any surface showing a historical
+   decomposition is showing numbers whose provenance it cannot establish. If
+   that ever matters, the honest move is a per-row era marker, not a guess.
 
 9. **`integrations.type` means three different things, and five writers
    disagree.** Everything found in this area came out of it, so the column is
