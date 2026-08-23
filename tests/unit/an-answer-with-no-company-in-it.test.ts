@@ -67,8 +67,12 @@ describe('the estimates say what they are made of', () => {
     // `{ ..., measured: boolean }`. One word, one meaning, not a second
     // parallel scheme for the same idea.
     expect(SRC).toMatch(/measured: boolean;/);
+    // `monthly_growth_pct` became nullable when the growth rate it carried was
+    // found to be uncomputable — nothing records Foundry's own MRR at a past
+    // date — so the type is `number | null` now. The word this test is about is
+    // `measured`, and it is unchanged.
     expect(readFileSync('src/services/founder/intelligence.ts', 'utf8'))
-      .toMatch(/projected_from: \{ monthly_growth_pct: number; measured: boolean \}/);
+      .toMatch(/projected_from: \{ monthly_growth_pct: number \| null; measured: boolean \}/);
   });
 
   it('never claims a company figure reached a category estimate', () => {

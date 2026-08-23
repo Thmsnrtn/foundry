@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 const SRC = resolve(__dirname, '../../src');
 
@@ -150,13 +151,21 @@ describe('Portfolio API has ownership checks', () => {
     expect(sql).toMatch(/portfolio_id\s*=\s*\?/i);
   });
 
-  it('authenticatePortfolioKey queries by api_key (not id)', () => {
-    const fn = extractFunction(portfolioSource, 'authenticatePortfolioKey');
-    expect(fn).toMatch(/api_key\s*=\s*\?/);
-  });
-
-  it('portfolio API keys use prefixed format (pfk_*)', () => {
-    expect(portfolioSource).toMatch(/pfk_/);
+  it('mints no portfolio API key, because nothing accepts one', () => {
+    // These two tests used to pin `authenticatePortfolioKey` — which queried
+    // `api_key = ?` against a PLAINTEXT column — and the `pfk_` prefix format.
+    // RT02-10 asked for the key to be hashed. Reading it for that fix found
+    // that `authenticatePortfolioKey` HAD NO CALLER: the key was minted, stored
+    // in the clear, returned to the portfolio owner, and opened nothing. An API
+    // key handed to a customer says a door exists; there was no door. So the
+    // credential is gone rather than hashed, and migration 200 nulls the ones
+    // already written.
+    //
+    // Comments stripped: the paragraph above names both the function and the
+    // prefix, and a test that greps source must not read its own explanation.
+    const code = stripComments(portfolioSource, { lineComments: true });
+    expect(code).not.toMatch(/authenticatePortfolioKey/);
+    expect(code).not.toMatch(/pfk_/);
   });
 });
 

@@ -27,9 +27,15 @@ let seq = 0;
 /** Simulate one resolved decision in a category with a known outcome. */
 async function resolvedDecision(productId: string, category: string, valence: 'positive' | 'negative', decidedBy = 'second_self') {
   const id = `cv_${++seq}`;
+  // WHOSE JUDGEMENT WAS TESTED. A clean cycle banks toward Foundry's autonomy,
+  // so it only counts when FOUNDRY's judgement was the one that got it right:
+  // `decided_by = 'second_self'`, or a recommendation Foundry made that the
+  // founder then chose. `decided_by = 'founder'` says who RESOLVED the row.
+  // Without the recommendation, this fixture was ten decisions the founder made
+  // themselves, and it used to earn Foundry a promotion.
   await query(
-    `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, outcome_valence, autopilot_counted)
-     VALUES (?, ?, ?, 1, 'sim', 'sim', 'executed', ?, ?, 0)`,
+    `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, outcome_valence, autopilot_counted, recommendation, chosen_option)
+     VALUES (?, ?, ?, 1, 'sim', 'sim', 'executed', ?, ?, 0, 'Run it', 'run it')`,
     [id, productId, category, decidedBy, valence === 'positive' ? 1 : -1],
   );
   return id;

@@ -1023,6 +1023,10 @@ settingsRoutes.post('/settings/toggle-product-status', requireOwner(), async (c)
 //
 // A control the product calls the person's own, which the person cannot
 // exercise, is a claim about a control. This is where they exercise it.
+// NO COMPANY CAPABILITY, and the same reason as `/settings/fluency` beside it:
+// this writes the AUTHENTICATED FOUNDER'S OWN row and changes nothing about
+// what Foundry may do to the company. It can only bound how loudly Foundry
+// reaches this person, and the delivery policy may still go quieter on its own.
 settingsRoutes.post('/settings/interruption-ceiling', async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;

@@ -17,8 +17,6 @@ POST /api/decisions
 POST /api/experiments/:id/event
 POST /api/experiments/:id/stop
 POST /api/feedback/nps
-POST /api/founder/intelligence/decisions-inbox/:id/approve
-POST /api/founder/intelligence/decisions-inbox/:id/reject
 POST /api/founder/intelligence/digest/generate
 POST /api/network/cohort/join
 POST /api/network/introductions
@@ -102,6 +100,7 @@ POST /products/:id/journey/:artifactId/publish
 POST /products/:id/patterns/:patternId/invalidate
 POST /settings/delete-all-products
 POST /settings/fluency
+POST /settings/interruption-ceiling
 POST /switch-product
 POST /webhooks/integrations/stripe
 PUT /api/founder-health

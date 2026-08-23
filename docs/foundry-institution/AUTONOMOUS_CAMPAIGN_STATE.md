@@ -60,8 +60,18 @@ inherited list because it was inherited.
 - **Head:** `c2b53e1`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 235 files, highest **199**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **358 files / 3,057 tests**, `SUITE_EXIT=0`
-  read from the run that wrote the log. Every gate in `npm run check` run
+- **Validation:** `npm run check` green end to end — **382 files / 3,358 tests**,
+  read from the run that wrote the log.
+  **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
+  bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
+  Every checkpoint before this one recorded the unit count and called it "full
+  suite green" — and `tests/simulation` had THREE failures standing at the last
+  such checkpoint, each one a fixture whose premise an earlier correction had
+  invalidated: a founder-pulse fixture that never said which timezone its 2am
+  belonged to, and two ledgers seeded with decisions the FOUNDER had made
+  claiming to prove what FOUNDRY had earned. A validation claim is a claim like
+  any other, and this one had a bigger execution path than the run behind it.
+  **Run `npm run check`, not `vitest run tests/unit`, before writing this line.** Every gate in `npm run check` run
   individually and green: ratchets, kernel boundary, NULL-safety, truth audit,
   effects audit, `lint:columns`, AI attribution. The **Head** sha above is the
   commit that tree became; documentation edits after the run touch no code.
@@ -92,249 +102,141 @@ None in flight. Everything below is unstarted or blocked.
 
 ## What the last cycle established
 
-**A fan-out sweep across the service areas this campaign had not read returned
-twenty-two confirmed findings, and every one of them is closed.** They were
-adversarially verified before I saw them, and the verifiers corrected the
-finders on specifics several times — which is the only reason the reports were
-worth acting on directly rather than re-deriving.
+**The rest of the 32-agent sweep, read in full and worked to the end.** The
+previous cycle acted on the findings it had read; this one read the remaining
+report and closed every one. Twelve batches, each mutation-tested, each with the
+defect replanted to prove the test would have caught it.
 
 **THE SHAPES, in the order they cost the most:**
 
-**The level and the movement, in the two places a founder asks whether the
-company survives.** Both runway forecasters seeded themselves by summing
-`new_/expansion_/contraction_/churned_mrr_cents` — one period's MOVEMENT — while
-`mrr_cents`, the LEVEL, sat unread in the same rows. A company reporting through
-the documented door was modelled at ZERO, and not through a NULL: those columns
-are `INTEGER DEFAULT 0`, so the sum was a confident zero. $50k MRR, $60k burn,
-$600k cash was told ten months instead of sixty. Both growth rates compounded
-it, growing the level by the change in the movement and treating each daily
-snapshot as a month.
+**A credential that authenticated nothing, handed to a customer.** RT02-10 asked
+for the `pfk_` portfolio key to be hashed like the main API keys. Reading the
+code for that fix found what the ticket had not: `authenticatePortfolioKey` HAD
+NO CALLER — imported by the routes file and never invoked. So the key was
+minted, stored in the clear, returned to the portfolio owner, and opened
+nothing. Hashing it would have shrunk the blast radius of a leak and left the
+worse half standing: AN API KEY HANDED TO A CUSTOMER SAYS A DOOR EXISTS. The
+mint is gone, the reader is gone, and migration 200 nulls what was already
+written — the half a code change cannot do.
 
-**One absence, substituted in opposite directions inside one function.** The
-weekly digest wrote `?? 0` across churn, activation, day-30 retention and NPS in
-one object literal, so the same NULL was flawless retention and total product
-failure in adjacent lines. `computeCustomerHealth` did the same across usage,
-support and payment. The M&A scorer compared a 0–1 churn fraction against
-thresholds of 2/3/5 percentage points, so every measured churn rate cleared the
-best band — including 100% monthly churn. **The tell is always the same: when
-the fallback and the measurement disagree about the arithmetic that follows, one
-of them is in the wrong unit.**
+**Two identifiers, one checked, and the unchecked one deciding everything.**
+`POST /api/products/:id/integrations/:integrationId/sync` verified ownership of
+`:id` and passed `:integrationId` to `runSync`, which resolved the integration
+by id alone. Any founder could name another company's integration and make
+Foundry call a provider with that company's credentials, write into that
+company's metrics, and read the record count and error text out of the response.
+The ownership rule lived in the route and the row it governed was fetched two
+files away. A RULE THAT DECIDES AUTHORITY MUST HAVE EXACTLY ONE HOME: the scope
+now travels with the call, and there is no default.
 
-**Authority earned on somebody else's record.** Three places ask "was this a
-test of FOUNDRY's judgement" and all three decide how much authority Foundry
-gets. The autopilot ladder banked a clean cycle on any positive outcome — and in
-`shadow` Foundry decides nothing, so it could leave shadow marked `earned` by
-being overruled ten times while the founder was right. The trust ledger filtered
-on `decided_by = 'founder'`, which says who RESOLVED the row. The rule now lives
-once in `decisions/foundry-proposed.ts` and the SQL and TypeScript forms are
-asserted against each other. **Pinning them immediately found a live defect
-neither reported: `TRIM(LOWER('  ')) = TRIM(LOWER(''))` is true, so a decision
-where Foundry said nothing and the founder chose nothing counted as AGREEMENT.**
+**A judge that could not answer, recorded as a pass.** The voice gate met an
+unreachable judge with `score: threshold, in_voice: true` and four fabricated
+dimension matches — so an outage SHIPPED the customer-facing artifact the judge
+exists to hold back, while the neighbouring failure (an unparseable answer)
+fabricated 50 and blocked. Two failures of one kind treated oppositely, and the
+permissive one is the one that reaches a customer. Now: null score, null
+breakdown, a distinct `unscored` verdict, and auto-execution withdrawn because
+the permission was conditioned on a check that did not happen.
 
-**A security kernel that did not check the segment it writes to.**
-`repository-change.ts` resolved only the PARENT chain, so a symlink at the final
-component wrote through into the constitutional ring. The rule is a bright line
-now — a symlinked final component is refused outright — because a kernel is
-worth more when its rule fits in a sentence.
+**An approval stamped an hour before it could have happened.** `proposeAction`
+wrote `approved_by = 'auto'` and `approved_at` ONE HOUR IN THE FUTURE the moment
+a level-1 action was proposed, left the status pending, and returned — with no
+scheduler, no notice, and a dashboard badge promising a "1-hour window". Removed;
+migration 201 refuses any `approved_at` more than five minutes ahead of the
+clock; and whether Foundry may send because nobody answered is now
+`OWNER_DECISIONS_PENDING` §14 rather than a timestamp written in advance.
 
-**Whose clock, whose subject, whose contact.** The founder pulse counted UTC
-hours and told the founder they were "between 11pm and 5am"; a US-Pacific
-evening scored 1.0 and dropped every non-critical event two rungs down the
-interruption ladder. A notice's identity excluded the founder-authored SUBJECT,
-so correcting a typo in a heading sent the old one. `addAgentNote` stamped
-`last_contacted_at` for a purely internal note, and the v1 API served that to an
-integrator syncing into a CRM.
+**A budget that metered the wrong person and never gave anything back.** The cap
+of three a week exists so agents cannot nag a company's CUSTOMER; every
+founder-bound send passes the founder's own address, so the daily briefing, the
+digest, the welcome sequence and the billing notice drew on one budget of three
+— and the first thing refused after Wednesday was whatever came next, including
+"your card was declined". The count is also taken BEFORE the send and was never
+released, so three provider outages made a customer uncontactable that week
+having received nothing. Two department sweeps spent it on drafts, keyed on the
+CRM id while the gateway keyed on the address — two counts of messages to one
+person, neither of them the number they received.
 
-**A rate over a table nothing writes, painted red and green on one page.**
-`decision_quality_scores` has no writer, so /founder-intelligence showed "Full
-Context 0%" as a criticism beside "Override Rate 0%" as a compliment.
+**Every component of one assessment failed towards a claim.**
+`assessMigrationReadiness`: revenue read from two MOVEMENT columns instead of the
+level, churn compared a 0–1 fraction against 5 (i.e. "under 500%"), NPS was
+`nps_score ?? (0 >= 50)` because `>=` binds tighter than `??` — so an NPS of -40
+read as "High NPS confirms value delivery" — and users were `?? 0`. Four
+defects, four different mechanisms, one direction.
 
-**Found on the way, not in the sweep:**
+**A documented endpoint that had never once succeeded.** `GET /v1/customers`
+selected three columns the table does not have, threw on every request, and
+returned a fixed sentence from a catch that discarded the error. The POST
+handler seventy lines below names the correct mapping in a comment: the write
+was fixed and the read was left. Its sibling `/v1/metrics/health` computed
+`is_stale` from row EXISTENCE while a daily job inserts an empty placeholder for
+every company, so nothing was ever stale; and `/v1/agents/:name/briefings` had no
+agent predicate at all, answering for names that are not agents.
 
-**Two source files git diffed as binary.** A raw NUL in the first 8000 bytes
-makes git print "Binary files differ" instead of the change — in `git diff`, in
-a pull request review, everywhere — and grep skips the file. One of the two was
-the single writer of development observations, whose whole purpose is that what
-a check reported can be audited. Neither NUL was corruption; both were correct
-in intent and wrong in ENCODING. `check-no-raw-control-bytes.mjs` refuses them
-now.
+**A cohort that did not exist, ranked against invented bands.** The percentile
+lookup keyed `lifecycle_state` as 'prompt_1'..'prompt_4' while the only writer
+stores 'pre_revenue'|'early'|'growth'|'scale'. The two vocabularies never
+intersected, the lookup missed for every company on every call, and the fallback
+— bands in percentage points, ranked against 0–1 fractions — was therefore the
+path EVERY founder took. It also walked around the owner's five-contributor
+floor, because an invented distribution has no contributors.
 
-**A table whose only writer and only reader are both unreachable passes both
-gates that exist to catch it.** `temporal_events` sat that way from migration
-012 until 194 and `agent_wiki_reads` from 027 until 195.
-`check-unreferenced-tables.mjs` is the third side of that triangle, at 13 and
-falling; `audit_trail` and `autopilot_config` were removed rather than
-baselined, because an empty table named for a control is a claim of a control.
+**A runway that was algebraically the constant 8.** `min(24, (mrr*2)/(mrr/4))`:
+the burn it divides by is the MRR it divides. One failure pattern asks for
+runway under 6 months and could never match; another asks for under 9 and always
+did.
 
-**The backtick gate had a blind spot, found by tripping over it.** Its "inside a
-template literal" state was a boolean, and template literals NEST — so a line
-opening a second template flipped the flag OFF and everything inside it, which
-is where the HTML is, became invisible. The condition is gone rather than
-repaired: it was never load-bearing.
+**Numbers that could not move.** Foundry's own growth rate compared today's
+payers against today's payers-who-signed-up-earlier — a strict subset, so it
+could not be negative, and the twelve-month forecast compounded it. Compliance
+debt was always 0 because nothing writes the requirements it scores, and 0 there
+is the claim "nothing required is unmet". The activation stressor measured a
+fraction against a threshold in points and could never fire. The dashboard's
+rejection-streak card called a lifetime counter "this week".
 
-**Method note that earned its keep:** the sealed-table check produced four
-candidates and two were false positives, from attributing SQL inside a route
-handler to the last named function above it, and from a string-stripper that
-swallowed a dynamic `await import`. Half wrong is worse than blind, so it was
-measured and NOT built. **A function that names itself in its own log message is
-not its own caller** — any reference count over source has to strip strings
-first.
+**A control the product calls the person's own, which the person could not
+exercise.** `preferences.max_channel` — the interruption ceiling three modules
+describe as the thing that "always wins" — had no writer anywhere, so every
+founder sat permanently at push. It has a setter and a setting now.
+
+**A gate that skipped the shape the defect was in.** `check-select-columns`
+skipped every aliased query along with the JOINs, and the broken endpoint above
+was `FROM customer_intelligence ci`. One table is one table, alias or not; it
+reads them now, and replanting the original defect fails the build.
+
+**The recurring method note.** Seven times this campaign, and twice more this
+cycle, a test failed after a repair because the test had encoded the defect as
+its premise — a fixture stating `new_mrr_cents` where the reader now wants the
+level, an assertion pinning a growth rate that could not decline. The repair is
+never to relax the assertion: it is to make the fixture STATE what it was
+assuming, and to say so in the comment.
 
 ## The cycle before this one
 
-**Twelve tables that nothing read, followed one at a time, and eight of the
-twelve led somewhere worse than the table.** The unread-tables gate is a
-starting point, not a verdict: in every case the row itself was the least of it.
+**A fan-out sweep across the service areas this campaign had not read returned
+twenty-two confirmed findings, and every one of them is closed.** The shapes: the
+LEVEL and the MOVEMENT confused in both runway forecasters, so a company
+reporting through the documented door was modelled at zero; one absence
+substituted in opposite directions inside a single function, so the same NULL was
+flawless retention and total failure in adjacent lines; a 0–1 churn fraction
+compared against thresholds in percentage points, so every measured rate cleared
+the best band; and a composite that rested on components it had not measured.
+The durable rules those produced live in `IMPLEMENTATION_STATE.md`.
 
-**The shape that repeated most: a shadow copy that was wrong, and could not be
-found to be wrong because nothing read it.** `auto_execution_log` duplicated
-`action_drafts`. `agent_positions` duplicated `debate_sessions.positions_json`,
-and duplicated it badly — the challenger inserted a SECOND row carrying the
-challenged assertion instead of marking the original, so the columns the schema
-existed for were never once populated. A copy nobody reads cannot be caught
-drifting; both were wrong for as long as they existed.
+## Earlier cycles
 
-**A word that outranked the execution path.** A debate that THREW was stored
-`status = 'complete'`, and the page paints 'complete' green beside a conflict
-count that a crashed run leaves at zero — the same row a debate where everyone
-agreed produces. The failure text existed; it was rendered as the executive
-summary inside the card headed "Unified Synthesis".
+Moved to `history/SEAM_CAMPAIGN_HISTORY.md`, narrative only — the fixes live in
+the migrations and tests that implement them, and the durable rules in
+`IMPLEMENTATION_STATE.md`:
 
-**An estimate with no company in it.** Four investor-tier functions were given a
-product's NAME and SECTOR, asked a model for numbers, and returned them as
-analysis: a moat strength, an erosion rate, a switching-cost ratio. The numbers
-stay — an estimate is a legitimate thing to offer — and now carry
-`estimated_from`, the same shape and the same word as `Forecast.projected_from`.
-**The not-found branches were the worst of it**: `risk_score: 0` (no risk),
-`probability: 0` (the incumbent will certainly not respond), a switching-cost
-ratio of exactly 1, portability and depth of 50. Reassurance and midpoints
-invented about nothing.
-
-**And the same absence scoring as opposite extremes.** One co-founder
-respondent returned alignment 100/100/100/100; none returned 0/0/0/0. A
-portfolio company with no lifecycle state was counted GREEN. A benchmark metric
-the company had not reported was read as 0 — for churn the best possible value,
-for NPS among the worst.
-
-**The single sharpest finding was a direction, not a number.** Portfolio
-benchmarking scored `product_percentile` as the share of peers with a LOWER
-value and read a low percentile as poor performance. For churn that is exactly
-backwards: the company with the least churn in the portfolio scored 0 and was
-told to prioritise retention. Each metric declares its own direction now, in one
-place, instead of the direction living implicitly in whoever reads the number.
-
-**Two operational findings worth more than the tables that led to them.** A
-failed integration sync set `status = 'error'` and the hourly job selected
-`status = 'active'`, so ONE failure removed an integration from sync
-permanently — no retry, no limit, no notice; the stop was a side effect of a
-WHERE clause. And `graph_rebuild` paid Opus weekly for causal chains it used for
-a log line, while the route that serves chains paid Opus again on every request.
-
-**METHOD NOTE THAT NEARLY COST A COMMIT.** The first causal-chains test asserted
-the SHAPE OF THE INSERT and the ORDER OF TWO CALLS in the route source. Both
-mutations survived it. **A test that reads code rather than running it will
-believe anything the code says about itself** — including the comments I had
-just written explaining what the code now does. Rewritten to stub the model and
-exercise the write path and the route for real, it caught three mutations.
-Prefer behaviour; use source assertions only for absence (a name that must not
-come back), and strip comments before asserting absence, because the explanation
-of the old name contains the old name.
-
-**A boundary I crossed, caught by a gate rather than by me.** The
-stopped-integration notice was first announced through `emitSignalEvent` — the
-single door into responsibility discovery, which has exactly one caller by
-design: the company reporting something about itself.
-`discovery-is-not-reachable-from-integrations.test.ts` failed on the first full
-run. The test was right; the code was wrong. It goes through the interruption
-ladder now.
-
-**THE SHARPEST FINDING OF THE CYCLE CAME FROM A COLUMN NOBODY READ.**
-`responsibility_shadow_expectations.observation_source_evidence_ref` was on the
-write-only list. Entering Shadowing writes a transition whose reason is "A
-current independent observation channel can test a bounded expectation" — the
-entire justification for the state — and that rule was enforced three times,
-each keyed on the SHAPE OF THE EXPECTATION: two triggers matching
-`expected_event_type LIKE 'development_verified:%'` and `'external_metric:%'`
-with the source hardcoded, plus each caller filtering its own query.
-`beginResponsibilityShadowing` accepts any event type. **A rule enforced N times
-by special case has no floor: the (N+1)th case has nothing at all.** FOUR places
-in this repository — including the fixture fourteen test files reach Shadowing
-through — created expectations that neither trigger would match. Migration 191
-makes the caller name the channel and enforces it generically.
-
-**AND THE OBVIOUS FORM OF THAT FIX WAS WRONG, which is the part to carry.** The
-natural rule is "the observation must come from the same source as the signal in
-`observation_source_evidence_ref`". That column does not mean one thing: in
-external shadowing it holds a signal FROM the ingest channel, in development
-shadowing a `repository` signal recording the NEED. The first version refused
-every development comparison. **Before generalising a rule from a column, check
-that the column means the same thing at every writer.**
-
-**Fifty was in the schema, not only in the code.** Four agents wrote
-`parsed.domain_health_score ?? 50` into a field their own type declares optional;
-six layers read it; and underneath all of them
-`agent_instances.domain_health_score INTEGER DEFAULT 50`, with the provisioner
-writing the literal 50 for twelve agents of every company at creation.
-`products.health_score INTEGER DEFAULT 0` started every company at the worst
-health there is. **When one substitution appears in several files at once, read
-the schema before fixing any of them** — the application code was keeping faith
-with a column that already lied.
-
-**And the same silence scored twice, differently, in one file.** The Value
-Delivery Index substituted 0 for four components and 100 for the fifth, so a
-company reporting nothing scored 15/100; eighty lines away the same missing
-breadth was read as 100 and could never raise a stressor. `if (!m) return 0` gave
-a company with no snapshot a flat zero on "how effectively the product delivers
-value", and `assessTimeToFirstValue` read a missing measurement as 0 hours,
-which falls in its first branch: "Excellent — users get value within minutes."
-
-**AND THE SAME LENS, ONE LAYER UP, FOUND THE MOST SERIOUS DEFECT OF THE
-CYCLE.** `middleware/tenant.ts` was on the unreachable-modules baseline: the
-module that states tenant ownership ONCE, including the deliberate 404-rather-
-than-403, mounted nowhere. Eight idioms are in use instead. A rule with eight
-implementations has no floor, and `GET /packet/:id` was the route with nothing —
-**any authenticated founder could read any company's board packet**, the most
-sensitive document Foundry produces, while three of its neighbours in the same
-file scoped correctly and one carried a comment saying why. On the same surface
-sweep, two operator routes resolved a company's decisions and recorded
-`decided_by = 'founder'` about somebody else.
-
-**`check-tenant-scope.mjs` is the floor**, baseline 2, both entries earned. The
-body-and-query door was checked in the same pass and holds — recorded because a
-sweep that reports only what it broke tells the next reader nothing about where
-not to look.
-
-**A THIRD KIND OF SELF-INFLICTED SCANNER CONFUSION, and the pattern is now
-clear enough to name: PROSE THAT QUOTES CODE IS READ AS CODE.** Earlier this
-campaign my own scanners read SQL comments and TS comments as statements. This
-time it was the repository's scanner reading MY comment: a note explaining the
-statement it had just removed, quoted verbatim, was extracted by
-`sql-prepares-against-schema` and failed to prepare. Describe the statement, or
-expect the tools to believe you.
-
-**A flake that read as a security regression.** `encryption.test.ts` overwrote
-the first two hex characters of a ciphertext with the constant `'ff'`. One
-ciphertext in 256 already starts with `ff`, so one run in 256 tampered with
-nothing, decrypted cleanly, and failed. Both tamper tests flip a bit now and
-assert the tampering landed. Same discipline as mutation testing, applied to a
-test that was itself the mutant.
-
-## Two cycles back
-
-Moved to `history/SEAM_CAMPAIGN_HISTORY.md` — "One page, read line by line":
-eleven consecutive findings on `founder/intelligence.ts`, the page the operator
-of Foundry looks at, from the plainest lens available — read the number, then
-find the query that produced it. The durable rules it produced live in
-`IMPLEMENTATION_STATE.md`; the fixes live in the migrations and tests that
-implement them. Only the narrative moved.
-
-## What the cycle before that established
-
-Moved to `history/SEAM_CAMPAIGN_HISTORY.md` — "The owner answered §10, §14 and
-§12". The decisions themselves are load-bearing and are recorded in the
-migrations that implement them and in **Blocked — owner** below; only the
-narrative moved.
-
+- **"Twelve tables that nothing read"** — followed one at a time; eight of the
+  twelve led somewhere worse than the table itself.
+- **"One page, read line by line"** — eleven consecutive findings on
+  `founder/intelligence.ts`, from the plainest lens available: read the number,
+  then find the query that produced it.
+- **"The owner answered §10, §14 and §12"** — the decisions are load-bearing and
+  are recorded in the migrations that implement them and in **Blocked — owner**
+  below.
 ## The unreachable-modules list, read module by module
 
 **26 entries, and the list is not a work queue — it is a set of questions with
@@ -956,6 +858,17 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    migration makes new rows honest and leaves history ambiguous, and any surface
    showing a historical decomposition has to say which era a row is from. **The
    trigger:** do it when a reader needs to distinguish the two, not before.
+
+   **What the placeholder writer turned out to be holding up.** The daily job
+   (`metricSnapshot`, `jobs/index.ts`) inserts an empty row per active product
+   so that "daily snapshots exist" — and that row is what several ingest paths
+   UPDATE rather than insert: `integrations/framework.ts` writes
+   `custom_metrics` and `support_volume_7d` with a bare
+   `UPDATE ... WHERE product_id = ? AND snapshot_date = ?`. Deleting the
+   placeholder would make those writes silently affect zero rows. So the
+   placeholder is not simply noise to remove; the order is **make the ingest
+   paths upsert, then stop writing the placeholder, then make the columns
+   nullable** — and each step is verifiable on its own.
 
 9. **`integrations.type` means three different things, and five writers
    disagree.** Everything found in this area came out of it, so the column is

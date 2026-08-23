@@ -85,12 +85,23 @@ async function hit(method: string, path: string, body?: unknown, json = false): 
 }
 
 let seq = 0;
-async function founderWith(name: string, opts: { snapshots?: number[]; stage?: string } = {}): Promise<{ fid: string; pid: string; founder: Record<string, unknown> }> {
+async function founderWith(
+  name: string,
+  opts: { snapshots?: number[]; stage?: string; timezone?: string } = {},
+): Promise<{ fid: string; pid: string; founder: Record<string, unknown> }> {
   const fid = `wf_f${++seq}`;
   const pid = `wf_p${seq}`;
+  // A FOUNDER WHO HAS NOT SAID WHERE THEY ARE HAS NO LATE NIGHT.
+  // `wellbeing/pulse.ts` counts a decision as late-night against the founder's
+  // OWN clock, and refuses to guess when no timezone is stated — because
+  // counting UTC hours told a US-Pacific founder that an ordinary working
+  // evening was the middle of the night, in a message about their life. A
+  // fixture that means "this founder decided things at 2am" has to say which
+  // 2am, and this one means UTC because that is what it inserts.
+  const preferences = opts.timezone ? JSON.stringify({ timezone: opts.timezone }) : null;
   await query(
-    `INSERT INTO founders (id, clerk_user_id, email, name, tier) VALUES (?, ?, ?, ?, 'growth')`,
-    [fid, `clk_${fid}`, `${fid}@wave.test`, name],
+    `INSERT INTO founders (id, clerk_user_id, email, name, tier, preferences) VALUES (?, ?, ?, ?, 'growth', ?)`,
+    [fid, `clk_${fid}`, `${fid}@wave.test`, name, preferences],
   );
   await query(`INSERT INTO products (id, name, owner_id) VALUES (?, ?, ?)`, [pid, `${name}Co`, fid]);
   await query(`INSERT INTO lifecycle_state (product_id, current_prompt) VALUES (?, ?)`, [pid, opts.stage ?? 'prompt_2']);
@@ -228,7 +239,7 @@ describe('the Thin founder — honesty under thin data', () => {
 
 describe('the Overloaded founder — the pulse notices', () => {
   it('a 2am decision spree triggers one kind, numbers-shown note', async () => {
-    const f = await founderWith('Overloaded');
+    const f = await founderWith('Overloaded', { timezone: 'UTC' });
     for (const d of [10, 17, 24, 31]) {
       await query(
         `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at)
@@ -272,8 +283,14 @@ describe('the Trusted founder — autonomy is earned on the record', () => {
     const f = await founderWith('Trusted');
     for (let i = 0; i < 10; i++) {
       await query(
-        `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence)
-         VALUES (?, ?, 'marketing', 1, 'x', 'y', 'approved', 'founder', datetime('now','-10 days'), ?)`,
+        // FOUNDRY PROPOSED IT AND THE FOUNDER TOOK IT. The ledger prices
+        // autonomy on Foundry's OWN record, and `decided_by = 'founder'` says
+        // who resolved the row, not who proposed it — so this fixture used to
+        // earn Foundry a gate with ten decisions the founder made themselves.
+        // The recommendation and the matching choice are what a proposal
+        // Foundry made and the founder accepted looks like in this table.
+        `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence, recommendation, chosen_option)
+         VALUES (?, ?, 'marketing', 1, 'x', 'y', 'approved', 'founder', datetime('now','-10 days'), ?, 'Run it', 'run it')`,
         [`wf_d${++seq}`, f.pid, i < 9 ? 1 : -1]);
     }
     actAs(f);

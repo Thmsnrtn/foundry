@@ -1298,3 +1298,144 @@ migration 080 had already fixed that, and the map is correct. And a wellbeing
 test failed on the `DEFAULT 'stable'` column rather than on the code, which is
 what surfaced the second-order trap above. Read the migration before writing the
 finding.
+
+---
+
+## Twelve tables that nothing read
+
+**Twelve tables that nothing read, followed one at a time, and eight of the
+twelve led somewhere worse than the table.** The unread-tables gate is a
+starting point, not a verdict: in every case the row itself was the least of it.
+
+**The shape that repeated most: a shadow copy that was wrong, and could not be
+found to be wrong because nothing read it.** `auto_execution_log` duplicated
+`action_drafts`. `agent_positions` duplicated `debate_sessions.positions_json`,
+and duplicated it badly — the challenger inserted a SECOND row carrying the
+challenged assertion instead of marking the original, so the columns the schema
+existed for were never once populated. A copy nobody reads cannot be caught
+drifting; both were wrong for as long as they existed.
+
+**A word that outranked the execution path.** A debate that THREW was stored
+`status = 'complete'`, and the page paints 'complete' green beside a conflict
+count that a crashed run leaves at zero — the same row a debate where everyone
+agreed produces. The failure text existed; it was rendered as the executive
+summary inside the card headed "Unified Synthesis".
+
+**An estimate with no company in it.** Four investor-tier functions were given a
+product's NAME and SECTOR, asked a model for numbers, and returned them as
+analysis: a moat strength, an erosion rate, a switching-cost ratio. The numbers
+stay — an estimate is a legitimate thing to offer — and now carry
+`estimated_from`, the same shape and the same word as `Forecast.projected_from`.
+**The not-found branches were the worst of it**: `risk_score: 0` (no risk),
+`probability: 0` (the incumbent will certainly not respond), a switching-cost
+ratio of exactly 1, portability and depth of 50. Reassurance and midpoints
+invented about nothing.
+
+**And the same absence scoring as opposite extremes.** One co-founder
+respondent returned alignment 100/100/100/100; none returned 0/0/0/0. A
+portfolio company with no lifecycle state was counted GREEN. A benchmark metric
+the company had not reported was read as 0 — for churn the best possible value,
+for NPS among the worst.
+
+**The single sharpest finding was a direction, not a number.** Portfolio
+benchmarking scored `product_percentile` as the share of peers with a LOWER
+value and read a low percentile as poor performance. For churn that is exactly
+backwards: the company with the least churn in the portfolio scored 0 and was
+told to prioritise retention. Each metric declares its own direction now, in one
+place, instead of the direction living implicitly in whoever reads the number.
+
+**Two operational findings worth more than the tables that led to them.** A
+failed integration sync set `status = 'error'` and the hourly job selected
+`status = 'active'`, so ONE failure removed an integration from sync
+permanently — no retry, no limit, no notice; the stop was a side effect of a
+WHERE clause. And `graph_rebuild` paid Opus weekly for causal chains it used for
+a log line, while the route that serves chains paid Opus again on every request.
+
+**METHOD NOTE THAT NEARLY COST A COMMIT.** The first causal-chains test asserted
+the SHAPE OF THE INSERT and the ORDER OF TWO CALLS in the route source. Both
+mutations survived it. **A test that reads code rather than running it will
+believe anything the code says about itself** — including the comments I had
+just written explaining what the code now does. Rewritten to stub the model and
+exercise the write path and the route for real, it caught three mutations.
+Prefer behaviour; use source assertions only for absence (a name that must not
+come back), and strip comments before asserting absence, because the explanation
+of the old name contains the old name.
+
+**A boundary I crossed, caught by a gate rather than by me.** The
+stopped-integration notice was first announced through `emitSignalEvent` — the
+single door into responsibility discovery, which has exactly one caller by
+design: the company reporting something about itself.
+`discovery-is-not-reachable-from-integrations.test.ts` failed on the first full
+run. The test was right; the code was wrong. It goes through the interruption
+ladder now.
+
+**THE SHARPEST FINDING OF THE CYCLE CAME FROM A COLUMN NOBODY READ.**
+`responsibility_shadow_expectations.observation_source_evidence_ref` was on the
+write-only list. Entering Shadowing writes a transition whose reason is "A
+current independent observation channel can test a bounded expectation" — the
+entire justification for the state — and that rule was enforced three times,
+each keyed on the SHAPE OF THE EXPECTATION: two triggers matching
+`expected_event_type LIKE 'development_verified:%'` and `'external_metric:%'`
+with the source hardcoded, plus each caller filtering its own query.
+`beginResponsibilityShadowing` accepts any event type. **A rule enforced N times
+by special case has no floor: the (N+1)th case has nothing at all.** FOUR places
+in this repository — including the fixture fourteen test files reach Shadowing
+through — created expectations that neither trigger would match. Migration 191
+makes the caller name the channel and enforces it generically.
+
+**AND THE OBVIOUS FORM OF THAT FIX WAS WRONG, which is the part to carry.** The
+natural rule is "the observation must come from the same source as the signal in
+`observation_source_evidence_ref`". That column does not mean one thing: in
+external shadowing it holds a signal FROM the ingest channel, in development
+shadowing a `repository` signal recording the NEED. The first version refused
+every development comparison. **Before generalising a rule from a column, check
+that the column means the same thing at every writer.**
+
+**Fifty was in the schema, not only in the code.** Four agents wrote
+`parsed.domain_health_score ?? 50` into a field their own type declares optional;
+six layers read it; and underneath all of them
+`agent_instances.domain_health_score INTEGER DEFAULT 50`, with the provisioner
+writing the literal 50 for twelve agents of every company at creation.
+`products.health_score INTEGER DEFAULT 0` started every company at the worst
+health there is. **When one substitution appears in several files at once, read
+the schema before fixing any of them** — the application code was keeping faith
+with a column that already lied.
+
+**And the same silence scored twice, differently, in one file.** The Value
+Delivery Index substituted 0 for four components and 100 for the fifth, so a
+company reporting nothing scored 15/100; eighty lines away the same missing
+breadth was read as 100 and could never raise a stressor. `if (!m) return 0` gave
+a company with no snapshot a flat zero on "how effectively the product delivers
+value", and `assessTimeToFirstValue` read a missing measurement as 0 hours,
+which falls in its first branch: "Excellent — users get value within minutes."
+
+**AND THE SAME LENS, ONE LAYER UP, FOUND THE MOST SERIOUS DEFECT OF THE
+CYCLE.** `middleware/tenant.ts` was on the unreachable-modules baseline: the
+module that states tenant ownership ONCE, including the deliberate 404-rather-
+than-403, mounted nowhere. Eight idioms are in use instead. A rule with eight
+implementations has no floor, and `GET /packet/:id` was the route with nothing —
+**any authenticated founder could read any company's board packet**, the most
+sensitive document Foundry produces, while three of its neighbours in the same
+file scoped correctly and one carried a comment saying why. On the same surface
+sweep, two operator routes resolved a company's decisions and recorded
+`decided_by = 'founder'` about somebody else.
+
+**`check-tenant-scope.mjs` is the floor**, baseline 2, both entries earned. The
+body-and-query door was checked in the same pass and holds — recorded because a
+sweep that reports only what it broke tells the next reader nothing about where
+not to look.
+
+**A THIRD KIND OF SELF-INFLICTED SCANNER CONFUSION, and the pattern is now
+clear enough to name: PROSE THAT QUOTES CODE IS READ AS CODE.** Earlier this
+campaign my own scanners read SQL comments and TS comments as statements. This
+time it was the repository's scanner reading MY comment: a note explaining the
+statement it had just removed, quoted verbatim, was extracted by
+`sql-prepares-against-schema` and failed to prepare. Describe the statement, or
+expect the tools to believe you.
+
+**A flake that read as a security regression.** `encryption.test.ts` overwrote
+the first two hex characters of a ciphertext with the constant `'ff'`. One
+ciphertext in 256 already starts with `ff`, so one run in 256 tampered with
+nothing, decrypted cleanly, and failed. Both tamper tests flip a bit now and
+assert the tampering landed. Same discipline as mutation testing, applied to a
+test that was itself the mutant.

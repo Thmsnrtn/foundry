@@ -361,6 +361,15 @@ answers. `POST /api/v1/customers` (documented, scoped credentials) writes
 session-authenticated route no client calls and by the demo seed. A company
 that integrated the documented way was invisible to them.
 
+**And the READ half of that documented door had never worked.** `GET
+/v1/customers` selected `ci.name`, `ci.company` and `ci.lifecycle_stage` from a
+table whose columns are `account_name` and `stage` and which has no company at
+all, so every request threw and returned a fixed sentence from a catch that
+discarded the error — while the POST handler seventy lines below carried a
+comment naming that exact mapping. A company could write through the door and
+never read back through it. Fixed, and the SELECT gate that could not see it
+(it skipped aliased queries) now reads them.
+
 One accessor now answers it — `services/institution/company-customers.ts` —
 reading both stores, reporting which one each record came from, and stating the
 at-risk and champion predicates once each. This is the **compare** stage of a
@@ -725,9 +734,13 @@ fails when one neither reads `hasData` nor uses them. A default is NOT written
 to `signal_history` — a gap there means nothing was known that day, which is
 what the sparkline, the 7-day trend and the drop alert all need it to mean.
 
-**Reaching a founder's phone asks the ceiling first.** `preferences.max_channel`
-is what the founder said about how loudly Foundry may EVER interrupt them, and
-`ux/interruption.ts` is the only thing that may decide. A caller with its own
+**Reaching a founder's phone asks the ceiling first, and the founder can now
+set it.** `preferences.max_channel` is what the founder said about how loudly
+Foundry may EVER interrupt them, and `ux/interruption.ts` is the only thing that
+may decide. Until this cycle NOTHING WROTE IT: `fluency` was the only key any
+code path put into `founders.preferences`, so the ceiling branch was dead and
+every founder sat at push. `setMaxChannel` is the writer and
+`POST /settings/interruption-ceiling` is where a founder uses it. A caller with its own
 legitimate push type calls `mayPush()` rather than coming through `deliver()`,
 which flattens every type to `daily_briefing`; a test enumerates every caller of
 `notifyFounder` and fails when one does neither.
@@ -972,3 +985,11 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **A detector's blind spot is a claim you are making without evidence.** "0 direct effects" was true of what the regex could see and false of the codebase. The inventory read as reassurance for as long as nobody checked what it could not match.
 - **A write chain is half a chain.** Four surfaces were unreachable by a human being while every write link had a production caller. Data moving is not a person seeing.
 - **`unresolved` becomes permanent unless something makes it fail.** Four untraced consequential effects sat for a long time because the audit counted them instead of refusing them.
+- **A validation claim is a claim.** The checkpoint said "full suite green" from `vitest run tests/unit` for several cycles while `tests/simulation` — which `npm run check` runs and the unit path does not — had three standing failures. Every one was a fixture whose premise a correct earlier repair had invalidated, sitting red where nobody looked: the pulse fixture that never said whose 2am it meant, and two trust fixtures seeding decisions the FOUNDER made to prove what FOUNDRY had earned. Run the command the claim names.
+- **An identifier taken from a request is not a capability.** A route checked the founder owned `:id`, then passed `:integrationId` to a function that resolved the integration `WHERE id = ?`: two identifiers, one checked, and the unchecked one deciding which company's credentials were used and whose metrics were written. The ownership rule lived in the route and the row it governed was fetched two files away. Scope travels WITH the call — `runSync(id, { onBehalfOfProduct })` or `'scheduled'`, with no default — so the predicate lands on the query that loads the row.
+- **A control that could not run withdraws the permission it grants.** The voice judge's outage returned a full passing score, so an unreachable check SHIPPED the artifact it exists to hold back, while the neighbouring failure (an unparseable answer) fabricated a low score and blocked. Two failures of one kind, treated oppositely, and the permissive one is the one that reaches a customer. A check that did not happen is `unscored`, and `unscored` withdraws auto-execution.
+- **A reservation taken before an effect must be released when the effect does not happen.** The weekly communication cap has to count BEFORE the send or it cannot hold under concurrency — which makes the count a hold, not a fact. It was permanent: provider outages, missing senders of record and refusals that never touched the wire each spent a message from a real person's allowance, and three of them made that person uncontactable for the week having received nothing.
+- **An operator is not a customer, and the server decides which.** The cap that stops agents nagging a company's customer was applied to the founder, because every founder-bound send passes the founder's own address — so the daily briefing exhausted the budget and the next thing refused was "your card was declined". The fix is not a field the caller sets: a caller cannot be allowed to claim a bigger allowance, so the gateway asks the database whose address it is.
+- **A threshold must be anchored to the comparator that governs it.** "We are doubling the team to 12 people, on the premise that churn stays under 5%" recorded a threshold of 12 — the first number in the string — and the memory kernel then held the decision accountable to a belief the founder never stated. The number the comparator governs is the one that FOLLOWS it, adjacently; a sentence where nothing follows is one the parser cannot read, and saying nothing is the right answer.
+- **A gate that skips a shape cannot see the defect in that shape.** `check-select-columns` skipped every aliased query along with the JOINs, and the public API's broken list-customers endpoint was `FROM customer_intelligence ci` — one table, no ambiguity, three columns that do not exist, throwing on every request since it was written. A single-table SELECT is single-table whether or not it has an alias. When a gate carries an explicit exclusion, check what is actually hiding in it before trusting the count.
+- **A control the product calls the person's own must be one the person can exercise.** `preferences.max_channel` was honoured by the delivery policy, described in three modules as the founder's ceiling that "always wins", and written by nothing — so every founder sat permanently at the loudest rung. Grep for the WRITER of any preference a guard reads; a ceiling with no setter is a claim about a control, not a control.
