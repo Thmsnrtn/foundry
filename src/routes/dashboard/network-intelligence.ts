@@ -58,9 +58,25 @@ function fmtScore(score: number): string {
   return `${Math.round(score * 100)}%`;
 }
 
+/**
+ * TWO SCALES, ONE FORMATTER, ONE PER CENT SIGN.
+ *
+ * `churn_rate`, `activation_rate` and `day_30_retention` are stored as 0–1
+ * FRACTIONS; `mrr_growth_rate` is computed in this module as a percentage
+ * already multiplied by 100; `nps_score` is on its own -100..100 scale. This
+ * printed all of them as `value.toFixed(1)%`, so a company churning five per
+ * cent a month read "0.1%" on its own cohort page — a number a founder would
+ * take as extraordinary retention.
+ */
+const FRACTION_METRICS = new Set(['churn_rate', 'activation_rate', 'day_30_retention']);
+
+/** Exposed for the test that holds the two scales apart. */
+export const __fmtMetricForTest = (v: number | null, m: string): string => fmtMetric(v, m);
+
 function fmtMetric(value: number | null, metric: string): string {
   if (value === null || value === undefined) return '—';
   if (metric === 'nps_score') return value.toFixed(0);
+  if (FRACTION_METRICS.has(metric)) return `${(value * 100).toFixed(1)}%`;
   return `${value.toFixed(1)}%`;
 }
 
@@ -211,12 +227,19 @@ networkIntelligence.get('/network', async (c) => {
           </div>
         </div>
         <div style="margin-bottom:0.5rem;">${bar}</div>
-        <div style="display:flex;justify-content:space-between;font-size:0.67rem;color:var(--text-muted);margin-bottom:0.5rem;">
+        ${b.cohort_median !== null
+          ? `<div style="display:flex;justify-content:space-between;font-size:0.67rem;color:var(--text-muted);margin-bottom:0.5rem;">
           <span>P25: ${fmtMetric(b.cohort_p25, b.metric)}</span>
           <span>Median: ${fmtMetric(b.cohort_median, b.metric)}</span>
           <span>P75: ${fmtMetric(b.cohort_p75, b.metric)}</span>
-        </div>
-        <div style="font-size:0.78rem;color:var(--text-dim);border-top:1px solid rgba(255,255,255,0.06);padding-top:0.5rem;">${b.cohort_insight}</div>
+        </div>`
+          : `<div style="font-size:0.67rem;color:var(--text-muted);margin-bottom:0.5rem;">
+          No cohort distribution published yet — a percentile is only shown once
+          enough distinct companies in this segment have contributed.
+        </div>`}
+        ${b.cohort_insight !== null
+          ? `<div style="font-size:0.78rem;color:var(--text-dim);border-top:1px solid rgba(255,255,255,0.06);padding-top:0.5rem;">${b.cohort_insight}</div>`
+          : ''}
       </div>`;
     })
     .join('');

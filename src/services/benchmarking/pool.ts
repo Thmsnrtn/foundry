@@ -276,6 +276,49 @@ function metricNameToColumn(metricName: string): string | null {
   return map[metricName] ?? null;
 }
 
+/**
+ * The segment a company belongs to in the benchmark pool: which lifecycle band
+ * and which company category.
+ *
+ * ONE VOCABULARY, ONE HOME. The writer derived the lifecycle band inline in the
+ * benchmark job — `prompt_1..prompt_9` mapped to
+ * 'pre_revenue' | 'early' | 'growth' | 'scale' — and the cohort reader in
+ * `network/cohort-patterns.ts` built its own key by mapping the company's
+ * FUNDING stage to the literal strings 'prompt_1'..'prompt_4'. The two never
+ * intersected, so the reader's lookup missed for every company, every time, and
+ * fell through to a set of invented percentile bands nobody could see was
+ * invented.
+ *
+ * Both sides now ask here. A segment key is a fact about how the pool is
+ * partitioned, and the module that writes the partition owns it.
+ */
+export function lifecycleBandForPrompt(currentPrompt: string | null | undefined): string {
+  const bands: Record<string, string> = {
+    prompt_1: 'pre_revenue', prompt_2: 'pre_revenue', prompt_2_5: 'pre_revenue',
+    prompt_3: 'early', prompt_4: 'early', prompt_5: 'early',
+    prompt_6: 'growth', prompt_7: 'growth', prompt_8: 'scale', prompt_9: 'scale',
+  };
+  return bands[String(currentPrompt ?? '')] ?? 'early';
+}
+
+/** The pool segment for one product, read from what the pool is keyed on. */
+export async function benchmarkSegment(
+  productId: string,
+): Promise<{ lifecycleState: string; companyCategory: string }> {
+  const row = (await query(
+    `SELECT ls.current_prompt AS current_prompt, p.market_category AS market_category
+       FROM products p
+       LEFT JOIN lifecycle_state ls ON ls.product_id = p.id
+      WHERE p.id = ?`,
+    [productId],
+  )).rows[0] as Record<string, unknown> | undefined;
+
+  return {
+    lifecycleState: lifecycleBandForPrompt(row?.current_prompt as string | null),
+    companyCategory: mapIndustryToCategory(String(row?.market_category ?? 'saas')),
+  };
+}
+
 function mapIndustryToCategory(industry: string): string {
   const map: Record<string, string> = {
     saas: 'b2b_saas',

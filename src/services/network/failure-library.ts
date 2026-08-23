@@ -7,6 +7,7 @@
 
 import { query } from '../../db/client.js';
 import { ratePoints } from '../ai/measured.js';
+import { getFinancialPosition } from '../financial/position.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -324,6 +325,11 @@ interface ProductState {
   risk_state: string;
 }
 
+/** Exposed for the test that holds the runway to being a measurement. */
+export async function __loadProductStateForTest(productId: string): Promise<ProductState> {
+  return loadProductState(productId);
+}
+
 async function loadProductState(productId: string): Promise<ProductState> {
   const [snapshotsResult, stressorsResult, lifecycleResult, fundraisingResult] = await Promise.all([
     query(
@@ -374,15 +380,25 @@ async function loadProductState(productId: string): Promise<ProductState> {
     if (curr !== null && prev !== null && curr < prev) activation_declining_weeks++;
   }
 
-  // Rough runway estimate from MRR trajectory vs burn (using MRR as proxy)
-  let runway_months: number | null = null;
-  if (latest && oldest && snapshots.length >= 4) {
-    const latestMrr = (latest.new_mrr_cents as number | null) ?? 0;
-    const weeklyBurn = latestMrr > 0 ? latestMrr / 4 : null; // rough proxy
-    if (weeklyBurn && weeklyBurn > 0) {
-      runway_months = Math.min(24, (latestMrr * 2) / weeklyBurn); // simplified heuristic
-    }
-  }
+  // A RUNWAY THAT WAS THE CONSTANT 8, FOR EVERY COMPANY.
+  //
+  // The old estimate was `min(24, (mrr * 2) / (mrr / 4))`. The "burn" it
+  // divided by was the same MRR figure it divided, so the MRR cancels and the
+  // expression is 8 — always, for every company with any revenue at all, and
+  // null for every company without. Two failure patterns key on it: one asks
+  // for runway under 6 months and could therefore NEVER match, and the other
+  // asks for under 9 and therefore ALWAYS matched. A founder was shown "8" as
+  // an estimate of how long their cash lasts.
+  //
+  // Foundry cannot derive a cash balance. Migration 181 settled that: it is a
+  // fact about a bank account, so it is STATED by the founder, dated, and
+  // attributed — and absent, runway is unknown. This reads that one source and
+  // says nothing when there is nothing to say, which leaves both thresholds
+  // unfired rather than one permanently on.
+  const position = await getFinancialPosition(productId);
+  const runway_months = position !== null && position.monthlyBurnCents > 0
+    ? position.cashOnHandCents / position.monthlyBurnCents
+    : null;
 
   const active_stressor_count = (stressorsResult.rows[0] as Record<string, number>)?.cnt ?? 0;
   const risk_state = (lifecycleResult.rows[0] as Record<string, string>)?.risk_state ?? 'green';

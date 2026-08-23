@@ -1449,15 +1449,13 @@ async function scpBenchmarkRefresh(): Promise<void> {
        LIMIT 200`
     );
 
-    const stageMap: Record<string, string> = {
-      prompt_1: 'pre_revenue', prompt_2: 'pre_revenue', prompt_2_5: 'pre_revenue',
-      prompt_3: 'early', prompt_4: 'early', prompt_5: 'early',
-      prompt_6: 'growth', prompt_7: 'growth', prompt_8: 'scale', prompt_9: 'scale',
-    };
+    // The band vocabulary lives with the pool that is keyed on it, so the
+    // reader in `network/cohort-patterns.ts` cannot invent a second spelling.
+    const { lifecycleBandForPrompt } = await import('../services/benchmarking/pool.js');
 
     for (const row of products.rows) {
       const r = row as Record<string, unknown>;
-      const stage = stageMap[r.current_prompt as string] ?? 'early';
+      const stage = lifecycleBandForPrompt(r.current_prompt as string | null);
       const contributions = [];
       if (r.churn_rate != null) contributions.push({ metric_name: 'churn_rate', value: Number(r.churn_rate), company_stage: stage, industry: 'saas' });
       if (r.activation_rate != null) contributions.push({ metric_name: 'activation_rate', value: Number(r.activation_rate), company_stage: stage, industry: 'saas' });

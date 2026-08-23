@@ -88,11 +88,15 @@ describe('the network benchmark path', () => {
       await query(
         `INSERT INTO products (id, name, owner_id, status) VALUES (?,?,?,'active')`,
         [pr, `Co ${i}`, f]);
+      // `mrr_cents` is the LEVEL and it is what the size bracket is keyed on.
+      // This fixture used to state only `new_mrr_cents` — one period's new
+      // business — because that is what the contributor read at the time, and a
+      // company whose size is unknown cannot be placed in a size bracket.
       await query(
         `INSERT INTO metric_snapshots
            (id, product_id, snapshot_date, activation_rate, day_30_retention,
-            churn_rate, nps_score, new_mrr_cents)
-         VALUES (?, ?, date('now'), ?, ?, ?, ?, 100000)`,
+            churn_rate, nps_score, mrr_cents, new_mrr_cents)
+         VALUES (?, ?, date('now'), ?, ?, ?, ?, 4000000, 100000)`,
         [`${tag}_ms${i}`, pr, 40 + i, 60 + i, 3 + i, 20 + i],
       );
     }

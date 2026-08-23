@@ -112,14 +112,25 @@ export async function getAllBenchmarkComparisons(
 ): Promise<BenchmarkComparison[]> {
   // Get latest metrics and MRR
   const metricsResult = await query(
-    `SELECT activation_rate, day_30_retention, churn_rate, nps_score, new_mrr_cents
+    `SELECT activation_rate, day_30_retention, churn_rate, nps_score, mrr_cents
      FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1`,
     [productId],
   );
   if (metricsResult.rows.length === 0) return [];
 
+  // THE BRACKET IS THE COMPANY'S SIZE, AND THIS READ ONE PERIOD'S NEW BUSINESS.
+  //
+  // `new_mrr_cents` is the MRR WON in a period; `mrr_cents` is the level. A
+  // company at $80k MRR with a flat month has `new_mrr_cents = 0` and was
+  // bucketed '0' — compared against pre-revenue companies — while the same
+  // company after one good week landed in a different cell. The peer group was
+  // an accident of the period rather than a property of the company.
+  //
+  // Null means the level was never reported, and a company whose size is
+  // unknown cannot be placed in a size bracket. No bracket, no comparison.
   const m = metricsResult.rows[0] as Record<string, number | null>;
-  const mrrCents = m.new_mrr_cents ?? 0;
+  if (m.mrr_cents == null) return [];
+  const mrrCents = m.mrr_cents;
   const comparisons: BenchmarkComparison[] = [];
 
   const metricMap: Record<string, number | null> = {
@@ -180,14 +191,18 @@ export async function contributeToNetwork(
   if (!optedIn) return;
 
   const metricsResult = await query(
-    `SELECT activation_rate, day_30_retention, churn_rate, nps_score, new_mrr_cents
+    `SELECT activation_rate, day_30_retention, churn_rate, nps_score, mrr_cents
      FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1`,
     [productId],
   );
   if (metricsResult.rows.length === 0) return;
 
+  // The level, not the period's new business — see `getAllBenchmarkComparisons`
+  // above. A contribution filed under the wrong bracket makes the cell wrong
+  // for everybody in it, not only for the company that filed it.
   const m = metricsResult.rows[0] as Record<string, number | null>;
-  const mrrBracket = getMRRBracket(m.new_mrr_cents ?? 0);
+  if (m.mrr_cents == null) return;
+  const mrrBracket = getMRRBracket(m.mrr_cents);
 
   // A rolling window: each weekly run replaces this company's prior
   // contribution, so a company that runs more often does not weigh more.
