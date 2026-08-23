@@ -287,46 +287,86 @@ integrationsRoutes.post('/integrations/:type/connect',
   }
   const { config, credentials } = splitIntegrationFields(submitted);
 
-  const existing = await query(
-    `SELECT id FROM integrations WHERE product_id = ? AND type = ?`,
-    [ctx.product.id, type],
-  );
-
   // Encrypt credentials at rest. config_json stays plaintext — it's
   // non-sensitive (event names, account ids).
   const credentialsCiphertext = encryptCredentialPayload(JSON.stringify(credentials));
 
-  if (existing.rows.length > 0) {
-    await query(
-      `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
-       last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE product_id = ? AND type = ?`,
-      [credentialsCiphertext, JSON.stringify(config), ctx.product.id, type],
-    );
-  } else {
-    // 'active', THE SAME VALUE THE UPDATE BRANCH FOUR LINES UP ALREADY WRITES.
-    //
-    // This wrote 'connected', and migration 074 exists because that value is
-    // the one nothing reads: `sync.ts` selects `status IN ('active','error')`,
-    // every adapter in `services/integration/` guards on `status === 'active'`,
-    // and `framework.ts` selects `WHERE status = 'active'` for the due-sync
-    // sweep. So a founder connecting an integration FOR THE FIRST TIME stored
-    // their credentials, was redirected to `?connected=<type>`, and got a page
-    // reading "Not connected" over an integration nothing would ever sync —
-    // because this page's own badge tests `status === 'active'` too.
-    //
-    // Reconnecting the same integration took the UPDATE branch and wrote
-    // 'active', which is why it worked the second time and why the state was
-    // easy to miss. Migration 074 repaired the rows once; this line put them
-    // back, one founder at a time.
-    await query(
-      `INSERT INTO integrations (id, product_id, type, status, credentials_json, config_json)
-       VALUES (?, ?, ?, 'active', ?, ?)`,
-      [nanoid(), ctx.product.id, type, credentialsCiphertext, JSON.stringify(config)],
-    );
-  }
+  await saveConnectedIntegration({
+    productId: ctx.product.id, type, credentialsCiphertext, config,
+  });
 
   return c.redirect('/integrations?connected=' + type);
 });
+
+/**
+ * Write what this page's connect form was given, and return nothing but the
+ * fact that it happened.
+ *
+ * EXPORTED SO THE WRITER CAN BE RUN RATHER THAN IMITATED. It was inline in the
+ * handler, and the first test written for it built its own INSERT that looked
+ * like this one — so removing the fix from the handler left the test green.
+ * A test that reproduces the writer proves only that the test agrees with
+ * itself.
+ *
+ * 'active', THE SAME VALUE THE UPDATE BRANCH WRITES. The INSERT used to write
+ * 'connected', and migration 074 exists because nothing reads that: `sync.ts`
+ * selects `status IN ('active','error')`, every adapter in
+ * `services/integration/` guards on `status === 'active'`, `framework.ts`
+ * selects `WHERE status = 'active'`, and this page's own badge tests it too.
+ * So a founder connecting FOR THE FIRST TIME stored their credentials, was
+ * redirected to `?connected=<type>`, and read "Not connected" over an
+ * integration nothing would ever sync. Reconnecting took the UPDATE branch and
+ * worked, which is why it was easy to miss — and why 074's repair was undone
+ * one founder at a time.
+ *
+ * AND `name`, WHICH THIS PAGE NEVER WROTE. It is how the event syncs identify
+ * an integration: `getIntegration(productId, name)` matches on it, and all six
+ * of sentry/linear/intercom/slack/posthog/github call it that way. With `name`
+ * NULL they return `{ synced: 0 }` on their first branch — silently, because
+ * "not connected" and "connected but found nothing" are the same return.
+ * `sync.ts` matches on `type` instead, so the SAME ROW was visible to one sync
+ * and invisible to the other, and which of Foundry's two connect pages a
+ * founder used decided whether their integration produced events.
+ *
+ * Here the two are the same string, because this route's `:type` param IS the
+ * provider key. That is not true of every writer — `fabric.ts` and
+ * `framework.ts` put a CATEGORY in `type`, `connections.ts` puts a direction —
+ * which is why migration 199's repair names the nine values this page can
+ * produce instead of copying `type` wholesale.
+ */
+export async function saveConnectedIntegration(input: {
+  productId: string;
+  type: string;
+  /** `string | null` because `encryptCredentialPayload` returns null for an
+   *  empty payload, and this preserves what the inline version stored. */
+  credentialsCiphertext: string | null;
+  config: Record<string, unknown>;
+}): Promise<void> {
+  const existing = await query(
+    `SELECT id FROM integrations WHERE product_id = ? AND type = ?`,
+    [input.productId, input.type],
+  );
+
+  if (existing.rows.length > 0) {
+    // `name` is set here too, which repairs a row this page created before it
+    // started writing one.
+    await query(
+      `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
+       name = COALESCE(name, ?), last_error = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE product_id = ? AND type = ?`,
+      [input.credentialsCiphertext, JSON.stringify(input.config), input.type,
+       input.productId, input.type],
+    );
+    return;
+  }
+
+  await query(
+    `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json)
+     VALUES (?, ?, ?, ?, 'active', ?, ?)`,
+    [nanoid(), input.productId, input.type, input.type,
+     input.credentialsCiphertext, JSON.stringify(input.config)],
+  );
+}
 
 // ─── POST /integrations/:type/disconnect ─────────────────────────────────────
 

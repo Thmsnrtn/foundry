@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { getIntegration } from '../../src/services/integration/fabric.js';
+import { saveConnectedIntegration } from '../../src/routes/dashboard/integrations.js';
 
 // =============================================================================
 // AN INTEGRATION CONNECTED FOR THE FIRST TIME.
@@ -52,8 +53,19 @@ beforeAll(async () => {
 
 beforeEach(async () => { await query('DELETE FROM integrations WHERE product_id = ?', [P]); });
 
-/** Exactly what the first-connect INSERT branch writes. */
-async function firstConnect(type: string, status: string): Promise<string> {
+/** THE REAL WRITER the connect route calls, not a copy of it. A test that
+ *  reproduces the INSERT stays green when the INSERT is wrong. */
+async function firstConnect(type: string): Promise<string> {
+  await saveConnectedIntegration({
+    productId: P, type, credentialsCiphertext: 'ciphertext', config: {},
+  });
+  const r = await query('SELECT id FROM integrations WHERE product_id = ? AND type = ?', [P, type]);
+  return String((r.rows[0] as Record<string, unknown>).id);
+}
+
+/** A row in a state no writer produces any more, planted to assert what the
+ *  selectors do with it. */
+async function plantWithStatus(type: string, status: string): Promise<string> {
   const id = nanoid();
   await query(
     `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json)
@@ -81,8 +93,7 @@ async function inDueSweep(id: string): Promise<boolean> {
 
 describe("the value nothing reads", () => {
   it('is not what a first connect stores', async () => {
-    // The route's INSERT branch, as it now is.
-    const id = await firstConnect('stripe', 'active');
+    const id = await firstConnect('stripe');
 
     expect(await wouldBeSynced(id)).toBe(true);
     expect(await inDueSweep(id)).toBe(true);
@@ -94,21 +105,21 @@ describe("the value nothing reads", () => {
   it('would have been invisible to every selector that matters', async () => {
     // The state the route used to produce, asserted against the selectors so
     // the cost is visible rather than asserted as a string mismatch.
-    const id = await firstConnect('posthog', 'connected');
+    const id = await plantWithStatus('posthog', 'connected');
 
     expect(await wouldBeSynced(id)).toBe(false);
     expect(await inDueSweep(id)).toBe(false);
   });
 
   it('leaves an errored integration syncable, because giving up is a decision', async () => {
-    const id = await firstConnect('linear', 'error');
+    const id = await plantWithStatus('linear', 'error');
     expect(await wouldBeSynced(id)).toBe(true);
   });
 });
 
 describe('the guard on the other side of the mirror', () => {
   it('accepts an integration that is correctly connected', async () => {
-    await firstConnect('linear', 'active');
+    await firstConnect('linear');
 
     const integration = await getIntegration(P, 'linear');
 
