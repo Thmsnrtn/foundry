@@ -118,7 +118,11 @@ Return JSON:
       artifact_type: draft.artifact_type,
       draft_content: draft.draft_content,
     });
-    if (verdict.verdict === 'block' || verdict.verdict === 'warn') {
+    // 'unscored' joins them: the auto-execution was conditioned on a check
+    // that did not happen, so the permission it granted is withdrawn until a
+    // person looks. Only 'no_fingerprint' and 'exempt' pass through untouched,
+    // because those are settled states rather than failures.
+    if (verdict.verdict === 'block' || verdict.verdict === 'warn' || verdict.verdict === 'unscored') {
       draft.auto_executable = false;
       draft.status = 'draft';
       const tag =

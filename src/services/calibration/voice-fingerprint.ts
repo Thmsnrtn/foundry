@@ -11,6 +11,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { logger } from '../logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,8 +55,27 @@ export interface CreateDraftInput {
 export interface UpdateDraftInput extends CreateDraftInput {}
 
 export interface VoiceScore {
-  score: number;                // 0-100
-  in_voice: boolean;            // score >= 70 by default
+  /**
+   * 0-100, or null when NOTHING WAS MEASURED.
+   *
+   * The judge outage path used to return `score: threshold, in_voice: true`
+   * with all four dimension matches set to the threshold — a full passing
+   * verdict, fabricated, whose only trace was a rationale string nobody reads
+   * as a control. The gate above it turned that into 'pass', and 'pass' is what
+   * leaves `auto_executable` set on a customer-facing draft. So an unreachable
+   * judge shipped the artifact the judge exists to hold back.
+   *
+   * The neighbouring failure did the opposite: an unparseable answer fabricated
+   * 50, which lands under the block band. Two failures of the same kind — the
+   * judge did not give an answer — treated oppositely, and the permissive one
+   * is the one that ships.
+   *
+   * Both now say so: null score, null breakdown, and a gate verdict of
+   * 'unscored'. AN UNMEASURED VALUE MUST BE ABLE TO SAY IT WAS NOT MEASURED.
+   */
+  score: number | null;
+  /** null when score is null: no opinion, which is not the same as a pass. */
+  in_voice: boolean | null;
   threshold: number;
   breakdown: {
     register_match: number;     // 0-100
@@ -64,7 +84,7 @@ export interface VoiceScore {
     energy_match: number;       // 0-100
     avoids_banned_words: boolean;
     avoids_anti_exemplars: boolean;
-  };
+  } | null;
   rationale: string;
 }
 
@@ -364,24 +384,32 @@ export async function scoreArtifactAgainstVoice(
   try {
     response = await callSonnet(systemPrompt, userPrompt, 600, productId);
   } catch (err) {
-    // On LLM failure, return neutral non-blocking score with rationale
+    // The judge was asked and could not answer. That is not a score.
+    logger.error(
+      `voice judge unavailable for ${productId}: ${err instanceof Error ? err.message : String(err)}`,
+      { productId },
+    );
     return {
-      score: threshold, // borderline — caller can treat as "uncertain"
-      in_voice: true,
+      score: null,
+      in_voice: null,
       threshold,
-      breakdown: {
-        register_match: threshold,
-        rhythm_match: threshold,
-        lexical_match: threshold,
-        energy_match: threshold,
-        avoids_banned_words: true,
-        avoids_anti_exemplars: true,
-      },
-      rationale: `Voice judge unavailable: ${(err as Error).message}; defaulted to threshold`,
+      breakdown: null,
+      rationale: `Voice judge unavailable: ${(err as Error).message}`,
     };
   }
 
   const parsed = parseJudgeResponse(response.content);
+  if (parsed === null) {
+    // An answer arrived and could not be read. Also not a score.
+    logger.error(`voice judge response unparseable for ${productId}`, { productId });
+    return {
+      score: null,
+      in_voice: null,
+      threshold,
+      breakdown: null,
+      rationale: 'Voice judge response could not be parsed',
+    };
+  }
   return {
     score: parsed.score,
     in_voice: parsed.score >= threshold,
@@ -442,18 +470,12 @@ function parseJudgeResponse(text: string): {
   lexical: number;
   energy: number;
   rationale: string;
-} {
-  // Defensive parse — tolerate prose around JSON
+} | null {
+  // Defensive parse — tolerate prose around JSON. Returns null when there is
+  // no readable answer, because the four dimension numbers this used to invent
+  // are indistinguishable, downstream, from four the judge actually gave.
   const match = text.match(/\{[\s\S]*\}/);
-  const fallback = {
-    score: 50,
-    register: 50,
-    rhythm: 50,
-    lexical: 50,
-    energy: 50,
-    rationale: 'Could not parse judge response',
-  };
-  if (!match) return fallback;
+  if (!match) return null;
   try {
     const parsed = JSON.parse(match[0]) as Record<string, unknown>;
     return {
@@ -465,7 +487,7 @@ function parseJudgeResponse(text: string): {
       rationale: typeof parsed.rationale === 'string' ? parsed.rationale : '',
     };
   } catch {
-    return fallback;
+    return null;
   }
 }
 

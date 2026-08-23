@@ -42,7 +42,13 @@ export type VoiceVerdict =
   | 'warn'              // score in [threshold-15, threshold); reviewer should glance
   | 'block'             // score < threshold-15; require explicit human override
   | 'exempt'            // not voice-bearing; gate doesn't apply
-  | 'no_fingerprint';   // no active fingerprint; gate has no opinion
+  | 'no_fingerprint'    // no active fingerprint; gate has no opinion
+  // The judge was asked and did not answer — unreachable, or an answer that
+  // could not be read. Distinct from 'no_fingerprint', which is a settled state
+  // (there is nothing to compare against) rather than a failure. The scorer
+  // used to answer an outage with a passing score, so this verdict did not
+  // exist and could not: every outage arrived here already wearing a 'pass'.
+  | 'unscored';
 
 export interface VoiceGateResult {
   verdict: VoiceVerdict;
@@ -115,6 +121,20 @@ export async function voiceGateDraft(
       threshold,
       rationale: 'voice scoring unavailable',
       suggested_action: 'ignore',
+      breakdown: null,
+    };
+  }
+
+  if (result.score === null) {
+    // Nothing was measured. The gate withholds the permission it was asked to
+    // grant rather than granting it on a judgment that did not happen: a
+    // customer-facing draft does not auto-ship because the judge was down.
+    return {
+      verdict: 'unscored',
+      score: null,
+      threshold,
+      rationale: result.rationale,
+      suggested_action: 'review',
       breakdown: null,
     };
   }
