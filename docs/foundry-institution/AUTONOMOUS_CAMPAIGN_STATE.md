@@ -50,10 +50,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `48590af`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `pending`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 235 files, highest **199**. Ordering gated. Snapshot current.
-- **Validation:** full suite green — **353 files / 3,018 tests**, `SUITE_EXIT=0`
+- **Validation:** full suite green — **354 files / 3,028 tests**, `SUITE_EXIT=0`
   read from the run that wrote the log. Every gate in `npm run check` run
   individually and green: ratchets, kernel boundary, NULL-safety, truth audit,
   effects audit, `lint:columns`, AI attribution. The **Head** sha above is the
@@ -926,7 +926,31 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    of the rule are asserted, and each clause of the convergence predicate has
    been mutated and shown load-bearing.
 
-8. **`integrations.type` means three different things, and five writers
+8. **Four MRR movement columns that cannot say "not reported".**
+   `metric_snapshots.new_/expansion_/contraction_/churned_mrr_cents` are
+   `INTEGER DEFAULT 0`, so a company that reported a genuine zero and one that
+   reported no movement at all store the same value. Every reader that adds them
+   up inherits the ambiguity, and the daily placeholder snapshot made it a
+   systematic daily fabrication — `getMRRDecomposition` read the LATEST row,
+   which is the placeholder, and returned a confident decomposition of zeros to
+   ten importers. The founder's chat context listed them as facts, the COO
+   prompt was told "net new this period: $0", and the voice briefing spoke
+   "Net new MRR this period: flat" aloud.
+
+   **The reader now selects the latest snapshot that reported ANY revenue**,
+   which removes the daily fabrication and is as far as a query can go.
+
+   **THE END STATE, and why it is not done here:** those four columns nullable,
+   with both ingest doors and the v1 metrics API writing NULL for what was not
+   supplied. That is a table rebuild plus every reader that sums them — and it
+   comes with a caveat that should be stated before anyone starts: **rows
+   already written can never be repaired**, because the information that would
+   tell a reported 0 from an unreported movement was never stored. So the
+   migration makes new rows honest and leaves history ambiguous, and any surface
+   showing a historical decomposition has to say which era a row is from. **The
+   trigger:** do it when a reader needs to distinguish the two, not before.
+
+9. **`integrations.type` means three different things, and five writers
    disagree.** Everything found in this area came out of it, so the column is
    worth stating plainly:
 
@@ -954,7 +978,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    margins of a defect. **The trigger:** the next time a reader has to guess
    what `type` means, do this instead of guessing again.
 
-9. **Three writers to `experiments`, and three vocabularies for "who won".**
+10. **Three writers to `experiments`, and three vocabularies for "who won".**
    The table carries both migration 023's schema and migration 028's — 028's
    `CREATE TABLE IF NOT EXISTS` was a no-op and migration 056 reconciled the
    columns by ALTER, so the live table is the union of two designs. Three paths
@@ -983,7 +1007,7 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    dead: an experiments system with a holdout column nothing writes. On the
    unreferenced-tables baseline in item 8.
 
-10. **Thirteen tables no code can reach, one at a time against their successor.**
+11. **Thirteen tables no code can reach, one at a time against their successor.**
    `check-unreferenced-tables.mjs` is the third side of the triangle the other
    two table gates leave open, and it is a RATCHET, not a work queue. The
    pattern in the thirteen is a superseded store left behind after its

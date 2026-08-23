@@ -2,14 +2,48 @@
 // FOUNDRY — Revenue Intelligence: MRR Decomposition
 // =============================================================================
 
-import { query, getLatestMetrics } from '../../db/client.js';
+import { query } from '../../db/client.js';
 import type { MRRDecomposition, MRRHealthRatio } from '../../types/index.js';
 
 /**
- * Get MRR decomposition from the latest metric snapshot.
+ * Get MRR decomposition from the latest snapshot THAT REPORTED ANY REVENUE.
+ *
+ * IT USED TO READ THE LATEST SNAPSHOT, FULL STOP — and the daily job writes a
+ * placeholder row carrying nothing but `(id, product_id, snapshot_date)`. That
+ * row is the latest one on every ordinary day, its four movement columns are
+ * `INTEGER DEFAULT 0`, and so this returned a confident decomposition of zeros
+ * for essentially every company, every day.
+ *
+ * Ten modules import from here. The founder's chat context listed new $0,
+ * churned $0, expansion $0, contraction $0 as measured facts; the digest email
+ * printed a net-new figure; the COO prompt was told "net new this period: $0";
+ * and the voice briefing SAID OUT LOUD "Net new MRR this period: flat" —
+ * which is a statement about the month, from a row that recorded nothing.
+ *
+ * WHAT THIS DOES NOT FIX, because a query cannot. The four movement columns are
+ * `INTEGER DEFAULT 0`, so a company that reported a genuine zero and a company
+ * that reported no movement at all store the same value. Selecting a row that
+ * reported SOMETHING removes the systematic daily fabrication; it does not make
+ * the movements on that row distinguishable from unreported. The end state is
+ * those four columns nullable with the ingest doors writing NULL for what was
+ * not supplied — a table rebuild plus every reader that adds them up, and one
+ * honest caveat: rows already written cannot be repaired, because the
+ * information that would tell 0 from unknown was never stored. Recorded on the
+ * frontier with that trigger rather than half-done here.
  */
 export async function getMRRDecomposition(productId: string): Promise<MRRDecomposition | null> {
-  const result = await getLatestMetrics(productId);
+  const result = await query(
+    `SELECT * FROM metric_snapshots
+      WHERE product_id = ?
+        AND (mrr_cents IS NOT NULL
+             OR COALESCE(new_mrr_cents, 0) != 0
+             OR COALESCE(expansion_mrr_cents, 0) != 0
+             OR COALESCE(contraction_mrr_cents, 0) != 0
+             OR COALESCE(churned_mrr_cents, 0) != 0)
+      ORDER BY snapshot_date DESC
+      LIMIT 1`,
+    [productId],
+  );
   if (result.rows.length === 0) return null;
 
   const row = result.rows[0] as Record<string, unknown>;
