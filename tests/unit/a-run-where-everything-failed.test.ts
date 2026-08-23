@@ -117,3 +117,43 @@ describe('no scheduled job still swallows a per-subject failure', () => {
     expect(failureLogs).toBe(11);
   });
 });
+
+describe('a write that was allowed to fail, but not to be silent', () => {
+  // Two more of the same family, found by asking which empty catch blocks wrap a
+  // WRITE. Fifteen do across services and routes; most are considered and say
+  // so — a dev database missing a migration, the last-resort catch around
+  // recording that an erasure FAILED, a cleanup delete. Two were consequential
+  // and simply bare.
+  //
+  // `signal.ts` deliberately does not let history recording break the Signal
+  // read, which is right. But `signal_history` is not a log: the timeline, the
+  // seven-day delta, the board packet and the portfolio page all read it, so a
+  // write failing every day left holes that make those quietly wrong rather
+  // than visibly absent.
+  //
+  // `ranker.ts` deliberately continues past a duplicate or a constraint
+  // failure, which is also right — one bad action should not cost the founder
+  // the rest of the queue. But the count it returns is what the "One Thing"
+  // banner is built from, so an action rejected by a CHECK never appeared and
+  // nothing said which one, or that any had.
+  //
+  // Neither fix changes the flow. Both stop the silence.
+  const signalSrc = readFileSync('src/services/signal.ts', 'utf8');
+  const rankerSrc = readFileSync('src/services/scp/priority/ranker.ts', 'utf8');
+
+  it('records why signal history was not written', () => {
+    expect(signalSrc).not.toContain("} catch {\n    // Non-critical");
+    expect(signalSrc).toContain('signal history not recorded for');
+  });
+
+  it('keeps letting the Signal read succeed anyway', () => {
+    // The catch is still a catch: the read must not break because history did.
+    expect(signalSrc).toMatch(/catch \(err\) \{[\s\S]*?logger\.error/);
+  });
+
+  it('says how many priority actions were skipped', () => {
+    expect(rankerSrc).toContain('let skipped = 0;');
+    expect(rankerSrc).toContain('priority action skipped for');
+    expect(rankerSrc).toContain('and ${skipped} skipped');
+  });
+});

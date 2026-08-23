@@ -5,6 +5,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { logger } from '../../logger.js';
 
 export interface PriorityAction {
   id: string;
@@ -232,6 +233,7 @@ export async function rebuildPriorityQueue(productId: string): Promise<number> {
 
   // ── Insert all collected actions ──────────────────────────────────────────
   let inserted = 0;
+  let skipped = 0;
   for (const action of actions) {
     const priorityScore = action.urgency_score * action.impact_score;
     try {
@@ -256,11 +258,26 @@ export async function rebuildPriorityQueue(productId: string): Promise<number> {
         ]
       );
       inserted++;
-    } catch {
-      // Non-fatal: skip duplicates or constraint failures
+    } catch (err) {
+      // SKIPPING IS FINE; SKIPPING IN SILENCE IS NOT. Continuing past a
+      // duplicate or a constraint failure is the right behaviour — one bad
+      // action should not cost the founder the rest of the queue. But this
+      // catch was bare, and the count returned from here is what the "One
+      // Thing" banner is built from, so an action rejected by a CHECK simply
+      // never appeared and nothing anywhere said which one, or that any had.
+      skipped += 1;
+      logger.error(
+        `priority action skipped for ${productId} (${action.source}): `
+        + `${err instanceof Error ? err.message : String(err)}`,
+        { productId });
     }
   }
 
+  if (skipped > 0) {
+    logger.error(
+      `priority queue for ${productId} rebuilt with ${inserted} actions and ${skipped} skipped`,
+      { productId });
+  }
   return inserted;
 }
 

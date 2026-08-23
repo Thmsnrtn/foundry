@@ -13,6 +13,7 @@ import {
 } from '../db/client.js';
 import { callSonnet } from './ai/client.js';
 import { nanoid } from 'nanoid';
+import { logger } from './logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -339,8 +340,16 @@ async function recordSignalSnapshot(
          recorded_at = CURRENT_TIMESTAMP`,
       [nanoid(), productId, score, tier, riskState, stressorCount, JSON.stringify(components)],
     );
-  } catch {
-    // Non-critical: don't let history recording break the Signal read
+  } catch (err) {
+    // NON-CRITICAL IS NOT THE SAME AS UNSAID. Not letting history recording
+    // break the Signal read is the right call and it stays. But this catch was
+    // bare, so a write that failed every day left `signal_history` full of
+    // holes in silence — and that table is not a log, it is what the timeline,
+    // the seven-day delta, the board packet and the portfolio page all read.
+    // A shorter series makes those quietly wrong rather than visibly absent.
+    logger.error(
+      `signal history not recorded for ${productId}: ${err instanceof Error ? err.message : String(err)}`,
+      { productId });
   }
 }
 
