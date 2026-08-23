@@ -127,7 +127,13 @@ function buildScoringPrompt(request: AuditScoringRequest): string {
     `ROUTES:`,
     `API routes (${request.analysis_results.routes.api_routes.length}): ${request.analysis_results.routes.api_routes.slice(0, 20).join(', ')}`,
     `Page routes (${request.analysis_results.routes.page_routes.length}): ${request.analysis_results.routes.page_routes.slice(0, 20).join(', ')}`,
-    `Auth protected: ${request.analysis_results.routes.auth_protected}`,
+    // Rendered as words rather than as `false`, because the value is now
+    // three-valued and a model reading "false" cannot tell a measurement from
+    // an absence — which is exactly how this line came to describe every
+    // repository as having unprotected routes.
+    `Auth protected: ${request.analysis_results.routes.auth_protected === null
+      ? 'not determined'
+      : request.analysis_results.routes.auth_protected ? 'yes' : 'no'}`,
     '',
     `BILLING:`,
     `Stripe integration: ${request.analysis_results.billing.stripe_integration}`,

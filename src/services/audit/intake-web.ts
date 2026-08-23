@@ -215,56 +215,122 @@ Return JSON array of recommendations. Be specific about what type of vendor/free
 
 /**
  * Assess whether a no-code product is ready to migrate to custom code.
+ *
+ * FOUR OF THE FIVE COMPONENTS WERE BROKEN, EACH IN A DIFFERENT WAY, AND EVERY
+ * ONE OF THEM FAILED TOWARDS A CLAIM.
+ *
+ *   Revenue    read as `new_mrr_cents + expansion_mrr_cents` — two ONE-PERIOD
+ *              MOVEMENT columns — instead of `mrr_cents`, the level, with each
+ *              coalesced to 0. A daily job writes a placeholder snapshot whose
+ *              movement columns are `INTEGER DEFAULT 0`, so a company at
+ *              $80k MRR was assessed at $0 and told "revenue may not yet
+ *              justify migration costs", and the migration plan the model then
+ *              wrote said "MRR: $0" in its prompt.
+ *   Users      `?? 0`, so a company that reports no user count is measured at
+ *              zero users rather than at nothing.
+ *   Churn      `churnRate < 5` against a column stored as a 0–1 FRACTION, so
+ *              the test was "is churn under 500%" and 90% monthly churn
+ *              collected the fifteen points for "low churn suggests
+ *              product-market fit".
+ *   NPS        `(m?.nps_score as number) ?? 0 >= 50` parses as
+ *              `nps_score ?? (0 >= 50)`, because `>=` binds tighter than `??`.
+ *              The comparison against 50 never ran on the score. Any non-zero
+ *              NPS — including -40 — was "High NPS confirms value delivery".
+ *
+ * A threshold is a FINDING. It fires on a measured value or it does not fire,
+ * and an absent measurement is neither a pass nor a fail: it is silence, and it
+ * is now reported as silence. `ready` is null when what could not be measured
+ * could still change the answer — which is a bound, not a hedge.
  */
 export async function assessMigrationReadiness(productId: string): Promise<{
-  ready: boolean;
+  ready: boolean | null;
   score: number;
+  measurable: number;
   reasons: string[];
+  not_measured: string[];
   transition_plan: string | null;
 }> {
   const product = await query('SELECT * FROM products WHERE id = ?', [productId]);
   const p = product.rows[0] as Record<string, unknown> | undefined;
-  if (!p) return { ready: false, score: 0, reasons: ['Product not found'], transition_plan: null };
+  if (!p) {
+    return {
+      ready: null, score: 0, measurable: 0,
+      reasons: ['Product not found'], not_measured: [], transition_plan: null,
+    };
+  }
 
   const metrics = await query(
     'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
     [productId]
   );
   const m = metrics.rows[0] as Record<string, unknown> | undefined;
-  const mrrCents = ((m?.new_mrr_cents as number) ?? 0) + ((m?.expansion_mrr_cents as number) ?? 0);
-  const activeUsers = (m?.active_users as number) ?? 0;
+  /** A number the company actually reported, or null. Never a stand-in zero. */
+  const reported = (key: string): number | null => {
+    const v = m?.[key];
+    return v === null || v === undefined ? null : Number(v);
+  };
+  const mrrCents = reported('mrr_cents');
+  const activeUsers = reported('active_users');
 
   const reasons: string[] = [];
+  const notMeasured: string[] = [];
   let score = 0;
+  /** The share of the 100-point scale this company could be assessed on. */
+  let measurable = 0;
 
   // Revenue justifies migration cost
-  if (mrrCents > 500000) { score += 30; reasons.push('Revenue ($5K+/mo) can justify development costs'); }
-  else if (mrrCents > 200000) { score += 15; reasons.push('Moderate revenue may justify phased migration'); }
-  else { reasons.push('Revenue may not yet justify migration costs'); }
+  if (mrrCents === null) {
+    notMeasured.push('MRR is not reported, so revenue cannot weigh either way');
+  } else {
+    measurable += 30;
+    if (mrrCents > 500000) { score += 30; reasons.push('Revenue ($5K+/mo) can justify development costs'); }
+    else if (mrrCents > 200000) { score += 15; reasons.push('Moderate revenue may justify phased migration'); }
+    else { reasons.push('Revenue may not yet justify migration costs'); }
+  }
 
   // User count suggests platform limits approaching
-  if (activeUsers > 100) { score += 20; reasons.push('User count suggests no-code platform limits approaching'); }
-  else if (activeUsers > 50) { score += 10; }
+  if (activeUsers === null) {
+    notMeasured.push('Active users are not reported');
+  } else {
+    measurable += 20;
+    if (activeUsers > 100) { score += 20; reasons.push('User count suggests no-code platform limits approaching'); }
+    else if (activeUsers > 50) { score += 10; }
+  }
 
-  // Check for vendor recommendations with "migration" category
+  // Check for vendor recommendations with "migration" category. Always
+  // measurable: a count over rows this product owns is zero when there are
+  // none, and that zero is a measurement.
   const migrationRecs = await query(
     `SELECT COUNT(*) as c FROM vendor_recommendations WHERE product_id = ? AND category = 'migration'`,
     [productId]
   );
   const migCount = (migrationRecs.rows[0] as Record<string, number>)?.c ?? 0;
+  measurable += 20;
   if (migCount > 0) { score += 20; reasons.push(`${migCount} migration-related recommendations already identified`); }
 
-  // Product-market fit signals
-  const churnRate = (m?.churn_rate as number) ?? null;
-  if (churnRate !== null && churnRate < 5) { score += 15; reasons.push('Low churn suggests product-market fit'); }
-  if ((m?.nps_score as number) ?? 0 >= 50) { score += 15; reasons.push('High NPS confirms value delivery'); }
+  // Product-market fit signals. `churn_rate` is a 0–1 FRACTION here and
+  // everywhere else in `metric_snapshots`; 0.05 is five percent a month.
+  const churnRate = reported('churn_rate');
+  if (churnRate === null) {
+    notMeasured.push('Churn is not reported');
+  } else {
+    measurable += 15;
+    if (churnRate < 0.05) { score += 15; reasons.push('Low churn suggests product-market fit'); }
+  }
+  const nps = reported('nps_score');
+  if (nps === null) {
+    notMeasured.push('NPS is not reported');
+  } else {
+    measurable += 15;
+    if (nps >= 50) { score += 15; reasons.push('High NPS confirms value delivery'); }
+  }
 
   let transitionPlan: string | null = null;
   if (score >= 50) {
     const prompt = `Create a brief migration plan for moving a ${p.build_platform} product to custom code.
 Product: ${p.name}
-Current users: ${activeUsers}
-MRR: $${(mrrCents / 100).toFixed(0)}
+Current users: ${activeUsers === null ? 'not reported' : activeUsers}
+MRR: ${mrrCents === null ? 'not reported' : `$${(mrrCents / 100).toFixed(0)}`}
 Key findings: ${reasons.join(', ')}
 
 Outline 3-5 steps with timeline and cost estimates.`;
@@ -277,5 +343,16 @@ Outline 3-5 steps with timeline and cost estimates.`;
     transitionPlan = response.content;
   }
 
-  return { ready: score >= 50, score, reasons, transition_plan: transitionPlan };
+  // Ready when the evidence reaches the threshold. NOT ready only when the
+  // evidence that is missing could not reach it even if all of it came back
+  // perfect. Between those, the honest answer is that this cannot be said yet.
+  const ready = measurable === 0
+    ? null
+    : score >= 50
+      ? true
+      : score + (100 - measurable) >= 50
+        ? null
+        : false;
+
+  return { ready, score, measurable, reasons, not_measured: notMeasured, transition_plan: transitionPlan };
 }

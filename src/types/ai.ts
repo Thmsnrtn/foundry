@@ -97,7 +97,8 @@ export interface RouteAnalysisResult {
   api_routes: string[];
   page_routes: string[];
   middleware: string[];
-  auth_protected: boolean;
+  /** null when no middleware file was read — not evidence either way. */
+  auth_protected: boolean | null;
 }
 
 export interface BillingAnalysisResult {
