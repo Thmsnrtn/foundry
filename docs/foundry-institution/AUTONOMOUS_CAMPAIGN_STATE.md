@@ -50,7 +50,7 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `pending`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `8d7ff74`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 235 files, highest **199**. Ordering gated. Snapshot current.
 - **Validation:** full suite green — **354 files / 3,028 tests**, `SUITE_EXIT=0`
