@@ -424,6 +424,32 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_m');
   });
 
+  it('check-integration-status-vocabulary fails on a new \'connected\' literal', () => {
+    // Migration 074 retired that value and `fabric.ts` repeats the rule in a
+    // JSDoc saying "Do NOT write 'connected'". It was still written by the
+    // first-connect route and still required by the Linear executor — a rule
+    // written down twice and broken twice, which is a wish until something
+    // mechanical enforces it.
+    plant('src/services/_gate_fixture_status.ts',
+      j('import { query } from "../db/client.js";\n',
+        'export const c = () => query(`INSERT ', 'INTO integrations\n',
+        '  (id, product_id, type, status)\n',
+        "  VALUES (?, ?, ?, 'conn", "ected')`, []);\n"));
+    const r = run('check-integration-status-vocabulary.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_status');
+  });
+
+  it('check-integration-status-vocabulary does not read its own explanation as a breach', () => {
+    // The rule is explained in comments in three places, including the gate's
+    // own header. Prose about a literal is not the literal.
+    plant('src/services/_gate_fixture_status_prose.ts',
+      j('// Never write ', "'conn", "ected' to integrations.status.\n",
+        'export const x = 1;\n'));
+    const r = run('check-integration-status-vocabulary.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-unreferenced-tables fails on a table no code can reach', () => {
     // The population neither sibling gate has: check-writerless-tables starts
     // from tables that are read, check-unread-tables from tables that are

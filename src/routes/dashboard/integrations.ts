@@ -303,9 +303,24 @@ integrationsRoutes.post('/integrations/:type/connect',
       [credentialsCiphertext, JSON.stringify(config), ctx.product.id, type],
     );
   } else {
+    // 'active', THE SAME VALUE THE UPDATE BRANCH FOUR LINES UP ALREADY WRITES.
+    //
+    // This wrote 'connected', and migration 074 exists because that value is
+    // the one nothing reads: `sync.ts` selects `status IN ('active','error')`,
+    // every adapter in `services/integration/` guards on `status === 'active'`,
+    // and `framework.ts` selects `WHERE status = 'active'` for the due-sync
+    // sweep. So a founder connecting an integration FOR THE FIRST TIME stored
+    // their credentials, was redirected to `?connected=<type>`, and got a page
+    // reading "Not connected" over an integration nothing would ever sync —
+    // because this page's own badge tests `status === 'active'` too.
+    //
+    // Reconnecting the same integration took the UPDATE branch and wrote
+    // 'active', which is why it worked the second time and why the state was
+    // easy to miss. Migration 074 repaired the rows once; this line put them
+    // back, one founder at a time.
     await query(
       `INSERT INTO integrations (id, product_id, type, status, credentials_json, config_json)
-       VALUES (?, ?, ?, 'connected', ?, ?)`,
+       VALUES (?, ?, ?, 'active', ?, ?)`,
       [nanoid(), ctx.product.id, type, credentialsCiphertext, JSON.stringify(config)],
     );
   }

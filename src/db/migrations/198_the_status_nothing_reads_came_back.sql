@@ -1,0 +1,39 @@
+-- =============================================================================
+-- THE STATUS NOTHING READS CAME BACK, ONE FOUNDER AT A TIME.
+--
+-- Migration 074 retired `integrations.status = 'connected'`. Its reasoning is
+-- worth repeating because it was right: nothing reads that value. `sync.ts`
+-- selects `status IN ('active','error')`, every adapter in
+-- `services/integration/` guards on `status === 'active'`, `framework.ts`
+-- selects `WHERE status = 'active'` for the due-sync sweep, and the
+-- integrations page's own badge tests `status === 'active'`. 074 repaired the
+-- rows and recorded that the code "now standardizes on 'active' everywhere".
+--
+-- TWO SITES WERE MISSED, and they were mirror images of each other.
+--
+-- `POST /integrations/:type/connect` wrote 'connected' on INSERT while its own
+-- UPDATE branch, four lines above, wrote 'active'. So a founder connecting an
+-- integration FOR THE FIRST TIME stored their credentials, was redirected to
+-- `?connected=<type>`, and read "Not connected" on a page describing an
+-- integration nothing would ever sync. Reconnecting took the UPDATE branch and
+-- worked, which is why the state was easy to miss — and why 074's repair was
+-- undone one founder at a time, every first connect, ever since.
+--
+-- `executeLinearTicket` was the last adapter still REQUIRING 'connected', so
+-- every Linear ticket Foundry tried to file came back "Linear integration not
+-- connected" for a correctly connected integration. The only state that would
+-- have satisfied it is the broken one that cannot sync.
+--
+-- Both are fixed. This repairs the rows the writer produced between 074 and
+-- now, and `check-integration-status-vocabulary.mjs` is why it should not need
+-- doing a third time: the rule was written into a migration AND a JSDoc and was
+-- still broken twice, which makes it a wish rather than a rule until something
+-- mechanical enforces it.
+--
+-- `integrations.status` has NO CHECK constraint on the live table — it is
+-- `TEXT NOT NULL DEFAULT 'pending'` — which is why `check-check-vocabularies`
+-- could not see any of this. A column with no vocabulary accepts every spelling
+-- of every state, and only the readers know which ones mean anything.
+-- =============================================================================
+
+UPDATE integrations SET status = 'active' WHERE status = 'connected';

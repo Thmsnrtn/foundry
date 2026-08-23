@@ -523,7 +523,18 @@ async function executeSlack(productId: string, payload: ActionPayload): Promise<
 
 async function executeLinearTicket(productId: string, payload: ActionPayload): Promise<ExecutionResult> {
   const integration = await getIntegration(productId, 'linear');
-  if (!integration || integration.status !== 'connected') {
+  // THE LAST ADAPTER STILL GUARDING ON THE VALUE MIGRATION 074 RETIRED.
+  //
+  // 074 says the original bug was that adapters checked 'connected' — a value
+  // nothing writes and no schema's CHECK permits — "so the hourly fabric sync
+  // silently no-op'd and agents reasoned over zero telemetry", and that the
+  // code "now standardizes on 'active' everywhere". Everywhere but here.
+  //
+  // Which inverted this action: a correctly connected Linear integration is
+  // 'active', so every ticket Foundry tried to file came back "Linear
+  // integration not connected", and the only state that would have satisfied
+  // this guard is the broken one that cannot sync.
+  if (!integration || integration.status !== 'active') {
     return { success: false, error: 'Linear integration not connected' };
   }
 
