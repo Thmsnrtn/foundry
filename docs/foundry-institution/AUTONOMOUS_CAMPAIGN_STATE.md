@@ -918,33 +918,23 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    decomposition is showing numbers whose provenance it cannot establish. If
    that ever matters, the honest move is a per-row era marker, not a guess.
 
-9. **`integrations.type` means three different things, and five writers
-   disagree.** Everything found in this area came out of it, so the column is
-   worth stating plainly:
+9. **CLOSED — `integrations.type` is retired.** One column meant a PROVIDER
+   KEY, a DIRECTION or a CATEGORY depending on which of five writers made the
+   row, and every reader had to guess which. Three live defects came out of the
+   guessing and were fixed one at a time; none of them was the fix.
 
-   | writer | `name` | `type` holds |
-   |---|---|---|
-   | `dashboard/integrations.ts` connect form | set (as of migration 199) | the PROVIDER KEY |
-   | `integration/fabric.ts` `connectIntegration` | set | a CATEGORY from a `typeMap` |
-   | `integrations/framework.ts` | not set | a CATEGORY from `providerType()` |
-   | `integrations/stripe-sync.ts` | 'stripe' | a DIRECTION, 'inbound' |
-   | `dashboard/connections.ts` | the server's label | a DIRECTION, 'outbound' |
+   Migration 203 gave direction its own column, backfilled it from what each
+   row actually meant, and put the vocabulary in a database trigger. Migration
+   204 backfilled `provider` for the fabric-written rows — whose provider was in
+   `name` — and dropped `type`. Every writer sets both columns; `directionOf`
+   has one home.
 
-   `sync.ts` selects by `type` and DISPATCHES on it as a provider key;
-   `getIntegration(productId, name)` — the lookup all six event syncs use —
-   matches on `name`. Three live defects came from that single ambiguity: a row
-   visible to one sync and invisible to the other, an outbound MCP connection
-   dragged into the inbound sync until Foundry told the founder it had
-   "stopped syncing outbound", and a repair migration that would have invented
-   an integration called "outbound" had it copied `type` wholesale.
-
-   **All three are fixed and none of them is the fix.** The column still holds
-   three kinds of value. The real repair is a `direction` column and a
-   `provider` column that every writer sets, with `type` retired — which is a
-   schema change across five writers and two founder-facing connect pages, and
-   should be done when someone can carry it end to end rather than in the
-   margins of a defect. **The trigger:** the next time a reader has to guess
-   what `type` means, do this instead of guessing again.
+   **Three readers were answering the wrong question and nobody had noticed:**
+   the Integrations page keyed its connected-cards map on `type`, so an
+   integration connected through another door never matched a card and its
+   Disconnect button did nothing; Shield's credential-expiry query named a
+   DIRECTION as the source of a credential; and the chat context told the model
+   a company had connected "inbound".
 
 10. **Three writers to `experiments`, and three vocabularies for "who won".**
    The table carries both migration 023's schema and migration 028's — 028's
