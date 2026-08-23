@@ -75,7 +75,7 @@ by whatever mechanism, not necessarily the one the ticket proposed.
 | RT02-11 | fixed | `encryptCredentialPayload`/`decryptCredentialPayload` at both connect surfaces |
 | RT02-12 | fixed | `getProductIdForApiKey` hashes before comparing |
 | RT02-13 | fixed | Both pages build the error as nodes and set `textContent`; neither assigns `.innerHTML` at all. The message comes from a module fetched from a third-party CDN, so any markup in it was being parsed on the page that takes a password. **Was open until this cycle** |
-| RT02-14 | **open** | CSP still carries `script-src 'unsafe-inline'` |
+| RT02-14 | partial | `'unsafe-inline'` still stands (14 inline `<script>` blocks and 37 inline event handlers, which a nonce does not cover — a whole piece of work, not a directive edit). **What was found while reading it is worse and is fixed:** the enforced `script-src` named neither origin the product's own auth and landing pages load Clerk from, so an enforcing browser blocked authentication entirely; and a SECOND policy sat in `middleware/security.ts` that nothing imported |
 | RT02-15 | partial | The write path now checks the opt-out; **no read path filters on it** |
 | RT02-16 | fixed | `lib/sql-like.ts` escapes `%`, `_` and `\` and the four queries that search for a person- or model-supplied substring name `ESCAPE '\'`. A bare `%` used to resolve whichever active stressor came first. **Was open until this cycle** |
 
@@ -208,6 +208,12 @@ somebody reading the code again.
 - **Reproduction:** The Content-Security-Policy includes `script-src 'self' 'unsafe-inline' https://unpkg.com https://*.clerk.accounts.dev`. The `'unsafe-inline'` directive completely undermines the XSS protection that CSP is supposed to provide. If any XSS vector exists (or is introduced), CSP will not block inline script execution. The auth pages use inline `<script>` tags that require `'unsafe-inline'`, but this should be addressed with nonces.
 - **Evidence:** `src/middleware/security-headers.ts` line 26: `"script-src 'self' 'unsafe-inline' https://unpkg.com https://*.clerk.accounts.dev"`.
 - **Remediation:** Replace `'unsafe-inline'` with nonce-based CSP. Generate a per-request nonce, add it to inline scripts as `<script nonce="...">`, and use `'nonce-<value>'` in the CSP directive.
+
+- **What was found reading it, and fixed.** The `'unsafe-inline'` in this directive is the least of what was wrong with it.
+  1. **The enforced policy forbade the product's own pages.** `script-src` allowed `'self'` and `https://*.clerk.accounts.dev`. The sign-up, sign-in and sign-out pages import Clerk from `https://cdn.jsdelivr.net`, and the landing page loads it from `https://unpkg.com`. An enforcing browser blocks all four — authentication does not load, and the sign-in page falls into the catch handler that says "failed to load authentication". Both origins are named now.
+  2. **There were two policies and one was enforced.** `middleware/security.ts` exported a second `securityHeaders` that nothing imported, allowing unpkg but not jsdelivr, and carrying `object-src 'none'` and `base-uri 'self'` that the live one lacked — so the dead copy looked stricter than the real one. It is deleted and its two directives moved to the live file.
+  3. **A test now reads the origins the pages actually load from and requires the policy to name each one**, so the two cannot drift apart again (`tests/unit/a-policy-that-forbade-the-product.test.ts`).
+- **What remains, and the trigger for doing it:** nonce-based CSP means a per-request nonce on 14 inline `<script>` blocks AND rewriting 37 inline event handlers, which nonces do not cover. Do it as one piece with its own verification — an XSS sink that survives is worse than a policy that admits it allows inline script.
 
 ### RT02-15 Wisdom Opt-Out Not Enforced at Query Layer for Decision Patterns
 - **Severity:** P2
