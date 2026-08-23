@@ -26,13 +26,39 @@ export async function recordPredictionAccuracy(
   actualOutcomeDirection: 'positive' | 'neutral' | 'negative',
   actualMrrDeltaPct: number | null,
   actualTimeframeDays: number | null,
+  chosenOption: string | null,
 ): Promise<void> {
-  // Get the scenario model for this decision
+  // THE FORECAST FOR THE PATH ACTUALLY TAKEN, NOT AN ARBITRARY ONE.
+  //
+  // `scenario.ts` writes ONE ROW PER OPTION — a decision with three options has
+  // three scenario models, one of which may be the ghost, the forecast for
+  // doing nothing. This read `WHERE decision_id = ? LIMIT 1` with no ORDER BY,
+  // so which forecast got graded was arbitrary: an outcome that followed the
+  // founder choosing to raise prices could be scored against the prediction for
+  // leaving them alone.
+  //
+  // Then it wrote `scenario.option_label` into a column called `option_chosen`,
+  // so the record STATED that arbitrary option as the one the founder picked —
+  // and stamped `outcome_accuracy` on that scenario's row. Foundry scoring its
+  // own forecasts is the one place the institution is its own subject, and this
+  // was scoring a forecast nobody acted on and filing it under a choice nobody
+  // made.
+  //
+  // `decisions.chosen_option` holds what was actually chosen, and the job that
+  // calls this already selects it. Matched case- and whitespace-insensitively,
+  // the same normalisation `decisions/foundry-proposed.ts` uses for the same
+  // column.
+  const chosen = (chosenOption ?? '').trim();
+  if (chosen === '') return;      // nothing was chosen; there is nothing to grade
+
   const scenarioResult = await query(
     `SELECT id, option_label, base_case FROM scenario_models
-     WHERE decision_id = ? LIMIT 1`,
-    [decisionId],
+     WHERE decision_id = ? AND TRIM(LOWER(option_label)) = TRIM(LOWER(?))
+     LIMIT 1`,
+    [decisionId, chosen],
   );
+  // No forecast for the path taken is not a forecast to grade. Recording the
+  // nearest one would be the defect this replaced.
   if (scenarioResult.rows.length === 0) return;
 
   const scenario = scenarioResult.rows[0] as Record<string, string>;

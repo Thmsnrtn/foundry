@@ -1034,6 +1034,7 @@ export async function predictionAccuracyJob(): Promise<void> {
        AND NOT EXISTS (
          SELECT 1 FROM prediction_accuracy pa WHERE pa.decision_id = d.id
        )
+     ORDER BY d.decided_at ASC
      LIMIT 50`,
     [],
   );
@@ -1050,6 +1051,9 @@ export async function predictionAccuracyJob(): Promise<void> {
         direction as 'positive' | 'neutral' | 'negative',
         null,
         null,
+        // Already selected above, and previously discarded one call short of
+        // the scorer that needed it to grade the right forecast.
+        d.chosen_option == null ? null : String(d.chosen_option),
       );
     } catch (err) {
       logger.error(`prediction_accuracy error for decision ${d.id}:`, { jobName: 'prediction_accuracy', error: String(err) });
