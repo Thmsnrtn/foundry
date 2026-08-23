@@ -326,7 +326,27 @@ export function extractPremiseCondition(text: string): ExtractedPremise | null {
   if (!metric) return null;
   const comp = COMPARATOR_PHRASES.find((c) => c.re.test(text));
   if (!comp) return null;
-  const num = text.match(/(\d+(?:\.\d+)?)\s*(%|percent)?/);
+  // THE NUMBER THE COMPARATOR GOVERNS, NOT THE FIRST NUMBER IN THE SENTENCE.
+  //
+  // This searched the whole string, so "we are doubling the team to 12 people,
+  // on the premise that churn stays under 5%" recorded a threshold of 12 — and
+  // then, because churn is a fraction metric and 12 > 1, divided it to 0.12.
+  // The founder's belief was stored as "churn below 12%", more than twice what
+  // they said, and the memory kernel later holds the decision accountable to
+  // that number: it is the belief they get told has been violated, or has held.
+  //
+  // Every phrasing this vocabulary accepts puts the number after the
+  // comparator — "under 5%", "at least 60%", "no more than 30 percent" — so a
+  // sentence with no number after its comparator is one this cannot read, and
+  // saying nothing is the right answer for it.
+  const compMatch = comp.re.exec(text);
+  if (!compMatch) return null;
+  const afterComparator = text.slice(compMatch.index + compMatch[0].length);
+  // Anchored: the number the comparator governs is the one that FOLLOWS it,
+  // allowing only a hedge word between. "stays under control with 12 people"
+  // has a number after the comparator and no threshold in it.
+  const num = afterComparator.match(
+    /^\s*(?:about|around|roughly|approximately|~)?\s*(\d+(?:\.\d+)?)\s*(%|percent)?/);
   if (!num) return null;
   let threshold = parseFloat(num[1]);
   const isPercent = !!num[2] || (FRACTION_METRICS.has(metric.key) && threshold > 1);

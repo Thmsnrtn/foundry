@@ -40,6 +40,34 @@ function down(ch: Channel, steps: number): Channel {
   return LADDER[Math.max(0, LADDER.indexOf(ch) - steps)];
 }
 
+/**
+ * Set the founder's interruption ceiling — the loudest channel Foundry may ever
+ * use to reach them.
+ *
+ * A CEILING NOTHING COULD SET. `decideChannel` has always honoured
+ * `preferences.max_channel`, this module's header calls it the thing that
+ * "always wins", and two other modules cite it as the reason they consult
+ * before reaching a phone. Nothing in the repository ever wrote it. The only
+ * key ever written into `founders.preferences` is `fluency`, so the ceiling
+ * branch was dead for every founder and everybody sat permanently at the top of
+ * the ladder.
+ *
+ * A control the product describes as the person's own, which the person has no
+ * way to exercise, is a claim about a control rather than a control. This is
+ * the writer, and the settings page is where it is used from.
+ *
+ * JSON-merges, so the fluency dial beside it survives.
+ */
+export async function setMaxChannel(founderId: string, channel: Channel): Promise<void> {
+  if (!LADDER.includes(channel)) return;
+  const r = await query('SELECT preferences FROM founders WHERE id = ?', [founderId]);
+  const raw = (r.rows[0] as Record<string, string | null> | undefined)?.preferences;
+  let prefs: Record<string, unknown> = {};
+  try { prefs = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch { /* replace corrupt prefs */ }
+  prefs.max_channel = channel;
+  await query('UPDATE founders SET preferences = ? WHERE id = ?', [JSON.stringify(prefs), founderId]);
+}
+
 export function decideChannel(
   importance: Importance,
   pulse: PulseSignal,

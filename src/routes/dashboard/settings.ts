@@ -128,6 +128,7 @@ settingsRoutes.get('/settings', async (c) => {
   const successMessages: Record<string, string> = {
     company_paused: 'Product paused. All agent activity and data ingestion are suspended.',
     company_resumed: 'Product resumed. Agent activity and data ingestion are active.',
+    interruption_ceiling: 'Saved. Foundry will not reach you more loudly than that.',
   };
   const successBannerMsg = successParam ? successMessages[successParam] ?? null : null;
 
@@ -242,6 +243,23 @@ settingsRoutes.get('/settings', async (c) => {
             class="btn ${((founder.preferences?.fluency ?? 'balanced') === f) ? 'btn-primary' : 'btn-ghost'}"
             style="font-size:0.8rem;text-transform:capitalize;">
             ${f === 'plain' ? 'Plain English' : f === 'balanced' ? 'Balanced' : 'Technical'}
+          </button>`)}
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>How loudly Foundry may interrupt you</h3>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">
+        The loudest channel Foundry may ever use. It can go quieter than this on
+        its own — when you are strained, it does — but never louder. Push is the
+        only tier that interrupts your life.
+      </p>
+      <form method="POST" action="/settings/interruption-ceiling" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        ${(['log', 'letter', 'notification', 'push'] as const).map((ch) => html`
+          <button type="submit" name="max_channel" value="${ch}"
+            class="btn ${((founder.preferences?.max_channel ?? 'push') === ch) ? 'btn-primary' : 'btn-ghost'}"
+            style="font-size:0.8rem;text-transform:capitalize;">
+            ${ch === 'log' ? 'Log only' : ch === 'letter' ? 'The letter' : ch === 'notification' ? 'In-app' : 'Push'}
           </button>`)}
       </form>
     </div>
@@ -993,6 +1011,24 @@ settingsRoutes.post('/settings/toggle-product-status', requireOwner(), async (c)
   );
 
   return c.redirect(`/settings?success=company_${paused ? 'resumed' : 'paused'}`);
+});
+
+// ─── Interruption ceiling ────────────────────────────────────────────────────
+//
+// `preferences.max_channel` is honoured by `decideChannel`, described by the
+// interruption module as the thing that "always wins", and cited by two other
+// modules as the reason they check before reaching a phone. Nothing ever wrote
+// it: `fluency` was the only key any code path put into `founders.preferences`,
+// so the ceiling branch was dead and every founder sat permanently at push.
+//
+// A control the product calls the person's own, which the person cannot
+// exercise, is a claim about a control. This is where they exercise it.
+settingsRoutes.post('/settings/interruption-ceiling', async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.parseBody() as Record<string, string>;
+  const { setMaxChannel } = await import('../../services/ux/interruption.js');
+  await setMaxChannel(founder.id, body.max_channel as 'log' | 'letter' | 'notification' | 'push');
+  return c.redirect('/settings?success=interruption_ceiling');
 });
 
 // ─── Fluency (one product, many voices) ───────────────────────────────────────
