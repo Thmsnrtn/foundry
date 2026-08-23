@@ -104,8 +104,14 @@ function renderPatternAlert(match: PatternMatch, productId: string): string {
     .map((a) => `<li style="margin-bottom:0.25rem;color:var(--text-dim);">${a}</li>`)
     .join('');
 
+  // A RULE OF THUMB, ON A CARD FULL OF THIS COMPANY'S OWN NUMBERS. The match
+  // score and the matched signals come from this company's metrics; the pattern
+  // itself is editorial — a library Foundry ships, written by hand, derived from
+  // no company's data. Beside a score computed from real numbers, "~45d lead
+  // time" reads as something Foundry measured. It is not, and the card says so
+  // once rather than qualifying every line.
   const daysNote = match.days_until_typical_failure !== null
-    ? `<span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.5rem;">~${match.days_until_typical_failure}d lead time</span>`
+    ? `<span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.5rem;" title="A rule of thumb from the pattern library, not a measurement of your company.">~${match.days_until_typical_failure}d typical lead time (rule of thumb)</span>`
     : '';
 
   return `<div class="card" style="padding:1.25rem;margin-bottom:0.75rem;border-left:3px solid ${color};background:${bg};">
@@ -117,6 +123,11 @@ function renderPatternAlert(match: PatternMatch, productId: string): string {
           ${daysNote}
         </div>
         <p style="margin:0;font-size:0.82rem;color:var(--text-muted);max-width:600px;">${match.pattern.description}</p>
+        <p style="margin:0.35rem 0 0;font-size:0.72rem;color:var(--text-dim);max-width:600px;">
+          The pattern is one Foundry ships — received startup practice, not a
+          measurement of your company or of other companies on Foundry. What is
+          yours is the match score and the signals below it.
+        </p>
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-size:1.1rem;font-weight:700;color:${color};">${fmtScore(match.match_score)}</div>

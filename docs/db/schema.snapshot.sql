@@ -1917,7 +1917,6 @@
   confidence REAL,
   confidence REAL,
   confidence REAL,
-  confidence REAL,
   confidence_at_decision  INTEGER CHECK (confidence_at_decision BETWEEN 1 AND 5),
   confidence_level REAL DEFAULT 0.95,
   confidence_score REAL,
@@ -2107,7 +2106,6 @@
   created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
-  created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
   created_at TEXT DEFAULT (datetime('now')),
@@ -2493,7 +2491,6 @@
   follow_up_at DATETIME,
   forbidden_classes TEXT,                         -- JSON array: ['pii_strict','financial_secret']
   formality_level INTEGER DEFAULT 5, -- 1-10 (1=very casual, 10=very formal)
-  formula TEXT,
   founder_a_id TEXT NOT NULL,
   founder_b_id TEXT NOT NULL,
   founder_cap_cents REAL,
@@ -2595,7 +2592,6 @@
   grounding_mechanism TEXT NOT NULL CHECK(grounding_mechanism IN ('deterministic','authenticated_owner')),
   growth_hypothesis TEXT,
   growth_philosophy TEXT, -- free-form: "I prefer organic growth over paid acquisition"
-  growth_stage TEXT NOT NULL,
   growth_stage TEXT NOT NULL,
   growth_stage TEXT,
   growth_stage TEXT,
@@ -2867,7 +2863,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -2877,8 +2872,6 @@
   impact_score REAL NOT NULL,       -- 0-10 (higher = more impactful)
   impact_usd REAL,
   importance TEXT NOT NULL CHECK (importance IN ('info', 'attention', 'action_needed', 'critical')),
-  indicator_description TEXT NOT NULL,
-  indicator_name TEXT NOT NULL,
   initiative_type TEXT NOT NULL,  -- 'proactive_check', 'message_response', 'event_reaction'
   input_context TEXT NOT NULL,         -- What situation prompted this lesson
   input_context TEXT, -- JSON
@@ -3024,7 +3017,6 @@
   last_viewed_at DATETIME,
   latency_ms INTEGER,
   latency_ms INTEGER,                       -- acted_at - viewed_at, populated on action
-  lead_time_days INTEGER NOT NULL,
   learned_claim_id      TEXT REFERENCES reconstruction_claims(id),
   learned_claim_id TEXT REFERENCES reconstruction_claims(id),
   lesson TEXT NOT NULL,                -- Synthesized lesson (injected into prompts)
@@ -3400,7 +3392,6 @@
   prediction_type TEXT NOT NULL,
   predictions_after INTEGER NOT NULL DEFAULT 0,
   predictions_before INTEGER NOT NULL DEFAULT 0,
-  predicts TEXT NOT NULL,
   preference_key TEXT NOT NULL,
   preference_type TEXT NOT NULL, -- 'detail_level' | 'framing' | 'agent_trust' | 'override_pattern'
   preference_value TEXT NOT NULL,
@@ -3843,7 +3834,6 @@
   sample_count     INTEGER NOT NULL,
   sample_count     INTEGER,
   sample_size INTEGER NOT NULL,
-  sample_size INTEGER,
   scenario_accuracy_score REAL,
   scenario_id TEXT REFERENCES forecast_scenarios(id),
   scenario_model TEXT,
@@ -3874,7 +3864,6 @@
   secret_key     TEXT NOT NULL,
   section      TEXT NOT NULL CHECK (section IN (
   sections_completed TEXT DEFAULT '[]',
-  sector TEXT NOT NULL,
   sector TEXT NOT NULL,
   sector TEXT NOT NULL,
   sector TEXT NOT NULL,
@@ -4250,7 +4239,6 @@
   updated_at TEXT DEFAULT (datetime('now'))
   updated_at TEXT DEFAULT (datetime('now'))
   updated_at TEXT DEFAULT (datetime('now'))
-  updated_at TEXT DEFAULT (datetime('now'))
   updated_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
@@ -4368,7 +4356,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
 );
 );
 );
@@ -4988,7 +4975,6 @@ CREATE INDEX idx_judgment_dispositions ON institutional_judgment_dispositions(pr
 CREATE INDEX idx_judgment_evaluations ON institutional_judgment_evaluations(product_id,judgment_id,created_at);
 CREATE INDEX idx_judgment_patterns_product ON founder_judgment_patterns(product_id);
 CREATE INDEX idx_key_results_okr ON key_results(okr_id);
-CREATE INDEX idx_leading_sector ON leading_indicators(sector, growth_stage);
 CREATE INDEX idx_lifecycle_cond_product ON lifecycle_conditions(product_id);
 CREATE INDEX idx_lifecycle_risk ON lifecycle_state(risk_state);
 CREATE INDEX idx_lifecycle_rules_product ON lifecycle_rules(product_id, enabled);
@@ -5286,7 +5272,6 @@ CREATE TABLE investors (
 CREATE TABLE job_health (
 CREATE TABLE job_locks (
 CREATE TABLE key_results (
-CREATE TABLE leading_indicators (
 CREATE TABLE lifecycle_conditions (
 CREATE TABLE lifecycle_rule_triggers (
 CREATE TABLE lifecycle_rules (

@@ -1,6 +1,21 @@
 // =============================================================================
 // FOUNDRY — Predictive Intelligence Engine
-// Leading indicators, pre-stressor detection, probability forecasts.
+//
+// Pre-stressor detection and probability forecasts, from this company's own
+// trajectory and from the cross-company pattern signal.
+//
+// THIS HEADER SAID "LEADING INDICATORS" AND NOTHING HERE HAS ONE. Migration 023
+// created a `leading_indicators` table beside `predictions` — sector, indicator,
+// what it predicts, lead time, confidence, sample size — and nothing ever wrote
+// a row or read one. Those columns describe an empirical body of knowledge, and
+// Foundry has never had a way to establish any of the numbers in them; filling
+// them would have meant writing them down. Migration 205 removed the table, and
+// this header no longer claims it.
+//
+// The honest version of that idea is live under another name:
+// `network/failure-library.ts` holds named shapes with match criteria the
+// engine evaluates against a company's real metrics, and a lead time it labels
+// as a rule of thumb rather than a measurement.
 // =============================================================================
 
 import { query } from '../../db/client.js';

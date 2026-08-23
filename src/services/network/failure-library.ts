@@ -57,6 +57,29 @@ interface MatchCriteria {
 /**
  * Seeds the failure_patterns table with well-known startup failure patterns.
  * Safe to call repeatedly — uses INSERT OR IGNORE.
+ *
+ * THESE ARE EDITORIAL, AND FOUR OF THEM USED TO SAY OTHERWISE. The library
+ * ships with Foundry: it is received startup practice about shapes worth
+ * watching, written by hand, and NOT derived from any company's data — not this
+ * company's, not the benchmark pool's, not the network's. Nothing measures a
+ * lead time and nothing counts how often a pattern was followed by the failure
+ * it names.
+ *
+ * Four descriptions stated frequencies as if something had counted them:
+ *
+ *   "typically see churn double within 60 days"
+ *   "most companies in this pattern see negative MRR growth within 8 weeks"
+ *   "the most common failure mode for B2B SaaS at the $10k-50k MRR range"
+ *   "NPS captures the deterioration 60-90 days before it hits revenue"
+ *
+ * A founder reads those on a card headed with their own match score, beside
+ * signals drawn from their own metrics — which is exactly the context that makes
+ * a rule of thumb read as a finding about their company. The direction each one
+ * describes is worth saying; the number was never measured, so it is not said.
+ *
+ * `typical_lead_time_days` stays, because a rule of thumb about how much warning
+ * a shape usually gives is useful — and the card that renders it now says which
+ * kind of number it is.
  */
 export async function seedDefaultPatterns(): Promise<void> {
   const existing = await query('SELECT COUNT(*) as cnt FROM failure_patterns', []);
@@ -79,7 +102,7 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_churn_precursor',
       pattern_name: 'Churn Precursor',
-      description: 'Elevated churn rate combined with low NPS is a leading indicator of accelerating revenue loss. Companies that hit this combination without intervention typically see churn double within 60 days.',
+      description: 'Elevated churn combined with low NPS is a shape that tends to precede accelerating revenue loss: the customers most likely to leave are already telling you, and the rate is already moving. Left alone it usually gets worse rather than better.',
       category: 'churn_spike',
       warning_signals: [
         'Churn rate exceeds 8% monthly',
@@ -100,7 +123,7 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_growth_plateau_pre_stall',
       pattern_name: 'Growth Plateau Pre-Stall',
-      description: 'Sustained near-zero MRR growth over multiple weeks indicates the product is approaching a growth stall. Without intervention, most companies in this pattern see negative MRR growth within 8 weeks.',
+      description: 'Sustained near-zero MRR growth over multiple weeks is what a growth stall looks like from inside it. Flat is not stable: churn continues while new business does not, so the same trajectory tends to turn negative rather than hold.',
       category: 'growth_stall',
       warning_signals: [
         'MRR growth below 2% for 3+ consecutive weeks',
@@ -247,7 +270,7 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_seed_to_growth_stall',
       pattern_name: 'Seed-to-Growth Stall',
-      description: 'Companies that exhaust their seed capital before reaching repeatable growth motions stall at the transition to Series A. This is the most common failure mode for B2B SaaS at the $10k-50k MRR range.',
+      description: 'Exhausting seed capital before reaching a repeatable growth motion is a well-known way to stall at the transition to Series A: the money runs out while the thing that would raise the next round is still being looked for.',
       category: 'growth_stall',
       warning_signals: [
         'MRR growth declining 3+ consecutive months',
@@ -268,7 +291,7 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_nps_freefall',
       pattern_name: 'NPS Freefall',
-      description: 'A rapidly declining NPS score is one of the strongest leading indicators of future churn. Customers rarely churn silently — NPS captures the deterioration 60-90 days before it hits revenue.',
+      description: 'A rapidly declining NPS is one of the shapes most often cited as preceding churn. Customers rarely leave silently, and sentiment tends to move before revenue does — which is the whole reason to watch it.',
       category: 'churn_spike',
       warning_signals: [
         'NPS below 0 or declining >10 points over 60 days',
