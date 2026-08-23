@@ -217,6 +217,12 @@ export async function getCustomersAtRisk(
  * customer sliding 90 → 70 → 55 looked identical, at 55, to one that had sat at
  * 55 all year, and Foundry had the rows to tell them apart the whole time.
  *
+ * AND WHICH PART MOVED. The first version of this read only `health_score`, so
+ * it could say a customer fell 35 points and not whether that was usage,
+ * support, payment or engagement — the only part of the answer that says what to
+ * do. The four component columns were still write-only, and a gate found them
+ * once it stopped being able to mask them.
+ *
  * Harbor's own system prompt says it: "churn is never a surprise — it's always
  * telegraphed 30-60 days in advance by behavioral signals that nobody watched.
  * Your job is to watch them." The watching was being recorded and discarded.
@@ -234,6 +240,20 @@ export interface CustomerHealthTrend {
   daysObserved: number;
   earliestScore: number;
   latestScore: number;
+  /**
+   * WHICH PART MOVED, or null when the snapshots cannot say.
+   *
+   * The composite is a weighted average of usage, support, payment and
+   * engagement, and every refresh wrote all four into the snapshot beside the
+   * score. NOTHING READ THEM. So the trend could say a customer fell 35 points
+   * and not which of the four fell, which is the first thing a founder asks and
+   * the only part that says what to do about it.
+   *
+   * Null when neither end of the window reported the components — an older
+   * snapshot, or a customer whose components were never measured. A composite
+   * that fell for reasons this cannot name says so rather than guessing.
+   */
+  largestDrop: { component: 'usage' | 'support' | 'payment' | 'engagement'; deltaPoints: number } | null;
 }
 
 /** Health is a 0–100 score, so this is points, not per cent. Ten points across
@@ -249,19 +269,33 @@ export async function getCustomerHealthTrends(
   productId: string, windowDays = TREND_WINDOW_DAYS,
 ): Promise<CustomerHealthTrend[]> {
   const rows = (await query(
-    `SELECT customer_id, snapshot_date, health_score
+    `SELECT customer_id, snapshot_date, health_score,
+            usage_score, support_score, payment_score, engagement_score
        FROM customer_health_snapshots
       WHERE product_id = ? AND health_score IS NOT NULL
         AND date(snapshot_date) >= date('now', ?)
       ORDER BY customer_id, snapshot_date`,
     [productId, `-${windowDays} days`])).rows as unknown as Array<Record<string, unknown>>;
 
-  const byCustomer = new Map<string, Array<{ date: string; score: number }>>();
+  /** A component the snapshot reported, or null. Never a stand-in zero: an
+   *  unmeasured component that read as 0 would be the largest drop every time. */
+  const component = (row: Record<string, unknown>, key: string): number | null =>
+    row[key] === null || row[key] === undefined ? null : Number(row[key]);
+
+  const byCustomer = new Map<string, Array<{
+    date: string; score: number; parts: Record<string, number | null>;
+  }>>();
   for (const row of rows) {
     const id = String(row.customer_id);
     if (!byCustomer.has(id)) byCustomer.set(id, []);
     byCustomer.get(id)!.push({
       date: String(row.snapshot_date), score: Number(row.health_score),
+      parts: {
+        usage: component(row, 'usage_score'),
+        support: component(row, 'support_score'),
+        payment: component(row, 'payment_score'),
+        engagement: component(row, 'engagement_score'),
+      },
     });
   }
 
@@ -274,9 +308,24 @@ export async function getCustomerHealthTrends(
       (Date.parse(`${last.date.slice(0, 10)}T00:00:00Z`)
         - Date.parse(`${first.date.slice(0, 10)}T00:00:00Z`)) / 86_400_000);
     if (days < 1) continue;                   // two readings the same day
+    // The component that moved down the most between the same two readings.
+    // Both ends have to have reported it; a part measured at only one end has
+    // no movement to report, which is not the same as no movement.
+    let largestDrop: CustomerHealthTrend['largestDrop'] = null;
+    for (const key of ['usage', 'support', 'payment', 'engagement'] as const) {
+      const before = first.parts[key];
+      const after = last.parts[key];
+      if (before === null || after === null) continue;
+      const delta = Math.round((after - before) * 10) / 10;
+      if (delta < 0 && (largestDrop === null || delta < largestDrop.deltaPoints)) {
+        largestDrop = { component: key, deltaPoints: delta };
+      }
+    }
+
     out.push({
       customerId, deltaPoints: Math.round((last.score - first.score) * 10) / 10,
       daysObserved: days, earliestScore: first.score, latestScore: last.score,
+      largestDrop,
     });
   }
   return out.sort((a, b) => a.deltaPoints - b.deltaPoints);

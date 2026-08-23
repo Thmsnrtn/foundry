@@ -193,7 +193,7 @@ agentCustomerRoutes.get('/agents/customers', async (c) => {
           ↓ Falling (${falling.length})</h2>
         <p style="font-size:12px;color:#6b7280;margin:0 0 16px">
           Health dropping ${FALLING_HEALTH_POINTS} points or more over the last
-          ${TREND_WINDOW_DAYS} days. Some of these are still above the at-risk
+          ${TREND_WINDOW_DAYS} days, and which part of the score moved most. Some of these are still above the at-risk
           line — that is the point of showing them: a customer on the way down is
           easier to keep than one already gone.
         </p>
@@ -205,6 +205,7 @@ agentCustomerRoutes.get('/agents/customers', async (c) => {
               <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">Now</th>
               <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">Change</th>
               <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">Over</th>
+              <th style="text-align:left;padding:8px 12px;font-weight:600;color:#6b7280">What moved</th>
             </tr>
           </thead>
           <tbody>
@@ -218,6 +219,9 @@ agentCustomerRoutes.get('/agents/customers', async (c) => {
               <td style="padding:10px 12px;color:#111">${Math.round(t.latestScore)}</td>
               <td style="padding:10px 12px;color:#b45309;font-weight:600">${t.deltaPoints}</td>
               <td style="padding:10px 12px;color:#6b7280">${t.daysObserved} days</td>
+              <td style="padding:10px 12px;color:#6b7280">${t.largestDrop === null
+                ? 'not recorded'
+                : `${t.largestDrop.component} ${t.largestDrop.deltaPoints}`}</td>
             </tr>`;
             })}
           </tbody>

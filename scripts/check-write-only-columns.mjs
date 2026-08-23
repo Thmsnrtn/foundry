@@ -131,10 +131,30 @@ const stripLocal = (source) => stripComments(source, { lineComments: false })
 const code = stripLocal(sourceFiles().map((f) => readFileSync(f, 'utf8')).join('\n'));
 const tables = schema();
 
-// Every write context, per table — and one copy of the code with all of them
-// blanked out, which is everywhere a column could be read from.
+// Every write context, per table.
+//
+// THE VERDICT USED TO DEPEND ON THE ORDER OF THE MIGRATION FILES, and nothing
+// said so. The old version built one copy of the source with every write
+// context's TEXT REMOVED — `readable.split(context).join(' ')` — and asked
+// whether a column's name survived. Removal is destructive and order-dependent:
+// one table's INSERT column list can be a SUBSTRING of another's.
+//
+// `INSERT INTO metric_snapshots (id, product_id, snapshot_date)` — the daily
+// placeholder writer — contributed the context `id, product_id, snapshot_date`,
+// which is a substring of `customer_health_snapshots`'s list
+// `id, customer_id, product_id, snapshot_date, health_score, ...`. Blanking the
+// short one first chopped it out of the long one, so the long one no longer
+// matched its own text, its split did nothing, and FOUR genuinely write-only
+// columns — `usage_score`, `support_score`, `payment_score`,
+// `engagement_score` — were counted as read. Deleting that placeholder writer
+// for unrelated reasons is what made them visible, which is not a way to find
+// defects.
+//
+// So nothing is removed from anything. A column is READ if it appears in the
+// source MORE TIMES than it appears inside its own table's write contexts. That
+// is arithmetic over the same two facts, and it cannot depend on the order the
+// tables happen to be visited in.
 const writeContexts = new Map();
-let readable = code;
 for (const table of tables.keys()) {
   const contexts = [];
   for (const pattern of [
@@ -143,8 +163,33 @@ for (const table of tables.keys()) {
   ]) for (const m of code.matchAll(pattern)) contexts.push(m[1]);
   if (contexts.length) writeContexts.set(table, contexts);
 }
-for (const contexts of writeContexts.values()) {
-  for (const context of contexts) readable = readable.split(context).join(' ');
+
+/**
+ * The character ranges every write context occupies in `code`.
+ *
+ * Counting occurrences per context instead would mask a column written on
+ * SEVERAL tables — `learned_claim_id` is written on four — because its
+ * appearances in the other tables' write lists would read as reads. Ranges keep
+ * the original meaning ("outside EVERY write context") without removing text,
+ * which is what made the answer depend on the order tables were visited in.
+ */
+const writeRanges = [];
+for (const table of tables.keys()) {
+  for (const pattern of [
+    new RegExp(`INSERT\\s+(?:OR\\s+(?:IGNORE|REPLACE|ABORT|FAIL|ROLLBACK)\\s+)?INTO\\s+${table}\\s*\\(([^)]*)\\)`, 'gi'),
+    new RegExp(`UPDATE\\s+${table}\\s+SET([\\s\\S]{0,600}?)(?=WHERE|\`)`, 'gi'),
+  ]) for (const m of code.matchAll(pattern)) writeRanges.push([m.index, m.index + m[0].length]);
+}
+writeRanges.sort((a, b) => a[0] - b[0]);
+const insideAWrite = (index) => writeRanges.some(([from, to]) => index >= from && index < to);
+
+/** Whether the name appears anywhere in `code` outside every write context. */
+function readSomewhere(column) {
+  const re = new RegExp(`\\b${column}\\b`, 'g');
+  for (let m = re.exec(code); m !== null; m = re.exec(code)) {
+    if (!insideAWrite(m.index)) return true;
+  }
+  return false;
 }
 
 const writeOnly = [];
@@ -152,7 +197,7 @@ for (const [table, contexts] of writeContexts) {
   for (const column of tables.get(table) ?? []) {
     const written = contexts.some((c) => new RegExp(`\\b${column}\\b`).test(c));
     if (!written) continue;
-    if (!new RegExp(`\\b${column}\\b`).test(readable)) writeOnly.push(`${table}.${column}`);
+    if (!readSomewhere(column)) writeOnly.push(`${table}.${column}`);
   }
 }
 writeOnly.sort();

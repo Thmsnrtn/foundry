@@ -406,6 +406,32 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('attempt_count');
   });
 
+  it('check-write-only-columns still reports when one write list is a substring of another', () => {
+    // THE ANSWER USED TO DEPEND ON MIGRATION FILE ORDER. The gate built one copy
+    // of the source with every write context's TEXT REMOVED and asked whether a
+    // column name survived. Removal is destructive: one table's INSERT column
+    // list can be a SUBSTRING of another's, and blanking the short one first
+    // chopped it out of the long one, so the long one no longer matched itself
+    // and its columns read as read.
+    //
+    // That is exactly what hid `customer_health_snapshots.usage_score` and its
+    // three siblings behind `INSERT INTO metric_snapshots (id, product_id,
+    // snapshot_date)`. Deleting that placeholder writer for unrelated reasons is
+    // what made them visible, which is not a way to find defects.
+    // Two writes to one table, where the first list is a leading SUBSTRING of
+    // the second. Under the old removal-based gate, blanking the short one
+    // first left the long one unmatched and `attempt_count` read as read.
+    plant('src/services/_gate_fixture_n2.ts',
+      j('import { query } from "../db/client.js";\n',
+        'export const a = () => query(`INSERT ', 'INTO webhook_deliveries',
+        ' (id, webhook_id) VALUES (?, ?)`, []);\n',
+        'export const b = () => query(`INSERT ', 'INTO webhook_deliveries',
+        ' (id, webhook_id, attempt_count) VALUES (?, ?, ?)`, []);\n'));
+    const r = run('check-write-only-columns.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('attempt_count');
+  });
+
   it('check-backticks-in-embedded-comments fails on a backtick in embedded SQL', () => {
     // Three parse errors in one campaign, each to somebody who had already
     // written the lesson down. The backtick closes the template literal and the
