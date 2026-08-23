@@ -340,9 +340,24 @@ const githubAdapter: ProviderAdapter = {
         deploys_recent: Array.isArray(deploys) ? deploys.length : 0,
       });
 
+      // AN UPDATE THAT MATCHED NOTHING AND REPORTED SUCCESS.
+      //
+      // This wrote into TODAY'S snapshot row and assumed one existed. The row
+      // is created by a daily job at midnight UTC — so before that job's first
+      // run for a company (a company created today), or on any day it failed,
+      // this UPDATE affected zero rows. The function then returned
+      // `records_processed: N` and `metrics_updated: [...]`, the sync log
+      // recorded a success, and the integration's health stayed green. Nothing
+      // was written.
+      //
+      // Upserting on `(product_id, snapshot_date)` is what the Stripe and
+      // PostHog adapters already do, and it removes the dependency on the
+      // placeholder writer rather than documenting it.
       await query(
-        `UPDATE metric_snapshots SET custom_metrics = ? WHERE product_id = ? AND snapshot_date = ?`,
-        [customMetrics, productId, today]
+        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, custom_metrics)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(product_id, snapshot_date) DO UPDATE SET custom_metrics = ?`,
+        [nanoid(), productId, today, customMetrics, customMetrics]
       );
 
       return {
@@ -383,10 +398,15 @@ const intercomAdapter: ProviderAdapter = {
       const supportVolume = convos.total_count ?? 0;
 
       // Update metric snapshot
+      // Upsert, not update: see the GitHub adapter above. An UPDATE against a
+      // row the daily job has not created yet writes nothing and says it
+      // processed everything.
       const today = new Date().toISOString().split('T')[0];
       await query(
-        `UPDATE metric_snapshots SET support_volume_7d = ? WHERE product_id = ? AND snapshot_date = ?`,
-        [supportVolume, productId, today]
+        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, support_volume_7d)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(product_id, snapshot_date) DO UPDATE SET support_volume_7d = ?`,
+        [nanoid(), productId, today, supportVolume, supportVolume]
       );
 
       return {
