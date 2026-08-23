@@ -296,6 +296,33 @@ app.post('/webhooks/stripe/:productId', async (c) => {
   const rawBody = await c.req.text();
   try {
     const event = verifyStripeWebhook(rawBody, signature);
+    // THE URL NAMES THE COMPANY AND NOTHING CHECKED THAT THE COMPANY EXISTS.
+    //
+    // RT02-09 is about the signature proving the event came from Stripe and not
+    // which product it belongs to. The replay half is closed one layer down: the
+    // event id is globally unique in `stripe_events`, so the same captured event
+    // delivered at a second product does nothing.
+    //
+    // What was missing here is smaller and entirely checkable: the `:productId`
+    // was passed straight through, so an id belonging to no company — a typo, a
+    // deleted company, a paused one, a company on its way out under a scheduled
+    // erasure — ran the whole chain, wrote rows against it, and returned a
+    // success body. A company that is not operating does not receive revenue
+    // events; it certainly does not get metrics written and stressors raised.
+    //
+    // WHAT IS STILL NOT PROVEN, stated so nobody reads this guard as more than
+    // it is: one webhook secret serves every tenant, so anyone holding it can
+    // mint an event for any company. Binding an event to a company needs the
+    // company's own Stripe account id on the product row and a per-account
+    // secret — a connect-flow change that cannot be verified against real
+    // Stripe from here.
+    const { query: dbQuery, operatingProduct } = await import('./db/client.js');
+    const known = await dbQuery(
+      `SELECT id FROM products WHERE id = ? AND ${operatingProduct()}`, [productId]);
+    if (known.rows.length === 0) {
+      logger.warn('stripe webhook for a product that is not operating', { productId });
+      return c.json({ error: 'Unknown product' }, 404);
+    }
     const result = await processStripeEventChain(productId, event);
     return c.json({ received: true, ...result });
   } catch (err) {
