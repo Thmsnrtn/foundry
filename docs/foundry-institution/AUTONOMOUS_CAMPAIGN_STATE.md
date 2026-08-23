@@ -989,14 +989,25 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
    dead: an experiments system with a holdout column nothing writes. On the
    unreferenced-tables baseline in item 8.
 
-11. **Thirteen tables no code can reach, one at a time against their successor.**
+11. **Eleven tables no code can reach, one at a time against their successor.**
    `check-unreferenced-tables.mjs` is the third side of the triangle the other
    two table gates leave open, and it is a RATCHET, not a work queue. The
-   pattern in the thirteen is a superseded store left behind after its
-   replacement arrived — `outbound_webhooks` beside live `webhooks` and
-   `product_webhooks`, `strategic_plans` beside `strategic_syntheses`,
+   pattern in the eleven is a superseded store left behind after its
+   replacement arrived — `strategic_plans` beside `strategic_syntheses`,
    `competitor_pricing_snapshots` and `competitor_feature_tracking` beside the
    live competitive path.
+
+   **Two more went this cycle, and both taught something on the way out.**
+   `leading_indicators` held `confidence`, `sample_size` and `lead_time_days` —
+   the columns that would have made the failure-pattern library evidential —
+   and reading it is what surfaced that the library was stating four
+   frequencies nothing had counted, on a card headed by the founder's own match
+   score. `outbound_webhooks` was a third table for a concept the product
+   implements twice, and reading it surfaced that TEN `CREATE TABLE IF NOT
+   EXISTS` statements across seven migrations never ran — three of which have
+   cost this campaign real time. **Both times the table was the smaller half of
+   what the reading found**, which is the argument for the selection rule below
+   rather than for sweeping the list.
 
    **Two were already removed rather than baselined, and the reason is the
    selection rule for the rest:** `audit_trail` carried the header "Every
