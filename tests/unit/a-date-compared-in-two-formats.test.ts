@@ -68,12 +68,19 @@ describe('the founder’s weekly outcome card', () => {
   });
 
   it('counts a decision the founder approved on the boundary date', async () => {
+    // BOTH STAMPS AT THE END OF THE BOUNDARY DATE, and that is not cosmetic:
+    // the window's edge is an INSTANT — `datetime('now','-7 days')` — while the
+    // defect this test is about excluded the whole DATE. Seeding 09:00 made the
+    // case pass only when the suite ran before 09:00 UTC, which is a flake I
+    // introduced and the 09:21 run found. 23:59:59 is inside the window for
+    // every clock time except the last second of a day, and it was outside it
+    // under the old text comparison whatever the hour.
     const boundaryDate = (await query("SELECT date('now', '-7 days') AS d"))
       .rows[0] as unknown as Record<string, unknown>;
-    await decision('d_acted', { createdAt: `${String(boundaryDate.d)} 09:00:00` });
+    await decision('d_acted', { createdAt: `${String(boundaryDate.d)} 23:59:59` });
     await query(
       `UPDATE decisions SET status='approved', decided_at=?, decided_by='founder' WHERE id='d_acted'`,
-      [`${String(boundaryDate.d)} 23:00:00`],
+      [`${String(boundaryDate.d)} 23:59:59`],
     );
 
     const outcome = await computeWeeklyOutcome(P);

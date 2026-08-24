@@ -109,8 +109,11 @@ inherited list because it was inherited.
   tables written and never read **4** (215 written tables checked) ·
   **raw control bytes 0** (new gate) ·
   **tables no code can reach 11** ·
-  **permitted `'connected'` literals 1** (new gate: the integration status
-  nothing reads, written twice after being retired).
+  **permitted `'connected'` literals 1** (the integration status nothing
+  reads, written twice after being retired) ·
+  **star-select phantom columns 0** (new gate: a property read off a
+  `SELECT *` row that is not a column of that table — ten found by hand and
+  by the gate this cycle, all in founder-facing documents).
 
 ## Active work
 
@@ -390,7 +393,7 @@ error were guilty of something else in the same query: the monthly INVESTOR
 UPDATE read `mrr_growth_pct` and `customer_count`, neither of which has ever
 been a column, so every update ever generated reported both as "N/A".
 
-**SEVEN COLUMNS THAT DO NOT EXIST, IN TWO INVESTOR-FACING ASSESSMENTS.** Read
+**TEN COLUMNS THAT DO NOT EXIST, IN FIVE FOUNDER-FACING DOCUMENTS.** Read
 off a `SELECT *` row, a column that is not there is `undefined` — forever,
 silently, with no error anywhere. The monthly INVESTOR UPDATE read
 `mrr_growth_pct` and `customer_count` from `metric_snapshots`, so every update
@@ -401,10 +404,16 @@ five more from `product_dna` — `target_customer`, `competitors`, `positioning`
 false for every company that has ever run it: all six points of the market
 dimension and two of the narrative, withheld from everybody. **A named-column
 SELECT would have raised on the first call**; `SELECT *` plus `as number` makes
-the schema check disappear. A scanner for this shape is written and is currently
-a reading tool — variable-name collisions across a file make it noisy — and the
-gateable version needs the TypeScript parser rather than a regex, the way
-`check-ai-attribution.mjs` does it.
+the schema check disappear. **IT IS A GATE NOW.** `check-star-select-columns.mjs`
+walks each file in source order with the TypeScript parser, carrying an
+environment: a result variable bound to a single-table `SELECT *`, a row
+variable bound from its `.rows[…]` by declaration OR assignment, and a cloned
+environment on entering a function so a parameter shadows what it should. The
+regex version reported 56 candidates, all collisions; this one reports zero, and
+found THREE MORE real ones on its first run — `mrr_growth_pct` in the compressed
+briefing ("unknown growth" in every one ever generated) and in the BOARD PACKET
+("N/A" in the document that goes to a board). Baseline 0, in `lint:columns`,
+with the defect planted in three shapes including one it must NOT report.
 
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
