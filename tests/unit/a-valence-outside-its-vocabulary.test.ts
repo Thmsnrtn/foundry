@@ -1,6 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
+import { Hono } from 'hono';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
@@ -22,11 +23,22 @@ import { getTrustLedger } from '../../src/services/trust/ledger.js';
 // =============================================================================
 
 const P = 'p_val';
+const OWNER = 'f_val';
+let app: Hono;
 
 beforeAll(async () => {
   await runMigrations();
   await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_val','c_val','v@example.com')");
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Acme','f_val','active')", [P]);
+
+  const { decisionRoutes } = await import('../../src/routes/dashboard/decisions.js');
+  app = new Hono();
+  app.use('*', async (c, next) => {
+    c.set('founder' as never, { id: OWNER } as never);
+    c.set('csrfToken' as never, 'test' as never);
+    await next();
+  });
+  app.route('/', decisionRoutes);
 });
 
 beforeEach(async () => { await query('DELETE FROM decisions'); });
@@ -86,5 +98,30 @@ describe('the trust ledger', () => {
     const product = ledger.categories.find((c) => c.category === 'product');
     expect(product?.decided).toBe(8);
     expect(product?.positive).toBe(8);
+  });
+});
+
+describe('the door', () => {
+  const post = (id: string, body: unknown) =>
+    app.request(`/decisions/${id}/outcome`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('answers 400 rather than letting the database raise', async () => {
+    await decision('d_door');
+    const res = await post('d_door', { outcome: 'it happened', valence: 5 });
+    expect(res.status, 'a caller deserves to be told what is wrong').toBe(400);
+    expect((await res.json() as { error: string }).error).toContain('-1, 0 or 1');
+  });
+
+  it('records one inside the vocabulary', async () => {
+    await decision('d_ok');
+    const res = await post('d_ok', { outcome: 'it worked', valence: 1 });
+    expect(res.status).toBe(200);
+    const row = (await query("SELECT outcome_valence FROM decisions WHERE id='d_ok'"))
+      .rows[0] as unknown as Record<string, unknown>;
+    expect(Number(row.outcome_valence)).toBe(1);
   });
 });
