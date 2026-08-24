@@ -486,6 +486,20 @@ with, exported from one place and validated at the door. `POST
 and only that agent's own run reads the queue, so a row for a name this product
 has no agent for sits pending forever under a 201 saying "Agent run queued".
 
+**A GROWTH RATE HAS A PERIOD, AND THIS ONE'S WAS THE REPORTING CADENCE.** The
+Ghost simulator took the ratio between two consecutive `metric_snapshots`,
+called it `monthlyGrowthMean`, and compounded it three times for a 90-day
+horizon. The table is keyed by DATE and companies report daily, so for most of
+them that was the mean DAILY growth compounded over three days — returned as a
+90-day forecast with p10/p50/p90 bands and a probability of decline, reachable
+over MCP as the thing to consult before resolving a gate-3 decision. The window
+also took the OLDEST 24 snapshots, so a company with two years of history was
+simulated forward from the growth of its first three weeks. Each step is now
+converted to its monthly equivalent from the gap between the dates, the window
+is the most recent 24, and the span in days travels with the estimate. The MCP
+description also promised abstention "under 4 months of history" when the guard
+is four usable snapshots.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
