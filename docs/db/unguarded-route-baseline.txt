@@ -81,7 +81,6 @@ POST /connections/:name/disconnect
 POST /connections/grants/:id/revoke
 POST /decisions/:id/undo-auto
 POST /integrations/:type/disconnect
-POST /koldly/icp
 POST /letter/attention/:decisionId
 POST /letter/channels/:channelId/revoke
 POST /letter/evidence/:requestId/answer
