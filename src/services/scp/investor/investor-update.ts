@@ -160,16 +160,43 @@ export async function generateInvestorUpdate(
   } catch { /* ok */ }
 
   // Compute key metrics
+  //
+  // TWO COLUMNS THAT DO NOT EXIST, IN THE DOCUMENT THAT GOES TO INVESTORS.
+  // `mrr_growth_pct` and `customer_count` have never been columns on
+  // `metric_snapshots` — the same pair the fundraising assessment was found
+  // reading. Off a `SELECT *` row they are `undefined` forever, so every
+  // investor update ever generated reported growth and customer count as "N/A",
+  // and the prior snapshot fetched two queries above to compute growth was
+  // never used.
+  //
+  // Growth is derived from the two snapshots, as a MONTHLY-EQUIVALENT rate from
+  // the gap between their dates: consecutive rows are a day apart for most
+  // companies, and this line is read as a monthly figure by whoever receives
+  // the update. The customer count comes from the accessor that reads both
+  // customer stores.
   const mrrCents = (metricsRow.mrr_cents as number) ?? null;
   const prevMrrCents = (prevMetricsRow.mrr_cents as number) ?? null;
   const mrrDisplay = mrrCents !== null ? `$${(mrrCents / 100).toLocaleString()}` : 'N/A';
-  const mrrGrowth = (metricsRow.mrr_growth_pct as number) ?? null;
+
+  let mrrGrowth: number | null = null;
+  {
+    const gapDays = (Date.parse(`${String(metricsRow.snapshot_date)}T00:00:00Z`)
+      - Date.parse(`${String(prevMetricsRow.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+    if (mrrCents !== null && prevMrrCents !== null && prevMrrCents > 0
+      && Number.isFinite(gapDays) && gapDays > 0) {
+      mrrGrowth = Math.round(((mrrCents / prevMrrCents) ** (30.44 / gapDays) - 1) * 1000) / 10;
+    }
+  }
   // `* 100`: stored as 0–1 fractions. An investor update reporting "0.0%
   // churn" for a company churning 2% a month is the version of this that
   // matters most.
   const churnRate = metricsRow.churn_rate == null ? null : Number(metricsRow.churn_rate) * 100;
   const activationRate = metricsRow.activation_rate == null ? null : Number(metricsRow.activation_rate) * 100;
-  const customerCount = (metricsRow.customer_count as number) ?? null;
+  let customerCount: number | null = null;
+  try {
+    const { getCompanyCustomers } = await import('../../institution/company-customers.js');
+    customerCount = (await getCompanyCustomers(productId)).length;
+  } catch { /* an unreadable customer store is not a count of zero */ }
 
   const keyMetrics: Record<string, unknown> = {
     mrr: mrrDisplay,
