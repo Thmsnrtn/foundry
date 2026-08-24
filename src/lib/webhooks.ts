@@ -10,17 +10,32 @@ import { log } from './logger.js';
 import { assertUrlSafe } from '../services/outbound/ssrf.js';
 import { decryptCredentialPayload, encrypt, isEncrypted } from '../services/encryption.js';
 
-export type WebhookEvent =
-  | 'audit.completed'
-  | 'decision.created'
-  | 'decision.resolved'
-  | 'stressor.identified'
-  | 'stressor.resolved'
-  | 'risk_state.changed'
-  | 'metric.recorded'
-  | 'digest.generated'
-  | 'remediation.pr_opened'
-  | 'remediation.pr_merged';
+/**
+ * THE EVENTS FOUNDRY ACTUALLY SENDS.
+ *
+ * This list had ten names and three of them were ever dispatched. The other
+ * seven — `audit.completed`, `decision.created`, `stressor.identified`,
+ * `stressor.resolved`, `digest.generated`, `remediation.pr_opened`,
+ * `remediation.pr_merged` — appeared in the type, were accepted by
+ * `POST /v1/webhooks` without complaint, and were emitted by nothing. An
+ * integrator subscribing to one got a 201 and silence for as long as they
+ * waited.
+ *
+ * A subscription vocabulary is a promise about what will arrive. This one now
+ * lists what `dispatchWebhook` is called with, and the API validates against
+ * it: a name that is not here is refused, with the list, rather than accepted
+ * into a table nothing will ever match.
+ *
+ * ADDING AN EVENT MEANS DISPATCHING IT. Put the name here in the same change
+ * that calls `dispatchWebhook` with it, not before.
+ */
+export const WEBHOOK_EVENTS = [
+  'decision.resolved',
+  'metric.recorded',
+  'risk_state.changed',
+] as const;
+
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
 /**
  * Dispatch a webhook event to all registered endpoints for a founder.

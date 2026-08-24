@@ -101,13 +101,32 @@ agentsApi.post('/:agentName/run', requireScope('agents:run'), async (c) => {
     // no body is fine
   }
   try {
+    // A QUEUE ENTRY FOR AN AGENT THIS PRODUCT DOES NOT HAVE IS NEVER READ.
+    // `_processInitiatives` selects by `agent_name` when that agent runs, so a
+    // row naming something that is not one of this product's agents sits
+    // pending forever — and this route answered 201 "queued" for it. The
+    // briefings route beside it already refuses an unknown name.
+    const known = await query(
+      'SELECT 1 AS present FROM agent_instances WHERE product_id = ? AND agent_name = ?',
+      [productId, agentName]
+    );
+    if (known.rows.length === 0) {
+      return c.json({ error: `No agent named '${agentName}' for this product` }, 404);
+    }
+
     const id = nanoid();
     await query(
       `INSERT INTO agent_initiative_queue (id, product_id, agent_name, initiative_type, description, context, priority, status)
        VALUES (?,?,?,'api_trigger',?,?,1,'pending')`,
       [id, productId, agentName, `API-triggered run for ${agentName}`, JSON.stringify(body)]
     );
-    return c.json({ queued: true, message: 'Agent run queued', id }, 201);
+    // "Queued", precisely: the agent picks its initiatives up on its next
+    // scheduled run. This does not start one.
+    return c.json({
+      queued: true,
+      message: `Queued for ${agentName}; picked up on its next scheduled run`,
+      id,
+    }, 201);
   } catch (err) {
     return c.json({ error: 'Failed to queue agent run' }, 500);
   }
