@@ -66,54 +66,42 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `d812db8`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `f670bef`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 250 files, highest **214**. Ordering gated. Snapshot current.
-- **Validation:** `npm run check` green end to end — **422 files / 3,652 tests**,
-  read from the run that wrote the log.
-  **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
-  bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
-  Every checkpoint before this one recorded the unit count and called it "full
-  suite green" — and `tests/simulation` had THREE failures standing at the last
-  such checkpoint, each one a fixture whose premise an earlier correction had
-  invalidated: a founder-pulse fixture that never said which timezone its 2am
-  belonged to, and two ledgers seeded with decisions the FOUNDER had made
-  claiming to prove what FOUNDRY had earned. A validation claim is a claim like
-  any other, and this one had a bigger execution path than the run behind it.
-  **Run `npm run check`, not `vitest run tests/unit`, before writing this line.**
-  That single command IS the gate chain — typecheck, ratchets, kernel boundary,
-  NULL-safety, truth audit, effects audit, `lint:columns`, AI attribution, then
-  every test — and `CHECK_EXIT=0` was read from the run that wrote the log. The
-  **Head** sha above is the commit that tree became; documentation edits after
-  the run touch no code.
-  **READ THE EXIT CODE FROM THE RUN THAT PRODUCED THE LOG.** A commit once went
-  out with five red tests because the code was read from a wrapper, and this
-  line said "green at f8a1581" for about a minute before being corrected on the
-  same rule the rest of this file is about. Piping vitest through `grep` returns
-  grep's status, not the suite's.
+- **Migrations:** 252 files, highest **216**. Ordering gated. Snapshot current —
+  and regenerate it AFTER the last migration of a batch, not in the middle of
+  one. It was regenerated between 215 and 216 this cycle, and
+  `foundry-self-observation` caught the result: 685 objects recorded against 684
+  live. That check is Foundry comparing its own schema to its record of it,
+  which is the one place a stale snapshot has to be caught, and it was.
+- **Validation:** `npm run check` green end to end — **427 files / 3,693 tests**,
+  `CHECK_EXIT=0`, read from the run that wrote the log.
+  **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
+  also runs `tests/simulation` and `tests/evals`. Checkpoints before this
+  campaign recorded the unit count and called it "full suite green" while
+  `tests/simulation` had three failures standing. A validation claim is a claim
+  like any other. **Run `npm run check`, not `vitest run tests/unit`.** That one
+  command IS the gate chain — typecheck, ratchets, kernel boundary, NULL-safety,
+  truth audit, effects audit, `lint:columns`, AI attribution, then every test.
+  **READ THE EXIT CODE FROM THE RUN THAT PRODUCED THE LOG, AND FROM THE RIGHT
+  COMMAND IN IT.** Twice now this has bitten differently. Piping vitest through
+  `grep` returns grep's status. And this cycle the HARNESS reported "exit code 0"
+  for a run that failed, because the backgrounded command ended with
+  `echo "CHECK_EXIT=$?" | tee` — the pipeline's status, not npm's. Write the
+  code INTO the log with `>>` and read it from there; 50 red test files were
+  reported as a pass for about a minute on the strength of a wrapper.
   **Qualified:** the suite aborted natively about one run in three *before*
   `closeDb` landed; many consecutive clean runs since. See item 2.
-  **`console-in-src` fell 212 → 211** and the ratchet refused to pass until the
-  gain was locked in, which is the behaviour that makes a ratchet worth having.
-- **Ratchets:** unguarded mutating routes **112** (baseline 112 — the Koldly
-  ICP POST was deleted; earlier: two stale
-  entries removed, one added: the founder's own interruption ceiling, which
-  only bounds what Foundry may do) · fabricated test schemas **4** ·
-  writer-less tables **0** · SELECT drift **0** (the gate now reads
-  single-table queries THROUGH their alias, which is where the public API's
-  broken list-customers query was hiding) · untraced
-  consequential effects **0** · statically unreachable modules **26** ·
-  write-only columns **69** · unscoped product-shaped routes **2** ·
+- **Ratchets:** unguarded mutating routes **112** · fabricated test schemas **4** ·
+  writer-less tables **0** · SELECT drift **0** · untraced consequential
+  effects **0** · statically unreachable modules **24** ·
+  write-only columns **64** · unscoped product-shaped routes **2** ·
   id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** · INSERT value-list mismatches **0** ·
-  tables written and never read **4** (215 written tables checked) ·
-  **raw control bytes 0** (new gate) ·
-  **tables no code can reach 11** ·
-  **permitted `'connected'` literals 1** (the integration status nothing
-  reads, written twice after being retired) ·
-  **star-select phantom columns 0** (new gate: a property read off a
-  `SELECT *` row that is not a column of that table — ten found by hand and
-  by the gate this cycle, all in founder-facing documents).
+  tables written and never read **2** · raw control bytes **0** ·
+  **tables no code can reach 0** (was 11; migration 215 dropped them and 216
+  finished the job) · permitted `'connected'` literals **1** ·
+  star-select phantom columns **0**.
 
 ## Active work
 
