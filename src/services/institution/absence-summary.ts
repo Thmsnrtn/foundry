@@ -18,7 +18,12 @@ export interface AbsenceItem {
 export async function getSevenDayResponsibilitySummary(
   productId: string, now: Date = new Date(),
 ): Promise<Record<AbsenceClassification, AbsenceItem[]>> {
-  const cutoff = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  // `responsibility_transitions.created_at` is CURRENT_TIMESTAMP text and this
+  // bound was an ISO string; compared as text, a space sorts before 'T', so a
+  // transition recorded on the boundary date read as older than the window and
+  // the "latest transition" for that responsibility went missing.
+  const cutoff = new Date(now.getTime() - 7 * 86_400_000)
+    .toISOString().replace('T', ' ').slice(0, 19);
   const responsibilities = await query(
     `SELECT id,title,state,evidence_ref,authority_ref,outcome_ref,disposition,disposition_reason,disposition_evidence_ref,due_at
        FROM institutional_responsibilities WHERE product_id=? ORDER BY updated_at DESC`, [productId],

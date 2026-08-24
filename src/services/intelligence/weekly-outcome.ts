@@ -28,8 +28,21 @@ export interface WeeklyOutcome {
  * SELECTs against indexed columns. Safe to call on every dashboard load.
  */
 export async function computeWeeklyOutcome(productId: string): Promise<WeeklyOutcome> {
-  const windowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const windowStartIso = windowStart.toISOString();
+  // ONE FORMAT ON BOTH SIDES OF THE WINDOW. These columns hold SQLite's own
+  // text — CURRENT_TIMESTAMP or datetime('now'), 'YYYY-MM-DD HH:MM:SS' — and
+  // the bound was a JavaScript `toISOString()`, 'YYYY-MM-DDTHH:MM:SS.sssZ'.
+  // SQLite compares them as TEXT and at index 10 a space (0x20) sorts before
+  // 'T' (0x54), so every row written on the boundary DATE read as earlier than
+  // the boundary whatever its clock time. Asking SQLite for the bound keeps
+  // both sides in one format.
+  //
+  // What it cost here: the founder's weekly outcome card counts decisions
+  // surfaced, decisions acted on and actions executed over seven days. Each
+  // count silently dropped its oldest day, and `percent_acted` divided two
+  // numbers that had each lost a different slice.
+  const WINDOW = "-7 days";
+  // Reported as the window's label; the queries below ask SQLite for the bound.
+  const windowStartIso = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const [surfaced, acted, expired, agentActions] = await Promise.all([
     // Decisions surfaced for founder review (gate 0 actions auto-execute and
@@ -38,8 +51,8 @@ export async function computeWeeklyOutcome(productId: string): Promise<WeeklyOut
       `SELECT COUNT(*) AS c FROM decisions
         WHERE product_id = ?
           AND gate >= 1
-          AND created_at >= ?`,
-      [productId, windowStartIso]
+          AND created_at >= datetime('now', ?)`,
+      [productId, WINDOW]
     ),
     // Decisions the founder explicitly acted on. decided_by 'founder' is the
     // canonical value; we also accept null/non-system to be defensive against
@@ -47,17 +60,17 @@ export async function computeWeeklyOutcome(productId: string): Promise<WeeklyOut
     query(
       `SELECT COUNT(*) AS c FROM decisions
         WHERE product_id = ?
-          AND decided_at >= ?
+          AND decided_at >= datetime('now', ?)
           AND status IN ('approved', 'rejected')
           AND (decided_by IS NULL OR decided_by NOT LIKE 'system_%')`,
-      [productId, windowStartIso]
+      [productId, WINDOW]
     ),
     query(
       `SELECT COUNT(*) AS c FROM decisions
         WHERE product_id = ?
           AND status = 'expired'
-          AND created_at >= ?`,
-      [productId, windowStartIso]
+          AND created_at >= datetime('now', ?)`,
+      [productId, WINDOW]
     ),
     // Action drafts that actually executed (gate 0 auto-execute or
     // founder-approved). Counted from the action_drafts table.
@@ -65,8 +78,8 @@ export async function computeWeeklyOutcome(productId: string): Promise<WeeklyOut
       `SELECT COUNT(*) AS c FROM action_drafts
         WHERE product_id = ?
           AND status = 'executed'
-          AND COALESCE(executed_at, created_at) >= ?`,
-      [productId, windowStartIso]
+          AND COALESCE(executed_at, created_at) >= datetime('now', ?)`,
+      [productId, WINDOW]
     ),
   ]);
 

@@ -310,11 +310,18 @@ export async function evaluatePlaybooksForProduct(
 
     // Check weekly budget
     if (playbook.execution_budget_weekly !== null) {
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      // THE BUDGET COUNTED SIX DAYS AND A BIT. `triggered_at` is written as
+      // `datetime('now')` — 'YYYY-MM-DD HH:MM:SS' — and this bound was a
+      // JavaScript ISO string. Compared as text, a space sorts before 'T', so
+      // every trigger recorded on the boundary DATE read as older than the
+      // window whatever its clock time. A playbook's weekly execution budget is
+      // a control on how often Foundry may act on a company's behalf, and it
+      // was systematically undercounting its own executions.
       const countResult = await query(
         `SELECT COUNT(*) as cnt FROM playbook_trigger_log
-         WHERE playbook_id=? AND evaluation_result='triggered' AND triggered_at > ?`,
-        [playbook.id, weekAgo]
+         WHERE playbook_id=? AND evaluation_result='triggered'
+           AND triggered_at > datetime('now', '-7 days')`,
+        [playbook.id]
       );
       const count = ((countResult.rows[0] as Record<string, unknown>)?.cnt as number) ?? 0;
       if (count >= playbook.execution_budget_weekly) {
@@ -449,13 +456,14 @@ export async function getTriggerLog(productId: string, limit = 50): Promise<Trig
  * Count executions this week per playbook (for budget badge).
  */
 export async function getWeeklyExecutionCounts(productId: string): Promise<Record<string, number>> {
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // The badge and the budget must count the same week; see `evaluatePlaybooks`.
   const result = await query(
     `SELECT playbook_id, COUNT(*) as cnt
      FROM playbook_trigger_log
-     WHERE product_id=? AND evaluation_result='triggered' AND triggered_at > ?
+     WHERE product_id=? AND evaluation_result='triggered'
+       AND triggered_at > datetime('now', '-7 days')
      GROUP BY playbook_id`,
-    [productId, weekAgo]
+    [productId]
   );
 
   const counts: Record<string, number> = {};
