@@ -66,7 +66,7 @@ export async function ingestEvent(productId: string, event: Event): Promise<{
   );
 
   // Run anomaly detection
-  const anomaly = await detectAnomaly(productId, event);
+  const anomaly = await detectAnomaly(productId, eventId, event);
   if (anomaly) {
     cascades.push(`anomaly:${anomaly.id}`);
     // Escalate anomaly severity to the event
@@ -166,8 +166,32 @@ export async function createEventRule(
 
 /**
  * Detect statistical anomalies in the event stream.
+ *
+ * A POINT WAS PART OF ITS OWN BASELINE, WHICH PUT A CEILING ON HOW ANOMALOUS
+ * ANYTHING COULD BE. The event is written to `event_stream` before detection
+ * runs, and the history query took the last 100 events of this type — so the
+ * value being tested was included in the mean and the standard deviation it
+ * was then compared against. That is not a small bias. For a run of n values
+ * where one departs from the rest, the deviation this arithmetic can report is
+ * at most √(n − 1), no matter how extreme the departure: at the minimum n = 10
+ * a metric that went to infinity would score 3.0σ, and `deviation_sigma > 3`
+ * — the branch that escalates an event to critical — could not be reached at
+ * all. `excludeEventId` takes the point back out of its own baseline, and the
+ * ten-observation floor now means ten observations that are not this one.
+ *
+ * Two more corrections in the same arithmetic:
+ *
+ *   The spread is estimated from a sample of history, not from a population,
+ *   so it divides by n − 1. The n divisor understates σ and every deviation
+ *   computed from it was correspondingly overstated.
+ *
+ *   `typeof v === 'number'` was checked on the incoming payload and never on
+ *   the history. One historical row carrying a string under that key made
+ *   `mean` a concatenation, every deviation `NaN`, and `NaN > 2.5` false — so
+ *   a single bad value silently switched anomaly detection off for that metric
+ *   and left no trace of having done so.
  */
-async function detectAnomaly(productId: string, event: Event): Promise<{
+async function detectAnomaly(productId: string, excludeEventId: string, event: Event): Promise<{
   id: string;
   deviation_sigma: number;
 } | null> {
@@ -179,19 +203,20 @@ async function detectAnomaly(productId: string, event: Event): Promise<{
     // Get historical values for this metric
     const history = await query(
       `SELECT json_extract(payload, ?) as val FROM event_stream
-       WHERE product_id = ? AND event_type = ? AND created_at > datetime('now', '-30 days')
+       WHERE product_id = ? AND event_type = ? AND id != ?
+         AND created_at > datetime('now', '-30 days')
        ORDER BY created_at DESC LIMIT 100`,
-      [`$.${key}`, productId, event.event_type]
+      [`$.${key}`, productId, event.event_type, excludeEventId]
     );
 
-    const values = (history.rows as unknown as Array<Record<string, number>>)
+    const values = (history.rows as unknown as Array<Record<string, unknown>>)
       .map((r) => r.val)
-      .filter((v) => v !== null && v !== undefined);
+      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
 
     if (values.length < 10) continue;
 
     const mean = values.reduce((a, b) => a + b, 0) / values.length;
-    const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+    const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (values.length - 1);
     const stdDev = Math.sqrt(variance);
 
     if (stdDev === 0) continue;

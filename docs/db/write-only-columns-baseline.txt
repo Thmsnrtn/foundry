@@ -47,11 +47,6 @@ operator_attention.item_kind
 operator_attention.item_ref
 outbound_actions.feedback_data_json
 outbound_actions.learned_claim_id
-portfolio_snapshots.avg_mrr
-portfolio_snapshots.companies_green
-portfolio_snapshots.companies_red
-portfolio_snapshots.companies_yellow
-portfolio_snapshots.total_portfolio_mrr
 predictions.outcome_recorded_at
 priority_actions.dismissed_at
 recommendation_outcomes.action_taken_at
