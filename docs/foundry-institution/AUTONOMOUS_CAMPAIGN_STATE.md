@@ -16,8 +16,14 @@ Bootstrap from disk: verify the branch and a clean tree, read
 `DEVELOPMENT_INSTITUTION.md` and this file, skim `IMPLEMENTATION_STATE.md` and
 recent git history, then work. No chat history is required.
 
-**FIRST, CHECK THE REMOTE — THE CONTAINER'S CHECKOUT CAN BE BEHIND IT.** SIX
-TIMES NOW this working directory has come up rolled back — by fourteen, twenty,
+**FIRST, CHECK THE REMOTE — AND CHECK WHICH WAY THE GAP RUNS.** The seventh
+container restart of this campaign came back the OTHER WAY: HEAD was three
+commits AHEAD of `origin/<branch>`, tree clean, nothing lost — the restart had
+simply landed between a commit and its push. `git merge-base --is-ancestor
+origin/<branch> HEAD` answers which case you are in, and it is the first thing
+to run. If the remote is an ancestor, push; if HEAD is, reset. The rest of this
+note is the other case, which has happened SIX TIMES: this working directory
+came up rolled back — by fourteen, twenty,
 thirty-eight, fifty-two, eighty-one and ninety-four commits — with `origin/<branch>`, the
 LOCAL TRACKING REF, agreeing with the stale HEAD, so `git status` said "up to
 date" and a whole cycle of work looked lost. It was not: it was on the remote
@@ -60,10 +66,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `c2a2b99`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `5891aa2`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 249 files, highest **213**. Ordering gated. Snapshot current.
-- **Validation:** `npm run check` green end to end — **415 files / 3,601 tests**,
+- **Validation:** `npm run check` green end to end — **418 files / 3,613 tests**,
   read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
   bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
@@ -343,6 +349,19 @@ test carried two more: `rows.length >= 12` was called twelve months (a fortnight
 of daily snapshots satisfied it, and mature permanently suppresses the
 slow-growth and flat-MRR stressors), and the rates it compared were
 month-over-month growth of one period's ACQUISITION rather than of revenue.
+
+**TWO PREDICTIONS, ONE OF WHICH COULD NOT FIRE.** `predictChurnSpike` compared a
+change in `churn_rate` — stored 0–1 — against a threshold of 0.5 written in
+PERCENTAGE POINTS, so churn had to jump fifty points between snapshots and the
+prediction was silence for everyone; its evidence lines printed a three-point
+rise as "+0.03%". `predictRevenuePlateau` read `new + expansion` — revenue
+ACQUIRED, not revenue — divided consecutive rows without regard to the gap
+between their dates, compared the result against monthly figures, and ran its
+deceleration test the wrong way down a newest-first array, so a company
+accelerating from 1% to 8% a month was told it was about to plateau. And every
+"proactive insight" said "from last period" when the two rows it compares are
+usually consecutive DAYS — two of them comparing seven-day rolling windows that
+share six of their seven days. The intervals travel with the sentences now.
 
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
