@@ -178,8 +178,17 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
   const mrrDisplay = latestMetrics.mrr_cents != null
     ? `$${((latestMetrics.mrr_cents as number) / 100).toLocaleString()}`
     : 'unknown';
-  const mrrGrowth = latestMetrics.mrr_growth_pct != null
-    ? `${(latestMetrics.mrr_growth_pct as number).toFixed(1)}% MoM`
+  // `mrr_growth_pct` HAS NEVER BEEN A COLUMN, so this said "unknown growth" in
+  // every compressed briefing ever generated. The prior snapshot is already
+  // loaded above; the rate is monthly-equivalent over the gap between the two
+  // dates, and says so.
+  const priorMrr = priorMetrics.mrr_cents as number | null;
+  const currentMrr = latestMetrics.mrr_cents as number | null;
+  const growthGapDays = (Date.parse(`${String(latestMetrics.snapshot_date)}T00:00:00Z`)
+    - Date.parse(`${String(priorMetrics.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+  const mrrGrowth = (currentMrr != null && priorMrr != null && priorMrr > 0
+    && Number.isFinite(growthGapDays) && growthGapDays > 0)
+    ? `${(((currentMrr / priorMrr) ** (30.44 / growthGapDays) - 1) * 100).toFixed(1)}% MoM`
     : 'unknown growth';
   const churnDisplay = latestMetrics.churn_rate != null
     // `* 100`: these are stored as 0–1 fractions (`ux/fluency.ts` names them

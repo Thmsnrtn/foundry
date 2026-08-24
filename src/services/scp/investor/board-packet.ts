@@ -123,6 +123,7 @@ export async function generateBoardPacket(
 
   // 3. Load metrics: latest metric_snapshots
   let metricsSnapshot: Record<string, unknown> = {};
+  let priorSnapshot: Record<string, unknown> = {};
   try {
     const metricsResult = await query(
       `SELECT * FROM metric_snapshots WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 2`,
@@ -130,6 +131,9 @@ export async function generateBoardPacket(
     );
     if (metricsResult.rows.length > 0) {
       metricsSnapshot = metricsResult.rows[0] as Record<string, unknown>;
+    }
+    if (metricsResult.rows.length > 1) {
+      priorSnapshot = metricsResult.rows[1] as Record<string, unknown>;
     }
   } catch {
     // table may not have expected columns
@@ -246,10 +250,23 @@ export async function generateBoardPacket(
   }
 
   // 6. Compute MRR display values
+  //
+  // `mrr_growth_pct` HAS NEVER BEEN A COLUMN. Read off a `SELECT *` row it is
+  // `undefined`, so every board packet ever generated showed growth as "N/A" —
+  // in the document a founder takes to their board. The second snapshot was
+  // already being fetched by the query above and thrown away; growth is derived
+  // from the two levels, as a monthly-equivalent rate from the gap between
+  // their dates, because consecutive rows are a day apart for most companies.
   const mrrCents = (metricsSnapshot.mrr_cents as number) ?? null;
-  const mrrGrowthPct = (metricsSnapshot.mrr_growth_pct as number) ?? null;
+  const priorMrrCents = (priorSnapshot.mrr_cents as number) ?? null;
+  const growthGapDays = (Date.parse(`${String(metricsSnapshot.snapshot_date)}T00:00:00Z`)
+    - Date.parse(`${String(priorSnapshot.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+  const mrrGrowthPct = (mrrCents !== null && priorMrrCents !== null && priorMrrCents > 0
+    && Number.isFinite(growthGapDays) && growthGapDays > 0)
+    ? Math.round(((mrrCents / priorMrrCents) ** (30.44 / growthGapDays) - 1) * 1000) / 10
+    : null;
   const mrrDisplay = mrrCents !== null ? `$${(mrrCents / 100).toLocaleString()}` : 'N/A';
-  const growthDisplay = mrrGrowthPct !== null ? `${mrrGrowthPct.toFixed(1)}%` : 'N/A';
+  const growthDisplay = mrrGrowthPct !== null ? `${mrrGrowthPct.toFixed(1)}%/mo` : 'N/A';
 
   // 7. Build prompt and call Claude
   const systemPrompt = `You are a board-level strategic advisor helping a founder prepare for their board meeting.
