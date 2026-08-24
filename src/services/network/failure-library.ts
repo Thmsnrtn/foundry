@@ -356,8 +356,11 @@ export async function __loadProductStateForTest(productId: string): Promise<Prod
 async function loadProductState(productId: string): Promise<ProductState> {
   const [snapshotsResult, stressorsResult, lifecycleResult, fundraisingResult] = await Promise.all([
     query(
-      `SELECT new_mrr_cents, churn_rate, activation_rate, nps_score, snapshot_date
-       FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 8`,
+      // A DATE WINDOW, NOT A ROW COUNT — see the note above the week counters.
+      `SELECT mrr_cents, new_mrr_cents, churn_rate, activation_rate, nps_score, snapshot_date
+       FROM metric_snapshots
+       WHERE product_id = ? AND snapshot_date >= date('now', '-70 days')
+       ORDER BY snapshot_date DESC`,
       [productId],
     ),
     query(
@@ -376,31 +379,73 @@ async function loadProductState(productId: string): Promise<ProductState> {
 
   const snapshots = snapshotsResult.rows as Array<Record<string, unknown>>;
   const latest = snapshots[0] ?? null;
-  const oldest = snapshots[Math.min(snapshots.length - 1, 7)] ?? null;
 
-  // MRR growth rate (latest vs 4-week-ago snapshot)
+  // A WEEK IS SEVEN DAYS, NOT ONE ROW.
+  //
+  // Both counters below stepped through consecutive `metric_snapshots` rows and
+  // called each step a week. The table is keyed by DATE and most companies
+  // report daily, so "activation declining for four weeks" — a criterion that
+  // matches the Activation Decay pattern and tells the founder they have a
+  // 60-day lead time on it — was four consecutive DAYS. The MRR comparison had
+  // the same shape twice over: `snapshots[3]` was called "the 4-week-ago
+  // snapshot" and was three rows back, and it compared `new_mrr_cents`, which
+  // is the revenue ACQUIRED in a period rather than the company's revenue.
+  //
+  // Each step now looks for the snapshot nearest a real number of days back,
+  // within half that interval — so a weekly reporter answers on its own rows, a
+  // daily one answers on the right ones, and a monthly one simply cannot
+  // resolve a week and counts nothing rather than counting days as weeks.
+  const dayOf = (row: Record<string, unknown> | undefined): number | null => {
+    if (!row) return null;
+    const t = Date.parse(`${String(row.snapshot_date)}T00:00:00Z`);
+    return Number.isFinite(t) ? t / 86_400_000 : null;
+  };
+  const today = dayOf(latest ?? undefined);
+  /** The snapshot closest to `daysBack`, if one is within half that distance. */
+  const nearest = (daysBack: number): Record<string, unknown> | null => {
+    if (today === null) return null;
+    const target = today - daysBack;
+    let best: Record<string, unknown> | null = null;
+    let bestGap = Infinity;
+    for (const row of snapshots) {
+      const d = dayOf(row);
+      if (d === null) continue;
+      const gap = Math.abs(d - target);
+      if (gap < bestGap) { bestGap = gap; best = row; }
+    }
+    return bestGap <= daysBack / 2 ? best : null;
+  };
+  const levelOf = (row: Record<string, unknown> | null): number | null => {
+    const v = row?.mrr_cents;
+    return v == null ? null : Number(v);
+  };
+
+  // MRR growth over four weeks, from the LEVEL.
   let mrr_growth_rate: number | null = null;
-  const compare = snapshots[3] ?? null;
-  if (latest && compare) {
-    const lMrr = (latest.new_mrr_cents as number | null) ?? 0;
-    const cMrr = (compare.new_mrr_cents as number | null) ?? 0;
-    if (cMrr > 0) mrr_growth_rate = ((lMrr - cMrr) / cMrr) * 100;
+  const nowLevel = levelOf(latest);
+  const monthAgoLevel = levelOf(nearest(28));
+  if (nowLevel !== null && monthAgoLevel !== null && monthAgoLevel > 0) {
+    mrr_growth_rate = ((nowLevel - monthAgoLevel) / monthAgoLevel) * 100;
   }
 
-  // Count weeks where MRR growth was below 2%
+  // Weeks whose MRR grew less than 2%, counted from the last six weeks.
   let mrr_growth_weeks = 0;
-  for (let i = 0; i < Math.min(snapshots.length - 1, 6); i++) {
-    const curr = (snapshots[i]?.new_mrr_cents as number | null) ?? 0;
-    const prev = (snapshots[i + 1]?.new_mrr_cents as number | null) ?? 0;
-    if (prev > 0 && ((curr - prev) / prev) * 100 < 2) mrr_growth_weeks++;
+  for (let w = 0; w < 6; w++) {
+    const end = levelOf(w === 0 ? latest : nearest(w * 7));
+    const start = levelOf(nearest((w + 1) * 7));
+    if (end === null || start === null || !(start > 0)) continue;
+    if (((end - start) / start) * 100 < 2) mrr_growth_weeks++;
   }
 
-  // Count weeks where activation rate was declining
+  // Weeks whose activation rate fell.
   let activation_declining_weeks = 0;
-  for (let i = 0; i < Math.min(snapshots.length - 1, 6); i++) {
-    const curr = (snapshots[i]?.activation_rate as number | null) ?? null;
-    const prev = (snapshots[i + 1]?.activation_rate as number | null) ?? null;
-    if (curr !== null && prev !== null && curr < prev) activation_declining_weeks++;
+  for (let w = 0; w < 6; w++) {
+    const endRow = w === 0 ? latest : nearest(w * 7);
+    const startRow = nearest((w + 1) * 7);
+    const end = endRow?.activation_rate as number | null | undefined;
+    const start = startRow?.activation_rate as number | null | undefined;
+    if (end == null || start == null) continue;
+    if (end < start) activation_declining_weeks++;
   }
 
   // A RUNWAY THAT WAS THE CONSTANT 8, FOR EVERY COMPANY.
