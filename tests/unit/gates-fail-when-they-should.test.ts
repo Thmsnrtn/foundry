@@ -191,19 +191,26 @@ describe('every gate refuses the defect it exists for', () => {
   });
 
   it('check-unread-tables fails on a table something writes and nothing reads', () => {
-    // `sector_remediation_templates` exists in the schema and is reached by
-    // nothing at all — no writer, no reader, no trigger, not in the erasure
-    // map. Giving it a writer is exactly the moment this gate exists to catch:
-    // a record starting to be kept that nobody looks at. (`onboarding_checklist`
-    // would NOT do here — it is in the erasure map, so the export's dynamic
-    // `SELECT * FROM ${table}` reads it and the gate is right to say so.)
+    // THIS FIXTURE USED TO BORROW A REAL TABLE, and the borrowed table went
+    // away. `sector_remediation_templates` qualified — in the schema, reached
+    // by nothing at all, not in the erasure map — until migration 215 dropped
+    // it with the ten others nothing had ever written. A fixture that depends
+    // on a real defect surviving rots every time one is cleaned up, so this
+    // one brings its own schema: a table planted for the length of the test,
+    // given a writer and no reader, which is exactly the moment this gate
+    // exists to catch — a record starting to be kept that nobody looks at.
+    // (`onboarding_checklist` would NOT do here — it is in the erasure map, so
+    // the export's dynamic `SELECT * FROM ${table}` reads it and the gate is
+    // right to say so.)
+    plant('src/db/migrations/998_gate_fixture_unread.sql',
+      j('CREATE TABLE ', 'IF NOT EXISTS ', '_gate_fixture_unread_table (id TEXT PRIMARY KEY);\n'));
     plant('src/services/_gate_fixture_unread.ts',
       'import { query } from "../db/client.js";\n'
-      + j('export const q = () => query(`INSERT ', 'INTO sector_remediation_templates ',
+      + j('export const q = () => query(`INSERT ', 'INTO _gate_fixture_unread_table ',
         '(id) VALUES (?)`, [1]);\n'));
     const r = run('check-unread-tables.mjs');
     expect(r.code, r.output).toBe(1);
-    expect(r.output).toContain('sector_remediation_templates');
+    expect(r.output).toContain('_gate_fixture_unread_table');
   });
 
   it('check-unread-tables counts a SQL trigger as a reader', () => {

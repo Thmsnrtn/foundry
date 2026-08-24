@@ -115,7 +115,6 @@
                         'b2b_saas','b2c_saas','marketplace','developer_tools','fintech','other'
                         ('proceed', 'proceed_with_changes', 'do_not_proceed')),
                       )),
-                     CHECK (our_equivalent IN ('shipped','planned','not_planned','unknown')),
                      CHECK (status IN ('on_track','at_risk','off_track','completed','cancelled')),
                     CHECK (decision_source IN ('strategic', 'decision')),
                     CHECK (premise_type IN ('metric', 'qualitative')),
@@ -355,7 +354,6 @@
     'churn_response',          -- What we do when churn spikes
     'co_founder', 'advisor', 'investor_observer'
     'competitive_response',    -- How we respond to competitive threats
-    'concern', 'endorsement', 'question', 'context', 'precedent'
     'contact_required',
     'content_required',
     'content_too_large',
@@ -786,7 +784,6 @@
   )),
   )),
   )),
-  )),
   );
   );
   );
@@ -1147,7 +1144,6 @@
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
-  ON agent_message_threads(product_id, last_message_at);
   ON agent_messages(thread_id);
   ON agent_wiki_entries(product_id, section, title);
   ON agent_wiki_entries(product_id, section, updated_at);
@@ -1163,20 +1159,14 @@
   ON briefing_shares(founder_id, created_at DESC);
   ON communication_budgets(product_id, customer_external_id, week_starting);
   ON company_observation_channels(product_id, revoked_at);
-  ON competitor_feature_tracking(product_id, competitor_name);
-  ON competitor_feature_tracking(product_id, competitor_name, feature_name);
-  ON competitor_pricing_snapshots(product_id, competitor_name, snapshot_date);
   ON cost_events(product_id, capability, created_at);
   ON cost_events(product_id, responsibility_id, created_at);
   ON cross_product_insights(sector, growth_stage, observed_through);
-  ON custom_webhook_sources(product_id, is_active);
   ON data_classifications(product_id, surface);
   ON decision_patterns(market_category, product_lifecycle_stage, contributor_hash);
   ON ecosystem_principal_companies(principal_id, product_id);
   ON ecosystem_principals(key_hash);
   ON envelope_usage(product_id, scope, week_starting);
-  ON experiment_holdouts(product_id, is_active);
-  ON experiment_results_timeline(experiment_id, checkpoint_date);
   ON founder_evidence_requests(product_id,predicate) WHERE scope='company';
   ON founder_evidence_requests(product_id,responsibility_id,predicate);
   ON founder_journal_entries(product_id, is_agent_visible, created_at);
@@ -1548,7 +1538,6 @@
   accuracy_after REAL,
   accuracy_before REAL,
   accuracy_rate REAL, -- correct / measured
-  accuracy_score REAL
   accuracy_score REAL,
   accuracy_score REAL, -- 0.0-1.0: correct=1.0, partial=0.5, incorrect=0.0
   achieved_at TEXT,
@@ -1624,7 +1613,6 @@
   actual_mrr_delta_pct REAL,
   actual_outcome          TEXT,
   actual_outcome_direction TEXT,
-  actual_outcomes TEXT,
   actual_revenue_impact_usd REAL,
   actual_timeframe_days INTEGER,
   actual_value REAL,
@@ -1669,8 +1657,6 @@
   allowed_classes TEXT NOT NULL,                  -- JSON array: ['general','customer']
   amount_usd REAL NOT NULL,
   amount_usd REAL NOT NULL,
-  analysis TEXT NOT NULL,
-  annotation_type TEXT CHECK(annotation_type IN (
   anonymize_customer_data INTEGER NOT NULL DEFAULT 0,
   answer_signal_id  TEXT REFERENCES signal_events(id),
   anti_dilution TEXT NOT NULL DEFAULT 'broad_based_weighted_avg',
@@ -1725,7 +1711,6 @@
   authority_ref TEXT,
   authority_ref TEXT,
   authority_required INTEGER NOT NULL DEFAULT 0 CHECK(authority_required IN (0,1)),
-  authorized_agents      TEXT NOT NULL DEFAULT '["all"]',  -- JSON array
   authorized_agents TEXT DEFAULT '["all"]',
   auto_executable INTEGER DEFAULT 0,
   auto_execute INTEGER NOT NULL DEFAULT 0, -- 0=require approval, 1=auto-execute
@@ -1810,7 +1795,6 @@
   change_class          TEXT NOT NULL,
   change_description TEXT NOT NULL,    -- Human-readable summary
   change_id             TEXT NOT NULL,
-  change_summary   TEXT,            -- human-readable diff description when pricing_changed = 1
   change_type TEXT NOT NULL CHECK(change_type IN (
   change_type TEXT NOT NULL,
   changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -1821,7 +1805,6 @@
   channel_id TEXT,
   channel_key        TEXT NOT NULL,
   channel_name TEXT,
-  checkpoint_date  TEXT NOT NULL,     -- ISO date of this statistical snapshot
   checkpoint_date TEXT NOT NULL,
   checksum TEXT
   chosen_option TEXT,
@@ -1862,11 +1845,8 @@
   comparator      TEXT CHECK (comparator IN ('<', '<=', '>', '>=', '==')),
   competitive_narrative TEXT,          -- Competitive landscape story
   competitor_mentions_json TEXT, -- JSON array: [{name, context, sentiment}]
-  competitor_name  TEXT NOT NULL,
-  competitor_name  TEXT NOT NULL,
   competitor_name TEXT NOT NULL,
   competitor_name TEXT NOT NULL,
-  completed_at DATETIME
   completed_at DATETIME
   completed_at DATETIME,
   completed_at DATETIME,
@@ -1935,7 +1915,6 @@
   content TEXT NOT NULL,
   content TEXT NOT NULL,
   content TEXT NOT NULL,
-  content TEXT NOT NULL,           -- their perspective / question
   content TEXT NOT NULL,       -- copied from the message for durability
   content TEXT NOT NULL, -- JSON or Markdown
   content TEXT NOT NULL, -- full markdown content
@@ -1959,8 +1938,6 @@
   contribution_margin REAL,
   contributor_hash TEXT NOT NULL,
   control_description TEXT NOT NULL,
-  control_mean     REAL,
-  control_n        INTEGER,           -- observations in control group at checkpoint
   convergence_key TEXT NOT NULL,
   conversation_ref    TEXT,
   converted_to_paid INTEGER,
@@ -1980,22 +1957,16 @@
   cost_usd REAL DEFAULT 0.0,
   count         INTEGER NOT NULL DEFAULT 0,
   country_code TEXT DEFAULT 'US',
-  created_at             TEXT NOT NULL DEFAULT (datetime('now'))
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
-  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
-  created_at       TEXT NOT NULL DEFAULT (datetime('now'))
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
-  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -2005,8 +1976,6 @@
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at  TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -2067,7 +2036,6 @@
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
   created_at TEXT DEFAULT (datetime('now'))
@@ -2212,7 +2180,6 @@
   decision_id         TEXT NOT NULL,             -- decisions.id (founder queue)
   decision_id     TEXT NOT NULL,
   decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
-  decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
   decision_id TEXT NOT NULL REFERENCES decisions(id),
   decision_id TEXT NOT NULL REFERENCES decisions(id),
   decision_id TEXT REFERENCES decisions(id),
@@ -2233,7 +2200,6 @@
   decisions_resolved INTEGER NOT NULL DEFAULT 0,
   declined_at TEXT,
   dedup_key TEXT NOT NULL,                        -- caller-supplied idempotency key
-  default_event_type     TEXT NOT NULL DEFAULT 'custom_event',
   delete_agent_logs_after_days INTEGER NOT NULL DEFAULT 90,
   deleted_at DATETIME,
   delivered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -2245,7 +2211,6 @@
   department TEXT, -- 'engineering' | 'sales' | 'marketing' | 'product' | 'support'
   derivation_method TEXT NOT NULL,
   derivation_method TEXT NOT NULL,
-  description            TEXT,
   description          TEXT NOT NULL
   description     TEXT NOT NULL,
   description   TEXT NOT NULL,
@@ -2268,7 +2233,6 @@
   description TEXT,                 -- 2-3 sentence context
   description_excerpt TEXT,
   designed_by TEXT DEFAULT 'oracle',
-  destination TEXT CHECK(destination IN ('notion', 'linear', 'pdf', 'markdown')),
   destination_summary TEXT,                  -- founder-written prose summary
   detail_preference TEXT DEFAULT 'standard', -- 'minimal', 'standard', 'comprehensive'
   details_json TEXT,                     -- {model, tokens_in, tokens_out} etc.
@@ -2281,7 +2245,6 @@
   detected_at TEXT NOT NULL DEFAULT (datetime('now')),
   deviation_sigma REAL,
   diff_verified         INTEGER,
-  dimension TEXT NOT NULL,
   dimension TEXT NOT NULL,
   dimension TEXT NOT NULL,
   direction_correct BOOLEAN,           -- did we predict the direction right?
@@ -2309,7 +2272,6 @@
   early_stop_reason TEXT,
   edge_type TEXT NOT NULL, -- 'caused' | 'informed_by' | 'led_to' | 'contradicts' | 'supports'
   effect_entity_id TEXT,
-  effect_size      REAL,
   effective_date TEXT,
   email       TEXT NOT NULL,
   email TEXT NOT NULL,
@@ -2323,7 +2285,6 @@
   ended_at TEXT,                              -- NULL = currently active
   ended_by TEXT,                              -- 'founder' | 'expired' | 'override'
   endpoint TEXT UNIQUE,
-  endpoint_token         TEXT NOT NULL UNIQUE,     -- random token forming the inbound URL
   energy TEXT,                                -- 'urgent'|'measured'|'warm'|'cool'
   energy_pattern TEXT, -- "morning person" or "night owl" or "varies"
   engagement_depth_score REAL,
@@ -2337,7 +2298,6 @@
   equity_percentage REAL,
   error         TEXT,
   error TEXT
-  error TEXT,
   error TEXT,
   error_count INTEGER DEFAULT 0,
   error_count_trailing_7d INTEGER DEFAULT 0,
@@ -2415,7 +2375,6 @@
   expected_outcome        TEXT,
   expected_value REAL,
   experience_level TEXT DEFAULT 'experienced',
-  experiment_id    TEXT NOT NULL REFERENCES experiments(id),
   experiment_id TEXT NOT NULL REFERENCES experiments(id),
   experiment_id TEXT NOT NULL,
   experiments_running TEXT,            -- JSON: Experiment[]
@@ -2444,7 +2403,6 @@
   falsified_at    DATETIME,
   feature_depth_score REAL DEFAULT 50.0,
   feature_key TEXT NOT NULL,
-  feature_name     TEXT NOT NULL,
   feature_utilization_breadth REAL,
   features_used TEXT DEFAULT '[]',       -- JSON: string[]
   feedback TEXT,
@@ -2453,7 +2411,6 @@
   feedback_data_json TEXT,    -- Open rates, conversions, etc.
   feedback_status TEXT DEFAULT 'pending' CHECK(feedback_status IN ('pending','positive','negative','neutral','not_applicable')),
   feedback_type TEXT NOT NULL,             -- 'nps' | 'csat' | 'rejection_reason'
-  field_mappings         TEXT NOT NULL DEFAULT '[]',  -- JSON array of mapping objects
   files_modified TEXT,
   finalized_at DATETIME,              -- when founder marks it ready to share
   financial_summary TEXT,              -- JSON: {mrr, ai_cost_30d, roi}
@@ -2465,7 +2422,6 @@
   firm TEXT,
   first_briefing_generated INTEGER NOT NULL DEFAULT 0,
   first_detected_at TEXT NOT NULL DEFAULT (datetime('now')),
-  first_seen_at    TEXT NOT NULL,   -- ISO datetime when feature was first detected
   fit_score REAL NOT NULL DEFAULT 0.5, -- 0-1 how good a fit
   fix_approach TEXT,
   fix_summary TEXT,
@@ -2546,7 +2502,6 @@
   gate_scores TEXT  -- JSON: {constitution, regression, size, drift, safety}
   generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   generated_at DATETIME,
   generated_at TEXT NOT NULL DEFAULT (datetime('now'))
   generated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2595,12 +2550,9 @@
   highlights TEXT,
   highlights TEXT,
   hint_text TEXT NOT NULL,
-  holdout_name  TEXT NOT NULL DEFAULT 'primary',
-  holdout_pct   REAL NOT NULL DEFAULT 0.1,   -- fraction of users, e.g. 0.1 = 10 %
   hops TEXT NOT NULL,
   hour_reset_at DATETIME,
   hours REAL NOT NULL,
-  hypothesis TEXT NOT NULL,
   hypothesis_id TEXT NOT NULL REFERENCES hypotheses(id),
   hypothesis_signals TEXT, -- JSON: {h1: data, h2: data, ...}
   icp_description TEXT,
@@ -2608,7 +2560,6 @@
   icp_sophistication TEXT,
   icp_trigger TEXT,
   id                      TEXT PRIMARY KEY,
-  id                     TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
   id                   TEXT PRIMARY KEY,
@@ -2624,10 +2575,6 @@
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
   id               TEXT PRIMARY KEY,
-  id               TEXT PRIMARY KEY,
-  id               TEXT PRIMARY KEY,
-  id               TEXT PRIMARY KEY,
-  id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
@@ -2635,7 +2582,6 @@
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
-  id            TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
@@ -2835,12 +2781,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
-  idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
   immigration_status TEXT,
@@ -2876,7 +2816,6 @@
   investment_amount REAL NOT NULL,
   investment_amount REAL,
   investment_date TEXT,
-  investor_id TEXT NOT NULL REFERENCES investors(id) ON DELETE CASCADE,
   investor_ownership_pct REAL NOT NULL,
   investor_proceeds_pct REAL,
   invited_by TEXT NOT NULL REFERENCES founders(id),
@@ -2885,8 +2824,6 @@
   ip_address    TEXT,            -- set when actor_type = 'founder' or 'api'
   ip_address TEXT,
   ip_clarity_score REAL NOT NULL, -- code ownership, no IP disputes, clean licenses
-  is_active              INTEGER NOT NULL DEFAULT 1,
-  is_active     INTEGER NOT NULL DEFAULT 1,
   is_active INTEGER NOT NULL DEFAULT 0,
   is_active INTEGER NOT NULL DEFAULT 1,
   is_active INTEGER NOT NULL DEFAULT 1,
@@ -2896,9 +2833,7 @@
   is_champion INTEGER DEFAULT 0,
   is_current BOOLEAN DEFAULT TRUE,
   is_pinned    INTEGER NOT NULL DEFAULT 0,    -- 1 = always included in agent context
-  is_private BOOLEAN DEFAULT FALSE, -- private to investor (not shown to other investors)
   is_seasonal INTEGER DEFAULT 0,
-  is_significant   INTEGER NOT NULL DEFAULT 0,  -- 1 when p_value < pre-specified alpha
   item_key TEXT NOT NULL,
   item_kind   TEXT NOT NULL,             -- 'needs_you' | future kinds
   item_ref    TEXT NOT NULL,             -- e.g. decision id
@@ -2916,7 +2851,6 @@
   jurisdiction TEXT NOT NULL,
   jurisdictions TEXT,
   key           TEXT    NOT NULL,
-  key_assumptions TEXT NOT NULL,
   key_decisions_made TEXT,             -- JSON: array of resolved decisions
   key_gaps TEXT,                       -- JSON: string[] — what's blocking raise readiness
   key_gaps_json TEXT NOT NULL, -- JSON array of gaps
@@ -2932,7 +2866,6 @@
   kill_criterion TEXT NOT NULL,              -- Sage: required, NOT NULL.
   killed_at TEXT,
   killed_reason TEXT,
-  known_competitors TEXT,
   known_features TEXT DEFAULT '[]',      -- JSON: string[]
   known_weaknesses TEXT,
   label              TEXT NOT NULL,
@@ -2966,9 +2899,7 @@
   last_login_streak INTEGER DEFAULT 0,
   last_message_at DATETIME,
   last_message_at TEXT DEFAULT (datetime('now')),
-  last_message_at TEXT,                         -- updated when a new message is posted
   last_promoted_at      DATETIME,
-  last_received_at       TEXT,
   last_reinforced_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_rejected_at TEXT,
   last_reviewed_at TEXT,                     -- founder review timestamp
@@ -3052,7 +2983,6 @@
   meeting_cadence TEXT DEFAULT 'monthly',
   memory_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
   message TEXT,
-  message_count   INTEGER NOT NULL DEFAULT 0,
   message_count INTEGER DEFAULT 0,
   message_count INTEGER DEFAULT 0,
   message_id TEXT REFERENCES conversation_messages(id),
@@ -3109,7 +3039,6 @@
   mrr_narrative TEXT,                  -- Revenue story
   mrr_trajectory_score INTEGER,       -- Is revenue trending right?
   mutation_type TEXT NOT NULL, -- 'emphasis_shift' | 'context_addition' | 'framing_change'
-  name                   TEXT NOT NULL,            -- human label, e.g. "Stripe Billing Events"
   name TEXT NOT NULL,
   name TEXT NOT NULL,
   name TEXT NOT NULL,
@@ -3143,11 +3072,9 @@
   next_meeting_at TEXT,
   next_quarter_focus TEXT,             -- Forward-looking 90-day plan
   next_run_at DATETIME,
-  ninety_day_horizon TEXT NOT NULL,
   node_type TEXT NOT NULL, -- 'decision' | 'outcome' | 'context_snapshot' | 'hypothesis'
   note            TEXT,
   noted_at TEXT NOT NULL DEFAULT (datetime('now'))
-  notes            TEXT,
   notes TEXT
   notes TEXT,
   notes TEXT,
@@ -3198,7 +3125,6 @@
   options TEXT,
   organization_type TEXT NOT NULL,
   our_advantages TEXT DEFAULT '[]',      -- JSON: string[]
-  our_equivalent   TEXT NOT NULL DEFAULT 'unknown'
   outbound_action_id TEXT
   outbound_action_id TEXT REFERENCES outbound_actions(id),
   outcome TEXT -- 'avoided' | 'occurred' | 'monitoring'
@@ -3279,7 +3205,6 @@
   p75 REAL,
   p90              REAL,
   p90 REAL,
-  p_value          REAL,
   page_analysis TEXT,
   paid_count INTEGER NOT NULL DEFAULT 0
   parameters_json TEXT NOT NULL DEFAULT '{}',
@@ -3287,7 +3212,6 @@
   parent_version INTEGER,
   participant_emails TEXT, -- comma-separated
   participant_name TEXT,
-  participants    TEXT NOT NULL DEFAULT '[]',   -- JSON array of agent name strings
   passing_threshold_override REAL,
   pattern TEXT NOT NULL,       -- The synthesized wisdom statement
   pattern_description TEXT NOT NULL,
@@ -3331,7 +3255,6 @@
   platform_cost_dollars REAL,
   playbook_body TEXT,          -- Main content
   playbook_id TEXT NOT NULL REFERENCES execution_playbooks(id),
-  playbook_id TEXT NOT NULL REFERENCES playbooks(id) ON DELETE CASCADE,
   portfolio_id TEXT NOT NULL REFERENCES portfolios(id),
   portfolio_id TEXT NOT NULL,
   positioning TEXT,
@@ -3353,7 +3276,6 @@
   predicted_effect_size REAL,
   predicted_mrr_delta_pct REAL,
   predicted_outcome_direction TEXT,
-  predicted_outcomes TEXT NOT NULL,
   predicted_roi REAL,
   predicted_timeframe_days INTEGER,
   predicted_value REAL NOT NULL,
@@ -3378,8 +3300,6 @@
   preview_text TEXT,          -- Human-readable preview for CEO approval UI
   previous_config TEXT,                -- JSON: snapshot of config before change
   previous_value  REAL,
-  pricing_changed  INTEGER NOT NULL DEFAULT 0,  -- 1 if different from previous snapshot
-  pricing_json     TEXT NOT NULL,   -- JSON: { tiers: [{ name, price, features[] }] }
   pricing_model TEXT,
   pricing_philosophy TEXT, -- free-form: "I believe in value-based pricing"
   pricing_summary TEXT,
@@ -3412,7 +3332,6 @@
   product_cap_cents REAL,
   product_direction TEXT,                -- Compass analysis
   product_id              TEXT NOT NULL,
-  product_id             TEXT NOT NULL,
   product_id            TEXT NOT NULL,
   product_id            TEXT NOT NULL,
   product_id           TEXT NOT NULL,
@@ -3426,13 +3345,9 @@
   product_id        TEXT NOT NULL REFERENCES products(id),
   product_id       TEXT NOT NULL,
   product_id       TEXT NOT NULL,
-  product_id       TEXT NOT NULL,
-  product_id       TEXT NOT NULL,
-  product_id      TEXT NOT NULL,
   product_id      TEXT NOT NULL,
   product_id     TEXT NOT NULL,
   product_id    TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
   product_id    TEXT PRIMARY KEY,
@@ -3499,9 +3414,6 @@
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL REFERENCES products(id),
   product_id TEXT NOT NULL REFERENCES products(id),
@@ -3709,7 +3621,6 @@
   relevant_agents_json TEXT,  -- JSON array of AgentName strings that should process this
   remediation_type TEXT NOT NULL,
   repository_ref        TEXT NOT NULL,
-  requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   required_sample_size INTEGER,
   requires_unanimous INTEGER DEFAULT 0,
   reserved_cents REAL NOT NULL CHECK (reserved_cents > 0),
@@ -3736,7 +3647,6 @@
   result_json TEXT,
   result_json TEXT,                               -- cached result; populated by storeResult
   result_json TEXT, -- response from integration
-  result_url TEXT,
   resulting_initial_state TEXT CHECK(resulting_initial_state IS NULL OR resulting_initial_state='visible'),
   resulting_responsibility_id TEXT REFERENCES institutional_responsibilities(id),
   results_json TEXT NOT NULL DEFAULT '{}',
@@ -3829,7 +3739,6 @@
   sections_completed TEXT DEFAULT '[]',
   sector TEXT NOT NULL,
   sector TEXT NOT NULL,
-  sector TEXT NOT NULL,
   sector TEXT,
   sector TEXT,
   seeking_help_with TEXT,
@@ -3885,11 +3794,9 @@
   significance TEXT CHECK(significance IN ('low', 'medium', 'high')),
   signup_count INTEGER NOT NULL DEFAULT 0,
   signups_7d INTEGER,
-  sixty_day_outlook TEXT NOT NULL,
   skipped_at DATETIME,
   skipped_reason TEXT,
   slides TEXT NOT NULL,
-  snapshot_date    TEXT NOT NULL,   -- ISO date string (YYYY-MM-DD)
   snapshot_date DATE NOT NULL,
   snapshot_date TEXT NOT NULL,
   snapshot_date TEXT NOT NULL,
@@ -3900,7 +3807,6 @@
   snapshot_date TEXT NOT NULL,        -- YYYY-MM-DD
   snapshot_date TEXT NOT NULL,   -- YYYY-MM-DD, one per product per day
   social_license_risk TEXT DEFAULT 'low',
-  source           TEXT NOT NULL CHECK (source IN ('changelog','product_page','job_posting','review')),
   source          TEXT NOT NULL CHECK (source IN ('agent_session','founder_manual')),
   source TEXT NOT NULL CHECK(source IN (
   source TEXT NOT NULL DEFAULT 'founder',     -- 'founder' | 'llm_distilled' | 'mixed'
@@ -3967,7 +3873,6 @@
   status TEXT DEFAULT 'draft',
   status TEXT DEFAULT 'draft',
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected', 'executed', 'expired')),
-  status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'done', 'failed')),
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'skipped')),
   status TEXT DEFAULT 'pending',
   status TEXT DEFAULT 'proposed',
@@ -4006,7 +3911,6 @@
   strongest_objection TEXT,
   structured_updates TEXT,             -- JSON: [{type, data}] extracted from transcript
   subject             TEXT,
-  subject         TEXT NOT NULL,
   subject TEXT NOT NULL,
   subject TEXT NOT NULL,
   subject TEXT NOT NULL,
@@ -4041,7 +3945,6 @@
   take_rate REAL,
   target TEXT NOT NULL,                     -- 'slack' | 'linear' | 'notion' | 'generic'
   target_acquirer_profile TEXT, -- what kind of acquirer would pay a premium
-  target_customer TEXT NOT NULL,
   target_date TEXT,                          -- 'YYYY-MM-DD' (12-month horizon)
   target_entity_id TEXT NOT NULL REFERENCES graph_entities(id),
   target_id     TEXT,
@@ -4055,13 +3958,11 @@
   team_retention_score REAL NOT NULL, -- key person risk, vesting cliffs
   team_size_bucket    TEXT NOT NULL CHECK (team_size_bucket IN ('1','2-5','6-15','16-50','50+')),
   technical_debt_score INTEGER,        -- Derived from latest audit composite
-  template_context TEXT,
   template_id TEXT REFERENCES action_templates(id),
   template_json TEXT NOT NULL DEFAULT '{}', -- JSON: { subject?, body_template?, channel?, fields? }
   testimonial_permitted BOOLEAN DEFAULT FALSE,
   testimonial_text TEXT,
   their_advantages TEXT DEFAULT '[]',    -- JSON: string[]
-  thirty_day_plan TEXT NOT NULL,
   thread_id TEXT NOT NULL REFERENCES conversation_threads(id) ON DELETE CASCADE,
   threat_level TEXT DEFAULT 'low' CHECK(threat_level IN ('low','medium','high')),
   threshold       REAL,
@@ -4114,7 +4015,6 @@
   tokens_used INTEGER DEFAULT 0,
   tokens_used INTEGER DEFAULT 0,
   tokens_used INTEGER,
-  tone TEXT DEFAULT 'standard',
   too_long INTEGER DEFAULT 0,
   too_short INTEGER DEFAULT 0,
   too_simple INTEGER DEFAULT 0,
@@ -4128,7 +4028,6 @@
   total_decisions_approved INTEGER NOT NULL DEFAULT 0,
   total_decisions_proposed INTEGER NOT NULL DEFAULT 0,
   total_decisions_resolved INTEGER NOT NULL DEFAULT 0,
-  total_events_received  INTEGER NOT NULL DEFAULT 0,
   total_evolution_cycles INTEGER NOT NULL DEFAULT 0,
   total_inbound_events INTEGER DEFAULT 0,
   total_outbound_actions INTEGER DEFAULT 0,
@@ -4142,8 +4041,6 @@
   transcript TEXT,                     -- Raw transcript from STT
   transcript_text TEXT,
   treatment_description TEXT NOT NULL,
-  treatment_mean   REAL,
-  treatment_n      INTEGER,           -- observations in treatment group at checkpoint
   trial_ends_at TEXT
   trigger TEXT NOT NULL,
   trigger_conditions TEXT NOT NULL,     -- JSON: {threshold?, stage?, days?}
@@ -4242,7 +4139,6 @@
   variant TEXT NOT NULL,
   verdict             TEXT NOT NULL CHECK (verdict IN
   verdict TEXT CHECK(verdict IN ('raise_ready', 'almost_ready', 'not_ready')),
-  verdict TEXT NOT NULL CHECK(verdict IN ('strong', 'moderate', 'weak')),
   verdict TEXT,
   verification_evidence_json TEXT,
   verification_status   TEXT CHECK (verification_status IN ('passed','failed','unresolved')),
@@ -4251,7 +4147,6 @@
   version INTEGER NOT NULL DEFAULT 1,
   version INTEGER NOT NULL DEFAULT 1,
   version INTEGER NOT NULL DEFAULT 1,
-  version INTEGER NOT NULL,
   version INTEGER NOT NULL,
   version INTEGER NOT NULL,
   version INTEGER NOT NULL,                   -- monotonic per product
@@ -4313,17 +4208,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
-);
-);
-);
-);
-);
-);
-);
-);
-);
-);
 );
 );
 );
@@ -4822,8 +4706,6 @@ CREATE INDEX idx_cohort_patterns_key ON cohort_patterns(cohort_key, pattern_type
 CREATE INDEX idx_cohorts_channel ON cohorts(acquisition_channel);
 CREATE INDEX idx_cohorts_product ON cohorts(product_id);
 CREATE INDEX idx_cohorts_product_channel ON cohorts(product_id, acquisition_channel);
-CREATE INDEX idx_comp_feature_product
-CREATE INDEX idx_comp_pricing_product
 CREATE INDEX idx_comp_signals_product ON competitive_signals(product_id);
 CREATE INDEX idx_comp_signals_product_date ON competitive_signals(product_id, detected_at);
 CREATE INDEX idx_comp_signals_significance ON competitive_signals(significance);
@@ -4844,7 +4726,6 @@ CREATE INDEX idx_cpi_sector ON cross_product_insights(sector);
 CREATE INDEX idx_cpi_stage ON cross_product_insights(growth_stage);
 CREATE INDEX idx_cpi_type ON cross_product_insights(insight_type);
 CREATE INDEX idx_cross_product_insights_freshness
-CREATE INDEX idx_custom_webhook_sources_product
 CREATE INDEX idx_customer_events ON customer_events(customer_id, created_at);
 CREATE INDEX idx_customer_health_snap ON customer_health_snapshots(customer_id, snapshot_date);
 CREATE INDEX idx_customer_intel_external ON customer_intelligence(product_id, external_customer_id);
@@ -4882,8 +4763,6 @@ CREATE INDEX idx_exec_queue_job ON execution_queue(job_type, status);
 CREATE INDEX idx_exec_queue_product ON execution_queue(product_id);
 CREATE INDEX idx_exec_queue_status ON execution_queue(status, created_at);
 CREATE INDEX idx_exp_events ON experiment_events(experiment_id, variant);
-CREATE INDEX idx_exp_holdouts_product
-CREATE INDEX idx_exp_timeline_experiment
 CREATE INDEX idx_experiment_variants_experiment ON experiment_variants(experiment_id);
 CREATE INDEX idx_experiments_product ON experiments(product_id, status);
 CREATE INDEX idx_failure_log_category ON failure_log(product_id, category);
@@ -4913,7 +4792,6 @@ CREATE INDEX idx_graph_rels_product ON graph_relationships(product_id, relations
 CREATE INDEX idx_graph_rels_source ON graph_relationships(source_entity_id);
 CREATE INDEX idx_graph_rels_target ON graph_relationships(target_entity_id);
 CREATE INDEX idx_hypotheses_product ON hypotheses(product_id, status);
-CREATE INDEX idx_idea_validations_product ON idea_validations(product_id);
 CREATE INDEX idx_idem_expires ON idempotency_keys(expires_at);
 CREATE INDEX idx_ingest_credentials_product ON ingest_credentials(product_id, revoked_at);
 CREATE INDEX idx_initiative_queue_pending ON agent_initiative_queue(product_id, agent_name, status, priority);
@@ -4922,8 +4800,6 @@ CREATE INDEX idx_integration_events_unprocessed ON integration_events(product_id
 CREATE INDEX idx_integration_secret_quarantine_product
 CREATE INDEX idx_integrations_product ON integrations(product_id);
 CREATE INDEX idx_introductions_founders ON introductions(founder_a_id);
-CREATE INDEX idx_investor_annotations_decision ON investor_annotations(decision_id);
-CREATE INDEX idx_investor_annotations_investor ON investor_annotations(investor_id);
 CREATE INDEX idx_investor_updates ON investor_updates(product_id, period);
 CREATE INDEX idx_investors_product ON investors(product_id, status);
 CREATE INDEX idx_investors_token ON investors(access_token);
@@ -4942,7 +4818,6 @@ CREATE INDEX idx_mcp_grants_lookup ON mcp_grants(product_id, server_name, revoke
 CREATE INDEX idx_memory_edges_from ON memory_edges(from_node_id);
 CREATE INDEX idx_memory_edges_to ON memory_edges(to_node_id);
 CREATE INDEX idx_memory_nodes_product ON memory_nodes(product_id, occurred_at DESC);
-CREATE INDEX idx_message_threads_product
 CREATE INDEX idx_metric_snapshots_created ON metric_snapshots(created_at);
 CREATE INDEX idx_metrics_product ON metric_snapshots(product_id);
 CREATE INDEX idx_metrics_product_date ON metric_snapshots(product_id, snapshot_date);
@@ -4971,7 +4846,6 @@ CREATE INDEX idx_patterns_stage ON decision_patterns(product_lifecycle_stage);
 CREATE INDEX idx_patterns_type ON decision_patterns(decision_type);
 CREATE INDEX idx_phase_beta_freeze
 CREATE INDEX idx_phase_beta_product_status
-CREATE INDEX idx_playbook_exports_playbook ON playbook_exports(playbook_id);
 CREATE INDEX idx_playbooks_product ON playbooks(product_id, type, is_current);
 CREATE INDEX idx_portfolio_members ON portfolio_memberships(portfolio_id, status);
 CREATE INDEX idx_portfolio_snapshots ON portfolio_snapshots(portfolio_id, snapshot_date);
@@ -5097,7 +4971,6 @@ CREATE TABLE agent_cost_log (
 CREATE TABLE agent_evolution_versions (
 CREATE TABLE agent_initiative_queue (
 CREATE TABLE agent_instances (
-CREATE TABLE agent_message_threads (
 CREATE TABLE agent_messages (
 CREATE TABLE agent_predictions (
 CREATE TABLE agent_remediations (
@@ -5140,16 +5013,13 @@ CREATE TABLE company_financial_position (
 CREATE TABLE company_observation_channels (
 CREATE TABLE company_okrs (
 CREATE TABLE competitive_signals (
-CREATE TABLE competitor_feature_tracking (
 CREATE TABLE competitor_job_signals (
-CREATE TABLE competitor_pricing_snapshots (
 CREATE TABLE competitor_profiles (
 CREATE TABLE competitors (
 CREATE TABLE conversation_messages (
 CREATE TABLE conversation_threads (
 CREATE TABLE cost_events (
 CREATE TABLE cross_product_insights (
-CREATE TABLE custom_webhook_sources (
 CREATE TABLE customer_events (
 CREATE TABLE customer_health_snapshots (
 CREATE TABLE customer_intelligence (
@@ -5176,8 +5046,6 @@ CREATE TABLE evolved_prompts (
 CREATE TABLE execution_playbooks (
 CREATE TABLE execution_queue (
 CREATE TABLE experiment_events (
-CREATE TABLE experiment_holdouts (
-CREATE TABLE experiment_results_timeline (
 CREATE TABLE experiment_variants (
 CREATE TABLE experiments (
 CREATE TABLE failure_log (
@@ -5208,7 +5076,6 @@ CREATE TABLE golden_suite (
 CREATE TABLE governed_effect_kinds (
 CREATE TABLE graph_entities (
 CREATE TABLE graph_relationships (
-CREATE TABLE idea_validations (
 CREATE TABLE idempotency_keys (
 CREATE TABLE inbound_customer_messages (
 CREATE TABLE ingest_credentials (
@@ -5221,7 +5088,6 @@ CREATE TABLE integration_secret_quarantine (
 CREATE TABLE integration_sync_log (
 CREATE TABLE intelligence_benchmarks (
 CREATE TABLE introductions (
-CREATE TABLE investor_annotations (
 CREATE TABLE investor_updates (
 CREATE TABLE investors (
 CREATE TABLE job_health (
@@ -5254,7 +5120,6 @@ CREATE TABLE outcome_trees (
 CREATE TABLE outreach_suppressions (
 CREATE TABLE pattern_matches (
 CREATE TABLE phase_beta_proposals (
-CREATE TABLE playbook_exports (
 CREATE TABLE playbook_trigger_log (
 CREATE TABLE playbooks (
 CREATE TABLE portfolio_memberships (
@@ -5296,13 +5161,11 @@ CREATE TABLE scenario_models (
 CREATE TABLE schema_migrations (
 CREATE TABLE scp_briefings (
 CREATE TABLE scp_constitutions (
-CREATE TABLE sector_remediation_templates (
 CREATE TABLE sector_scoring_overrides (
 CREATE TABLE signal_events (
 CREATE TABLE signal_history (
 CREATE TABLE slack_integrations (
 CREATE TABLE strategic_decisions_log (
-CREATE TABLE strategic_plans (
 CREATE TABLE strategic_syntheses (
 CREATE TABLE stressor_history (
 CREATE TABLE stripe_events (
@@ -5424,7 +5287,6 @@ CREATE UNIQUE INDEX idx_board_packets_quarter ON board_packets(product_id, quart
 CREATE UNIQUE INDEX idx_calendar_alloc_week ON calendar_allocations(product_id, week_start, category);
 CREATE UNIQUE INDEX idx_candidate_single_promotion
 CREATE UNIQUE INDEX idx_comm_budget_unique
-CREATE UNIQUE INDEX idx_comp_feature_unique
 CREATE UNIQUE INDEX idx_data_class_product_surface
 CREATE UNIQUE INDEX idx_development_change_identity ON development_change_plans(product_id,change_id);
 CREATE UNIQUE INDEX idx_dimension_hints_unique ON dimension_hints(audit_score_id, dimension);
