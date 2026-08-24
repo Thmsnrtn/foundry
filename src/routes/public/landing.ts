@@ -309,7 +309,7 @@ pricingRoutes.get('/pricing', async (c) => {
             <li>Secure investor deal rooms with live Signal share</li>
             <li>Playbook crystallization — 8 operating playbook types</li>
             <li>Temporal Intelligence — Signal replay + prediction accuracy</li>
-            <li>Cohort analysis + competitive intelligence</li>
+            <li>Competitive intelligence — weekly competitor scans</li>
             <li>Founding Story Engine with timestamped case studies</li>
             <li>Unlimited team members</li>
           </ul>

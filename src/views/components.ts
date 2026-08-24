@@ -480,7 +480,15 @@ export function cohortTable(
   byChannel: Record<string, { count: number; avgRetention14: number | null }> | null,
 ): HtmlContent {
   if (cohorts.length === 0) {
-    return emptyState('No cohort data yet. Cohorts are created as users sign up.');
+    // "Cohorts are created as users sign up" was a statement about this
+    // company. The only writer of the `cohorts` table is Foundry's own signup
+    // webhook, writing Foundry's own product — nothing creates a cohort for a
+    // customer company, so this page is empty for reasons that have nothing to
+    // do with the company's users.
+    return emptyState(
+      'No cohort data for this company. Foundry has no path yet for reporting '
+      + 'acquisition cohorts or retention, so nothing has been recorded here — '
+      + 'this is a gap in Foundry, not a finding about your users.');
   }
   return html`
   <div class="card">
@@ -491,7 +499,7 @@ export function cohortTable(
       </div>
       ${historicalAvg ? html`
       <div class="comp-row" style="background:var(--surface-2);">
-        <span><em>Historical Avg</em></span>
+        <span><em>Avg across cohorts</em></span>
         <span>—</span>
         <span>${historicalAvg.retention_day_7 !== null ? historicalAvg.retention_day_7.toFixed(0) + '%' : '—'}</span>
         <span>${historicalAvg.retention_day_14 !== null ? historicalAvg.retention_day_14.toFixed(0) + '%' : '—'}</span>

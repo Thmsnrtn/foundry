@@ -16,7 +16,8 @@ export interface StressorInputs {
   priorMetrics: MetricSnapshot | null;
   mrrDecomposition: MRRDecomposition | null;
   latestCohort: CohortSummary | null;
-  historicalAvgRetention: { day_14: number; day_30: number } | null;
+  /** Per day, because a cohort may have reported one horizon and not another. */
+  historicalAvgRetention: { day_14: number | null; day_30: number | null } | null;
   highSignificanceSignals: CompetitiveSignal[];
   riskState: RiskStateValue;
   growthStage?: GrowthStage;
@@ -81,13 +82,14 @@ export async function identifyStressors(inputs: StressorInputs): Promise<Stresso
   // says null now, and a stressor is a finding, so it needs one.
   if (!stageConfig.suppressedStressors.includes('cohort_retention')
       && inputs.latestCohort?.retention_day_14 != null
-      && inputs.historicalAvgRetention) {
+      && inputs.historicalAvgRetention?.day_14 != null) {
     const latestDay14 = inputs.latestCohort.retention_day_14;
-    const deviation14 = inputs.historicalAvgRetention.day_14 - latestDay14;
+    const avgDay14 = inputs.historicalAvgRetention.day_14;
+    const deviation14 = avgDay14 - latestDay14;
     if (deviation14 >= thresholds.cohortRetentionDeviation) {
       items.push({
         name: 'Severe cohort retention drop',
-        signal: `Latest cohort day-14 retention ${latestDay14.toFixed(1)}% vs average ${inputs.historicalAvgRetention.day_14.toFixed(1)}% (${deviation14.toFixed(0)}pt gap)`,
+        signal: `Latest cohort day-14 retention ${latestDay14.toFixed(1)}% vs average ${avgDay14.toFixed(1)}% (${deviation14.toFixed(0)}pt gap)`,
         timeframe_days: 30,
         neutralizing_action: 'Investigate acquisition channel quality shift. Check onboarding completion rates for latest cohort.',
         severity: 'critical',

@@ -147,13 +147,21 @@ export class HarborAgent extends BaseAgent {
     const cohortRows = cohortsResult.rows as Record<string, unknown>[];
     let cohortTrend = 'No cohort data';
     if (cohortRows.length > 0) {
+      // `|| 0` STATED A ZERO AS THIS COMPANY'S DATA. Nothing in the codebase
+      // writes `activated_count` or `retained_day_30`; before migration 212
+      // they carried a `DEFAULT 0`, so every cohort was described to the model
+      // as "activation=0.0%, day30_retention=0.0%" — a measurement of total
+      // failure, for a company nobody had measured. They are NULL now, and an
+      // unreported figure says so.
+      const pct = (value: unknown, total: number): string => {
+        if (value == null || total <= 0) return 'not reported';
+        return `${((Number(value) / total) * 100).toFixed(1)}%`;
+      };
       cohortTrend = cohortRows.map(c => {
-        const total = Number(c.founder_count) || 1;
-        const activated = Number(c.activated_count) || 0;
-        const retDay30 = Number(c.retained_day_30) || 0;
-        const actPct = ((activated / total) * 100).toFixed(1);
-        const retPct = ((retDay30 / total) * 100).toFixed(1);
-        return `${c.acquisition_period as string} (${c.acquisition_channel as string ?? 'unknown'}): activation=${actPct}%, day30_retention=${retPct}%`;
+        const total = Number(c.founder_count) || 0;
+        return `${c.acquisition_period as string} (${c.acquisition_channel as string ?? 'unknown'}): `
+          + `${total} in cohort, activation=${pct(c.activated_count, total)}, `
+          + `day30_retention=${pct(c.retained_day_30, total)}`;
       }).join(' | ');
     }
 

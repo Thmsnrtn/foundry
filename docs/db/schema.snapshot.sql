@@ -845,6 +845,7 @@
   -- A tool may say what it observed. It may not say who said it.
   -- A verified outcome requires BOTH independent verification and proof that
   -- APNs (iOS)
+  -- Absent means absent, on every one of these.
   -- Access control
   -- Accuracy
   -- Accuracy scoring
@@ -870,6 +871,7 @@
   -- Control
   -- Core growth and retention metrics (nullable — contribute what you have)
   -- Cost tracking
+  -- Countable: the signup webhook increments this.
   -- Counters maintained on conversion event:
   -- Cross-agent synthesis notes
   -- Decision-making style (learned from patterns, but founder can override)
@@ -1592,7 +1594,7 @@
   actions_taken TEXT,          -- JSON: [{type, description, entity_id, entity_type}]
   activated_at TEXT
   activated_at TEXT,
-  activated_count INTEGER DEFAULT 0,
+  activated_count INTEGER,
   activation_cadence_hours INTEGER NOT NULL DEFAULT 24,
   activation_complete INTEGER DEFAULT 0,  -- BOOLEAN
   activation_outcome TEXT, -- JSON
@@ -1827,7 +1829,7 @@
   churn_risk REAL,
   churn_risk REAL,
   churn_score INTEGER,                 -- Is churn acceptable for stage?
-  churned_count INTEGER DEFAULT 0,
+  churned_count INTEGER,
   churned_customers INTEGER,
   churned_mrr_cents INTEGER,
   claims_substantiation_score REAL,
@@ -1959,7 +1961,7 @@
   control_n        INTEGER,           -- observations in control group at checkpoint
   convergence_key TEXT NOT NULL,
   conversation_ref    TEXT,
-  converted_to_paid INTEGER DEFAULT 0,
+  converted_to_paid INTEGER,
   coo_response TEXT,
   cooldown_hours INTEGER DEFAULT 72,    -- Don't re-trigger for same customer within N hours
   core_principles TEXT,        -- The heuristics derived from decision patterns
@@ -3100,7 +3102,7 @@
   mrr_cents INTEGER DEFAULT 0,
   mrr_cents INTEGER DEFAULT 0,
   mrr_cents INTEGER,
-  mrr_contribution_cents INTEGER DEFAULT 0,
+  mrr_contribution_cents INTEGER,
   mrr_health_ratio REAL,
   mrr_narrative TEXT,                  -- Revenue story
   mrr_trajectory_score INTEGER,       -- Is revenue trending right?
@@ -3742,11 +3744,11 @@
   results_json TEXT NOT NULL DEFAULT '{}',
   results_json TEXT,
   results_json TEXT,                     -- JSON: {control_mean, treatment_mean, p_value, ci_lower, ci_upper, effect_size, significant}
-  retained_day_14 INTEGER DEFAULT 0,
-  retained_day_30 INTEGER DEFAULT 0,
-  retained_day_60 INTEGER DEFAULT 0,
-  retained_day_7 INTEGER DEFAULT 0,
-  retained_day_90 INTEGER DEFAULT 0,
+  retained_day_14 INTEGER,
+  retained_day_30 INTEGER,
+  retained_day_60 INTEGER,
+  retained_day_7 INTEGER,
+  retained_day_90 INTEGER,
   retention_hypothesis TEXT,
   retrospective_due_at    TEXT,         -- typically made_at + 90 days
   retrospective_notes     TEXT,
@@ -5067,6 +5069,7 @@ CREATE INDEX idx_weekly_plans ON weekly_plans(product_id, week_of DESC);
 CREATE INDEX idx_wiki_entries_product_section
 CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
 CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
+CREATE TABLE IF NOT EXISTS "cohorts" (
 CREATE TABLE IF NOT EXISTS "deal_rooms" (
 CREATE TABLE IF NOT EXISTS "decision_votes" (
 CREATE TABLE IF NOT EXISTS "decisions" (
@@ -5130,7 +5133,6 @@ CREATE TABLE cofounder_profiles (
 CREATE TABLE cohort_groups (
 CREATE TABLE cohort_memberships (
 CREATE TABLE cohort_patterns (
-CREATE TABLE cohorts (
 CREATE TABLE communication_budgets (
 CREATE TABLE company_financial_position (
 CREATE TABLE company_observation_channels (

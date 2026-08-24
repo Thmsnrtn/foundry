@@ -96,6 +96,13 @@ export class BeaconAgent extends BaseAgent {
 
     // ── 5. Query cohort acquisition channel performance ───────────────────────
     const cohortChannelResult = await db(
+      // RANKED BY A NUMBER NOBODY WRITES. `activated_count` has no writer in
+      // this codebase and carried a `DEFAULT 0` until migration 212, so every
+      // channel's activation rate was 0 and `ORDER BY avg_activation DESC`
+      // returned eight channels in storage order under the heading of a
+      // ranking. It is NULL now — SQL sorts NULLs first ascending, so the
+      // order names the channels that HAVE a rate before those that do not,
+      // and the size of the channel breaks the tie between the unmeasured.
       `SELECT acquisition_channel,
               COUNT(*) as cohort_count,
               SUM(founder_count) as total_users,
@@ -103,7 +110,7 @@ export class BeaconAgent extends BaseAgent {
        FROM cohorts
        WHERE product_id = ?
        GROUP BY acquisition_channel
-       ORDER BY avg_activation DESC
+       ORDER BY avg_activation IS NULL, avg_activation DESC, total_users DESC
        LIMIT 8`,
       [productId]
     );

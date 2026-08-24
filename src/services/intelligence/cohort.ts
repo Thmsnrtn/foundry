@@ -6,9 +6,14 @@ import { query, getCohorts } from '../../db/client.js';
 import type { CohortSummary } from '../../types/index.js';
 import type { CohortRow } from '../../types/database.js';
 
-/** Retention as a percentage, or null when the cohort has nobody in it. */
-function retentionPct(retained: number, founders: number): number | null {
-  return founders > 0 ? (retained / founders) * 100 : null;
+/** Retention as a percentage; null when the cohort has nobody in it OR when
+ *  nobody has recorded how many were retained. Migration 212 made the second
+ *  case expressible: the column used to be `DEFAULT 0`, so "we never measured
+ *  this" and "not one of them came back" were the same value, and nothing in
+ *  this codebase writes it. */
+function retentionPct(retained: number | null | undefined, founders: number): number | null {
+  if (retained == null || founders <= 0) return null;
+  return (retained / founders) * 100;
 }
 
 export async function getLatestCohortSummary(productId: string): Promise<CohortSummary | null> {
@@ -41,29 +46,54 @@ export async function getLatestCohortSummary(productId: string): Promise<CohortS
     channel: row.acquisition_channel,
     retention_day_14: day14,
     retention_day_30: day30,
-    vs_historical_average_14: avg === null || day14 === null ? null : day14 - avg.day_14,
-    vs_historical_average_30: avg === null || day30 === null ? null : day30 - avg.day_30,
+    // Each comparison needs BOTH halves: this cohort's figure and an average
+    // for the same day. An average that exists for day 7 says nothing about
+    // day 30.
+    vs_historical_average_14: day14 === null || avg?.day_14 == null ? null : day14 - avg.day_14,
+    vs_historical_average_30: day30 === null || avg?.day_30 == null ? null : day30 - avg.day_30,
   };
 }
 
-export async function getHistoricalAverage(productId: string): Promise<{ day_7: number; day_14: number; day_30: number } | null> {
+export async function getHistoricalAverage(productId: string): Promise<
+  { day_7: number | null; day_14: number | null; day_30: number | null } | null
+> {
   const result = await getCohorts(productId);
   if (result.rows.length < 2) return null; // Need at least 2 cohorts for meaningful comparison
 
+  // THE MEAN ACROSS COHORTS THAT REPORTED A NUMBER, per day, counted
+  // separately — a cohort that recorded day-7 but not day-30 belongs in one
+  // average and not the other. It used to add an unmeasured column's `DEFAULT
+  // 0` into every total and divide by every cohort, so one unreported cohort
+  // pulled the "historical average" towards zero and the page compared the
+  // newest cohort against it.
+  //
+  // It is the mean of the cohorts' RATES, not the retention of the historical
+  // population — a small cohort counts as much as a large one. That is what the
+  // page's "Historical Avg" row has always shown; it is named here rather than
+  // quietly changed, because switching to a size-weighted mean would move a
+  // number a founder may have been reading for months.
   const rows = result.rows as unknown as CohortRow[];
-  let total7 = 0, total14 = 0, total30 = 0, count = 0;
+  const sums = { day_7: 0, day_14: 0, day_30: 0 };
+  const counts = { day_7: 0, day_14: 0, day_30: 0 };
 
   for (const row of rows) {
-    if (row.founder_count > 0) {
-      total7 += (row.retained_day_7 / row.founder_count) * 100;
-      total14 += (row.retained_day_14 / row.founder_count) * 100;
-      total30 += (row.retained_day_30 / row.founder_count) * 100;
-      count++;
+    if (row.founder_count <= 0) continue;
+    for (const [key, retained] of [
+      ['day_7', row.retained_day_7], ['day_14', row.retained_day_14],
+      ['day_30', row.retained_day_30],
+    ] as const) {
+      if (retained == null) continue;
+      sums[key] += (retained / row.founder_count) * 100;
+      counts[key] += 1;
     }
   }
 
-  if (count === 0) return null;
-  return { day_7: total7 / count, day_14: total14 / count, day_30: total30 / count };
+  if (counts.day_7 + counts.day_14 + counts.day_30 === 0) return null;
+  return {
+    day_7: counts.day_7 > 0 ? sums.day_7 / counts.day_7 : null,
+    day_14: counts.day_14 > 0 ? sums.day_14 / counts.day_14 : null,
+    day_30: counts.day_30 > 0 ? sums.day_30 / counts.day_30 : null,
+  };
 }
 
 /**
@@ -80,10 +110,16 @@ export async function getCohortsByChannel(productId: string): Promise<Record<str
   for (const row of rows) {
     const ch = row.acquisition_channel ?? 'unknown';
     if (!channels[ch]) channels[ch] = { totalRetention: 0, count: 0, founderCount: 0 };
+    // The channel's SIZE is countable whether or not anyone measured its
+    // retention; the RATE needs a reported figure. Counting a NULL as a zero
+    // rate is the defect this function's own header describes, one column
+    // further in: `retained_day_14` is unwritten by anything in this codebase.
     if (row.founder_count > 0) {
-      channels[ch].totalRetention += (row.retained_day_14 / row.founder_count) * 100;
-      channels[ch].count++;
       channels[ch].founderCount += row.founder_count;
+      if (row.retained_day_14 != null) {
+        channels[ch].totalRetention += (row.retained_day_14 / row.founder_count) * 100;
+        channels[ch].count++;
+      }
     }
   }
 
