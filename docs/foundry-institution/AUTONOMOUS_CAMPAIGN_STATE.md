@@ -110,192 +110,24 @@ inherited list because it was inherited.
 
 None in flight. Everything below is unstarted or blocked.
 
-## What the last cycle established
+## What this cycle established
 
-**The rest of the 32-agent sweep, read in full and worked to the end.** The
-previous cycle acted on the findings it had read; this one read the remaining
-report and closed every one. Twelve batches, each mutation-tested, each with the
-defect replanted to prove the test would have caught it.
-
-**THE SHAPES, in the order they cost the most:**
-
-**A credential that authenticated nothing, handed to a customer.** RT02-10 asked
-for the `pfk_` portfolio key to be hashed like the main API keys. Reading the
-code for that fix found what the ticket had not: `authenticatePortfolioKey` HAD
-NO CALLER — imported by the routes file and never invoked. So the key was
-minted, stored in the clear, returned to the portfolio owner, and opened
-nothing. Hashing it would have shrunk the blast radius of a leak and left the
-worse half standing: AN API KEY HANDED TO A CUSTOMER SAYS A DOOR EXISTS. The
-mint is gone, the reader is gone, and migration 200 nulls what was already
-written — the half a code change cannot do.
-
-**Two identifiers, one checked, and the unchecked one deciding everything.**
-`POST /api/products/:id/integrations/:integrationId/sync` verified ownership of
-`:id` and passed `:integrationId` to `runSync`, which resolved the integration
-by id alone. Any founder could name another company's integration and make
-Foundry call a provider with that company's credentials, write into that
-company's metrics, and read the record count and error text out of the response.
-The ownership rule lived in the route and the row it governed was fetched two
-files away. A RULE THAT DECIDES AUTHORITY MUST HAVE EXACTLY ONE HOME: the scope
-now travels with the call, and there is no default.
-
-**A judge that could not answer, recorded as a pass.** The voice gate met an
-unreachable judge with `score: threshold, in_voice: true` and four fabricated
-dimension matches — so an outage SHIPPED the customer-facing artifact the judge
-exists to hold back, while the neighbouring failure (an unparseable answer)
-fabricated 50 and blocked. Two failures of one kind treated oppositely, and the
-permissive one is the one that reaches a customer. Now: null score, null
-breakdown, a distinct `unscored` verdict, and auto-execution withdrawn because
-the permission was conditioned on a check that did not happen.
-
-**An approval stamped an hour before it could have happened.** `proposeAction`
-wrote `approved_by = 'auto'` and `approved_at` ONE HOUR IN THE FUTURE the moment
-a level-1 action was proposed, left the status pending, and returned — with no
-scheduler, no notice, and a dashboard badge promising a "1-hour window". Removed;
-migration 201 refuses any `approved_at` more than five minutes ahead of the
-clock; and whether Foundry may send because nobody answered is now
-`OWNER_DECISIONS_PENDING` §14 rather than a timestamp written in advance.
-
-**A budget that metered the wrong person and never gave anything back.** The cap
-of three a week exists so agents cannot nag a company's CUSTOMER; every
-founder-bound send passes the founder's own address, so the daily briefing, the
-digest, the welcome sequence and the billing notice drew on one budget of three
-— and the first thing refused after Wednesday was whatever came next, including
-"your card was declined". The count is also taken BEFORE the send and was never
-released, so three provider outages made a customer uncontactable that week
-having received nothing. Two department sweeps spent it on drafts, keyed on the
-CRM id while the gateway keyed on the address — two counts of messages to one
-person, neither of them the number they received.
-
-**Every component of one assessment failed towards a claim.**
-`assessMigrationReadiness`: revenue read from two MOVEMENT columns instead of the
-level, churn compared a 0–1 fraction against 5 (i.e. "under 500%"), NPS was
-`nps_score ?? (0 >= 50)` because `>=` binds tighter than `??` — so an NPS of -40
-read as "High NPS confirms value delivery" — and users were `?? 0`. Four
-defects, four different mechanisms, one direction.
-
-**A documented endpoint that had never once succeeded.** `GET /v1/customers`
-selected three columns the table does not have, threw on every request, and
-returned a fixed sentence from a catch that discarded the error. The POST
-handler seventy lines below names the correct mapping in a comment: the write
-was fixed and the read was left. Its sibling `/v1/metrics/health` computed
-`is_stale` from row EXISTENCE while a daily job inserts an empty placeholder for
-every company, so nothing was ever stale; and `/v1/agents/:name/briefings` had no
-agent predicate at all, answering for names that are not agents.
-
-**A cohort that did not exist, ranked against invented bands.** The percentile
-lookup keyed `lifecycle_state` as 'prompt_1'..'prompt_4' while the only writer
-stores 'pre_revenue'|'early'|'growth'|'scale'. The two vocabularies never
-intersected, the lookup missed for every company on every call, and the fallback
-— bands in percentage points, ranked against 0–1 fractions — was therefore the
-path EVERY founder took. It also walked around the owner's five-contributor
-floor, because an invented distribution has no contributors.
-
-**A runway that was algebraically the constant 8.** `min(24, (mrr*2)/(mrr/4))`:
-the burn it divides by is the MRR it divides. One failure pattern asks for
-runway under 6 months and could never match; another asks for under 9 and always
-did.
-
-**Numbers that could not move.** Foundry's own growth rate compared today's
-payers against today's payers-who-signed-up-earlier — a strict subset, so it
-could not be negative, and the twelve-month forecast compounded it. Compliance
-debt was always 0 because nothing writes the requirements it scores, and 0 there
-is the claim "nothing required is unmet". The activation stressor measured a
-fraction against a threshold in points and could never fire. The dashboard's
-rejection-streak card called a lifetime counter "this week".
-
-**A control the product calls the person's own, which the person could not
-exercise.** `preferences.max_channel` — the interruption ceiling three modules
-describe as the thing that "always wins" — had no writer anywhere, so every
-founder sat permanently at push. It has a setter and a setting now.
-
-**A gate that skipped the shape the defect was in.** `check-select-columns`
-skipped every aliased query along with the JOINs, and the broken endpoint above
-was `FROM customer_intelligence ci`. One table is one table, alias or not; it
-reads them now, and replanting the original defect fails the build.
-
-**And the red-team ledger, worked to the end of what is engineering.** Four
-more tickets closed, and in three of them the ticket was not the worst of it:
-
-- **RT02-14 asked for nonces.** The enforced `script-src` named neither origin
-  the product's own pages load Clerk from — `cdn.jsdelivr.net` on sign-up,
-  sign-in and sign-out, `unpkg.com` on the landing page — so an enforcing
-  browser blocks authentication entirely. And a SECOND policy sat in
-  `middleware/security.ts` that nothing imported, allowing unpkg but not
-  jsdelivr and carrying two directives the live one lacked: two answers to one
-  question, and the dead one looked stricter. A test now reads the origins the
-  pages actually load from and requires the policy to name each.
-- **RT02-15 asked for opt-out filtering on reads.** The consent that gates the
-  WRITE cannot be granted at all — `cross_company_patterns` is in the union and
-  not in migration 041's CHECK — so nothing has written the table since. What
-  the readers could still serve was pre-gate and seed rows, and the one reader
-  that counted ROWS rather than companies had no production caller and one test
-  asserting the defect as its expected behaviour. Deleted.
-- **RT02-16 asked for LIKE escaping** on one query; the same shape was in three
-  more, and on the `resolve_stressor` path it reached a WRITE — a `%` matched
-  the company's first active stressor and marked it resolved.
-- **RT02-13** was the error rendering on the auth pages, and is now nodes and
-  `textContent`.
-
-- **RT02-07 and RT02-08** wanted prompt-injection defence and said no
-  sanitisation layer existed. It had existed since Wave 1 and was used at three
-  boundaries; the transcript and competitor paths had never been wired to it.
-  They are wrapped in named data blocks now, with the instruction in the SYSTEM
-  prompt — and the words inside are NOT rewritten, because the denylist that is
-  right for a stranger's support message mangles a founder's own dictation.
-
-**One ticket is left, and it is not a fix:** the RT02-09 binding half needs a
-Stripe Connect account id on the product row — a schema and connect-flow change.
-
-**And the lesson the ledger itself teaches:** in three of these the ticket was
-not the worst of it, and implementing the remediation as proposed would have
-made a false claim more robust. Read the code the ticket points at.
-
-**And the writer four repairs had been working around.** A job inserted an
-EMPTY `metric_snapshots` row for every active company every day, so that "daily
-snapshots exist". The decomposition that returned a confident zero, the
-staleness flag computed from a row's existence, the readiness assessment that
-found no revenue, the mobile dashboard reporting a month in which nothing moved
-— four fixes in this campaign, each correct, each a workaround for this one
-writer. Two ingest paths depended on the row and reported success when their
-bare UPDATE matched nothing; they upsert now, and the job is deleted. WHEN TWO
-READERS NEED THE SAME WORKAROUND, THE DEFECT IS UPSTREAM OF BOTH.
-
-**And the gate that could not see four columns until an unrelated writer was
-deleted.** Removing the daily placeholder made the write-only-column gate report
-four `customer_health_snapshots` columns it had never mentioned. They had always
-been write-only: the gate blanked write contexts by REMOVING their text, and
-`INSERT INTO metric_snapshots (id, product_id, snapshot_date)` is a leading
-substring of that table's column list, so blanking the short one left the long
-one unable to match itself. **When a gate's verdict changes after a change that
-could not have affected it, the gate is the finding.** It records ranges now
-instead of removing text. The four columns got a reader in the same batch: the
-falling-customers table names WHICH of usage, support, payment or engagement
-dropped, which is the only part of that answer that says what to do.
-
-**Two tables removed, and the trap that made one of them possible.**
-`leading_indicators` held the columns that would have made the failure-pattern
-library evidential — `confidence`, `sample_size`, `lead_time_days` — and nothing
-ever wrote one, because Foundry has never had a way to establish those numbers.
-The library itself was stating four frequencies as though something had counted
-them ("typically see churn double within 60 days"), on a card headed by the
-founder's own match score; the directions are kept, the numbers are gone, and
-the card now says which half is editorial. `outbound_webhooks` was a third table
-for a concept the product implements twice — and reading it surfaced that TEN
-`CREATE TABLE IF NOT EXISTS` statements across seven migrations never ran.
-Three of them have cost this campaign real time. Each now says so in the file.
-
-**A capped page with no order, six times, and one of them was Foundry grading
-itself.** `scenario.ts` writes one forecast PER OPTION — a decision with three
-options has three, one of which may be the ghost — and the accuracy scorer took
-`LIMIT 1` with no ORDER BY, so an outcome that followed the founder raising
-prices could be scored against the prediction for leaving them alone, then
-recorded that option as the one chosen and stamped the untaken forecast with the
-result. `decisions.chosen_option` holds the answer and the calling job already
-selected it, one call short of the code that needed it. The other five: what
-needs you next, the red team's five risks, the briefing's three stressors, an
-agent's five OKRs, the verifier's hundred. **A biased sample nobody knows is a
-sample is worse than a short list.**
+**The cycle before this one closed the 32-agent sweep**, twelve batches, each
+mutation-tested with the defect replanted. Its narrative is in
+`history/SEAM_CAMPAIGN_HISTORY.md` under "The rest of the 32-agent sweep"; the
+durable rules are in `IMPLEMENTATION_STATE.md`. The shapes, in one line each: a
+credential that authenticated nothing handed to a customer; two identifiers with
+only one checked; a judge that could not answer recorded as a pass; an approval
+stamped an hour before it could have happened; a budget that metered the wrong
+person; an assessment whose every component failed towards a claim; a documented
+endpoint that had never once succeeded; a cohort that did not exist ranked
+against invented bands; a runway that was algebraically the constant 8; five
+numbers that could not move; a control the product calls the founder's own that
+the founder could not exercise; a gate that skipped the shape the defect was in;
+four red-team tickets where the ticket was not the worst of it; the writer four
+repairs had been working around; a gate that could not see four columns until an
+unrelated writer was deleted; two tables removed and the `CREATE TABLE IF NOT
+EXISTS` trap that made one possible; and a capped page with no order, six times.
 
 **THE EXIT SURFACE, READ END TO END — the pages a founder opens when deciding
 whether to sell.** Five findings, all in the same direction.
@@ -500,6 +332,18 @@ is the most recent 24, and the span in days travels with the estimate. The MCP
 description also promised abstention "under 4 months of history" when the guard
 is four usable snapshots.
 
+**THE GROWTH STAGE WAS DECIDED BY THE MOVEMENT, NOT THE LEVEL.** The fourth
+appearance of this shape in the campaign, and the most consequential:
+`detectGrowthStage` added the four MRR MOVEMENT columns and called the result
+the company's MRR, so a company at $60,000/month with a flat month was
+classified from about $0 — `pre_launch` or `early_traction`, which suppresses
+the MRR and churn stressors, relaxes every remaining threshold by 1.5–2×, and
+tells the digest to say "no MRR analysis until you have customers". The "mature"
+test carried two more: `rows.length >= 12` was called twelve months (a fortnight
+of daily snapshots satisfied it, and mature permanently suppresses the
+slow-growth and flat-MRR stressors), and the rates it compared were
+month-over-month growth of one period's ACQUISITION rather than of revenue.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
@@ -507,24 +351,20 @@ level, an assertion pinning a growth rate that could not decline. The repair is
 never to relax the assertion: it is to make the fixture STATE what it was
 assuming, and to say so in the comment.
 
-## The cycle before this one
-
-**A fan-out sweep across the service areas this campaign had not read returned
-twenty-two confirmed findings, and every one of them is closed.** The shapes: the
-LEVEL and the MOVEMENT confused in both runway forecasters, so a company
-reporting through the documented door was modelled at zero; one absence
-substituted in opposite directions inside a single function, so the same NULL was
-flawless retention and total failure in adjacent lines; a 0–1 churn fraction
-compared against thresholds in percentage points, so every measured rate cleared
-the best band; and a composite that rested on components it had not measured.
-The durable rules those produced live in `IMPLEMENTATION_STATE.md`.
-
 ## Earlier cycles
 
-Moved to `history/SEAM_CAMPAIGN_HISTORY.md`, narrative only — the fixes live in
-the migrations and tests that implement them, and the durable rules in
+Narrative in `history/SEAM_CAMPAIGN_HISTORY.md` — the fixes live in the
+migrations and tests that implement them, and the durable rules in
 `IMPLEMENTATION_STATE.md`:
 
+- **"The rest of the 32-agent sweep"** — twelve batches; summarised at the top
+  of this cycle's section because several of its shapes recurred here.
+- **A fan-out sweep across the unread service areas** — twenty-two findings, all
+  closed: the LEVEL and the MOVEMENT confused in both runway forecasters, so a
+  company reporting through the documented door was modelled at zero; one
+  absence substituted in opposite directions inside a single function; a 0–1
+  churn fraction compared against thresholds in percentage points; and a
+  composite that rested on components it had not measured.
 - **"Twelve tables that nothing read"** — followed one at a time; eight of the
   twelve led somewhere worse than the table itself.
 - **"One page, read line by line"** — eleven consecutive findings on
