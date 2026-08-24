@@ -3709,7 +3709,6 @@
   repository_ref        TEXT NOT NULL,
   requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   required_sample_size INTEGER,
-  requires_response INTEGER DEFAULT 0,  -- BOOLEAN
   requires_unanimous INTEGER DEFAULT 0,
   reserved_cents REAL NOT NULL CHECK (reserved_cents > 0),
   resolution_notes TEXT,
@@ -3722,11 +3721,8 @@
   resolved_at TEXT,
   resolved_at TEXT, -- null if still active
   resolved_outcome    TEXT CHECK (resolved_outcome IN ('vindicated', 'overruled_held')),
-  responded_at DATETIME,
   responded_at TEXT DEFAULT (datetime('now')),
   response TEXT NOT NULL,
-  response_deadline DATETIME,
-  response_id TEXT,                     -- ID of response message
   responsibility_id     TEXT NOT NULL REFERENCES institutional_responsibilities(id),
   responsibility_id   TEXT NOT NULL REFERENCES institutional_responsibilities(id),
   responsibility_id TEXT NOT NULL REFERENCES institutional_responsibilities(id),

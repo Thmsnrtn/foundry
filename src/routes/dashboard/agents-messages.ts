@@ -101,7 +101,7 @@ agentMessageRoutes.get('/agents/messages', async (c) => {
   // Auto-mark as read (silent, non-blocking)
   const unreadIds = allMessages.filter(m => !m.read_at).map(m => m.id);
   if (unreadIds.length > 0) {
-    markAsRead(unreadIds).catch(() => {});
+    markAsRead(productId, unreadIds).catch(() => {});
   }
 
   const criticalMessages = allMessages.filter(m => m.priority === 'critical');
@@ -125,10 +125,6 @@ agentMessageRoutes.get('/agents/messages', async (c) => {
         <div style="background:#fff;border:1px solid ${summary.critical_count > 0 ? '#fca5a5' : '#e5e7eb'};border-radius:8px;padding:14px">
           <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase">Critical</div>
           <div style="font-size:24px;font-weight:700;color:${summary.critical_count > 0 ? '#ef4444' : '#111'};margin-top:2px">${summary.critical_count}</div>
-        </div>
-        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:14px">
-          <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase">Unanswered</div>
-          <div style="font-size:24px;font-weight:700;color:#111;margin-top:2px">${summary.unresponded_count}</div>
         </div>
         <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:14px">
           <div style="font-size:11px;color:#6b7280;font-weight:600;text-transform:uppercase">Most Active</div>
@@ -178,8 +174,7 @@ agentMessageRoutes.get('/agents/messages', async (c) => {
               </div>
               <div style="font-weight:600;color:#374151;font-size:13px;margin-top:4px">${m.subject}</div>
               <div style="color:#6b7280;font-size:12px;margin-top:3px;line-height:1.5">${m.body.slice(0, 240)}${m.body.length > 240 ? '…' : ''}</div>
-              ${m.requires_response && !m.responded_at ? html`
-              <div style="margin-top:6px;font-size:11px;color:#f59e0b;font-weight:600">⏳ Response requested</div>` : ''}
+
             </div>
           </div>`)}
         `}
