@@ -87,9 +87,11 @@ describe('the revenue plateau prediction', () => {
   });
 
   it('does not call an accelerating company a plateau', async () => {
-    // 1% → 2% → 4% → 8%: growth is speeding up. The deceleration test used to
-    // run the wrong way down a newest-first array and called this a plateau.
-    const mrrs = [1_000_000, 1_010_000, 1_030_200, 1_071_408, 1_157_121, 1_260_000];
+    // Accelerating, but slowly: 0.4% → 0.8% → 1.6% → 2.4% → 3.2% a month. It
+    // stays under the 5% ceiling the other half of the condition applies, so
+    // the DIRECTION is what decides — and the test used to run the wrong way
+    // down a newest-first array, which made this a plateau warning.
+    const mrrs = [1_000_000, 1_004_000, 1_012_032, 1_028_224, 1_052_901, 1_086_594];
     for (let i = 0; i < mrrs.length; i++) await snap(180 - i * 30, { mrr_cents: mrrs[i]! });
 
     const predictions = await generatePredictions(P, OWNER);
