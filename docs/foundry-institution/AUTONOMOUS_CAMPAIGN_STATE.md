@@ -60,10 +60,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `aba8d56`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `2db2c9f`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 242 files, highest **206**. Ordering gated. Snapshot current.
-- **Validation:** `npm run check` green end to end — **397 files / 3,443 tests**,
+- **Migrations:** 245 files, highest **209**. Ordering gated. Snapshot current.
+- **Validation:** `npm run check` green end to end — **402 files / 3,496 tests**,
   read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
   bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
@@ -99,7 +99,7 @@ inherited list because it was inherited.
   write-only columns **69** · unscoped product-shaped routes **2** ·
   id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** · INSERT value-list mismatches **0** ·
-  tables written and never read **4** (218 written tables checked) ·
+  tables written and never read **4** (215 written tables checked) ·
   **raw control bytes 0** (new gate) ·
   **tables no code can reach 11** ·
   **permitted `'connected'` literals 1** (new gate: the integration status
@@ -295,6 +295,62 @@ selected it, one call short of the code that needed it. The other five: what
 needs you next, the red team's five risks, the briefing's three stressors, an
 agent's five OKRs, the verifier's hundred. **A biased sample nobody knows is a
 sample is worse than a short list.**
+
+**THE EXIT SURFACE, READ END TO END — the pages a founder opens when deciding
+whether to sell.** Five findings, all in the same direction.
+
+- **A quarter of the M&A readiness score was a constant.** Customer
+  concentration carries weight 0.25 — joint-heaviest — and both its inputs were
+  dead: `topCustomerMrrPct` was a hardcoded `null` under a comment saying
+  per-customer MRR is not in the schema (it is, in both stores), and
+  `customerCount` read `metric_snapshots.customer_count`, a column that has
+  never existed. Count zero took the "no data" branch, 5.0, for every company —
+  and its `< 7` test then printed "Customer concentration risk" as a finding
+  about the COMPANY when it was a finding about the DATA. Now measured, NULL
+  when no paying customer is known, dropped from the composite with the weights
+  renormalised, and migration 207 repairs every stored row on the same rule.
+- **A liquidation preference is a floor, and the waterfall treated it as a
+  ceiling.** A non-participating investor takes the greater of the preference
+  and their shares converted; `computeWaterfall` paid the preference and
+  stopped. The form's own placeholder cap table is the worked example: at the
+  $250M exit the page models, it told the founder they would take $249.50M —
+  99.8% — where the investor converts and takes $35.71M. **The overstatement
+  grew with the size of the exit.** Conversions interact, so they now run to a
+  fixed point, and the page names who converts.
+- **A column that said dilution and meant proceeds, on rows that held neither.**
+  `total_dilution_pct` stored the investors' share of the exit and was rendered
+  under "Dilution" — different numbers whenever a preference bites, which is the
+  page's whole subject. And its writer fills it only when given an exit
+  valuation, which its one caller never passed: NULL in every row ever written,
+  rendered as an em dash, which reads as zero.
+- **A "market standard" nobody measured, for a round nobody listed.** Five
+  numbers per round, written into the source, cited to the founder and to the
+  model as market data — with `?? MARKET_BENCHMARKS['seed']` behind them, so an
+  unlisted round got seed's numbers under its own name from an unvalidated form
+  field. `compareToMarketTerms`, which built the same sentences, was imported by
+  the page and never called; deleted rather than corrected.
+- **A rationale picked alphabetically, beside the date of a different signal.**
+  `MAX(strategic_rationale)` next to `MAX(detected_at)` under a heading reading
+  "Latest". And the acquisition-thesis prompt described the company with four
+  labels, three wrong: the model was told the company is called
+  `V1StGXR8_Z5jdHi6B-myT`.
+
+**A whole transparency surface reading a table nothing has ever written.**
+`agent_run_details` had three writers and no caller for any of them, so every
+cost table, run list and run detail on the Agent Transparency pages was empty
+for every company, forever — under a header saying the page shows exactly what
+each agent sees, thinks and costs per run, and an empty state reading "No run
+data yet. Agents will appear here once they complete their first run." The
+agents run daily; the runs are in `agent_sessions`. Migration 209 drops the
+table, the reads moved, and the four things only the empty table could have
+shown — prompt previews, a context summary, an input/output token split, a
+per-run health score — are gone from the page rather than reimplemented.
+**Two gates said nothing about it and both were satisfied honestly:** the
+writer-less-tables gate sees an INSERT in source and cannot tell that nothing
+CALLS it, and the tenant-scope gate matches route params named `:id` or
+`:productId` and passes on the mention of an idiom rather than its use — which
+is why `getRunDetails(runId)`, an unscoped cross-tenant read, sat inside a
+handler that mentions `ctx.productId` twice. Both limits are now written down.
 
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
