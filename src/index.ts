@@ -5,7 +5,11 @@
 
 import { validateEnvironment } from './env.js';
 
-// Validate environment before anything else
+// Validate environment before anything else. ONE LIST — this file used to
+// carry a second pair of its own (FATAL_ENV_VARS / DEGRADED_ENV_VARS) a few
+// lines below this call, disagreeing with `env.ts` about whether an AI key was
+// fatal. On a boot without one, `env.ts` printed "✓ Environment validated" and
+// this block then printed "FATAL: required config missing".
 if (process.env.NODE_ENV !== 'test') {
   validateEnvironment();
 }
@@ -141,49 +145,6 @@ import { acquireJobLock, releaseJobLock } from './services/job-lock.js';
 
 // Database migrations
 import { runMigrations } from './db/migrate.js';
-
-// ─── Startup Validation ───────────────────────────────────────────────────────
-
-// Config the app genuinely cannot run without. Missing any of these means a
-// broken deploy — fail FAST and LOUD in production rather than crash-looping or
-// (worse) serving a silently half-working app. AI counts as fatal: Foundry is
-// an AI product, so no key = no product.
-const FATAL_ENV_VARS = ['TURSO_DATABASE_URL', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY'];
-
-// Config that disables a feature when absent but lets the app run. We warn
-// loudly (with the concrete consequence) so a misconfiguration is visible in
-// logs the moment it boots, not when the first founder hits the broken path.
-const DEGRADED_ENV_VARS: Array<{ name: string; consequence: string }> = [
-  { name: 'STRIPE_SECRET_KEY', consequence: 'billing/checkout disabled' },
-  { name: 'STRIPE_WEBHOOK_SECRET', consequence: 'subscription + trial state will not update' },
-  { name: 'STRIPE_SOLO_PRICE_ID', consequence: 'Solo checkout disabled' },
-  { name: 'STRIPE_GROWTH_PRICE_ID', consequence: 'Growth checkout disabled' },
-  { name: 'STRIPE_INVESTOR_READY_PRICE_ID', consequence: 'Investor-Ready checkout disabled' },
-  { name: 'ENCRYPTION_KEY', consequence: 'integration credentials cannot be encrypted at rest' },
-  { name: 'RESEND_API_KEY', consequence: 'all outbound email (welcome, digests, alerts) disabled' },
-  { name: 'SENTRY_DSN', consequence: 'error tracking falls back to stderr only' },
-];
-
-const fatalMissing = FATAL_ENV_VARS.filter((v) => !process.env[v]);
-if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-  fatalMissing.push('OPENROUTER_API_KEY (or ANTHROPIC_API_KEY)');
-}
-if (fatalMissing.length > 0) {
-  const msg = `FATAL: required config missing — ${fatalMissing.join(', ')}. The app cannot function; set these before deploying.`;
-  logger.error(msg);
-  // In production a misconfigured boot must fail visibly, not serve a broken app.
-  if (process.env.NODE_ENV === 'production') {
-    console.error(`[STARTUP] ${msg}`);
-    process.exit(1);
-  } else {
-    console.warn(`[STARTUP] ${msg} (continuing in non-production)`);
-  }
-}
-
-const degradedMissing = DEGRADED_ENV_VARS.filter((d) => !process.env[d.name]);
-for (const d of degradedMissing) {
-  logger.warn(`Config missing: ${d.name} — ${d.consequence}`);
-}
 
 // ─── App Setup ───────────────────────────────────────────────────────────────
 

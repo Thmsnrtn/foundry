@@ -1,5 +1,3 @@
-src/lib/env.ts
-src/lib/request.ts
 src/mcp/cli.ts
 src/services/ai/composer.ts
 src/services/calibration/taste-journal.ts
