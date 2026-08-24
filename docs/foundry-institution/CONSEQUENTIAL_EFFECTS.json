@@ -136,7 +136,7 @@
     },
     {
       "file": "src/services/integrations/linear.ts",
-      "line": 123,
+      "line": 129,
       "detector": "external_post",
       "status": "read_only",
       "capability": "GraphQL query: completed issues for ship-cadence metrics"
