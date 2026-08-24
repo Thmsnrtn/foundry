@@ -527,7 +527,16 @@ decisionRoutes.post('/decisions/:id/outcome',
   );
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const productId = (result.rows[0] as Record<string, string>).product_id;
+  // THREE VALUES, AND EVERY READER ASSUMES THEM. `outcome_valence` is read as
+  // 1 = positive, -1 = negative, anything else = neutral by the trust ledger,
+  // the pattern generator and the prediction-accuracy job — and the board
+  // packet maps the average through `((avg + 1) / 2) * 100`, so a valence of 5
+  // would print a decision score of 300%. The form offers exactly -1, 0 and 1;
+  // this door accepted any number at all and the column has no constraint.
   const valence = body.valence != null ? Number(body.valence) : null;
+  if (valence !== null && ![-1, 0, 1].includes(valence)) {
+    return c.json({ error: 'valence must be -1, 0 or 1' }, 400);
+  }
   await recordOutcome(decisionId, productId, body.outcome, valence);
   return c.json({ status: 'recorded' });
 });

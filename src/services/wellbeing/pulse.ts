@@ -56,12 +56,17 @@ async function statedTimezone(productId: string): Promise<string | null> {
 /**
  * The hour of `decided_at` on the founder's own clock, or null.
  *
- * TWO WRITERS, TWO FORMATS, ONE COLUMN. `decisions/queue.ts` writes
- * `new Date().toISOString()` — "2026-08-22T10:00:00.000Z" — and
- * `decisions/actions.ts` writes SQLite's `datetime('now')` — "2026-08-22
- * 10:00:00", UTC with nothing saying so. `Date.parse` reads the second as LOCAL
- * time, which on any server not set to UTC would shift the hour before the
- * timezone conversion even began. The space form is normalised explicitly.
+ * ONE COLUMN, ONE CLOCK — SINCE MIGRATION 210. `decisions/queue.ts` used to
+ * write `new Date().toISOString()` while `decisions/actions.ts` wrote SQLite's
+ * `datetime('now')`, so this column held both "2026-08-22T10:00:00.000Z" and
+ * "2026-08-22 10:00:00" depending on which path resolved the decision. Both
+ * writers now use `datetime('now')` and migration 210 rewrote the stored ISO
+ * values, so every row is the space form.
+ *
+ * The tolerance below stays, and not out of caution: `Date.parse` reads the
+ * space form as LOCAL time, so on any server not set to UTC the hour would
+ * shift before the timezone conversion even began. Normalising it explicitly is
+ * what makes this correct for the format the column now holds.
  */
 function localHour(decidedAt: string | null, timeZone: string): number | null {
   if (!decidedAt) return null;

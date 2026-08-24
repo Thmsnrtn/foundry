@@ -1254,6 +1254,8 @@
   SELECT RAISE(ABORT, 'integration:direction is inbound, outbound or bidirectional');
   SELECT RAISE(ABORT, 'integration:direction is inbound, outbound or bidirectional');
   SELECT RAISE(ABORT, 'judgment_disposition:append_only') WHERE EXISTS (
+  SELECT RAISE(ABORT, 'outcome_valence:not_in_vocabulary');
+  SELECT RAISE(ABORT, 'outcome_valence:not_in_vocabulary');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_invalid') WHERE NOT EXISTS (
@@ -4580,6 +4582,7 @@ BEFORE INSERT ON company_financial_position
 BEFORE INSERT ON company_financial_position
 BEFORE INSERT ON company_observation_channels
 BEFORE INSERT ON cost_events
+BEFORE INSERT ON decisions
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON development_change_plans
 BEFORE INSERT ON ecosystem_principal_companies
@@ -4635,6 +4638,7 @@ BEFORE UPDATE OF disposition, disposition_reason, disposition_evidence_ref, disp
 BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
 BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
 BEFORE UPDATE OF evidence_ref, authority_ref, outcome_ref
+BEFORE UPDATE OF outcome_valence ON decisions
 BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE OF state ON institutional_responsibilities
 BEFORE UPDATE OF status ON responsibility_candidates
@@ -4652,6 +4656,8 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5332,6 +5338,8 @@ CREATE TRIGGER company_observation_channel_immutable
 CREATE TRIGGER cost_event_attribution_guard
 CREATE TRIGGER cost_event_attribution_immutable
 CREATE TRIGGER customer_message_observation_guard
+CREATE TRIGGER decisions_outcome_valence_vocabulary_insert
+CREATE TRIGGER decisions_outcome_valence_vocabulary_update
 CREATE TRIGGER development_authority_guard
 CREATE TRIGGER development_change_disposition_guard
 CREATE TRIGGER development_change_plan_guard
@@ -5535,6 +5543,8 @@ END;
 END;
 END;
 END;
+END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
@@ -5559,6 +5569,8 @@ WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.due_stated_by IS NOT NULL
 WHEN NEW.evidence_ref IS NOT OLD.evidence_ref
 WHEN NEW.observation_source_kind IS NULL OR trim(NEW.observation_source_kind)=''
+WHEN NEW.outcome_valence IS NOT NULL AND NEW.outcome_valence NOT IN (-1, 0, 1)
+WHEN NEW.outcome_valence IS NOT NULL AND NEW.outcome_valence NOT IN (-1, 0, 1)
 WHEN NEW.processed_at IS NOT NULL AND NEW.analysis_failed_at IS NOT NULL
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
