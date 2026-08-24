@@ -66,7 +66,7 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `f670bef`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `8835299`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 252 files, highest **216**. Ordering gated. Snapshot current —
   and regenerate it AFTER the last migration of a batch, not in the middle of
@@ -74,7 +74,7 @@ inherited list because it was inherited.
   `foundry-self-observation` caught the result: 685 objects recorded against 684
   live. That check is Foundry comparing its own schema to its record of it,
   which is the one place a stale snapshot has to be caught, and it was.
-- **Validation:** `npm run check` green end to end — **427 files / 3,693 tests**,
+- **Validation:** `npm run check` green end to end — **428 files / 3,701 tests**,
   `CHECK_EXIT=0`, read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
   also runs `tests/simulation` and `tests/evals`. Checkpoints before this
@@ -94,7 +94,7 @@ inherited list because it was inherited.
   `closeDb` landed; many consecutive clean runs since. See item 2.
 - **Ratchets:** unguarded mutating routes **112** · fabricated test schemas **4** ·
   writer-less tables **0** · SELECT drift **0** · untraced consequential
-  effects **0** · statically unreachable modules **24** ·
+  effects **0** · statically unreachable modules **22** ·
   write-only columns **64** · unscoped product-shaped routes **2** ·
   id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** · INSERT value-list mismatches **0** ·
