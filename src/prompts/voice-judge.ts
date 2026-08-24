@@ -1,8 +1,21 @@
 // =============================================================================
 // FOUNDRY — Voice Judge Prompt (Wave 3, action 24)
-// Typed builder for the voice-fingerprint judge. Extracted from
-// src/services/calibration/voice-fingerprint.ts. Caller dispatches via
+// Typed builder for the voice-fingerprint judge. Caller dispatches via
 // callSonnet and parses the JSON response.
+//
+// IT WAS "EXTRACTED FROM" `services/calibration/voice-fingerprint.ts` AND THAT
+// MODULE KEPT ITS COPY. Nothing imported this file; production built its prompt
+// from `buildJudgeSystemPrompt` / `buildJudgeUserPrompt` next to the callsite,
+// and the two texts had drifted — different exemplar and draft headings, and,
+// materially, the live copy FENCED the draft in triple quotes while this one
+// interpolated it bare. The draft is text Foundry did not write. A judge prompt
+// that does not mark where untrusted text begins and ends is a different prompt
+// from one that does, and the golden cases below were scoring the wrong one.
+//
+// `truth/engine.ts` taught the rule earlier in this campaign and it is the same
+// rule here: two copies are fine when they are pinned, and two copies nobody
+// compares are one rule with two answers. This is now the only copy. The
+// fencing is the live behaviour and is kept.
 // =============================================================================
 
 export interface VoiceJudgeInput {
@@ -47,11 +60,13 @@ export function buildVoiceJudgePrompt(input: VoiceJudgeInput): VoiceJudgePromptP
     `- sentence rhythm: ${fp.sentence_rhythm ?? '(unspecified)'}`,
     `- lexical preferences: ${lexical}`,
     '',
-    'Exemplar sentences (the voice we want):',
+    'Exemplar sentences (in-voice ground truth):',
     exemplars,
     '',
-    'Draft text to score:',
+    'Draft to score:',
+    '"""',
     input.draftText,
+    '"""',
     '',
     'Return JSON only.',
   ].join('\n');

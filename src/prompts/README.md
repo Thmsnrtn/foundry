@@ -5,6 +5,21 @@ one agent's prompt must be diffable against the rest, and every prompt
 that touches an LLM must have a typed builder + golden cases mounted in
 the eval framework.
 
+**That second half was a claim this directory could not support, and it
+is worth keeping the record of it.** Nothing outside `src/prompts/` ever
+referenced `GOLDEN_CASES` — neither module's cases had been run by
+anything — and `voice-judge.ts` was not the builder production used:
+`services/calibration/voice-fingerprint.ts` kept its own copy, the two
+had drifted, and the live one fenced the untrusted draft in triple
+quotes while the extracted one interpolated it bare. Golden cases
+scoring a prompt the product does not send are not coverage.
+
+`tests/evals/prompt-golden-cases.eval.test.ts` mounts both modules'
+cases now, and `voice-fingerprint.ts` imports the builder rather than
+copying it. **Two prompts here so far, out of many still inline: the
+sentence "every prompt that touches an LLM" describes the standard for
+this directory, not the state of the repository.**
+
 ## Conventions
 
 Each prompt module exports:
@@ -22,7 +37,10 @@ Each prompt module exports:
 - A diff to one agent's prompt is reviewable as code, not as a
   refactor of a 300-line agent file.
 - The eval framework (`tests/evals/`) imports the same builder used
-  in production, so eval coverage is real.
+  in production, so eval coverage is real. This holds only while
+  production imports it: a module here whose text is duplicated at the
+  callsite is worse than no module, because the cases go on passing
+  against the copy nobody sends.
 - Future "prompt versioning" (rollback, A/B) gets a single place to
   hook in.
 

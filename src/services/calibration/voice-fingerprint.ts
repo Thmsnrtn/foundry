@@ -11,6 +11,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { buildVoiceJudgePrompt } from '../../prompts/voice-judge.js';
 import { logger } from '../logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -376,9 +377,19 @@ export async function scoreArtifactAgainstVoice(
     };
   }
 
-  // LLM judge
-  const systemPrompt = buildJudgeSystemPrompt(fp);
-  const userPrompt = buildJudgeUserPrompt(fp, draftText);
+  // LLM judge. ONE BUILDER — `src/prompts/voice-judge.ts` used to be a copy of
+  // the two functions that lived here, and the copies had drifted.
+  const { system: systemPrompt, user: userPrompt } = buildVoiceJudgePrompt({
+    fingerprint: {
+      register: fp.register,
+      energy: fp.energy,
+      pov: fp.pov,
+      sentence_rhythm: fp.sentence_rhythm,
+      lexical_preferences: fp.lexical_preferences,
+      exemplar_sentences: fp.exemplar_sentences,
+    },
+    draftText,
+  });
 
   let response;
   try {
@@ -424,43 +435,6 @@ export async function scoreArtifactAgainstVoice(
     },
     rationale: parsed.rationale,
   };
-}
-
-// ─── Judge Prompts ────────────────────────────────────────────────────────────
-
-function buildJudgeSystemPrompt(fp: VoiceFingerprint): string {
-  return [
-    'You are a voice-and-tone judge. You score draft text against a defined product voice fingerprint.',
-    'Return JSON only. No prose outside JSON.',
-    'Required JSON shape: {"score":0-100,"register":0-100,"rhythm":0-100,"lexical":0-100,"energy":0-100,"rationale":"<one sentence>"}',
-    'Be strict. Generic SaaS-median copy should score ≤55. In-voice copy should score ≥75.',
-  ].join('\n');
-}
-
-function buildJudgeUserPrompt(fp: VoiceFingerprint, draftText: string): string {
-  const exemplars = fp.exemplar_sentences
-    .map((s, i) => `${i + 1}. ${s}`)
-    .join('\n');
-  const lexical = fp.lexical_preferences.join(', ') || '(none specified)';
-  const lines = [
-    `Voice fingerprint:`,
-    `- register: ${fp.register ?? '(unspecified)'}`,
-    `- energy: ${fp.energy ?? '(unspecified)'}`,
-    `- pov: ${fp.pov ?? '(unspecified)'}`,
-    `- sentence rhythm: ${fp.sentence_rhythm ?? '(unspecified)'}`,
-    `- lexical preferences: ${lexical}`,
-    '',
-    `Exemplar sentences (in-voice ground truth):`,
-    exemplars,
-    '',
-    `Draft to score:`,
-    '"""',
-    draftText,
-    '"""',
-    '',
-    `Return JSON only.`,
-  ];
-  return lines.join('\n');
 }
 
 function parseJudgeResponse(text: string): {

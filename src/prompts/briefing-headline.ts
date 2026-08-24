@@ -41,7 +41,7 @@ export function buildBriefingHeadlinePrompt(
   return { system, user, maxTokens: 150 };
 }
 
-// ─── Golden cases (mounted by tests/evals/) ──────────────────────────────────
+// ─── Golden cases, mounted by tests/evals/prompt-golden-cases.eval.test.ts ───
 
 export const GOLDEN_CASES: Array<{
   name: string;
