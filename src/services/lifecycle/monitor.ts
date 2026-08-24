@@ -6,6 +6,23 @@ import { query, insertAuditLog } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import type { RiskStateValue } from '../../types/index.js';
 
+/**
+ * THE ORDER OF THE PHASES, IN ONE PLACE.
+ *
+ * `parseInt('2_5')` is 2, so every caller that derived a phase number from the
+ * key put Remediation and Hypothesis Formation at the same position — which is
+ * how the lifecycle page came to show a completed phase as not started.
+ */
+export const PROMPT_ORDER = [
+  'prompt_1', 'prompt_2', 'prompt_2_5', 'prompt_3', 'prompt_4',
+  'prompt_5', 'prompt_6', 'prompt_7', 'prompt_8', 'prompt_9',
+] as const;
+
+/** Position in `PROMPT_ORDER`, or -1 for a value this system does not define. */
+export function promptIndex(prompt: string | null | undefined): number {
+  return PROMPT_ORDER.indexOf(String(prompt ?? '') as typeof PROMPT_ORDER[number]);
+}
+
 export interface ConditionDef {
   prompt: string;
   name: string;
@@ -107,8 +124,34 @@ export const ACTIVATION_CONDITIONS: ConditionDef[] = [
 ];
 
 /**
- * Evaluate all lifecycle conditions for a product.
- * Returns prompts that are newly activated.
+ * Evaluate all lifecycle conditions for a product, and record what they say.
+ *
+ * NOTHING ADVANCED THE LIFECYCLE. This function computed which prompts had all
+ * their conditions met, wrote an audit-log line saying so, and returned the
+ * list; the daily job logged it. `current_prompt` was written once, by the
+ * INSERT that creates the row, and never again — so every company that has ever
+ * run sat at `prompt_1` for as long as it existed, and:
+ *
+ *   the Lifecycle page told a company operating for months to "Run your first
+ *   audit", with all nine phases drawn as not started;
+ *   the weekly digest reported that stage to the founder;
+ *   the Compass agent was told it in its prompt;
+ *   and `lifecycleBandForPrompt` banded EVERY company as `pre_revenue`, so the
+ *   cross-company benchmark pool compared a scaled company against companies
+ *   with no revenue and called them a segment.
+ *
+ * The mechanism existed and was not connected. This connects it: a prompt whose
+ * conditions are all met is marked `in_progress`, and `current_prompt` moves to
+ * the furthest such prompt. It NEVER REGRESSES — a condition that stops being
+ * true does not un-live the company's history.
+ *
+ * WHAT REMAINS UNREACHABLE, said here rather than implied: `prompt_2` and
+ * `prompt_2_5` have no conditions defined at all, so nothing can activate them;
+ * a company moves from phase 1 to phase 3 when phase 3's conditions are met.
+ * And `prompt_9` requires `prompt_4_status = 'completed'`, which nothing in the
+ * system sets — only the audit engine ever writes a 'completed' status, and only
+ * for phase 1. Inventing either rule here would be inventing the lifecycle
+ * rather than connecting it.
  */
 export async function evaluateConditions(productId: string): Promise<string[]> {
   const newlyActivated: string[] = [];
@@ -128,8 +171,9 @@ export async function evaluateConditions(productId: string): Promise<string[]> {
     );
   }
 
-  // Check which prompts have ALL conditions met
+  // Which prompts have ALL of their conditions met
   const prompts = [...new Set(ACTIVATION_CONDITIONS.map((c) => c.prompt))];
+  const met: string[] = [];
   for (const prompt of prompts) {
     const condResult = await query(
       `SELECT COUNT(*) as total, SUM(CASE WHEN condition_met = 1 THEN 1 ELSE 0 END) as met_count
@@ -137,22 +181,52 @@ export async function evaluateConditions(productId: string): Promise<string[]> {
       [productId, prompt]
     );
     const row = condResult.rows[0] as Record<string, number>;
-    if (row.total > 0 && row.met_count === row.total) {
-      // Check if prompt isn't already activated
-      const lsResult = await query('SELECT * FROM lifecycle_state WHERE product_id = ?', [productId]);
-      const ls = lsResult.rows[0] as Record<string, string> | undefined;
-      const statusKey = `${prompt.replace('prompt_', 'prompt_')}_status`;
-      if (ls && (ls[statusKey] === 'dormant' || ls[statusKey] === 'not_started')) {
-        newlyActivated.push(prompt);
+    if (row.total > 0 && row.met_count === row.total) met.push(prompt);
+  }
+  if (met.length === 0) return newlyActivated;
 
-        await insertAuditLog({
-          id: nanoid(), product_id: productId,
-          action_type: 'lifecycle_condition_met', gate: 2,
-          trigger: 'lifecycle_check', reasoning: `All conditions met for ${prompt}`,
-          risk_state_at_action: ls.risk_state ?? null,
-        });
-      }
-    }
+  const lsResult = await query('SELECT * FROM lifecycle_state WHERE product_id = ?', [productId]);
+  const ls = lsResult.rows[0] as Record<string, string> | undefined;
+  if (!ls) return newlyActivated;
+
+  for (const prompt of met) {
+    const statusKey = `${prompt}_status`;
+    if (ls[statusKey] !== 'dormant' && ls[statusKey] !== 'not_started') continue;
+
+    // The status column name is built from a value in ACTIVATION_CONDITIONS,
+    // which is a literal in this file — not from anything a caller supplies.
+    await query(
+      `UPDATE lifecycle_state SET ${statusKey} = 'in_progress', updated_at = datetime('now')
+        WHERE product_id = ?`,
+      [productId],
+    );
+    newlyActivated.push(prompt);
+
+    await insertAuditLog({
+      id: nanoid(), product_id: productId,
+      action_type: 'lifecycle_condition_met', gate: 2,
+      trigger: 'lifecycle_check', reasoning: `All conditions met for ${prompt}`,
+      risk_state_at_action: ls.risk_state ?? null,
+    });
+  }
+
+  // FORWARD ONLY. The furthest prompt whose conditions are met is where the
+  // company is; a condition that later stops being true does not move it back.
+  const furthest = met.reduce((best, p) =>
+    promptIndex(p) > promptIndex(best) ? p : best, met[0]);
+  if (promptIndex(furthest) > promptIndex(ls.current_prompt)) {
+    await query(
+      `UPDATE lifecycle_state SET current_prompt = ?, updated_at = datetime('now')
+        WHERE product_id = ?`,
+      [furthest, productId],
+    );
+    await insertAuditLog({
+      id: nanoid(), product_id: productId,
+      action_type: 'lifecycle_advanced', gate: 2,
+      trigger: 'lifecycle_check',
+      reasoning: `Advanced from ${ls.current_prompt} to ${furthest}: all conditions met`,
+      risk_state_at_action: ls.risk_state ?? null,
+    });
   }
 
   return newlyActivated;

@@ -5,6 +5,7 @@ import { query, getProductByOwner, getLifecycleState, getLifecycleConditions } f
 import { dashboardLayout } from '../../views/layout.js';
 import { lifecycleProgress, lifecycleConditions } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
+import { PROMPT_ORDER, promptIndex } from '../../services/lifecycle/monitor.js';
 
 /** Human-readable descriptions and actions for each lifecycle prompt. */
 const PROMPT_DESCRIPTIONS: Record<string, { name: string; description: string; what: string; nextAction: string }> = {
@@ -85,8 +86,12 @@ lifecycleRoutes.get('/products/:id/lifecycle', async (c) => {
   const currentPrompt = (ls?.current_prompt as string) ?? 'prompt_1';
   const riskState = (ls?.risk_state as string) ?? 'green';
 
-  const promptInfo = PROMPT_DESCRIPTIONS[currentPrompt] ?? PROMPT_DESCRIPTIONS.prompt_1;
-  const promptNumber = parseInt(currentPrompt.replace('prompt_', '').replace('.', '_'), 10) || 1;
+  // `parseInt('2_5')` is 2, so Remediation and Hypothesis Formation shared a
+  // position: at phase 2.5 the page drew phase 2 as not yet started. The order
+  // is now read from the one place that defines it.
+  const position = promptIndex(currentPrompt);
+  const promptInfo: (typeof PROMPT_DESCRIPTIONS)[string] | null =
+    PROMPT_DESCRIPTIONS[currentPrompt] ?? null;
 
   const content = html`
     <h1>Lifecycle</h1>
@@ -99,25 +104,32 @@ lifecycleRoutes.get('/products/:id/lifecycle', async (c) => {
     <div class="card" style="border-left:3px solid #2563eb;">
       <div style="display:flex;justify-content:space-between;align-items:start;">
         <div>
-          <h3 style="margin-bottom:0.25rem;">Phase ${promptNumber}: ${promptInfo.name}</h3>
-          <p style="color:#4b5563;margin-bottom:0.75rem;">${promptInfo.description}</p>
+          <h3 style="margin-bottom:0.25rem;">${promptInfo
+            ? html`Phase ${position + 1}: ${promptInfo.name}`
+            : html`Phase not recognised`}</h3>
+          <p style="color:#4b5563;margin-bottom:0.75rem;">${promptInfo
+            ? promptInfo.description
+            : html`This company's lifecycle position is recorded as
+              "${currentPrompt}", which is not one of the phases this page
+              describes. Nothing here is a statement about the company.`}</p>
         </div>
         <span class="risk-badge risk-${riskState}">${riskState.toUpperCase()}</span>
       </div>
+      ${promptInfo ? html`
       <div style="background:#f8fafc;border-radius:6px;padding:1rem;margin-bottom:0.75rem;">
         <strong style="font-size:0.87rem;">What you should be doing:</strong>
         <p style="color:#374151;margin:0.25rem 0 0;">${promptInfo.what}</p>
       </div>
-      <p style="font-size:0.87rem;"><strong>Next action:</strong> ${promptInfo.nextAction}</p>
+      <p style="font-size:0.87rem;"><strong>Next action:</strong> ${promptInfo.nextAction}</p>` : ''}
     </div>
 
     <div class="card">
       <h3>All Phases</h3>
       <div style="display:flex;flex-direction:column;gap:0.5rem;">
-        ${Object.entries(PROMPT_DESCRIPTIONS).map(([key, info]) => {
-          const num = parseInt(key.replace('prompt_', '').replace('.', '_'), 10) || 0;
+        ${PROMPT_ORDER.map((key) => {
+          const info = PROMPT_DESCRIPTIONS[key];
           const isCurrent = key === currentPrompt;
-          const isPast = num < promptNumber;
+          const isPast = position >= 0 && promptIndex(key) < position;
           const statusIcon = isPast ? '✓' : isCurrent ? '→' : '○';
           const statusColor = isPast ? '#059669' : isCurrent ? '#2563eb' : '#9ca3af';
           return html`
@@ -132,6 +144,13 @@ lifecycleRoutes.get('/products/:id/lifecycle', async (c) => {
         })}
       </div>
     </div>
+
+    <p style="font-size:0.8rem;color:#6b7280;margin:-0.5rem 0 1rem;">
+      A phase is reached when every one of its activation conditions is met —
+      the conditions below are what Foundry evaluates. Hypothesis Formation and
+      Remediation have no conditions defined, so a company moves from the audit
+      straight to Beta Infrastructure when that phase's conditions are met.
+    </p>
 
     ${lifecycleConditions(conditionsResult.rows as Array<Record<string, unknown>>)}
   `;
