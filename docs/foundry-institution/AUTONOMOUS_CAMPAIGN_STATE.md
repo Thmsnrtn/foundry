@@ -162,6 +162,29 @@ matters is that one of them was being TESTED.**
   because it qualified as a real unreferenced table, and a fixture that depends
   on a real defect surviving rots every time one is cleaned up. It plants its
   own table now.
+- **Three environment validators, two of which ran, and they disagreed.**
+  `src/env.ts` was called at boot and treated an AI key as OPTIONAL; `index.ts`
+  carried its own pair of lists a few lines after the call and treated it as
+  FATAL; `src/lib/env.ts` was a third that nothing imported, requiring
+  `STRIPE_SECRET_KEY` and `ANTHROPIC_API_KEY` with no OpenRouter alternative,
+  omitting `ENCRYPTION_KEY`, and naming two Stripe tiers no code reads. The
+  disagreement printed itself on every broken boot: "✓ Environment validated"
+  first, "FATAL: required config missing" second, and outside production the
+  fatal line only warns — so an operator's takeaway from a broken boot was a
+  green tick. One list now, with the CONSEQUENCE of each absence, and the tick
+  conditional on it.
+- **A count with no period in its name, recorded as a week.** The public ingest
+  door mapped `signups` to `signups_7d`. Refused now, naming the field to send
+  instead: there is no correct period to guess, and `custom_metrics` would have
+  been the quieter answer and the worse one.
+- **One column, three writers, one of which read it first.**
+  `metric_snapshots.custom_metrics` was written wholesale by the hourly GitHub
+  fabric sync and by the ingest door, and read-merged-written only by the Linear
+  sync — so `linear_velocity_7d` was destroyed within the hour, every hour,
+  while `syncLinearMetrics` reported having updated it and the sync log recorded
+  a success. **The bound moved with the merge, and that is the part worth
+  keeping: merging without re-bounding turns a per-request cap into an unbounded
+  growth path.**
 - **One prompt, two copies, and the golden cases scoring the wrong one.**
   `src/prompts/voice-judge.ts` said it was "extracted from"
   `voice-fingerprint.ts`, which had kept its copy; nothing imported the
@@ -171,6 +194,14 @@ matters is that one of them was being TESTED.**
   imports the same builder production uses; nothing outside `src/prompts/`
   referenced `GOLDEN_CASES` at all.
 
+**THE THROUGH-LINE, once eight batches were in: four of them were places where
+the system's own EVIDENCE agreed with it and should not have.** A test suite
+asserting on a middleware no router mounted. Golden cases scoring a prompt the
+product does not send. A boot log printing "✓ Environment validated"
+immediately before "FATAL: required config missing". A sync log recording a
+success for a metric another writer erased within the hour. The defect in each
+case is not the broken thing — it is the instrument that reported it working.
+
 **The rule this cycle adds, and it is about evidence rather than code: A TEST
 MAY ASSERT ON A DORMANT MODULE'S SOURCE WHEN IT SAYS THE MODULE IS DORMANT.**
 `stripe-sync.ts` has two such tests, named "the dormant path no longer discards
@@ -178,6 +209,24 @@ it either", and they are honest — they claim a defect stays fixed in a file th
 does not run, and they say so. A test named for a live control that reads a file
 which never executes is the defect. **The difference is what the test's name
 promises a reader, not whether the file runs.**
+
+**TWO LENSES RUN TO EXHAUSTION THIS CYCLE, BOTH NEGATIVE — recorded so nobody
+pays for them twice.**
+
+- **Every test that reads a module's SOURCE, crossed with the unreachable-modules
+  baseline.** Six modules are in both sets. All six name their subject honestly:
+  `a-contract-that-encoded-the-ambiguity` says outright that nothing imports
+  `views/numbers.ts`, and `outbound-url-safety` states the standard better than
+  this file could — *"'Unreachable today' is not a safety property — it is a
+  coincidence with a deadline."* `middleware/tenant.ts` was the only outlier and
+  it is gone.
+- **Every scheduled job's cron expression against the day and cadence its
+  description claims.** Sixty-odd jobs, every day-of-week and every `*/N`
+  correct. While reading it: `alignment_scores` (Monday) computes a DIFFERENT
+  alignment from `getAlignmentScore` — `team/members.ts` counts decision votes
+  into `alignment_snapshots`, deterministically; `wisdom/cofounder.ts` has a
+  model judge DNA responses into `cofounder_alignment_scores` and has no job at
+  all. Two different measures sharing a word, not a duplicate.
 
 **The recurring method note.** Seven times this campaign, and twice more in the
 cycle before this one, a test failed after a repair because the test had encoded
@@ -305,17 +354,15 @@ different answers.** Read end to end this cycle so nobody re-reads it:
   **`intelligence/{benchmarks,shippability}.ts`**, **`support-pilot-readiness.ts`**
   (which says in its own header it may never be reported as pilot evidence).
 
-  **`lib/env.ts` IS NOT ONE OF THOSE AND IS THE NEXT THING TO LOOK AT.** It
-  validates every required environment variable and calls itself "fails fast
-  with actionable error messages" at startup, and nothing calls it — so the
-  process boots with a missing variable and fails somewhere else, later, in
-  whatever code first needed it. That is a control that does not run, not a
-  feature without a caller. Wiring it into boot is the obvious answer and needs
-  care: the schema must be checked against what each deployment actually sets
-  before it becomes the thing that refuses to start.
-
-  **`lib/request.ts`** is a body parser no route uses; routes parse inline.
-  Dead helper, removable.
+  **`lib/env.ts` AND `lib/request.ts` ARE GONE, AND THE FIRST OF THEM CORRECTS A
+  NOTE WRITTEN HERE AN HOUR EARLIER.** That note said `lib/env.ts` was "a
+  control that does not run" and that wiring it into boot was the obvious
+  answer. It was wrong on the premise: boot ALREADY validates the environment,
+  twice — `src/env.ts` at the top of `index.ts`, and `index.ts`'s own inline
+  pair of lists a few lines later, disagreeing with it about whether an AI key
+  is fatal. `lib/env.ts` was a third and the worst of them. The answer was one
+  validator, not a third caller. **Read what boot does before concluding that
+  nothing does it.** `lib/request.ts` was a body parser no route used.
 
 - **The two Stripe modules, and why only one of them is a duplicate.**
   `integration/` (singular) is outbound — gateway adapters Foundry CALLS.
