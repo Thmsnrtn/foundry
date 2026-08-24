@@ -334,12 +334,26 @@ const githubAdapter: ProviderAdapter = {
       );
       const deploys = await deploysResponse.json() as Array<Record<string, unknown>>;
 
-      // Store as custom metrics
-      const today = new Date().toISOString().split('T')[0];
-      const customMetrics = JSON.stringify({
+      // Store as custom metrics. THIS WROTE THE WHOLE COLUMN. `custom_metrics`
+      // has three writers and this one replaced it, so a company with a Linear
+      // integration lost `linear_velocity_7d` within the hour, every hour —
+      // while the Linear sync reported having updated it. The merge is shared
+      // now; the two keys below are a patch, not the object.
+      const today = new Date().toISOString().split('T')[0]!;
+      const { mergeCustomMetrics } = await import('../metrics/custom-metrics.js');
+      const merge = await mergeCustomMetrics(productId, today, {
         commits_7d: Array.isArray(commits) ? commits.length : 0,
         deploys_recent: Array.isArray(deploys) ? deploys.length : 0,
       });
+      if ('refused' in merge) {
+        return {
+          records_processed: 0,
+          metrics_updated: [],
+          errors: [`custom metrics not stored: ${merge.refused}`],
+          duration_ms: 0,
+        };
+      }
+      const customMetrics = merge.json;
 
       // AN UPDATE THAT MATCHED NOTHING AND REPORTED SUCCESS.
       //

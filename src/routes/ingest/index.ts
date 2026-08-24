@@ -7,6 +7,7 @@
 
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { MAX_CUSTOM_METRIC_KEYS, mergeCustomMetrics } from '../../services/metrics/custom-metrics.js';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { invalidateSignalCache } from '../../services/signal.js';
@@ -23,7 +24,6 @@ const RATE_FIELDS = new Set(['activation_rate', 'day_30_retention', 'churn_rate'
 const COUNT_FIELDS = new Set(['signups_7d', 'active_users', 'support_volume_7d']);
 const NPS_FIELDS = new Set(['nps', 'nps_score']);
 const MAX_BODY_FIELDS = 40;
-const MAX_CUSTOM_KEYS = 20;
 
 const ingestBodySchema = z.record(z.string().max(64), z.unknown())
   .refine((b) => Object.keys(b).length <= MAX_BODY_FIELDS, `at most ${MAX_BODY_FIELDS} fields`);
@@ -201,14 +201,26 @@ ingestRoutes.post('/ingest/:token', async (c) => {
     return c.json({ error: 'Out-of-range or non-finite metric values', fields: rejected }, 422);
   }
 
+  // ONE COLUMN, THREE WRITERS, AND THIS ONE WROTE THE WHOLE OBJECT.
+  //
+  // `custom_metrics` is also written by the GitHub fabric sync (hourly) and the
+  // Linear sync. Replacing it here meant a founder pipeline posting `custom`
+  // erased whatever those had recorded that day, and they erased this. The
+  // merge is shared now — `services/metrics/custom-metrics.ts` — and it is
+  // applied BEFORE anything is written, so a request that cannot be stored
+  // stays a request that wrote nothing.
+  const today = new Date().toISOString().slice(0, 10);
   const customKeys = Object.keys(customMetrics);
   if (customKeys.length > 0) {
-    const customJson = JSON.stringify(customMetrics);
-    if (customKeys.length > MAX_CUSTOM_KEYS || customJson.length > 8_192) {
-      return c.json({ error: `custom metrics bounded to ${MAX_CUSTOM_KEYS} keys / 8KB` }, 422);
+    if (customKeys.length > MAX_CUSTOM_METRIC_KEYS) {
+      return c.json({
+        error: `custom metrics bounded to ${MAX_CUSTOM_METRIC_KEYS} keys per request`,
+      }, 422);
     }
+    const merge = await mergeCustomMetrics(productId, today, customMetrics);
+    if ('refused' in merge) return c.json({ error: merge.refused }, 422);
     columns.push('custom_metrics');
-    values.push(customJson);
+    values.push(merge.json);
   }
 
   if (columns.length === 0) {
@@ -236,7 +248,6 @@ ingestRoutes.post('/ingest/:token', async (c) => {
   }
 
   // UPSERT today's metric snapshot
-  const today = new Date().toISOString().slice(0, 10);
   const setClause = columns.map((col) => `${col} = ?`).join(', ');
 
   try {

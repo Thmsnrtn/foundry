@@ -61,25 +61,31 @@ export async function syncLinearMetrics(
     return { metricsUpdated: [], recordsProcessed: 0 };
   }
 
-  // Store ship velocity in custom_metrics
-  const existingResult = await query(
-    `SELECT custom_metrics FROM metric_snapshots WHERE product_id = ? AND snapshot_date = ?`,
-    [productId, today],
-  );
-
-  const existing = existingResult.rows[0] as Record<string, unknown> | undefined;
-  const customMetrics = existing?.custom_metrics
-    ? JSON.parse(existing.custom_metrics as string) as Record<string, unknown>
-    : {};
-
-  customMetrics.linear_velocity_7d = completedIssues.length;
-  customMetrics.linear_last_sync = new Date().toISOString();
+  // Store ship velocity in custom_metrics. This module already read the day's
+  // value before writing it; the other two writers of the same column did not,
+  // so the merge now lives in one place and all three use it.
+  const { mergeCustomMetrics } = await import('../metrics/custom-metrics.js');
+  const merge = await mergeCustomMetrics(productId, today, {
+    linear_velocity_7d: completedIssues.length,
+    linear_last_sync: new Date().toISOString(),
+  });
+  if ('refused' in merge) {
+    // Recorded where this integration's failures are already visible, rather
+    // than as a log line: `last_error` is what the integrations page reads and
+    // what the consecutive-failure counter escalates on. A sync that cannot
+    // store its result has not succeeded, and saying so is the whole point.
+    await query(
+      `UPDATE integrations SET last_error = ? WHERE id = ?`,
+      [`custom metrics not stored: ${merge.refused}`, integrationId],
+    );
+    return { metricsUpdated: [], recordsProcessed: 0 };
+  }
 
   await query(
     `INSERT INTO metric_snapshots (id, product_id, snapshot_date, custom_metrics)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(product_id, snapshot_date) DO UPDATE SET custom_metrics = ?`,
-    [nanoid(), productId, today, JSON.stringify(customMetrics), JSON.stringify(customMetrics)],
+    [nanoid(), productId, today, merge.json, merge.json],
   );
 
   await query(
