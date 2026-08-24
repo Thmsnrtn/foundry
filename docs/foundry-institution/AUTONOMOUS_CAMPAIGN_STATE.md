@@ -66,10 +66,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `fb8c2e3`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `d812db8`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 249 files, highest **213**. Ordering gated. Snapshot current.
-- **Validation:** `npm run check` green end to end — **419 files / 3,634 tests**,
+- **Migrations:** 250 files, highest **214**. Ordering gated. Snapshot current.
+- **Validation:** `npm run check` green end to end — **422 files / 3,652 tests**,
   read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
   bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
@@ -433,6 +433,14 @@ decision score of 300%. The founder's form offers three radio buttons; the route
 took `Number(body.valence)` unchecked and the column had no constraint. The
 route refuses now and migration 214 puts the same rule in the database, because
 `check-check-vocabularies` cannot see a value that arrives as a bound parameter.
+
+**AND A FIXTURE THE NEW TRIGGER CAUGHT.** Migration 214 refused a seed in
+`autopilot-calibration-audit` that wrote `outcome_valence` as the STRING
+'positive'. Every reader compares that column against 1, so the fixture read as
+NOT positive — while its own comment said the positive outcomes were there "so
+the quality hold does NOT fire". The assertion passed either way, which is what
+made it invisible for as long as it existed. **A vocabulary guard is also a
+fixture audit**: the rows a test writes are the rows a reader would read.
 
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
