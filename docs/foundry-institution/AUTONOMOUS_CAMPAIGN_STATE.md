@@ -442,6 +442,28 @@ repaired earlier in this campaign; what changed is that null can now arrive.
 **The producing half does not exist and it was on the pricing page**: see
 "Blocked — owner" below.
 
+**AN ICP FORM NOTHING READ, WRITING OVER A FIELD FOUR PROMPTS DO.** The Koldly
+page carried a second Ideal Customer Profile editor — "Koldly uses this to
+target outbound campaigns" — which saved by running `UPDATE products SET
+stack_description = ?` with a JSON blob, destroying the stack description four
+prompts read. Nothing anywhere read the ICP it wrote, and `GET /internal/icp`,
+the endpoint the copy pointed at, returns five constants describing FOUNDRY's
+own ideal customer and takes no company id. The ICP that IS read lives in
+`product_dna`, behind a tier gate and `can_manage_company`. The form is gone;
+the page links to the DNA and says what the endpoints actually do.
+
+**WHICHEVER COMPANY SORTED FIRST WAS DECIDING REAL ACTIONS.** Five places
+resolved "the founder's company" with `... WHERE owner_id = ? LIMIT 1` and no
+ORDER BY, then rotated an ingest token on it, generated a public share link for
+it, wrote the week's plan for it, described the founder to the whole network by
+its sector and stage, and set the tone of every AI answer from it. The rule now
+has one home and REFUSES rather than guesses. The share-link route also ran a
+fallback query, ignored its result, and used the cookie value it had just failed
+to resolve — so the UPDATE matched nothing and the founder was redirected to a
+page that looked like it had made them a share link. And the Fleet Observatory
+read `owner_id` alone, so an invited co-founder saw nothing on the one screen
+titled "every agent's status across all of a founder's products".
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the

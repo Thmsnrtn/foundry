@@ -1,7 +1,9 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
+import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { selectedProductId } from '../../src/routes/dashboard/_shared.js';
@@ -131,5 +133,21 @@ describe('what the network is told about a founder', () => {
     expect(row.sector, 'two sectors is not one sector').toBeNull();
     // They agree on the stage, so that one is carried.
     expect(row.growth_stage).toBe('seed');
+  });
+});
+
+describe('a page that shows one company', () => {
+  const read = (f: string) => readFileSync(f, 'utf8');
+
+  it('does not resolve a second one of its own', () => {
+    // The layout already resolved the selected company — cookie first, which
+    // is what the switcher sets. A page that runs its own
+    // `WHERE owner_id = ?` and takes row zero can print one company's name in
+    // the header and another company's data below it.
+    for (const f of ['src/routes/dashboard/beta.ts', 'src/routes/dashboard/koldly.ts']) {
+      expect(stripComments(read(f)), `${f} resolves its own company`)
+        .not.toContain('FROM products WHERE owner_id = ?');
+      expect(read(f)).toContain('ctx.productId');
+    }
   });
 });

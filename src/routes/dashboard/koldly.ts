@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
 export const koldlyRoutes = new Hono<AuthEnv>();
@@ -12,16 +11,11 @@ koldlyRoutes.get('/koldly', async (c) => {
   const ecosystemKey = process.env.ECOSYSTEM_SERVICE_KEY ? 'Configured' : 'Not configured';
   const koldlyUrl = process.env.KOLDLY_INTERNAL_API_URL ?? 'Not configured';
 
-  const products = await query('SELECT id, name, stack_description FROM products WHERE owner_id = ?', [founder.id]);
-  const productId = products.rows.length > 0 ? (products.rows[0] as Record<string, string>).id : null;
-  const existingIcp = productId
-    ? await query('SELECT stack_description FROM products WHERE id = ?', [productId])
-    : null;
-  let icpData = null;
-  try {
-    const desc = (existingIcp?.rows[0] as Record<string, string>)?.stack_description;
-    if (desc) icpData = JSON.parse(desc)?.icp;
-  } catch { /* no existing ICP */ }
+  // The company the switcher has selected, which is the one the sidebar and
+  // the header on this page are already showing. This used to run its own
+  // `WHERE owner_id = ?` and take row zero, so the DNA link could point at a
+  // different company from the one the page said it was about.
+  const productId = ctx.productId;
 
   const content = html`
     <h1>Koldly Integration</h1>
