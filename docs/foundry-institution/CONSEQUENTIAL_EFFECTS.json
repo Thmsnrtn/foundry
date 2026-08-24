@@ -3,7 +3,7 @@
   "findings": [
     {
       "file": "src/lib/webhooks.ts",
-      "line": 120,
+      "line": 135,
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "customer webhook fan-out — kill-switch checked before dispatch, per-delivery receipt after"

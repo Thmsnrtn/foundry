@@ -465,6 +465,27 @@ page that looked like it had made them a share link. And the Fleet Observatory
 read `owner_id` alone, so an invited co-founder saw nothing on the one screen
 titled "every agent's status across all of a founder's products".
 
+**A REPLY NOBODY COULD SEND, COUNTED ON A CARD.** `agent_messages` carried four
+columns for a request-and-answer loop between agents: nobody asked (no caller
+ever passed `requiresResponse`), nobody could answer (`replyToMessage` had no
+caller), and the message bus page drew both — an "Unanswered" card counting a
+state nothing could produce and a badge that could never render. Migration 213
+takes the columns, the function and the interface together. `markAsRead` also
+took message ids alone, so the company was decided by whoever assembled the
+list. And five `ai_spend_reservations` entries on the write-only baseline are
+answered in place: migration 099's triggers CONSUME them — comparing the running
+total against the cap and RAISEing IS the ceiling — which is the consuming side
+of the line that gate's header already draws.
+
+**A SUBSCRIPTION NOTHING WOULD EVER MATCH, ANSWERED 201.** `POST /v1/webhooks`
+accepted any string in `events`, and the type it advertised listed TEN names of
+which THREE are dispatched. Subscribing to `audit.completed` got a 201 and
+silence forever. The vocabulary is now exactly what `dispatchWebhook` is called
+with, exported from one place and validated at the door. `POST
+/v1/agents/:name/run` had the same shape — it queued an initiative for any name,
+and only that agent's own run reads the queue, so a row for a name this product
+has no agent for sits pending forever under a 201 saying "Agent run queued".
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
