@@ -76,7 +76,7 @@ export const LOOP_TOOLS: MCPTool[] = [
   },
   {
     name: 'foundry_fork_reality',
-    description: 'Simulate each option\'s 90-day MRR trajectory (1,000-run seeded Monte Carlo on the company\'s OWN growth history). Returns p10/p50/p90 bands per option plus a do-nothing ghost. Abstains honestly if the company has under 4 months of history.',
+    description: 'Simulate each option\'s 90-day MRR trajectory (1,000-run seeded Monte Carlo on the company\'s OWN growth history, most recent 24 snapshots). Returns p10/p50/p90 bands per option plus a do-nothing ghost, with the number of snapshots and the days they span in the stored assumptions. Abstains honestly when the company has fewer than four usable MRR snapshots.',
     inputSchema: {
       type: 'object',
       properties: { decision_id: { type: 'string', description: 'The pending decision to fork' } },
