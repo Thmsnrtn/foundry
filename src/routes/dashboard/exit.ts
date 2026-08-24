@@ -21,7 +21,7 @@ import {
   runMultipleExitScenarios,
   type Stakeholder,
 } from '../../services/scp/exit/cap-table.js';
-import { modelTermSheet, getTermSheetModels, compareToMarketTerms } from '../../services/scp/exit/term-sheet.js';
+import { modelTermSheet, getTermSheetModels } from '../../services/scp/exit/term-sheet.js';
 import { requireTier } from '../../middleware/tier-gate.js';
 import { requireCompanyCapability } from '../../middleware/rbac.js';
 
@@ -664,8 +664,14 @@ exitRoutes.post('/exit/term-sheet', async (c) => {
 
     ${result.market_context ? html`
       <div class="insight-card" style="max-width:700px;margin-top:16px">
-        <h3>Market Context</h3>
+        <h3>Commentary</h3>
         <p class="text-muted">${result.market_context}</p>
+        <p class="text-muted text-xs" style="margin-top:8px">
+          Written by a model from the terms above and a fixed reference list of
+          commonly cited terms. Foundry has no market data feed: nothing here
+          samples current term sheets, and no range on this page is a
+          measurement. It was headed "Market Context".
+        </p>
       </div>
     ` : ''}
 
