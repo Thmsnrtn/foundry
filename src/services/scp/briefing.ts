@@ -151,8 +151,16 @@ export async function generateDailyBriefing(
       const priorMrr = prior ? (prior.mrr_cents as number | null) : null;
       // One snapshot is not a growth rate, and neither is growth from zero.
       // Reporting either as a percentage invents a denominator.
-      mrrGrowthPct = (mrrCents != null && priorMrr != null && priorMrr > 0)
-        ? Math.round(((mrrCents - priorMrr) / priorMrr) * 1000) / 10
+      // ...AND OVER WHATEVER GAP SEPARATES THEM. The two snapshots are
+      // consecutive rows, which for a daily reporter is yesterday — so this is
+      // a day-over-day figure reported to the founder as the company's growth.
+      // A monthly-equivalent rate from the gap between the dates is the same
+      // arithmetic the Ghost simulator and the stage detector now use.
+      const gapDays = (Date.parse(`${String(mr.snapshot_date)}T00:00:00Z`)
+        - Date.parse(`${String(prior?.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+      mrrGrowthPct = (mrrCents != null && priorMrr != null && priorMrr > 0
+        && Number.isFinite(gapDays) && gapDays > 0)
+        ? Math.round(((mrrCents / priorMrr) ** (30.44 / gapDays) - 1) * 1000) / 10
         : null;
     }
   } catch {

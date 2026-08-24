@@ -40,7 +40,12 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
 
   // 3. Load latest metric_snapshot
   let latestMetrics: Record<string, unknown> = {};
-  let lastWeekMetrics: Record<string, unknown> = {};
+  // NOT LAST WEEK. This is the snapshot BEFORE the latest one, whenever that
+  // was: `metric_snapshots` is keyed by DATE and most companies report daily.
+  // Every delta below is computed against it and reaches the model — and the
+  // founder — as a change, with the name claiming a week. The interval is
+  // measured and travels with the deltas instead.
+  let priorMetrics: Record<string, unknown> = {};
   try {
     const metricsResult = await query(
       'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 2',
@@ -50,7 +55,7 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
       latestMetrics = metricsResult.rows[0] as Record<string, unknown>;
     }
     if (metricsResult.rows.length > 1) {
-      lastWeekMetrics = metricsResult.rows[1] as Record<string, unknown>;
+      priorMetrics = metricsResult.rows[1] as Record<string, unknown>;
     }
   } catch {
     // metric_snapshots may not have data
@@ -140,21 +145,25 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
     // non-fatal
   }
 
-  // 9. Compute metrics deltas
+  // 9. Compute metrics deltas, over whatever interval the two snapshots span
   const metricsDelta: Record<string, unknown> = {};
   try {
+    const gapDays = Math.round(
+      (Date.parse(`${String(latestMetrics.snapshot_date)}T00:00:00Z`)
+        - Date.parse(`${String(priorMetrics.snapshot_date)}T00:00:00Z`)) / 86_400_000);
+    if (Number.isFinite(gapDays) && gapDays > 0) metricsDelta.over_days = gapDays;
     const currentMrr = latestMetrics.mrr_cents as number | null;
-    const prevMrr = lastWeekMetrics.mrr_cents as number | null;
+    const prevMrr = priorMetrics.mrr_cents as number | null;
     if (currentMrr !== null && prevMrr !== null && prevMrr > 0) {
       metricsDelta.mrr_change_pct = Number((((currentMrr - prevMrr) / prevMrr) * 100).toFixed(1));
     }
     const currentChurn = latestMetrics.churn_rate as number | null;
-    const prevChurn = lastWeekMetrics.churn_rate as number | null;
+    const prevChurn = priorMetrics.churn_rate as number | null;
     if (currentChurn !== null && prevChurn !== null) {
       metricsDelta.churn_change = Number((currentChurn - prevChurn).toFixed(2));
     }
     const currentActivation = latestMetrics.activation_rate as number | null;
-    const prevActivation = lastWeekMetrics.activation_rate as number | null;
+    const prevActivation = priorMetrics.activation_rate as number | null;
     if (currentActivation !== null && prevActivation !== null) {
       metricsDelta.activation_change = Number((currentActivation - prevActivation).toFixed(2));
     }

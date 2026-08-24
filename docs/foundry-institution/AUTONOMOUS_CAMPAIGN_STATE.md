@@ -363,6 +363,19 @@ accelerating from 1% to 8% a month was told it was about to plateau. And every
 usually consecutive DAYS — two of them comparing seven-day rolling windows that
 share six of their seven days. The intervals travel with the sentences now.
 
+**A WEEK IS SEVEN DAYS, NOT ONE ROW — and by now this is a LENS, not a
+finding.** `metric_snapshots` is keyed by DATE, most companies report daily, and
+five separate consumers stepped through consecutive ROWS while calling the step
+a month, a week or a period: the Ghost simulator's 90-day Monte Carlo, growth
+stage detection, the revenue-plateau prediction, the proactive insights, and the
+failure-pattern matcher — where four consecutive DAYS satisfied "activation
+declining for four weeks" and matched a pattern that tells the founder they have
+a 60-day lead time. Each one is now expressed in days: nearest-snapshot lookups
+with a stated tolerance, monthly-equivalent rates from the gap between dates, or
+the interval printed in the sentence. **The scan is `grep -l "FROM
+metric_snapshots"` crossed with index arithmetic** — twelve files, five of them
+guilty, and the remaining seven checked by hand.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the

@@ -169,11 +169,20 @@ export async function assessFundraisingReadiness(
     if (metricsResult.rows.length > 0) {
       metricsRow = metricsResult.rows[0] as Record<string, unknown>;
     }
+    // ...AND THE THRESHOLD IT IS SCORED AGAINST IS 15%/MONTH. The two
+    // snapshots are consecutive rows, which for a daily reporter is yesterday,
+    // so a company growing 0.5% a day — about 16% a month, over the bar —
+    // scored zero of the two points and was told "growth: 0.5%/mo" in an
+    // investor-readiness assessment. The rate is monthly-equivalent, from the
+    // gap between the two dates.
     const prior = metricsResult.rows[1] as Record<string, unknown> | undefined;
     const now = metricsRow.mrr_cents == null ? null : Number(metricsRow.mrr_cents);
     const then = prior?.mrr_cents == null ? null : Number(prior.mrr_cents);
-    if (now !== null && then !== null && then > 0) {
-      mrrGrowthPct = ((now - then) / then) * 100;
+    const gapDays = (Date.parse(`${String(metricsRow.snapshot_date)}T00:00:00Z`)
+      - Date.parse(`${String(prior?.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+    if (now !== null && then !== null && then > 0
+      && Number.isFinite(gapDays) && gapDays > 0) {
+      mrrGrowthPct = ((now / then) ** (30.44 / gapDays) - 1) * 100;
     }
   } catch { /* ok */ }
 
