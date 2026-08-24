@@ -106,8 +106,9 @@ export async function getTopAcquirerCandidates(productId: string): Promise<Acqui
   //
   // This card is read as the current thinking on an acquirer, and it feeds the
   // acquisition thesis prompt. The correlated read below takes the rationale
-  // from the most recent signal that has one, with the id as the tiebreak two
-  // signals recorded in the same second need.
+  // from the most recent signal that has one, with `rowid` as the tiebreak two
+  // signals recorded in the same second need — an id here is a nanoid, which is
+  // not a clock, while SQLite assigns rowid in insertion order.
   const res = await query(
     `SELECT
        s.acquirer_name,
@@ -121,7 +122,7 @@ export async function getTopAcquirerCandidates(productId: string): Promise<Acqui
            AND s2.acquirer_name = s.acquirer_name
            AND s2.acquirer_type = s.acquirer_type
            AND s2.strategic_rationale IS NOT NULL
-         ORDER BY s2.detected_at DESC, s2.id DESC
+         ORDER BY s2.detected_at DESC, s2.rowid DESC
          LIMIT 1) as strategic_rationale
      FROM acquirer_signals s
      WHERE s.product_id=?

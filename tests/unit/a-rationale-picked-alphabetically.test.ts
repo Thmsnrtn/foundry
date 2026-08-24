@@ -85,13 +85,14 @@ describe('the rationale on the acquirer card', () => {
     expect(candidate.strategic_rationale).toBe('They need our ingestion pipeline.');
   });
 
-  it('breaks a same-second tie by id rather than by chance', async () => {
+  it('breaks a same-second tie by insertion order rather than by chance', async () => {
     await signal('s_1', '2026-06-01T09:00:00Z', 'First rationale.');
     await signal('s_2', '2026-06-01T09:00:00Z', 'Second rationale.');
     const first = await getTopAcquirerCandidates(P);
     const second = await getTopAcquirerCandidates(P);
     expect(first[0].strategic_rationale).toBe(second[0].strategic_rationale);
-    expect(first[0].strategic_rationale).toBe('Second rationale.'); // s_2 > s_1
+    // The one inserted second, by rowid. An id here is a nanoid, not a clock.
+    expect(first[0].strategic_rationale).toBe('Second rationale.');
   });
 
   it('says nothing when no signal recorded a rationale', async () => {
