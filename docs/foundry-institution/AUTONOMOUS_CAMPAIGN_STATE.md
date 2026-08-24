@@ -427,6 +427,21 @@ with the advance in the audit log. What stays unreachable is stated rather than
 implied: two phases have no conditions defined at all, and `prompt_9` requires a
 'completed' status nothing in the system sets.
 
+**A RETENTION NOBODY MEASURED, RENDERED AS ZERO — AND SOLD.** `cohorts` has ten
+outcome columns and nothing in this codebase writes any of them; the only
+production writer of the table is the Clerk signup webhook, incrementing
+`founder_count` on FOUNDRY'S OWN product. Every one of those columns was
+`INTEGER DEFAULT 0`, so six readers took the default as a measurement: the page
+drew "0%" at day 7/14/30 beside a historical average of the same zeros, Harbor's
+prompt told a model "activation=0.0%, day30_retention=0.0%" per cohort, Beacon
+RANKED acquisition channels by an activation rate that was zero for all of them,
+and the historical average a new cohort is compared against was pulled towards
+zero by every unreported cohort in it. Migration 212 removes the defaults — the
+readers were already written for null, because the empty-cohort case was
+repaired earlier in this campaign; what changed is that null can now arrive.
+**The producing half does not exist and it was on the pricing page**: see
+"Blocked — owner" below.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
@@ -1238,6 +1253,31 @@ worth trying before inventing a new one:
 - **`challenger` and `synthesizer` are NOT part of that.** They are not agents at all — standalone debate functions reached by static import. Classifying them from the directory nearly justified deleting live code; the gate now checks reachability instead of location.
 
 ## Blocked — owner
+
+### Cohort analysis has no producing half, and it was being sold
+
+**What exists:** the `cohorts` table, the cohorts page, `GET
+/api/products/:id/cohorts`, a per-channel breakdown, a latest-cohort summary and
+a retention-deviation stressor. All of it reads.
+
+**What does not:** anything that WRITES a cohort's activation or retention for a
+customer company. The table's only production writer is Foundry's own signup
+webhook, writing Foundry's own product's `founder_count`. Ten outcome columns
+have no writer anywhere.
+
+**What was claimed:** the Investor-Ready upgrade page promised "Retention Curves
+— Day 7, 14, 30, 60, 90 retention by acquisition period and channel", "Channel
+Attribution" and "Historical Comparison … Deviations trigger stressors
+automatically", and the pricing page listed "Cohort analysis" as a capability of
+a $399/month tier. Both are corrected: the upgrade page now says what exists and
+says plainly that there is no path for reporting cohort retention today, and the
+pricing bullet no longer lists it.
+
+**The decision, which is the owner's:** either an ingestion path is built — the
+obvious one derives cohorts from the customers a company already reports through
+`POST /api/v1/customers`, grouping by `signed_up_at` and reading `last_active_at`
+for retention, which invents nothing — or the surfaces come out. What must not
+happen is a third cycle of readers rendering a `DEFAULT 0` as a measurement.
 
 **Six items pending.** §9 retention lawfulness, §11 the audit-log horizon and
 §13 the cross-company aggregation threshold need counsel rather than the owner
