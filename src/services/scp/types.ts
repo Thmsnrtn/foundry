@@ -164,7 +164,9 @@ export interface AgentInstance {
   total_decisions_proposed: number;
   total_decisions_approved: number;
   total_evolution_cycles: number;
-  domain_health_score: number;
+  /** NULL until some run scores the domain — the column is nullable and every
+   *  agent now leaves it alone rather than writing 50. */
+  domain_health_score: number | null;
   system_prompt_core: string | null;
   behavioral_constraints: string[] | null;
   config_json: Record<string, unknown> | null;
@@ -274,7 +276,16 @@ export interface AgentAnalysisResult {
   evolutionCandidates: EvolutionCandidate[];
   tokensUsed: number;
   costUsd?: number;                    // Optional: if provided, used directly; otherwise computed from tokensUsed
-  domainHealthScore?: number;          // 0-100; if provided, updates agent_instances.domain_health_score
+  /** 0-100; when provided, OVERWRITES `agent_instances.domain_health_score`.
+   *
+   *  UNDEFINED MEANS UNSCORED, AND UNSCORED IS NOT 50. Every agent had two
+   *  early-exit paths — "no data yet", "parsing error" — that returned 50, and
+   *  eight also wrote `?? 50` when the model answered without a score. Fifty is
+   *  the middle of the bar the dashboard draws and it OVERWROTE the score the
+   *  agent's last real run had earned, in the column the investor board packet
+   *  ranks its top three agents by. Leaving it undefined leaves the previous
+   *  score standing, which is the honest statement: this run did not score. */
+  domainHealthScore?: number;
   // v2/v3 signal fields — optional; BaseAgent processes these after analyzeAndAct returns
   customerSignals?: CustomerSignal[];  // Upserted into customer_intelligence
   outboundActions?: OutboundActionSignal[]; // Queued in outbound_actions

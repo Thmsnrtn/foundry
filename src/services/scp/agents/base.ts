@@ -187,7 +187,12 @@ export abstract class BaseAgent {
       import('../coordination/scratchpad.js').then(({ writeAgentFinding }) => {
         writeAgentFinding(productId, agentName, {
           position: result.briefingContribution,
-          confidence: result.domainHealthScore !== undefined ? result.domainHealthScore / 100 : 0.5,
+          // The same substitution as the 50: a run that did not score the
+          // domain has no confidence to state, and 0.5 was printed to every
+          // other agent's prompt as "50% confidence" in this agent's position.
+          confidence: result.domainHealthScore !== undefined
+            ? result.domainHealthScore / 100
+            : null,
         }).catch((err) => { logger.error(`writeAgentFinding failed for ${agentName}/${productId}: ${err}`); });
       }).catch((err) => { logger.error(`import scratchpad.js failed: ${err}`); });
     }
@@ -768,7 +773,7 @@ Rules:
       total_decisions_proposed: r.total_decisions_proposed as number,
       total_decisions_approved: r.total_decisions_approved as number,
       total_evolution_cycles: r.total_evolution_cycles as number,
-      domain_health_score: r.domain_health_score as number,
+      domain_health_score: (r.domain_health_score ?? null) as number | null,
       system_prompt_core: r.system_prompt_core as string | null,
       behavioral_constraints: this._parseJSON<string[] | null>(r.behavioral_constraints as string | null, null),
       config_json: this._parseJSON<Record<string, unknown> | null>(r.config_json as string | null, null),

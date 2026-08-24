@@ -49,7 +49,16 @@ import { getSCPBoardSection } from '../../src/services/investor/board_packet.js'
 // mattered most.
 // =============================================================================
 
-const AGENT_FILES = ['compass', 'shield', 'sentinel', 'ledger'] as const;
+// ALL ELEVEN, not the four the first pass reached. Removing `?? 50` from four
+// agents left the same substitution standing in seven others — and in a place
+// the first pass did not look at all: every agent has TWO early-exit paths, "no
+// data yet" and "parsing error", and each returned `domainHealthScore: 50`
+// outright. Twenty-two literal fifties, which OVERWRITE the score a real run
+// earned, in the column the investor board packet ranks its top three agents by.
+const AGENT_FILES = [
+  'atlas', 'beacon', 'compass', 'crucible', 'forge', 'harbor',
+  'ledger', 'oracle', 'prism', 'sentinel', 'shield',
+] as const;
 
 beforeAll(async () => {
   await runMigrations();
@@ -78,6 +87,15 @@ describe('the agents no longer invent a score', () => {
       expect(code, `${f} still substitutes 50 for a score the model did not give`)
         .not.toMatch(/domain_health_score \?\? 50/);
       expect(code).not.toMatch(/company_health_score \?\? 50/);
+    }
+  });
+
+  it('and none of them returns 50 from an early exit', () => {
+    for (const f of AGENT_FILES) {
+      const code = stripComments(
+        readFileSync(`src/services/scp/agents/${f}.ts`, 'utf8'), { lineComments: true });
+      expect(code, `${f} still reports health 50 from a path that scored nothing`)
+        .not.toMatch(/domainHealthScore:\s*50/);
     }
   });
 
@@ -231,5 +249,58 @@ describe('the weekly brief can record that it does not know', () => {
   it('and the page says so instead of drawing a bar', () => {
     expect(readFileSync('src/routes/dashboard/weekly-brief.ts', 'utf8'))
       .toMatch(/brief\.health_score == null \? 'not scored'/);
+  });
+});
+
+// =============================================================================
+// AND THE TWO PLACES THE INVENTED 50 WAS SPOKEN ALOUD.
+// =============================================================================
+
+describe("what other agents are told about a finding's confidence", () => {
+  it('says the confidence was not stated rather than printing 50%', async () => {
+    const { writeAgentFinding, getScratchpadContext } =
+      await import('../../src/services/scp/coordination/scratchpad.js');
+
+    // `base.ts` derived this from the health score: `score/100`, or 0.5 when
+    // the run did not score. Every other agent's prompt then read "50%
+    // confidence" in this agent's position — a number nothing produced,
+    // stated to a model that weighs the day's positions against each other.
+    await writeAgentFinding('p_h', 'compass', {
+      position: 'Positioning is drifting towards enterprise.',
+      confidence: null,
+    });
+    await writeAgentFinding('p_h', 'oracle', {
+      position: 'Two integrations went stale.',
+      confidence: 0.8,
+    });
+
+    const context = await getScratchpadContext('p_h');
+    expect(context).toContain('confidence not stated');
+    expect(context).toContain('80% confidence');
+    expect(context).not.toContain('50% confidence');
+  });
+});
+
+describe('the quality alert Crucible sends to Compass', () => {
+  it('is not sent on a score the model never gave', () => {
+    const code = stripComments(
+      readFileSync('src/services/scp/agents/crucible.ts', 'utf8'), { lineComments: true });
+
+    // It read `parsed.domain_health_score ?? 50` and then `if (score < 60)`,
+    // so a model that answered without a score sent Compass an alert reading
+    // "Quality score dropped to 50/100 — strategic attention needed", asking
+    // another agent to reprioritise engineering capacity because of it.
+    expect(code).toMatch(/const qualityScore = parsed\.domain_health_score;/);
+    expect(code).toMatch(/qualityScore != null && qualityScore < 60/);
+  });
+});
+
+describe('the prompt each agent is given', () => {
+  it('tells every one of them to omit a score it cannot evidence', () => {
+    for (const f of AGENT_FILES) {
+      expect(readFileSync(`src/services/scp/agents/${f}.ts`, 'utf8'),
+        `${f} asks for a score without saying it may be omitted`)
+        .toMatch(/OMIT THIS FIELD ENTIRELY if you have no/);
+    }
   });
 });

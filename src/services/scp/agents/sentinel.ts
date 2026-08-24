@@ -109,7 +109,6 @@ export class SentinelAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -201,7 +200,6 @@ Assess infrastructure and deployment health. Return JSON only (no markdown fence
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 

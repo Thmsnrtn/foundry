@@ -45,7 +45,7 @@ interface OracleClaudeResponse {
     insight: string;
     priority: 'critical' | 'high' | 'normal' | 'low';
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -133,7 +133,6 @@ export class OracleAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -251,7 +250,9 @@ Return JSON only (no markdown fences):
       "priority": "critical" | "high" | "normal" | "low"
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -273,7 +274,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -344,7 +344,7 @@ Return JSON only (no markdown fences):
       }] : [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      domainHealthScore: parsed.domain_health_score,
       hypotheses,
       agentMessages,
     };

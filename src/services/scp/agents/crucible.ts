@@ -44,7 +44,7 @@ interface CrucibleClaudeResponse {
     description: string;
     authority_level: 0 | 1 | 2;
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -118,7 +118,6 @@ export class CrucibleAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -249,7 +248,9 @@ Return JSON only (no markdown fences):
       "authority_level": 0 | 1 | 2
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -271,7 +272,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -361,8 +361,13 @@ Return JSON only (no markdown fences):
       });
     }
 
-    const qualityScore = parsed.domain_health_score ?? 50;
-    if (qualityScore < 60) {
+    // A MESSAGE THAT STATES A SCORE MUST HAVE ONE. This read
+    // `parsed.domain_health_score ?? 50`, so a model that answered without a
+    // score sent Compass an alert reading "Quality score dropped to 50/100 —
+    // strategic attention needed", naming a number nothing produced and asking
+    // another agent to reprioritise engineering capacity because of it.
+    const qualityScore = parsed.domain_health_score;
+    if (qualityScore != null && qualityScore < 60) {
       agentMessages.push({
         to_agent: 'compass',
         message_type: 'insight',
@@ -403,7 +408,7 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      domainHealthScore: parsed.domain_health_score,
       outboundActions,
       agentMessages,
       hypotheses,

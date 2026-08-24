@@ -41,7 +41,7 @@ interface HarborClaudeResponse {
     recommended_action: string;
     urgency: 'immediate' | 'this_week' | 'monitor';
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -125,7 +125,6 @@ export class HarborAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -243,7 +242,9 @@ Return JSON only (no markdown fences):
       "urgency": "immediate" | "this_week" | "monitor"
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -265,7 +266,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -360,7 +360,7 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      domainHealthScore: parsed.domain_health_score,
       customerSignals,
       outboundActions,
       agentMessages,

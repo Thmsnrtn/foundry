@@ -132,7 +132,6 @@ export class LedgerAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -274,7 +273,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 

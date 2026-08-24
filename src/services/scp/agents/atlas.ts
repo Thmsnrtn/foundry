@@ -38,7 +38,7 @@ interface AtlasClaudeResponse {
     success_threshold: number;
     test_duration_days: number;
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -133,7 +133,6 @@ export class AtlasAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -148,9 +147,14 @@ export class AtlasAgent extends BaseAgent {
       ? stressorRows.map(s => `${s.stressor_name as string} [${s.severity as string}]: ${s.signal as string}`).join('; ')
       : 'None active';
 
+    // A ROW EXISTS FOR EVERY PROVISIONED AGENT; the SCORE is what may be
+    // missing, and now genuinely can be — an agent that has never scored its
+    // domain leaves the column NULL rather than writing 50. Interpolating that
+    // put the word "null" into the prompt as this agent's current health.
     const sessionRows = sessionResult.rows as Record<string, unknown>[];
-    const healthTrend = sessionRows.length > 0
-      ? `Current domain health score: ${sessionRows[0].domain_health_score as number} `
+    const currentHealth = sessionRows.length > 0 ? sessionRows[0].domain_health_score : null;
+    const healthTrend = currentHealth != null
+      ? `Current domain health score: ${Number(currentHealth)} `
         + `(as of ${sessionRows[0].completed_at as string}). No history is kept, so this is a level, not a trend.`
       : 'No domain health score recorded yet';
 
@@ -213,7 +217,9 @@ Return JSON only (no markdown fences):
       "test_duration_days": number
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -235,7 +241,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -332,7 +337,7 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      domainHealthScore: parsed.domain_health_score,
       outboundActions,
       agentMessages,
       hypotheses,
