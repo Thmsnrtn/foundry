@@ -5,7 +5,7 @@
 // Reads existing tables (products, agent_instances, decisions) — no new writes.
 // =============================================================================
 
-import { query } from '../../db/client.js';
+import { query, getVisibleProducts } from '../../db/client.js';
 
 export interface FleetAgent {
   agentName: string;
@@ -40,11 +40,16 @@ function placeholders(n: number): string {
  * their agents, their pending-decision counts) — no per-product N+1.
  */
 export async function getFleetOverview(founderId: string): Promise<FleetOverview> {
-  const productsResult = await query(
-    `SELECT id, name, scp_status FROM products WHERE owner_id = ? AND status = 'active' ORDER BY name ASC`,
-    [founderId],
-  );
-  const products = productsResult.rows as Array<Record<string, unknown>>;
+  // EVERY COMPANY THIS PERSON MAY SEE, not only the ones they own. This read
+  // `WHERE owner_id = ?`, so an invited co-founder opened the Fleet Observatory
+  // — "every agent's status across all of a founder's products" — and saw
+  // nothing, while every other page in the product showed them the company they
+  // had been accepted into. `getVisibleProducts` is where that rule lives; the
+  // fleet's own choice to show only ACTIVE companies is applied after it.
+  const visible = await getVisibleProducts(founderId);
+  const products = (visible.rows as Array<Record<string, unknown>>)
+    .filter((p) => p.status === 'active')
+    .sort((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? '')));
   if (products.length === 0) {
     return { products: [], totals: { products: 0, agents: 0, activeAgents: 0, pendingDecisions: 0 } };
   }

@@ -9,7 +9,7 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
-import { getLayoutContext } from './_shared.js';
+import { getLayoutContext, selectedProductId } from './_shared.js';
 import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const planRoutes = new Hono<AuthEnv>();
@@ -164,7 +164,12 @@ import { signalText } from '../../services/signal.js';
 planRoutes.post('/plan/generate',
   requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
-  const products = await query('SELECT id, name FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
+  // The week's plan is written FOR a company. This took whichever one sorted
+  // first, so a founder with two got one company's plan and no way to ask for
+  // the other's.
+  const selectedId = await selectedProductId(c, founder.id);
+  if (!selectedId) return c.redirect('/plan');
+  const products = await query('SELECT id, name FROM products WHERE id = ?', [selectedId]);
   if (products.rows.length === 0) return c.redirect('/plan');
 
   const p = products.rows[0] as Record<string, string>;

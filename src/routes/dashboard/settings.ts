@@ -10,7 +10,7 @@ import { query } from '../../db/client.js';
 import { createBillingPortalSession, createCheckoutSession } from '../../services/billing/stripe.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { settingsPage } from '../../views/components.js';
-import { getLayoutContext } from './_shared.js';
+import { getLayoutContext, selectedProductId } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
 import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
 import { nanoid } from 'nanoid';
@@ -607,19 +607,15 @@ settingsRoutes.post('/settings/generate-share', requireCompanyCapability('can_ma
   const founder = c.get('founder');
   // Use current product from cookie, not LIMIT 1 (FRICTION: settings targeting wrong product)
   const { getCookie } = await import('hono/cookie');
-  const cookieProductId = getCookie(c, 'foundry_product');
-  const products = await query(
-    'SELECT id FROM products WHERE owner_id = ? AND id = ?',
-    [founder.id, cookieProductId ?? '']
-  );
-  if (products.rows.length === 0) {
-    // Fallback to first product if cookie not set
-    const fallback = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
-    if (fallback.rows.length === 0) return c.redirect('/settings');
-  }
-  const productId = (products.rows[0] as Record<string, string>)?.id ?? cookieProductId;
-  const token = randomBytes(24).toString('hex');
+  // THE FALLBACK WAS COMPUTED AND THROWN AWAY. When the cookie was unset or
+  // stale, this ran a second query, ignored its result, and set `productId` to
+  // the cookie value it had just failed to resolve — so the UPDATE matched
+  // nothing, and the founder was redirected to a page that looked like it had
+  // generated them a public share link.
+  const productId = await selectedProductId(c, founder.id);
+  if (!productId) return c.redirect('/settings?error=no_company_selected');
 
+  const token = randomBytes(24).toString('hex');
   await query('UPDATE products SET share_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
   return c.redirect('/settings');
 });
@@ -628,12 +624,13 @@ settingsRoutes.post('/settings/generate-share', requireCompanyCapability('can_ma
 
 settingsRoutes.post('/settings/generate-ingest', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
-  const products = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
-  if (products.rows.length === 0) return c.redirect('/settings');
+  // Rotating an ingest token is a change to how a named company reports its
+  // own numbers. `LIMIT 1` with no ORDER BY rotated it on whichever company
+  // SQLite returned first.
+  const productId = await selectedProductId(c, founder.id);
+  if (!productId) return c.redirect('/settings?error=no_company_selected');
 
-  const productId = (products.rows[0] as Record<string, string>).id;
   const token = randomBytes(24).toString('hex');
-
   await query('UPDATE products SET ingest_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
   return c.redirect('/settings');
 });

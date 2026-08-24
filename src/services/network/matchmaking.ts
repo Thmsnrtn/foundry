@@ -29,11 +29,24 @@ export async function upsertNetworkProfile(
     timezone?: string;
   }
 ): Promise<void> {
-  const product = await query(
-    "SELECT sector_profile, growth_stage FROM products WHERE owner_id = ? AND status = 'active' LIMIT 1",
+  // A FOUNDER WITH TWO COMPANIES HAS NO SINGLE SECTOR, and this took whichever
+  // one SQLite returned first — `LIMIT 1` with no ORDER BY — to describe them
+  // to every other founder in the network. The profile carries the sector and
+  // stage when they are unambiguous; when the founder's active companies
+  // disagree, it carries neither, and the founder can state them themselves.
+  const productsResult = await query(
+    "SELECT sector_profile, growth_stage FROM products WHERE owner_id = ? AND status = 'active'",
     [founderId]
   );
-  const p = product.rows[0] as Record<string, string> | undefined;
+  const rows = productsResult.rows as Array<Record<string, string | null>>;
+  const only = <K extends 'sector_profile' | 'growth_stage'>(key: K): string | null => {
+    const values = [...new Set(rows.map((r) => r[key]).filter((v): v is string => !!v))];
+    return values.length === 1 ? values[0] : null;
+  };
+  const p = rows.length === 0 ? undefined : {
+    sector_profile: only('sector_profile'),
+    growth_stage: only('growth_stage'),
+  };
 
   await query(
     `INSERT INTO network_profiles (id, founder_id, display_name, bio, sector, growth_stage, expertise_areas, seeking_help_with, willing_to_help_with, timezone)

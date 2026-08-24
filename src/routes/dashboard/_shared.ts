@@ -19,6 +19,41 @@ import { getCookie } from 'hono/cookie';
 import type { Context } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
 
+/**
+ * The company this founder is acting on, or null.
+ *
+ * WHICHEVER COMPANY SORTED FIRST WAS DECIDING REAL ACTIONS. Three POST routes
+ * resolved the company with `SELECT id FROM products WHERE owner_id = ? LIMIT 1`
+ * — no ORDER BY, so the row SQLite happened to return first. A founder with two
+ * companies rotated an ingest token on whichever one that was, generated a
+ * public share link for it, and had the week's plan written for it. The
+ * pause/resume routes already did this correctly, from the cookie the company
+ * switcher sets; this is that rule with one home.
+ *
+ * Returns null when there is no selection or the selection is not this
+ * founder's, and the caller does nothing rather than acting on a guess.
+ */
+export async function selectedProductId(
+  honoCtx: Parameters<typeof getCookie>[0],
+  founderId: string,
+): Promise<string | null> {
+  const cookieProductId = getCookie(honoCtx, 'foundry_product');
+  if (cookieProductId) {
+    const owned = await query(
+      'SELECT id FROM products WHERE id = ? AND owner_id = ?',
+      [cookieProductId, founderId]);
+    if (owned.rows.length > 0) return (owned.rows[0] as Record<string, string>).id;
+  }
+
+  // No cookie, or a stale one. A founder with exactly ONE company has made an
+  // unambiguous choice by having only one; more than one is a choice nobody has
+  // made, and picking is what this function exists to stop.
+  const all = await query(
+    "SELECT id FROM products WHERE owner_id = ? AND status != 'archived' ORDER BY id",
+    [founderId]);
+  return all.rows.length === 1 ? (all.rows[0] as Record<string, string>).id : null;
+}
+
 export interface UXContext {
   nextAction: NextAction | null;
   unreadNotifications: AppNotification[];
