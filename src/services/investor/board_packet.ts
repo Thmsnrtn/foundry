@@ -21,7 +21,13 @@ export interface SCPBoardSection {
   golden_suite_size: number;
   ai_cost_30d_usd: number;
   attributed_revenue_30d_usd: number;
-  roi: number | null;
+  /** Attributed revenue over measured AI cost. THE NUMERATOR IS AN ESTIMATE:
+   *  `attributed_revenue_trailing_30d_usd` is written from the Ledger agent's
+   *  model-generated guesses at how much revenue each agent action produced,
+   *  weighted by the confidence that same model assigned, and reconciled
+   *  against no invoice. This renders in an investor packet, so the field is
+   *  named for the half it inherits rather than as "roi". */
+  attributed_roi: number | null;
   top_agents: Array<{ name: string; role: string; health: number; version: number }>;
   latest_briefing_headline: string | null;
 }
@@ -39,7 +45,7 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
   const prod = (productResult.rows[0] ?? {}) as Record<string, unknown>;
   const aiCost = (prod.ai_cost_trailing_30d_usd as number) ?? 0;
   const attributedRevenue = (prod.attributed_revenue_trailing_30d_usd as number) ?? 0;
-  const roi = aiCost > 0 ? attributedRevenue / aiCost : null;
+  const attributedRoi = aiCost > 0 ? attributedRevenue / aiCost : null;
 
   // Top 3 agents by domain_health_score.
   //
@@ -94,7 +100,7 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
     golden_suite_size: (prod.golden_suite_size as number) ?? 0,
     ai_cost_30d_usd: aiCost,
     attributed_revenue_30d_usd: attributedRevenue,
-    roi,
+    attributed_roi: attributedRoi,
     top_agents,
     latest_briefing_headline,
   };

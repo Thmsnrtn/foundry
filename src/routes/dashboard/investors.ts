@@ -342,12 +342,15 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
         </div>
         <!-- AI ROI -->
         <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
-          ${scpSection.roi !== null ? html`
-            <div style="font-size:2rem;font-weight:700;color:${scpSection.roi >= 2 ? '#4ecca3' : scpSection.roi >= 1 ? '#ffb347' : '#ff6b6b'};">${scpSection.roi.toFixed(1)}x</div>
+          ${scpSection.attributed_roi !== null ? html`
+            <div style="font-size:2rem;font-weight:700;color:${scpSection.attributed_roi >= 2 ? '#4ecca3' : scpSection.attributed_roi >= 1 ? '#ffb347' : '#ff6b6b'};">${scpSection.attributed_roi.toFixed(1)}x</div>
           ` : html`
             <div style="font-size:1.5rem;font-weight:700;color:var(--text-muted,#64748b);">—</div>
           `}
-          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">AI ROI</div>
+          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Attributed AI ROI</div>
+          <div style="font-size:10px;color:var(--text-muted,#64748b);margin-top:2px;line-height:1.35;">
+            measured cost, estimated revenue
+          </div>
         </div>
         <!-- Evolution Cycles -->
         <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">

@@ -1266,7 +1266,7 @@ async function scpPLUpdate(): Promise<void> {
     // Update products table with latest AI cost trailing 30d
     await dbQuery(
       `UPDATE products SET ai_cost_trailing_30d_usd=?, attributed_revenue_trailing_30d_usd=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-      [pl.costs.total_usd, pl.revenue.total_usd, productId]
+      [pl.costs.total_usd, pl.attributed_revenue.total_usd, productId]
     );
   }
   logger.info(`scp_pl_update: Updated P&L for ${products.rows.length} products`, { jobName: 'scp_pl_update' });

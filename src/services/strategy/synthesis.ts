@@ -118,7 +118,11 @@ export async function generateStrategicSynthesis(productId: string): Promise<str
     }),
     recent_agent_actions: recentSessions,
     experiments: experimentSummary,
-    roi: roiSummary,
+    // `roiSummary.provenance` travels INSIDE the block, because this block is
+    // the model's only source and the numbers alone read as measurements. The
+    // attributed revenue in it is Foundry's own estimate of what its actions
+    // earned, weighted by the confidence the estimate carried.
+    attributed_economics: roiSummary,
     competitor_profiles: competitorProfiles.map((c) => ({
       name: c.name,
       threat_level: c.threat_level,
@@ -154,7 +158,11 @@ Rules:
 - top_opportunities: max 5, ordered by priority
 - recommended_priorities: max 5 actionable items for next 30 days
 - full_synthesis: structured markdown with ## headers for each section
-- Be specific and actionable, not generic`;
+- Be specific and actionable, not generic
+- attributed_economics mixes measured costs with Foundry's own estimates of
+  the revenue its actions produced. Its provenance field says so. Never state
+  attributed revenue, profit or ROI as measured results, and never conclude
+  that the company is profitable or self-funding from them.`;
 
   const userPrompt = `Product ID: ${productId}\nPeriod: ${periodStart} to ${periodEnd}\n\nContext:\n${contextBlock}`;
 

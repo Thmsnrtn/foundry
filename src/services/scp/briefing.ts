@@ -177,14 +177,14 @@ export async function generateDailyBriefing(
   }
 
   const attributedRevenue = (prod.attributed_revenue_trailing_30d_usd as number) ?? 0;
-  const roi = aiCost30d > 0 ? attributedRevenue / aiCost30d : null;
+  const attributedRoi = aiCost30d > 0 ? attributedRevenue / aiCost30d : null;
 
   const financialSummary: FinancialSummary = {
     mrr_cents: mrrCents,
     mrr_growth_pct: mrrGrowthPct,
     ai_cost_30d_usd: aiCost30d,
     attributed_revenue_usd: attributedRevenue,
-    roi,
+    attributed_roi: attributedRoi,
   };
 
   // Collect pending_decisions from all sessions
@@ -568,8 +568,8 @@ export function formatBriefingAsHTML(briefing: SCPBriefing, companyName: string)
   const mrrDisplay = fin?.mrr_cents !== null && fin?.mrr_cents !== undefined
     ? `$${(fin.mrr_cents / 100).toLocaleString()}`
     : 'N/A';
-  const roiDisplay = fin?.roi !== null && fin?.roi !== undefined
-    ? `${fin.roi.toFixed(1)}x`
+  const roiDisplay = fin?.attributed_roi !== null && fin?.attributed_roi !== undefined
+    ? `${fin.attributed_roi.toFixed(1)}x`
     : 'N/A';
 
   return `
@@ -625,7 +625,7 @@ export function formatBriefingAsHTML(briefing: SCPBriefing, companyName: string)
     <div style="display:flex; gap:24px; flex-wrap:wrap; font-size:14px; color:var(--text-secondary, #94a3b8);">
       <span><strong style="color:var(--text-primary, #e2e8f0);">MRR:</strong> ${mrrDisplay}</span>
       <span><strong style="color:var(--text-primary, #e2e8f0);">AI Cost (30d):</strong> $${fin ? fin.ai_cost_30d_usd.toFixed(2) : '0.00'}</span>
-      <span><strong style="color:var(--text-primary, #e2e8f0);">ROI:</strong> ${roiDisplay}</span>
+      <span><strong style="color:var(--text-primary, #e2e8f0);">Attributed ROI:</strong> ${roiDisplay}</span>
     </div>
   </div>
 

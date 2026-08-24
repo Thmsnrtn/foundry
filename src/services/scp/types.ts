@@ -404,7 +404,12 @@ export interface FinancialSummary {
   mrr_growth_pct: number | null;
   ai_cost_30d_usd: number;
   attributed_revenue_usd: number;
-  roi: number | null;                  // attributed_revenue / ai_cost
+  /** attributed_revenue / ai_cost. THE NUMERATOR IS AN ESTIMATE — see
+   *  `financial/economics.ts`: attributed revenue is the Ledger agent's
+   *  model-generated guess at what each action earned, weighted by its own
+   *  confidence and reconciled against nothing. Anywhere this is rendered it
+   *  must be labelled as attributed rather than as a measured return. */
+  attributed_roi: number | null;
 }
 
 export interface SCPBriefing {
