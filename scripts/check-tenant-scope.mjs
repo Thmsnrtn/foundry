@@ -2,9 +2,11 @@
 // =============================================================================
 // A ROUTE THAT TAKES A COMPANY'S ID MUST SAY WHOSE COMPANY IT IS.
 //
-// `middleware/tenant.ts` states the rule once — validate ownership, return 404
-// rather than 403 so nothing leaks — and is mounted nowhere. Every route that
-// needs it re-implements it inline, and SIX idioms are in use:
+// `middleware/tenant.ts` stated the rule once — validate ownership, return 404
+// rather than 403 so nothing leaks — and was mounted nowhere. It has since been
+// deleted: two test suites were asserting on its source text, which made an
+// unmounted file read as evidence that tenancy was centrally enforced. Every
+// route re-implements the rule inline, and SIX idioms are in use:
 //
 //   getProductByOwner(id, founder.id)     hasProductAccess(id, founder.id)
 //   requireOwner()                        verifyPortfolioOwnership(id, email)

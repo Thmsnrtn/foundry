@@ -405,8 +405,8 @@ boardPacket.get('/packet/:id', async (c) => {
 
   // Scoped to this founder. A packet belonging to another company now
   // returns null and renders the same "not found" as a packet that does not
-  // exist — no information leak, which is the choice `middleware/tenant.ts`
-  // made and stated years before this route was written.
+  // exist — no information leak. 404 rather than 403 is the standing choice
+  // across every route; `scripts/check-tenant-scope.mjs` is where it is kept.
   const data = await getBoardPacket(id, founder.id).catch(() => null);
 
   if (!data) {

@@ -6,11 +6,12 @@
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 const SRC = resolve(__dirname, '../../src');
+const ROOT = resolve(__dirname, '../..');
 
 let clientSource: string;
 let portfolioSource: string;
@@ -18,7 +19,6 @@ let experimentSource: string;
 let voiceBriefingSource: string;
 let voiceProcessorSource: string;
 let schemaSource: string;
-let tenantMiddlewareSource: string;
 let authMiddlewareSource: string;
 
 beforeAll(() => {
@@ -28,7 +28,6 @@ beforeAll(() => {
   voiceBriefingSource = readFileSync(resolve(SRC, 'services/voice/briefing.ts'), 'utf-8');
   voiceProcessorSource = readFileSync(resolve(SRC, 'services/voice/processor.ts'), 'utf-8');
   schemaSource = readFileSync(resolve(SRC, 'db/schema.sql'), 'utf-8');
-  tenantMiddlewareSource = readFileSync(resolve(SRC, 'middleware/tenant.ts'), 'utf-8');
   authMiddlewareSource = readFileSync(resolve(SRC, 'middleware/auth.ts'), 'utf-8');
 });
 
@@ -298,17 +297,16 @@ describe('decision_patterns is intentionally unscoped (anonymized)', () => {
 
 describe('Cross-company data contract enforcement', () => {
 
-  it('tenant middleware verifies product ownership via getProductByOwner', () => {
-    expect(tenantMiddlewareSource).toMatch(/getProductByOwner/);
-  });
-
-  it('tenant middleware returns 404 for non-owned products (not 403)', () => {
-    expect(tenantMiddlewareSource).toMatch(/404/);
-    // After the ownership check (rows.length === 0), there should be a 404 response
-    const ownershipBlock = tenantMiddlewareSource.match(
-      /rows\.length\s*===\s*0[\s\S]*?c\.json\([^)]+,\s*404\s*\)/
-    );
-    expect(ownershipBlock).toBeTruthy();
+  // THESE TWO READ A FILE THAT DID NOT RUN. `middleware/tenant.ts` was mounted
+  // on no router; routes scope ownership inline, one query at a time. Asserting
+  // that the unmounted file was well written told a reader that tenancy was
+  // enforced centrally, and could not have failed whatever the live routes did.
+  // The executing version lives in `tests/unit/tenancy-isolation.test.ts`,
+  // which requests another founder's company and reads the answer;
+  // `check-tenant-scope.mjs` is the ratchet across every route.
+  it('every route module scopes reads by owner — the ratchet, not a source string', () => {
+    expect(existsSync(resolve(SRC, 'middleware/tenant.ts'))).toBe(false);
+    expect(existsSync(resolve(ROOT, 'scripts/check-tenant-scope.mjs'))).toBe(true);
   });
 
   it('auth middleware resolves founder from Clerk JWT (not from query params)', () => {
