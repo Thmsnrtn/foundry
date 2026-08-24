@@ -365,16 +365,30 @@ share six of their seven days. The intervals travel with the sentences now.
 
 **A WEEK IS SEVEN DAYS, NOT ONE ROW — and by now this is a LENS, not a
 finding.** `metric_snapshots` is keyed by DATE, most companies report daily, and
-five separate consumers stepped through consecutive ROWS while calling the step
-a month, a week or a period: the Ghost simulator's 90-day Monte Carlo, growth
-stage detection, the revenue-plateau prediction, the proactive insights, and the
-failure-pattern matcher — where four consecutive DAYS satisfied "activation
-declining for four weeks" and matched a pattern that tells the founder they have
-a 60-day lead time. Each one is now expressed in days: nearest-snapshot lookups
-with a stated tolerance, monthly-equivalent rates from the gap between dates, or
-the interval printed in the sentence. **The scan is `grep -l "FROM
-metric_snapshots"` crossed with index arithmetic** — twelve files, five of them
-guilty, and the remaining seven checked by hand.
+EIGHT separate consumers stepped through consecutive ROWS while calling the step
+a month, a week or a period:
+
+- the Ghost simulator's 90-day Monte Carlo, over MCP, before a gate-3 decision;
+- growth stage detection, which also called twelve rows twelve months;
+- the revenue-plateau prediction, which also ran its deceleration test backwards;
+- the proactive insights, two of which compare SEVEN-DAY ROLLING figures one day
+  apart — six of their seven days shared;
+- the failure-pattern matcher, where four consecutive DAYS satisfied "activation
+  declining for four weeks" and matched a pattern that tells the founder they
+  have a 60-day lead time on it;
+- the fundraising readiness score, where a daily rate was compared against a
+  15%/month bar and stated to the model as "growth: 0.5%/mo";
+- the daily briefing's `mrr_growth_pct`, and the compressed briefing, which
+  named the previous row `lastWeekMetrics`;
+- the founder's email digest, which labelled it "WoW".
+
+Each is now expressed in days: nearest-snapshot lookups with a stated tolerance,
+monthly-equivalent rates from the gap between dates, or the interval printed in
+the sentence. **The scan is `grep -l "FROM metric_snapshots"` crossed with index
+arithmetic** — twelve files, and the ones that were not guilty of the cadence
+error were guilty of something else in the same query: the monthly INVESTOR
+UPDATE read `mrr_growth_pct` and `customer_count`, neither of which has ever
+been a column, so every update ever generated reported both as "N/A".
 
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as

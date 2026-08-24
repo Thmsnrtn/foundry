@@ -206,14 +206,37 @@ export async function assessFundraisingReadiness(
       [productId]
     );
     if (dnaResult.rows.length > 0) {
+      // FIVE MORE COLUMNS THAT DO NOT EXIST, IN THE SAME ASSESSMENT.
+      //
+      // `target_customer`, `competitors`, `positioning`, `core_hypothesis` and
+      // `hypothesis_validated` have never been columns on `product_dna`. Read
+      // off a `SELECT *` row they are `undefined`, so all four flags were FALSE
+      // for every company that has ever run this — six of the ten points on the
+      // narrative dimension and two on the traction dimension, withheld from
+      // everybody, in an assessment of whether they are ready to raise.
+      //
+      // The real fields are `icp_description`, `competitive_landscape` and
+      // `positioning_statement`. There is no hypothesis on the DNA at all: a
+      // tested hypothesis is one in the `hypotheses` table that has reached a
+      // terminal status, which is what "tested" means — including 'disproven'
+      // and 'inconclusive', because a hypothesis that failed was still tested.
       const dnaRow = dnaResult.rows[0] as Record<string, unknown>;
       dnaCompletion = (dnaRow.completion_pct as number) ?? 0;
-      hasICP = !!(dnaRow.target_customer && String(dnaRow.target_customer).length > 20);
-      hasCompetitive = !!(dnaRow.competitors && String(dnaRow.competitors).length > 20);
-      hasPositioning = !!(dnaRow.positioning && String(dnaRow.positioning).length > 20);
-      hasHypothesisTested = !!(dnaRow.core_hypothesis && (dnaRow.hypothesis_validated as boolean));
+      const filled = (v: unknown) => !!(v && String(v).trim().length > 20);
+      hasICP = filled(dnaRow.icp_description);
+      hasCompetitive = filled(dnaRow.competitive_landscape);
+      hasPositioning = filled(dnaRow.positioning_statement);
     }
   } catch { /* ok */ }
+
+  try {
+    const testedResult = await query(
+      `SELECT COUNT(*) AS cnt FROM hypotheses
+        WHERE product_id = ? AND status IN ('completed','disproven','inconclusive')`,
+      [productId],
+    );
+    hasHypothesisTested = Number((testedResult.rows[0] as Record<string, unknown>)?.cnt ?? 0) > 0;
+  } catch { /* an unreadable table is not a hypothesis nobody tested */ }
 
   // Load lifecycle state (has_cto, advisors, etc.)
   let lifecycleState: string | null = null;
