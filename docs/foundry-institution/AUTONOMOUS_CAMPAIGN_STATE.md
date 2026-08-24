@@ -60,10 +60,10 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `2db2c9f`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `02929e2`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 245 files, highest **209**. Ordering gated. Snapshot current.
-- **Validation:** `npm run check` green end to end — **402 files / 3,496 tests**,
+- **Migrations:** 248 files, highest **212**. Ordering gated. Snapshot current.
+- **Validation:** `npm run check` green end to end — **410 files / 3,578 tests**,
   read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE, AND THIS LINE SAID IT WAS.** `test:ci` is a
   bare `vitest --run`, which also runs `tests/simulation` and `tests/evals`.
@@ -89,7 +89,8 @@ inherited list because it was inherited.
   `closeDb` landed; many consecutive clean runs since. See item 2.
   **`console-in-src` fell 212 → 211** and the ratchet refused to pass until the
   gain was locked in, which is the behaviour that makes a ratchet worth having.
-- **Ratchets:** unguarded mutating routes **113** (baseline 113 — two stale
+- **Ratchets:** unguarded mutating routes **112** (baseline 112 — the Koldly
+  ICP POST was deleted; earlier: two stale
   entries removed, one added: the founder's own interruption ceiling, which
   only bounds what Foundry may do) · fabricated test schemas **4** ·
   writer-less tables **0** · SELECT drift **0** (the gate now reads
