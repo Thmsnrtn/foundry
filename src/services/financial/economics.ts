@@ -63,16 +63,24 @@ export async function getAICompanyPL(
   productId: string,
   days: number = 30,
 ): Promise<AICompanyPL> {
+  // Reported as the period's label; the queries below ask SQLite for the bound.
   const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
   const now = new Date().toISOString();
 
   // Costs
+  // ONE FORMAT ON BOTH SIDES. `created_at` defaults to CURRENT_TIMESTAMP, which
+  // SQLite writes as 'YYYY-MM-DD HH:MM:SS'; the bound was a JavaScript
+  // `toISOString()`, 'YYYY-MM-DDTHH:MM:SS.sssZ'. These are compared as TEXT, and
+  // at index 10 a space (0x20) sorts before 'T' (0x54) — so every row written on
+  // the boundary DATE compared as earlier than the boundary whatever its time,
+  // and a "trailing 30 days" window silently dropped its oldest day. Asking
+  // SQLite for the bound keeps both sides in SQLite's format.
   const costResult = await query(
     `SELECT agent_name, cost_type, SUM(amount_usd) as total
      FROM cost_events
-     WHERE product_id = ? AND created_at >= ?
+     WHERE product_id = ? AND created_at >= datetime('now', ? || ' days')
      GROUP BY agent_name, cost_type`,
-    [productId, since],
+    [productId, `-${days}`],
   );
 
   const costsByAgent: Record<string, number> = {};
@@ -106,9 +114,9 @@ export async function getAICompanyPL(
   const revenueResult = await query(
     `SELECT agent_name, attribution_type, SUM(amount_usd * confidence) as total
      FROM revenue_attributions
-     WHERE product_id = ? AND created_at >= ?
+     WHERE product_id = ? AND created_at >= datetime('now', ? || ' days')
      GROUP BY agent_name, attribution_type`,
-    [productId, since],
+    [productId, `-${days}`],
   );
 
   const revenueByAgent: Record<string, number> = {};
@@ -163,17 +171,16 @@ export async function getAgentCostBreakdown(
   /** NULL when this agent recorded no cost in the window. */
   attributed_roi: number | null;
 }>> {
-  const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
-
   const costResult = await query(
     `SELECT agent_name,
             SUM(amount_usd) as total_cost,
             SUM(CASE WHEN cost_type = 'llm_tokens' THEN amount_usd ELSE 0 END) as llm_cost,
             SUM(CASE WHEN cost_type = 'integration_api' THEN amount_usd ELSE 0 END) as integration_cost
      FROM cost_events
-     WHERE product_id = ? AND created_at >= ? AND agent_name IS NOT NULL
+     WHERE product_id = ? AND created_at >= datetime('now', ? || ' days')
+       AND agent_name IS NOT NULL
      GROUP BY agent_name`,
-    [productId, since],
+    [productId, `-${days}`],
   );
 
   // `created_at`, for the reason given in `getAICompanyPL`: an attribution's
@@ -182,9 +189,9 @@ export async function getAgentCostBreakdown(
   const revenueResult = await query(
     `SELECT agent_name, SUM(amount_usd * confidence) as attributed_revenue
      FROM revenue_attributions
-     WHERE product_id = ? AND created_at >= ?
+     WHERE product_id = ? AND created_at >= datetime('now', ? || ' days')
      GROUP BY agent_name`,
-    [productId, since],
+    [productId, `-${days}`],
   );
 
   const revenueByAgent: Record<string, number> = {};

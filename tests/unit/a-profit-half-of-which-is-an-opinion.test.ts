@@ -132,6 +132,26 @@ describe('the window the attributions are read through', () => {
     expect(row.attributed_revenue_usd).toBeCloseTo(25, 6);
   });
 
+  it('does not drop the oldest day of the window to a format mismatch', async () => {
+    // `created_at` is CURRENT_TIMESTAMP, 'YYYY-MM-DD HH:MM:SS'; the bound was a
+    // JavaScript ISO string, 'YYYY-MM-DDTHH:MM:SS.sssZ'. Compared as TEXT, a
+    // space sorts before 'T', so EVERY row written on the boundary date read as
+    // earlier than the boundary whatever its clock time — a "trailing 30 days"
+    // window that silently dropped its oldest day.
+    await logRevenue({
+      productId: P, attributionType: 'direct', agentName: 'ledger',
+      amountUsd: 40, confidence: 1, description: 'a guess',
+    });
+    const boundary = (await query(
+      "SELECT datetime('now', '-30 days') AS b")).rows[0] as unknown as Record<string, unknown>;
+    // Late in the day, 30 days back: inside a 30-day window by any reading.
+    await query('UPDATE revenue_attributions SET created_at = ?',
+      [`${String(boundary.b).slice(0, 10)} 23:59:59`]);
+
+    const pl = await getAICompanyPL(P, 30);
+    expect(pl.attributed_revenue.total_usd).toBeCloseTo(40, 6);
+  });
+
   it('still honours the window it was given', async () => {
     await logRevenue({
       productId: P, attributionType: 'direct', agentName: 'ledger',
