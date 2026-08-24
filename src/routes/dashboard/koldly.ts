@@ -1,21 +1,9 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { query, getProductByOwner } from '../../db/client.js';
+import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
-import { validate } from '../../lib/validation.js';
-import { z } from 'zod';
-
-const icpSchema = z.object({
-  product_id: z.string().min(1),
-  target_role: z.string().min(1).max(200),
-  target_industry: z.string().min(1).max(200),
-  company_size: z.string().min(1).max(100),
-  pain_points: z.array(z.string().max(500)).max(10),
-  qualifying_signals: z.array(z.string().max(500)).max(10),
-});
-
 export const koldlyRoutes = new Hono<AuthEnv>();
 
 koldlyRoutes.get('/koldly', async (c) => {
@@ -47,72 +35,46 @@ koldlyRoutes.get('/koldly', async (c) => {
         </div>
         <div>
           <p style="font-size:0.8rem;color:#6b7280;margin-bottom:0.25rem;">Koldly API URL</p>
-          <p style="font-weight:600;color:${koldlyUrl !== 'Not configured' ? '#059669' : '#dc2626'};">${koldlyUrl !== 'Not configured' ? 'Connected' : 'Not configured'}</p>
+          <!-- "Connected" was the word for "an environment variable is set".
+               Nothing here has called Koldly. -->
+          <p style="font-weight:600;color:${koldlyUrl !== 'Not configured' ? '#059669' : '#dc2626'};">${koldlyUrl !== 'Not configured' ? 'Configured (not tested)' : 'Not configured'}</p>
         </div>
       </div>
     </div>
 
     <div class="card">
       <h3>ICP Configuration</h3>
-      <p style="font-size:0.87rem;color:#6b7280;margin-bottom:1rem;">Define your Ideal Customer Profile. Koldly uses this to target outbound campaigns.</p>
-      ${productId ? html`
-        <form method="POST" action="/koldly/icp" id="icp-form">
-          <input type="hidden" name="product_id" value="${productId}" />
-          <div class="form-group">
-            <label for="target_role">Target Role</label>
-            <input type="text" name="target_role" id="target_role" value="${icpData?.target_role ?? ''}" placeholder="e.g., Technical Founder, CTO" required />
-          </div>
-          <div class="form-group">
-            <label for="target_industry">Target Industry</label>
-            <input type="text" name="target_industry" id="target_industry" value="${icpData?.target_industry ?? ''}" placeholder="e.g., SaaS, Developer Tools" required />
-          </div>
-          <div class="form-group">
-            <label for="company_size">Company Size</label>
-            <input type="text" name="company_size" id="company_size" value="${icpData?.company_size ?? ''}" placeholder="e.g., 1-10, 10-50" required />
-          </div>
-          <div class="form-group">
-            <label for="pain_points">Pain Points (one per line)</label>
-            <textarea name="pain_points" id="pain_points" rows="3" placeholder="No operational layer&#10;Building features but not the business">${(icpData?.pain_points ?? []).join('\n')}</textarea>
-          </div>
-          <div class="form-group">
-            <label for="qualifying_signals">Qualifying Signals (one per line)</label>
-            <textarea name="qualifying_signals" id="qualifying_signals" rows="3" placeholder="Active GitHub repo&#10;Pre-launch SaaS">${(icpData?.qualifying_signals ?? []).join('\n')}</textarea>
-          </div>
-          <button type="submit" class="btn btn-primary">Save ICP</button>
-        </form>
-      ` : html`<p style="color:#d97706;">No product found. Complete onboarding first.</p>`}
+      <p style="font-size:0.87rem;color:#6b7280;margin-bottom:0.5rem;">
+        Your Ideal Customer Profile lives in your company's DNA — the audience,
+        the pain, the trigger, the positioning — where every agent reads it.
+        ${productId ? html`<a href="/products/${productId}/dna">Edit it there</a>.` : 'Complete onboarding first.'}
+      </p>
+      <p style="font-size:0.8rem;color:#6b7280;">
+        THIS PAGE USED TO HOLD A SECOND ICP FORM. It saved into
+        <code>products.stack_description</code> — overwriting the stack
+        description that field is for, and that four prompts read — and nothing
+        anywhere read what it wrote. <code>GET /internal/icp</code>, the endpoint
+        the copy said Koldly targets campaigns from, returns a fixed profile
+        written into the source; it does not take a company and never read this
+        form.
+      </p>
     </div>
 
     <div class="card">
       <h3>API Endpoints</h3>
-      <p style="font-size:0.87rem;color:#6b7280;margin-bottom:1rem;">These endpoints are available for ecosystem integration. Authenticate with the <code>X-Ecosystem-Key</code> header.</p>
+      <p style="font-size:0.87rem;color:#6b7280;margin-bottom:1rem;">
+        These endpoints are available for ecosystem integration. The key travels
+        in the <code>X-Ecosystem-Key</code> header, and the two that touch a
+        company resolve it to a principal and check that company is in its
+        scope — so until the owner issues one, they serve nobody.
+      </p>
       <div style="font-size:0.87rem;">
         <div style="padding:0.5rem 0;border-bottom:1px solid #f3f4f6;"><code>GET /internal/health</code> — Health check (no auth required)</div>
-        <div style="padding:0.5rem 0;border-bottom:1px solid #f3f4f6;"><code>GET /internal/icp</code> — Get ICP configuration for Koldly targeting</div>
-        <div style="padding:0.5rem 0;border-bottom:1px solid #f3f4f6;"><code>POST /internal/conversion-signal</code> — Report conversion events from Koldly campaigns</div>
-        <div style="padding:0.5rem 0;"><code>POST /internal/campaign/receive</code> — Receive campaign data from Koldly</div>
+        <div style="padding:0.5rem 0;border-bottom:1px solid #f3f4f6;"><code>GET /internal/icp</code> — a FIXED profile, written into the source. It takes no company and reads nothing this founder has entered.</div>
+        <div style="padding:0.5rem 0;border-bottom:1px solid #f3f4f6;"><code>POST /internal/conversion-signal</code> — report a conversion event against a named company. Requires a principal scoped to that company.</div>
+        <div style="padding:0.5rem 0;"><code>POST /internal/campaign/receive</code> — receive campaign data for a named company. Requires a principal scoped to that company.</div>
       </div>
     </div>
   `;
   return c.html(dashboardLayout(ctx, content));
-});
-
-koldlyRoutes.post('/koldly/icp', async (c) => {
-  const founder = c.get('founder');
-  const rawBody = await c.req.parseBody() as Record<string, string>;
-  const body = validate(icpSchema, {
-    product_id: rawBody.product_id,
-    target_role: rawBody.target_role,
-    target_industry: rawBody.target_industry,
-    company_size: rawBody.company_size,
-    pain_points: (rawBody.pain_points ?? '').split('\n').map((s: string) => s.trim()).filter(Boolean),
-    qualifying_signals: (rawBody.qualifying_signals ?? '').split('\n').map((s: string) => s.trim()).filter(Boolean),
-  });
-  const prodResult = await getProductByOwner(body.product_id, founder.id);
-  if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-
-  await query('UPDATE products SET stack_description = ? WHERE id = ?',
-    [JSON.stringify({ icp: body }), body.product_id]);
-
-  return c.redirect('/koldly?saved=1');
 });
