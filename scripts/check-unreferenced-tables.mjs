@@ -33,6 +33,22 @@
 //     `SELECT * FROM ${table}` no static scan can attribute. Only the
 //     object-valued entries count. A table listed as NOT company data is being
 //     excluded from a sweep, not read by one.
+//   • A FOREIGN KEY HELD BY A TABLE THAT STAYS. This one was learned the
+//     expensive way. Migration 215 dropped eleven tables this gate had listed,
+//     and fifty test files went red on
+//     `no such table: main.agent_message_threads` — because
+//     `agent_messages.thread_id REFERENCES agent_message_threads(id)`, and with
+//     `foreign_keys = 1` SQLite resolves that on every DELETE against the
+//     child. The erasure path could not complete. `experiments.holdout_id`
+//     was the same. A table nothing in TypeScript names is still reached by the
+//     database itself on every write to whatever points at it, so it is not a
+//     table nobody can touch — and calling it one is how a working schema gets
+//     broken by a cleanup.
+//
+//     The reference has to SURVIVE to count: a column dropped by a later
+//     `ALTER TABLE ... DROP COLUMN`, or one on a table since dropped, points at
+//     nothing. Migration 216 removed both dangling columns, which is why this
+//     rule changes no current finding — it changes what a future one can be.
 //
 // TABLE REBUILDS ARE FOLLOWED THROUGH THEIR RENAME. SQLite cannot alter a
 // constraint in place, so a rebuild is CREATE x_new, copy, DROP x, RENAME x_new
@@ -82,6 +98,33 @@ for (const file of migrationFiles) {
   }
 }
 
+// ─── Foreign keys that still point somewhere ─────────────────────────────────
+//
+// A parent counts only when the (table, column) holding the reference is still
+// there: the referencing table survives, and the column was not dropped later.
+const droppedColumns = new Set();
+for (const m of migrationSql.matchAll(/ALTER TABLE\s+(\w+)\s+DROP COLUMN\s+(\w+)/gi)) {
+  droppedColumns.add(`${m[1].toLowerCase()}.${m[2].toLowerCase()}`);
+}
+const fkParents = new Set();
+const noteFk = (child, column, parent) => {
+  if (!tables.has(child)) return;
+  if (droppedColumns.has(`${child.toLowerCase()}.${column.toLowerCase()}`)) return;
+  fkParents.add(parent);
+};
+for (const m of migrationSql.matchAll(
+  /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)\s*\(([\s\S]*?)\n\s*\);/gi)) {
+  const child = m[1];
+  for (const line of m[2].split('\n')) {
+    const col = /^\s*(\w+)\s+[^,]*?REFERENCES\s+(\w+)/i.exec(line);
+    if (col) noteFk(child, col[1], col[2]);
+  }
+}
+for (const m of migrationSql.matchAll(
+  /ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+(\w+)[^;]*?REFERENCES\s+(\w+)/gi)) {
+  noteFk(m[1], m[2], m[3]);
+}
+
 const triggerBodies = (migrationSql.match(/CREATE TRIGGER[\s\S]*?END;/gi) ?? []).join('\n');
 const consent = readFileSync('src/services/privacy/consent.ts', 'utf8');
 const src = walk('src')
@@ -94,6 +137,7 @@ for (const table of [...tables].sort()) {
     'i').test(src);
   if (named) continue;
   if (new RegExp(`\\b${table}\\b`).test(triggerBodies)) continue;
+  if (fkParents.has(table)) continue;
   if (new RegExp(`^\\s*${table}:\\s*\\{`, 'm').test(consent)) continue;
   findings.push(table);
 }

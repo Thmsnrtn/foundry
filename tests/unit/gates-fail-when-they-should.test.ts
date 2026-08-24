@@ -510,6 +510,40 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_orphan_table');
   });
 
+  it('check-unreferenced-tables does not call a foreign-key parent unreachable', () => {
+    // THE EXPENSIVE ONE. Migration 215 dropped eleven tables this gate had
+    // listed and fifty test files went red on `no such table:
+    // main.agent_message_threads`, because `agent_messages.thread_id`
+    // REFERENCES it and `foreign_keys = 1` makes SQLite resolve that on every
+    // DELETE against the child — so the erasure path could not complete. A
+    // table no TypeScript names is still reached by the database itself on
+    // every write to whatever points at it.
+    plant('src/db/migrations/997_gate_fixture_fk.sql',
+      j('CREATE TABLE ', 'IF NOT EXISTS ', '_gate_fixture_fk_parent (\n',
+        '  id TEXT PRIMARY KEY\n', ');\n',
+        'ALTER TABLE products ADD COLUMN _gate_fixture_ptr TEXT ',
+        'REFERENCES _gate_fixture_fk_parent(id);\n'));
+    const r = run('check-unreferenced-tables.mjs');
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).not.toContain('_gate_fixture_fk_parent');
+  });
+
+  it('check-unreferenced-tables ignores a foreign key whose column was dropped', () => {
+    // The other direction, and the reason the rule tracks columns rather than
+    // just counting REFERENCES: a pointer that has since been removed points at
+    // nothing, and a table only such a pointer reached IS unreachable. This is
+    // what migration 216 did to `thread_id` and `holdout_id`.
+    plant('src/db/migrations/997_gate_fixture_fk.sql',
+      j('CREATE TABLE ', 'IF NOT EXISTS ', '_gate_fixture_fk_parent (\n',
+        '  id TEXT PRIMARY KEY\n', ');\n',
+        'ALTER TABLE products ADD COLUMN _gate_fixture_ptr TEXT ',
+        'REFERENCES _gate_fixture_fk_parent(id);\n',
+        'ALTER TABLE products DROP COLUMN _gate_fixture_ptr;\n'));
+    const r = run('check-unreferenced-tables.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_fk_parent');
+  });
+
   it('check-unreferenced-tables follows a rebuild through its rename', () => {
     // SQLite cannot alter a constraint in place, so a rebuild is CREATE x_new,
     // copy, DROP x, RENAME x_new TO x. Reading only CREATE and DROP left twelve

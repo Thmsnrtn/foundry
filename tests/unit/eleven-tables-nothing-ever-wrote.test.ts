@@ -17,6 +17,17 @@ import { query } from '../../src/db/client.js';
 // The owner's rule from migration 157 applies unchanged — remove the consuming
 // halves rather than build the producing ones, and anything genuinely wanted
 // comes back as a whole feature. Here there was not even a consuming half.
+//
+// TWO OF THE ELEVEN WERE REACHED AFTER ALL, BY THE DATABASE RATHER THAN BY CODE,
+// and the suite said so within minutes: fifty test files went red on `no such
+// table: main.agent_message_threads`. `agent_messages.thread_id` and
+// `experiments.holdout_id` held foreign keys into two of the dropped tables, and
+// with `foreign_keys = 1` SQLite resolves those on every DELETE against the
+// child — so the erasure path could not finish. Migration 216 removes both
+// columns, which is what 215 should have done: they are the pointer half of the
+// same unbuilt mechanisms. `check-unreferenced-tables.mjs` read TypeScript only
+// and now counts a live foreign key as a reference, with a planted-defect test
+// in both directions.
 // =============================================================================
 
 const DROPPED = [
@@ -61,6 +72,25 @@ describe('the tables nothing ever wrote are gone', () => {
       const r = await query("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [table]);
       expect(r.rows, `${table} should still exist`).toHaveLength(1);
     }
+  });
+
+  it('the columns that pointed at two of them are gone too', async () => {
+    const dangling: Array<[string, string]> = [
+      ['agent_messages', 'thread_id'],
+      ['experiments', 'holdout_id'],
+    ];
+    for (const [table, column] of dangling) {
+      const cols = (await query(`PRAGMA table_info(${table})`))
+        .rows as unknown as Array<Record<string, unknown>>;
+      expect(cols.map((c) => String(c.name)), `${table}.${column}`).not.toContain(column);
+    }
+  });
+
+  it('the erasure path can still delete a founder\'s agent messages', async () => {
+    // The exact failure fifty test files reported. A DELETE against the child
+    // of a dropped parent is what raised `no such table`.
+    await query('DELETE FROM agent_messages WHERE product_id = ?', ['p_nonexistent_215']);
+    await query('DELETE FROM experiments WHERE product_id = ?', ['p_nonexistent_215']);
   });
 
   it('the ratchet that found them is at zero and can only stay there', () => {

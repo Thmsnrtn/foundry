@@ -46,10 +46,18 @@ describe('the response protocol', () => {
     for (const dead of ['requires_response', 'response_deadline', 'responded_at', 'response_id']) {
       expect(names, `${dead} survived migration 213`).not.toContain(dead);
     }
-    // What the bus does do is untouched.
-    for (const live of ['from_agent', 'to_agent', 'priority', 'read_at', 'thread_id']) {
+    // What the bus does do is untouched. This list is an anti-overreach guard —
+    // 213 took four columns and must not have taken a fifth — so it shrinks only
+    // when a LATER migration removes one deliberately. `thread_id` left in 216,
+    // which dropped it together with `agent_message_threads`; the guard against
+    // 213 having taken it is the assertion below that 213's own text names four
+    // columns and no more.
+    for (const live of ['from_agent', 'to_agent', 'priority', 'read_at']) {
       expect(names).toContain(live);
     }
+    const m213 = readFileSync('src/db/migrations/213_a_reply_nobody_could_send.sql', 'utf8');
+    expect(m213.match(/ALTER TABLE agent_messages DROP COLUMN/g)).toHaveLength(4);
+    expect(m213).not.toContain('thread_id;');
   });
 
   it('is gone from the code, including the reply nothing called', async () => {
