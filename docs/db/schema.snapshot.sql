@@ -1144,7 +1144,6 @@
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
-  ON agent_messages(thread_id);
   ON agent_wiki_entries(product_id, section, title);
   ON agent_wiki_entries(product_id, section, updated_at);
   ON ai_spend_reservations(status, expires_at);
@@ -4435,8 +4434,9 @@
 , observation_source_kind TEXT);
 , origin TEXT NOT NULL DEFAULT 'founder', review_id TEXT, effective_at DATETIME);
 , paid_through TEXT);
+, parent_message_id TEXT REFERENCES agent_messages(id));
 , payload_json TEXT, attempt_count INTEGER, failed_at DATETIME, effect_certainty TEXT, provider_acknowledged_at TEXT, reconcile_after TEXT);
-, pre_mortem  TEXT, learnings   TEXT, holdout_id  TEXT REFERENCES experiment_holdouts(id), owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT, success_threshold REAL, outcome TEXT, winning_variant_id TEXT, concluded_at DATETIME);
+, pre_mortem  TEXT, learnings   TEXT, owner_id TEXT, hypothesis TEXT, experiment_type TEXT, variants TEXT, primary_metric TEXT, secondary_metrics TEXT, traffic_split TEXT, sample_size_target INTEGER, current_sample_size INTEGER DEFAULT 0, ended_at TEXT, results TEXT, confidence_level REAL, decision_id TEXT, success_threshold REAL, outcome TEXT, winning_variant_id TEXT, concluded_at DATETIME);
 , product_id TEXT, role TEXT, scopes TEXT, created_by TEXT, expires_at TEXT);
 , progress REAL);
 , provenance_json TEXT, observed_through TEXT);
@@ -4448,7 +4448,6 @@
 , scope TEXT NOT NULL DEFAULT 'responsibility');
 , sector_profile TEXT DEFAULT 'b2b_saas', growth_stage TEXT DEFAULT 'pre_launch', growth_stage_updated_at TEXT, growth_stage_overridden INTEGER DEFAULT 0, share_token TEXT, ingest_token TEXT, deleted_at DATETIME, build_platform TEXT DEFAULT 'custom_code', company_lifecycle_state TEXT DEFAULT 'setup'
 , superseded_by_candidate_id TEXT REFERENCES responsibility_candidates(id));
-, thread_id TEXT REFERENCES agent_message_threads(id), parent_message_id TEXT REFERENCES agent_messages(id));
 , unmeasured TEXT, measured_components INTEGER);
 AFTER INSERT ON ai_spend_reservations
 AFTER INSERT ON responsibility_candidate_decisions WHEN NEW.decision!='promoted'
@@ -4647,7 +4646,6 @@ CREATE INDEX idx_agent_instances_next_run ON agent_instances(next_run_at, status
 CREATE INDEX idx_agent_instances_product ON agent_instances(product_id);
 CREATE INDEX idx_agent_instances_status ON agent_instances(product_id, status);
 CREATE INDEX idx_agent_messages_from ON agent_messages(product_id, from_agent, created_at DESC);
-CREATE INDEX idx_agent_messages_thread
 CREATE INDEX idx_agent_messages_to ON agent_messages(product_id, to_agent, read_at);
 CREATE INDEX idx_agent_messages_unread ON agent_messages(product_id, to_agent) WHERE read_at IS NULL;
 CREATE INDEX idx_agent_remediations_agent ON agent_remediations(product_id, agent_name);
