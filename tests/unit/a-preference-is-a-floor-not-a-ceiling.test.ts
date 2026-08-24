@@ -1,6 +1,13 @@
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+process.env.ENCRYPTION_KEY = '0'.repeat(64);
+
 import { describe, expect, it } from 'vitest';
-import { computeWaterfall, runMultipleExitScenarios, type Stakeholder }
-  from '../../src/services/scp/exit/cap-table.js';
+import { runMigrations } from '../../src/db/migrate.js';
+import { query } from '../../src/db/client.js';
+import {
+  computeWaterfall, runMultipleExitScenarios, saveCapTableScenario,
+  getCapTableScenarios, type Stakeholder,
+} from '../../src/services/scp/exit/cap-table.js';
 
 // =============================================================================
 // A LIQUIDATION PREFERENCE IS A FLOOR, AND THE WATERFALL TREATED IT AS A CEILING.
@@ -144,5 +151,67 @@ describe('two investors whose choices interact', () => {
     // Nobody is paid twice: the totals add up to the exit.
     const sum = w.proceeds_by_stakeholder.reduce((t, p) => t + p.gross_proceeds, 0);
     expect(sum).toBeCloseTo(20_000_000, -2);
+  });
+});
+
+// =============================================================================
+// AND THE SAVED ROW THAT HELD NOTHING BUT NAMES.
+//
+// `saveCapTableScenario` fills `founder_proceeds` and `investor_proceeds_pct`
+// only when given an exit valuation to model against, and its one caller never
+// passed one — so both columns were NULL in every row ever written while the
+// Saved Scenarios table advertised them as columns.
+//
+// The column was also called `total_dilution_pct` and rendered under a heading
+// reading "Dilution". It holds the investors' share of the PROCEEDS, which is a
+// different number from ownership dilution whenever a preference bites — the
+// entire subject of this page. Migration 208 renames it.
+// =============================================================================
+
+describe('the saved scenario', () => {
+  it('carries the proceeds when given a valuation to model against', async () => {
+    await runMigrations();
+    await query("INSERT OR IGNORE INTO founders (id, clerk_user_id, email) VALUES ('f_ct','c_ct','ct@example.com')");
+    await query("INSERT OR IGNORE INTO products (id, name, owner_id, status) VALUES ('p_ct','Acme','f_ct','active')");
+
+    await saveCapTableScenario('p_ct', {
+      scenario_name: 'With a valuation',
+      stakeholders: [FOUNDER, SEED],
+      exit_valuation: 250_000_000,
+    });
+    await saveCapTableScenario('p_ct', {
+      scenario_name: 'Without one',
+      stakeholders: [FOUNDER, SEED],
+    });
+
+    const rows = await getCapTableScenarios('p_ct');
+    const withVal = rows.find((r) => r.scenario_name === 'With a valuation')!;
+    const without = rows.find((r) => r.scenario_name === 'Without one')!;
+
+    expect(withVal.founder_proceeds).toBeCloseTo(214_285_714, -2);
+    // 14.29% of the proceeds — the investor converted, so proceeds share and
+    // ownership coincide here. They do not at $2M, which is the next case.
+    expect(withVal.investor_proceeds_pct).toBeCloseTo(14.29, 1);
+
+    // Absent, and absent is what it says: the row holds the stakeholders only.
+    expect(without.founder_proceeds).toBeNull();
+    expect(without.investor_proceeds_pct).toBeNull();
+    expect(without.exit_valuation).toBeNull();
+  });
+
+  it('stores the proceeds share, which is not dilution', async () => {
+    // At a $2M exit the investor takes their $500,000 preference: 25% of the
+    // proceeds, on 14.29% of the company. A column headed "Dilution" showing
+    // 25 would have told the founder they gave away a quarter of it.
+    await saveCapTableScenario('p_ct', {
+      scenario_name: 'Preference bites',
+      stakeholders: [FOUNDER, SEED],
+      exit_valuation: 2_000_000,
+    });
+    const row = (await getCapTableScenarios('p_ct'))
+      .find((r) => r.scenario_name === 'Preference bites')!;
+    expect(row.investor_proceeds_pct).toBeCloseTo(25, 1);
+    // The investor's ownership, for contrast: 500,000 of 3,500,000 shares.
+    expect(row.investor_proceeds_pct).not.toBeCloseTo(14.29, 1);
   });
 });

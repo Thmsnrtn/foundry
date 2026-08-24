@@ -2898,6 +2898,7 @@
   investment_date TEXT,
   investor_id TEXT NOT NULL REFERENCES investors(id) ON DELETE CASCADE,
   investor_ownership_pct REAL NOT NULL,
+  investor_proceeds_pct REAL,
   invited_by TEXT NOT NULL REFERENCES founders(id),
   invited_by TEXT REFERENCES founders(id),
   invited_founder_id TEXT,                  -- non-null for signup/paid events
@@ -4160,7 +4161,6 @@
   total_decisions_approved INTEGER NOT NULL DEFAULT 0,
   total_decisions_proposed INTEGER NOT NULL DEFAULT 0,
   total_decisions_resolved INTEGER NOT NULL DEFAULT 0,
-  total_dilution_pct REAL,
   total_events_received  INTEGER NOT NULL DEFAULT 0,
   total_evolution_cycles INTEGER NOT NULL DEFAULT 0,
   total_inbound_events INTEGER DEFAULT 0,

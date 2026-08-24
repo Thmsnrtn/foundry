@@ -52,7 +52,11 @@ export interface CapTableScenarioRow {
   exit_valuation: number | null;
   stakeholders_json: string;
   founder_proceeds: number | null;
-  total_dilution_pct: number | null;
+  /** The investors' share of the exit PROCEEDS, which is not dilution: a
+   *  preference that bites pays an investor far more than their ownership. The
+   *  column was called `total_dilution_pct` and rendered under a column headed
+   *  "Dilution" (migration 208). */
+  investor_proceeds_pct: number | null;
   preference_waterfall_json: string | null;
   created_at: string;
 }
@@ -221,13 +225,13 @@ export async function saveCapTableScenario(
   const id = nanoid();
 
   let founderProceeds: number | null = null;
-  let totalDilutionPct: number | null = null;
+  let investorProceedsPct: number | null = null;
   let preferencewaterfallJson: string | null = null;
 
   if (scenario.exit_valuation && scenario.exit_valuation > 0) {
     const waterfall = await computeWaterfall(scenario.stakeholders, scenario.exit_valuation);
     founderProceeds = waterfall.founder_total;
-    totalDilutionPct = parseFloat(
+    investorProceedsPct = parseFloat(
       ((waterfall.investor_total / scenario.exit_valuation) * 100).toFixed(2)
     );
     preferencewaterfallJson = JSON.stringify(waterfall.proceeds_by_stakeholder);
@@ -236,7 +240,7 @@ export async function saveCapTableScenario(
   await query(
     `INSERT INTO cap_table_scenarios
        (id, product_id, scenario_name, exit_valuation, stakeholders_json,
-        founder_proceeds, total_dilution_pct, preference_waterfall_json)
+        founder_proceeds, investor_proceeds_pct, preference_waterfall_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
@@ -245,7 +249,7 @@ export async function saveCapTableScenario(
       scenario.exit_valuation ?? null,
       JSON.stringify(scenario.stakeholders),
       founderProceeds,
-      totalDilutionPct,
+      investorProceedsPct,
       preferencewaterfallJson,
     ]
   );
@@ -271,7 +275,7 @@ export async function getCapTableScenarios(productId: string): Promise<CapTableS
       exit_valuation: row.exit_valuation as number | null,
       stakeholders_json: row.stakeholders_json as string,
       founder_proceeds: row.founder_proceeds as number | null,
-      total_dilution_pct: row.total_dilution_pct as number | null,
+      investor_proceeds_pct: row.investor_proceeds_pct as number | null,
       preference_waterfall_json: row.preference_waterfall_json as string | null,
       created_at: row.created_at as string,
     };

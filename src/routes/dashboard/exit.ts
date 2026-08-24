@@ -432,6 +432,15 @@ exitRoutes.get('/exit/cap-table', async (c) => {
             <input type="text" name="scenario_name" class="form-control" required placeholder="Current cap table" />
           </div>
           <div class="form-group">
+            <label>Exit valuation to save against (optional, $)</label>
+            <input type="number" name="exit_valuation" class="form-control" placeholder="50000000" />
+            <p class="text-muted text-xs" style="margin-top:4px">
+              The table below models six exit sizes either way. This is the one
+              the saved scenario keeps its proceeds for — without it the saved
+              row holds the stakeholders and nothing else.
+            </p>
+          </div>
+          <div class="form-group">
             <label>Stakeholders (JSON array)</label>
             <textarea name="stakeholders_json" class="form-control" rows="8" required placeholder='[
   {"name":"Founder A","type":"founder","shares":3000000,"options":0,"invested":0,"preference_multiple":1,"is_participating":false,"vested_pct":100},
@@ -447,14 +456,20 @@ exitRoutes.get('/exit/cap-table', async (c) => {
       <div class="section">
         <h2>Saved Scenarios</h2>
         <table class="data-table">
-          <thead><tr><th>Name</th><th>Exit Valuation</th><th>Founder Proceeds</th><th>Dilution</th><th>Created</th></tr></thead>
+          <thead><tr><th>Name</th><th>Exit Valuation</th><th>Founder Proceeds</th><th>Investor share of proceeds</th><th>Created</th></tr></thead>
           <tbody>
             ${scenarios.map(s => html`
               <tr>
                 <td>${s.scenario_name}</td>
-                <td>${s.exit_valuation ? '$' + (Number(s.exit_valuation) / 1_000_000).toFixed(1) + 'M' : '—'}</td>
-                <td>${s.founder_proceeds ? '$' + (Number(s.founder_proceeds) / 1_000).toFixed(0) + 'K' : '—'}</td>
-                <td>${s.total_dilution_pct ? Number(s.total_dilution_pct).toFixed(1) + '%' : '—'}</td>
+                <td>${s.exit_valuation === null
+                  ? html`<span class="text-muted">not modelled</span>`
+                  : '$' + (Number(s.exit_valuation) / 1_000_000).toFixed(1) + 'M'}</td>
+                <td>${s.founder_proceeds === null
+                  ? html`<span class="text-muted">not modelled</span>`
+                  : '$' + (Number(s.founder_proceeds) / 1_000).toFixed(0) + 'K'}</td>
+                <td>${s.investor_proceeds_pct === null
+                  ? html`<span class="text-muted">not modelled</span>`
+                  : Number(s.investor_proceeds_pct).toFixed(1) + '%'}</td>
                 <td class="text-muted text-xs">${String(s.created_at).slice(0, 10)}</td>
               </tr>
             `)}
@@ -483,8 +498,20 @@ exitRoutes.post('/exit/cap-table', async (c) => {
   }
 
   const scenarioName = String(body['scenario_name'] ?? 'Scenario');
+
+  // THE SAVED ROW USED TO HOLD NOTHING BUT NAMES. `saveCapTableScenario` fills
+  // `founder_proceeds` and `investor_proceeds_pct` only when it is given an
+  // exit valuation to model against, and this call never passed one — so both
+  // columns were NULL in every row ever written, and the Saved Scenarios table
+  // advertised two numbers it could not produce.
+  const rawValuation = parseFloat(String(body['exit_valuation'] ?? ''));
+  const exitValuation = Number.isFinite(rawValuation) && rawValuation > 0
+    ? rawValuation : undefined;
+
   const exitScenarios = await runMultipleExitScenarios(ctx.productId, stakeholders).catch(() => []);
-  await saveCapTableScenario(ctx.productId, { scenario_name: scenarioName, stakeholders }).catch(() => {});
+  await saveCapTableScenario(ctx.productId, {
+    scenario_name: scenarioName, stakeholders, exit_valuation: exitValuation,
+  }).catch(() => {});
 
   const content = html`
     <div class="page-header">

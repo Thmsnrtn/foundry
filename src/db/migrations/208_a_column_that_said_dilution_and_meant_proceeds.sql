@@ -1,0 +1,25 @@
+-- =============================================================================
+-- Migration 208: `total_dilution_pct` never held dilution
+--
+-- The column stores `investor_total / exit_valuation * 100` — the investors'
+-- SHARE OF THE EXIT PROCEEDS. The Saved Scenarios table on the cap table page
+-- rendered it under a column headed "Dilution".
+--
+-- Those are different numbers whenever a liquidation preference bites, which is
+-- the entire subject of this page. An investor holding 14% of the company and a
+-- $4M preference takes far more than 14% of a $5M exit and exactly 14% of a
+-- $250M one. A founder reading "Dilution: 80%" would have understood they had
+-- given away four-fifths of their company.
+--
+-- The column is renamed to what it holds. SQLite renames a column in place when
+-- no index or trigger references it, and none does — the one index on this
+-- table is on `product_id`.
+--
+-- NO ROW IS AFFECTED, and there is a reason worth recording: `exit_valuation`
+-- is optional on the writer, and the only caller has never passed one, so this
+-- column and `founder_proceeds` have been NULL in every row ever written. The
+-- table advertised two numbers it could not produce. That is repaired in the
+-- same commit, at the call site, by asking for the valuation the numbers need.
+-- =============================================================================
+
+ALTER TABLE cap_table_scenarios RENAME COLUMN total_dilution_pct TO investor_proceeds_pct;
