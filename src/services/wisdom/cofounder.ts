@@ -113,6 +113,47 @@ export async function getAlignmentScore(productId: string): Promise<AlignmentSco
     };
   }
 
+  // A SCORE THAT COST A MODEL CALL EVERY TIME IT WAS ASKED FOR, AND WAS NEVER
+  // READ BACK. Each call to this function ran Opus and appended a row to
+  // `cofounder_alignment_scores`; nothing anywhere read that table, so two
+  // requests on the same unchanged responses paid twice and could disagree
+  // with each other. The responses are the whole input: if the newest one
+  // predates the newest stored score, that score still describes them.
+  //
+  // Strictly `>`: `responded_at` and `created_at` are both `datetime('now')`,
+  // a whole second. A tie means we cannot tell which was written first, so we
+  // re-score rather than serve an answer that may predate its own input.
+  const latestResponseAt = (responses.rows as unknown as Array<Record<string, string>>)
+    .reduce((max, r) => (r.responded_at && r.responded_at > max ? r.responded_at : max), '');
+  const cachedResult = await query(
+    `SELECT overall_alignment, vision_alignment, priority_alignment, risk_alignment,
+            divergence_axis, recommendations, created_at
+       FROM cofounder_alignment_scores
+      WHERE product_id = ?
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 1`,
+    [productId],
+  );
+  const cached = cachedResult.rows[0] as unknown as Record<string, unknown> | undefined;
+  if (cached && latestResponseAt && String(cached.created_at) > latestResponseAt) {
+    let recommendations: string[] = [];
+    try {
+      const decoded: unknown = JSON.parse(String(cached.recommendations ?? '[]'));
+      if (Array.isArray(decoded)) recommendations = decoded.map((r) => String(r));
+    } catch {
+      recommendations = [];
+    }
+    return {
+      overall_alignment: cached.overall_alignment == null ? null : Number(cached.overall_alignment),
+      vision_alignment: cached.vision_alignment == null ? null : Number(cached.vision_alignment),
+      priority_alignment: cached.priority_alignment == null ? null : Number(cached.priority_alignment),
+      risk_alignment: cached.risk_alignment == null ? null : Number(cached.risk_alignment),
+      divergence_axis: cached.divergence_axis == null ? null : String(cached.divergence_axis),
+      recommendations,
+      respondents: founderIds.length,
+    };
+  }
+
   // Use Claude Opus to analyze alignment
   const prompt = `Analyze alignment between co-founders based on their independent DNA responses.
 

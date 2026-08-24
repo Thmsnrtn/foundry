@@ -381,6 +381,53 @@ export async function benchmarkProduct(
   };
 }
 
+export interface PortfolioSnapshotRow {
+  snapshot_date: string;
+  total_companies: number;
+  avg_mrr: number | null;
+  median_mrr: number | null;
+  companies_green: number;
+  companies_yellow: number;
+  companies_red: number;
+  total_portfolio_mrr: number | null;
+}
+
+/**
+ * The snapshots this portfolio has accumulated, newest first.
+ *
+ * A WEEKLY JOB HAD BEEN WRITING THESE SINCE THE TABLE EXISTED AND NOTHING READ
+ * ONE. `POST /api/portfolios/:id/snapshot` generates a row and answers
+ * `{"status":"generated"}`; there was no way to read one back, so the record
+ * accumulated where only the erasure export could reach it. This is the read
+ * half of a write that already exists — not a new capability — and it is
+ * bounded: half a year of weekly rows, newest first, ordered by the date they
+ * describe with `rowid` breaking a same-day tie.
+ */
+export async function getPortfolioSnapshots(
+  portfolioId: string,
+  limit = 26,
+): Promise<PortfolioSnapshotRow[]> {
+  const result = await query(
+    `SELECT snapshot_date, total_companies, avg_mrr, median_mrr,
+            companies_green, companies_yellow, companies_red, total_portfolio_mrr
+       FROM portfolio_snapshots
+      WHERE portfolio_id = ?
+      ORDER BY snapshot_date DESC, rowid DESC
+      LIMIT ?`,
+    [portfolioId, Math.min(Math.max(1, limit), 104)],
+  );
+  return (result.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    snapshot_date: String(r.snapshot_date),
+    total_companies: Number(r.total_companies ?? 0),
+    avg_mrr: r.avg_mrr == null ? null : Number(r.avg_mrr),
+    median_mrr: r.median_mrr == null ? null : Number(r.median_mrr),
+    companies_green: Number(r.companies_green ?? 0),
+    companies_yellow: Number(r.companies_yellow ?? 0),
+    companies_red: Number(r.companies_red ?? 0),
+    total_portfolio_mrr: r.total_portfolio_mrr == null ? null : Number(r.total_portfolio_mrr),
+  }));
+}
+
 /**
  * Generate a portfolio snapshot (for weekly portfolio reports).
  */

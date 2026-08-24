@@ -18,7 +18,7 @@ import { assessFundraisingReadiness } from '../../services/scp/investor/fundrais
 import { generateInvestorUpdate } from '../../services/scp/investor/investor-update.js';
 import { processVoiceMemo, generateSpokenDigest, startVoiceSession, endVoiceSession } from '../../services/voice/processor.js';
 import { buildProductGraph, discoverCausalChains, queryNeighborhood } from '../../services/graph/engine.js';
-import { createPortfolio, addToPortfolio, getPortfolioOverview, benchmarkProduct, generatePortfolioSnapshot } from '../../services/portfolio/manager.js';
+import { createPortfolio, addToPortfolio, getPortfolioOverview, benchmarkProduct, generatePortfolioSnapshot, getPortfolioSnapshots } from '../../services/portfolio/manager.js';
 
 export const platformApiRoutes = new Hono<AuthEnv>();
 
@@ -458,6 +458,19 @@ platformApiRoutes.get('/api/portfolios/:id/benchmark/:productId', async (c) => {
   const result = await benchmarkProduct(portfolioId, c.req.param('productId'));
   if (result === null) return c.json({ error: 'Not found' }, 404);
   return c.json(result);
+});
+
+// The read half of the write below. `POST .../snapshot` had been answering
+// "generated" since the endpoint existed, with no way to read one back, and a
+// weekly job writing one per portfolio as well.
+platformApiRoutes.get('/api/portfolios/:id/snapshots', async (c) => {
+  const founder = c.get('founder');
+  const portfolioId = c.req.param('id');
+  if (!(await verifyPortfolioOwnership(portfolioId, founder.email))) return c.json({ error: 'Not found' }, 404);
+  const limitRaw = Number(c.req.query('limit') ?? 26);
+  const limit = Number.isFinite(limitRaw) ? limitRaw : 26;
+  const snapshots = await getPortfolioSnapshots(portfolioId, limit);
+  return c.json({ data: snapshots, meta: { total: snapshots.length } });
 });
 
 platformApiRoutes.post('/api/portfolios/:id/snapshot', async (c) => {

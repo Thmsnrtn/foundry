@@ -1,4 +1,2 @@
 board_decks
-cofounder_alignment_scores
-portfolio_snapshots
 web_audit_results
