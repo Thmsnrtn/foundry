@@ -121,333 +121,80 @@ None in flight. Everything below is unstarted or blocked.
 
 ## What this cycle established
 
-**The cycle before this one closed the 32-agent sweep**, twelve batches, each
-mutation-tested with the defect replanted. Its narrative is in
-`history/SEAM_CAMPAIGN_HISTORY.md` under "The rest of the 32-agent sweep"; the
-durable rules are in `IMPLEMENTATION_STATE.md`. The shapes, in one line each: a
-credential that authenticated nothing handed to a customer; two identifiers with
-only one checked; a judge that could not answer recorded as a pass; an approval
-stamped an hour before it could have happened; a budget that metered the wrong
-person; an assessment whose every component failed towards a claim; a documented
-endpoint that had never once succeeded; a cohort that did not exist ranked
-against invented bands; a runway that was algebraically the constant 8; five
-numbers that could not move; a control the product calls the founder's own that
-the founder could not exercise; a gate that skipped the shape the defect was in;
-four red-team tickets where the ticket was not the worst of it; the writer four
-repairs had been working around; a gate that could not see four columns until an
-unrelated writer was deleted; two tables removed and the `CREATE TABLE IF NOT
-EXISTS` trap that made one possible; and a capped page with no order, six times.
+**The cycle before this one read the exit surface end to end and built the
+phantom-column gate.** Its narrative is in `history/SEAM_CAMPAIGN_HISTORY.md`
+under "The exit surface, the cadence lens, and the phantom-column gate"; the
+durable rules are in `IMPLEMENTATION_STATE.md`. In one line each: a quarter of
+the M&A readiness score that was a constant; a liquidation preference treated as
+a ceiling; a column that said dilution and meant proceeds; a "market standard"
+nobody measured; twenty-two health scores of fifty from runs that scored
+nothing; a profit half of which was an opinion; a date compared in two formats;
+four badges nobody could see; a lifecycle that never advanced; a retention
+nobody measured and sold on the pricing page; whichever company sorted first
+deciding real actions; a growth rate whose period was the reporting cadence; ten
+columns that do not exist in five founder-facing documents; and a valence
+outside its vocabulary.
 
-**THE EXIT SURFACE, READ END TO END — the pages a founder opens when deciding
-whether to sell.** Five findings, all in the same direction.
+**THIS CYCLE'S SUBJECT IS THE HALF-BUILT MECHANISM — and the finding that
+matters is that one of them was being TESTED.**
 
-- **A quarter of the M&A readiness score was a constant.** Customer
-  concentration carries weight 0.25 — joint-heaviest — and both its inputs were
-  dead: `topCustomerMrrPct` was a hardcoded `null` under a comment saying
-  per-customer MRR is not in the schema (it is, in both stores), and
-  `customerCount` read `metric_snapshots.customer_count`, a column that has
-  never existed. Count zero took the "no data" branch, 5.0, for every company —
-  and its `< 7` test then printed "Customer concentration risk" as a finding
-  about the COMPANY when it was a finding about the DATA. Now measured, NULL
-  when no paying customer is known, dropped from the composite with the weights
-  renormalised, and migration 207 repairs every stored row on the same rule.
-- **A liquidation preference is a floor, and the waterfall treated it as a
-  ceiling.** A non-participating investor takes the greater of the preference
-  and their shares converted; `computeWaterfall` paid the preference and
-  stopped. The form's own placeholder cap table is the worked example: at the
-  $250M exit the page models, it told the founder they would take $249.50M —
-  99.8% — where the investor converts and takes $35.71M. **The overstatement
-  grew with the size of the exit.** Conversions interact, so they now run to a
-  fixed point, and the page names who converts.
-- **A column that said dilution and meant proceeds, on rows that held neither.**
-  `total_dilution_pct` stored the investors' share of the exit and was rendered
-  under "Dilution" — different numbers whenever a preference bites, which is the
-  page's whole subject. And its writer fills it only when given an exit
-  valuation, which its one caller never passed: NULL in every row ever written,
-  rendered as an em dash, which reads as zero.
-- **A "market standard" nobody measured, for a round nobody listed.** Five
-  numbers per round, written into the source, cited to the founder and to the
-  model as market data — with `?? MARKET_BENCHMARKS['seed']` behind them, so an
-  unlisted round got seed's numbers under its own name from an unvalidated form
-  field. `compareToMarketTerms`, which built the same sentences, was imported by
-  the page and never called; deleted rather than corrected.
-- **A rationale picked alphabetically, beside the date of a different signal.**
-  `MAX(strategic_rationale)` next to `MAX(detected_at)` under a heading reading
-  "Latest". And the acquisition-thesis prompt described the company with four
-  labels, three wrong: the model was told the company is called
-  `V1StGXR8_Z5jdHi6B-myT`.
+- **A tenancy control that was tested and never mounted.**
+  `src/middleware/tenant.ts` stated the rule properly and was mounted on no
+  router. Ten assertions in `tests/unit/tenancy-isolation.test.ts` and two in
+  `tests/simulation/05-tenancy-integrity.test.ts` read its SOURCE TEXT and
+  confirmed each property. A suite named for the control could not have failed
+  whatever the live routes did. The module is gone; those tests now request
+  another founder's company and read the answer — 404, byte-identical to a
+  company that does not exist, with neither the name nor the numbers in the
+  body — and the archived and paused rules are pinned in `kill-switch.ts` where
+  they run, INCLUDING an active company that is not blocked, because a guard
+  that always refuses measures nothing.
+- **An event was part of the baseline it was measured against.** `ingestEvent`
+  writes to `event_stream` and then asks how far the event sits from the last
+  hundred events of its type — a window that included it. For n values where one
+  differs from the rest, the largest deviation that arithmetic can report is
+  √(n − 1): at the ten-observation floor, 3.0σ, so `deviation_sigma > 3` — the
+  branch that escalates to critical and notifies the founder — was unreachable,
+  and a metric that went to infinity scored 3.0. Two more in the same lines: the
+  spread divided by n on a sample, and history rows never checked for being
+  numbers, so one string made every deviation `NaN`, `NaN > 2.5` false, and
+  detection silently off.
+- **Two tables written every week that nothing could read.**
+  `portfolio_snapshots` had a weekly job and a POST endpoint and no reader; it
+  has an owner-verified GET now. `cofounder_alignment_scores` was worse than
+  unread — `getAlignmentScore` ran Opus and appended a row on every call, so a
+  page load cost a model call and two looks at unchanged responses could
+  disagree, into a table nothing read. It serves the stored score when no
+  response is newer, strictly `>` because both clocks are whole seconds and a
+  tie is not evidence of order.
+- **Eleven tables nothing ever wrote.** Not written-and-unread — never written.
+  Created by a migration, referenced by nothing in `src/`. Migration 215 drops
+  them. **The useful half of that change was a fixture:** the planted-defect
+  test for `check-unread-tables` BORROWED `sector_remediation_templates`
+  because it qualified as a real unreferenced table, and a fixture that depends
+  on a real defect surviving rots every time one is cleaned up. It plants its
+  own table now.
+- **One prompt, two copies, and the golden cases scoring the wrong one.**
+  `src/prompts/voice-judge.ts` said it was "extracted from"
+  `voice-fingerprint.ts`, which had kept its copy; nothing imported the
+  extracted one. They had drifted, and materially — the live copy fenced the
+  draft, text Foundry did not write, in triple quotes, and the extracted one
+  interpolated it bare. `src/prompts/README.md` claimed the eval framework
+  imports the same builder production uses; nothing outside `src/prompts/`
+  referenced `GOLDEN_CASES` at all.
 
-**A whole transparency surface reading a table nothing has ever written.**
-`agent_run_details` had three writers and no caller for any of them, so every
-cost table, run list and run detail on the Agent Transparency pages was empty
-for every company, forever — under a header saying the page shows exactly what
-each agent sees, thinks and costs per run, and an empty state reading "No run
-data yet. Agents will appear here once they complete their first run." The
-agents run daily; the runs are in `agent_sessions`. Migration 209 drops the
-table, the reads moved, and the four things only the empty table could have
-shown — prompt previews, a context summary, an input/output token split, a
-per-run health score — are gone from the page rather than reimplemented.
-**Two gates said nothing about it and both were satisfied honestly:** the
-writer-less-tables gate sees an INSERT in source and cannot tell that nothing
-CALLS it, and the tenant-scope gate matches route params named `:id` or
-`:productId` and passes on the mention of an idiom rather than its use — which
-is why `getRunDetails(runId)`, an unscoped cross-tenant read, sat inside a
-handler that mentions `ctx.productId` twice. Both limits are now written down.
+**The rule this cycle adds, and it is about evidence rather than code: A TEST
+MAY ASSERT ON A DORMANT MODULE'S SOURCE WHEN IT SAYS THE MODULE IS DORMANT.**
+`stripe-sync.ts` has two such tests, named "the dormant path no longer discards
+it either", and they are honest — they claim a defect stays fixed in a file that
+does not run, and they say so. A test named for a live control that reads a file
+which never executes is the defect. **The difference is what the test's name
+promises a reader, not whether the file runs.**
 
-**TWENTY-TWO HEALTH SCORES OF FIFTY, FROM RUNS THAT SCORED NOTHING.** Every SCP
-agent has two early-exit paths — "no data yet" and "parsing error" — and each
-returned `domainHealthScore: 50`, which OVERWRITES `agent_instances
-.domain_health_score`: what the agents dashboard draws, what the company health
-average is built from, and what the investor board packet ranks its top three
-agents by. Seven agents also still wrote `?? 50` on the parse-success path, the
-substitution four agents had already had removed. All gone; undefined leaves the
-previous score standing, and the seven response shapes that demanded a score now
-say it may be omitted. Three places it was SPOKEN rather than stored: Crucible
-told Compass "Quality score dropped to 50/100 — strategic attention needed" and
-asked it to reprioritise engineering capacity over a number the model never
-gave; the scratchpad printed "50% confidence" in an agent's position to every
-other agent's prompt; and Atlas would have interpolated the column into its own
-prompt as the word "null".
-
-**A PROFIT, HALF OF WHICH IS AN OPINION — AND A REVENUE HALF THAT WAS ALWAYS
-ZERO.** The AI Company P&L subtracts measured cost from `revenue_attributions`,
-which has one writer: the Ledger agent asking a model how much revenue another
-agent's action produced, taking the confidence that same model assigned to its
-own guess, filtering at `> 0.6` and multiplying by it. Nothing reconciles it
-against Stripe, an invoice or a customer. That difference was called "Profit",
-the ratio "ROI", and the comparison "Self-Funding: Yes" — Foundry stating it pays
-for itself on the strength of its own guess, with the same ratio reaching an
-INVESTOR packet as "AI ROI 2.4x" and a strategy prompt with nothing to say half
-the numbers were its own. Every field is named for the half it inherits now, and
-the provenance travels inside the object because one of its readers is a model.
-**And the revenue was never there at all:** `logRevenue` stores `period_start =
-now - 30 days` while both readers asked for `period_start >= now - 30 days`,
-evaluated later — so every attribution's own start was a hair before the boundary
-and attributed revenue was 0 for every company in every window since the P&L was
-written, making "Profit" the negative of cost and "Self-Funding" permanently "No".
-
-**A DATE COMPARED IN TWO FORMATS, THREE WINDOWS AND ELEVEN COLUMNS.** SQLite has
-no date type: `datetime('now')` writes 'YYYY-MM-DD HH:MM:SS' and JavaScript
-writes 'YYYY-MM-DDTHH:MM:SS.sssZ', and at index 10 a space sorts before 'T'. A
-JavaScript bound therefore excludes every row from the boundary DATE whatever its
-clock time. The founder's weekly outcome card counted three seven-day windows
-that were six and a bit and divided two of them into a percentage; a playbook's
-`execution_budget_weekly` — a control on how often Foundry may act on a company's
-behalf — undercounted its own executions; the budget bar's month started in the
-previous month (local midnight rendered as UTC). Worse: eleven columns were
-written BOTH ways by different paths, including one written both ways inside a
-single function, so ordering interleaved them wrongly and `MAX()` preferred
-whichever row JavaScript wrote. Migration 210 repairs the two on `decisions`.
-**The lens that found them is a reading tool, not a gate** — it reads SQL and
-cannot see the JavaScript that fills a bound — and the gateable form of the rule
-is written down with its price: 132 call sites.
-
-**FOUR BADGES NOBODY COULD SEE, AND A TOAST FOR THE WRONG COMPANY.** The sidebar
-draws one badge — the count beside "Decide". The other four `NavBadges` numbers
-were computed for every product every six hours, written into `lifecycle_state`,
-read back on every dashboard page load, and handed to a layout that ignored
-them; `getLayoutContext` ran its own `remediation_prs` COUNT per page for the
-same absent badge. Migration 211 drops the four columns rather than reviving the
-badges: a nav that deliberately stopped shouting is a decision, and reviving
-four badges to justify the arithmetic behind them would be the arithmetic
-deciding the design. The milestone half was worse than wasted work — the reader
-and the writer were FOUNDER-scoped while both callers are one company's page, so
-a milestone earned by one company toasted over another's dashboard, and opening
-company A's journey marked company B's milestones seen.
-
-**A LIFECYCLE THAT NEVER ADVANCED.** `current_prompt` was written once, by the
-INSERT that creates the row, and never again. `evaluateConditions` computed which
-phases had all their conditions met, wrote an audit-log line saying so, returned
-the list — and the daily job logged it. **Every company that has ever run sat at
-`prompt_1` for as long as it existed:** the Lifecycle page told a company
-operating for months to "Run your first audit", the weekly digest reported that
-stage, the Compass agent was told it in its prompt, and `lifecycleBandForPrompt`
-banded EVERY company as `pre_revenue` — so the cross-company benchmark pool
-compared a scaled company against companies with no revenue and called them a
-segment. The mechanism existed and was not connected; it is now, forward only,
-with the advance in the audit log. What stays unreachable is stated rather than
-implied: two phases have no conditions defined at all, and `prompt_9` requires a
-'completed' status nothing in the system sets.
-
-**A RETENTION NOBODY MEASURED, RENDERED AS ZERO — AND SOLD.** `cohorts` has ten
-outcome columns and nothing in this codebase writes any of them; the only
-production writer of the table is the Clerk signup webhook, incrementing
-`founder_count` on FOUNDRY'S OWN product. Every one of those columns was
-`INTEGER DEFAULT 0`, so six readers took the default as a measurement: the page
-drew "0%" at day 7/14/30 beside a historical average of the same zeros, Harbor's
-prompt told a model "activation=0.0%, day30_retention=0.0%" per cohort, Beacon
-RANKED acquisition channels by an activation rate that was zero for all of them,
-and the historical average a new cohort is compared against was pulled towards
-zero by every unreported cohort in it. Migration 212 removes the defaults — the
-readers were already written for null, because the empty-cohort case was
-repaired earlier in this campaign; what changed is that null can now arrive.
-**The producing half does not exist and it was on the pricing page**: see
-"Blocked — owner" below.
-
-**AN ICP FORM NOTHING READ, WRITING OVER A FIELD FOUR PROMPTS DO.** The Koldly
-page carried a second Ideal Customer Profile editor — "Koldly uses this to
-target outbound campaigns" — which saved by running `UPDATE products SET
-stack_description = ?` with a JSON blob, destroying the stack description four
-prompts read. Nothing anywhere read the ICP it wrote, and `GET /internal/icp`,
-the endpoint the copy pointed at, returns five constants describing FOUNDRY's
-own ideal customer and takes no company id. The ICP that IS read lives in
-`product_dna`, behind a tier gate and `can_manage_company`. The form is gone;
-the page links to the DNA and says what the endpoints actually do.
-
-**WHICHEVER COMPANY SORTED FIRST WAS DECIDING REAL ACTIONS.** Five places
-resolved "the founder's company" with `... WHERE owner_id = ? LIMIT 1` and no
-ORDER BY, then rotated an ingest token on it, generated a public share link for
-it, wrote the week's plan for it, described the founder to the whole network by
-its sector and stage, and set the tone of every AI answer from it. The rule now
-has one home and REFUSES rather than guesses. The share-link route also ran a
-fallback query, ignored its result, and used the cookie value it had just failed
-to resolve — so the UPDATE matched nothing and the founder was redirected to a
-page that looked like it had made them a share link. And the Fleet Observatory
-read `owner_id` alone, so an invited co-founder saw nothing on the one screen
-titled "every agent's status across all of a founder's products".
-
-**A REPLY NOBODY COULD SEND, COUNTED ON A CARD.** `agent_messages` carried four
-columns for a request-and-answer loop between agents: nobody asked (no caller
-ever passed `requiresResponse`), nobody could answer (`replyToMessage` had no
-caller), and the message bus page drew both — an "Unanswered" card counting a
-state nothing could produce and a badge that could never render. Migration 213
-takes the columns, the function and the interface together. `markAsRead` also
-took message ids alone, so the company was decided by whoever assembled the
-list. And five `ai_spend_reservations` entries on the write-only baseline are
-answered in place: migration 099's triggers CONSUME them — comparing the running
-total against the cap and RAISEing IS the ceiling — which is the consuming side
-of the line that gate's header already draws.
-
-**A SUBSCRIPTION NOTHING WOULD EVER MATCH, ANSWERED 201.** `POST /v1/webhooks`
-accepted any string in `events`, and the type it advertised listed TEN names of
-which THREE are dispatched. Subscribing to `audit.completed` got a 201 and
-silence forever. The vocabulary is now exactly what `dispatchWebhook` is called
-with, exported from one place and validated at the door. `POST
-/v1/agents/:name/run` had the same shape — it queued an initiative for any name,
-and only that agent's own run reads the queue, so a row for a name this product
-has no agent for sits pending forever under a 201 saying "Agent run queued".
-
-**A GROWTH RATE HAS A PERIOD, AND THIS ONE'S WAS THE REPORTING CADENCE.** The
-Ghost simulator took the ratio between two consecutive `metric_snapshots`,
-called it `monthlyGrowthMean`, and compounded it three times for a 90-day
-horizon. The table is keyed by DATE and companies report daily, so for most of
-them that was the mean DAILY growth compounded over three days — returned as a
-90-day forecast with p10/p50/p90 bands and a probability of decline, reachable
-over MCP as the thing to consult before resolving a gate-3 decision. The window
-also took the OLDEST 24 snapshots, so a company with two years of history was
-simulated forward from the growth of its first three weeks. Each step is now
-converted to its monthly equivalent from the gap between the dates, the window
-is the most recent 24, and the span in days travels with the estimate. The MCP
-description also promised abstention "under 4 months of history" when the guard
-is four usable snapshots.
-
-**THE GROWTH STAGE WAS DECIDED BY THE MOVEMENT, NOT THE LEVEL.** The fourth
-appearance of this shape in the campaign, and the most consequential:
-`detectGrowthStage` added the four MRR MOVEMENT columns and called the result
-the company's MRR, so a company at $60,000/month with a flat month was
-classified from about $0 — `pre_launch` or `early_traction`, which suppresses
-the MRR and churn stressors, relaxes every remaining threshold by 1.5–2×, and
-tells the digest to say "no MRR analysis until you have customers". The "mature"
-test carried two more: `rows.length >= 12` was called twelve months (a fortnight
-of daily snapshots satisfied it, and mature permanently suppresses the
-slow-growth and flat-MRR stressors), and the rates it compared were
-month-over-month growth of one period's ACQUISITION rather than of revenue.
-
-**TWO PREDICTIONS, ONE OF WHICH COULD NOT FIRE.** `predictChurnSpike` compared a
-change in `churn_rate` — stored 0–1 — against a threshold of 0.5 written in
-PERCENTAGE POINTS, so churn had to jump fifty points between snapshots and the
-prediction was silence for everyone; its evidence lines printed a three-point
-rise as "+0.03%". `predictRevenuePlateau` read `new + expansion` — revenue
-ACQUIRED, not revenue — divided consecutive rows without regard to the gap
-between their dates, compared the result against monthly figures, and ran its
-deceleration test the wrong way down a newest-first array, so a company
-accelerating from 1% to 8% a month was told it was about to plateau. And every
-"proactive insight" said "from last period" when the two rows it compares are
-usually consecutive DAYS — two of them comparing seven-day rolling windows that
-share six of their seven days. The intervals travel with the sentences now.
-
-**A WEEK IS SEVEN DAYS, NOT ONE ROW — and by now this is a LENS, not a
-finding.** `metric_snapshots` is keyed by DATE, most companies report daily, and
-EIGHT separate consumers stepped through consecutive ROWS while calling the step
-a month, a week or a period:
-
-- the Ghost simulator's 90-day Monte Carlo, over MCP, before a gate-3 decision;
-- growth stage detection, which also called twelve rows twelve months;
-- the revenue-plateau prediction, which also ran its deceleration test backwards;
-- the proactive insights, two of which compare SEVEN-DAY ROLLING figures one day
-  apart — six of their seven days shared;
-- the failure-pattern matcher, where four consecutive DAYS satisfied "activation
-  declining for four weeks" and matched a pattern that tells the founder they
-  have a 60-day lead time on it;
-- the fundraising readiness score, where a daily rate was compared against a
-  15%/month bar and stated to the model as "growth: 0.5%/mo";
-- the daily briefing's `mrr_growth_pct`, and the compressed briefing, which
-  named the previous row `lastWeekMetrics`;
-- the founder's email digest, which labelled it "WoW".
-
-Each is now expressed in days: nearest-snapshot lookups with a stated tolerance,
-monthly-equivalent rates from the gap between dates, or the interval printed in
-the sentence. **The scan is `grep -l "FROM metric_snapshots"` crossed with index
-arithmetic** — twelve files, and the ones that were not guilty of the cadence
-error were guilty of something else in the same query: the monthly INVESTOR
-UPDATE read `mrr_growth_pct` and `customer_count`, neither of which has ever
-been a column, so every update ever generated reported both as "N/A".
-
-**TEN COLUMNS THAT DO NOT EXIST, IN FIVE FOUNDER-FACING DOCUMENTS.** Read
-off a `SELECT *` row, a column that is not there is `undefined` — forever,
-silently, with no error anywhere. The monthly INVESTOR UPDATE read
-`mrr_growth_pct` and `customer_count` from `metric_snapshots`, so every update
-ever generated reported both as "N/A". The FUNDRAISING READINESS assessment read
-five more from `product_dna` — `target_customer`, `competitors`, `positioning`,
-`core_hypothesis`, `hypothesis_validated` — so `has_icp_defined`,
-`has_competitive_section`, `has_positioning` and `has_hypothesis_tested` were
-false for every company that has ever run it: all six points of the market
-dimension and two of the narrative, withheld from everybody. **A named-column
-SELECT would have raised on the first call**; `SELECT *` plus `as number` makes
-the schema check disappear. **IT IS A GATE NOW.** `check-star-select-columns.mjs`
-walks each file in source order with the TypeScript parser, carrying an
-environment: a result variable bound to a single-table `SELECT *`, a row
-variable bound from its `.rows[…]` by declaration OR assignment, and a cloned
-environment on entering a function so a parameter shadows what it should. The
-regex version reported 56 candidates, all collisions; this one reports zero, and
-found THREE MORE real ones on its first run — `mrr_growth_pct` in the compressed
-briefing ("unknown growth" in every one ever generated) and in the BOARD PACKET
-("N/A" in the document that goes to a board). Baseline 0, in `lint:columns`,
-with the defect planted in three shapes including one it must NOT report.
-
-**A THRESHOLD A MODEL CHOSE, IN THE UNITS A MODEL WOULD CHOOSE.** The memory
-kernel's rate metrics are stored 0–1, and a premise threshold reaches it from
-three producers: the founder's sentence (parsed, converted), the
-`foundry_record_decision` MCP tool and the chat capture (both a number a MODEL
-picked). A model asked for "the threshold" on churn writes 5 for five per cent,
-and `0.05 < 5` holds forever — so the belief could never be falsified and the
-accountability queue, the whole point of the kernel and a tool an external agent
-is told to consult, would never mention the decision resting on it. One home now
-(`normaliseThreshold`), idempotent, stated in both tool descriptions.
-
-**A VALENCE OUTSIDE ITS VOCABULARY.** `decisions.outcome_valence` is three values
-to every reader — the trust ledger that decides how much authority Foundry gets,
-the pattern generator, the prediction-accuracy job, and a board packet that maps
-the average through `((avg + 1) / 2) * 100`, where a single 5 would print a
-decision score of 300%. The founder's form offers three radio buttons; the route
-took `Number(body.valence)` unchecked and the column had no constraint. The
-route refuses now and migration 214 puts the same rule in the database, because
-`check-check-vocabularies` cannot see a value that arrives as a bound parameter.
-
-**AND A FIXTURE THE NEW TRIGGER CAUGHT.** Migration 214 refused a seed in
-`autopilot-calibration-audit` that wrote `outcome_valence` as the STRING
-'positive'. Every reader compares that column against 1, so the fixture read as
-NOT positive — while its own comment said the positive outcomes were there "so
-the quality hold does NOT fire". The assertion passed either way, which is what
-made it invisible for as long as it existed. **A vocabulary guard is also a
-fixture audit**: the rows a test writes are the rows a reader would read.
-
-**The recurring method note.** Seven times this campaign, and twice more this
-cycle, a test failed after a repair because the test had encoded the defect as
-its premise — a fixture stating `new_mrr_cents` where the reader now wants the
-level, an assertion pinning a growth rate that could not decline. The repair is
-never to relax the assertion: it is to make the fixture STATE what it was
-assuming, and to say so in the comment.
+**The recurring method note.** Seven times this campaign, and twice more in the
+cycle before this one, a test failed after a repair because the test had encoded
+the defect as its premise. The repair is never to relax the assertion: it is to
+make the fixture STATE what it was assuming, and to say so in the comment.
 
 ## Earlier cycles
 
@@ -487,8 +234,28 @@ different answers.** Read end to end this cycle so nobody re-reads it:
   `scripts/lib/claim-tokenizer.mjs`, pinned by a test that runs both.
   **Two copies are fine when they are pinned; two copies nobody compares are one
   rule with two answers.**
-- **`middleware/tenant.ts`** is the written statement of a rule now enforced by
-  `check-tenant-scope.mjs`. Specification, not dead code.
+- **`middleware/tenant.ts` — THIS ENTRY WAS WRONG AND THE MODULE IS GONE.** It
+  said "specification, not dead code". What it actually was: a control that TWO
+  TEST SUITES ASSERTED ON. Ten assertions in `tests/unit/tenancy-isolation.test.ts`
+  and two in `tests/simulation/05-tenancy-integrity.test.ts` read its source text
+  — that it calls `getProductByOwner`, answers 404 rather than 403, treats an
+  archived company as absent — and `tenantMiddleware` was mounted on no router.
+  A suite named for the control could not have failed whatever the live routes
+  did. Deleted; the tests now request another founder's company and read the
+  answer. Ownership is enforced inline on every route and ratcheted by
+  `check-tenant-scope.mjs`; archived and paused are enforced by
+  `outbound/kill-switch.ts` at the effect boundary, which is the place that
+  matters. The module also fabricated `sector_profile: 'b2b_saas'` and
+  `growth_stage: 'pre_launch'` into every `Product` it built, from no reading —
+  mounting it would have introduced that claim.
+
+  **THE RULE THIS PRODUCES, and it decides the next case as well as this one: a
+  test may assert on a dormant module's source when it SAYS the module is
+  dormant. `stripe-sync.ts` has two such tests — "the dormant path no longer
+  discards it either" — and they are honest: they claim a defect stays fixed in
+  a file that does not run, and they name it as such. A test named for a live
+  control that reads a file which never executes is the defect. The difference
+  is what the test's name promises a reader, not whether the file runs.**
 - **`foundry/recursive-institution-contract.ts`** says in its own header that it
   is a prospective contract frozen before the behaviour it governs. Deliberate.
 - **`financial/institutional-economics.ts` is the best-written cost accounting
@@ -523,11 +290,55 @@ different answers.** Read end to end this cycle so nobody re-reads it:
   the founder rating and the agent reading it as ground truth — live inside the
   one unreachable module; no route writes and no agent reads. Unlike the OKR
   form and the Scribe wiki, there is nothing here to connect. Owner's call.
-- **`briefing-share.ts`, `ai/composer.ts`, `lib/{env,request}.ts`, `mcp/cli.ts`,
-  `prompts/voice-judge.ts`, `support-pilot-readiness.ts`,
-  `intelligence/{benchmarks,shippability}.ts`** are unexamined. Each is a
-  product question of the same kind as item 2, not a defect: a feature whose
-  reading half exists and whose calling half does not.
+- **The nine that were unexamined, now read.** Three had answers, not questions:
+
+  - **`prompts/voice-judge.ts` was `truth/engine.ts` again**, and it is fixed.
+    Its header said "extracted from `services/calibration/voice-fingerprint.ts`"
+    and that module had KEPT ITS COPY; nothing imported the extracted one. The
+    two had drifted, and not cosmetically: the live copy fenced the draft — text
+    Foundry did not write — in triple quotes, and the extracted copy interpolated
+    it bare. The `GOLDEN_CASES` beside it were scoring a prompt the product does
+    not send. One builder now, carrying the live wording including the fence.
+  - **`src/prompts/README.md` claimed coverage that did not exist.** "Every
+    prompt that touches an LLM must have a typed builder + golden cases mounted
+    in the eval framework", and "the eval framework imports the same builder used
+    in production, so eval coverage is real". NOTHING outside `src/prompts/`
+    referenced `GOLDEN_CASES` — neither module's cases had ever been run by
+    anything. `tests/evals/prompt-golden-cases.eval.test.ts` mounts both, without
+    a model call: a case declaring `max_chars: 120` against a prompt that asks
+    for 140 is a case measuring nothing, and that is what an eval can honestly
+    check here.
+  - **`mcp/cli.ts` is an entrypoint, not dead code.** `npx tsx src/mcp/cli.ts`
+    is how it is invoked; nothing imports an entrypoint. Correctly baselined.
+
+  Still open, each a product question of the same kind as item 2 rather than a
+  defect — a feature whose reading half exists and whose calling half does not:
+  **`briefing-share.ts`**, **`ai/composer.ts`**,
+  **`intelligence/{benchmarks,shippability}.ts`**, **`support-pilot-readiness.ts`**
+  (which says in its own header it may never be reported as pilot evidence).
+
+  **`lib/env.ts` IS NOT ONE OF THOSE AND IS THE NEXT THING TO LOOK AT.** It
+  validates every required environment variable and calls itself "fails fast
+  with actionable error messages" at startup, and nothing calls it — so the
+  process boots with a missing variable and fails somewhere else, later, in
+  whatever code first needed it. That is a control that does not run, not a
+  feature without a caller. Wiring it into boot is the obvious answer and needs
+  care: the schema must be checked against what each deployment actually sets
+  before it becomes the thing that refuses to start.
+
+  **`lib/request.ts`** is a body parser no route uses; routes parse inline.
+  Dead helper, removable.
+
+- **The two Stripe modules, and why only one of them is a duplicate.**
+  `integration/` (singular) is outbound — gateway adapters Foundry CALLS.
+  `integrations/` (plural) is inbound — sync adapters that PULL metrics, reached
+  through `sync.ts`. Four provider names appear in both directories and none of
+  those pairs is a duplicate; they are the two halves of a provider relationship.
+  `integrations/stripe-sync.ts` is the odd one: a second inbound Stripe path
+  with its own Connect OAuth flow whose callback route does not exist. It stays
+  by a decision recorded in an earlier cycle — its defects were fixed before
+  anybody wires it up — and its tests name it as dormant, which is what makes
+  them honest.
 
 ## Highest-value current opportunities
 
