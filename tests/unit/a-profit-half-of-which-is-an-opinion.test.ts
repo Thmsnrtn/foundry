@@ -7,7 +7,8 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
-  getAICompanyPL, getAgentCostBreakdown, getROISummary, logCost, logRevenue,
+  getAICompanyPL, getAgentCostBreakdown, getBudgetUtilization, getROISummary,
+  logCost, logRevenue,
 } from '../../src/services/financial/economics.js';
 import { getExperimentSummary } from '../../src/services/scp/experiments.js';
 
@@ -249,5 +250,30 @@ describe('the experiment summary', () => {
     const summary = await getExperimentSummary(P);
     expect(summary.recent_win?.name).toBe('broken');
     expect(summary.recent_win?.effect_size).toBeNull();
+  });
+});
+
+describe('the monthly budget bar', () => {
+  it('counts spend from the database’s own start of month', async () => {
+    // `new Date(y, m, 1).toISOString()` is LOCAL midnight rendered as UTC, so
+    // east of Greenwich the month started in the previous month and the bar
+    // counted a day that belongs to the last bill — and the ISO string was then
+    // compared as text against CURRENT_TIMESTAMP values anyway, which excluded
+    // everything written on the first of the month.
+    await logCost({ productId: P, agentName: 'ledger', costType: 'llm_tokens', amountUsd: 7 });
+    await query(
+      `UPDATE cost_events SET created_at = datetime('now', 'start of month')`);
+
+    const budget = await getBudgetUtilization(P);
+    expect(budget.spent_usd).toBeCloseTo(7, 6);
+  });
+
+  it('leaves last month’s spend out of it', async () => {
+    await logCost({ productId: P, agentName: 'ledger', costType: 'llm_tokens', amountUsd: 7 });
+    await query(
+      `UPDATE cost_events SET created_at = datetime('now', 'start of month', '-1 second')`);
+
+    const budget = await getBudgetUtilization(P);
+    expect(budget.spent_usd).toBe(0);
   });
 });

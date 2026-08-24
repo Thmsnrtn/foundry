@@ -318,14 +318,20 @@ export async function getBudgetUtilization(productId: string): Promise<{
   const prodRow = prodResult.rows[0] as Record<string, unknown> | undefined;
   const budgetUsd = (prodRow?.operating_budget_monthly_usd as number | null) ?? 500;
 
-  // Current month spend
+  // CURRENT MONTH SPEND, IN THE DATABASE'S CALENDAR AND THE DATABASE'S FORMAT.
+  //
+  // Two problems in one line. `new Date(y, m, 1)` builds LOCAL midnight and
+  // `.toISOString()` then converts it to UTC, so on a host east of Greenwich
+  // the "start of month" landed in the previous month and the bar counted a day
+  // that belongs to the last bill. And the result was an ISO string compared as
+  // text against CURRENT_TIMESTAMP values, where a space sorts before 'T' — so
+  // everything written on the first of the month was excluded anyway.
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   const spendResult = await query(
     `SELECT SUM(amount_usd) as total FROM cost_events
-     WHERE product_id = ? AND created_at >= ?`,
-    [productId, monthStart],
+     WHERE product_id = ? AND created_at >= datetime('now', 'start of month')`,
+    [productId],
   );
 
   const spentUsd = ((spendResult.rows[0] as Record<string, unknown>)?.total as number) ?? 0;
