@@ -400,6 +400,33 @@ whichever row JavaScript wrote. Migration 210 repairs the two on `decisions`.
 cannot see the JavaScript that fills a bound — and the gateable form of the rule
 is written down with its price: 132 call sites.
 
+**FOUR BADGES NOBODY COULD SEE, AND A TOAST FOR THE WRONG COMPANY.** The sidebar
+draws one badge — the count beside "Decide". The other four `NavBadges` numbers
+were computed for every product every six hours, written into `lifecycle_state`,
+read back on every dashboard page load, and handed to a layout that ignored
+them; `getLayoutContext` ran its own `remediation_prs` COUNT per page for the
+same absent badge. Migration 211 drops the four columns rather than reviving the
+badges: a nav that deliberately stopped shouting is a decision, and reviving
+four badges to justify the arithmetic behind them would be the arithmetic
+deciding the design. The milestone half was worse than wasted work — the reader
+and the writer were FOUNDER-scoped while both callers are one company's page, so
+a milestone earned by one company toasted over another's dashboard, and opening
+company A's journey marked company B's milestones seen.
+
+**A LIFECYCLE THAT NEVER ADVANCED.** `current_prompt` was written once, by the
+INSERT that creates the row, and never again. `evaluateConditions` computed which
+phases had all their conditions met, wrote an audit-log line saying so, returned
+the list — and the daily job logged it. **Every company that has ever run sat at
+`prompt_1` for as long as it existed:** the Lifecycle page told a company
+operating for months to "Run your first audit", the weekly digest reported that
+stage, the Compass agent was told it in its prompt, and `lifecycleBandForPrompt`
+banded EVERY company as `pre_revenue` — so the cross-company benchmark pool
+compared a scaled company against companies with no revenue and called them a
+segment. The mechanism existed and was not connected; it is now, forward only,
+with the advance in the audit log. What stays unreachable is stated rather than
+implied: two phases have no conditions defined at all, and `prompt_9` requires a
+'completed' status nothing in the system sets.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
