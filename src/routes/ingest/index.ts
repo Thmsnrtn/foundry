@@ -20,7 +20,7 @@ export const ingestRoutes = new Hono();
 // rates in [0,1], counts are non-negative integers, dollars bounded, NPS in
 // [-100,100], custom metrics capped in count and size.
 const RATE_FIELDS = new Set(['activation_rate', 'day_30_retention', 'churn_rate', 'mrr_health_ratio']);
-const COUNT_FIELDS = new Set(['signups', 'signups_7d', 'active_users', 'support_volume', 'support_volume_7d']);
+const COUNT_FIELDS = new Set(['signups_7d', 'active_users', 'support_volume_7d']);
 const NPS_FIELDS = new Set(['nps', 'nps_score']);
 const MAX_BODY_FIELDS = 40;
 const MAX_CUSTOM_KEYS = 20;
@@ -81,14 +81,38 @@ const FIELD_MAP: Record<string, string> = {
   churn_rate:        'churn_rate',
   mrr_health_ratio:  'mrr_health_ratio',
   // Counts
-  signups:           'signups_7d',
   signups_7d:        'signups_7d',
   active_users:      'active_users',
-  support_volume:    'support_volume_7d',
   support_volume_7d: 'support_volume_7d',
   // NPS
   nps:               'nps_score',
   nps_score:         'nps_score',
+};
+
+// A COUNT IS A COUNT OVER SOMETHING, AND TWO ALIASES DID NOT SAY OVER WHAT.
+//
+// `signups` mapped to `signups_7d` and `support_volume` to `support_volume_7d`.
+// A caller POSTing `{"signups": 400}` — the obvious name, the one every
+// analytics tool uses, and a number that for most companies means "since we
+// started" — had it recorded as SIGNUPS IN THE LAST SEVEN DAYS. Nothing said
+// so: not an error, not a warning, not a different column. The marketing sweep
+// then carried it as a graced `signups_7d` premise, and the dashboard drew it
+// under a label that names a week.
+//
+// This is the `mrr` defect from a few lines above in a smaller costume, and
+// the settings page already states the principle for that one in the founder's
+// own words: "sending the total under the wrong name is not [fine], which is
+// why they are spelled out here." The example payload it shows uses
+// `signups_7d`. The alias was the one door that let the unspelled name in.
+//
+// WHEN THE ANSWER IS AMBIGUOUS, REFUSING IS AN ANSWER. There is no correct
+// period to guess for a bare `signups`, so it is refused with the name to send
+// instead, rather than routed into `custom_metrics` where a founder would never
+// see it and their real signup count would sit unread beside a fabricated
+// weekly one.
+const AMBIGUOUS_ALIASES: Record<string, string> = {
+  signups: 'signups_7d',
+  support_volume: 'support_volume_7d',
 };
 
 // ─── POST /ingest/:token ──────────────────────────────────────────────────────
@@ -136,7 +160,14 @@ ingestRoutes.post('/ingest/:token', async (c) => {
   const customMetrics: Record<string, unknown> = {};
   const rejected: string[] = [];
 
+  const ambiguous: Array<{ sent: string; send_instead: string }> = [];
+
   for (const [key, value] of Object.entries(body)) {
+    const correction = AMBIGUOUS_ALIASES[key];
+    if (correction) {
+      ambiguous.push({ sent: key, send_instead: correction });
+      continue;
+    }
     if (key === 'custom' && typeof value === 'object' && value !== null) {
       // custom metrics → stored as JSON (bounded below)
       Object.assign(customMetrics, value);
@@ -157,6 +188,13 @@ ingestRoutes.post('/ingest/:token', async (c) => {
       // Unknown fields go into custom_metrics
       customMetrics[key] = value;
     }
+  }
+
+  if (ambiguous.length > 0) {
+    return c.json({
+      error: 'Field names must state the period they cover',
+      fields: ambiguous,
+    }, 422);
   }
 
   if (rejected.length > 0) {
