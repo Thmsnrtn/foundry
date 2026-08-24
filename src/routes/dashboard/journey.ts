@@ -6,7 +6,7 @@ import { publishArtifact } from '../../services/story/engine.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { journeyTimeline, milestoneTimeline } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
-import { markMilestonesAsSeen, getUnseenMilestones } from '../../services/ux/milestones.js';
+import { markMilestonesAsSeen } from '../../services/ux/milestones.js';
 import { query } from '../../db/client.js';
 
 export const journeyRoutes = new Hono<AuthEnv>();
@@ -26,7 +26,7 @@ journeyRoutes.get('/products/:id/journey', async (c) => {
     [founder.id, productId],
   );
   const allMilestones = allMilestonesResult.rows as unknown as import('../../types/index.js').MilestoneEvent[];
-  await markMilestonesAsSeen(founder.id);
+  await markMilestonesAsSeen(founder.id, productId);
 
   const content = html`
     <h1>Founding Story</h1>

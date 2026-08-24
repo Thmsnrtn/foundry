@@ -352,6 +352,54 @@ CALLS it, and the tenant-scope gate matches route params named `:id` or
 is why `getRunDetails(runId)`, an unscoped cross-tenant read, sat inside a
 handler that mentions `ctx.productId` twice. Both limits are now written down.
 
+**TWENTY-TWO HEALTH SCORES OF FIFTY, FROM RUNS THAT SCORED NOTHING.** Every SCP
+agent has two early-exit paths — "no data yet" and "parsing error" — and each
+returned `domainHealthScore: 50`, which OVERWRITES `agent_instances
+.domain_health_score`: what the agents dashboard draws, what the company health
+average is built from, and what the investor board packet ranks its top three
+agents by. Seven agents also still wrote `?? 50` on the parse-success path, the
+substitution four agents had already had removed. All gone; undefined leaves the
+previous score standing, and the seven response shapes that demanded a score now
+say it may be omitted. Three places it was SPOKEN rather than stored: Crucible
+told Compass "Quality score dropped to 50/100 — strategic attention needed" and
+asked it to reprioritise engineering capacity over a number the model never
+gave; the scratchpad printed "50% confidence" in an agent's position to every
+other agent's prompt; and Atlas would have interpolated the column into its own
+prompt as the word "null".
+
+**A PROFIT, HALF OF WHICH IS AN OPINION — AND A REVENUE HALF THAT WAS ALWAYS
+ZERO.** The AI Company P&L subtracts measured cost from `revenue_attributions`,
+which has one writer: the Ledger agent asking a model how much revenue another
+agent's action produced, taking the confidence that same model assigned to its
+own guess, filtering at `> 0.6` and multiplying by it. Nothing reconciles it
+against Stripe, an invoice or a customer. That difference was called "Profit",
+the ratio "ROI", and the comparison "Self-Funding: Yes" — Foundry stating it pays
+for itself on the strength of its own guess, with the same ratio reaching an
+INVESTOR packet as "AI ROI 2.4x" and a strategy prompt with nothing to say half
+the numbers were its own. Every field is named for the half it inherits now, and
+the provenance travels inside the object because one of its readers is a model.
+**And the revenue was never there at all:** `logRevenue` stores `period_start =
+now - 30 days` while both readers asked for `period_start >= now - 30 days`,
+evaluated later — so every attribution's own start was a hair before the boundary
+and attributed revenue was 0 for every company in every window since the P&L was
+written, making "Profit" the negative of cost and "Self-Funding" permanently "No".
+
+**A DATE COMPARED IN TWO FORMATS, THREE WINDOWS AND ELEVEN COLUMNS.** SQLite has
+no date type: `datetime('now')` writes 'YYYY-MM-DD HH:MM:SS' and JavaScript
+writes 'YYYY-MM-DDTHH:MM:SS.sssZ', and at index 10 a space sorts before 'T'. A
+JavaScript bound therefore excludes every row from the boundary DATE whatever its
+clock time. The founder's weekly outcome card counted three seven-day windows
+that were six and a bit and divided two of them into a percentage; a playbook's
+`execution_budget_weekly` — a control on how often Foundry may act on a company's
+behalf — undercounted its own executions; the budget bar's month started in the
+previous month (local midnight rendered as UTC). Worse: eleven columns were
+written BOTH ways by different paths, including one written both ways inside a
+single function, so ordering interleaved them wrongly and `MAX()` preferred
+whichever row JavaScript wrote. Migration 210 repairs the two on `decisions`.
+**The lens that found them is a reading tool, not a gate** — it reads SQL and
+cannot see the JavaScript that fills a bound — and the gateable form of the rule
+is written down with its price: 132 call sites.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the

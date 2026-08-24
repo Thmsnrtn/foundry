@@ -35,7 +35,6 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
   founderEmail: string;
   dnaCompletionPct: number;
   wisdomLayerActive: boolean;
-  openPRCount: number;
   /** CSRF token for form auto-injection */
   csrfToken: string;
   /** All products owned by this founder, for the switcher */
@@ -79,7 +78,7 @@ export async function getLayoutContext(
     unreadNotificationCount: 0,
     unseenMilestones: [],
     tourState: null,
-    navBadges: { decisions_count: 0, has_overdue_audit: false, unread_signals: false, unseen_milestones: false, open_prs_count: 0, dna_completion: 0 },
+    navBadges: { decisions_count: 0 },
     canAccess: (featureKey: string) => canAccessFn(founder, featureKey),
   };
 
@@ -101,7 +100,6 @@ export async function getLayoutContext(
       founderEmail: founder.email,
       dnaCompletionPct: 0,
       wisdomLayerActive: false,
-      openPRCount: 0,
       allProducts: [],
       ux: emptyUx,
       trialStatus: getTrialStatus(founder.trial_ends_at, founder.tier),
@@ -132,29 +130,19 @@ export async function getLayoutContext(
   const dna = await getProductDNA(productId);
   const dnaCompletionPct = dna?.completion_pct ?? 0;
   const wisdomLayerActive = (ls?.wisdom_layer_active as number | null) === 1;
-  const prCountResult = await query(
-    "SELECT COUNT(*) as cnt FROM remediation_prs WHERE product_id = ? AND status = 'pr_open'",
-    [productId]
-  );
-  const openPRCount = (prCountResult.rows[0] as Record<string, number>)?.cnt ?? 0;
-
   // UX Intelligence Layer — parallel fetches
   const [nextAction, unreadNotifs, unreadCount, unseenMilestones, tourState] = await Promise.all([
     getNextAction(founder, productId),
     getUnreadNotifications(founder.id),
     getUnreadCount(founder.id),
-    getUnseenMilestones(founder.id),
+    getUnseenMilestones(founder.id, productId),
     getTourState(founder.id),
   ]);
 
-  // Nav badges from lifecycle_state cached columns
+  // The one badge the sidebar draws. The other five were computed here, cached
+  // in `lifecycle_state` by a job, and read into a struct the layout ignored.
   const navBadges: NavBadges = {
     decisions_count: (ls?.pending_decisions_count as number) ?? 0,
-    has_overdue_audit: ((ls?.audit_age_days as number) ?? 0) > 30,
-    unread_signals: ((ls?.unread_competitive_signals as number) ?? 0) > 0,
-    unseen_milestones: ((ls?.unread_milestones as number) ?? 0) > 0,
-    open_prs_count: (ls?.open_remediation_prs as number) ?? 0,
-    dna_completion: dnaCompletionPct,
   };
 
   const ux: UXContext = {
@@ -181,7 +169,6 @@ export async function getLayoutContext(
     founderEmail: founder.email,
     dnaCompletionPct,
     wisdomLayerActive,
-    openPRCount,
     allProducts,
     ux,
     trialStatus: getTrialStatus(founder.trial_ends_at, founder.tier),

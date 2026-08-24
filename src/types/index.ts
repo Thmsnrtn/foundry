@@ -1097,13 +1097,23 @@ export interface AppNotification {
   created_at: string;
 }
 
+/**
+ * FIVE OF THESE SIX WERE NEVER DRAWN.
+ *
+ * `groupedSidebar` renders exactly one badge — the count beside "Decide" — and
+ * has done since the nav was cut to five doors. The other five fields were
+ * computed on every dashboard page load, cached into `lifecycle_state` by a
+ * scheduled job that swept every product, and read back by `getLayoutContext`
+ * into a struct that the layout then ignored. An overdue audit, unread
+ * competitive signals, unseen milestones and open remediation PRs were all
+ * being counted for a badge that does not exist.
+ *
+ * They are gone rather than drawn: a nav that deliberately stopped shouting is
+ * a decision, and reviving four badges to justify the arithmetic behind them
+ * would be the arithmetic deciding the design.
+ */
 export interface NavBadges {
   decisions_count: number;
-  has_overdue_audit: boolean;
-  unread_signals: boolean;
-  unseen_milestones: boolean;
-  open_prs_count: number;
-  dna_completion: number;
 }
 
 export interface FeatureGateConfig {

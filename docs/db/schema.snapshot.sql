@@ -4541,7 +4541,7 @@
 , direction TEXT);
 , disposition TEXT NOT NULL DEFAULT 'active'
 , disposition TEXT, disposition_evidence_json TEXT);
-, dna_completion_pct INTEGER DEFAULT 0, wisdom_layer_active BOOLEAN DEFAULT FALSE, unread_competitive_signals INTEGER DEFAULT 0, audit_age_days INTEGER DEFAULT 0, unread_milestones INTEGER DEFAULT 0, open_remediation_prs INTEGER DEFAULT 0, pending_decisions_count INTEGER DEFAULT 0);
+, dna_completion_pct INTEGER DEFAULT 0, wisdom_layer_active BOOLEAN DEFAULT FALSE, pending_decisions_count INTEGER DEFAULT 0);
 , evidence_source TEXT NOT NULL DEFAULT 'observed'
 , last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 , last_refused_at DATETIME, refusal_count INTEGER NOT NULL DEFAULT 0, last_refusal_reason TEXT

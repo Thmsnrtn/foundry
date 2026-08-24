@@ -193,20 +193,38 @@ export async function checkAndAwardMilestones(
 /**
  * Get milestones that the founder has not yet seen.
  */
-export async function getUnseenMilestones(founderId: string): Promise<MilestoneEvent[]> {
+export async function getUnseenMilestones(
+  founderId: string,
+  productId: string,
+): Promise<MilestoneEvent[]> {
+  // SCOPED TO THE COMPANY BEING LOOKED AT. This was founder-scoped, and its one
+  // caller feeds the toast on a PRODUCT's dashboard — so a milestone earned by
+  // one of the founder's companies popped up over another company's numbers,
+  // with nothing in the toast to say which company it belonged to.
   const result = await query(
-    'SELECT * FROM milestone_events WHERE founder_id = ? AND seen_at IS NULL ORDER BY created_at DESC',
-    [founderId],
+    `SELECT * FROM milestone_events
+      WHERE founder_id = ? AND product_id = ? AND seen_at IS NULL
+      ORDER BY created_at DESC`,
+    [founderId, productId],
   );
   return result.rows as unknown as MilestoneEvent[];
 }
 
 /**
- * Mark all unseen milestones as seen for this founder.
+ * Mark this company's unseen milestones as seen.
+ *
+ * The founder-wide version cleared every company at once, and its one caller is
+ * ONE company's journey page: opening company A's story silently marked company
+ * B's milestones as seen, and B's toast never appeared again for a page the
+ * founder had not opened.
  */
-export async function markMilestonesAsSeen(founderId: string): Promise<void> {
+export async function markMilestonesAsSeen(
+  founderId: string,
+  productId: string,
+): Promise<void> {
   await query(
-    'UPDATE milestone_events SET seen_at = CURRENT_TIMESTAMP WHERE founder_id = ? AND seen_at IS NULL',
-    [founderId],
+    `UPDATE milestone_events SET seen_at = CURRENT_TIMESTAMP
+      WHERE founder_id = ? AND product_id = ? AND seen_at IS NULL`,
+    [founderId, productId],
   );
 }

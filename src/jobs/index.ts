@@ -616,32 +616,23 @@ export async function navBadgeRefresh(): Promise<void> {
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
+      // FOUR OF THESE SIX COUNTS FED A BADGE THAT DOES NOT EXIST. The sidebar
+      // draws one badge — the count beside "Decide" — and has since the nav was
+      // cut to five doors. An audit's age, unacknowledged competitive signals,
+      // unseen milestones and open remediation PRs were swept for every product
+      // every six hours, written into `lifecycle_state`, read back on every
+      // dashboard page load, and handed to a layout that ignored them. Their
+      // columns are dropped in migration 211.
+      //
+      // `dna_completion_pct` stays: `wisdom/dna.ts` reads it, and writes it
+      // itself on every DNA update — this job was a second writer of the same
+      // number, so it is no longer one.
       const pendingDecisions = await query("SELECT COUNT(*) as c FROM decisions WHERE product_id = ? AND status = 'pending'", [p.id]);
-      const lastAudit = await query('SELECT created_at FROM audit_scores WHERE product_id = ? ORDER BY created_at DESC LIMIT 1', [p.id]);
-      const unreadSignals = await query("SELECT COUNT(*) as c FROM competitive_signals WHERE product_id = ? AND acknowledged = 0", [p.id]);
-      const openPRs = await query("SELECT COUNT(*) as c FROM remediation_prs WHERE product_id = ? AND status = 'pr_open'", [p.id]);
-      const unseenMilestones = await query('SELECT COUNT(*) as c FROM milestone_events WHERE product_id = ? AND seen_at IS NULL', [p.id]);
-
       const pendingCount = (pendingDecisions.rows[0] as Record<string, number>)?.c ?? 0;
-      const lastAuditDate = (lastAudit.rows[0] as Record<string, string>)?.created_at;
-      const auditAgeDays = lastAuditDate ? Math.floor((Date.now() - new Date(lastAuditDate).getTime()) / 86400000) : 999;
-      const unreadCount = (unreadSignals.rows[0] as Record<string, number>)?.c ?? 0;
-      const openPRCount = (openPRs.rows[0] as Record<string, number>)?.c ?? 0;
-      const unseenCount = (unseenMilestones.rows[0] as Record<string, number>)?.c ?? 0;
-
-      const dna = await getProductDNA(p.id);
-      const dnaCompletion = dna?.completion_pct ?? 0;
 
       await query(
-        `UPDATE lifecycle_state SET
-          pending_decisions_count = ?,
-          audit_age_days = ?,
-          unread_competitive_signals = ?,
-          open_remediation_prs = ?,
-          unread_milestones = ?,
-          dna_completion_pct = ?
-         WHERE product_id = ?`,
-        [pendingCount, auditAgeDays, unreadCount, openPRCount, unseenCount, dnaCompletion, p.id],
+        'UPDATE lifecycle_state SET pending_decisions_count = ? WHERE product_id = ?',
+        [pendingCount, p.id],
       );
     } catch (err) {
       logger.error(`nav_badge_refresh error for ${p.id}:`, { jobName: 'nav_badge_refresh', error: String(err) });
