@@ -102,11 +102,6 @@
 
 
 
-
-
-
-
-
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -832,7 +827,6 @@
   --
   --
   --
-  --   config_keys_count, stressors_active, customer_count }
   --   current_mrr_estimate, team_size, biggest_challenge, stage }
   --   overruled_held — founder overruled and the premises held (dissent was wrong)
   --   vindicated  — an overruled objection's premise was falsified (dissent was right)
@@ -875,7 +869,6 @@
   -- Content sections (Markdown)
   -- Control
   -- Core growth and retention metrics (nullable — contribute what you have)
-  -- Cost and performance
   -- Cost tracking
   -- Counters maintained on conversion event:
   -- Cross-agent synthesis notes
@@ -924,7 +917,6 @@
   -- Only the hash. The secret is shown once, at issuance, and never again.
   -- Optional unit, again the founder's words: 'boats', 'classes', 'orders'.
   -- Outcome fields (populated when measured)
-  -- Output
   -- Performance
   -- Personal context (helps Foundry be a better advisor)
   -- Planning requires an Assisting development responsibility whose authority
@@ -995,8 +987,6 @@
   -- Voice input processing
   -- Web Push
   -- What a founder is actually agreeing to when they grant this scope.
-  -- What the agent decided
-  -- What the agent saw
   -- When a send through this identity was last accepted by the provider.
   -- Which provider account the mail goes through. Closed vocabulary: adding a
   -- Who said so. A financial position with no author is a number of unknown
@@ -1133,7 +1123,6 @@
   -- would like. Widening it is a migration and a review, exactly as adding a
   -- wrote it, and neither the founder nor the institution could tell which
   -- { company_name, problem, solution, target_customer, revenue_model,
-  -- { metrics_snapshot_date, integration_events_count, unread_messages_count,
   -- { traction: 0-10, team: 0-10, market: 0-10, unit_economics: 0-10, narrative: 0-10 }
   -- ─── Action accuracy ──────────────────────────────────────────────────────
   -- ─── Anti-canon (Vesper's recursion finding) ────────────────────────────
@@ -1597,7 +1586,6 @@
   action_url TEXT,
   action_url TEXT,                  -- deep link to the relevant page
   actionable_insight TEXT,
-  actions_count INTEGER NOT NULL DEFAULT 0,
   actions_proposed TEXT,
   actions_taken TEXT,
   actions_taken TEXT,               -- JSON: AgentAction[]
@@ -1647,7 +1635,6 @@
   agent_contributions TEXT,            -- JSON: {agent_name: {contribution, priority}}
   agent_id TEXT,                                  -- agent name; NULL for system actions
   agent_name TEXT NOT NULL CHECK(agent_name IN (
-  agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
   agent_name TEXT NOT NULL,
@@ -1958,7 +1945,6 @@
   context_json TEXT,       -- JSON: the full AgentDecision object
   context_richness INTEGER,  -- 0-3: 0=no context, 1=minimal, 2=good, 3=full
   context_snapshot TEXT,       -- JSON: {signal, riskState, stressors, metrics} at thread start
-  context_summary_json TEXT NOT NULL DEFAULT '{}',
   context_used TEXT,
   contraction_mrr_cents INTEGER,
   contributed_at      TEXT NOT NULL DEFAULT (datetime('now'))
@@ -1988,7 +1974,6 @@
   cost_usd REAL DEFAULT 0.0,
   cost_usd REAL DEFAULT 0.0,
   cost_usd REAL DEFAULT 0.0,
-  cost_usd REAL NOT NULL DEFAULT 0,
   count         INTEGER NOT NULL DEFAULT 0,
   country_code TEXT DEFAULT 'US',
   created_at             TEXT NOT NULL DEFAULT (datetime('now'))
@@ -2133,7 +2118,6 @@
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2184,7 +2168,6 @@
   customer_id TEXT NOT NULL,
   customer_intelligence TEXT,            -- Harbor + Forge analysis
   customer_philosophy TEXT, -- free-form: "I'd rather have 100 happy customers than 1000 lukewarm ones"
-  customer_signals_count INTEGER NOT NULL DEFAULT 0,
   d10_score INTEGER,
   d1_score INTEGER,
   d2_score INTEGER,
@@ -2239,7 +2222,6 @@
   decision_title TEXT NOT NULL,
   decision_track_record_score INTEGER, -- Outcome valence from decision history
   decision_type TEXT NOT NULL,
-  decisions_count INTEGER NOT NULL DEFAULT 0,
   decisions_created TEXT,
   decisions_created TEXT,              -- JSON: decision_id[] created from voice
   decisions_overridden INTEGER NOT NULL DEFAULT 0,
@@ -2315,7 +2297,6 @@
   dna_field TEXT NOT NULL,
   dna_fields_populated TEXT NOT NULL DEFAULT '[]', -- which DNA fields were set
   dna_sections_used TEXT,               -- JSON: string[] — which DNA fields contributed
-  domain_health_score INTEGER,
   draft_content TEXT NOT NULL,
   draft_id TEXT,                            -- action_drafts.id once approved/rejected
   duration_minutes INTEGER,
@@ -2358,7 +2339,6 @@
   error_count_trailing_7d INTEGER DEFAULT 0,
   error_log TEXT,
   error_message TEXT
-  error_message TEXT,
   error_message TEXT,
   error_message TEXT,
   error_message TEXT,
@@ -2602,7 +2582,6 @@
   has_ratings INTEGER DEFAULT 0,
   headline TEXT NOT NULL,    -- ≤120 chars: the one sentence founders wake up to
   headline TEXT,                       -- One-line summary of the day
-  headline TEXT, -- agent's one-line summary
   health_score INTEGER,
   health_score INTEGER,
   health_score REAL DEFAULT 50.0,
@@ -2617,7 +2596,6 @@
   hops TEXT NOT NULL,
   hour_reset_at DATETIME,
   hours REAL NOT NULL,
-  hypotheses_count INTEGER NOT NULL DEFAULT 0,
   hypothesis TEXT NOT NULL,
   hypothesis_id TEXT NOT NULL REFERENCES hypotheses(id),
   hypothesis_signals TEXT, -- JSON: {h1: data, h2: data, ...}
@@ -2858,7 +2836,6 @@
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
   id TEXT PRIMARY KEY,
-  id TEXT PRIMARY KEY,
   idea_description TEXT NOT NULL,
   identified_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   identity_key       TEXT PRIMARY KEY,
@@ -2871,7 +2848,6 @@
   initiative_type TEXT NOT NULL,  -- 'proactive_check', 'message_response', 'event_reaction'
   input_context TEXT NOT NULL,         -- What situation prompted this lesson
   input_context TEXT, -- JSON
-  input_tokens INTEGER NOT NULL DEFAULT 0,
   inputs TEXT NOT NULL,
   insight_date TEXT NOT NULL, -- YYYY-MM-DD
   insight_type TEXT NOT NULL,
@@ -3010,7 +2986,6 @@
   last_used_at DATETIME,
   last_viewed_at DATETIME,
   last_viewed_at DATETIME,
-  latency_ms INTEGER,
   latency_ms INTEGER,                       -- acted_at - viewed_at, populated on action
   learned_claim_id      TEXT REFERENCES reconstruction_claims(id),
   learned_claim_id TEXT REFERENCES reconstruction_claims(id),
@@ -3078,7 +3053,6 @@
   message_count INTEGER DEFAULT 0,
   message_id TEXT REFERENCES conversation_messages(id),
   messages_json TEXT NOT NULL DEFAULT '[]', -- chat history
-  messages_sent_count INTEGER NOT NULL DEFAULT 0,
   metadata TEXT,
   metadata TEXT,
   metadata TEXT,
@@ -3255,7 +3229,6 @@
   outcome_valence INTEGER,
   output TEXT, -- JSON
   output_id TEXT,
-  output_tokens INTEGER NOT NULL DEFAULT 0,
   output_type TEXT NOT NULL,
   overall_alignment REAL,
   overall_ethics_score REAL,
@@ -3624,7 +3597,6 @@
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
   product_id TEXT NOT NULL,
-  product_id TEXT NOT NULL,
   product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id TEXT PRIMARY KEY REFERENCES products(id),
@@ -3820,8 +3792,6 @@
   rotated_at     TEXT,
   round_type TEXT NOT NULL, -- 'seed' | 'series_a' | 'series_b'
   rule_id TEXT NOT NULL REFERENCES lifecycle_rules(id),
-  run_completed_at TEXT,
-  run_started_at TEXT NOT NULL,
   run_type TEXT CHECK(run_type IN ('initial', 'post_remediation', 'periodic')),
   runway_months REAL,
   sample_allocation REAL DEFAULT 0.5,    -- % to treatment
@@ -3875,7 +3845,6 @@
   services_revenue_percentage REAL,
   session_date TEXT NOT NULL,          -- YYYY-MM-DD
   session_id TEXT NOT NULL REFERENCES chat_sessions(id),
-  session_id TEXT NOT NULL,
   session_id TEXT NOT NULL,
   session_id TEXT REFERENCES agent_sessions(id),
   session_id TEXT,
@@ -4019,7 +3988,6 @@
   status TEXT NOT NULL DEFAULT 'pending_approval' CHECK(status IN (
   status TEXT NOT NULL DEFAULT 'proposed' CHECK(status IN (
   status TEXT NOT NULL DEFAULT 'queued',      -- 'queued' | 'approved' | 'rejected' | 'force_applied' | 'superseded'
-  status TEXT NOT NULL DEFAULT 'running' CHECK (status IN ('running','completed','failed')),
   status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'completed', 'failed', 'skipped')),
   status TEXT NOT NULL DEFAULT 'unknown', -- 'healthy' | 'degraded' | 'stale' | 'error' | 'unknown'
   status_code INTEGER,
@@ -4066,7 +4034,6 @@
   synthesis TEXT,                 -- 1-2 sentence framing paragraph
   synthesis_json TEXT, -- final synthesized output
   system_prompt_core TEXT,
-  system_prompt_preview TEXT, -- first 500 chars of system prompt
   tags             TEXT NOT NULL DEFAULT '[]',              -- JSON array
   tags         TEXT NOT NULL DEFAULT '[]',    -- JSON array of tag strings
   tags TEXT,
@@ -4261,7 +4228,6 @@
   used_count    INTEGER NOT NULL DEFAULT 0,
   user_agent TEXT,
   user_agent TEXT,
-  user_prompt_preview TEXT, -- first 500 chars of user prompt
   valid_until TEXT,
   valid_until TEXT,
   valid_until TEXT,
@@ -4347,7 +4313,6 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
-);
 );
 );
 );
@@ -5050,8 +5015,6 @@ CREATE INDEX idx_responsibility_dispositions ON responsibility_dispositions(resp
 CREATE INDEX idx_responsibility_transitions
 CREATE INDEX idx_revenue_attributions_product ON revenue_attributions(product_id, agent_name, period_start DESC);
 CREATE INDEX idx_rule_triggers_cooldown ON lifecycle_rule_triggers(rule_id, customer_id, triggered_at DESC);
-CREATE INDEX idx_run_details_product ON agent_run_details(product_id, agent_name, created_at);
-CREATE INDEX idx_run_details_session ON agent_run_details(session_id);
 CREATE INDEX idx_runway_founder ON runway_models(founder_id);
 CREATE INDEX idx_saved_insights_product ON saved_insights(product_id, created_at DESC);
 CREATE INDEX idx_scenario_decision ON scenario_models(decision_id);
@@ -5133,7 +5096,6 @@ CREATE TABLE agent_message_threads (
 CREATE TABLE agent_messages (
 CREATE TABLE agent_predictions (
 CREATE TABLE agent_remediations (
-CREATE TABLE agent_run_details (
 CREATE TABLE agent_scratchpad (
 CREATE TABLE agent_sessions (
 CREATE TABLE agent_wiki_entries (
