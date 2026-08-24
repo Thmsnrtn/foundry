@@ -19,6 +19,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { ratePoints } from '../ai/measured.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import type { GrowthStage, RiskStateValue } from '../../types/index.js';
@@ -81,8 +82,17 @@ async function predictChurnSpike(productId: string): Promise<Prediction | null> 
   );
   if (metrics.rows.length < 4) return null;
 
-  const rows = metrics.rows as unknown as Array<Record<string, number>>;
-  const churnRates = rows.map((r) => r.churn_rate ?? 0).filter((r) => r > 0);
+  // POINTS, NOT FRACTIONS. `churn_rate` is stored 0–1 in this system, and the
+  // threshold below is written in PERCENTAGE POINTS — so a delta of 0.5 meant a
+  // fifty-point jump in churn, which is not a thing that happens, and this
+  // prediction could never fire for anyone. The evidence lines had the mirror
+  // of the same error: `+${delta.toFixed(2)}%` printed a three-point rise as
+  // "+0.03%". `ratePoints` is the one place that converts, and the rule is to
+  // convert the VALUE, never the threshold.
+  const rows = metrics.rows as unknown as Array<Record<string, number | null>>;
+  const churnRates = rows
+    .map((r) => ratePoints(r.churn_rate))
+    .filter((r): r is number => r !== null && r > 0);
   if (churnRates.length < 3) return null;
 
   // Detect acceleration: is the rate of change of churn increasing?
@@ -104,8 +114,8 @@ async function predictChurnSpike(productId: string): Promise<Prediction | null> 
       probability,
       time_horizon_days: 45,
       evidence: [
-        `Recent churn acceleration: +${recentDelta.toFixed(2)}%/period`,
-        `Historical baseline: +${olderDelta.toFixed(2)}%/period`,
+        `Recent churn acceleration: +${recentDelta.toFixed(2)} points per snapshot`,
+        `Historical baseline: +${olderDelta.toFixed(2)} points per snapshot`,
         `Latest churn rate: ${churnRates[0]!.toFixed(1)}%`,
       ],
       recommended_action: 'Investigate the root cause immediately. Check recent cohort quality, onboarding changes, or competitive moves. Act before the spike materializes.',
@@ -119,27 +129,43 @@ async function predictChurnSpike(productId: string): Promise<Prediction | null> 
  * Predict revenue plateau from growth deceleration.
  */
 async function predictRevenuePlateau(productId: string): Promise<Prediction | null> {
+  // THE LEVEL, AND ONE RATE PER MONTH OF IT. This read `new + expansion` — the
+  // revenue ACQUIRED in a period, not the company's revenue — and divided
+  // consecutive rows, so the "growth rate" was per snapshot interval and the
+  // thresholds below (5% and −2%) are monthly figures. `metric_snapshots` is
+  // keyed by DATE and most companies report daily, so both halves were wrong at
+  // once for the same company, and the sentence it produces is about MRR
+  // plateauing.
   const metrics = await query(
-    'SELECT new_mrr_cents, expansion_mrr_cents, snapshot_date FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 12',
+    `SELECT mrr_cents, snapshot_date FROM metric_snapshots
+      WHERE product_id = ? AND mrr_cents IS NOT NULL
+      ORDER BY snapshot_date DESC LIMIT 12`,
     [productId]
   );
   if (metrics.rows.length < 6) return null;
 
-  const rows = metrics.rows as unknown as Array<Record<string, number>>;
-  const revenues = rows.map((r) => (r.new_mrr_cents ?? 0) + (r.expansion_mrr_cents ?? 0));
+  const rows = metrics.rows as unknown as Array<Record<string, string | number>>;
 
-  // Calculate growth rates
-  const growthRates = [];
-  for (let i = 0; i < revenues.length - 1; i++) {
-    const prev = revenues[i + 1]!;
-    if (prev > 0) growthRates.push((revenues[i]! - prev) / prev);
+  // Monthly-equivalent growth between consecutive snapshots, newest first.
+  const DAYS_PER_MONTH = 30.44;
+  const growthRates: number[] = [];
+  for (let i = 0; i < rows.length - 1; i++) {
+    const curr = Number(rows[i]!.mrr_cents);
+    const prev = Number(rows[i + 1]!.mrr_cents);
+    if (!(prev > 0) || !(curr > 0)) continue;
+    const gapDays = (Date.parse(`${String(rows[i]!.snapshot_date)}T00:00:00Z`)
+      - Date.parse(`${String(rows[i + 1]!.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+    if (!Number.isFinite(gapDays) || gapDays <= 0) continue;
+    growthRates.push((curr / prev) ** (DAYS_PER_MONTH / gapDays) - 1);
   }
 
   if (growthRates.length < 4) return null;
 
-  // Consistent deceleration = each recent period slower than the last
+  // Consistent deceleration = each recent period slower than the last. The rates
+  // are newest-first, so "decelerating" means each one is SMALLER than the one
+  // after it in the array — which is the one BEFORE it in time.
   const recent = growthRates.slice(0, 3);
-  const isDecelerating = recent.every((r, i) => i === 0 || r <= recent[i - 1]!);
+  const isDecelerating = recent.every((r, i) => i === recent.length - 1 || r <= recent[i + 1]!);
   const avgRecentGrowth = recent.reduce((a, b) => a + b, 0) / recent.length;
 
   if (isDecelerating && avgRecentGrowth < 0.05 && avgRecentGrowth > -0.02) {
@@ -150,8 +176,8 @@ async function predictRevenuePlateau(productId: string): Promise<Prediction | nu
       probability: 0.65,
       time_horizon_days: 75,
       evidence: [
-        `Recent growth rates: ${recent.map((r) => (r * 100).toFixed(1) + '%').join(' → ')}`,
-        `Average recent growth: ${(avgRecentGrowth * 100).toFixed(1)}%/period`,
+        `Recent monthly growth, oldest first: ${[...recent].reverse().map((r) => (r * 100).toFixed(1) + '%').join(' → ')}`,
+        `Average of those three: ${(avgRecentGrowth * 100).toFixed(1)}%/month`,
       ],
       recommended_action: 'This is the inflection point. Either expand TAM (new segments, geographies) or deepen (upsell, pricing increase, new value-adds). Status quo leads to plateau.',
     };
