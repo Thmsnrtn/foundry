@@ -15,6 +15,9 @@
 
 import { query } from '../../db/client.js';
 import type { FounderPreferences } from '../../types/index.js';
+// One home for which metrics are fractions: the memory kernel, which is where
+// premise thresholds are stored and checked.
+import { FRACTION_METRIC_KEYS as FRACTION_METRICS } from '../memory/kernel.js';
 
 export type Fluency = 'plain' | 'balanced' | 'technical';
 
@@ -289,7 +292,6 @@ export function metricLabel(key: string, f: Fluency): string {
 }
 
 /** Metrics stored as 0–1 fractions (rates) render as % outside technical. */
-const FRACTION_METRICS = new Set(['churn_rate', 'activation_rate', 'day_30_retention', 'mrr_health_ratio']);
 export function metricValue(key: string, value: number, f: Fluency): string {
   if (f === 'technical') return String(value);
   return FRACTION_METRICS.has(key) ? rate(value, f) : String(value);

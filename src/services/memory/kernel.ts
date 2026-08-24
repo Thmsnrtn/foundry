@@ -36,6 +36,32 @@ const METRIC_COLUMNS: Record<string, string> = {
  *  premises, Red Team objections). Single source of checkability truth. */
 export const CHECKABLE_METRIC_KEYS = Object.keys(METRIC_COLUMNS);
 
+/** The metrics stored 0–1 rather than in percentage points. */
+export const FRACTION_METRIC_KEYS = new Set([
+  'churn_rate', 'activation_rate', 'day_30_retention', 'mrr_health_ratio',
+]);
+
+/**
+ * A THRESHOLD IN THE UNITS THE COLUMN IS STORED IN.
+ *
+ * `churn_rate` and its siblings are stored 0–1. A premise threshold reaches
+ * this service from three places, and only one of them converted: the founder's
+ * own sentence, parsed by `ux/fluency.ts`. The other two — the
+ * `foundry_record_decision` MCP tool and the chat capture — pass a number a
+ * MODEL chose, and a model asked for "the threshold" on churn will write 5 for
+ * five per cent. `0.05 < 5` holds forever, so the belief could never be
+ * falsified and the accountability queue would never mention it.
+ *
+ * The rule is the one `fluency.ts` already applied and now imports: for a
+ * fraction metric, a value above 1 is percentage points. It is idempotent, so
+ * a caller that has already converted is not converted twice, and it is stated
+ * in both tool descriptions so a model can write either.
+ */
+export function normaliseThreshold(metricKey: string | undefined, threshold: number): number {
+  if (!metricKey || !FRACTION_METRIC_KEYS.has(metricKey)) return threshold;
+  return threshold > 1 ? threshold / 100 : threshold;
+}
+
 export interface RecordPremiseInput {
   productId: string;
   decisionId: string;
@@ -57,6 +83,8 @@ export interface RecordPremiseInput {
 export async function recordPremise(input: RecordPremiseInput): Promise<string> {
   const id = nanoid();
   const isMetric = !!(input.metricKey && input.comparator && input.threshold != null);
+  const threshold = input.threshold == null
+    ? null : normaliseThreshold(input.metricKey, input.threshold);
   const row: DecisionPremiseInsert = {
     id,
     product_id: input.productId,
@@ -66,7 +94,7 @@ export async function recordPremise(input: RecordPremiseInput): Promise<string> 
     premise_type: isMetric ? 'metric' : 'qualitative',
     metric_key: input.metricKey ?? null,
     comparator: input.comparator ?? null,
-    threshold: input.threshold ?? null,
+    threshold,
     status: 'holding',
     origin: input.origin ?? 'founder',
     review_id: input.reviewId ?? null,

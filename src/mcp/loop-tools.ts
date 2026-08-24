@@ -60,7 +60,7 @@ export const LOOP_TOOLS: MCPTool[] = [
         premise: { type: 'string', description: 'The belief this decision rests on, in plain words' },
         premise_metric: { type: 'string', description: 'Optional metric key to auto-check the premise against' },
         premise_comparator: { type: 'string', description: 'One of < <= > >= — the condition that must KEEP holding' },
-        premise_threshold: { type: 'number', description: 'The threshold for the comparator' },
+        premise_threshold: { type: 'number', description: 'The threshold for the comparator. Rates (churn_rate, activation_rate, day_30_retention, mrr_health_ratio) are stored 0-1; either form is accepted — a value above 1 is read as percentage points, so 5 and 0.05 both mean five per cent.' },
       },
       required: ['title', 'decision'],
     },
