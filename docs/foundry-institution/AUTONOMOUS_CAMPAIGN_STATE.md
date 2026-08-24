@@ -415,6 +415,25 @@ briefing ("unknown growth" in every one ever generated) and in the BOARD PACKET
 ("N/A" in the document that goes to a board). Baseline 0, in `lint:columns`,
 with the defect planted in three shapes including one it must NOT report.
 
+**A THRESHOLD A MODEL CHOSE, IN THE UNITS A MODEL WOULD CHOOSE.** The memory
+kernel's rate metrics are stored 0–1, and a premise threshold reaches it from
+three producers: the founder's sentence (parsed, converted), the
+`foundry_record_decision` MCP tool and the chat capture (both a number a MODEL
+picked). A model asked for "the threshold" on churn writes 5 for five per cent,
+and `0.05 < 5` holds forever — so the belief could never be falsified and the
+accountability queue, the whole point of the kernel and a tool an external agent
+is told to consult, would never mention the decision resting on it. One home now
+(`normaliseThreshold`), idempotent, stated in both tool descriptions.
+
+**A VALENCE OUTSIDE ITS VOCABULARY.** `decisions.outcome_valence` is three values
+to every reader — the trust ledger that decides how much authority Foundry gets,
+the pattern generator, the prediction-accuracy job, and a board packet that maps
+the average through `((avg + 1) / 2) * 100`, where a single 5 would print a
+decision score of 300%. The founder's form offers three radio buttons; the route
+took `Number(body.valence)` unchecked and the column had no constraint. The
+route refuses now and migration 214 puts the same rule in the database, because
+`check-check-vocabularies` cannot see a value that arrives as a bound parameter.
+
 **The recurring method note.** Seven times this campaign, and twice more this
 cycle, a test failed after a repair because the test had encoded the defect as
 its premise — a fixture stating `new_mrr_cents` where the reader now wants the
