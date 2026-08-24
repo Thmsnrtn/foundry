@@ -91,8 +91,16 @@ describe('the columns that were never there', () => {
     expect(src).not.toMatch(/metricsRow\.mrr_growth_pct/);
     expect(src).not.toMatch(/metricsRow\.customer_count/);
     expect(src).not.toMatch(/metricsRow\.d30_retention/);
+    // The SUBJECT here is that growth comes from two snapshots of the LEVEL
+    // rather than from a column that does not exist. It used to pin the exact
+    // expression `((now - then) / then) * 100`, which turned red when the rate
+    // was made monthly-equivalent — a correction to a different defect in the
+    // same line. Pin the two levels and the fact that the gap between their
+    // dates is what the rate is expressed over.
     expect(src, 'growth is computed from two snapshots of the level')
-      .toMatch(/mrrGrowthPct = \(\(now - then\) \/ then\) \* 100/);
+      .toMatch(/mrrGrowthPct = \(\(now \/ then\)/);
+    expect(src, 'and over the interval those two snapshots actually span')
+      .toMatch(/30\.44 \/ gapDays/);
     expect(src, 'and customers are counted where they live')
       .toMatch(/getCompanyCustomers/);
   });
