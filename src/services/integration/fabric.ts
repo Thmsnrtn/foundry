@@ -283,16 +283,16 @@ export async function connectIntegration(
         credentials_json = COALESCE(?, credentials_json),
         config_json = ?,
         authorized_agents = ?,
-        updated_at = ?
+        updated_at = datetime('now')
        WHERE product_id = ? AND name = ?`,
-      [direction, name, credentialsCiphertext, configJson, authorizedAgents, now, productId, name],
+      [direction, name, credentialsCiphertext, configJson, authorizedAgents, productId, name],
     );
   } else {
     await query(
       `INSERT INTO integrations (id, product_id, name, provider, direction, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, datetime('now'), datetime('now'))`,
       [nanoid(), productId, name, name, direction, credentialsCiphertext, configJson,
-       authorizedAgents, now, now],
+       authorizedAgents],
     );
   }
 }
@@ -302,8 +302,8 @@ export async function connectIntegration(
  */
 export async function disconnectIntegration(productId: string, name: string): Promise<void> {
   await query(
-    `UPDATE integrations SET status = 'disconnected', updated_at = ? WHERE product_id = ? AND name = ?`,
-    [new Date().toISOString(), productId, name],
+    `UPDATE integrations SET status = 'disconnected', updated_at = datetime('now') WHERE product_id = ? AND name = ?`,
+    [productId, name],
   );
 }
 
@@ -343,9 +343,10 @@ export async function storeEvent(
 
   // Update total_inbound_events counter on the integration
   await query(
-    `UPDATE integrations SET total_inbound_events = total_inbound_events + 1, last_synced_at = ?, updated_at = ?
+    `UPDATE integrations SET total_inbound_events = total_inbound_events + 1,
+            last_synced_at = datetime('now'), updated_at = datetime('now')
      WHERE product_id = ? AND name = ?`,
-    [now, now, productId, event.integration_name],
+    [productId, event.integration_name],
   );
 
   return id;

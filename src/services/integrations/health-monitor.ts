@@ -32,7 +32,7 @@ export async function recordIntegrationEvent(
       `INSERT INTO integration_health
          (id, product_id, integration_source, last_event_at, last_successful_sync,
           consecutive_failures, error_message, status, data_freshness_hours, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0.0, ?)`,
+       VALUES (?, ?, ?, datetime(?), datetime(?), ?, ?, ?, 0.0, datetime('now'))`,
       [
         id,
         productId,
@@ -42,7 +42,6 @@ export async function recordIntegrationEvent(
         failures,
         success ? null : (errorMessage ?? null),
         status,
-        now,
       ],
     );
   } else {
@@ -54,13 +53,13 @@ export async function recordIntegrationEvent(
 
     await query(
       `UPDATE integration_health
-       SET last_event_at = ?,
-           last_successful_sync = CASE WHEN ? = 1 THEN ? ELSE last_successful_sync END,
+       SET last_event_at = datetime(?),
+           last_successful_sync = CASE WHEN ? = 1 THEN datetime(?) ELSE last_successful_sync END,
            consecutive_failures = ?,
            error_message = ?,
            status = ?,
            data_freshness_hours = 0.0,
-           updated_at = ?
+           updated_at = datetime('now')
        WHERE product_id = ? AND integration_source = ?`,
       [
         now,
@@ -69,7 +68,6 @@ export async function recordIntegrationEvent(
         failures,
         success ? null : (errorMessage ?? null),
         status,
-        now,
         productId,
         source,
       ],

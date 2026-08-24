@@ -80,12 +80,11 @@ async function executeAction(action: OutboundActionRecord): Promise<{ success: b
     // Future integrations: linear, github, etc.
     default: {
       // Mark as executed with a log result
-      const now = new Date().toISOString();
       await query(
-        `UPDATE outbound_actions SET status = 'executed', result_json = ?, executed_at = ? WHERE id = ?`,
+        `UPDATE outbound_actions SET status = 'executed', result_json = ?,
+                executed_at = datetime('now') WHERE id = ?`,
         [
           JSON.stringify({ message: `Action ${action.action_type} on ${action.integration_name} logged — no executor registered yet` }),
-          now,
           action.id,
         ],
       );
@@ -256,12 +255,11 @@ export async function approveAction(
     throw new Error(`approver is not a principal reference: ${approvedBy}`);
   }
 
-  const now = new Date().toISOString();
-
   // Mark as approved
   await query(
-    `UPDATE outbound_actions SET status = 'approved', approved_by = ?, approved_at = ? WHERE id = ?`,
-    [approvedBy, now, actionId],
+    `UPDATE outbound_actions SET status = 'approved', approved_by = ?,
+            approved_at = datetime('now') WHERE id = ?`,
+    [approvedBy, actionId],
   );
 
   const action = await getAction(actionId);
@@ -300,11 +298,11 @@ export async function rejectAction(
     `UPDATE outbound_actions SET
       status = 'rejected',
       approved_by = ?,
-      approved_at = ?,
+      approved_at = datetime('now'),
       feedback_status = 'negative',
       feedback_data_json = ?
      WHERE id = ?`,
-    [decidedBy, now,
+    [decidedBy,
       JSON.stringify({ reason: reason ?? 'Rejected without a stated reason', rejected_at: now }),
       actionId],
   );

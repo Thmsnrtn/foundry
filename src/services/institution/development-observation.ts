@@ -56,7 +56,7 @@ export async function recordDevelopmentObservation(input: {
 
   await query(
     `INSERT OR IGNORE INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary,created_at)
-     VALUES (?,?,'development_verification',?,?,?,?,?)`,
+     VALUES (?,?,'development_verification',?,?,?,?,datetime(?))`,
     [id, input.productId, eventType, severity,
       JSON.stringify({ check, result, detail: input.detail, observed_at: observedAt }),
       `${check} reported ${result}`, observedAt],

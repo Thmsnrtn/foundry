@@ -333,8 +333,8 @@ export async function upsertCustomer(
            name = COALESCE(?, name), email = COALESCE(?, email),
            company = COALESCE(?, company), plan = COALESCE(?, plan),
            mrr_cents = COALESCE(?, mrr_cents),
-           signed_up_at = COALESCE(?, signed_up_at),
-           last_active_at = COALESCE(?, last_active_at),
+           signed_up_at = COALESCE(datetime(?), signed_up_at),
+           last_active_at = COALESCE(datetime(?), last_active_at),
            metadata = COALESCE(?, metadata),
            updated_at = datetime('now')
          WHERE id = ?`,
@@ -353,7 +353,7 @@ export async function upsertCustomer(
   const id = nanoid();
   await query(
     `INSERT INTO customers (id, product_id, owner_id, external_id, name, email, company, plan, mrr_cents, signed_up_at, last_active_at, metadata)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime(?), datetime(?), ?)`,
     [
       id, productId, ownerId,
       externalId, data.name ?? null, data.email ?? null,

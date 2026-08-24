@@ -121,8 +121,12 @@ export async function executeEmailSend(
   // action does not need asking. That is a standing authority, not silence
   // after a notice, and the two are different facts about who is responsible.
   await query(
-    `UPDATE outbound_actions SET status = 'executing', approved_by = COALESCE(approved_by, ?), approved_at = COALESCE(approved_at, ?), executed_at = ? WHERE id = ?`,
-    [principalRef('system', 'standing_authority'), now, now, actionId],
+    `UPDATE outbound_actions SET status = 'executing',
+            approved_by = COALESCE(approved_by, ?),
+            approved_at = COALESCE(approved_at, datetime('now')),
+            executed_at = datetime('now')
+      WHERE id = ?`,
+    [principalRef('system', 'standing_authority'), actionId],
   );
 
   const req: GatewayRequest = {
@@ -427,9 +431,9 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
         last_error = ?,
         error_count_trailing_7d = error_count_trailing_7d + 1,
         status = 'errored',
-        updated_at = ?
+        updated_at = datetime('now')
        WHERE product_id = ? AND name = 'resend'`,
-      [String(err), new Date().toISOString(), req.productId],
+      [String(err), req.productId],
     );
     throw lastError;
   }

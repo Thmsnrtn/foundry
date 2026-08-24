@@ -10,6 +10,15 @@ import { nanoid } from 'nanoid';
 export async function seedDemoFounder(): Promise<void> {
   console.log('🌱 Seeding demo founder with 6 months of realistic data...\n');
 
+  // THE DEMO WROTE ITS TIMESTAMPS IN THE OTHER FORMAT. Every column seeded here
+  // is also written by production code as `datetime('now')` —
+  // 'YYYY-MM-DD HH:MM:SS' — and `toISOString()` produces
+  // 'YYYY-MM-DDTHH:MM:SS.sssZ'. Compared as text a space sorts before 'T', so a
+  // demo company's seeded history and anything Foundry wrote afterwards
+  // interleaved wrongly in every ORDER BY and every window. `sqlTime` is the
+  // same instant in the format the rest of the database uses.
+  const sqlTime = (d: Date) => d.toISOString().replace('T', ' ').slice(0, 19);
+
   const founderId = 'demo_founder_001';
   const productId = 'demo_product_001';
   const now = new Date();
@@ -20,7 +29,7 @@ export async function seedDemoFounder(): Promise<void> {
     `INSERT OR REPLACE INTO founders (id, clerk_user_id, email, name, tier, cohort_id, created_at, lifestyle_mode, lifestyle_target_mrr, country_code, local_currency, ppp_factor)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [founderId, 'demo_clerk_001', 'maya@labflow.app', 'Maya Okonkwo', 'founding_cohort', 'cohort_001',
-     new Date(now.getTime() - 180 * 86400000).toISOString(), 0, null, 'US', 'USD', 1.0]
+     sqlTime(new Date(now.getTime() - 180 * 86400000)), 0, null, 'US', 'USD', 1.0]
   );
   console.log('  ✓ Founder: Maya Okonkwo (LabFlow)');
 
@@ -31,7 +40,7 @@ export async function seedDemoFounder(): Promise<void> {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [productId, 'LabFlow', founderId, 'https://github.com/maya/labflow', 'maya', 'labflow',
      'TypeScript, Next.js, Prisma, Supabase', 'education', 'education', 'early_traction', 'active',
-     new Date(now.getTime() - 180 * 86400000).toISOString()]
+     sqlTime(new Date(now.getTime() - 180 * 86400000))]
   );
   console.log('  ✓ Product: LabFlow (education SaaS)');
 
@@ -44,10 +53,10 @@ export async function seedDemoFounder(): Promise<void> {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [productId, 'prompt_3', 'yellow',
      'Churn approaching new revenue. 2 elevated stressors.',
-     new Date(now.getTime() - 7 * 86400000).toISOString(),
-     'completed', new Date(now.getTime() - 150 * 86400000).toISOString(), 6.8, 'READY_WITH_CONDITIONS',
+     sqlTime(new Date(now.getTime() - 7 * 86400000)),
+     'completed', sqlTime(new Date(now.getTime() - 150 * 86400000)), 6.8, 'READY_WITH_CONDITIONS',
      'completed', 'in_progress', 'not_started', 'dormant',
-     now.toISOString()]
+     sqlTime(now)]
   );
   console.log('  ✓ Lifecycle: Prompt 3, Yellow risk state');
 
@@ -66,7 +75,7 @@ export async function seedDemoFounder(): Promise<void> {
      'LabFlow works with annual PO billing cycles. No credit card required. Pricing is per-school, not per-seat.',
      'Education SaaS is won at conferences and lost at renewal. The decision maker (dept head) is not the budget holder (principal/district).',
      'Teachers who use LabFlow for experiment scheduling retain 3x better than those who only use inventory. The scheduling hook is the retention driver.',
-     80, new Date(now.getTime() - 120 * 86400000).toISOString(), now.toISOString()]
+     80, sqlTime(new Date(now.getTime() - 120 * 86400000)), sqlTime(now)]
   );
   console.log('  ✓ Product DNA: 80% complete');
 
@@ -83,7 +92,7 @@ export async function seedDemoFounder(): Promise<void> {
   ];
 
   for (const m of metricHistory) {
-    const date = new Date(now.getTime() - m.daysAgo * 86400000).toISOString().split('T')[0]!;
+    const date = sqlTime(new Date(now.getTime() - m.daysAgo * 86400000)).split('T')[0]!;
     const healthRatio = m.mrr > 0 ? m.churn / m.mrr : null;
     await query(
       `INSERT OR REPLACE INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, expansion_mrr_cents, contraction_mrr_cents, churned_mrr_cents, active_users, signups_7d, activation_rate, day_30_retention, churn_rate, nps_score, mrr_health_ratio, support_volume_7d)
@@ -105,7 +114,7 @@ export async function seedDemoFounder(): Promise<void> {
        { dimension: 'D6', dimension_number: 6, finding: 'Pricing page missing', evidence: 'No /pricing route found', severity: 'major' },
        { dimension: 'D8', dimension_number: 8, finding: 'No competitive differentiation documented', evidence: 'Product DNA what_we_are_not is set but not reflected in marketing', severity: 'minor' },
      ]),
-     new Date(now.getTime() - 150 * 86400000).toISOString()]
+     sqlTime(new Date(now.getTime() - 150 * 86400000))]
   );
   console.log('  ✓ Audit score: 6.8 READY_WITH_CONDITIONS');
 
@@ -134,7 +143,7 @@ export async function seedDemoFounder(): Promise<void> {
       args: [nanoid(), productId, 'Churn approaching new revenue',
         'MRR Health Ratio at 0.85 — churn is 85% of new revenue', 60,
         'Investigate churn patterns by cohort. 3 schools cancelled citing "summer break" — may be seasonal.',
-        'elevated', new Date(now.getTime() - 14 * 86400000).toISOString()],
+        'elevated', sqlTime(new Date(now.getTime() - 14 * 86400000))],
     },
     {
       sql: `INSERT INTO stressor_history (id, product_id, stressor_name, signal, timeframe_days, neutralizing_action, severity, status, risk_state_at_identification, identified_at)
@@ -142,7 +151,7 @@ export async function seedDemoFounder(): Promise<void> {
       args: [nanoid(), productId, 'Activation rate erosion',
         'Activation rate dropped from 65% to 42% over 4 months', 45,
         'Audit onboarding funnel. Check if district-level IT restrictions block setup.',
-        'elevated', new Date(now.getTime() - 7 * 86400000).toISOString()],
+        'elevated', sqlTime(new Date(now.getTime() - 7 * 86400000))],
     },
   ]);
   console.log('  ✓ Stressors: 2 active (elevated)');
@@ -158,7 +167,7 @@ export async function seedDemoFounder(): Promise<void> {
         'Three schools cancelled citing summer break. If seasonal churn is the pattern, free summer access could retain them for fall.',
         JSON.stringify([{ label: 'Schools churned', value: '3', source: 'stressor' }, { label: 'Reason cited', value: 'Summer break', source: 'support' }]),
         'Offer free June-August access for annual subscribers. The cost is zero (server costs negligible) and it prevents re-onboarding friction in fall.',
-        now.toISOString()],
+        sqlTime(now)],
     },
     {
       sql: `INSERT INTO decisions (id, product_id, category, gate, what, why_now, context, recommendation, status, created_at)
@@ -168,7 +177,7 @@ export async function seedDemoFounder(): Promise<void> {
         'Two principals asked for visibility into which teachers use LabFlow. This is the buyer persona — they control budget.',
         JSON.stringify([{ label: 'Principal requests', value: '2', source: 'support' }, { label: 'DNA insight', value: 'Decision maker != user', source: 'product_dna' }]),
         'Build a read-only admin view. Low effort, high signal — it aligns the buyer with the product.',
-        now.toISOString()],
+        sqlTime(now)],
     },
     {
       sql: `INSERT INTO decisions (id, product_id, category, gate, what, why_now, context, recommendation, status, created_at)
@@ -178,7 +187,7 @@ export async function seedDemoFounder(): Promise<void> {
         'ISTE 2026 call for proposals closes in 3 weeks. Education SaaS is won at conferences.',
         JSON.stringify([{ label: 'Deadline', value: '3 weeks', source: 'calendar' }, { label: 'DNA insight', value: 'Won at conferences, lost at renewal', source: 'product_dna' }]),
         'Submit a talk on "Lab Safety Compliance Without Paper." It positions LabFlow as a compliance tool, not just scheduling.',
-        now.toISOString()],
+        sqlTime(now)],
     },
   ]);
   console.log('  ✓ Decisions: 3 pending (Gate 1, 2, 3)');
@@ -220,8 +229,8 @@ export async function seedDemoFounder(): Promise<void> {
       `INSERT INTO customers (id, product_id, owner_id, name, plan, mrr_cents, health_score, churn_risk, is_champion, last_active_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [nanoid(), productId, founderId, c.name, c.plan, c.mrr, c.health, c.churn, c.champion ? 1 : 0,
-       new Date(now.getTime() - c.active * 86400000).toISOString(),
-       new Date(now.getTime() - 120 * 86400000).toISOString()]
+       sqlTime(new Date(now.getTime() - c.active * 86400000)),
+       sqlTime(new Date(now.getTime() - 120 * 86400000))]
     );
   }
   console.log('  ✓ Customers: 6 (2 champions, 2 at-risk, 1 trial, 1 churning)');
@@ -231,7 +240,7 @@ export async function seedDemoFounder(): Promise<void> {
   await query(
     `INSERT OR REPLACE INTO founder_health (id, founder_id, personal_runway_months, weekly_hours_available, engagement_trend, motivation_score, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [nanoid(), founderId, 4.5, 45, 'declining', 52, now.toISOString()]
+    [nanoid(), founderId, 4.5, 45, 'declining', 52, sqlTime(now)]
   );
   console.log('  ✓ Founder health: 4.5mo runway, declining engagement, motivation 52/100');
 
@@ -251,7 +260,7 @@ export async function seedDemoFounder(): Promise<void> {
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [nanoid(), productId, 'Flinn Scientific', 'feature_launch',
      'Flinn launched a digital inventory module as part of their existing catalog platform. Free for catalog customers.',
-     'high', new Date(now.getTime() - 5 * 86400000).toISOString()]
+     'high', sqlTime(new Date(now.getTime() - 5 * 86400000))]
   );
   console.log('  ✓ Competitive signal: Flinn launched inventory module (high significance)');
 

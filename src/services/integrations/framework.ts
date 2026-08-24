@@ -179,7 +179,7 @@ export async function runSync(integrationId: string, caller: SyncCaller): Promis
     // unremarkable, which is why a log that has never recorded anything looked
     // like a quiet system. The value was already in hand: `start`.
     `INSERT INTO integration_sync_log (id, integration_id, product_id, provider, sync_type, records_processed, metrics_updated, errors, duration_ms, started_at, completed_at)
-     VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, datetime('now'))`,
+     VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, datetime(?), datetime('now'))`,
     [
       nanoid(), integrationId, productId, provider,
       result.records_processed,

@@ -143,7 +143,7 @@ export async function recordSyncAttempt(input: {
     `INSERT INTO integration_sync_log
        (id, integration_id, product_id, started_at, completed_at, status,
         records_processed, error_message)
-     VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)`,
+     VALUES (?, ?, ?, datetime(?), CURRENT_TIMESTAMP, ?, ?, ?)`,
     [
       nanoid(), String(row.id), input.productId, input.startedAt,
       input.error ? 'failed' : 'success',
