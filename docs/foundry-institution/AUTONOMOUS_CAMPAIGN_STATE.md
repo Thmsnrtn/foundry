@@ -81,15 +81,19 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `1420bcb`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `9976d23`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 252 files, highest **216**. Ordering gated. Snapshot current —
-  and regenerate it AFTER the last migration of a batch, not in the middle of
-  one. It was regenerated between 215 and 216 this cycle, and
-  `foundry-self-observation` caught the result: 685 objects recorded against 684
-  live. That check is Foundry comparing its own schema to its record of it,
-  which is the one place a stale snapshot has to be caught, and it was.
-- **Validation:** `npm run check` green end to end — **430 files / 3,716 tests**,
+- **Migrations:** 253 files, highest **217**. Ordering gated. **Snapshot
+  freshness is now a GATE, not a note.** It went stale twice in one session —
+  once regenerated between 215 and 216 rather than after both, once not
+  regenerated for 217 at all, by the author who had written the reminder into
+  this very line an hour earlier. `foundry-self-observation` caught both,
+  correctly and twenty-five minutes into a full run each time.
+  `check-schema-snapshot.mjs` asks the same question in seconds at the front of
+  the chain. **A note that has to be remembered at the right moment is not a
+  control; the distance between a mistake and its discovery is the thing to
+  fix.**
+- **Validation:** `npm run check` green end to end — **431 files / 3,727 tests**,
   `CHECK_EXIT=0`, read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
   also runs `tests/simulation` and `tests/evals`. Checkpoints before this
@@ -209,6 +213,35 @@ matters is that one of them was being TESTED.**
   imports the same builder production uses; nothing outside `src/prompts/`
   referenced `GOLDEN_CASES` at all.
 
+- **A message observed in the future, at the top of the founder's queue.**
+  `inbound_customer_messages.source_observed_at` is the SOURCE'S clock and it is
+  also the ORDER of the founder's queue — `ORDER BY datetime(source_observed_at)
+  DESC ... LIMIT ?`. Any time was accepted, including times that have not
+  happened, so one message stamped 2099 sat at the top forever and pushed a real
+  customer off the end. Migration 201 is this defect against `approved_at`; the
+  difference is whose clock it is, so the allowance is fifteen minutes rather
+  than five — **a skew allowance, not a grace period**, and deliberately short
+  of a timezone mistake, which the integration's author should be told about
+  rather than have absorbed.
+- **The one unbounded external string on a public door.** Every other external
+  string on the ingest doors is bounded — `reported_by` 120, `what` 200, a
+  customer's body 8192, the custom-metrics drawer 8KB. `detail` on the
+  effect-outcome door was trimmed and stored with no length anywhere, into
+  `signal_events.payload_json`, which has no size constraint of its own.
+
+**AND ONE I CAUSED, WHICH IS THE MOST USEFUL ENTRY IN THIS SECTION.** Splitting
+the custom-metrics cap into per-request and stored, I split the KEY cap
+correctly and left the BYTE cap as a single stored-sized number — relaxing a
+public door from 8KB to 16KB, a bound standing since the 2026-07-13 security
+close-out. `security-closeout.test.ts` failed on the next full run. **My own
+test for that batch did not, and that is the part worth keeping: it asserted the
+MERGED bound in both directions and never once the INCOMING one.** A test
+written alongside a split tends to test the half that was interesting to write.
+**A cap on what one request may send and a cap on what the row may hold are
+different quantities, and when one is split into two questions, every cap beside
+it is too.** Walking the neighbouring doors under that rule is what found the
+unbounded `detail` above.
+
 **THE THROUGH-LINE, once eight batches were in: four of them were places where
 the system's own EVIDENCE agreed with it and should not have.** A test suite
 asserting on a middleware no router mounted. Golden cases scoring a prompt the
@@ -216,6 +249,17 @@ product does not send. A boot log printing "✓ Environment validated"
 immediately before "FATAL: required config missing". A sync log recording a
 success for a metric another writer erased within the hour. The defect in each
 case is not the broken thing — it is the instrument that reported it working.
+
+**AND THE SAME SHAPE POINTED INWARD, THREE TIMES, WHICH IS THE CYCLE'S REAL
+LESSON.** This file's own entry for `middleware/tenant.ts` read "specification,
+not dead code" and was wrong. A note written here about `lib/env.ts` — "a
+control that does not run, wire it into boot" — was wrong on its premise; boot
+already validated twice. And the checkpoint's reminder to regenerate the schema
+snapshot after the last migration of a batch was RIGHT and still failed, an hour
+after being written, by its own author. The first two were replaced. The third
+became `check-schema-snapshot.mjs`, because a note that has to be remembered at
+the right moment is not a control. **An instrument that agrees with you is the
+thing to check first, and this file is an instrument.**
 
 **The rule this cycle adds, and it is about evidence rather than code: A TEST
 MAY ASSERT ON A DORMANT MODULE'S SOURCE WHEN IT SAYS THE MODULE IS DORMANT.**
