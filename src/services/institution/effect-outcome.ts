@@ -32,7 +32,28 @@ import { query } from '../../db/client.js';
 export type OutcomeVerdict = 'achieved' | 'failed';
 
 export type OutcomeRefusal =
-  | 'effect_unknown' | 'verdict_invalid' | 'reporter_invalid' | 'not_executed';
+  | 'effect_unknown' | 'verdict_invalid' | 'reporter_invalid' | 'not_executed'
+  | 'detail_too_long';
+
+/**
+ * THE ONE UNBOUNDED STRING ON A PUBLIC DOOR.
+ *
+ * `POST /ingest/effect-outcome/:token` is token-authed and open, and every
+ * other external string on it and its neighbours is bounded: `reported_by` is
+ * sliced to 120 here and on the company-report door, `what` is refused past 200
+ * there, a customer's message body is refused past 8192 by the intake schema,
+ * and the custom-metrics drawer has carried an 8KB ceiling since the
+ * 2026-07-13 security close-out. `detail` was trimmed and stored, and nothing
+ * anywhere said how long it could be — into `signal_events.payload_json`, which
+ * has no size constraint of its own.
+ *
+ * Two thousand characters, and refused rather than truncated. A machine
+ * explaining why an effect failed has room for a paragraph; a truncated
+ * explanation is a different explanation, and this record is evidence a person
+ * reads to decide whether something worked. The sibling bound on `what` refuses
+ * for the same reason.
+ */
+export const MAX_OUTCOME_DETAIL_CHARS = 2_000;
 
 export interface EffectOutcomeReport {
   id: string; effectId: string; verdict: OutcomeVerdict; reporter: string; detail: string | null;
@@ -57,6 +78,7 @@ export async function reportEffectOutcome(input: {
   // Refused here as well as in the database, so the caller gets a reason rather
   // than a constraint error.
   if (!reporter || reporter.startsWith('institution:')) return { refused: 'reporter_invalid' };
+  if (detail && detail.length > MAX_OUTCOME_DETAIL_CHARS) return { refused: 'detail_too_long' };
 
   const executed = await query(
     "SELECT 1 FROM outbound_actions WHERE product_id=? AND effect_id=? AND status='executed'",

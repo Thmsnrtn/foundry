@@ -273,6 +273,42 @@ describe('what the founder is told about an outcome', () => {
     expect(activity.some((a) => a.detail.includes('a system you connected told me'))).toBe(true);
   });
 
+  it('refuses an unbounded detail rather than storing or truncating it', async () => {
+    // THE ONE UNBOUNDED EXTERNAL STRING ON A PUBLIC DOOR.
+    // `POST /ingest/effect-outcome/:token` is token-authed and open, and every
+    // other external string on it and its neighbours is bounded — `reported_by`
+    // sliced to 120, `what` refused past 200, a customer's message body refused
+    // past 8192, the custom-metrics drawer capped at 8KB since the 2026-07-13
+    // close-out. `detail` was trimmed and stored, with no length anywhere,
+    // straight into `signal_events.payload_json`.
+    //
+    // Refused, not truncated: a truncated explanation is a different
+    // explanation, and this record is evidence a person reads to decide whether
+    // something worked.
+    const { MAX_OUTCOME_DETAIL_CHARS } = await import(
+      '../../src/services/institution/effect-outcome.js');
+    const refused = await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_1', verdict: 'achieved',
+      reporter: 'external:some_tool', detail: 'x'.repeat(MAX_OUTCOME_DETAIL_CHARS + 1),
+    });
+    expect(refused).toEqual({ refused: 'detail_too_long' });
+
+    const stored = await query(
+      "SELECT COUNT(*) AS n FROM signal_events WHERE product_id=? AND source='effect_outcome_report'"
+      + " AND payload_json LIKE '%xxxxxxxxxx%'", [P]);
+    expect(Number((stored.rows[0] as unknown as { n: number }).n)).toBe(0);
+  });
+
+  it('accepts a detail right at the bound, so the limit is the limit', async () => {
+    const { MAX_OUTCOME_DETAIL_CHARS } = await import(
+      '../../src/services/institution/effect-outcome.js');
+    const accepted = await reportEffectOutcome({
+      productId: P, effectId: 'eo_effect_1', verdict: 'failed',
+      reporter: 'external:another_tool', detail: 'y'.repeat(MAX_OUTCOME_DETAIL_CHARS),
+    });
+    expect('refused' in accepted).toBe(false);
+  });
+
   it('says plainly that it will not settle a disagreement', async () => {
     const { getFounderAssistingActivity } = await import(
       '../../src/services/institution/responsibility-assisted-email.js');
