@@ -510,6 +510,22 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_orphan_table');
   });
 
+  it('check-schema-snapshot fails when a migration adds an object the snapshot lacks', () => {
+    // THE GATE THAT EXISTS BECAUSE A NOTE WAS NOT ENOUGH. The committed
+    // snapshot was caught stale twice in one session by
+    // `foundry-self-observation.test.ts` — correct, and twenty-five minutes
+    // into a full run each time, the second time by the same person who had
+    // written "regenerate it after the last migration of a batch" into the
+    // checkpoint an hour earlier. A note that must be remembered at the right
+    // moment is not a control; the distance between the mistake and its
+    // discovery is what makes it expensive.
+    plant('src/db/migrations/996_gate_fixture_snapshot.sql',
+      j('CREATE TABLE ', 'IF NOT EXISTS ', '_gate_fixture_unsnapshotted (id TEXT PRIMARY KEY);\n'));
+    const r = run('check-schema-snapshot.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_unsnapshotted');
+  });
+
   it('check-unreferenced-tables does not call a foreign-key parent unreachable', () => {
     // THE EXPENSIVE ONE. Migration 215 dropped eleven tables this gate had
     // listed and fifty test files went red on `no such table:

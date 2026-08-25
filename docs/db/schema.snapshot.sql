@@ -1347,6 +1347,8 @@
   SELECT RAISE(ABORT,'governed_effect_kind:constitutional');
   SELECT RAISE(ABORT,'governed_effect_kind:constitutional');
   SELECT RAISE(ABORT,'governed_effect_kind:constitutional');
+  SELECT RAISE(ABORT,'inbound_customer_message:observed_in_the_future');
+  SELECT RAISE(ABORT,'inbound_customer_message:observed_in_the_future');
   SELECT RAISE(ABORT,'inbound_message:channel_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'inbound_message:content_required')
   SELECT RAISE(ABORT,'inbound_message:evidence_invalid') WHERE NOT EXISTS (
@@ -4200,6 +4202,8 @@
  AND NEW.direction NOT IN ('inbound', 'outbound', 'bidirectional')
  AND datetime(NEW.approved_at) > datetime('now', '+5 minutes')
  AND datetime(NEW.approved_at) > datetime('now', '+5 minutes')
+ AND datetime(NEW.source_observed_at) > datetime('now', '+15 minutes')
+ AND datetime(NEW.source_observed_at) > datetime('now', '+15 minutes')
  SELECT RAISE(ABORT,'judgment_evaluation:evidence_invalid') WHERE json_valid(NEW.evidence_refs_json)=0 OR EXISTS (
  SELECT RAISE(ABORT,'judgment_evaluation:tenant_invalid') WHERE NOT EXISTS (
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -4472,6 +4476,7 @@ BEFORE INSERT ON ecosystem_principal_companies
 BEFORE INSERT ON founder_evidence_requests
 BEFORE INSERT ON governed_effect_kinds
 BEFORE INSERT ON inbound_customer_messages
+BEFORE INSERT ON inbound_customer_messages
 BEFORE INSERT ON ingest_credentials
 BEFORE INSERT ON institutional_judgment_dispositions
 BEFORE INSERT ON institutional_responsibilities
@@ -4523,6 +4528,7 @@ BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
 BEFORE UPDATE OF evidence_ref, authority_ref, outcome_ref
 BEFORE UPDATE OF outcome_valence ON decisions
 BEFORE UPDATE OF revoked_at ON autonomy_consents
+BEFORE UPDATE OF source_observed_at ON inbound_customer_messages
 BEFORE UPDATE OF state ON institutional_responsibilities
 BEFORE UPDATE OF status ON responsibility_candidates
 BEFORE UPDATE ON call_transcripts
@@ -4539,6 +4545,8 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5221,6 +5229,8 @@ CREATE TRIGGER governed_effect_kinds_immutable_delete
 CREATE TRIGGER governed_effect_kinds_immutable_insert
 CREATE TRIGGER governed_effect_kinds_immutable_update
 CREATE TRIGGER inbound_customer_message_guard
+CREATE TRIGGER inbound_message_not_observed_in_the_future_insert
+CREATE TRIGGER inbound_message_not_observed_in_the_future_update
 CREATE TRIGGER ingest_credential_guard
 CREATE TRIGGER ingest_credential_immutable
 CREATE TRIGGER institutional_judgment_disposition_append_only_delete
@@ -5405,6 +5415,8 @@ END;
 END;
 END;
 END;
+END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
@@ -5434,6 +5446,8 @@ WHEN NEW.outcome_valence IS NOT NULL AND NEW.outcome_valence NOT IN (-1, 0, 1)
 WHEN NEW.processed_at IS NOT NULL AND NEW.analysis_failed_at IS NOT NULL
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
 WHEN NEW.source='external_metric_ingest'
+WHEN NEW.source_observed_at IS NOT NULL
+WHEN NEW.source_observed_at IS NOT NULL
 WHEN NEW.state <> OLD.state
 WHEN NEW.state IN ('operating', 'mature', 'exception_owned')
 WHEN NEW.status = 'approved' AND NEW.responsibility_id IS NULL
