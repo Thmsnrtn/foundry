@@ -510,6 +510,99 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_orphan_table');
   });
 
+  // ─── The six gates nobody had ever made fail ──────────────────────────────
+  //
+  // `the-gates-actually-run.test.ts` opened by stating that every gate in this
+  // repository has a planted-defect test. It was not true of six of the thirty
+  // chained into `npm run check`, and nothing was checking the claim.
+  // `check-gates-are-tested.mjs` checks it now; these pay the baseline down.
+  // A gate that has never failed is indistinguishable from one that cannot.
+
+  it('check-guard-null-safety fails on a RAISE predicate a missing key makes NULL', () => {
+    // The defect three institutional guards were defeated by: a top-level
+    // `SELECT RAISE(ABORT,…) WHERE json_extract(...) <> 'x'` is NULL when the
+    // key is absent, and a NULL predicate does not fire — so the guard accepts
+    // precisely the input it was written to refuse.
+    plant('src/db/migrations/995_gate_fixture_nullguard.sql',
+      j('CREATE TRIGGER ', 'IF NOT EXISTS _gate_fixture_null_guard\n',
+        'BEFORE INSERT ON products\n', 'BEGIN\n',
+        "  SELECT RAISE(ABORT,'_gate_fixture:bad')\n",
+        "   WHERE json_extract(NEW.disabled_tools,'$.kind') <> 'permitted';\n",
+        'END;\n'));
+    const r = run('check-guard-null-safety.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('995_gate_fixture_nullguard');
+  });
+
+  it('check-guard-null-safety accepts the coalesce()d form, so it is not just refusing', () => {
+    plant('src/db/migrations/995_gate_fixture_nullguard.sql',
+      j('CREATE TRIGGER ', 'IF NOT EXISTS _gate_fixture_null_guard\n',
+        'BEFORE INSERT ON products\n', 'BEGIN\n',
+        "  SELECT RAISE(ABORT,'_gate_fixture:bad')\n",
+        "   WHERE coalesce(json_extract(NEW.disabled_tools,'$.kind'),'') <> 'permitted';\n",
+        'END;\n'));
+    const r = run('check-guard-null-safety.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
+  it('check-applied-columns-guarded fails on a column a ledger applies with no UPDATE guard', () => {
+    // The constitutional shape: an AFTER INSERT trigger applies a governed
+    // value to a parent column, and nothing stops a direct UPDATE writing that
+    // column around the ledger entirely.
+    plant('src/db/migrations/994_gate_fixture_applied.sql',
+      j('CREATE TABLE ', 'IF NOT EXISTS _gate_fixture_parent (id TEXT PRIMARY KEY, _gate_state TEXT);\n',
+        'CREATE TABLE ', 'IF NOT EXISTS _gate_fixture_ledger (id TEXT PRIMARY KEY, parent_id TEXT, to_state TEXT);\n',
+        'CREATE TRIGGER ', 'IF NOT EXISTS _gate_fixture_apply\n',
+        'AFTER INSERT ON _gate_fixture_ledger\n', 'BEGIN\n',
+        '  UPDATE _gate_fixture_parent SET _gate_state = NEW.to_state WHERE id = NEW.parent_id;\n',
+        'END;\n'));
+    const r = run('check-applied-columns-guarded.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_state');
+  });
+
+  it('check-ai-attribution fails on a model call charged to no company', () => {
+    plant('src/services/_gate_fixture_attribution.ts',
+      'import { callSonnet } from "./ai/client.js";\n'
+      + j('export const q = () => call', 'Sonnet("system", "user", 512);\n'));
+    const r = run('check-ai-attribution.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_attribution');
+  });
+
+  it('the gate that checks gates is itself proved to fail', () => {
+    // IT FLAGGED ITSELF ON ITS FIRST RUN, and then stopped — because the
+    // comment above these fixtures NAMES it, and a comment naming a script in a
+    // file that runs other scripts looked exactly like coverage. An instrument
+    // that counts a sentence about a gate as proof the gate works is the defect
+    // it was written to find. Comments are stripped now, like every other
+    // scanner here, and this is the planted defect that proves it still bites:
+    // a gate chained into the check with no test that ever runs it.
+    //
+    // THE FIXTURE'S NAME IS ASSEMBLED, and the first attempt failed for the
+    // reason this file's own header gives: a test must not look like the thing
+    // it plants. Writing the fake gate's filename out in full put it in a test
+    // that runs gates — which is exactly what this gate reads as coverage, so
+    // the planted defect made itself look covered and the gate passed.
+    const fixture = j('_gate_fixture_', 'unproved.mjs');
+    const pkgPath = resolve(ROOT, 'package.json');
+    const savedPkg = readFileSync(pkgPath, 'utf8');
+    try {
+      writeFileSync(pkgPath, savedPkg.replace(
+        'node scripts/check-gates-are-tested.mjs',
+        `node scripts/check-gates-are-tested.mjs && node scripts/${fixture}`,
+      ));
+      const r = run('check-gates-are-tested.mjs');
+      expect(r.code, r.output).toBe(1);
+      expect(r.output).toContain(fixture);
+    } finally {
+      writeFileSync(pkgPath, savedPkg);
+    }
+    // And the tree is left exactly as it was, which the next assertion needs.
+    expect(readFileSync(pkgPath, 'utf8')).toBe(savedPkg);
+    expect(run('check-gates-are-tested.mjs').code).toBe(0);
+  });
+
   it('check-schema-snapshot fails when a migration adds an object the snapshot lacks', () => {
     // THE GATE THAT EXISTS BECAUSE A NOTE WAS NOT ENOUGH. The committed
     // snapshot was caught stale twice in one session by
