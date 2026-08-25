@@ -7,7 +7,7 @@
 
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { MAX_CUSTOM_METRIC_KEYS, mergeCustomMetrics } from '../../services/metrics/custom-metrics.js';
+import { MAX_CUSTOM_METRIC_BYTES, MAX_CUSTOM_METRIC_KEYS, mergeCustomMetrics } from '../../services/metrics/custom-metrics.js';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { invalidateSignalCache } from '../../services/signal.js';
@@ -212,9 +212,11 @@ ingestRoutes.post('/ingest/:token', async (c) => {
   const today = new Date().toISOString().slice(0, 10);
   const customKeys = Object.keys(customMetrics);
   if (customKeys.length > 0) {
-    if (customKeys.length > MAX_CUSTOM_METRIC_KEYS) {
+    const incomingJson = JSON.stringify(customMetrics);
+    if (customKeys.length > MAX_CUSTOM_METRIC_KEYS || incomingJson.length > MAX_CUSTOM_METRIC_BYTES) {
       return c.json({
-        error: `custom metrics bounded to ${MAX_CUSTOM_METRIC_KEYS} keys per request`,
+        error: `custom metrics bounded to ${MAX_CUSTOM_METRIC_KEYS} keys / `
+          + `${MAX_CUSTOM_METRIC_BYTES} bytes per request`,
       }, 422);
     }
     const merge = await mergeCustomMetrics(productId, today, customMetrics);

@@ -36,8 +36,15 @@
 
 import { query } from '../../db/client.js';
 
-/** What a single ingest body may carry. */
+/** What a single ingest body may carry. Both halves of this pair are the
+ *  PUBLIC-DOOR bound from the 2026-07-13 security close-out, and neither may
+ *  be relaxed by the merge: splitting the key cap in two and forgetting to
+ *  split the byte cap raised a public limit from 8KB to 16KB, which
+ *  `security-closeout.test.ts` caught on the next full run. A cap on what one
+ *  request may send and a cap on what the row may hold are different
+ *  quantities; when one is split, every one of them is. */
 export const MAX_CUSTOM_METRIC_KEYS = 20;
+export const MAX_CUSTOM_METRIC_BYTES = 8_192;
 /** What the stored object may hold, after the named integrations add theirs. */
 export const MAX_STORED_CUSTOM_KEYS = 32;
 export const MAX_STORED_CUSTOM_BYTES = 16_384;

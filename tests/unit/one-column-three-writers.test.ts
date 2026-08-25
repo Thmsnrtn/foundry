@@ -132,12 +132,26 @@ describe('the bound is applied to what would be stored', () => {
     expect(Object.keys(await stored())).toHaveLength(MAX_STORED_CUSTOM_KEYS);
   });
 
-  it('a request over the per-request cap is refused before any merge', async () => {
+  it('a request over the per-request key cap is refused before any merge', async () => {
     const many: Record<string, unknown> = {};
     for (let i = 0; i < 25; i++) many[`r${i}`] = i;
     const res = await post({ custom: many });
     expect(res.status).toBe(422);
     expect((await res.json() as { error: string }).error).toMatch(/per request/);
+  });
+
+  it('a request over the per-request BYTE cap is refused too', async () => {
+    // THE ONE THIS SPLIT NEARLY LOST. The public door's 8KB bound is from the
+    // 2026-07-13 security close-out. Splitting the KEY cap into per-request and
+    // stored, and leaving the byte cap as a single stored-sized number, raised
+    // a public limit from 8KB to 16KB — caught by `security-closeout.test.ts`
+    // on the next full run and not by the test above it, which asserted the
+    // merged bound and never the incoming one. When one cap is split into two
+    // questions, every cap beside it is.
+    const res = await post({ custom: { blob: 'x'.repeat(9000) } });
+    expect(res.status).toBe(422);
+    expect((await res.json() as { error: string }).error).toMatch(/bytes per request/);
+    expect(await stored()).toEqual({});
   });
 
   it('a stored value that is not an object does not lose the incoming patch', async () => {
