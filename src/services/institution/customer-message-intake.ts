@@ -134,11 +134,13 @@ export const CHANNEL_REFUSAL_LABELS: Record<string, string> = {
   content_required: 'it sent no message',
   content_too_large: 'the message was longer than I take',
   timestamp_invalid: 'the time it gave was not a time',
+  timestamp_in_future: 'it said the message arrived later than now',
 };
 
 export type IntakeRefusal =
   | 'unknown_channel' | 'identity_required' | 'contact_required'
-  | 'content_required' | 'content_too_large' | 'timestamp_invalid';
+  | 'content_required' | 'content_too_large' | 'timestamp_invalid'
+  | 'timestamp_in_future';
 
 /**
  * Record that a support channel turned a message away.
@@ -221,10 +223,28 @@ export async function ingestCustomerMessage(input: {
 
   // The source's own clock is preserved separately from ours. A delayed
   // delivery is late, not recent.
+  //
+  // AND IT IS THE ORDER OF THE FOUNDER'S QUEUE. `getMessagesForResponsibility`
+  // reads `ORDER BY datetime(source_observed_at) DESC ... LIMIT ?`, so this
+  // number — supplied by a machine Foundry does not run — decides which
+  // messages a founder sees. Any time was accepted, including times that have
+  // not happened: one message stamped 2099 sits at the top of that queue
+  // forever and pushes a real customer off the end of the LIMIT.
+  //
+  // Fifteen minutes of tolerance, and it is a SKEW ALLOWANCE, NOT A GRACE
+  // PERIOD. Migration 201 allows five for Foundry's own processes; this clock
+  // belongs to somebody else's server, so ordinary drift gets more room — and
+  // deliberately not enough to absorb a timezone mistake, which is hours, and
+  // which the integration's author should be told about rather than have
+  // quietly accepted. Migration 217 states the same rule in the database.
+  const CLOCK_SKEW_ALLOWANCE_MS = 15 * 60_000;
   let sourceObservedAt = new Date().toISOString();
   if (input.sourceObservedAt) {
     const parsed = new Date(input.sourceObservedAt);
     if (Number.isNaN(parsed.getTime())) return { refused: 'timestamp_invalid' };
+    if (parsed.getTime() > Date.now() + CLOCK_SKEW_ALLOWANCE_MS) {
+      return { refused: 'timestamp_in_future' };
+    }
     sourceObservedAt = parsed.toISOString();
   }
 
