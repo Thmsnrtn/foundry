@@ -42,8 +42,14 @@ function scopeForTool(name: string): 'agents:read' | 'agents:write' {
   return 'agents:write';
 }
 
+/** A key holds a scope when it was granted that scope. There is no value
+ *  meaning "all of them": `issueApiKey` refuses any scope no route honours,
+ *  `'*'` included, and the settings page tells the founder a key "does exactly
+ *  what you tick and nothing else". This used to read `'*'` as every tool —
+ *  a fail-open default for an unknown string, one unvalidated issuance path
+ *  away from being reachable. That path is gone too. */
 function holds(scopes: string[], scope: string): boolean {
-  return scopes.includes(scope) || scopes.includes('*');
+  return scopes.includes(scope);
 }
 
 // The read tools require product_id in their schemas; over the remote transport

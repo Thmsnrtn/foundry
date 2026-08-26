@@ -31,28 +31,24 @@ async function hashKey(key: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ─── createApiKey ─────────────────────────────────────────────────────────────
-
-export async function createApiKey(
-  productId: string,
-  userId: string,
-  label: string,
-  scopes: string[]
-): Promise<{ key: string; keyId: string }> {
-  const keyId = nanoid();
-  const rawKey = 'fnd_' + nanoid(40);
-  const keyHash = await hashKey(rawKey);
-  const keyPrefix = rawKey.slice(0, 12); // 'fnd_' + first 8 chars
-
-  await query(
-    `INSERT INTO api_keys (id, founder_id, product_id, name, key_hash, key_prefix, role, scopes, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [keyId, userId, productId, label, keyHash, keyPrefix, 'viewer', JSON.stringify(scopes), userId]
-  );
-
-  return { key: rawKey, keyId };
-}
-
+// ─── createApiKey: REMOVED ────────────────────────────────────────────────────
+//
+// A SECOND WAY TO MINT A KEY, WITH NO CLOSED SET BEHIND IT. This took a
+// `scopes: string[]` and wrote it to `api_keys.scopes` verbatim — no
+// `isApiScope`, no expiry, no record that a founder had asserted anything. It
+// had no callers: `api-key-issuance.ts` says so in its own header, calling this
+// one of "the two dead helpers it replaces".
+//
+// Dead is not harmless here. The settings page promises the founder that "a key
+// does exactly what you tick and nothing else", and `issueApiKey` keeps that
+// promise by refusing any scope no route honours — `'*'` included, which is
+// what `api-key-issuance.test.ts` pins. This function would have accepted `'*'`,
+// and `api/v1/mcp.ts` read `'*'` as every tool. One caller away from a key that
+// does everything, under a page that says there is no everything option.
+//
+// The `'*'` branch in `mcp.ts` goes with it: no issuable scope is `'*'`, and a
+// value that silently means "all of them" is a fail-open default for an unknown
+// string. Narrowing what a credential may do is always permitted.
 // ─── validateApiKey ───────────────────────────────────────────────────────────
 
 export async function validateApiKey(

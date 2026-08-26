@@ -113,6 +113,41 @@ describe('issuing a key', () => {
     expect(await validateApiKey(issued.key)).toBeNull();
   });
 
+  it('there is exactly one way to mint a key, and it is the one with the closed set', async () => {
+    // A SECOND ISSUER EXISTED WITH NO CLOSED SET BEHIND IT.
+    // `rbac/permissions.ts` carried its own `createApiKey(productId, userId,
+    // label, scopes)` which wrote `api_keys.scopes` verbatim — no `isApiScope`,
+    // no expiry, no founder assertion recorded. It had no callers, and
+    // `api-key-issuance.ts` already described it as one of "the two dead helpers
+    // it replaces". Dead is not harmless: the settings page promises a founder
+    // that "a key does exactly what you tick and nothing else", and one caller
+    // of that function would have made the promise false.
+    const { readFileSync, readdirSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const walk = (dir: string): string[] => readdirSync(dir).flatMap((e) => {
+      const p = join(dir, e);
+      return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
+    });
+    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+    const writers = walk('src').filter((f) => {
+      const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
+      return /INSERT\s+INTO\s+api_keys/i.test(src);
+    });
+    expect(writers).toEqual(['src/services/api/api-key-issuance.ts']);
+  });
+
+  it('no scope string grants a tool the key was not given, including a wildcard', async () => {
+    // `api/v1/mcp.ts` used to read `'*'` as every tool. Nothing can issue that
+    // scope, so the branch was unreachable — and it was a fail-open default for
+    // an unknown string sitting one unvalidated issuer away from reachable.
+    const { readFileSync } = await import('node:fs');
+    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+    const mcp = stripComments(readFileSync('src/api/v1/mcp.ts', 'utf8'), { lineComments: true });
+    const holds = mcp.slice(mcp.indexOf('function holds'), mcp.indexOf('function holds') + 200);
+    expect(holds).toContain('scopes.includes(scope)');
+    expect(holds, 'a wildcard must not mean every tool').not.toContain("'*'");
+  });
+
   it('refuses a scope no route honours, an empty set, and a foreign product', async () => {
     expect(await issueApiKey({
       productId: P, founderId: OWNER, label: 'Greedy', scopes: ['*'],
