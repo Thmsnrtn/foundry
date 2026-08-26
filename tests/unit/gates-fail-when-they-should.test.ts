@@ -28,8 +28,11 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs';
-import { resolve } from 'path';
+import {
+  existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+} from 'fs';
+import { tmpdir } from 'os';
+import { join, resolve } from 'path';
 
 const ROOT = resolve(__dirname, '../..');
 const planted: string[] = [];
@@ -49,9 +52,9 @@ function plant(relPath: string, contents: string): void {
   planted.push(abs);
 }
 
-function run(script: string): { code: number; output: string } {
+function run(script: string, args: string[] = []): { code: number; output: string } {
   try {
-    const output = execFileSync('node', [resolve(ROOT, 'scripts', script)],
+    const output = execFileSync('node', [resolve(ROOT, 'scripts', script), ...args],
       { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     return { code: 0, output };
   } catch (err) {
@@ -568,6 +571,99 @@ describe('every gate refuses the defect it exists for', () => {
     const r = run('check-ai-attribution.mjs');
     expect(r.code, r.output).toBe(1);
     expect(r.output).toContain('_gate_fixture_attribution');
+  });
+
+  it('ratchet fails when a pattern appears more often than its baseline allows', () => {
+    // A ratchet freezes a count. The planted config's pattern matches something
+    // this repository certainly contains, against a baseline of zero.
+    plant('scripts/ratchets/_gate_fixture.json', JSON.stringify({
+      name: '_gate_fixture_ratchet',
+      description: 'planted for the gate suite; matches something that exists',
+      pattern: j('export ', 'async ', 'function'),
+      roots: ['src/services/metrics'],
+      includePath: '\\.ts$',
+      baseline: 0,
+      direction: 'down',
+    }));
+    const r = run('ratchet.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_ratchet');
+  });
+
+  it('ratchet also fails when the count falls below its baseline, unlocked', () => {
+    // The other half, and the reason a ratchet is not merely a maximum: an
+    // improvement that is not written down can be undone by the next commit
+    // without anything noticing.
+    plant('scripts/ratchets/_gate_fixture.json', JSON.stringify({
+      name: '_gate_fixture_ratchet',
+      description: 'planted for the gate suite; baseline above the real count',
+      pattern: j('export ', 'async ', 'function'),
+      roots: ['src/services/metrics'],
+      includePath: '\\.ts$',
+      baseline: 10_000,
+      direction: 'down',
+    }));
+    const r = run('ratchet.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_ratchet');
+  });
+
+  it('audit-public-claims fails when the shipped agent roster stops matching the page', () => {
+    // "All plans include 12 AI agents" is verified against the files in
+    // `src/services/scp/agents`. THIS EXACT PLANT HAPPENED BY ACCIDENT ONCE:
+    // a fixture left behind by a killed run was read as a thirteenth agent and
+    // the audit caught it, which is this file's own header describing the
+    // system working. Deliberately, now.
+    plant('src/services/scp/agents/_gate_fixture_agent.ts',
+      'export const unusedAgent = () => null;\n');
+    const r = run('audit-public-claims.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toMatch(/12 AI agents/);
+  });
+
+  it('audit-unauthorized-votes fails on a vote cast by a principal not entitled to cast it', () => {
+    // The audit takes a database path, so this needs nothing from the tree: a
+    // freshly migrated schema with one vote by a member whose membership does
+    // not carry `can_vote_decisions`. That is the defect migration 010 left
+    // open for as long as nothing read the column.
+    const dbDir = mkdtempSync(join(tmpdir(), 'foundry-votes-'));
+    const db = join(dbDir, 'votes.db');
+    try {
+      const migrations = readdirSync(resolve(ROOT, 'src/db/migrations'))
+        .filter((f) => f.endsWith('.sql')).sort();
+      for (const f of migrations) {
+        try {
+          execFileSync('sqlite3', [db], {
+            input: readFileSync(resolve(ROOT, 'src/db/migrations', f), 'utf8'),
+            stdio: ['pipe', 'ignore', 'ignore'],
+          });
+        } catch { /* the same per-statement tolerance the audit itself uses */ }
+      }
+      execFileSync('sqlite3', [db], { stdio: ['pipe', 'ignore', 'ignore'], input: [
+        "INSERT INTO founders (id,clerk_user_id,email) VALUES ('gf_owner','gf_c1','o@example.com');",
+        "INSERT INTO founders (id,clerk_user_id,email) VALUES ('gf_observer','gf_c2','i@example.com');",
+        "INSERT INTO products (id,name,owner_id) VALUES ('gf_prod','Acme','gf_owner');",
+        "INSERT INTO team_members (id,product_id,founder_id,role,status,can_vote_decisions)"
+          + " VALUES ('gf_tm','gf_prod','gf_observer','investor_observer','active',0);",
+        "INSERT INTO decisions (id,product_id,category,what,why_now,status)"
+          + " VALUES ('gf_dec','gf_prod','strategic','Raise or not','runway',"
+          + "'pending');",
+        "INSERT INTO decision_votes (id,product_id,decision_id,founder_id,vote)"
+          + " VALUES ('gf_v','gf_prod','gf_dec','gf_observer','approve');",
+      ].join('\n') });
+
+      const r = run('audit-unauthorized-votes.mjs', [db]);
+      expect(r.code, r.output).toBe(1);
+      expect(r.output).toContain('gf_observer');
+
+      // And the same audit on the same schema with no such vote passes, so it
+      // is reading the entitlement rather than refusing every vote.
+      execFileSync('sqlite3', [db], { stdio: ['pipe', 'ignore', 'ignore'],
+        input: "DELETE FROM decision_votes;" });
+      expect(run('audit-unauthorized-votes.mjs', [db]).code).toBe(0);
+    } finally {
+      rmSync(dbDir, { recursive: true, force: true });
+    }
   });
 
   it('the gate that checks gates is itself proved to fail', () => {
