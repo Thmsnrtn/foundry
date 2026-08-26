@@ -90,7 +90,7 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `ef19f25`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `cf9f8aa`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 255 files, highest **218**. Ordering gated. **Snapshot
   freshness is now a GATE, not a note.** It went stale twice in one session —
@@ -102,7 +102,7 @@ inherited list because it was inherited.
   the chain. **A note that has to be remembered at the right moment is not a
   control; the distance between a mistake and its discovery is the thing to
   fix.**
-- **Validation:** `npm run check` green end to end — **432 files / 3,746 tests**,
+- **Validation:** `npm run check` green end to end — **432 files / 3,749 tests**,
   `CHECK_EXIT=0`, read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
   also runs `tests/simulation` and `tests/evals`. Checkpoints before this
@@ -226,6 +226,32 @@ matters is that one of them was being TESTED.**
   imports the same builder production uses; nothing outside `src/prompts/`
   referenced `GOLDEN_CASES` at all.
 
+- **A door that asked whether the key was real and never what it was for.**
+  `routes/api/webhooks/transcripts.ts` authenticated an API key, read its
+  product, and checked NO SCOPE — so any valid key posted call transcripts
+  whatever the founder had ticked, and Foundry analysed them with a model at the
+  company's cost. A key issued `metrics:write`, whose label says it "may not
+  read anything else", could do it. It asks `agents:write` now, matching the
+  sibling webhook door. **The bidirectional scope test could not see it: it
+  scans `src/api/v1/` and asserts no route demands a scope a founder cannot
+  grant — one of the two failures. A door demanding NOTHING is the other, and it
+  lived outside a horizon bounded by a directory.**
+
+  Beside it, `'*'` as a scope meaning "everything" in FOUR places, against a
+  settings page promising "a key does exactly what you tick and nothing else".
+  Nothing could issue `'*'` — but `rbac/permissions.ts` carried a second
+  `createApiKey` with no closed set behind it, one caller from making it
+  reachable. Issuer deleted, wildcard gone from `requireScope`, the MCP
+  transport and the voice-reply door.
+
+  **THREE OF MY OWN CLAIMS WERE CORRECTED IN THE COURSE OF THIS, and the pattern
+  is the same one the campaign hunts.** "It had no callers" was true of `src/`
+  and false of `tests/`. "Both halves are gone" was one site of four — a removal
+  is the moment to grep every neighbour, which is the byte-cap lesson from
+  earlier in the same session, unapplied to my own change. And a false failure
+  I nearly acted on came from running two suites at once, because I trusted a
+  completion notification over `ps`.
+
 - **The founder could not hold a voice conversation after 06:30 UTC, any day —
   and the model call at the end of every session had no reader.**
   `voice_sessions` was declared TWICE, by migration 013 (the daily BRIEFING,
@@ -347,6 +373,17 @@ after being written, by its own author. The first two were replaced. The third
 became `check-schema-snapshot.mjs`, because a note that has to be remembered at
 the right moment is not a control. **An instrument that agrees with you is the
 thing to check first, and this file is an instrument.**
+
+**THE HARDER HALF OF "NEVER WEAKEN A TEST", MET HEAD-ON.**
+`single-api-key-authenticator.test.ts` REQUIRED the wildcard to be present —
+"a wildcard scope is deliberate and must stay explicit" — and caught its
+removal. Read closely it guards against the wildcard being HIDDEN and never asks
+whether there should be one; the answer came from facts postdating it. The
+assertion was INVERTED rather than deleted, keeping its intent and strengthening
+it: not "keep it visible" but "there is none". **Deleting a test that disagrees
+is how a gate becomes decoration. Replacing its claim with a truer one, and
+recording why the old one was right when it was written, is a different act —
+and the only honest way to do it is to state what changed underneath it.**
 
 **The rule this cycle adds, and it is about evidence rather than code: A TEST
 MAY ASSERT ON A DORMANT MODULE'S SOURCE WHEN IT SAYS THE MODULE IS DORMANT.**
