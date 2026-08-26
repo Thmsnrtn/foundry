@@ -22,18 +22,27 @@ commits AHEAD of `origin/<branch>`, tree clean, nothing lost — the restart had
 simply landed between a commit and its push. `git merge-base --is-ancestor
 origin/<branch> HEAD` answers which case you are in, and it is the first thing
 to run. If the remote is an ancestor, push; if HEAD is, reset. The rest of this
-note is the other case, which has now happened SEVEN TIMES: this working
+note is the other case, which has now happened EIGHT TIMES: this working
 directory came up rolled back — by fourteen, twenty, thirty-eight, fifty-two,
-eighty-one, ninety-four and, most recently, a hundred and eight commits — with
-`origin/<branch>`, the LOCAL TRACKING REF, agreeing with the stale HEAD, so
-`git status` said "up to date" and a whole cycle of work looked lost. It was
-not: it was on the remote the whole time. **Twice now it has followed a
-container restart mid-suite** — the fifth time and the seventh, both while
-`npm run check` was running in the background — which is the closest thing to a
-cause anyone has seen: the restart notice and the rollback are worth treating
-as the same event. The practical consequence is small and worth stating: a
-check running when the rollback happens is gone with it, and its log file goes
-with the container. Re-run it after recovering; do not go looking for the log.
+eighty-one, ninety-four, a hundred and eight, and a hundred and twenty commits
+— with `origin/<branch>`, the LOCAL TRACKING REF, agreeing with the stale HEAD,
+so `git status` said "up to date" and a whole cycle of work looked lost. It was
+not: it was on the remote the whole time. **Three times now it has followed a
+container restart mid-suite** — the fifth, seventh and eighth, all while
+`npm run check` ran in the background — which is the closest thing to a cause
+anyone has seen: the restart notice and the rollback are worth treating as the
+same event. The practical consequence is small and worth stating: a check
+running when the rollback happens is gone with it, and its log file goes with
+the container. Re-run it after recovering; do not go looking for the log.
+
+**RUN THE ANCESTOR CHECK AGAINST `FETCH_HEAD`, NEVER AGAINST `origin/<branch>`
+BEFORE FETCHING.** On the eighth rollback the first command run was
+`git merge-base --is-ancestor HEAD origin/<branch>`, which SUCCEEDED and printed
+a reassuring "synced" — because the local tracking ref is precisely the thing
+that is stale. It is the same ref that makes `git status` say "up to date". The
+only two commands that can tell you the truth before a fetch are `git ls-remote`
+and the fetch itself; every comparison against `origin/<branch>` beforehand is a
+comparison of the stale snapshot with itself.
 
 **THE SIGNATURE IS IDENTICAL EVERY TIME**, which is worth knowing before you
 start diagnosing: HEAD lands on `0e85a11` ("The level was computed, and thrown
