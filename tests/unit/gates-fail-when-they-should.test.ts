@@ -666,6 +666,33 @@ describe('every gate refuses the defect it exists for', () => {
     }
   });
 
+  it('check-star-select-columns does not believe a second CREATE that is a no-op', () => {
+    // NINE TABLES IN THIS REPOSITORY ARE DECLARED MORE THAN ONCE, and a second
+    // `CREATE TABLE IF NOT EXISTS` for a name that already exists does nothing
+    // at all. This gate used to MERGE the loser's columns in, so a property
+    // read off a `SELECT *` row that exists only in the losing declaration was
+    // judged valid — while at runtime it is `undefined` forever, which is
+    // exactly the defect the gate was written to catch.
+    plant('src/db/migrations/993_gate_fixture_dup_a.sql',
+      j('CREATE TABLE ', 'IF NOT EXISTS ', '_gate_fixture_dup (\n',
+        '  id TEXT PRIMARY KEY,\n', '  real_column TEXT\n', ');\n'));
+    plant('src/db/migrations/993_gate_fixture_dup_b.sql',
+      j('CREATE TABLE ', 'IF NOT EXISTS ', '_gate_fixture_dup (\n',
+        '  id TEXT PRIMARY KEY,\n', '  never_arrives TEXT\n', ');\n'));
+    plant('src/services/_gate_fixture_dup_read.ts',
+      'import { query } from "../db/client.js";\n'
+      + 'export async function q(): Promise<unknown> {\n'
+      + j('  const r = await query("SELECT ', '* FROM _gate_fixture_dup WHERE id = ?", [1]);\n')
+      + '  const row = r.rows[0] as Record<string, unknown>;\n'
+      + '  return row.never_arrives;\n'
+      + '}\n');
+    const r = run('check-star-select-columns.mjs');
+    // The fixture reads a column only the LOSING declaration has.
+    expect(r.output).not.toContain('real_column');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('never_arrives');
+  });
+
   it('every baselined gate refuses a baseline entry that names no real offender', () => {
     // A BASELINE ENTRY THAT NO LONGER NAMES A REAL OFFENDER IS A PERMANENT
     // EXEMPTION — the ratchet failing in the exact direction it exists to

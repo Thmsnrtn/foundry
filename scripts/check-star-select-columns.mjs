@@ -84,8 +84,23 @@ function schema() {
   for (const file of readdirSync(MIGRATIONS).filter((f) => f.endsWith('.sql')).sort()) {
     const sql = readFileSync(join(MIGRATIONS, file), 'utf8').replace(/--[^\n]*/g, '');
     for (const m of sql.matchAll(/DROP TABLE\s+(?:IF EXISTS\s+)?(\w+)/gi)) tables.delete(m[1]);
+    // A SECOND `CREATE TABLE IF NOT EXISTS` FOR A NAME THAT ALREADY EXISTS IS A
+    // NO-OP, AND THIS USED TO MERGE ITS COLUMNS IN ANYWAY. Nine tables in this
+    // repository are declared more than once — `integrations` three times — and
+    // for each of them the loser's column list contributed to the set of
+    // columns this gate considers real. A property read off a `SELECT *` row
+    // that exists ONLY in the losing declaration was therefore judged valid,
+    // while at runtime it is `undefined` forever. That is precisely the defect
+    // this gate was written to catch, and the gate could not see it.
+    //
+    // `voice_sessions` is what made it visible: declared by 013 as the daily
+    // briefing and again by 031 as the conversation, with the second a no-op
+    // and its columns arriving later as ALTERs — which is the only reason the
+    // conversation worked at all. The database keeps the first declaration and
+    // nothing of the second, so that is what this now models.
     for (const m of sql.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)\s*\(([\s\S]*?)\n\s*\);/gi)) {
-      if (!tables.has(m[1])) tables.set(m[1], new Set());
+      if (tables.has(m[1])) continue;
+      tables.set(m[1], new Set());
       for (const definition of definitions(m[2])) {
         const column = COLUMN_TYPE.exec(definition);
         if (column) tables.get(m[1]).add(column[1]);
