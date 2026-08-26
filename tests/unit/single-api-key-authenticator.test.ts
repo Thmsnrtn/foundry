@@ -72,8 +72,22 @@ describe('api key authentication', () => {
     const middleware = readFileSync(resolve(ROOT, 'src/api/middleware/auth.ts'), 'utf8');
     expect(middleware).toContain("c.set('scopes'");
     expect(middleware).toMatch(/export const requireScope/);
-    expect(middleware, 'a wildcard scope is deliberate and must stay explicit')
-      .toMatch(/scopes\.includes\('\*'\)/);
+
+    // THIS ASSERTION USED TO REQUIRE THE OPPOSITE, and the reason it gave was
+    // "a wildcard scope is deliberate and must stay explicit" — a guard against
+    // the wildcard being hidden, written when there was one. It never asked
+    // whether there should be. The answer arrived from the other end: nothing
+    // can issue `'*'` (`issueApiKey` refuses it as `scope_unknown`), the second
+    // issuer that could have is deleted, and the settings page tells the founder
+    // a key "does exactly what you tick and nothing else". A value that silently
+    // means every scope is a fail-open default for an unknown string, in the
+    // middleware guarding every `/api/v1` endpoint.
+    //
+    // The old assertion's intent is kept and strengthened: not "keep it
+    // visible" but "there is none". Removing a wildcard narrows what a
+    // credential may do, which is always permitted and needs no owner decision.
+    expect(middleware, 'no scope string may mean every scope')
+      .not.toMatch(/scopes\.includes\('\*'\)/);
   });
 
   it('the surfaces behind that credential are the ones we think they are', () => {
