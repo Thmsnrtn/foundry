@@ -242,12 +242,38 @@ matters is that one of them was being TESTED.**
   `GET /api/voice/conversations/:productId` is the read half, the same
   judgement as `portfolio_snapshots`.
 
-  **THE `CREATE TABLE IF NOT EXISTS` TRAP HAS NOW COST THIS CAMPAIGN THREE
-  FINDINGS**, and the lens is cheap: `grep -c "CREATE TABLE IF NOT EXISTS <name>"`
-  across the migrations for every table. Two declarations means the second is a
-  no-op, the columns of the loser arrive later as ALTERs if at all, and any
-  CONSTRAINT the loser declared — a UNIQUE, a CHECK, a NOT NULL — silently does
-  not exist while the code that assumes it does keeps running.
+  **THE `CREATE TABLE IF NOT EXISTS` TRAP, RUN TO EXHAUSTION — do not re-run
+  it.** ELEVEN tables in this repository are declared more than once
+  (`integrations` three times, with three different UNIQUE keys). Note the
+  count: a `grep` for `CREATE TABLE IF NOT EXISTS` finds nine, and two more are
+  declared without `IF NOT EXISTS`; match on `CREATE TABLE` and brace-match the
+  body, or two cases are invisible.
+
+  Every duplicated table was then checked column by column against a live
+  migrated database — what the losing declaration names, minus what the schema
+  actually has. **The result is one real casualty and one blind instrument, both
+  fixed, and nine benign:**
+
+  - `voice_sessions` — the finding above.
+  - `check-star-select-columns` MERGED the loser's columns into the winner's,
+    so a `SELECT *` property read of a column only the loser declares was judged
+    valid. Its three sibling column gates build a real database from the
+    migrations and read its schema, so the database answers the question; this
+    one parses text because it needs per-line positions, and now models what
+    SQLite does — a table already known keeps the declaration it has.
+  - The rest are supersets or renames whose columns arrived by later ALTER, or
+    never mattered. `webhook_deliveries` is the instructive benign case: its
+    losing declaration is a RENAMING that never happened (`response_status` for
+    `status_code`, `response_body` for `error`, `event_type` for `event`), and
+    the code uses the winner's names throughout. `integrations` was rebuilt by a
+    later migration with the CHECKs deliberately dropped ("app-validated") and
+    both UNIQUE keys re-established as explicit unique indexes — a documented
+    decision, not drift.
+
+  What makes the trap dangerous is not the columns, which the DB-backed gates
+  catch: it is that **any CONSTRAINT the loser declared — a UNIQUE, a CHECK, a
+  NOT NULL — silently does not exist while the code that assumes it does keeps
+  running.** That is what cost the voice conversation.
 
 - **A message observed in the future, at the top of the founder's queue.**
   `inbound_customer_messages.source_observed_at` is the SOURCE'S clock and it is
