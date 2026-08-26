@@ -166,15 +166,82 @@ export async function startVoiceSession(
   const chatSessionId = await startSession(founderId, productId, 'Voice session');
   const voiceSessionId = nanoid();
 
-  // `session_date` is NOT NULL with no default and was never supplied, so
-  // starting a voice session raised every time — before a word was recorded.
+  // A CONVERSATION IS NOT A BRIEFING, AND THEY SHARED A TABLE WITH A UNIQUE KEY
+  // WRITTEN FOR THE BRIEFING. `voice_sessions` is keyed
+  // `UNIQUE(product_id, session_date)` — one briefing per company per day, which
+  // is right for a briefing. This insert supplied `date('now')` to satisfy the
+  // NOT NULL, and so collided with the row `morning_briefings` writes at 06:30
+  // UTC: after that job ran, starting a voice conversation was refused for the
+  // rest of the day, every day. Migration 218 gives the conversation its own
+  // table, where as many as somebody wants to have is the correct number.
   await query(
-    `INSERT INTO voice_sessions (id, founder_id, product_id, chat_session_id, session_date)
-     VALUES (?, ?, ?, ?, date('now'))`,
+    `INSERT INTO voice_conversations (id, founder_id, product_id, chat_session_id)
+     VALUES (?, ?, ?, ?)`,
     [voiceSessionId, founderId, productId, chatSessionId]
   );
 
   return { voice_session_id: voiceSessionId, chat_session_id: chatSessionId };
+}
+
+export interface VoiceConversationSummary {
+  id: string;
+  created_at: string;
+  duration_seconds: number | null;
+  status: string;
+  summary: string | null;
+  extracted_decisions: string[];
+  extracted_actions: string[];
+}
+
+/**
+ * The conversations this company has held, newest first.
+ *
+ * `endVoiceSession` PAYS FOR A SONNET CALL to pull decisions, action items and
+ * a summary out of every transcript, and there was no way to read any of it
+ * back: `start` answers with ids and `end` answers `{"status":"completed"}`.
+ * The extraction was charged to the company and stored where only the erasure
+ * export could reach it.
+ *
+ * This is the read half of a write that already exists — the same judgement
+ * made for `portfolio_snapshots` earlier in this campaign, and the case is
+ * stronger here: the founder held the conversation, so what Foundry took from
+ * it is unambiguously theirs. Bounded, newest first, and the transcript is NOT
+ * returned in the list — it is the longest field by far and a list is for
+ * choosing, not for reading.
+ */
+export async function getVoiceConversations(
+  productId: string,
+  limit = 20,
+): Promise<VoiceConversationSummary[]> {
+  const result = await query(
+    `SELECT id, created_at, duration_seconds, status, summary,
+            extracted_decisions, extracted_actions
+       FROM voice_conversations
+      WHERE product_id = ?
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT ?`,
+    [productId, Math.min(Math.max(1, limit), 100)],
+  );
+
+  const decode = (raw: unknown): string[] => {
+    if (raw == null) return [];
+    try {
+      const parsed: unknown = JSON.parse(String(raw));
+      return Array.isArray(parsed) ? parsed.map((v) => String(v)) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  return (result.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    id: String(r.id),
+    created_at: String(r.created_at),
+    duration_seconds: r.duration_seconds == null ? null : Number(r.duration_seconds),
+    status: String(r.status),
+    summary: r.summary == null ? null : String(r.summary),
+    extracted_decisions: decode(r.extracted_decisions),
+    extracted_actions: decode(r.extracted_actions),
+  }));
 }
 
 /**
@@ -194,7 +261,7 @@ ${wrapDataBlock('transcript', transcript, 5000)}`;
   // The session row carries the company. Without it this call is charged to
   // nobody, which means no per-product ceiling applies to it.
   const sessionRow = await query(
-    'SELECT product_id FROM voice_sessions WHERE id = ?', [voiceSessionId]);
+    'SELECT product_id FROM voice_conversations WHERE id = ?', [voiceSessionId]);
   const sessionProductId =
     (sessionRow.rows[0] as Record<string, string> | undefined)?.product_id;
   if (!sessionProductId) {
@@ -210,7 +277,7 @@ ${wrapDataBlock('transcript', transcript, 5000)}`;
   const extracted = parseJSONResponse<{ decisions: string[]; actions: string[]; summary: string }>(response.content);
 
   await query(
-    `UPDATE voice_sessions SET
+    `UPDATE voice_conversations SET
        transcript = ?, duration_seconds = ?, extracted_decisions = ?,
        extracted_actions = ?, summary = ?, status = 'completed'
      WHERE id = ?`,

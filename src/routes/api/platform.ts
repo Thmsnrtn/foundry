@@ -16,7 +16,7 @@ import { assessFundraisingReadiness } from '../../services/scp/investor/fundrais
 // One writer per table — see migration 164. This route had its own, which
 // left `month` unset and made its updates invisible to the dashboard.
 import { generateInvestorUpdate } from '../../services/scp/investor/investor-update.js';
-import { processVoiceMemo, generateSpokenDigest, startVoiceSession, endVoiceSession } from '../../services/voice/processor.js';
+import { processVoiceMemo, generateSpokenDigest, startVoiceSession, endVoiceSession, getVoiceConversations } from '../../services/voice/processor.js';
 import { buildProductGraph, discoverCausalChains, queryNeighborhood } from '../../services/graph/engine.js';
 import { createPortfolio, addToPortfolio, getPortfolioOverview, benchmarkProduct, generatePortfolioSnapshot, getPortfolioSnapshots } from '../../services/portfolio/manager.js';
 
@@ -331,14 +331,28 @@ platformApiRoutes.post('/api/voice/session/start', async (c) => {
   return c.json(session);
 });
 
+// The read half. `end` pays for a Sonnet call to extract decisions and action
+// items from the transcript, and until this route existed there was no way to
+// read any of it back.
+platformApiRoutes.get('/api/voice/conversations/:productId', async (c) => {
+  const founder = c.get('founder');
+  const productId = c.req.param('productId');
+  const prodCheck = await getProductByOwner(productId, founder.id);
+  if (prodCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  const limitRaw = Number(c.req.query('limit') ?? 20);
+  const conversations = await getVoiceConversations(
+    productId, Number.isFinite(limitRaw) ? limitRaw : 20);
+  return c.json({ data: conversations, meta: { total: conversations.length } });
+});
+
 platformApiRoutes.post('/api/voice/session/:id/end', async (c) => {
   const founder = c.get('founder');
   const sessionId = c.req.param('id')!;
   // RT02-02: Verify founder owns this voice session before ending it
   const sessionCheck = await query(
-    `SELECT vs.id FROM voice_sessions vs
-     JOIN products p ON vs.product_id = p.id
-     WHERE vs.id = ? AND p.owner_id = ?`,
+    `SELECT vc.id FROM voice_conversations vc
+     JOIN products p ON vc.product_id = p.id
+     WHERE vc.id = ? AND p.owner_id = ?`,
     [sessionId, founder.id]
   );
   if (sessionCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);

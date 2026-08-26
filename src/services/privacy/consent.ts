@@ -1168,7 +1168,8 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   founder_feedback: { op: 'delete', columns: ['founder_id'], reason: 'feedback they wrote themselves' },
   founder_psychology_insights: { op: 'delete', columns: ['founder_id'], reason: 'inferences about them' },
   voice_memos: { op: 'delete', columns: ['founder_id'], reason: 'voice recordings of the person' },
-  voice_sessions: { op: 'delete', columns: ['founder_id'], reason: 'voice sessions the person held' },
+  voice_sessions: { op: 'delete', columns: ['founder_id'], reason: 'daily voice briefings prepared for the person' },
+  voice_conversations: { op: 'delete', columns: ['founder_id'], reason: 'voice conversations the person held' },
   notifications: { op: 'delete', columns: ['founder_id'], reason: 'messages addressed to them' },
   // Same kind as `notifications`: something Foundry decided to tell this person
   // and how loudly. It is addressed to them and it goes with them.

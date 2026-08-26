@@ -114,6 +114,7 @@
                          ('accepted','rejected','deferred','alternative_selected')),
                         'b2b_saas','b2c_saas','marketplace','developer_tools','fintech','other'
                         ('proceed', 'proceed_with_changes', 'do_not_proceed')),
+                        CHECK(status IN ('active', 'completed')),
                       )),
                      CHECK (status IN ('on_track','at_risk','off_track','completed','cancelled')),
                     CHECK (decision_source IN ('strategic', 'decision')),
@@ -1211,6 +1212,8 @@
   ON taste_journals(product_id, agent_name, rating, rated_at DESC);
   ON taste_journals(rated_in_session_id);
   ON team_health_metrics(product_id, week_starting DESC);
+  ON voice_conversations(founder_id, created_at DESC);
+  ON voice_conversations(product_id, created_at DESC);
   OR COALESCE(OLD.amount_usd,-1) <> COALESCE(NEW.amount_usd,-1)
   OR COALESCE(OLD.capability,'') <> COALESCE(NEW.capability,'')
   OR COALESCE(OLD.evidence_signal_id,'') <> COALESCE(NEW.evidence_signal_id,'')
@@ -1696,6 +1699,7 @@
   attempts INTEGER DEFAULT 0,
   attributed_revenue_usd REAL DEFAULT 0.0, -- Revenue traced to this agent's action
   attribution_type TEXT NOT NULL CHECK(attribution_type IN (
+  audio_url           TEXT,
   audio_url TEXT,
   audit_runs_limit INTEGER NOT NULL DEFAULT 10,
   audit_runs_used INTEGER DEFAULT 0,
@@ -1806,6 +1810,7 @@
   channel_id TEXT,
   channel_key        TEXT NOT NULL,
   channel_name TEXT,
+  chat_session_id     TEXT REFERENCES chat_sessions(id),
   checkpoint_date TEXT NOT NULL,
   checksum TEXT
   chosen_option TEXT,
@@ -1961,6 +1966,7 @@
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at          DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at          TEXT NOT NULL DEFAULT (datetime('now'))
   created_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   created_at       TEXT NOT NULL DEFAULT (datetime('now')),
@@ -2033,7 +2039,7 @@
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP, chat_session_id TEXT, extracted_decisions TEXT, extracted_actions TEXT, summary TEXT, audio_url TEXT, status TEXT DEFAULT 'active',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2268,6 +2274,7 @@
   draft_content TEXT NOT NULL,
   draft_id TEXT,                            -- action_drafts.id once approved/rejected
   duration_minutes INTEGER,
+  duration_seconds    INTEGER,
   duration_seconds INTEGER,
   duration_seconds INTEGER,
   early_stop_reason TEXT,
@@ -2395,7 +2402,9 @@
   external_customer_id TEXT NOT NULL,  -- Stripe customer ID or email
   external_id TEXT,
   external_message_id TEXT NOT NULL,
+  extracted_actions   TEXT,
   extracted_context_json TEXT NOT NULL DEFAULT '{}',
+  extracted_decisions TEXT,
   failure_count INTEGER DEFAULT 0,
   failure_count INTEGER DEFAULT 0,
   failure_count INTEGER DEFAULT 0,
@@ -2434,6 +2443,7 @@
   founder_cap_cents REAL,
   founder_count INTEGER DEFAULT 0,
   founder_hypothesis TEXT,
+  founder_id          TEXT NOT NULL REFERENCES founders(id),
   founder_id          TEXT NOT NULL,
   founder_id       TEXT NOT NULL,
   founder_id  TEXT NOT NULL,
@@ -2564,6 +2574,7 @@
   id                    TEXT PRIMARY KEY,
   id                    TEXT PRIMARY KEY,
   id                   TEXT PRIMARY KEY,
+  id                  TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
   id                  TEXT PRIMARY KEY,
@@ -3336,6 +3347,7 @@
   product_id            TEXT NOT NULL,
   product_id            TEXT NOT NULL,
   product_id           TEXT NOT NULL,
+  product_id          TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id          TEXT NOT NULL REFERENCES products(id),
   product_id          TEXT NOT NULL,
   product_id          TEXT NOT NULL,
@@ -3852,6 +3864,7 @@
   statement TEXT NOT NULL,
   status                  TEXT NOT NULL DEFAULT 'active'
   status                TEXT NOT NULL DEFAULT 'planned'
+  status              TEXT NOT NULL DEFAULT 'active'
   status            TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','answered','deferred')),
   status           TEXT NOT NULL DEFAULT 'on_track'
   status          TEXT NOT NULL DEFAULT 'holding'
@@ -3920,6 +3933,7 @@
   success_metric TEXT NOT NULL,          -- e.g., "trial_to_paid_conversion_rate"
   successful_sessions INTEGER NOT NULL DEFAULT 0,
   suggested_fix TEXT,
+  summary             TEXT,
   summary TEXT NOT NULL,      -- 1-sentence human-readable summary
   summary TEXT,
   supply_churn_rate REAL,
@@ -4038,6 +4052,7 @@
   total_steps   INTEGER NOT NULL DEFAULT 9,
   total_value_dollars REAL NOT NULL DEFAULT 0,
   traffic_pct REAL,
+  transcript          TEXT,
   transcript TEXT,
   transcript TEXT,                     -- Raw transcript from STT
   transcript_text TEXT,
@@ -4211,6 +4226,7 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
+);
 );
 );
 );
@@ -4939,6 +4955,8 @@ CREATE INDEX idx_ue_product_date ON unit_economics_snapshots(product_id, snapsho
 CREATE INDEX idx_vdm_product ON value_delivery_metrics(product_id);
 CREATE INDEX idx_vdm_product_date ON value_delivery_metrics(product_id, snapshot_date);
 CREATE INDEX idx_vendor_rec_product ON vendor_recommendations(product_id);
+CREATE INDEX idx_voice_conversations_founder
+CREATE INDEX idx_voice_conversations_product
 CREATE INDEX idx_voice_fp_product_status
 CREATE INDEX idx_voice_memos ON voice_memos(founder_id, processed);
 CREATE INDEX idx_voice_sessions ON voice_sessions(founder_id, created_at);
@@ -5187,6 +5205,7 @@ CREATE TABLE unit_economics_snapshots (
 CREATE TABLE usage_limits (
 CREATE TABLE value_delivery_metrics (
 CREATE TABLE vendor_recommendations (
+CREATE TABLE voice_conversations (
 CREATE TABLE voice_memos (
 CREATE TABLE voice_sessions (
 CREATE TABLE web_audit_results (

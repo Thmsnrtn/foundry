@@ -60,5 +60,3 @@ revenue_attributions.evidence_json
 signal_events.processing_session_id
 strategic_decisions_log.authority_required_json
 system_identities.established_reason
-voice_sessions.extracted_actions
-voice_sessions.extracted_decisions
