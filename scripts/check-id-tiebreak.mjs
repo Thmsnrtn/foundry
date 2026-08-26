@@ -102,6 +102,17 @@ for (const entry of found) {
   else added.push(entry);
 }
 
+// WHAT THE ALLOWANCE HAS LEFT OVER IS AN IMPROVEMENT NOBODY WROTE DOWN.
+//
+// The allowance is per FILE rather than per line on purpose: a tiebreak that
+// moves down a file when something above it changes is the same tiebreak, and
+// churning the baseline on every edit would teach people to regenerate it
+// without reading. But an allowance that goes UNUSED is a different thing —
+// somebody fixed a tiebreak in that file and the slot stayed open, so the next
+// `ORDER BY … id` added there is free. Every sibling gate refuses to pass on an
+// improvement that has not been written down, and this one did not.
+const unused = [...allowance.entries()].filter(([, left]) => left > 0);
+
 if (added.length) {
   console.error(
     '\nORDER BY falling back to `id`, which is a nanoid or a content hash:\n\n'
@@ -109,6 +120,14 @@ if (added.length) {
     + '\n\nAn id is not a clock. If this picks one winner, it picks at random\n'
     + 'whenever two rows share a timestamp. Use `rowid` — SQLite assigns it in\n'
     + 'insertion order, which is the question being asked.\n');
+  process.exit(1);
+}
+if (unused.length) {
+  const total = unused.reduce((n, [, left]) => n + left, 0);
+  console.error(`\n✓ ${total} id tiebreak(s) are gone:\n`);
+  for (const [file, left] of unused.sort()) console.error(`  ${file} — ${left} fewer`);
+  console.error(`\nRemove the paid-down line(s) from ${BASELINE} with --write, so the`);
+  console.error('slot cannot be filled by the next one silently.');
   process.exit(1);
 }
 console.log(`✓ no new id tiebreaks (${found.length} known, baseline ${baseline.length})`);

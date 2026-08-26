@@ -43,6 +43,16 @@
 //   • It does NOT follow a row through a function call or an array `.map`.
 //
 // Run: node scripts/check-star-select-columns.mjs [--write]   (CI, in lint:columns)
+//
+// A BASELINE ENTRY THAT NO LONGER NAMES A REAL OFFENDER IS A PERMANENT
+// EXEMPTION, which is the ratchet failing in the exact direction it exists to
+// prevent. Fix the offender, leave the line, and the day somebody reintroduces
+// it at that same place the gate says nothing — it is "known". Every sibling
+// gate here refuses to pass on an improvement that has not been written down;
+// this one printed a suggestion, or nothing at all. Measured rather than
+// assumed: a probe line appended to each of the eleven baselines showed three
+// gates accepting an entry that matched no finding.
+//
 // =============================================================================
 import ts from 'typescript';
 import { readdirSync, readFileSync, writeFileSync } from 'fs';
@@ -254,6 +264,7 @@ let baseline = [];
 try { baseline = readFileSync(BASELINE, 'utf8').split('\n').filter(Boolean); } catch { /* none yet */ }
 const known = new Set(baseline);
 const added = found.filter((f) => !known.has(f));
+const fixed = baseline.filter((b) => !found.includes(b));
 
 if (added.length > 0) {
   console.error('\nProperty read off a `SELECT *` row that is not a column of that table:\n');
@@ -261,6 +272,12 @@ if (added.length > 0) {
   console.error('\nA column that is not there reads as `undefined` forever and never throws.');
   console.error('Name the columns in the SELECT, or read the column that exists.');
   console.error('If this is a false positive, add it to docs/db/star-select-baseline.txt with --write.\n');
+  process.exit(1);
+}
+if (fixed.length > 0) {
+  console.error(`\n✓ ${fixed.length} star-select read(s) are gone:\n`);
+  for (const f of fixed) console.error(`  ${f}`);
+  console.error(`\nRemove them from ${BASELINE} with --write so they cannot come back.`);
   process.exit(1);
 }
 console.log(`✓ star-select reads: ${found.length} (baseline ${baseline.length})`);

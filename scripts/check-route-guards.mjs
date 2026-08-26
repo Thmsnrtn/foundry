@@ -59,6 +59,16 @@
 // about the one where an accepted member reaches every page.
 //
 // Run: node scripts/check-route-guards.mjs [--write]
+//
+// A BASELINE ENTRY THAT NO LONGER NAMES A REAL OFFENDER IS A PERMANENT
+// EXEMPTION, which is the ratchet failing in the exact direction it exists to
+// prevent. Fix the offender, leave the line, and the day somebody reintroduces
+// it at that same place the gate says nothing — it is "known". Every sibling
+// gate here refuses to pass on an improvement that has not been written down;
+// this one printed a suggestion, or nothing at all. Measured rather than
+// assumed: a probe line appended to each of the eleven baselines showed three
+// gates accepting an entry that matched no finding.
+//
 // =============================================================================
 import { readdirSync, readFileSync, writeFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
@@ -156,5 +166,15 @@ if (current.length > baseline.length) {
   console.error(`Unguarded mutating routes rose: ${baseline.length} → ${current.length}`);
   process.exit(1);
 }
-console.log(`✓ unguarded mutating routes: ${current.length} (baseline ${baseline.length}`
-  + `${removed.length ? `, ${removed.length} paid down — rerun with --write` : ''})`);
+if (removed.length) {
+  // THIS USED TO BE A SUGGESTION AND IS NOW A REFUSAL. A route that has been
+  // given a capability check and left on the baseline is exempt forever: remove
+  // the guard again tomorrow and this gate is silent, because the route is
+  // "known". An improvement nobody wrote down is one the next commit can undo.
+  console.error(`\n✓ ${removed.length} route(s) now ask a capability:\n`);
+  for (const r of removed) console.error(`  ${r}`);
+  console.error(`\nRemove them from ${relative(ROOT, BASELINE)} with --write so they`);
+  console.error('cannot come back unguarded without this gate noticing.');
+  process.exit(1);
+}
+console.log(`✓ unguarded mutating routes: ${current.length} (baseline ${baseline.length})`);

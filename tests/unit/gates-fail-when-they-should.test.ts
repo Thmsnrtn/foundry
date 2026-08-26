@@ -666,6 +666,52 @@ describe('every gate refuses the defect it exists for', () => {
     }
   });
 
+  it('every baselined gate refuses a baseline entry that names no real offender', () => {
+    // A BASELINE ENTRY THAT NO LONGER NAMES A REAL OFFENDER IS A PERMANENT
+    // EXEMPTION — the ratchet failing in the exact direction it exists to
+    // prevent. Fix the offender, leave the line, and the day somebody
+    // reintroduces it at that same place the gate says nothing, because it is
+    // "known".
+    //
+    // This was measured rather than reasoned about: a probe line appended to
+    // each of the eleven baselines found THREE gates accepting an entry that
+    // matched no finding — `check-id-tiebreak`, `check-route-guards` and
+    // `check-star-select-columns`. The other eight already refused. The probe
+    // is kept as a test because the property belongs to the FAMILY of gates,
+    // not to any one of them, and the next gate somebody adds should inherit
+    // it or be found not to have.
+    const pairs: Array<[string, string]> = [
+      ['check-gates-are-tested.mjs', 'docs/db/untested-gates-baseline.txt'],
+      ['check-id-tiebreak.mjs', 'docs/db/id-tiebreak-baseline.txt'],
+      ['check-integration-status-vocabulary.mjs', 'docs/db/integration-status-literals-baseline.txt'],
+      ['check-reachability.mjs', 'docs/db/unreachable-modules-baseline.txt'],
+      ['check-route-guards.mjs', 'docs/db/unguarded-route-baseline.txt'],
+      ['check-star-select-columns.mjs', 'docs/db/star-select-baseline.txt'],
+      ['check-tenant-scope.mjs', 'docs/db/tenant-scope-baseline.txt'],
+      ['check-test-schema-fabrication.mjs', 'docs/db/test-schema-fabrication-baseline.txt'],
+      ['check-unread-tables.mjs', 'docs/db/unread-tables-baseline.txt'],
+      ['check-unreferenced-tables.mjs', 'docs/db/unreferenced-tables-baseline.txt'],
+      ['check-write-only-columns.mjs', 'docs/db/write-only-columns-baseline.txt'],
+    ];
+    // A line no scanner can produce: not a path that exists, not a route that
+    // is served, not a table or column any migration declares.
+    const probe = j('src/_gate_probe_', 'nothing_here.ts:1 nothing.nowhere');
+
+    for (const [gate, baselinePath] of pairs) {
+      const abs = resolve(ROOT, baselinePath);
+      const saved = readFileSync(abs, 'utf8');
+      try {
+        writeFileSync(abs, `${saved.trimEnd()}\n${probe}\n`);
+        const r = run(gate);
+        expect(r.code, `${gate} accepted a baseline entry matching nothing:\n${r.output}`)
+          .toBe(1);
+      } finally {
+        writeFileSync(abs, saved);
+      }
+      expect(readFileSync(abs, 'utf8')).toBe(saved);
+    }
+  });
+
   it('the gate that checks gates is itself proved to fail', () => {
     // IT FLAGGED ITSELF ON ITS FIRST RUN, and then stopped — because the
     // comment above these fixtures NAMES it, and a comment naming a script in a
