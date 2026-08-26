@@ -81,7 +81,7 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `9976d23`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `5b085e9`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 253 files, highest **217**. Ordering gated. **Snapshot
   freshness is now a GATE, not a note.** It went stale twice in one session —
@@ -93,7 +93,7 @@ inherited list because it was inherited.
   the chain. **A note that has to be remembered at the right moment is not a
   control; the distance between a mistake and its discovery is the thing to
   fix.**
-- **Validation:** `npm run check` green end to end — **431 files / 3,727 tests**,
+- **Validation:** `npm run check` green end to end — **431 files / 3,736 tests**,
   `CHECK_EXIT=0`, read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
   also runs `tests/simulation` and `tests/evals`. Checkpoints before this
@@ -120,7 +120,11 @@ inherited list because it was inherited.
   tables written and never read **2** · raw control bytes **0** ·
   **tables no code can reach 0** (was 11; migration 215 dropped them and 216
   finished the job) · permitted `'connected'` literals **1** ·
-  star-select phantom columns **0**.
+  star-select phantom columns **0** ·
+  **gates with no planted-defect test 0** (new gate, and it found six —
+  including the four guarding votes by unentitled principals, model calls
+  charged to no company, governed state written around its ledger, and the
+  NULL-safety of the RAISE predicates that make guards fail closed).
 
 ## Active work
 
@@ -228,6 +232,31 @@ matters is that one of them was being TESTED.**
   customer's body 8192, the custom-metrics drawer 8KB. `detail` on the
   effect-outcome door was trimmed and stored with no length anywhere, into
   `signal_events.payload_json`, which has no size constraint of its own.
+
+- **A gate nobody had proved can fail, six times over — and this is where the
+  cycle's subject arrives at the gates themselves.**
+  `tests/unit/the-gates-actually-run.test.ts` opens by stating that every gate
+  in this repository has a planted-defect test proving it fails when it should.
+  Six of the thirty chained into `npm run check` were executed by no test
+  anywhere, four of them guarding what this institution most says it cares
+  about: votes cast by principals not entitled to cast them, model calls charged
+  to no company, governed state written around its own ledger, and the
+  NULL-safety of the RAISE predicates that make guards fail closed.
+  **A gate that has never failed is indistinguishable from a gate that cannot**,
+  and `check-star-select-columns` found three real phantom reads on its first
+  run BECAUSE somebody planted a defect and watched it go red first.
+  `check-gates-are-tested.mjs` turns the sentence into a control; the baseline
+  went 6 → 0 across two commits.
+
+  **The new gate was wrong about itself twice, and both are worth keeping.** It
+  stopped reporting itself the moment it was chained, because a COMMENT naming
+  it sat in a file that runs other gates — an instrument counting a sentence
+  about a gate as proof the gate works. And its own planted defect could not
+  make it fail: first because the fixture's filename written out in full made
+  the planted defect look covered, then because the chained-script pattern
+  `[a-z0-9-]+` cannot see an underscore, so a fixture named by this
+  repository's own convention was invisible to it. **A scanner that cannot see
+  a name cannot report it missing.**
 
 **AND ONE I CAUSED, WHICH IS THE MOST USEFUL ENTRY IN THIS SECTION.** Splitting
 the custom-metrics cap into per-request and stored, I split the KEY cap
