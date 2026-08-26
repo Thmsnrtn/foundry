@@ -90,9 +90,9 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `aded656`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `ca27c10`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 253 files, highest **217**. Ordering gated. **Snapshot
+- **Migrations:** 255 files, highest **218**. Ordering gated. **Snapshot
   freshness is now a GATE, not a note.** It went stale twice in one session —
   once regenerated between 215 and 216 rather than after both, once not
   regenerated for 217 at all, by the author who had written the reminder into
@@ -102,7 +102,7 @@ inherited list because it was inherited.
   the chain. **A note that has to be remembered at the right moment is not a
   control; the distance between a mistake and its discovery is the thing to
   fix.**
-- **Validation:** `npm run check` green end to end — **431 files / 3,737 tests**,
+- **Validation:** `npm run check` green end to end — **432 files / 3,745 tests**,
   `CHECK_EXIT=0`, read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
   also runs `tests/simulation` and `tests/evals`. Checkpoints before this
@@ -123,7 +123,7 @@ inherited list because it was inherited.
 - **Ratchets:** unguarded mutating routes **112** · fabricated test schemas **4** ·
   writer-less tables **0** · SELECT drift **0** · untraced consequential
   effects **0** · statically unreachable modules **22** ·
-  write-only columns **64** · unscoped product-shaped routes **2** ·
+  write-only columns **62** · unscoped product-shaped routes **2** ·
   id tiebreaks **18** · backticks in embedded comments **0** ·
   query-argument mismatches **0** · INSERT value-list mismatches **0** ·
   tables written and never read **2** · raw control bytes **0** ·
@@ -225,6 +225,29 @@ matters is that one of them was being TESTED.**
   interpolated it bare. `src/prompts/README.md` claimed the eval framework
   imports the same builder production uses; nothing outside `src/prompts/`
   referenced `GOLDEN_CASES` at all.
+
+- **The founder could not hold a voice conversation after 06:30 UTC, any day —
+  and the model call at the end of every session had no reader.**
+  `voice_sessions` was declared TWICE, by migration 013 (the daily BRIEFING,
+  keyed `UNIQUE(product_id, session_date)`) and again by 031 (the CONVERSATION).
+  `CREATE TABLE IF NOT EXISTS` made the second a no-op, so the conversation
+  inherited a key written for the briefing. `morning_briefings` runs at 06:30
+  and writes that day's row; `startVoiceSession` supplied `date('now')` to
+  satisfy the NOT NULL and was refused by the UNIQUE. **Confirmed against a
+  migrated database, not reasoned about.** The reverse order is the same defect
+  from the other side: a conversation started first is returned AS the briefing
+  by a `SELECT *` with no discriminator and no ORDER BY. Migration 218
+  separates them. And `endVoiceSession` pays for a Sonnet call to extract
+  decisions and action items into a row no route could read back —
+  `GET /api/voice/conversations/:productId` is the read half, the same
+  judgement as `portfolio_snapshots`.
+
+  **THE `CREATE TABLE IF NOT EXISTS` TRAP HAS NOW COST THIS CAMPAIGN THREE
+  FINDINGS**, and the lens is cheap: `grep -c "CREATE TABLE IF NOT EXISTS <name>"`
+  across the migrations for every table. Two declarations means the second is a
+  no-op, the columns of the loser arrive later as ALTERs if at all, and any
+  CONSTRAINT the loser declared — a UNIQUE, a CHECK, a NOT NULL — silently does
+  not exist while the code that assumes it does keeps running.
 
 - **A message observed in the future, at the top of the founder's queue.**
   `inbound_customer_messages.source_observed_at` is the SOURCE'S clock and it is
