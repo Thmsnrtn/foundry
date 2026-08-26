@@ -118,14 +118,25 @@ describe('an investor update is actually created', () => {
 });
 
 describe('a voice session is actually started', () => {
-  it('writes the session with the date the table requires', async () => {
+  it('writes the conversation, linked to the chat session it opened', async () => {
+    // THE PREMISE MOVED, AND THE SUBJECT DID NOT. This asserted a row in
+    // `voice_sessions` carrying `session_date`, because that is where a
+    // conversation used to be written — and supplying that date to satisfy a
+    // NOT NULL is what made every conversation collide with the day's briefing
+    // on `UNIQUE(product_id, session_date)`. Migration 218 gave the
+    // conversation its own table, where there is no date key because a
+    // conversation is not one-per-day.
+    //
+    // What this test is FOR is unchanged: starting a voice session used to raise
+    // before a word was recorded, and the write has to land. It lands here now.
     const { startVoiceSession } = await import('../../src/services/voice/processor.js');
-    const { voice_session_id } = await startVoiceSession(OWNER, P);
+    const { voice_session_id, chat_session_id } = await startVoiceSession(OWNER, P);
     const row = (await query(
-      `SELECT session_date, chat_session_id FROM voice_sessions WHERE id = ?`,
+      `SELECT chat_session_id, status FROM voice_conversations WHERE id = ?`,
       [voice_session_id])).rows[0] as Record<string, unknown>;
     expect(row, 'starting a voice session raised before a word was recorded').toBeTruthy();
-    expect(String(row.session_date)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(String(row.chat_session_id)).toBe(chat_session_id);
+    expect(String(row.status)).toBe('active');
   });
 });
 
