@@ -43,10 +43,24 @@ export const apiKeyAuth = createMiddleware<ApiAuthEnv>(async (c, next) => {
   await next();
 });
 
+/**
+ * A key holds a scope when it was granted that scope.
+ *
+ * THERE IS NO VALUE MEANING "ALL OF THEM", and this guard used to accept one.
+ * `issueApiKey` refuses any scope no route honours — `'*'` included — and the
+ * settings page tells the founder a key "does exactly what you tick and nothing
+ * else". Reading `'*'` as every scope is a fail-open default for an unknown
+ * string, in the middleware that guards every `/api/v1` endpoint.
+ *
+ * The `'*'` in `lib/webhooks.ts` is a different vocabulary and stays: there it
+ * is an EVENT meaning "send me every event type", which is a subscription the
+ * dispatcher honours. One vocabulary says which events you want; this one said
+ * what you may do.
+ */
 export const requireScope = (scope: string) =>
   createMiddleware<ApiAuthEnv>(async (c, next) => {
     const scopes = (c.get('scopes') as string[]) || [];
-    if (!scopes.includes(scope) && !scopes.includes('*')) {
+    if (!scopes.includes(scope)) {
       return c.json({ error: `Insufficient permissions. Required scope: ${scope}` }, 403);
     }
     await next();

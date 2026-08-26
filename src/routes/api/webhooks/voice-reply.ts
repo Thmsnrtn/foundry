@@ -73,7 +73,10 @@ voiceReplyWebhook.post('/webhooks/voice-reply', async (c) => {
 
   // Every branch of this route writes — a decision, a note, a question, or an
   // approved outward effect. A read scope buys none of them.
-  if (!keyResult.scopes.includes('agents:write') && !keyResult.scopes.includes('*')) {
+  // No wildcard: the key holds `agents:write` or it does not. See the note on
+  // `requireScope` — nothing can issue a `'*'` scope, and a string that
+  // silently means every scope is a fail-open default.
+  if (!keyResult.scopes.includes('agents:write')) {
     return c.json({ error: 'This API key does not carry the agents:write scope' }, 403);
   }
 

@@ -21,10 +21,30 @@ const MAX_PARTICIPANTS = 50;
 // header key against the stored key_hash — legitimate keys always 401'd and a
 // leaked hash would have authenticated. validateApiKey hashes the presented
 // key and also enforces revocation + expiry.
+/**
+ * A DOOR THAT ASKED WHETHER THE KEY WAS REAL AND NEVER WHAT IT WAS FOR.
+ *
+ * This authenticated the key and read its product, and checked no scope at all
+ * — so ANY valid key posted call transcripts, whatever the founder had ticked.
+ * A key issued `metrics:write`, whose own label says it "may not read anything
+ * else", could push a transcript that Foundry then analyses with a model at the
+ * company's cost.
+ *
+ * `agents:write` is the scope, matching `voice-reply.ts` — the sibling
+ * webhook door, also key-authenticated, which has always checked it. Two doors
+ * of the same kind now ask the same question.
+ *
+ * The bidirectional scope test could not see this: it scans `src/api/v1/` and
+ * these doors live under `src/routes/api/webhooks/`. It asserted that no route
+ * demands a scope a founder cannot grant, which is one of the two failures. A
+ * door that demands NOTHING is the other, and it was outside the horizon.
+ */
 async function getProductIdForApiKey(apiKey: string): Promise<string | null> {
   if (!apiKey) return null;
   const result = await validateApiKey(apiKey).catch(() => null);
-  return result?.productId ?? null;
+  if (!result) return null;
+  if (!result.scopes.includes('agents:write')) return null;
+  return result.productId ?? null;
 }
 
 // ─── POST /webhooks/transcripts/fathom ────────────────────────────────────────

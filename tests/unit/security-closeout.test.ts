@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { createApiKey } from '../../src/services/rbac/permissions.js';
+import { issueApiKey } from '../../src/services/api/api-key-issuance.js';
 
 let app: Hono;
 let rawApiKey: string;
@@ -32,7 +32,17 @@ beforeAll(async () => {
   await query(
     "INSERT INTO products (id, name, owner_id, status, ingest_token) VALUES ('sc_p','SecCo','sc_f','active','ingtok_secco_12345')", [],
   );
-  ({ key: rawApiKey } = await createApiKey('sc_p', 'sc_f', 'test', ['transcripts']));
+  // MINTED THROUGH THE DOOR THE PRODUCT USES, with a scope the routes enforce.
+  // This used to call `rbac/permissions.ts`'s own `createApiKey` with the scope
+  // `'transcripts'` — a string in no closed set, demanded by no route, and
+  // therefore never checked by anything. It "worked" because the transcript
+  // webhook checked no scope at all, which is the defect this fixture was
+  // quietly resting on.
+  const issued = await issueApiKey({
+    productId: 'sc_p', founderId: 'sc_f', label: 'test', scopes: ['agents:write'],
+  });
+  if ('refused' in issued) throw new Error(`key not issued: ${issued.refused}`);
+  rawApiKey = issued.key;
 
   const { transcriptWebhooks } = await import('../../src/routes/api/webhooks/transcripts.js');
   const { voiceReplyWebhook } = await import('../../src/routes/api/webhooks/voice-reply.js');

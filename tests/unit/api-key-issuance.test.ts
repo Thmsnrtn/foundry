@@ -198,6 +198,34 @@ describe('the scope vocabulary is exactly what the routes enforce', () => {
     return [...found].sort();
   }
 
+  it('every API-key-authenticated door asks what the key is for', async () => {
+    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+    // THE BIDIRECTIONAL TEST BELOW SCANS `src/api/v1/` AND THE KEY OPENS MORE
+    // DOORS THAN THAT. `routes/api/webhooks/transcripts.ts` authenticated the
+    // key, read its product, and checked NO SCOPE — so any valid key posted
+    // call transcripts, whatever the founder had ticked, and Foundry analysed
+    // them with a model at the company's cost. A key issued `metrics:write`,
+    // whose label says it "may not read anything else", could do it.
+    //
+    // The test below asserts no route demands a scope a founder cannot grant.
+    // That is one of the two failures. A door that demands NOTHING is the
+    // other, and it was outside the horizon of a scan bounded by a directory.
+    const doors = [
+      'src/routes/api/webhooks/transcripts.ts',
+      'src/routes/api/webhooks/voice-reply.ts',
+    ];
+    for (const door of doors) {
+      const source = stripComments(readFileSync(resolve(ROOT, door), 'utf8'), { lineComments: true });
+      expect(source, `${door} authenticates a key`).toMatch(/validateApiKey/);
+      const scopes = [...source.matchAll(/scopes\.includes\('([^']+)'\)/g)].map((m) => m[1]);
+      expect(scopes.length, `${door} authenticates a key and never asks its scope`)
+        .toBeGreaterThan(0);
+      for (const scope of scopes) {
+        expect(API_SCOPES as readonly string[], `${door} demands ${scope}`).toContain(scope);
+      }
+    }
+  });
+
   it('offers no scope that no route honours, and demands none a founder cannot grant', () => {
     // Bidirectional on purpose. One direction alone lets a vocabulary rot into
     // a menu of things that do nothing, or a route demand a permission that
