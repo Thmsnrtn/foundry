@@ -8,7 +8,12 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { computeCostCents, MODELS, CACHE_BREAKPOINT } from '../../ai/client.js';
-import { sanitizeForPrompt } from '../../ai/sanitize.js';
+import { dataBlockInstruction, sanitizeForPrompt, wrapDataBlock } from '../../ai/sanitize.js';
+
+/** Tags for the two blocks of third-party text every agent run carries. Named
+ *  constants so the fence and the sentence explaining it cannot drift apart. */
+const INTEGRATION_SIGNALS_TAG = 'integration_signals';
+const AGENT_MESSAGES_TAG = 'agent_messages';
 import { logger } from '../../logger.js';
 import type {
   AgentName,
@@ -552,6 +557,13 @@ export abstract class BaseAgent {
       );
     }
 
+    // The sentence that makes the fences below mean something. In the STABLE
+    // half deliberately: it is identical for every agent and every run, so it
+    // belongs before the cache breakpoint, and `dataBlockInstruction` says it
+    // must sit in the system prompt rather than beside the data.
+    stable.push(`${dataBlockInstruction(INTEGRATION_SIGNALS_TAG)}\n`
+      + `${dataBlockInstruction(AGENT_MESSAGES_TAG)}`);
+
     // ── C-Suite Output Standard (stable — identical for every agent/run) ──────
     stable.push(`
 REQUIRED OUTPUT FORMAT — C-SUITE STANDARD:
@@ -574,20 +586,40 @@ Rules:
     // ── VOLATILE blocks (change every run — must sit AFTER the cache breakpoint)
     const volatile: string[] = [];
 
-    // Inject integration events (v2) — sanitize summaries (user-controlled data)
+    // A DENYLIST WAS THE ONLY THING BETWEEN THIRD-PARTY TEXT AND TWELVE AGENTS.
+    //
+    // These two blocks carry the most external content in the product:
+    // integration summaries built from Intercom conversations, Linear issues,
+    // GitHub commits and Sentry errors, and agent messages whose bodies quote
+    // them. Both were passed through `sanitizeForPrompt` — seventeen regexes
+    // for known injection phrases, plus tag stripping — and then interpolated
+    // bare into the prompt of every agent run, the highest-traffic model path
+    // in the product.
+    //
+    // `sanitize.ts` documents the stronger mechanism a few lines from that
+    // function and says why it is stronger: a fenced block, plus a sentence in
+    // the SYSTEM prompt saying what the fence means, because "a delimiter with
+    // nothing telling the model what the delimiter is for is decoration". Two
+    // of seventy-eight model-calling files used it. This is now a third and a
+    // fourth.
+    //
+    // Both, not either. The denylist stays — it also redacts PII out of these
+    // summaries before they reach a provider — and the fence is what holds when
+    // the phrase is one nobody listed.
     if (context.integrationEvents && context.integrationEvents.length > 0) {
       const eventLines = context.integrationEvents.slice(0, 15).map(e =>
         `[${sanitizeForPrompt(e.source)}/${sanitizeForPrompt(e.event_type)}] ${sanitizeForPrompt(e.summary)}`
       ).join('\n');
-      volatile.push(`INTEGRATION SIGNALS (${context.integrationEvents.length} since last run):\n${eventLines}`);
+      volatile.push(`INTEGRATION SIGNALS (${context.integrationEvents.length} since last run):\n`
+        + wrapDataBlock(INTEGRATION_SIGNALS_TAG, eventLines));
     }
 
-    // Inject unread agent messages (v2) — sanitize subject/body (may contain external data)
     if (context.unreadMessages && context.unreadMessages.length > 0) {
       const msgLines = context.unreadMessages.map(m =>
         `[${sanitizeForPrompt(m.from_agent)} · ${m.priority}] ${sanitizeForPrompt(m.subject)}: ${sanitizeForPrompt(m.body.slice(0, 300))}`
       ).join('\n');
-      volatile.push(`MESSAGES FROM AGENT NETWORK:\n${msgLines}`);
+      volatile.push(`MESSAGES FROM AGENT NETWORK:\n`
+        + wrapDataBlock(AGENT_MESSAGES_TAG, msgLines));
     }
 
     // Inject scratchpad context — what other agents found today
