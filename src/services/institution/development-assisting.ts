@@ -393,6 +393,25 @@ export interface FounderDevelopmentActivity {
  * letting time turn it into "nobody knows" would be Foundry improving its own
  * record by waiting. The asymmetry only ever runs against Foundry.
  */
+// A QUESTION ASKED OF THIS FUNCTION AND ANSWERED AGAINST THE ASKER, recorded so
+// it is not re-opened. `recordDevelopmentOutcome` writes a claim only when the
+// plan carries verification evidence — `evidence.length ? … : null` — so a
+// change applied and then checked by NOTHING has no claim and lands in no
+// bucket here, while the founder reads "Across everything I have changed and
+// recorded". Counting from `development_change_plans` instead looks like the
+// obvious repair and is wrong.
+//
+// A ROLLBACK MUTATES THE PLAN AND CANNOT TOUCH THE CLAIM. `outcome_status` is
+// current state; the claim is append-only history. Tallying plans would let a
+// rolled-back failure vanish from the record — Foundry improving its own track
+// record by undoing something — which is the exact asymmetry the rest of this
+// module exists to prevent. The two are counted separately on purpose, and
+// `development-assisting.test.ts` says so in as many words.
+//
+// So the total is what was changed AND RECORDED, which is what the sentence
+// says. The unmeasured case is not hidden: an applied change nothing checked
+// carries `outcome_status = 'unresolved'` on its plan and appears on the
+// founder's page as work in progress, not as a settled outcome.
 async function developmentRecord(
   productId: string, now: Date,
 ): Promise<FounderDevelopmentActivity['record']> {
