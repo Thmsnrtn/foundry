@@ -39,6 +39,7 @@
 // adapter does not change that: the founder writes the reply.
 // =============================================================================
 
+import { createHash } from 'node:crypto';
 import { query } from '../../db/client.js';
 import { ingestCustomerMessage, type IntakeRefusal } from '../institution/customer-message-intake.js';
 
@@ -193,4 +194,139 @@ export async function ingestIntercomMessages(
   }
 
   return result;
+}
+
+// =============================================================================
+// AND THE OTHER END OF THE SAME CHAIN: DID THE REPLY WORK?
+//
+// `IMPLEMENTATION_STATE` records the support chain ending "→ governed
+// send_email → receipt → outcome UNRESOLVED", and unresolved is where it has
+// always stopped. A provider acknowledgement is not an observed effect and an
+// observed effect is not an outcome; the only producers of a support outcome
+// were `POST /ingest/effect-outcome/:token`, which needs an outside system to
+// volunteer a verdict, and two legacy event types nothing in production wrote.
+//
+// The conversation Foundry replied into is an external witness it does not
+// control, and it can answer one question honestly: DID THE CUSTOMER WRITE
+// AGAIN AFTER WE ANSWERED? That is not an inference about whether they were
+// satisfied. It is a message, with a time on it, authored by the person the
+// reply was sent to.
+//
+// THE ASYMMETRY IS THE WHOLE DESIGN, AND IT ONLY EVER RUNS AGAINST FOUNDRY.
+//
+//   The customer wrote again → evidence the reply did not settle it. Recorded.
+//   Silence                  → NOT evidence that it did. Nothing is recorded,
+//                              and the outcome stays `unresolved`.
+//
+// Silence is the state of a customer who gave up, a customer who was helped, and
+// a customer on holiday. `external-observation.ts` states the same rule for its
+// own domain — "turning 'support volume fell' into 'support is being handled' is
+// exactly the inference an expectation exists to test" — and this module may not
+// make the support version of that mistake in the direction that flatters it.
+//
+// So there is no code path here that can write `support_reply_effective`. A
+// success verdict has to come from somewhere Foundry is not: the customer or the
+// company saying so through the effect-outcome door.
+// =============================================================================
+
+/** Deterministic, so the same customer reply observed on two syncs converges
+ *  instead of counting as two witnesses. */
+function observationId(effectId: string, partId: string): string {
+  return 'obsv_' + createHash('sha256').update(`${effectId}\n${partId}`).digest('hex').slice(0, 32);
+}
+
+export interface ReplyOutcomeObservation {
+  /** Executed replies whose conversation could be looked at. */
+  examined: number;
+  /** Replies the customer answered again — recorded as a failure witness. */
+  customerWroteAgain: number;
+  /** Looked at, nothing new from the customer. Deliberately records nothing. */
+  quiet: number;
+  providerUnavailable: number;
+}
+
+interface IntercomPart {
+  id: string;
+  created_at: number;
+  part_type?: string;
+  author?: { type?: string };
+}
+
+export async function observeIntercomReplyOutcomes(
+  productId: string,
+  credentials: { access_token: string },
+): Promise<ReplyOutcomeObservation> {
+  const out: ReplyOutcomeObservation = {
+    examined: 0, customerWroteAgain: 0, quiet: 0, providerUnavailable: 0,
+  };
+
+  // Only replies that actually went out, are not yet settled, and answer a
+  // message this adapter brought in. `conversation_ref` is what makes the link
+  // to a witness possible at all.
+  const pending = (await query(
+    `SELECT a.id AS action_id, a.effect_id, a.executed_at, m.conversation_ref
+       FROM outbound_actions a
+       JOIN inbound_customer_messages m ON m.id = a.inbound_message_id
+      WHERE a.product_id = ? AND a.status = 'executed'
+        AND (a.outcome_status IS NULL OR a.outcome_status = 'unresolved')
+        AND a.effect_id IS NOT NULL AND a.executed_at IS NOT NULL
+        AND m.conversation_ref LIKE 'intercom:%'`,
+    [productId],
+  )).rows as unknown as Array<Record<string, unknown>>;
+
+  const headers = {
+    Authorization: `Bearer ${credentials.access_token}`,
+    Accept: 'application/json',
+    'Intercom-Version': '2.11',
+  };
+
+  for (const row of pending) {
+    const conversationId = String(row.conversation_ref).slice('intercom:'.length);
+    const effectId = String(row.effect_id);
+    const executedAt = new Date(String(row.executed_at)).getTime();
+    if (Number.isNaN(executedAt)) continue;
+
+    let parts: IntercomPart[];
+    try {
+      const response = await fetch(
+        `https://api.intercom.io/conversations/${encodeURIComponent(conversationId)}`,
+        { headers });
+      if (!response.ok) { out.providerUnavailable++; continue; }
+      const body = await response.json() as
+        { conversation_parts?: { conversation_parts?: IntercomPart[] } };
+      parts = body.conversation_parts?.conversation_parts ?? [];
+    } catch {
+      out.providerUnavailable++;
+      continue;
+    }
+    out.examined++;
+
+    // `author.type === 'user'` is the customer. A teammate's note or an
+    // admin's reply is not the person the message was sent to, and counting
+    // one would be Foundry finding a witness in its own colleagues.
+    const theirs = parts
+      .filter((p) => p.author?.type === 'user')
+      .filter((p) => p.created_at * 1000 > executedAt)
+      .sort((a, b) => a.created_at - b.created_at)[0];
+
+    if (!theirs) { out.quiet++; continue; }
+
+    await query(
+      `INSERT OR IGNORE INTO signal_events
+         (id, product_id, source, event_type, severity, payload_json, summary)
+       VALUES (?,?,'intercom_conversation','support_reply_failed','medium',?,?)`,
+      [
+        observationId(effectId, theirs.id), productId,
+        JSON.stringify({
+          effect_id: effectId,
+          conversation_ref: String(row.conversation_ref),
+          customer_part_id: theirs.id,
+        }),
+        'The customer wrote again after the reply went out',
+      ],
+    );
+    out.customerWroteAgain++;
+  }
+
+  return out;
 }

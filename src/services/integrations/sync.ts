@@ -197,12 +197,23 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
         // one. What it did is recorded on the sync either way, because a sense
         // that stops feeding is a thing the founder needs to see.
         try {
-          const { ingestIntercomMessages } = await import('./intercom-messages.js');
+          const { ingestIntercomMessages, observeIntercomReplyOutcomes } = await import(
+            './intercom-messages.js');
           const ingest = await ingestIntercomMessages(
             integration.product_id, credentials as { access_token: string });
           if (!ingest.noChannel) {
             metricsUpdated = [...metricsUpdated, 'customer_messages'];
             recordsProcessed += ingest.accepted;
+          }
+
+          // And the other end of the chain. This runs whether or not a channel
+          // is fed: a reply Foundry sent lives in a conversation regardless of
+          // how the original message got in, and the question — did the
+          // customer write again — is answerable either way.
+          const outcomes = await observeIntercomReplyOutcomes(
+            integration.product_id, credentials as { access_token: string });
+          if (outcomes.customerWroteAgain > 0) {
+            metricsUpdated = [...metricsUpdated, 'support_reply_outcomes'];
           }
         } catch (err) {
           logger.error('intercom.messages_failed', {
