@@ -385,14 +385,19 @@ const customerMessageSection = (
 // WHAT PEOPLE SEND." A mailbox cannot POST JSON at all, and a helpdesk posts
 // its OWN webhook shape, which this door's schema refuses as `fields_invalid`.
 // The design record is explicit that "an adapter for a helpdesk, a mailbox, or
-// a form is an ordinary caller" — and no adapter exists, so the sentence
-// described one that was never written.
+// a form is an ordinary caller" — and at the time no adapter existed, so the
+// sentence described one that was never written. The founder would have found
+// out by trying, and the refusal counter above would have told them afterwards:
+// the system failing gracefully, not the system being honest.
 //
-// The founder would have found out by trying, and the refusal counter above
-// would have told them afterwards. That is the system failing gracefully, not
-// the system being honest: the copy sent them at it. It states the shape the
-// door takes now, which is both true and the thing they need in order to wire
-// anything to it.
+// THERE IS ONE NOW, AND THE COPY NAMES IT RATHER THAN THE SHAPE ALONE. The
+// Intercom adapter reads what customers wrote through the same door, so a
+// founder who has connected Intercom ticks a box instead of building a bridge.
+// What it can and cannot see is stated here in the same words the module states
+// it in — seven days, first message, an email address, no replies — because a
+// sense the founder misjudges the reach of is worse than one they know is
+// narrow. The hand-POST paragraph stays: it is still the answer for every
+// provider without an adapter, which is all of them but one.
 const supportChannelSection = (
   candidates: Array<{ responsibilityId: string; title: string }>,
   existing: Array<{ id: string; label: string; intakeKey: string; responsibilityTitle: string;
@@ -427,9 +432,14 @@ const supportChannelSection = (
         <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Add it</button>
       </form>`)}
     <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem;">
-      Anything that can POST JSON to that URL can hand me a message. <strong>A mailbox
-      cannot do that on its own</strong> — it needs something in between, and a helpdesk
-      needs its webhook set to this shape rather than its own:
+      <strong>If you have connected Intercom</strong>, tick it below and I will read what
+      people write there — the conversations from the last seven days, their first
+      message, from anyone who left an email address. I will not see replies, or
+      anything your team wrote back.
+      <br /><br />
+      Otherwise: anything that can POST JSON to that URL can hand me a message.
+      <strong>A mailbox cannot do that on its own</strong> — it needs something in
+      between, and a helpdesk needs its webhook set to this shape rather than its own:
       <code style="display:block;margin:0.35rem 0;font-size:0.68rem;white-space:pre;overflow-x:auto;">{"external_message_id": "...", "contact_email": "...", "body": "..."}</code>
       <code style="font-size:0.68rem;">subject</code>, <code style="font-size:0.68rem;">conversation_ref</code>
       and <code style="font-size:0.68rem;">source_observed_at</code> are optional. Anything

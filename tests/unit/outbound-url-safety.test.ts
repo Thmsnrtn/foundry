@@ -78,6 +78,11 @@ function dynamicUrlSenders(): string[] {
 const FOUNDRY_CHOSEN: Record<string, string> = {
   'src/services/audit/github.ts': 'builds api.github.com paths from a repo owner/name; the host is a constant',
   'src/services/integrations/intercom.ts': 'builds api.intercom.io paths; the host is a constant',
+  // The messages half of the same sense, added when the first adapter was
+  // built. Same constant host, same operator-free destination: the only
+  // founder-influenced value is the access token, which travels in a header
+  // and never in the URL.
+  'src/services/integrations/intercom-messages.ts': 'builds api.intercom.io paths; the host is a constant',
   // Template-literal senders, visible to this gate only since it learned to see
   // that syntax. Each host is operator-configured or compiled in — none is
   // founder-influenced. Where a founder-supplied value reaches the PATH, it is

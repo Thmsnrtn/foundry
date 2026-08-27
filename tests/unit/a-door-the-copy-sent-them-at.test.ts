@@ -78,21 +78,41 @@ describe('the page describes the door it points at', () => {
     expect(card).toMatch(/mailbox\s*\n?\s*cannot do that on its own|mailbox cannot/i);
   });
 
-  it('there is still no adapter, which is why the copy has to be precise', () => {
-    // If one is ever written, this test should fail and the copy should change
-    // to name it. An adapter is the thing that would make the old sentence true.
+  it('the copy names every adapter that exists, and no adapter goes unnamed', () => {
+    // THIS TEST FIRED AS DESIGNED. It used to assert that NO adapter existed,
+    // with the note: "If one is ever written, this test should fail and the
+    // copy should change to name it." One was written, it failed, and the copy
+    // changed. What it holds now is the durable half of the same rule — the
+    // page and the set of built adapters cannot drift apart in either
+    // direction.
     const { readdirSync, statSync } = require('node:fs') as typeof import('node:fs');
     const { join } = require('node:path') as typeof import('node:path');
     const walk = (dir: string): string[] => readdirSync(dir).flatMap((e) => {
       const p = join(dir, e);
       return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
     });
-    const touchers = walk('src').filter((f) =>
-      /intakeKey|intake_key/.test(stripComments(readFileSync(f, 'utf8'), { lineComments: true })));
-    expect(touchers.sort()).toEqual([
-      'src/routes/dashboard/letter.ts',
-      'src/routes/ingest/index.ts',
-      'src/services/institution/customer-message-intake.ts',
-    ]);
+    // A module that calls the door and is not the door itself is an adapter.
+    const adapters = walk('src')
+      .filter((f) => !f.includes('customer-message-intake'))
+      .filter((f) => /ingestCustomerMessage\s*\(/.test(
+        stripComments(readFileSync(f, 'utf8'), { lineComments: true })))
+      .filter((f) => !f.includes('routes/ingest'));
+    expect(adapters).toEqual(['src/services/integrations/intercom-messages.ts']);
+
+    // Each one is named on the page, so a founder knows it is available to
+    // them rather than discovering it in a changelog.
+    const card = intakeCard();
+    for (const provider of ['Intercom']) expect(card).toContain(provider);
+  });
+
+  it('what the page says the adapter can see is what the adapter says', () => {
+    // The four limits the module commits to. A page that promised more reach
+    // than the sense has is the same defect as the sentence this file is named
+    // for, one level along.
+    const card = intakeCard();
+    expect(card).toMatch(/seven days/i);
+    expect(card).toMatch(/first\s*\n?\s*message/i);
+    expect(card).toMatch(/email address/i);
+    expect(card).toMatch(/not see replies/i);
   });
 });
