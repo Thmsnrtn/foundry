@@ -34,6 +34,48 @@ export interface SupportChannel {
   responsibilityTitle: string; intakeKey: string; revoked: boolean;
   /** Customers turned away since a message last got through. Zero means fine. */
   refusalCount: number; lastRefusalReason: string | null;
+  /** The provider the FOUNDER said feeds this channel, or null for a channel
+   *  somebody posts to themselves. Never inferred: a product can hold several
+   *  channels bound to different responsibilities, and choosing one would be
+   *  Foundry deciding which responsibility a customer's message belongs to. */
+  fedBy: string | null;
+}
+
+/** Providers with an adapter that can actually feed a channel. Closed, and a
+ *  member is added only when its adapter exists — the same rule the API scopes
+ *  follow. Migration 219 holds the database's copy and a test pins them equal. */
+export const SUPPORT_CHANNEL_FEEDS = ['intercom'] as const;
+export type SupportChannelFeed = typeof SUPPORT_CHANNEL_FEEDS[number];
+
+/**
+ * The founder says which channel a provider feeds, or unsays it.
+ *
+ * Refused rather than silently ignored when the provider is unknown, when the
+ * channel is not this company's, or when another live channel already claims
+ * the provider — the database refuses that last one too, and getting a reason
+ * here means the founder is told which of the three happened.
+ */
+export async function setChannelFeed(input: {
+  productId: string; channelId: string; provider: string | null;
+}): Promise<{ ok: true } | { refused: 'unknown_provider' | 'unknown_channel' | 'provider_taken' }> {
+  if (input.provider !== null
+    && !(SUPPORT_CHANNEL_FEEDS as readonly string[]).includes(input.provider)) {
+    return { refused: 'unknown_provider' };
+  }
+  const owned = await query(
+    'SELECT id FROM support_channels WHERE id=? AND product_id=? AND revoked_at IS NULL',
+    [input.channelId, input.productId]);
+  if (!owned.rows.length) return { refused: 'unknown_channel' };
+
+  try {
+    await query('UPDATE support_channels SET fed_by=? WHERE id=? AND product_id=?',
+      [input.provider, input.channelId, input.productId]);
+  } catch {
+    // The partial unique index. Two channels claiming one provider is the
+    // ambiguity this column exists to prevent.
+    return { refused: 'provider_taken' };
+  }
+  return { ok: true };
 }
 
 /**
@@ -85,14 +127,14 @@ export async function registerSupportChannel(input: {
   return {
     id, label, intakeKey, revoked: false,
     responsibilityId: input.responsibilityId, responsibilityTitle: String(owned.title),
-    refusalCount: 0, lastRefusalReason: null,
+    refusalCount: 0, lastRefusalReason: null, fedBy: null,
   };
 }
 
 export async function getSupportChannels(productId: string): Promise<SupportChannel[]> {
   const rows = await query(
     `SELECT c.id,c.label,c.intake_key,c.revoked_at,c.responsibility_id,r.title,
-            c.refusal_count,c.last_refusal_reason
+            c.refusal_count,c.last_refusal_reason,c.fed_by
        FROM support_channels c JOIN institutional_responsibilities r ON r.id=c.responsibility_id
       WHERE c.product_id=? ORDER BY c.created_at`, [productId],
   );
@@ -102,6 +144,7 @@ export async function getSupportChannels(productId: string): Promise<SupportChan
     responsibilityTitle: String(r.title),
     refusalCount: Number(r.refusal_count ?? 0),
     lastRefusalReason: r.last_refusal_reason == null ? null : String(r.last_refusal_reason),
+    fedBy: r.fed_by == null ? null : String(r.fed_by),
   }));
 }
 

@@ -764,7 +764,6 @@
   ) AND NOT EXISTS (
   )));
   )));
-  )));
   )),
   )),
   )),
@@ -785,6 +784,7 @@
   )),
   )),
   )),
+  )), fed_by TEXT
   );
   );
   );
@@ -1208,6 +1208,7 @@
   ON responsibility_transitions(responsibility_id, created_at);
   ON signal_events(product_id, source, created_at);
   ON strategic_decisions_log(product_id, conflict_identity)
+  ON support_channels(product_id, fed_by)
   ON taste_journals(product_id, agent_name, rated_at DESC);
   ON taste_journals(product_id, agent_name, rating, rated_at DESC);
   ON taste_journals(rated_in_session_id);
@@ -1229,6 +1230,7 @@
   PRIMARY KEY (key, window_start)
   PRIMARY KEY (product_id, prompt, condition_name)
   PRIMARY KEY (scope, scope_id, date)
+  REFERENCES support_channel_feeds(provider));
   SELECT 1 FROM ecosystem_principals p
   SELECT 1 FROM json_each(NEW.evidence_refs_json) refs WHERE NOT EXISTS (
   SELECT 1 FROM strategic_decisions_log d WHERE d.id=NEW.judgment_id AND d.product_id=NEW.product_id);
@@ -1524,6 +1526,7 @@
   WHERE decision_acted_at IS NULL;
   WHERE discovery_evidence_ref IS NOT NULL;
   WHERE due_at IS NOT NULL;
+  WHERE fed_by IS NOT NULL AND revoked_at IS NULL;
   WHERE id = NEW.responsibility_id AND state = NEW.from_state;
   WHERE id=NEW.responsibility_id AND product_id=NEW.product_id;
   WHERE inbound_message_id IS NOT NULL AND status<>'cancelled';
@@ -3572,6 +3575,7 @@
   proposed_responsibility TEXT NOT NULL,
   proposer_founder_id TEXT,
   provider     TEXT NOT NULL CHECK(provider IN ('resend')),
+  provider TEXT PRIMARY KEY
   provider TEXT,
   published BOOLEAN DEFAULT FALSE
   purposes_json TEXT NOT NULL,
@@ -4226,6 +4230,7 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
+);
 );
 );
 );
@@ -5194,6 +5199,7 @@ CREATE TABLE strategic_syntheses (
 CREATE TABLE stressor_history (
 CREATE TABLE stripe_events (
 CREATE TABLE stripe_webhook_events (
+CREATE TABLE support_channel_feeds (
 CREATE TABLE support_channels (
 CREATE TABLE system_identities (
 CREATE TABLE taste_journals (
@@ -5340,6 +5346,7 @@ CREATE UNIQUE INDEX idx_rejection_streak_unique
 CREATE UNIQUE INDEX idx_responsibility_discovery_evidence
 CREATE UNIQUE INDEX idx_roi_monthly_product ON roi_monthly_summaries(product_id, month);
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
+CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
 END;

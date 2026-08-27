@@ -185,6 +185,31 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
         if (result.supportSpikeDetected) {
           await createSupportSpikeStressor(integration.product_id);
         }
+
+        // AND WHAT THE PEOPLE ACTUALLY WROTE, if the founder has said this
+        // provider feeds one of their support channels. The metrics sync above
+        // has counted these conversations since it existed and thrown the
+        // content away; `support_volume_7d` is how many people wrote.
+        //
+        // Failure here must not fail the metrics sync: they are two different
+        // observations sharing one credential, and losing the count because the
+        // messages could not be read would be trading a working sense for a new
+        // one. What it did is recorded on the sync either way, because a sense
+        // that stops feeding is a thing the founder needs to see.
+        try {
+          const { ingestIntercomMessages } = await import('./intercom-messages.js');
+          const ingest = await ingestIntercomMessages(
+            integration.product_id, credentials as { access_token: string });
+          if (!ingest.noChannel) {
+            metricsUpdated = [...metricsUpdated, 'customer_messages'];
+            recordsProcessed += ingest.accepted;
+          }
+        } catch (err) {
+          logger.error('intercom.messages_failed', {
+            productId: integration.product_id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
         break;
       }
 
