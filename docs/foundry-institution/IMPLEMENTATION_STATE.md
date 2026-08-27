@@ -208,12 +208,23 @@ founder reports an obligation → discovery → Visible                 │
             → founder authors a reply → bounded plan → revalidation
               → governed send_email → receipt → outcome UNRESOLVED
 
-provider adapter → POST /ingest/customer-message/:channelKey
+(no adapter exists) → POST /ingest/customer-message/:channelKey
   → canonical message evidence, attributed by channel binding
 ```
 
-**The chain is complete and closed.** What remains unproven is autonomous reply
-generation: the founder writes the reply, and that is now the deterministic
+**The chain is complete and closed FROM THE DOOR INWARDS, and its first link is
+an empty box.** This used to read "provider adapter →" as though one had been
+written. None has: the only files in `src/` that touch a channel's intake key
+are the door, the intake service and the letter page. The design record is
+explicit that "an adapter for a helpdesk, a mailbox, or a form is an ordinary
+caller", which is a statement of what would be needed, not of what exists.
+
+The distinction matters because the letter page acted on the wrong reading of
+it and told founders to "point your helpdesk or mailbox at that URL". A mailbox
+cannot POST JSON; a helpdesk posts its own shape and is refused. The page now
+states the shape the door takes, and a test pins the copy to the schema.
+
+What remains unproven is autonomous reply generation: the founder writes the reply, and that is now the deterministic
 human baseline (§10) any model-generated proposal must beat on a frozen
 contract.
 

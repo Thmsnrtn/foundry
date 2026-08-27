@@ -380,6 +380,19 @@ const customerMessageSection = (
 // channel, which is what lets a message be attributed without guessing from its
 // text. Withdrawing one is immediate, and an unknown key and a withdrawn key
 // are refused identically, so nobody learns which channels exist.
+//
+// THIS USED TO SAY "POINT YOUR HELPDESK OR MAILBOX AT THAT URL AND I WILL SEE
+// WHAT PEOPLE SEND." A mailbox cannot POST JSON at all, and a helpdesk posts
+// its OWN webhook shape, which this door's schema refuses as `fields_invalid`.
+// The design record is explicit that "an adapter for a helpdesk, a mailbox, or
+// a form is an ordinary caller" — and no adapter exists, so the sentence
+// described one that was never written.
+//
+// The founder would have found out by trying, and the refusal counter above
+// would have told them afterwards. That is the system failing gracefully, not
+// the system being honest: the copy sent them at it. It states the shape the
+// door takes now, which is both true and the thing they need in order to wire
+// anything to it.
 const supportChannelSection = (
   candidates: Array<{ responsibilityId: string; title: string }>,
   existing: Array<{ id: string; label: string; intakeKey: string; responsibilityTitle: string;
@@ -413,7 +426,16 @@ const supportChannelSection = (
           style="flex:1;min-width:220px;" />
         <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Add it</button>
       </form>`)}
-    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem;">Point your helpdesk or mailbox at that URL and I will see what people send. Seeing a message lets me show it to you — nothing more.</div>
+    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.4rem;">
+      Anything that can POST JSON to that URL can hand me a message. <strong>A mailbox
+      cannot do that on its own</strong> — it needs something in between, and a helpdesk
+      needs its webhook set to this shape rather than its own:
+      <code style="display:block;margin:0.35rem 0;font-size:0.68rem;white-space:pre;overflow-x:auto;">{"external_message_id": "...", "contact_email": "...", "body": "..."}</code>
+      <code style="font-size:0.68rem;">subject</code>, <code style="font-size:0.68rem;">conversation_ref</code>
+      and <code style="font-size:0.68rem;">source_observed_at</code> are optional. Anything
+      else is turned away and I will tell you above that it happened.
+      Seeing a message lets me show it to you — nothing more.
+    </div>
   </div>`;
 
 // Two people looked at the same effect and said different things.
