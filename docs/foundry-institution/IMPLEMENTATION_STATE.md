@@ -16,20 +16,26 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `cb7fbeb` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `a3987bd` on `claude/foundry-autonomous-continuation-0gents`.
+
+**This table was stale for many cycles and said so nowhere** — it read
+`cb7fbeb`, 228 migrations, 347 files. The document's own rule is at the top:
+replace claims here when they become false. A steward reads this to know what is
+true today, so a stale row here is the same defect the campaign spends its time
+removing, in the place it does the most damage.
 
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
-| Migrations | **228 files**, highest number **192**. Applied lexically at startup, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. Schema snapshot current and gated. |
-| Validation | Full suite green: **347 files / 3,060 tests**. `npm run check` green — and `check` now actually runs every gate, including the thirteen it used to omit. **The intermittent native abort has not recurred.** It ran at roughly one run in three before `closeDb` landed; 60 completed runs in this session's scratchpad carry zero abort signatures, on top of the 39 counted earlier. **The mechanism was never observed, so this is not a diagnosis** — see the live frontier item 4, which says what would eliminate the hypothesis and why not to spend more runs accumulating the same evidence. |
-| CI | Runs on `master`, `main` and `claude/**`. It triggered on master alone until now, so **no gate in this repository had ever run in CI** for the branch all the work is on. |
-| Ratchets | Unguarded mutating routes **114** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · statically unreachable modules **26** · write-only columns **69** · tables written and never read **4** · **unscoped product-shaped routes 2** (new). |
+| Migrations | **256 files**, highest number **219**. Applied lexically, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. **Snapshot freshness is a GATE now, not a note** — `check-schema-snapshot.mjs` runs at the front of the chain, because the reminder to regenerate it was right, was written into this file, and failed anyway an hour later. |
+| Validation | `npm run check` green end to end: **435 files / 3,775 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
+| CI | Runs on `master`, `main` and `claude/**`. |
+| Ratchets | Unguarded mutating routes **112** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · unreachable modules **22** · write-only columns **62** · unread tables **2** · unscoped product-shaped routes **2** · id tiebreaks **18** · star-select phantom columns **0** · **tables no code can reach 0** · **gates with no planted-defect test 0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
-| Public API | **Live.** Scoped, expiring, revocable keys issued from settings. Every v1 route needs a scope a founder can grant; the bidirectional gate enforces both directions. |
+| Public API | **Live.** Scoped, expiring, revocable keys issued from settings, from **exactly one issuer** — a second, unvalidated `createApiKey` was deleted and a test pins that only one file writes `api_keys`. No scope means "everything": the `'*'` wildcard is gone from `requireScope`, the MCP transport and both webhook doors. Every key-authenticated door asks a scope a founder can grant, including the two under `routes/api/webhooks/` that the v1-only scan could not see. |
 | Consequential effects | Converge through `services/outbound/gateway.ts` — kill switch, classification, budget, idempotency, audit. Inventory in `CONSEQUENTIAL_EFFECTS.json`; untraced count ratcheted to zero. |
 | AI spend | Central OpenRouter client. Atomic reserve → dispatch → settle across global/product/founder scopes. Refuses spend for a company that is not operating, naming which axis stopped it. |
-| Erasure | One implementation. Every table classified with a written reason, on two axes: by product, and — since an adversarial review found the gap — by PERSON across companies they do not own. An end-to-end sweep seeds every table and matches by containment, so an id inside a composite key is visible; only survivors with stated retention dispositions are allowed. Deletes where the row is wholly the person's, severs where it is the company's record naming a person. **Five tables are deliberately untouched pending an owner decision** (`OWNER_DECISIONS_PENDING` §10) — company assets on NOT NULL columns — which is a live gap, not a footnote. |
+| Erasure | One implementation, every table classified with a written reason, on two axes: by product and by PERSON across companies they do not own. **Five tables remain deliberately untouched pending an owner decision** (`OWNER_DECISIONS_PENDING` §10) — a live gap, not a footnote. |
 
 ## The institution's senses
 
@@ -60,6 +66,33 @@ Measured at `cb7fbeb` on `claude/foundry-autonomous-continuation-0gents`.
   ("you have 2 work blocks; these need 3"), what each side loses, what else was
   weighed, and whether Foundry can order the alternatives on money — reported
   as itself in all four states, including "I cannot tell you".
+- **A customer's own words, for the first time.** The support responsibility
+  chain was complete from the door inwards with an empty box at the first link:
+  `POST /ingest/customer-message/:channelKey` existed and nothing called it, so
+  the responsibility could be understood and shadowed and never assisted.
+  `syncIntercomMetrics` had counted Intercom conversations since it existed and
+  thrown the content away — `support_volume_7d` is HOW MANY people wrote.
+  `integrations/intercom-messages.ts` is the first adapter, and an ORDINARY
+  CALLER of that door: it inherits the channel binding, the tenant scope, the
+  dedup, the bounded fields, migration 217's future-timestamp refusal and the
+  refusal counter the founder reads.
+
+  **The founder says which channel a provider feeds** (migration 219's
+  `fed_by`, one live channel per provider enforced by a partial unique index).
+  Foundry may not choose: a product holds several channels bound to different
+  responsibilities, and picking one would invent the linkage migration 126
+  forbids. No statement, no ingestion.
+
+  **What it cannot see, stated in the module and repeated on the page**: the
+  first message only, of conversations created in the last seven days, from a
+  contact with an email address; no replies and nothing a teammate wrote; at
+  most 150, and a hit cap is reported rather than passed off as a total.
+  "I could not look" is a distinct result from "nobody wrote".
+
+  **E2 — local runtime.** Fifteen tests against a mocked Intercom. It has never
+  seen a real account, a real customer or a real conversation; that rung needs
+  an owner-connected account, not more local work.
+
 - Everything else a company can tell Foundry arrives through the four ingest
   routes, twelve integration adapters, two webhooks, and the founder typing
   into The Letter.
