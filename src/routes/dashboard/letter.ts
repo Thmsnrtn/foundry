@@ -401,7 +401,8 @@ const customerMessageSection = (
 const supportChannelSection = (
   candidates: Array<{ responsibilityId: string; title: string }>,
   existing: Array<{ id: string; label: string; intakeKey: string; responsibilityTitle: string;
-    revoked: boolean; refusalCount: number; lastRefusalReason: string | null }>,
+    revoked: boolean; refusalCount: number; lastRefusalReason: string | null;
+    fedBy: string | null }>,
   refusalLabels: Record<string, string>,
   appUrl: string,
 ) => candidates.length === 0 && existing.length === 0 ? '' : html`
@@ -415,6 +416,16 @@ const supportChannelSection = (
         <input type="text" readonly value="${appUrl}/ingest/customer-message/${c.intakeKey}"
           style="width:100%;font-size:0.72rem;font-family:monospace;margin-top:0.25rem;cursor:pointer;"
           onclick="this.select()" />
+        <form method="POST" action="/letter/channels/${c.id}/feed" style="margin-top:0.3rem;">
+          <input type="hidden" name="provider" value="${c.fedBy ? '' : 'intercom'}" />
+          <button type="submit" class="btn btn-ghost" style="font-size:0.7rem;padding:0.2rem 0.45rem;">
+            ${c.fedBy
+              ? `Stop reading from ${c.fedBy}`
+              : 'Read what people write in Intercom'}
+          </button>
+          ${c.fedBy ? html`<span style="font-size:0.7rem;color:var(--text-muted);margin-left:0.4rem;">
+            I read this from ${c.fedBy}.</span>` : ''}
+        </form>
         ${c.refusalCount > 0 ? html`
         <div style="font-size:0.74rem;color:#ffb347;margin-top:0.25rem;">
           I have turned away ${String(c.refusalCount)} ${c.refusalCount === 1 ? 'message' : 'messages'} on this since one last got through — ${refusalLabels[c.lastRefusalReason ?? ''] ?? 'I could not use what was sent'}. Somebody wrote and I did not keep it.
@@ -1979,6 +1990,39 @@ letterRoutes.post('/letter/channels/:channelId/revoke', async (c) => {
     founderId: founder.id as string,
   });
   if (!revoked) return c.text('Refused', 403);
+  return c.redirect('/letter');
+});
+
+// WHICH PROVIDER FEEDS THIS CHANNEL — the founder's statement, never Foundry's
+// inference. A product can hold several channels bound to different
+// responsibilities, so an adapter that chose one would be deciding which
+// responsibility a customer's message belongs to. The refusals are surfaced
+// rather than swallowed: `provider_taken` in particular is a real thing a
+// founder needs to see, because it means another channel already claims that
+// provider and they are about to wonder why nothing arrives.
+letterRoutes.post('/letter/channels/:channelId/feed',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+  const provider = String(body.provider ?? '').trim() || null;
+  const { setChannelFeed } = await import(
+    '../../services/institution/customer-message-intake.js'
+  );
+  const result = await setChannelFeed({
+    productId: ctx.productId, channelId: c.req.param('channelId'), provider,
+  });
+  if ('refused' in result) {
+    const said: Record<string, string> = {
+      unknown_provider: 'I have no adapter for that, so nothing would arrive.',
+      unknown_channel: 'That is not a channel of yours.',
+      provider_taken: 'Another of your channels already receives from there. '
+        + 'Two would mean I had to choose which responsibility a message belongs '
+        + 'to, and I will not guess that.',
+    };
+    return c.text(said[result.refused] ?? result.refused, 400);
+  }
   return c.redirect('/letter');
 });
 

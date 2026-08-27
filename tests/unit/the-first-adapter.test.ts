@@ -122,6 +122,55 @@ describe('the founder says what feeds a channel; Foundry does not guess', () => 
   });
 });
 
+describe('the founder can actually say it, on the page that describes it', () => {
+  // A CAPABILITY THE COPY DESCRIBES AND THE SURFACE DOES NOT OFFER is the same
+  // defect as the sentence that sent founders at a JSON door — one level along.
+  // The service function and its refusals existed before this route did, so
+  // this closes the gap rather than assuming it was never open.
+  async function post(channelId: string, provider: string): Promise<Response> {
+    const { Hono } = await import('hono');
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never,
+        { id: 'f_ad', email: 'ad@example.com', preferences: {} } as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
+    });
+    app.route('/', letterRoutes as unknown as Hono);
+    return app.request(`/letter/channels/${channelId}/feed`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ provider }).toString(),
+    });
+  }
+
+  it('sets the feed, and the channel reports it', async () => {
+    const res = await post(channelA.id, 'intercom');
+    expect([302, 303]).toContain(res.status);
+    const channels = await getSupportChannels(P);
+    expect(channels.find((c) => c.id === channelA.id)?.fedBy).toBe('intercom');
+  });
+
+  it('unsets it when the provider is blank', async () => {
+    await post(channelA.id, 'intercom');
+    await post(channelA.id, '');
+    const channels = await getSupportChannels(P);
+    expect(channels.find((c) => c.id === channelA.id)?.fedBy).toBeNull();
+  });
+
+  it('tells the founder WHY a second channel cannot claim the same provider', async () => {
+    await post(channelA.id, 'intercom');
+    const res = await post(channelB.id, 'intercom');
+    expect(res.status).toBe(400);
+    const said = await res.text();
+    expect(said).toMatch(/already receives/i);
+    // The reason matters more than the refusal: they are about to wonder why
+    // nothing arrives on the second one.
+    expect(said).toMatch(/will not guess/i);
+  });
+});
+
 describe('what the customer wrote reaches the responsibility', () => {
   beforeEach(async () => {
     await setChannelFeed({ productId: P, channelId: channelA.id, provider: 'intercom' });
