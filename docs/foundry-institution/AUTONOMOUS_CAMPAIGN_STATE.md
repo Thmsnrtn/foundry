@@ -90,7 +90,7 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `cf9f8aa`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `5ecce1f`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 255 files, highest **218**. Ordering gated. **Snapshot
   freshness is now a GATE, not a note.** It went stale twice in one session —
@@ -102,7 +102,7 @@ inherited list because it was inherited.
   the chain. **A note that has to be remembered at the right moment is not a
   control; the distance between a mistake and its discovery is the thing to
   fix.**
-- **Validation:** `npm run check` green end to end — **432 files / 3,749 tests**,
+- **Validation:** `npm run check` green end to end — **434 files / 3,759 tests**,
   `CHECK_EXIT=0`, read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
   also runs `tests/simulation` and `tests/evals`. Checkpoints before this
@@ -225,6 +225,30 @@ matters is that one of them was being TESTED.**
   interpolated it bare. `src/prompts/README.md` claimed the eval framework
   imports the same builder production uses; nothing outside `src/prompts/`
   referenced `GOLDEN_CASES` at all.
+
+- **A denylist was the only thing between third-party text and twelve agents.**
+  `agents/base.ts` builds every SCP agent's prompt, and its two most external
+  blocks — integration summaries from Intercom, Linear, GitHub and Sentry, and
+  agent messages quoting them — went through `sanitizeForPrompt` (seventeen
+  regexes, plus tag stripping) and were then interpolated BARE. `sanitize.ts`
+  documents the stronger mechanism a few lines away and says why: a fenced block
+  plus a sentence in the SYSTEM prompt, because "a delimiter with nothing telling
+  the model what the delimiter is for is decoration". **Two of seventy-eight
+  model-calling files used it.** Both now, not either — the denylist is also what
+  redacts PII before these reach a provider, and the fence is what holds when the
+  phrase is one nobody listed.
+
+  **Good news from the same sweep, worth recording so it is not re-investigated:
+  customer message text never reaches a model at all.** The three files reading
+  `inbound_customer_messages` make zero model calls between them.
+
+- **A door the copy sent them at.** The letter page told founders to "point your
+  helpdesk or mailbox at that URL". A mailbox cannot POST JSON; a helpdesk posts
+  its own shape and is refused. The design record says an adapter "is an ordinary
+  caller" — a statement of what would be NEEDED — and none exists. The page
+  states the shape the door takes now, pinned to the zod schema in both
+  directions. `IMPLEMENTATION_STATE` drew "provider adapter →" into a chain it
+  called complete; it says "(no adapter exists)" now.
 
 - **A door that asked whether the key was real and never what it was for.**
   `routes/api/webhooks/transcripts.ts` authenticated an API key, read its
@@ -373,6 +397,18 @@ after being written, by its own author. The first two were replaced. The third
 became `check-schema-snapshot.mjs`, because a note that has to be remembered at
 the right moment is not a control. **An instrument that agrees with you is the
 thing to check first, and this file is an instrument.**
+
+**AND A REPAIR THAT WOULD HAVE LET A ROLLBACK ERASE A FAILURE — the lens
+producing a false positive, caught by a test that stated its reasoning.**
+`developmentRecord` tallies reconstruction CLAIMS, and a change checked by
+nothing has no claim, so it lands in no bucket while the founder reads "Across
+everything I have changed and recorded". Counting from
+`development_change_plans` instead looks like the obvious repair. Three tests
+went red and one said why: a rollback mutates the plan and cannot touch the
+claim, so tallying plans would let a rolled-back failure vanish — Foundry
+improving its own record by undoing something. **The obvious repair was the
+defect.** Reverted, answer recorded next to the function. Twice now a test's
+COMMENT has done the work its expectation could not.
 
 **THE HARDER HALF OF "NEVER WEAKEN A TEST", MET HEAD-ON.**
 `single-api-key-authenticator.test.ts` REQUIRED the wildcard to be present —
