@@ -16,7 +16,7 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `f8a9733` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `5a0d201` on `claude/foundry-autonomous-continuation-0gents`.
 
 **This table was stale for many cycles and said so nowhere** — it read
 `cb7fbeb`, 228 migrations, 347 files. The document's own rule is at the top:
@@ -28,7 +28,7 @@ removing, in the place it does the most damage.
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **256 files**, highest number **219**. Applied lexically, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. **Snapshot freshness is a GATE now, not a note** — `check-schema-snapshot.mjs` runs at the front of the chain, because the reminder to regenerate it was right, was written into this file, and failed anyway an hour later. |
-| Validation | `npm run check` green end to end: **438 files / 3,807 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
+| Validation | `npm run check` green end to end: **439 files / 3,814 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
 | CI | Runs on `master`, `main` and `claude/**`. |
 | Ratchets | Unguarded mutating routes **112** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · unreachable modules **22** · write-only columns **62** · unread tables **2** · unscoped product-shaped routes **2** · id tiebreaks **18** · star-select phantom columns **0** · **tables no code can reach 0** · **gates with no planted-defect test 0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -113,6 +113,18 @@ removing, in the place it does the most damage.
   responsibility owning that channel and carry a proposal authored for that same
   message, and a grant is refused to a responsibility that has not reached
   Shadowing. **The ladder cannot be skipped even by a test fixture.**
+
+- **Foundry can say what it cannot SEE, which was the dead end at the first
+  rung.** `getShadowableResponsibilities` returns nothing when the company has no
+  observation channel, and a channel exists only once a reading has arrived — so
+  a company that has connected nothing and posted nothing gets no watch offer
+  and no reason for its absence. Understood → Shadowing cannot be crossed until
+  a number comes from outside, which means **the first thing every new company
+  experienced, after doing exactly what it was asked, was silence.** The Letter
+  names the responsibilities, names the remedy, and says what Foundry will not
+  do meanwhile: guess a number. Scoped to TOTAL absence — which number speaks
+  for a given responsibility is the founder's judgement, and asserting relevance
+  Foundry cannot compute would be the same defect from the other side.
 
 - **Foundry can say what it cannot carry.** The intake takes eight kinds of
   obligation, `discovery.ts` maps them onto four capabilities, and
