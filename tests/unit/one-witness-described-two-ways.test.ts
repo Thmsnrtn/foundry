@@ -44,7 +44,7 @@ describe('a reporter reads as what it is', () => {
 
   it('a system that did not say what it was is not given a name', () => {
     expect(reporterPhrase('external:unnamed_system'))
-      .toBe('a system you connected, which did not say what it was');
+      .toBe('a system you connected that did not say what it was');
     expect(reporterPhrase('external:')).toMatch(/did not say what it was/);
   });
 

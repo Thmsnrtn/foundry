@@ -270,7 +270,19 @@ describe('what the founder is told about an outcome', () => {
     const { getFounderAssistingActivity } = await import(
       '../../src/services/institution/responsibility-assisted-email.js');
     const activity = await getFounderAssistingActivity(P);
-    expect(activity.some((a) => a.detail.includes('a system you connected told me'))).toBe(true);
+    // THE SUBJECT IS THAT A CONNECTED SYSTEM IS TOLD APART FROM THE OWNER, and
+    // it survives: the phrasing gained the name the system gave itself, which
+    // says MORE than the category did. The assertion follows the subject rather
+    // than the sentence it was written against.
+    // THE LINE, NOT THE PAGE. My first version of this joined every activity
+    // line and asserted "you told me" was absent — but other lines on the same
+    // page legitimately say it, because the founder really did report those.
+    // The subject is that THIS witness is told apart from the owner, so the
+    // assertion looks at the line the external report produced.
+    const line = activity.map((a) => a.detail).find((d) => d.includes('rota_system'));
+    expect(line, 'the external report should produce a line of its own').toBeTruthy();
+    expect(line!).toMatch(/a system you connected/);
+    expect(line!).not.toMatch(/you told me/);
   });
 
   it('refuses an unbounded detail rather than storing or truncating it', async () => {

@@ -54,9 +54,14 @@ export function reporterPhrase(reporter: string): string {
   if (reporter === 'customer:wrote_again') return 'the customer, by writing again';
   if (reporter.startsWith('external:')) {
     const name = reporter.slice('external:'.length).trim();
+    // NO INTERNAL COMMA: this phrase is composed into sentences — "… told me
+    // it did not work" — and a trailing clause set off by a comma reads as a
+    // dangling one there. It has to work standing alone on the disputed card
+    // AND inside a sentence on the assisting line, so it is a single noun
+    // phrase in both.
     return name && name !== 'unnamed_system'
-      ? `a system you connected, calling itself “${name}”`
-      : 'a system you connected, which did not say what it was';
+      ? `a system you connected calling itself “${name}”`
+      : 'a system you connected that did not say what it was';
   }
   return 'somebody outside';
 }

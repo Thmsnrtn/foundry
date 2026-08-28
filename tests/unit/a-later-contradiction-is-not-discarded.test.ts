@@ -142,7 +142,7 @@ describe('an outcome that has already been settled', () => {
     // Names the one witness the verdict rests on. "2 separate reports" would be
     // counting a report that says the opposite; "somebody outside" would be
     // forgetting the witness it has.
-    expect(line.detail).toContain('a system you connected told me');
+    expect(line.detail).toMatch(/a system you connected/);
     expect(line.detail).not.toContain('2 separate reports');
     expect(line.detail).not.toContain('somebody outside');
   });
