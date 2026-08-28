@@ -679,6 +679,41 @@ const cannotCarrySection = (
       </div>`)}
   </div>`;
 
+// I UNDERSTAND THESE AND I CANNOT SEE ANY OF THEM.
+//
+// The offer below renders only when the company has an observation channel, and
+// a channel exists only once a reading has actually arrived. So a company that
+// has connected nothing and posted nothing gets no offer — correctly — and no
+// reason for its absence. The founder reported an obligation, answered
+// Foundry's questions about it, watched it reach Understood, and then nothing.
+//
+// That silence is the first rung of the ladder, and every new company starts
+// below it. "Nothing is happening" and "I cannot see" are different facts; the
+// founder can act on the second and can do nothing at all with the first.
+//
+// The remedy is named because it is theirs to take: connect something, or post
+// a number to the ingest URL on Settings. Foundry does not offer to guess a
+// number in the meantime.
+const cannotWatchSection = (items: Array<{ responsibilityId: string; title: string }>) =>
+  items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What I cannot see yet</div>
+    <div style="font-size:0.82rem;color:var(--text-primary);margin-bottom:0.5rem;">
+      I understand ${items.length === 1 ? 'this' : 'these'}, and I have no way to
+      watch ${items.length === 1 ? 'it' : 'them'}. Nothing has reported a number
+      to me — not through an integration, and not through your ingest URL — so I
+      have nothing to form an expectation against.
+    </div>
+    ${items.map((item) => html`
+      <div style="padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);font-size:0.86rem;color:var(--text-primary);">${item.title}</div>`)}
+    <div style="font-size:0.74rem;color:var(--text-muted);margin-top:0.5rem;">
+      Connect a tool, or post a reading to the ingest URL on
+      <a href="/settings" style="color:var(--text-muted);">Settings</a>, and I
+      will ask you what you would expect to see. Until then I am recording what
+      you tell me and nothing more — I am not going to guess a number.
+    </div>
+  </div>`;
+
 const metricWatchSection = (
   items: Array<{ responsibilityId: string; title: string; channels: Array<{ field: string; label: string }> }>,
 ) => items.length === 0 ? '' : html`
@@ -1062,6 +1097,9 @@ letterRoutes.get('/letter', async (c) => {
   }));
   const { getShadowableResponsibilities } = await import('../../services/institution/external-shadowing.js');
   const shadowable = await getShadowableResponsibilities(ctx.productId);
+  const { getUnwatchableResponsibilities } = await import(
+    '../../services/institution/external-shadowing.js');
+  const unwatchable = await getUnwatchableResponsibilities(ctx.productId);
   const { getStepAwayHorizon } = await import(
     '../../services/institution/absence-summary.js');
   const stepAway = await getStepAwayHorizon(ctx.productId);
@@ -1189,6 +1227,7 @@ letterRoutes.get('/letter', async (c) => {
       ${permissionSection(assistingCandidates)}
       ${darkenedWatchSection(darkenedWatches)}
       ${metricWatchSection(shadowable)}
+      ${cannotWatchSection(unwatchable)}
       ${cannotCarrySection(cannotCarry)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
       ${supportChannelSection(channelCandidates, supportChannels, CHANNEL_REFUSAL_LABELS,

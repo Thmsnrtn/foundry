@@ -306,3 +306,60 @@ export async function resolveExternalMetricShadowing(
   });
   return { classification, observationsConsidered: rows.length, learnedClaimId };
 }
+
+/**
+ * Responsibilities Foundry understands and has no way to watch, because nothing
+ * has ever reported a number to it.
+ *
+ * `getShadowableResponsibilities` above returns an empty list when the company
+ * has no observation channel — `if (!channels.length) return []` — and the
+ * "What would you expect to see?" offer simply does not render. That is correct
+ * behaviour and a silent dead end: the founder reported an obligation, answered
+ * Foundry's questions about it, watched it reach Understood, and then nothing.
+ * No offer, and no reason for its absence.
+ *
+ * IT IS THE FIRST RUNG OF THE LADDER AND EVERY NEW COMPANY STARTS BELOW IT. A
+ * channel becomes available when an `external_metric_ingest` reading has
+ * actually arrived, so a company that has connected nothing and posted nothing
+ * has no channels by construction. Understood → Shadowing is the transition
+ * that turns a described obligation into something Foundry watches, and it
+ * cannot be crossed until a number arrives from outside.
+ *
+ * The distinction this preserves is the one the institution is built on:
+ * "nothing is happening" and "I cannot see" are different facts. The founder
+ * can act on the second — connect something, post a reading — and can do
+ * nothing at all with silence.
+ *
+ * SCOPED TO TOTAL ABSENCE ON PURPOSE. When channels DO exist, whether any of
+ * them is relevant to a particular responsibility is the founder's judgement,
+ * not Foundry's — it does not know which number speaks for "answer the Hartley
+ * enquiry". Reporting "no relevant channel" would be Foundry asserting a
+ * relevance it cannot compute. Reporting "no channel at all" is arithmetic.
+ */
+export interface UnwatchableResponsibility {
+  responsibilityId: string;
+  title: string;
+}
+
+export async function getUnwatchableResponsibilities(
+  productId: string,
+): Promise<UnwatchableResponsibility[]> {
+  const builtIn = await availableObservationChannels(productId);
+  if (builtIn.length > 0) return [];
+
+  const declared = await getObservationChannels(productId);
+  const reported = new Set((await query(
+    `SELECT DISTINCT json_extract(payload_json,'$.field') AS field FROM signal_events
+      WHERE product_id=? AND source='external_metric_ingest'`, [productId],
+  )).rows.map((r) => String((r as Record<string, unknown>).field)));
+  if (declared.some((c) => !c.revoked && reported.has(c.channelKey))) return [];
+
+  const rows = await query(
+    `SELECT id,title FROM institutional_responsibilities
+      WHERE product_id=? AND state='understood' AND disposition='active'
+      ORDER BY created_at, rowid`,
+    [productId],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>)
+    .map((row) => ({ responsibilityId: String(row.id), title: String(row.title) }));
+}
