@@ -141,3 +141,168 @@ export async function observeFoundryRepositoryReality(input: {
   });
   return { observed: true, productId, observation, result };
 }
+
+// =============================================================================
+// A SECOND OBSERVATION, TO FIND OUT WHETHER THIS PATH GENERALISES
+//
+// One recursive case is an anecdote. The machinery it feeds — expectation,
+// comparison, verdict, what the founder is shown — was exercised by exactly one
+// check, and a mechanism that has only ever run on one input has not been shown
+// to be a mechanism. This is the second, chosen against the same bar the first
+// one set rather than a lower one.
+//
+// WHAT IS OBSERVED. The ratchet baselines under `docs/db/` are committed
+// descriptions of reality, exactly as the schema snapshot is: each line is a
+// standing exemption naming a module, a source line, a table or a column. When
+// the thing it names stops existing, the line becomes a permanent exemption for
+// nothing — the ratchet's count can no longer reach zero by fixing anything,
+// and a future reader is told an offender exists that does not.
+//
+// It is a real recurring obligation in this repository (deleting a module or a
+// table strands its baseline entries), it is deterministic, it is already
+// enforced externally by the gates themselves, and getting it wrong misleads a
+// reader without changing any behaviour.
+//
+// WHAT IS NOT OBSERVED, AND WHY. `unguarded-route-baseline.txt` and
+// `tenant-scope-baseline.txt` name ROUTES. Deciding whether a route still
+// exists means enumerating the routes, which is what those scanners do — and a
+// second copy of a detector, drifting from the first, is a defect this
+// repository has already paid for. Only entries whose liveness is a plain
+// existence question are checked here, and the rest are left to their gates.
+// =============================================================================
+
+export const BASELINE_LIVENESS_CHECK = 'ratchet-baseline-liveness';
+
+export type BaselineEntryKind = 'module' | 'source_line' | 'table' | 'column';
+
+export interface BaselineEntry { baseline: string; kind: BaselineEntryKind; value: string }
+
+/** The baselines whose entries are existence questions, and what each names. */
+export const LIVENESS_BASELINES: ReadonlyArray<{ path: string; kind: BaselineEntryKind }> = [
+  { path: 'docs/db/unreachable-modules-baseline.txt', kind: 'module' },
+  { path: 'docs/db/id-tiebreak-baseline.txt', kind: 'source_line' },
+  { path: 'docs/db/integration-status-literals-baseline.txt', kind: 'source_line' },
+  { path: 'docs/db/unread-tables-baseline.txt', kind: 'table' },
+  { path: 'docs/db/unreferenced-tables-baseline.txt', kind: 'table' },
+  { path: 'docs/db/write-only-columns-baseline.txt', kind: 'column' },
+];
+
+/** The entries a baseline file actually asserts: comments and blanks are not
+ * exemptions, and treating them as ones would report drift that is not there. */
+export function parseBaselineEntries(baseline: string, kind: BaselineEntryKind, contents: string): BaselineEntry[] {
+  return contents.split('\n').map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'))
+    .map((value) => ({ baseline, kind, value }));
+}
+
+/**
+ * Which baselined exemptions no longer name anything that exists.
+ *
+ * Deterministic and total, like `compareSchemaToSnapshot`: the answer depends
+ * only on the entries and the reality handed in, so the same repository state
+ * always produces the same observation.
+ *
+ * `fileLines` maps a source path to its line count; a path absent from the map
+ * is a file that is not there. A `source_line` entry is stale when its file is
+ * gone OR when the file no longer reaches that line, because a line past the
+ * end cannot be the offender the baseline recorded.
+ */
+export function compareBaselinesToReality(input: {
+  entries: readonly BaselineEntry[];
+  liveTables: Iterable<string>;
+  liveColumns: Iterable<string>;
+  fileLines: ReadonlyMap<string, number>;
+}): { result: 'passed' | 'failed'; detail: string } {
+  const tables = new Set(input.liveTables);
+  const columns = new Set(input.liveColumns);
+
+  const stale = input.entries.filter((entry) => {
+    if (entry.kind === 'table') return !tables.has(entry.value);
+    if (entry.kind === 'column') return !columns.has(entry.value);
+    if (entry.kind === 'module') return !input.fileLines.has(entry.value);
+    const at = entry.value.lastIndexOf(':');
+    // An entry that does not carry a line is not a `source_line` entry at all.
+    // Guessing which file it meant would invent an offender.
+    if (at <= 0) return true;
+    const path = entry.value.slice(0, at);
+    const line = Number(entry.value.slice(at + 1));
+    const lines = input.fileLines.get(path);
+    return lines === undefined || !Number.isInteger(line) || line < 1 || line > lines;
+  });
+
+  if (!stale.length) {
+    return {
+      result: 'passed',
+      detail: `${input.entries.length} baselined exemption(s) across ${LIVENESS_BASELINES.length} baselines all still name something that exists`,
+    };
+  }
+  return {
+    result: 'failed',
+    detail: `${stale.length} baselined exemption(s) name something that no longer exists: `
+      + stale.slice(0, 10).map((e) => `${e.baseline.split('/').pop()} → ${e.value}`).join(', '),
+  };
+}
+
+export type BaselineLivenessOutcome =
+  | { observed: false; reason: 'identity_not_established' | 'baselines_unreadable' }
+  | { observed: true; productId: string; observation: DevelopmentObservation; result: 'passed' | 'failed' };
+
+/**
+ * Observe whether Foundry's own standing exemptions still describe its reality,
+ * and record it as ordinary canonical evidence.
+ *
+ * Same shape as `observeFoundryRepositoryReality` in every respect that
+ * matters: identity resolved here and nowhere deeper, no command run, no file
+ * written, nothing repaired, and the observation handed to the same intake any
+ * other company's evidence goes through.
+ */
+export async function observeFoundryBaselineLiveness(input: {
+  repositoryRoot?: string; observedAt?: Date;
+} = {}): Promise<BaselineLivenessOutcome> {
+  const productId = await resolveFoundryProductId();
+  if (!productId) return { observed: false, reason: 'identity_not_established' };
+
+  const root = input.repositoryRoot ?? process.cwd();
+  const entries: BaselineEntry[] = [];
+  for (const baseline of LIVENESS_BASELINES) {
+    let contents: string;
+    try {
+      contents = readFileSync(resolve(root, baseline.path), 'utf8');
+    } catch {
+      // Evidence that could not be gathered is not evidence of drift, exactly
+      // as an unreadable snapshot is not a failing check.
+      return { observed: false, reason: 'baselines_unreadable' };
+    }
+    entries.push(...parseBaselineEntries(baseline.path, baseline.kind, contents));
+  }
+
+  const tables = (await query(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+  )).rows as unknown as Array<Record<string, unknown>>;
+  const liveTables = tables.map((r) => String(r.name));
+
+  const liveColumns: string[] = [];
+  for (const table of liveTables) {
+    const cols = (await query('SELECT name FROM pragma_table_info(?)', [table]))
+      .rows as unknown as Array<Record<string, unknown>>;
+    for (const col of cols) liveColumns.push(`${table}.${String(col.name)}`);
+  }
+
+  const fileLines = new Map<string, number>();
+  for (const entry of entries) {
+    if (entry.kind !== 'module' && entry.kind !== 'source_line') continue;
+    const at = entry.value.lastIndexOf(':');
+    const path = entry.kind === 'module' ? entry.value : (at > 0 ? entry.value.slice(0, at) : entry.value);
+    if (fileLines.has(path)) continue;
+    try {
+      fileLines.set(path, readFileSync(resolve(root, path), 'utf8').split('\n').length);
+    } catch { /* absent stays absent: the comparison reads a missing key as gone */ }
+  }
+
+  const { result, detail } = compareBaselinesToReality({ entries, liveTables, liveColumns, fileLines });
+
+  const observation = await recordDevelopmentObservation({
+    productId, check: BASELINE_LIVENESS_CHECK, result, detail, observedAt: input.observedAt,
+  });
+  return { observed: true, productId, observation, result };
+}

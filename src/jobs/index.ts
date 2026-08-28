@@ -2745,6 +2745,15 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             { jobName: 'institutional_judgment_tick' },
           );
         }
+        // The second check of the same shape, so the machinery downstream is
+        // exercised by more than one input. Nothing here special-cases it: the
+        // reader that puts a failing check on The Letter takes the latest
+        // observation per check and needed no change to see this one.
+        const { observeFoundryBaselineLiveness } = await import(
+          '../services/foundry/self-observation.js'
+        );
+        const liveness = await observeFoundryBaselineLiveness();
+        selfObserved = selfObserved || liveness.observed;
       } catch (err) {
         logger.error(
           `foundry self-observation failed: ${err instanceof Error ? err.message : String(err)}`,
