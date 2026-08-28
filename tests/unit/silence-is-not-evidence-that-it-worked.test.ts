@@ -94,7 +94,17 @@ beforeEach(async () => {
   // Only the witnesses reset. The reply itself is built once, through the
   // production path, because rebuilding it per test would mean re-deriving a
   // grant and a transition each time for no added coverage.
-  await query('DELETE FROM signal_events WHERE product_id=? AND source=?', [P, 'intercom_conversation']);
+  // EVERY WITNESS SHAPE, not just the observer's. A `reportEffectOutcome` row
+  // from an earlier test is source `effect_outcome_report`, and leaving it
+  // standing meant a later test inherited a DISAGREEMENT: the reconciliation
+  // correctly returned `conflicting`, and an assertion expecting
+  // `verified_failure` failed for a reason that was not its subject. The
+  // teardown clears the outcome evidence for this effect however it arrived.
+  await query(
+    `DELETE FROM signal_events
+      WHERE product_id=?
+        AND (source IN ('intercom_conversation','effect_outcome_report')
+             OR event_type IN ('support_reply_effective','support_reply_failed'))`, [P]);
   // THE EVIDENCE REF HAS TO GO BACK TOO, and leaving it out cost me a false
   // finding. The reconciliation selector compares how many witnesses exist
   // against how many the recorded verdict was decided from, so an action still
@@ -347,5 +357,70 @@ describe('when the founder and the customer disagree', () => {
     expect(page).toMatch(/not going to pick one/i);
     // And no internal identifier reaches the founder on the way.
     expect(page).not.toContain('founder:f_oc');
+  });
+});
+
+describe('the failure reaches the moment more authority is asked for', () => {
+  // THE CAPSTONE OF THE LOOP, AND THE SENTENCE THAT MATTERS MOST.
+  //
+  // `getAssistingCandidates` carries `verifiedFailures` and
+  // `lastVerifiedOutcome` so that a founder deciding whether to let Foundry go
+  // on helping is told what happened last time. Its own comment says why:
+  // Foundry "could ask to keep helping with something its last action
+  // demonstrably broke, and the founder was not told while deciding".
+  //
+  // Those two figures read `outbound_actions.outcome_status='verified_failure'`
+  // — and until the conversation observer existed, NOTHING on the support path
+  // could write one. A verdict needed an outside system to POST to the
+  // effect-outcome door, which nothing does. So the caution the surface was
+  // built to express had never once been exercised by real evidence.
+  //
+  // This is that path, end to end: the customer wrote again, the scheduled
+  // reconciliation turned it into a verdict, and the verdict reaches the
+  // authority request. Learning does not silently expand authority — and it
+  // must not silently fail to constrain it either.
+  it('a customer writing again is what the founder is shown before granting more', async () => {
+    const { reconcileAssistedSupportEmail } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    const { getAssistingCandidates } = await import(
+      '../../src/services/institution/assisting-admission.js');
+
+    const before = (await getAssistingCandidates(P)).find((c) => c.responsibilityId === RESP);
+    expect(before, 'the responsibility should be a candidate at all').toBeTruthy();
+    expect(before!.verifiedFailures).toBe(0);
+    expect(before!.lastVerifiedOutcome).toBeNull();
+
+    mockConversation([part('p3', 'user', 2)]);
+    await observeIntercomReplyOutcomes(P, { access_token: 't' });
+    await reconcileAssistedSupportEmail(P, actionId);
+
+    const after = (await getAssistingCandidates(P)).find((c) => c.responsibilityId === RESP);
+    expect(after!.verifiedFailures).toBe(1);
+    expect(after!.lastVerifiedOutcome).toBe('verified_failure');
+  });
+
+  it('a disagreement is not counted as a failure, because Foundry does not know', async () => {
+    // Learned from a leaked fixture: when the founder had already reported the
+    // reply worked, the verdict is `conflicting` and `verifiedFailures` stays
+    // zero. That is correct and worth pinning. Counting a disagreement as a
+    // failure would be Foundry picking a side at the exact moment it is asking
+    // for more authority — and picking the side that flatters its own caution
+    // is still picking a side.
+    const { reportEffectOutcome } = await import(
+      '../../src/services/institution/effect-outcome.js');
+    const { reconcileAssistedSupportEmail } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    const { getAssistingCandidates } = await import(
+      '../../src/services/institution/assisting-admission.js');
+
+    await reportEffectOutcome({
+      productId: P, effectId: 'eff_oc', verdict: 'achieved', reporter: 'founder:f_oc' });
+    mockConversation([part('p3', 'user', 2)]);
+    await observeIntercomReplyOutcomes(P, { access_token: 't' });
+    await reconcileAssistedSupportEmail(P, actionId);
+
+    const candidate = (await getAssistingCandidates(P)).find((c) => c.responsibilityId === RESP);
+    expect(candidate!.verifiedFailures).toBe(0);
+    expect(candidate!.lastVerifiedOutcome).toBeNull();
   });
 });
