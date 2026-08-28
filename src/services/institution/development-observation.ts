@@ -19,8 +19,32 @@ import { query } from '../../db/client.js';
  * the check and its result, so an expectation and an observation agree on
  * naming without either being able to see the other.
  */
+const EVENT_TYPE_PREFIX = 'development_verified:';
+
 export function developmentEventType(check: string, result: string): string {
-  return `development_verified:${check.trim()}:${result.trim()}`;
+  const c = check.trim();
+  const r = result.trim();
+  // The event type IS the identity, and it is colon-delimited. A check or
+  // result carrying its own colon makes that identity ambiguous, and the
+  // ambiguity is not cosmetic: resolution reads the check back out of the
+  // event type to decide which observations are about the same subject.
+  if (!c || !r || c.includes(':') || r.includes(':')) {
+    throw new Error('development observation identity refused');
+  }
+  return `${EVENT_TYPE_PREFIX}${c}:${r}`;
+}
+
+/**
+ * Which check an event type is about, or null if it does not name one.
+ *
+ * Null is a real answer and must stay one. An expectation whose event type
+ * this cannot read is an expectation whose subject is unknown, and comparing
+ * observations against an unknown subject would invent a verdict.
+ */
+export function developmentEventCheck(eventType: string): string | null {
+  if (!eventType.startsWith(EVENT_TYPE_PREFIX)) return null;
+  const parts = eventType.slice(EVENT_TYPE_PREFIX.length).split(':');
+  return parts.length === 2 && parts[0] && parts[1] ? parts[0] : null;
 }
 
 export interface DevelopmentObservation {

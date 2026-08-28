@@ -18,7 +18,9 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { recordReconstructionClaim } from './reconstruction.js';
 import { beginResponsibilityShadowing, compareShadowObservation } from './responsibility-shadowing.js';
-import { developmentEventType, getDevelopmentObservationsInWindow } from './development-observation.js';
+import {
+  developmentEventCheck, developmentEventType, getDevelopmentObservationsInWindow,
+} from './development-observation.js';
 import type { Responsibility } from './responsibility.js';
 
 export type ShadowClassification = 'matched' | 'deviated' | 'unresolved';
@@ -93,9 +95,27 @@ export async function resolveDevelopmentShadowing(input: {
   const expectedEventType = String(expectation.expected_event_type);
   const validUntil = expectation.valid_until == null ? null : String(expectation.valid_until);
 
-  const observations = await getDevelopmentObservationsInWindow(
+  // ONLY OBSERVATIONS OF THE CHECK THAT WAS PREDICTED.
+  //
+  // The window selector is deliberately about the whole company, so a
+  // deviating observation cannot be hidden. But every observation it returned
+  // was then compared against this one expectation, and comparison is exact
+  // event-type equality — so an observation of a DIFFERENT check classified as
+  // `deviated`, which dominates the verdict and is counted as a wrong
+  // prediction when this responsibility later asks for authority. Foundry
+  // would have looked worse at predicting than it is, cited a check the owner
+  // never made a claim about, and no correct observation of the right check
+  // could rescue it.
+  //
+  // The subject comes from the expectation, never from the caller, so
+  // narrowing to it cannot be used to cherry-pick: a deviating observation of
+  // THIS check is still unavoidable. An expectation whose subject cannot be
+  // read stays unresolved rather than being resolved by observations of
+  // something else.
+  const expectedCheck = developmentEventCheck(expectedEventType);
+  const observations = (await getDevelopmentObservationsInWindow(
     input.productId, String(expectation.created_at), validUntil,
-  );
+  )).filter((o) => expectedCheck !== null && o.check === expectedCheck);
 
   const comparisons: DevelopmentShadowVerdict['comparisons'] = [];
   for (const observation of observations) {
@@ -116,7 +136,22 @@ export async function resolveDevelopmentShadowing(input: {
       productId: input.productId, subject: `responsibility:${responsibilityId}`,
       predicate: 'development_shadow_comparison',
       value: { expectedEventType, verdict, observed: comparisons.map((c) => c.eventType) },
-      epistemicStatus: verdict === 'deviated' ? 'conflicting' : 'known',
+      // A CONFLICT IS BETWEEN SOURCES, NOT BETWEEN A PREDICTION AND REALITY.
+      //
+      // Every deviation was recorded as `conflicting`, and the claim guard has
+      // said since migration 106 that a conflicting claim needs at least two
+      // sources to be in conflict. So the most ordinary deviation there is —
+      // one observation, reporting something other than what was predicted —
+      // threw instead of being recorded, and the failure was in the write of
+      // what Foundry had just learned. Only a window whose observations
+      // disagreed with EACH OTHER ever got through, which is why nothing
+      // caught it.
+      //
+      // One observation falsifying a prediction is not unsettled: it is a
+      // known result, and the deviation is carried by the verdict, which is
+      // what the founder is shown and what the authority request counts.
+      epistemicStatus: comparisons.some((c) => c.classification === 'deviated')
+        && comparisons.some((c) => c.classification !== 'deviated') ? 'conflicting' : 'known',
       evidenceRefs: comparisons.map((c) => ({ kind: 'signal_event' as const, id: c.observationId })),
       derivationMethod: 'bounded development shadow comparison', observedAt: new Date(),
     })
