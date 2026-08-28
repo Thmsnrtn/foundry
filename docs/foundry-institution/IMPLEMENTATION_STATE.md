@@ -16,7 +16,7 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `5a0d201` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `f25b47f` on `claude/foundry-autonomous-continuation-0gents`.
 
 **This table was stale for many cycles and said so nowhere** — it read
 `cb7fbeb`, 228 migrations, 347 files. The document's own rule is at the top:
@@ -28,7 +28,7 @@ removing, in the place it does the most damage.
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **256 files**, highest number **219**. Applied lexically, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. **Snapshot freshness is a GATE now, not a note** — `check-schema-snapshot.mjs` runs at the front of the chain, because the reminder to regenerate it was right, was written into this file, and failed anyway an hour later. |
-| Validation | `npm run check` green end to end: **439 files / 3,814 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
+| Validation | `npm run check` green end to end: **440 files / 3,828 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
 | CI | Runs on `master`, `main` and `claude/**`. |
 | Ratchets | Unguarded mutating routes **112** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · unreachable modules **22** · write-only columns **62** · unread tables **2** · unscoped product-shaped routes **2** · id tiebreaks **18** · star-select phantom columns **0** · **tables no code can reach 0** · **gates with no planted-defect test 0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -103,7 +103,34 @@ removing, in the place it does the most damage.
   can write `support_reply_effective`; a success verdict must come from
   somewhere Foundry is not. A teammate's reply is not the customer answering.
 
-  **E2 — local runtime.** Twenty-four tests across both halves, against a
+  **THE LOOP IS CLOSED AT ITS MOST CONSEQUENTIAL POINT.**
+  `getAssistingCandidates` shows a founder `verifiedFailures` and
+  `lastVerifiedOutcome` before they grant more authority, and both read
+  `outcome_status='verified_failure'` — which NOTHING on the support path could
+  write until the observer existed. The caution that surface was built to
+  express had never once been driven by real evidence. Proven end to end now:
+  customer writes again → scheduled reconciliation → the verdict reaches the
+  authority request. A DISAGREEMENT is not counted as a failure, and that is
+  pinned: picking the side that flatters Foundry's own caution is still picking
+  a side.
+
+  **Five consumers of that evidence were walked; do not walk them again.** The
+  reconciliation selector and its verdict use the wide predicate (both witness
+  shapes); `getDisputedEffects` used the narrow one and showed a disagreement
+  with half of it missing — fixed, and it now uses the same predicate that
+  DECIDES, so the two cannot drift; `attribution()` flattened the customer to
+  "somebody outside" — fixed, one shared phrasing with the disputed card;
+  `getUnresolvedEffects` reads `outcome_status` on the action and never had the
+  drift.
+
+  **`operations` has no equivalent gap and cannot have this witness.** Its hand
+  is a founder-authored notice to a recipient the founder named, and Foundry has
+  no channel to a teacher or a client — "a provider accepting a notice is not
+  the teacher turning up", as that module says. The only witness is someone
+  reporting, which is built and covered end to end in the unfamiliar-company
+  tests. The asymmetry between the two capabilities is principled, not a gap.
+
+  **E2 — local runtime.** Thirty tests across both halves, against a
   mocked Intercom. Neither has seen a real account, a real customer or a real
   conversation; that rung needs an owner-connected account, not more local work.
 
