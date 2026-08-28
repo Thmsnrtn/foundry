@@ -96,3 +96,64 @@ export async function getDevelopmentObservationsInWindow(
     };
   });
 }
+
+/**
+ * Checks about this company that are currently reporting failed.
+ *
+ * A LOG IS NOT A RECORD, AND THIS ONE WAS ONLY A LOG. When Foundry observes
+ * that its own schema snapshot has drifted from the migrations that produce it,
+ * the job writes `logger.warn(...)` and moves on. The observation itself IS
+ * recorded — it lands as a `development_verification` signal event and feeds
+ * Shadowing — but the FACT that a check about this company is failing right now
+ * reached nobody. `every-gate-runs.test.ts` states the same lesson about job
+ * failures in as many words: "a week in which the institution's loops threw on
+ * every run looked exactly like a calm week on the page the founder reads."
+ * That reasoning produced `job_health` and the loops-stopped card, and was not
+ * applied here.
+ *
+ * LATEST PER CHECK, NOT EVERY FAILURE EVER. A check that failed on Tuesday and
+ * passed on Wednesday is not failing; reporting it would make a fixed problem
+ * permanent. The observation carries its own `observed_at`, which is the clock
+ * that decides — not `created_at`, which records when the row was written.
+ *
+ * GENERIC BY CONSTRUCTION. Nothing here names Foundry. Any company with
+ * development observations gets this surface; Foundry is simply the only
+ * company that currently has any, because it is the only one whose repository
+ * Foundry can independently see.
+ */
+export interface FailingSelfCheck {
+  check: string;
+  detail: string;
+  observedAt: string;
+}
+
+export async function getFailingSelfChecks(productId: string): Promise<FailingSelfCheck[]> {
+  const rows = await query(
+    `SELECT payload_json FROM signal_events
+      WHERE product_id = ? AND source = 'development_verification'
+      ORDER BY datetime(json_extract(payload_json,'$.observed_at')) DESC, rowid DESC`,
+    [productId],
+  );
+
+  const latest = new Map<string, FailingSelfCheck & { result: string }>();
+  for (const row of rows.rows as unknown as Array<Record<string, unknown>>) {
+    let payload: { check?: unknown; result?: unknown; detail?: unknown; observed_at?: unknown };
+    try {
+      payload = JSON.parse(String(row.payload_json)) as typeof payload;
+    } catch {
+      continue;
+    }
+    const check = String(payload.check ?? '');
+    if (!check || latest.has(check)) continue;
+    latest.set(check, {
+      check,
+      result: String(payload.result ?? ''),
+      detail: String(payload.detail ?? ''),
+      observedAt: String(payload.observed_at ?? ''),
+    });
+  }
+
+  return [...latest.values()]
+    .filter((c) => c.result === 'failed')
+    .map(({ check, detail, observedAt }) => ({ check, detail, observedAt }));
+}

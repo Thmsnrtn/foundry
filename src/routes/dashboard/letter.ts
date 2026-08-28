@@ -550,6 +550,40 @@ const stepAwaySection = (h: {
   </div>`;
 };
 
+// SOMETHING I MAINTAIN ABOUT THIS COMPANY HAS DRIFTED, AND I ONLY LOGGED IT.
+//
+// When Foundry observes that its own schema snapshot no longer describes the
+// migrations that produce it, the observation is RECORDED — a
+// `development_verification` signal event, feeding Shadowing — and the fact
+// that a check is failing right now went to `logger.warn` and stopped there.
+// `every-gate-runs.test.ts` says the same thing about job failures: "a week in
+// which the institution's loops threw on every run looked exactly like a calm
+// week on the page the founder reads". That reasoning produced `job_health` and
+// the card below; it was never applied to this.
+//
+// Sits beside the loops-stopped card because it is the same class of fact: not
+// something the company did, something about whether Foundry's account of the
+// company can be trusted right now.
+//
+// It says what drifted and when, and nothing about fixing it. Foundry did not
+// repair this and is not promising to — the observation module runs no command
+// and writes no file, deliberately, and a card that implied otherwise would be
+// claiming a capability the path refuses.
+const failingSelfChecksSection = (
+  items: Array<{ check: string; detail: string; observedAt: string }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;border-left:2px solid #ffb347;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.5rem;">Something I keep for you has drifted</div>
+    ${items.map((item) => html`
+      <div style="padding:0.35rem 0;">
+        <div style="font-size:0.86rem;color:var(--text-primary);">${item.detail}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
+          I last checked ${item.observedAt.slice(0, 10)}. I have not changed anything
+          — I only look.
+        </div>
+      </div>`)}
+  </div>`;
+
 // PART OF ME HAS STOPPED RUNNING, AND THIS PAGE IS THEREFORE OUT OF DATE.
 //
 // "Nothing happened" and "nothing ran" are different facts, and the letter said
@@ -1107,6 +1141,9 @@ letterRoutes.get('/letter', async (c) => {
   const { getUnwatchableResponsibilities } = await import(
     '../../services/institution/external-shadowing.js');
   const unwatchable = await getUnwatchableResponsibilities(ctx.productId);
+  const { getFailingSelfChecks } = await import(
+    '../../services/institution/development-observation.js');
+  const failingSelfChecks = await getFailingSelfChecks(ctx.productId);
   const { getStepAwayHorizon } = await import(
     '../../services/institution/absence-summary.js');
   const stepAway = await getStepAwayHorizon(ctx.productId);
@@ -1168,6 +1205,7 @@ letterRoutes.get('/letter', async (c) => {
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}`}
 
     ${loopsStoppedSection(failingLoops)}
+    ${failingSelfChecksSection(failingSelfChecks)}
     ${stepAwaySection(stepAway)}
 
     ${stopped ? html`
