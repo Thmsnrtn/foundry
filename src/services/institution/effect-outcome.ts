@@ -145,20 +145,52 @@ export async function reportEffectOutcome(input: {
 export async function getEffectOutcomeReports(
   productId: string, effectId: string,
 ): Promise<EffectOutcomeReport[]> {
+  // A CARD THAT SAID "PEOPLE DISAGREE" AND SHOWED ONE SIDE OF IT.
+  //
+  // This filtered `source='effect_outcome_report'` — the general shape — while
+  // the reconciliation that DECIDES an outcome is conflicting reads a wider
+  // set: that source OR the legacy `support_reply_effective` /
+  // `support_reply_failed` events. So the moment the conversation observer
+  // started producing the second kind, a disagreement between the founder and
+  // the customer was declared on one query and rendered from another. The
+  // founder saw "people disagree about this", their own report, and nothing to
+  // disagree with it.
+  //
+  // That is worse than not showing the card. A disagreement with half of it
+  // missing invites the founder to conclude the other half does not exist.
+  //
+  // The predicate is now the SAME ONE the reconciliation uses, so what decides
+  // and what is shown cannot drift apart again. Both shapes map to one report:
+  // the general form carries its reporter and detail; the legacy pair carries
+  // its verdict in the event type, and its reporter is the witness that wrote
+  // it — the conversation observer names the customer, and anything else
+  // predating this is an outside system that did not say who it was.
   const rows = await query(
-    `SELECT id,payload_json FROM signal_events
-      WHERE product_id=? AND source='effect_outcome_report'
-        AND json_extract(payload_json,'$.effect_id')=?
+    `SELECT id,source,event_type,payload_json FROM signal_events
+      WHERE product_id=? AND json_extract(payload_json,'$.effect_id')=?
+        AND (source='effect_outcome_report'
+             OR event_type IN ('support_reply_effective','support_reply_failed'))
       ORDER BY created_at, rowid`,
     [productId, effectId],
   );
   return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => {
     const payload = JSON.parse(String(row.payload_json)) as {
-      effect_id: string; verdict: OutcomeVerdict; reporter: string; detail: string | null;
+      effect_id?: string; verdict?: OutcomeVerdict; reporter?: string; detail?: string | null;
     };
+    if (String(row.source) === 'effect_outcome_report') {
+      return {
+        id: String(row.id), effectId: String(payload.effect_id), verdict: payload.verdict!,
+        reporter: String(payload.reporter), detail: payload.detail ?? null,
+      };
+    }
     return {
-      id: String(row.id), effectId: payload.effect_id, verdict: payload.verdict,
-      reporter: payload.reporter, detail: payload.detail ?? null,
+      id: String(row.id),
+      effectId: String(payload.effect_id ?? effectId),
+      verdict: (String(row.event_type) === 'support_reply_effective'
+        ? 'achieved' : 'failed') as OutcomeVerdict,
+      reporter: String(row.source) === 'intercom_conversation'
+        ? 'customer:wrote_again' : 'external:unnamed_system',
+      detail: payload.detail ?? null,
     };
   });
 }

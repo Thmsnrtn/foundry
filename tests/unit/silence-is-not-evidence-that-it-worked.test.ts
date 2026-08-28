@@ -244,3 +244,67 @@ describe('no path here can say it worked', () => {
     expect(result.examined).toBe(0);
   });
 });
+
+describe('when the founder and the customer disagree', () => {
+  // THE PATH THAT ONLY BECAME REACHABLE WHEN THE OBSERVER WAS BUILT. Before it,
+  // a support outcome had one possible witness at a time. Now the founder can
+  // report that a reply worked and the customer can write again saying
+  // otherwise, which is a real disagreement between the two people best placed
+  // to know — and the one Foundry must not settle.
+  it('keeps both, settles nothing, and SHOWS both', async () => {
+    const { reportEffectOutcome, getDisputedEffects } = await import(
+      '../../src/services/institution/effect-outcome.js');
+    const { reconcileAssistedSupportEmail } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+
+    await reportEffectOutcome({
+      productId: P, effectId: 'eff_oc', verdict: 'achieved',
+      reporter: 'founder:f_oc', detail: 'Rang them and it was sorted.' });
+    mockConversation([part('p3', 'user', 2)]);
+    await observeIntercomReplyOutcomes(P, { access_token: 't' });
+    await reconcileAssistedSupportEmail(P, actionId);
+
+    const row = (await query(
+      'SELECT outcome_status FROM outbound_actions WHERE id=?', [actionId]))
+      .rows[0] as Record<string, unknown>;
+    expect(String(row.outcome_status)).toBe('conflicting');
+
+    // A CARD THAT SAYS "PEOPLE DISAGREE" MUST SHOW WHAT DISAGREES. The reports
+    // query used to read only the general shape while the reconciliation read a
+    // wider set, so the customer's side was invisible and the founder saw a
+    // disagreement with one side of it.
+    const disputed = await getDisputedEffects(P);
+    expect(disputed).toHaveLength(1);
+    const verdicts = disputed[0]!.reports.map((r) => `${r.reporter}=${r.verdict}`).sort();
+    expect(verdicts).toEqual(['customer:wrote_again=failed', 'founder:f_oc=achieved']);
+  });
+
+  it('the page names both sides in the founder\'s language', async () => {
+    const { Hono } = await import('hono');
+    const { reportEffectOutcome } = await import(
+      '../../src/services/institution/effect-outcome.js');
+    const { reconcileAssistedSupportEmail } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    await reportEffectOutcome({
+      productId: P, effectId: 'eff_oc', verdict: 'achieved', reporter: 'founder:f_oc' });
+    mockConversation([part('p3', 'user', 2)]);
+    await observeIntercomReplyOutcomes(P, { access_token: 't' });
+    await reconcileAssistedSupportEmail(P, actionId);
+
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: 'f_oc', email: 'oc@example.com', preferences: {} } as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
+    });
+    app.route('/', letterRoutes as unknown as Hono);
+    const page = await (await app.request('/letter')).text();
+
+    expect(page).toContain('People disagree about this');
+    expect(page).toContain('the customer, by writing again');
+    expect(page).toMatch(/not going to pick one/i);
+    // And no internal identifier reaches the founder on the way.
+    expect(page).not.toContain('founder:f_oc');
+  });
+});
