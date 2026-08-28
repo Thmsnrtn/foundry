@@ -16,7 +16,7 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `e6de8b3` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `f8a9733` on `claude/foundry-autonomous-continuation-0gents`.
 
 **This table was stale for many cycles and said so nowhere** — it read
 `cb7fbeb`, 228 migrations, 347 files. The document's own rule is at the top:
@@ -28,7 +28,7 @@ removing, in the place it does the most damage.
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **256 files**, highest number **219**. Applied lexically, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. **Snapshot freshness is a GATE now, not a note** — `check-schema-snapshot.mjs` runs at the front of the chain, because the reminder to regenerate it was right, was written into this file, and failed anyway an hour later. |
-| Validation | `npm run check` green end to end: **436 files / 3,784 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
+| Validation | `npm run check` green end to end: **438 files / 3,807 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
 | CI | Runs on `master`, `main` and `claude/**`. |
 | Ratchets | Unguarded mutating routes **112** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · unreachable modules **22** · write-only columns **62** · unread tables **2** · unscoped product-shaped routes **2** · id tiebreaks **18** · star-select phantom columns **0** · **tables no code can reach 0** · **gates with no planted-defect test 0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -113,6 +113,28 @@ removing, in the place it does the most damage.
   responsibility owning that channel and carry a proposal authored for that same
   message, and a grant is refused to a responsibility that has not reached
   Shadowing. **The ladder cannot be skipped even by a test fixture.**
+
+- **Foundry can say what it cannot carry.** The intake takes eight kinds of
+  obligation, `discovery.ts` maps them onto four capabilities, and
+  `GRANTABLE_CAPABILITIES` holds two — development's authority is a separate
+  door. So `billing_recovery` had no path, and a founder could report it, answer
+  questions about its financial consequence, watch it reach Shadowing, and wait
+  for an offer that could not come. **The silence read as "not yet" when the
+  truth was "there is no path".** The Letter names them, with no apology and no
+  promise: acting on it stays theirs, and Foundry cannot say when that will
+  change. Derived from the grantable set, so a capability gaining an effect
+  drops off by construction.
+
+- **How long the founder could be away — a fact, not a forecast.**
+  `EXPERIENCE.md` names the owner-absence test as the proof target and
+  `getSevenDayResponsibilitySummary` answers it BACKWARDS. `getStepAwayHorizon`
+  answers it forwards, and estimates nothing: it reads the soonest date the
+  COMPANY stated on a still-active responsibility. Three caveats travel in the
+  same sentence as the number, because a founder who reads "4 days" and stops
+  reading has been misled by a true number — undated things that need them,
+  things already late, and passes that have stopped. The last is what makes
+  quiet untrustworthy rather than merely incomplete. Rounding is DOWN. No number
+  is not permission to go, and the page says so.
 
 - Everything else a company can tell Foundry arrives through the four ingest
   routes, twelve integration adapters, two webhooks, and the founder typing
