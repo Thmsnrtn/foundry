@@ -66,6 +66,9 @@ export interface AssistingCandidate {
    *  because asking for permission on the strength of having watched five
    *  times says nothing if it was wrong all five. */
   deviations: number;
+  /** When the newest counted comparison's observation actually arrived. Never
+   *  null for a candidate, because a candidate needs a comparison to exist. */
+  lastWatchedAt: string | null;
   /** Assisted actions on this responsibility that were independently observed
    *  to have failed. Recorded before this and read by nothing, so Foundry
    *  could ask to keep helping with something its last action demonstrably
@@ -155,6 +158,31 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
                 AND o.outcome_status IN ('verified_success','verified_failure')
               ORDER BY COALESCE(o.executed_at, o.created_at) DESC
               LIMIT 1) AS last_verified_outcome,
+            -- WHEN FOUNDRY LAST ACTUALLY SAW SOMETHING.
+            --
+            -- "I've been watching this and have one check to show for it" reads
+            -- identically whether that check arrived yesterday or eight months
+            -- ago. No production door supplies an expectation window, so the
+            -- expiry that would have kept a late reading from resolving a stale
+            -- prediction never runs, and a single old comparison is a full
+            -- ticket at the boundary where authority is granted.
+            --
+            -- The answer is a date, not a threshold. Foundry does not decide
+            -- how old is too old — that is the owner's judgement about their own
+            -- company, and they could not make it without being told.
+            --
+            -- The clock is the signal event's own arrival: when this company's
+            -- evidence reached Foundry, which is what "last saw something"
+            -- means. Deliberately the SAME predicate as the comparisons count
+            -- above, so the count and the date describe one set, not two.
+            (SELECT MAX(e.created_at) FROM responsibility_shadow_comparisons c
+               JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
+               JOIN reconstruction_claims claim
+                 ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
+               JOIN signal_events e ON c.observation_ref='signal_event:' || e.id
+              WHERE x.responsibility_id=r.id AND c.classification IN ('matched','deviated')
+                AND claim.epistemic_status IN ('known','inferred')
+                AND (claim.valid_until IS NULL OR datetime(claim.valid_until)>datetime('now'))) AS last_watched_at,
             (SELECT a.expires_at FROM autonomy_consents a
               WHERE a.responsibility_id=r.id AND a.product_id=r.product_id AND a.capability=r.capability
                 AND ${liveActGrant('a')}
@@ -174,6 +202,7 @@ export async function getAssistingCandidates(productId: string): Promise<Assisti
         mayNot: GRANTABLE_CAPABILITIES[capability].mayNot,
         comparisons: Number(r.comparisons),
         deviations: Number(r.deviations),
+        lastWatchedAt: r.last_watched_at == null ? null : String(r.last_watched_at),
         verifiedFailures: Number(r.verified_failures),
         lastVerifiedOutcome: r.last_verified_outcome === 'verified_failure' ? 'verified_failure'
           : r.last_verified_outcome === 'verified_success' ? 'verified_success'

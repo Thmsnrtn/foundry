@@ -907,7 +907,7 @@ const permissionSection = (
     ${items.map((item) => html`
       <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
-        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I've been watching this and have ${item.comparisons === 1 ? 'one check' : `${item.comparisons} checks`} to show for it.${item.deviations > 0 ? ` I got ${item.deviations === 1 ? 'one of them' : `${item.deviations} of them`} wrong.` : ''}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I've been watching this and have ${item.comparisons === 1 ? 'one check' : `${item.comparisons} checks`} to show for it.${item.deviations > 0 ? ` I got ${item.deviations === 1 ? 'one of them' : `${item.deviations} of them`} wrong.` : ''}${item.lastWatchedAt ? ` The last thing I actually saw about this arrived ${item.lastWatchedAt.slice(0, 10)}.` : ''}</div>
         ${item.verifiedFailures > 0 ? html`
         <div style="font-size:0.78rem;color:var(--danger, #ff6b6b);margin-top:0.15rem;">${item.lastVerifiedOutcome === 'verified_failure'
           ? `Last time I acted here it didn't work — ${item.verifiedFailures === 1 ? 'one attempt was' : `${item.verifiedFailures} attempts were`} checked afterwards and failed.`
