@@ -95,7 +95,18 @@ beforeEach(async () => {
   // production path, because rebuilding it per test would mean re-deriving a
   // grant and a transition each time for no added coverage.
   await query('DELETE FROM signal_events WHERE product_id=? AND source=?', [P, 'intercom_conversation']);
-  await query("UPDATE outbound_actions SET outcome_status=NULL, status='executed' WHERE id=?", [actionId]);
+  // THE EVIDENCE REF HAS TO GO BACK TOO, and leaving it out cost me a false
+  // finding. The reconciliation selector compares how many witnesses exist
+  // against how many the recorded verdict was decided from, so an action still
+  // carrying a previous test's `outcome_evidence_ref` looks already-settled and
+  // is correctly not selected. Resetting only the status left the fixture in a
+  // state production never produces, and the test that failed was about to be
+  // read as a defect in the selector.
+  await query(
+    `UPDATE outbound_actions
+        SET outcome_status=NULL, status='executed',
+            outcome_evidence_ref=NULL, learned_claim_id=NULL
+      WHERE id=?`, [actionId]);
 
   // THROUGH THE DOOR, not around it. A customer message must carry the evidence
   // row that observed it (`inbound_message:evidence_invalid`), and hand-writing
@@ -183,6 +194,36 @@ describe('the customer writing again is the witness', () => {
     const said = (await getFounderAssistingActivity(P)).map((a) => a.detail).join(' | ');
     expect(said).toMatch(/wrote again after you answered/i);
     expect(said).not.toMatch(/somebody outside/i);
+  });
+
+  it('the scheduled reconciliation actually selects it — the link I had only read', async () => {
+    // A WITNESS NOBODY RECONCILES IS A WITNESS NOBODY READS. The observer
+    // writes the evidence; `institutional_effect_reconciliation` is what turns
+    // it into a verdict, and it selects on a count of witnesses differing from
+    // the count already recorded. That predicate lives in a different file from
+    // the observer, so agreeing with it by reading is not the same as matching
+    // it.
+    mockConversation([part('p3', 'user', 2)]);
+    await observeIntercomReplyOutcomes(P, { access_token: 't' });
+
+    const { listActionsAwaitingOutcomeReconciliation } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    const pending = await listActionsAwaitingOutcomeReconciliation();
+    expect(pending.some((r) => r.actionId === actionId),
+      'the observer wrote a witness the scheduled pass never picks up').toBe(true);
+  });
+
+  it('and stops selecting it once the verdict has consumed that witness', async () => {
+    // The other half: a reconciliation that never settles would re-decide the
+    // same evidence on every hourly run.
+    const { listActionsAwaitingOutcomeReconciliation, reconcileAssistedSupportEmail } =
+      await import('../../src/services/institution/responsibility-assisted-email.js');
+    mockConversation([part('p3', 'user', 2)]);
+    await observeIntercomReplyOutcomes(P, { access_token: 't' });
+    await reconcileAssistedSupportEmail(P, actionId);
+
+    const pending = await listActionsAwaitingOutcomeReconciliation();
+    expect(pending.some((r) => r.actionId === actionId)).toBe(false);
   });
 
   it('the same reply seen twice converges instead of counting as two witnesses', async () => {
