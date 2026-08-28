@@ -1061,7 +1061,7 @@ letterRoutes.get('/letter', async (c) => {
   const responsibilitySummary = await getSevenDayResponsibilitySummary(ctx.productId);
   const { getPendingResponsibilityCandidates } = await import('../../services/institution/responsibility-candidate.js');
   const responsibilityCandidates = await getPendingResponsibilityCandidates(ctx.productId);
-  const { getMaterialShadowingExceptions } = await import('../../services/institution/responsibility-shadowing.js');
+  const { getMaterialShadowingExceptions, shadowExpectationPhrase } = await import('../../services/institution/responsibility-shadowing.js');
   const shadowingExceptions = await getMaterialShadowingExceptions(ctx.productId);
   const { getFounderAssistingActivity } = await import('../../services/institution/responsibility-assisted-email.js');
   const assistingActivity = await getFounderAssistingActivity(ctx.productId);
@@ -1262,7 +1262,7 @@ letterRoutes.get('/letter', async (c) => {
       ${section('What I handled', responsibilitySummary.HANDLED.map((i) => `${i.title} — outcome recorded`))}
       ${section('What changed', responsibilitySummary.CHANGED.map((i) => `${i.title} — ${i.state}`))}
       ${section('What differed while I watched', shadowingExceptions.map((item) =>
-        `${item.title} — expected ${item.expectedEventType}; ${item.classification === 'unresolved'
+        `${item.title} — expected ${shadowExpectationPhrase(item.expectedEventType)}; ${item.classification === 'unresolved'
           ? `the outcome remains unresolved (${item.observedSummary})`
           : `instead observed: ${item.observedSummary}`}. I am observing, not carrying this responsibility.`))}
       ${section('Bounded help', assistingActivity.map((item)=>`${item.title} — ${item.detail}`))}

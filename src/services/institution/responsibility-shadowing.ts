@@ -61,6 +61,32 @@ export async function compareShadowObservation(input:{productId:string;expectati
   return classification;
 }
 
+const DIRECTION_WORD: Record<string, string> = { rose: 'risen', fell: 'fallen', held: 'held steady' };
+
+/**
+ * What Foundry expected, said in words.
+ *
+ * The founder was shown `development_verified:schema-snapshot-freshness:passed`
+ * — an internal identity, printed at the boundary where the company is owned.
+ * Both families that can reach here are colon triples built by
+ * `developmentEventType` and `externalObservationEventType`; they are named
+ * below rather than imported, because this module stays family-agnostic and a
+ * generic parse would put a sentence on anything shaped like a triple.
+ *
+ * Two places knowing one format is a shape this repository treats as a defect,
+ * so the constructors and this function are compared by a test rather than
+ * trusted to agree. An identity from neither family is printed as it stands:
+ * showing a raw fact is honest, and inventing a sentence for a shape we do not
+ * recognise would not be.
+ */
+export function shadowExpectationPhrase(eventType: string): string {
+  const [family, subject, outcome, ...rest] = eventType.split(':');
+  if (rest.length || !subject || !outcome) return eventType;
+  if (family === 'development_verified') return `${subject} to report ${outcome}`;
+  if (family === 'external_metric') return `${subject} to have ${DIRECTION_WORD[outcome] ?? outcome}`;
+  return eventType;
+}
+
 /**
  * WHERE FOUNDRY WAS WATCHING.
  *
@@ -87,6 +113,15 @@ export async function getMaterialShadowingExceptions(productId:string):Promise<A
     JOIN institutional_responsibilities r ON r.id=x.responsibility_id
     JOIN signal_events e ON c.observation_ref='signal_event:' || e.id
     WHERE c.product_id=? AND r.product_id=? AND c.classification IN ('deviated','unresolved')
+      -- THE FOUNDER ALREADY ANSWERED THIS. A disposition of
+      -- deliberately_not_done is a recorded decision with a reason and
+      -- evidence: the company is not doing this. absence-summary honours it and
+      -- keeps those responsibilities out of what needs the founder; this did
+      -- not, so a responsibility they had
+      -- explicitly retired went on producing exceptions on the page they read
+      -- every day. The comparison rows stay — retiring a responsibility decides
+      -- what belongs on the daily surface, not what Foundry observed.
+      AND r.disposition='active'
     ORDER BY c.created_at DESC`,[productId,productId]);
   return (result.rows as unknown as Array<Record<string,unknown>>).map((row)=>({responsibilityId:String(row.responsibility_id),
     title:String(row.title),expectedEventType:String(row.expected_event_type),observedSummary:String(row.summary),
