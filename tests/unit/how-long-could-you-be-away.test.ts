@@ -36,9 +36,25 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  // Dispositions first: they reference the responsibility, and deleting the
-  // parent while the record stands is exactly what the foreign key is for.
-  await query('DELETE FROM responsibility_dispositions WHERE product_id=?', [P]);
+  // CHILDREN FIRST, NAMED. Eleven tables reference a responsibility, and
+  // rendering The Letter can create rows in several of them — an evidence
+  // request, a candidate decision, a transition. Deleting the parent while any
+  // of those stand is exactly what the foreign key is for, so the teardown
+  // states the order rather than switching the constraint off: a test that
+  // disables the rule it is standing on proves less than one that obeys it.
+  // `responsibility_transitions` carries no `product_id` — it belongs to the
+  // responsibility, not to the company — so it is cleared through its parent.
+  await query(
+    `DELETE FROM responsibility_transitions WHERE responsibility_id IN
+       (SELECT id FROM institutional_responsibilities WHERE product_id=?)`, [P]);
+  for (const table of [
+    'responsibility_dispositions', 'responsibility_candidate_decisions',
+    'responsibility_shadow_expectations', 'founder_evidence_requests',
+    'autonomy_consents', 'outbound_actions', 'inbound_customer_messages',
+    'support_channels', 'development_change_plans', 'cost_events',
+  ]) {
+    await query(`DELETE FROM ${table} WHERE product_id=?`, [P]);
+  }
   await query('DELETE FROM institutional_responsibilities WHERE product_id=?', [P]);
   await query('DELETE FROM signal_events WHERE product_id=?', [P]);
   await query('DELETE FROM job_health', []);
@@ -133,5 +149,52 @@ describe('what the number is silent about travels with it', () => {
       daysUntilSoonestDue: null, soonestDueAt: null, soonestDueTitle: null,
       alreadyOverdue: 0, loopsStopped: 0,
     });
+  });
+});
+
+describe('the founder reads it, with the caveats in the same breath', () => {
+  async function letter(): Promise<string> {
+    const { Hono } = await import('hono');
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: 'f_hz', email: 'hz@example.com', preferences: {} } as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
+    });
+    app.route('/', letterRoutes as unknown as Hono);
+    return (await app.request('/letter')).text();
+  }
+
+  it('names the days and what is due, not a score', async () => {
+    await responsibility('r1', 'File the quarterly return',
+      new Date(Date.now() + 4 * 86_400_000).toISOString());
+    const page = await letter();
+    expect(page).toContain('If you went away');
+    expect(page).toContain('File the quarterly return');
+    expect(page).toMatch(/\d+ days until/);
+  });
+
+  it('a true number does not travel alone', async () => {
+    // A founder who reads "4 days" and stops reading has been misled by a true
+    // number. The undated things that need them are in the same sentence.
+    await responsibility('r1', 'File the quarterly return',
+      new Date(Date.now() + 4 * 86_400_000).toISOString());
+    await responsibility('r2', 'Answer the Hartley enquiry', null);
+    const page = await letter();
+    expect(page).toMatch(/carry no date/);
+    expect(page).toMatch(/does not speak for/);
+  });
+
+  it('says plainly that no date is not permission to go', async () => {
+    await responsibility('r2', 'Answer the Hartley enquiry', null);
+    const page = await letter();
+    expect(page).toMatch(/No date is not the same as nothing to do/i);
+  });
+
+  it('is silent when there is genuinely nothing to say', async () => {
+    // A quiet company produces a quiet Letter. The section does not render
+    // itself to prove it ran.
+    expect(await letter()).not.toContain('If you went away');
   });
 });

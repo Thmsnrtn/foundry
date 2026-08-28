@@ -491,6 +491,58 @@ const disputedSection = (
       </div>`)}
   </div>`;
 
+// CAN I LEAVE, AND FOR HOW LONG.
+//
+// The question `EXPERIENCE.md` names as the proof target, asked forwards. The
+// seven-day summary answers what happened; this answers what is coming, and it
+// is a FACT rather than a forecast: the soonest date the COMPANY stated, on a
+// responsibility still active. Foundry does not estimate how long it can cope.
+//
+// THE CAVEATS ARE RENDERED IN THE SAME SENTENCE AS THE NUMBER, not beneath it,
+// because a founder who reads "eleven days" and stops reading has been misled by
+// a true number. Undated things that need them, things already late, and passes
+// that have stopped are each capable of making the interval meaningless, and the
+// last is the one that makes quiet untrustworthy rather than merely incomplete.
+//
+// No number at all is not permission to go. It means nothing carries a date —
+// which is a fact about what the company has told Foundry, not about how safe
+// the week is.
+const stepAwaySection = (h: {
+  daysUntilSoonestDue: number | null; soonestDueAt: string | null;
+  soonestDueTitle: string | null; alreadyOverdue: number;
+  needingYouWithoutDate: number; loopsStopped: number;
+}) => {
+  const caveats: string[] = [];
+  if (h.alreadyOverdue > 0) {
+    caveats.push(`${h.alreadyOverdue} ${h.alreadyOverdue === 1 ? 'thing is' : 'things are'} already past the date you gave`);
+  }
+  if (h.needingYouWithoutDate > 0) {
+    caveats.push(`${h.needingYouWithoutDate} ${h.needingYouWithoutDate === 1 ? 'thing needs' : 'things need'} you and carry no date, so this does not speak for ${h.needingYouWithoutDate === 1 ? 'it' : 'them'}`);
+  }
+  if (h.loopsStopped > 0) {
+    caveats.push('some of what would notice a problem is not running, so this quiet may be mine rather than the company\'s');
+  }
+  const headline = h.daysUntilSoonestDue === null
+    ? 'Nothing you have given a date to is coming up.'
+    : h.daysUntilSoonestDue === 0
+      ? `${h.soonestDueTitle} is due today.`
+      : `${h.daysUntilSoonestDue} ${h.daysUntilSoonestDue === 1 ? 'day' : 'days'} until ${h.soonestDueTitle} is due.`;
+  if (h.daysUntilSoonestDue === null && caveats.length === 0) return '';
+  return html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.4rem;">If you went away</div>
+    <div style="font-size:0.95rem;color:var(--text-primary);">${headline}</div>
+    ${caveats.length > 0 ? html`
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.35rem;">
+        ${caveats.join('; ')}.
+      </div>` : ''}
+    ${h.daysUntilSoonestDue === null && caveats.length > 0 ? html`
+      <div style="font-size:0.74rem;color:var(--text-muted);margin-top:0.3rem;">
+        No date is not the same as nothing to do.
+      </div>` : ''}
+  </div>`;
+};
+
 // PART OF ME HAS STOPPED RUNNING, AND THIS PAGE IS THEREFORE OUT OF DATE.
 //
 // "Nothing happened" and "nothing ran" are different facts, and the letter said
@@ -1010,6 +1062,9 @@ letterRoutes.get('/letter', async (c) => {
   }));
   const { getShadowableResponsibilities } = await import('../../services/institution/external-shadowing.js');
   const shadowable = await getShadowableResponsibilities(ctx.productId);
+  const { getStepAwayHorizon } = await import(
+    '../../services/institution/absence-summary.js');
+  const stepAway = await getStepAwayHorizon(ctx.productId);
   const { getUncarriableResponsibilities } = await import(
     '../../services/institution/assisting-admission.js');
   const cannotCarry = await getUncarriableResponsibilities(ctx.productId);
@@ -1068,6 +1123,7 @@ letterRoutes.get('/letter', async (c) => {
     ${intro ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:-1rem 0 1.25rem;">${intro}</p>` : ''}`}
 
     ${loopsStoppedSection(failingLoops)}
+    ${stepAwaySection(stepAway)}
 
     ${stopped ? html`
     <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid #ffb347;">
