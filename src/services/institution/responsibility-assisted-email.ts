@@ -341,8 +341,20 @@ export async function getFounderAssistingActivity(productId:string):Promise<Arra
       // The legacy event shape carries no reporter. It is still an outside
       // system saying something, and the sentence says that rather than
       // pretending it knows a name.
+      //
+      // EXCEPT WHEN THE WITNESS IS THE CUSTOMER THEMSELVES. The conversation
+      // observer records `support_reply_failed` from `intercom_conversation`
+      // when the person the reply was sent to wrote again afterwards. Flattened
+      // to "somebody outside", that reads as a third party volunteering a
+      // verdict — which is a different provenance from Foundry looking at a
+      // conversation and seeing a message with a time on it. The founder cannot
+      // weigh a verdict without knowing which of the two happened, and the
+      // institution keeps provenance rather than flattening it everywhere else.
+      const source=String(raw.source);
       witness.set(String(raw.id),
-        String(raw.source)==='effect_outcome_report'&&raw.r!=null?String(raw.r):'system:observed_event');
+        source==='effect_outcome_report'&&raw.r!=null?String(raw.r)
+          :source==='intercom_conversation'?'customer:wrote_again'
+            :'system:observed_event');
     }
     for (const [effectId,ids] of evidenceIds) {
       reporters.set(effectId,ids.map(id=>witness.get(id)).filter((w): w is string=>w!=null));
@@ -365,12 +377,19 @@ export async function getFounderAssistingActivity(productId:string):Promise<Arra
     }
   }
 
-  /** "the owner", "a system you connected", or a count when several agree. */
+  /** "the owner", "the customer", "a system you connected", or a count when
+   *  several agree. Each names WHO, because a verdict the founder cannot
+   *  attribute is a verdict they cannot weigh. */
   const attribution=(effectId:string):string=>{
     const who=reporters.get(effectId)??[];
     if (who.length===0) return 'somebody outside';
     if (who.length>1) return `${who.length} separate reports`;
-    return who[0].startsWith('founder:')?'you told me':'a system you connected told me';
+    if (who[0].startsWith('founder:')) return 'you told me';
+    // The strongest witness available on this path and the only one that is the
+    // person the reply was sent to. It is also the only one that is a FACT
+    // rather than a verdict: they wrote, and there is a time on it.
+    if (who[0]==='customer:wrote_again') return 'they wrote again after you answered, so';
+    return 'a system you connected told me';
   };
 
   return rows.map(row=>{

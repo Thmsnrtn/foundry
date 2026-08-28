@@ -168,6 +168,23 @@ describe('the customer writing again is the witness', () => {
     expect(String(row.outcome_status)).toBe('verified_failure');
   });
 
+  it('the founder is told WHO the witness was, not just that there was one', async () => {
+    // "Somebody outside told me it did not work" reads as a third party
+    // volunteering a verdict. What happened is that the person the reply was
+    // sent to wrote again, which is a fact with a time on it rather than an
+    // opinion — and a founder cannot weigh a verdict they cannot attribute.
+    mockConversation([part('p3', 'user', 2)]);
+    await observeIntercomReplyOutcomes(P, { access_token: 't' });
+
+    const { reconcileAssistedSupportEmail, getFounderAssistingActivity } = await import(
+      '../../src/services/institution/responsibility-assisted-email.js');
+    await reconcileAssistedSupportEmail(P, actionId);
+
+    const said = (await getFounderAssistingActivity(P)).map((a) => a.detail).join(' | ');
+    expect(said).toMatch(/wrote again after you answered/i);
+    expect(said).not.toMatch(/somebody outside/i);
+  });
+
   it('the same reply seen twice converges instead of counting as two witnesses', async () => {
     mockConversation([part('p3', 'user', 2)]);
     await observeIntercomReplyOutcomes(P, { access_token: 't' });
