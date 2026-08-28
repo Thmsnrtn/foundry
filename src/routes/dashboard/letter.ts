@@ -800,6 +800,30 @@ const darkenedWatchSection = (
       </div>`)}
   </div>`;
 
+// I AM WATCHING AND NOTHING IS COMING IN.
+//
+// The twin of the card above, for the cause the founder did not choose. A
+// channel nobody revoked can simply go quiet, and the consequence is the same:
+// the expectation stays open, so the responsibility sits at Shadowing for good.
+// No expectation expires in production, so "for good" is literal.
+//
+// A date, not a verdict. Foundry does not know this company's reporting cadence
+// and will not decide how quiet is too quiet on the owner's behalf.
+const silentWatchSection = (
+  items: Array<{ responsibilityId: string; title: string; channelLabel: string;
+    watchingSince: string; lastReadingAt: string | null }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">I am watching, and nothing is coming in</div>
+    ${items.map((item) => html`
+      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">You asked me to watch this on ${item.watchingSince.slice(0, 10)}, through ${item.channelLabel}. ${item.lastReadingAt
+          ? `Nothing has come in on it since ${item.lastReadingAt.slice(0, 10)}.`
+          : 'Nothing has ever come in on it.'} Until something does, there is nothing for me to compare, and this will not go any further. I am not going to guess whether that is a problem.</div>
+      </div>`)}
+  </div>`;
+
 // What the owner would expect a development check to report.
 //
 // The twin of the metric watch. Offered only for development responsibilities
@@ -1152,6 +1176,8 @@ letterRoutes.get('/letter', async (c) => {
   const cannotCarry = await getUncarriableResponsibilities(ctx.productId);
   const { getDarkenedWatches } = await import('../../services/institution/external-shadowing.js');
   const darkenedWatches = await getDarkenedWatches(ctx.productId);
+  const { getSilentWatches } = await import('../../services/institution/external-shadowing.js');
+  const silentWatches = await getSilentWatches(ctx.productId);
   const { availableDevelopmentChecks } = await import('../../services/institution/development-shadowing.js');
   const developmentChecks = await availableDevelopmentChecks(ctx.productId);
   const understoodDevelopment = (await (await import('../../db/client.js')).query(
@@ -1271,6 +1297,7 @@ letterRoutes.get('/letter', async (c) => {
       ${doNotContactSection(contactConstraints, CONTACT_CONSTRAINT_LABELS)}
       ${permissionSection(assistingCandidates)}
       ${darkenedWatchSection(darkenedWatches)}
+      ${silentWatchSection(silentWatches)}
       ${metricWatchSection(shadowable)}
       ${cannotWatchSection(unwatchable)}
       ${cannotCarrySection(cannotCarry)}

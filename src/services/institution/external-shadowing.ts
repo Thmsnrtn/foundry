@@ -241,6 +241,76 @@ export interface ExternalShadowResolution {
 }
 
 /**
+ * Watches that are open and cannot resolve, because nothing is arriving.
+ *
+ * `getDarkenedWatches` says what stopped when the founder disconnected a
+ * channel. Its twin was missing: a channel nobody revoked, that has simply gone
+ * quiet. The consequence is identical — the expectation stays open, so the
+ * responsibility sits at Shadowing for good and cannot reach Assisting — and
+ * the cause is one the founder did not choose and has nothing pointing at it.
+ *
+ * NO EXPECTATION EVER EXPIRES IN PRODUCTION. Neither founder-facing door
+ * supplies a window, so "for good" is literal rather than eventual, and there
+ * is no later moment at which this resolves itself.
+ *
+ * A DATE, NOT A VERDICT. Foundry does not know this company's reporting
+ * cadence, and picking a staleness threshold would be deciding how quiet is too
+ * quiet on the owner's behalf. It says when the channel last spoke and that
+ * nothing has come since; whether that is a problem is the owner's to say.
+ */
+export async function getSilentWatches(productId: string): Promise<Array<{
+  responsibilityId: string; title: string; channelKey: string; channelLabel: string;
+  watchingSince: string; lastReadingAt: string | null;
+}>> {
+  const rows = await query(
+    `SELECT r.id, r.title, c.channel_key, c.label, x.created_at AS watching_since,
+            (SELECT MAX(e.created_at) FROM signal_events e
+              WHERE e.product_id=x.product_id AND e.source='external_metric_ingest'
+                AND json_extract(e.payload_json,'$.field')=c.channel_key) AS last_reading_at
+       FROM responsibility_shadow_expectations x
+       JOIN institutional_responsibilities r
+         ON r.id=x.responsibility_id AND r.product_id=x.product_id
+       JOIN company_observation_channels c
+         ON c.product_id=x.product_id
+        -- Same prefix match as the darkened query, for the same reason: the
+        -- channel is the FIELD in the middle of external_metric:FIELD:DIRECTION,
+        -- and matching the prefix alone would catch a channel whose key is a
+        -- prefix of another's.
+        AND x.expected_event_type LIKE 'external_metric:' || c.channel_key || ':%'
+      WHERE x.product_id=? AND c.revoked_at IS NULL
+        AND r.state='shadowing' AND r.disposition='active'
+        AND NOT EXISTS (
+          SELECT 1 FROM responsibility_shadow_comparisons cmp
+           WHERE cmp.expectation_id=x.id AND cmp.classification IN ('matched','deviated'))
+        -- Only where the silence is real: a reading that arrived after the
+        -- expectation opened means the channel is speaking, and whatever is
+        -- keeping the comparison from being recorded is a different fact.
+        --
+        -- AT-OR-AFTER, WHERE RESOLUTION READS STRICTLY-AFTER. That path
+        -- excludes a
+        -- reading whose order against the expectation is ambiguous, so a
+        -- prediction is never credited by evidence that may predate it. Here
+        -- the claim is the negative one — nothing has come in since you asked
+        -- — and the same principle flips the inequality: an absence may only be
+        -- asserted where the evidence is complete enough to support it, so a
+        -- reading in the expectation's own second is enough to stay quiet.
+        AND NOT EXISTS (
+          SELECT 1 FROM signal_events e
+           WHERE e.product_id=x.product_id AND e.source='external_metric_ingest'
+             AND json_extract(e.payload_json,'$.field')=c.channel_key
+             AND datetime(e.created_at)>=datetime(x.created_at))
+      ORDER BY x.created_at`,
+    [productId],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
+    responsibilityId: String(row.id), title: String(row.title),
+    channelKey: String(row.channel_key), channelLabel: String(row.label),
+    watchingSince: String(row.watching_since),
+    lastReadingAt: row.last_reading_at == null ? null : String(row.last_reading_at),
+  }));
+}
+
+/**
  * Compare the expectation against every external reading that arrived after it.
  *
  * Deviation dominates. A favourable reading cannot bury an unfavourable one, so
