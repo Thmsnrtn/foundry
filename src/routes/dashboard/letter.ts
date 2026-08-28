@@ -589,6 +589,44 @@ const noticeSection = (
 // already being watched, and the channel has ALREADY produced a real reading.
 // `getShadowableResponsibilities` enforces all three, which is why this renders
 // whatever it returns and decides nothing itself.
+// WHAT I CANNOT CARRY, AND WHY YOU ARE STILL WAITING.
+//
+// A founder can report "money owed to us that needs collecting", be asked to
+// explain its failure conditions and its financial consequence, watch it reach
+// Shadowing — and then wait forever for an offer that cannot come, because
+// nothing Foundry may lawfully do would carry it. `getAssistingCandidates`
+// filters those out and says nothing, so the silence reads as "not yet" when
+// the truth is "there is no path".
+//
+// Those are different facts about Foundry, and the second is the one that
+// decides whether the founder keeps waiting or goes and does it themselves. It
+// is the same principle that makes an unobserved metric say so rather than
+// report zero: an absence the founder is entitled to know about.
+//
+// No apology and no promise. Foundry does not know when or whether a hand for
+// this will exist, and saying "soon" would be inventing a plan.
+const cannotCarrySection = (
+  items: Array<{ responsibilityId: string; title: string; capability: string; state: string }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What I cannot carry</div>
+    <div style="font-size:0.82rem;color:var(--text-primary);margin-bottom:0.6rem;">
+      I am watching ${items.length === 1 ? 'this' : 'these'} and I understand ${items.length === 1 ? 'it' : 'them'},
+      but there is nothing I can lawfully do that would carry
+      ${items.length === 1 ? 'it' : 'them'} — so I will not be asking you for
+      permission, and you should not wait for me to.
+    </div>
+    ${items.map((item) => html`
+      <div style="padding:0.4rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        <div style="font-size:0.88rem;color:var(--text-primary);">${item.title}</div>
+        <div style="font-size:0.74rem;color:var(--text-muted);margin-top:0.15rem;">
+          I keep watching it and I will tell you what I see. Acting on it stays
+          yours until a way for me to do it exists, and I cannot tell you when
+          that will be.
+        </div>
+      </div>`)}
+  </div>`;
+
 const metricWatchSection = (
   items: Array<{ responsibilityId: string; title: string; channels: Array<{ field: string; label: string }> }>,
 ) => items.length === 0 ? '' : html`
@@ -972,6 +1010,9 @@ letterRoutes.get('/letter', async (c) => {
   }));
   const { getShadowableResponsibilities } = await import('../../services/institution/external-shadowing.js');
   const shadowable = await getShadowableResponsibilities(ctx.productId);
+  const { getUncarriableResponsibilities } = await import(
+    '../../services/institution/assisting-admission.js');
+  const cannotCarry = await getUncarriableResponsibilities(ctx.productId);
   const { getDarkenedWatches } = await import('../../services/institution/external-shadowing.js');
   const darkenedWatches = await getDarkenedWatches(ctx.productId);
   const { availableDevelopmentChecks } = await import('../../services/institution/development-shadowing.js');
@@ -1092,6 +1133,7 @@ letterRoutes.get('/letter', async (c) => {
       ${permissionSection(assistingCandidates)}
       ${darkenedWatchSection(darkenedWatches)}
       ${metricWatchSection(shadowable)}
+      ${cannotCarrySection(cannotCarry)}
       ${developmentWatchSection(understoodDevelopment, developmentChecks)}
       ${supportChannelSection(channelCandidates, supportChannels, CHANNEL_REFUSAL_LABELS,
         process.env.APP_URL ?? 'http://localhost:8080')}

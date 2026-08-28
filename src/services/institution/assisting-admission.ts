@@ -326,3 +326,60 @@ export async function revokeAssistingAuthority(input: {
   );
   return Number(result.rowsAffected ?? 0) > 0;
 }
+
+/**
+ * Responsibilities Foundry can watch and understand and will never offer to
+ * help with, because nothing it can lawfully do would carry them.
+ *
+ * A FOUNDER CAN CREATE ONE OF THESE AND NOTHING TELLS THEM. The intake takes
+ * eight kinds of obligation and `discovery.ts` maps them onto four
+ * capabilities; `GRANTABLE_CAPABILITIES` above holds two, and development has
+ * its own authority path. `billing_recovery` — what "money owed to us that
+ * needs collecting" becomes — has none. So the founder reports it, is asked to
+ * explain its failure conditions, its stakeholder obligations and its financial
+ * consequence, watches it reach Shadowing, and then waits: the offer to help
+ * never arrives, because `getAssistingCandidates` filters it out on exactly
+ * this list and no surface says so.
+ *
+ * That silence reads as "not yet". The truth is "there is no path", and the two
+ * are different facts about Foundry. Absence of a capability is a fact the
+ * founder is entitled to, on the same principle that makes an unobserved metric
+ * say so rather than report zero — and it is the one that decides whether they
+ * go on waiting or go and do it themselves.
+ *
+ * DERIVED, NEVER LISTED. The set is whatever active responsibilities carry a
+ * capability with no grantable effect, so a capability gaining one drops off
+ * this surface by construction rather than by somebody remembering to edit it.
+ * `development` is excluded because it has its own authority path
+ * (`grantDevelopmentAuthority`), which is a different door and not an absent one.
+ */
+export interface UncarriableResponsibility {
+  responsibilityId: string;
+  title: string;
+  capability: string;
+  state: string;
+}
+
+/** Capabilities whose authority is granted somewhere other than the assisting
+ *  door. Not ungoverned — governed elsewhere. */
+const AUTHORITY_ELSEWHERE = new Set(['development']);
+
+export async function getUncarriableResponsibilities(
+  productId: string,
+): Promise<UncarriableResponsibility[]> {
+  const rows = await query(
+    `SELECT id, title, capability, state
+       FROM institutional_responsibilities
+      WHERE product_id = ? AND disposition = 'active'
+        AND state IN ('understood', 'shadowing')
+      ORDER BY created_at, rowid`,
+    [productId],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>)
+    .filter((r) => !GRANTABLE_CAPABILITIES[String(r.capability)])
+    .filter((r) => !AUTHORITY_ELSEWHERE.has(String(r.capability)))
+    .map((r) => ({
+      responsibilityId: String(r.id), title: String(r.title),
+      capability: String(r.capability), state: String(r.state),
+    }));
+}
