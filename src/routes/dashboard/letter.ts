@@ -25,6 +25,7 @@ const adviceStrip = (f: Parameters<typeof adviceFooter>[0]) => _html`
   </p>`;
 import { connectionRoutes } from './connections.js';
 import { requireCompanyCapability } from '../../middleware/rbac.js';
+import { reporterPhrase } from '../../services/institution/effect-outcome.js';
 
 export const letterRoutes = new Hono<AuthEnv>();
 
@@ -470,6 +471,12 @@ const supportChannelSection = (
 // reporters, suggest which to believe, or offer to settle it: it has no way of
 // knowing, and pretending otherwise is the whole failure mode the outcome layer
 // exists to avoid.
+//
+// THE REPORTER IS RENDERED THROUGH THE SHARED PHRASING. This card used to print
+// the raw string, so `external:` prefixes and a founder's own id reached the
+// page; the assisting-activity line flattened the same fact to a category and
+// lost which system said it. One function now, so a witness is not described
+// two ways on one page.
 const disputedSection = (
   items: Array<{
     effectId: string; title: string; preview: string;
@@ -484,7 +491,7 @@ const disputedSection = (
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${item.preview}</div>
         ${item.reports.map((r) => html`
           <div style="font-size:0.8rem;color:var(--text-primary);margin-top:0.3rem;">
-            <span style="color:var(--text-muted);">${r.reporter}</span>
+            <span style="color:var(--text-muted);">${reporterPhrase(r.reporter)}</span>
             — ${r.verdict === 'achieved' ? 'it worked' : 'it did not work'}${r.detail ? html`: ${r.detail}` : ''}
           </div>`)}
         <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.35rem;">I have kept both. I have no way to tell which is right, so I am not going to pick one.</div>

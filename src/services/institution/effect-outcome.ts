@@ -31,6 +31,36 @@ import { query } from '../../db/client.js';
 
 export type OutcomeVerdict = 'achieved' | 'failed';
 
+/**
+ * A reporter, as the founder should read it.
+ *
+ * THE SAME FACT HAD TWO TREATMENTS AND NEITHER WAS RIGHT. The disputed-effects
+ * card rendered the raw string — `external:zendesk-webhook`, or
+ * `founder:` followed by the founder's own id — so internal prefixes and a raw
+ * identifier reached the page. The assisting-activity line flattened everything
+ * to a category, so "a system you connected told me" discarded WHICH system,
+ * and a founder with three connected could not check the verdict against the
+ * right source.
+ *
+ * `external:` names are SELF-DECLARED and the phrasing says so. The ingest door
+ * states the rule it was captured under — "the origin the tool names for itself,
+ * never a claim about who it is; identity here is the token, this is provenance,
+ * not authority" — so rendering it as though Foundry had verified the name would
+ * be the claim that door refuses to make. Quoting it as what the system calls
+ * itself keeps the provenance and the doubt together.
+ */
+export function reporterPhrase(reporter: string): string {
+  if (reporter.startsWith('founder:')) return 'you';
+  if (reporter === 'customer:wrote_again') return 'the customer, by writing again';
+  if (reporter.startsWith('external:')) {
+    const name = reporter.slice('external:'.length).trim();
+    return name && name !== 'unnamed_system'
+      ? `a system you connected, calling itself “${name}”`
+      : 'a system you connected, which did not say what it was';
+  }
+  return 'somebody outside';
+}
+
 export type OutcomeRefusal =
   | 'effect_unknown' | 'verdict_invalid' | 'reporter_invalid' | 'not_executed'
   | 'detail_too_long';

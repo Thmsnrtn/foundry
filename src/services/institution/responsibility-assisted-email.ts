@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { liveActGrant, operatingProduct, query } from '../../db/client.js';
 import { invoke } from '../outbound/gateway.js';
 import { recordReconstructionClaim } from './reconstruction.js';
+import { reporterPhrase } from './effect-outcome.js';
 
 export const ASSISTED_EMAIL_SCOPE='send_email:support_reply';
 /** A founder-authored notice to a named recipient about a responsibility.
@@ -389,7 +390,10 @@ export async function getFounderAssistingActivity(productId:string):Promise<Arra
     // person the reply was sent to. It is also the only one that is a FACT
     // rather than a verdict: they wrote, and there is a time on it.
     if (who[0]==='customer:wrote_again') return 'they wrote again after you answered, so';
-    return 'a system you connected told me';
+    // One phrasing, shared with the disputed card, so the same witness is not
+    // described two ways on one page — and the system's self-declared name
+    // survives instead of being flattened to its category.
+    return `${reporterPhrase(who[0])} told me`;
   };
 
   return rows.map(row=>{
