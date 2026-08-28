@@ -163,3 +163,88 @@ export async function getSevenDayResponsibilitySummary(
   }
   return out;
 }
+
+/**
+ * How long the founder could be away before something the COMPANY said has a
+ * date falls due — and everything that question cannot answer.
+ *
+ * `getSevenDayResponsibilitySummary` above answers what happened in the last
+ * seven days, classified the way `EXPERIENCE.md` requires. It is backward
+ * looking. The founder's actual question before they go is the other one, and
+ * nothing answered it: CAN I LEAVE, AND FOR HOW LONG.
+ *
+ * THIS IS A FACT, NOT A PREDICTION, and the distinction is the whole design.
+ * Foundry does not estimate how long it can cope. It reads the soonest date the
+ * COMPANY ITSELF stated, on a responsibility that is still active, and reports
+ * the interval to it. Nothing is inferred: a date with no author is refused at
+ * the trigger, prose is never turned into a date, and a responsibility with no
+ * stated date contributes nothing to this number in either direction.
+ *
+ * WHICH IS WHY THE CAVEATS ARE NOT DECORATION. A horizon computed only from
+ * dated obligations is silent about undated ones, and reporting "eleven days"
+ * while four things wait with no clock on them would be a composite resting on
+ * what it did not measure — the defect this campaign spends its time removing.
+ * So `needingYouWithoutDate` is returned beside the number and the surface must
+ * say it. `alreadyOverdue` is separate again: those are not a horizon at all,
+ * they are things that are already late.
+ *
+ * `loopsStopped` is the last caveat and the sharpest. If the passes that would
+ * notice a problem are not running, the quiet this reading describes may be the
+ * quiet of nothing looking. Absence of a signal is not a signal.
+ */
+export interface StepAwayHorizon {
+  /** Whole days until the soonest stated due date. Null when nothing is dated —
+   *  which is NOT "you can leave indefinitely". */
+  daysUntilSoonestDue: number | null;
+  /** The date itself, and whose responsibility carries it. */
+  soonestDueAt: string | null;
+  soonestDueTitle: string | null;
+  /** Already past their stated date. Not a horizon — a debt. */
+  alreadyOverdue: number;
+  /** Needs the founder and carries no date, so the number above is silent
+   *  about them. */
+  needingYouWithoutDate: number;
+  /** Institution passes not currently running. A quiet reading from a system
+   *  that has stopped looking is not evidence of quiet. */
+  loopsStopped: number;
+}
+
+export async function getStepAwayHorizon(
+  productId: string, now: Date = new Date(),
+): Promise<StepAwayHorizon> {
+  const summary = await getSevenDayResponsibilitySummary(productId, now);
+  const needsYou = summary.NEEDS_YOU;
+
+  const dated = (await query(
+    `SELECT title, due_at FROM institutional_responsibilities
+      WHERE product_id = ? AND disposition = 'active' AND due_at IS NOT NULL
+        AND datetime(due_at) > datetime(?)
+      ORDER BY datetime(due_at) ASC, rowid ASC
+      LIMIT 1`,
+    [productId, now.toISOString()],
+  )).rows[0] as Record<string, unknown> | undefined;
+
+  const overdue = (await query(
+    `SELECT COUNT(*) AS n FROM institutional_responsibilities
+      WHERE product_id = ? AND disposition = 'active' AND due_at IS NOT NULL
+        AND datetime(due_at) <= datetime(?)`,
+    [productId, now.toISOString()],
+  )).rows[0] as Record<string, unknown>;
+
+  const { getFailingInstitutionLoops } = await import('./loop-health.js');
+  const failing = await getFailingInstitutionLoops(now);
+
+  const soonestDueAt = dated ? String(dated.due_at) : null;
+  return {
+    soonestDueAt,
+    soonestDueTitle: dated ? String(dated.title) : null,
+    // Whole days, rounded DOWN: a deadline in thirty hours is one day away, not
+    // two. Rounding the other way would hand the founder a day they do not have.
+    daysUntilSoonestDue: soonestDueAt === null ? null
+      : Math.max(0, Math.floor(
+        (new Date(soonestDueAt).getTime() - now.getTime()) / 86_400_000)),
+    alreadyOverdue: Number(overdue.n ?? 0),
+    needingYouWithoutDate: needsYou.filter((item) => !item.dueAt).length,
+    loopsStopped: failing.length,
+  };
+}
