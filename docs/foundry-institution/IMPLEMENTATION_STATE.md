@@ -16,7 +16,7 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `a3987bd` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at `e6de8b3` on `claude/foundry-autonomous-continuation-0gents`.
 
 **This table was stale for many cycles and said so nowhere** — it read
 `cb7fbeb`, 228 migrations, 347 files. The document's own rule is at the top:
@@ -28,7 +28,7 @@ removing, in the place it does the most damage.
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
 | Migrations | **256 files**, highest number **219**. Applied lexically, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. **Snapshot freshness is a GATE now, not a note** — `check-schema-snapshot.mjs` runs at the front of the chain, because the reminder to regenerate it was right, was written into this file, and failed anyway an hour later. |
-| Validation | `npm run check` green end to end: **435 files / 3,775 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
+| Validation | `npm run check` green end to end: **436 files / 3,784 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
 | CI | Runs on `master`, `main` and `claude/**`. |
 | Ratchets | Unguarded mutating routes **112** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · unreachable modules **22** · write-only columns **62** · unread tables **2** · unscoped product-shaped routes **2** · id tiebreaks **18** · star-select phantom columns **0** · **tables no code can reach 0** · **gates with no planted-defect test 0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -89,9 +89,30 @@ removing, in the place it does the most damage.
   most 150, and a hit cap is reported rather than passed off as a total.
   "I could not look" is a distinct result from "nobody wrote".
 
-  **E2 — local runtime.** Fifteen tests against a mocked Intercom. It has never
-  seen a real account, a real customer or a real conversation; that rung needs
-  an owner-connected account, not more local work.
+  **And the far end of the same chain.** The support loop ended "→ governed
+  send_email → receipt → outcome UNRESOLVED" because a support outcome had only
+  two possible producers: an external door nothing posts to, and two legacy
+  event types nothing wrote. The conversation answers one question honestly —
+  **did the customer write again after we answered?** — and the answer is
+  recorded in one direction only.
+
+  **The asymmetry is the design and it only ever runs against Foundry.** A
+  customer writing again is a failure witness. Silence records NOTHING and the
+  outcome stays `unresolved`, because silence is the state of a customer who
+  gave up, one who was helped, and one on holiday. There is no code path that
+  can write `support_reply_effective`; a success verdict must come from
+  somewhere Foundry is not. A teammate's reply is not the customer answering.
+
+  **E2 — local runtime.** Twenty-four tests across both halves, against a
+  mocked Intercom. Neither has seen a real account, a real customer or a real
+  conversation; that rung needs an owner-connected account, not more local work.
+
+  **What the fixtures proved on the way, which is worth more than the feature.**
+  Four database guards refused a shortcut in turn — a message needs a registered
+  channel, the channel needs its observing evidence row, a reply must name the
+  responsibility owning that channel and carry a proposal authored for that same
+  message, and a grant is refused to a responsibility that has not reached
+  Shadowing. **The ladder cannot be skipped even by a test fixture.**
 
 - Everything else a company can tell Foundry arrives through the four ingest
   routes, twelve integration adapters, two webhooks, and the founder typing
