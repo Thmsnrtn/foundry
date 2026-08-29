@@ -1225,8 +1225,8 @@ letterRoutes.get('/letter', async (c) => {
   // Whether the parts of Foundry that keep this page current are running. Read
   // last and rendered first: a founder needs to know the page may be stale
   // BEFORE they read it, not after they have acted on it.
-  const { getFailingInstitutionLoops } = await import('../../services/institution/loop-health.js');
-  const failingLoops = await getFailingInstitutionLoops();
+  const { getFailingLoopsForCompany } = await import('../../services/institution/loop-health.js');
+  const failingLoops = await getFailingLoopsForCompany(ctx.productId);
 
   const content = html`
     <h1 style="margin-bottom:0.25rem;">The Letter</h1>

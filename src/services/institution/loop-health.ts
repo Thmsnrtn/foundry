@@ -134,3 +134,99 @@ export async function getFailingInstitutionLoops(now: Date = new Date()): Promis
   return out.sort((a, b) => b.consecutiveFailures - a.consecutiveFailures
     || a.jobName.localeCompare(b.jobName));
 }
+
+// ─── THE SAME QUESTION, FOR ONE COMPANY ──────────────────────────────────────
+//
+// `job_health` answers "is Foundry's scheduled work running". The institution's
+// loops run per company, and each company's slice is wrapped so that one
+// product's state never stops another's pass — those handlers log and continue,
+// so the JOB succeeds while a particular company's loops do nothing.
+//
+// The founder of that company reads a page saying nothing has stopped. That is
+// the defect the loops-stopped card exists for, fixed once at the job level and
+// still true one level down.
+
+/**
+ * Record how one company's slice of a loop went.
+ *
+ * A slice FAILED if something in it was already logged as an error. That is the
+ * code's own judgement, not a new one: `earnResponsibilityUnderstanding` throws
+ * when the facts are not yet sufficient and its handler says so — "That is the
+ * normal case and is not an error" — and a slice must not be called failing
+ * because a responsibility is not ready.
+ *
+ * Writing failure is best-effort. This runs inside a job's own error handling,
+ * and a health row that cannot be written must never be the thing that stops
+ * the loop it is describing.
+ */
+export async function recordCompanyLoopOutcome(
+  productId: string, jobName: string, error: unknown | null,
+): Promise<void> {
+  try {
+    if (error === null) {
+      await query(
+        `INSERT INTO company_loop_health (product_id,job_name,last_success_at,consecutive_failures)
+         VALUES (?,?,datetime('now'),0)
+         ON CONFLICT(product_id,job_name) DO UPDATE SET
+           last_success_at=datetime('now'), consecutive_failures=0,
+           last_error_name=NULL, updated_at=datetime('now')`,
+        [productId, jobName]);
+      return;
+    }
+    await query(
+      `INSERT INTO company_loop_health
+         (product_id,job_name,last_failure_at,consecutive_failures,last_error_name)
+       VALUES (?,?,datetime('now'),1,?)
+       ON CONFLICT(product_id,job_name) DO UPDATE SET
+         last_failure_at=datetime('now'),
+         consecutive_failures=company_loop_health.consecutive_failures+1,
+         last_error_name=excluded.last_error_name, updated_at=datetime('now')`,
+      [productId, jobName, errorName(error)]);
+  } catch { /* a health row must never break the loop it describes */ }
+}
+
+/**
+ * Loops that are failing FOR THIS COMPANY — the job failing everywhere, or this
+ * company's own slice failing while the job succeeds.
+ *
+ * One answer per loop, because the founder's question is about the loop and not
+ * about which layer of Foundry noticed. Where both are true the worse count
+ * wins, so a company-specific failure can never make a global one look milder.
+ *
+ * `stoppedRunning` stays a fact about the JOB. A company's slice not running is
+ * not something this can see: a company whose slice is skipped writes no row,
+ * and absence of a row is a fresh company as much as a stopped one. Claiming
+ * staleness from silence is the mistake `getFailingInstitutionLoops` refuses to
+ * make above, and it is refused here for the same reason.
+ */
+export async function getFailingLoopsForCompany(
+  productId: string, now: Date = new Date(),
+): Promise<LoopHealth[]> {
+  const global = await getFailingInstitutionLoops(now);
+  const byName = new Map(global.map((l) => [l.jobName, l]));
+
+  const names = Object.keys(INSTITUTION_LOOPS);
+  const rows = await query(
+    `SELECT job_name,last_success_at,last_failure_at,consecutive_failures,last_error_name
+       FROM company_loop_health
+      WHERE product_id=? AND consecutive_failures>0
+        AND job_name IN (${names.map(() => '?').join(',')})`, [productId, ...names]);
+
+  for (const row of rows.rows as unknown as Array<Record<string, unknown>>) {
+    const jobName = String(row.job_name);
+    const loop = INSTITUTION_LOOPS[jobName];
+    if (!loop) continue;
+    const failures = Number(row.consecutive_failures);
+    const existing = byName.get(jobName);
+    if (existing && existing.consecutiveFailures >= failures) continue;
+    byName.set(jobName, {
+      jobName, label: loop.label,
+      consecutiveFailures: failures,
+      stoppedRunning: existing ? existing.stoppedRunning : false,
+      lastSuccessAt: row.last_success_at == null ? null : String(row.last_success_at),
+      lastFailureAt: row.last_failure_at == null ? null : String(row.last_failure_at),
+      lastErrorName: row.last_error_name == null ? null : String(row.last_error_name),
+    });
+  }
+  return [...byName.values()].sort((a, b) => a.jobName.localeCompare(b.jobName));
+}

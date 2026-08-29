@@ -454,6 +454,8 @@
     AND (NEW.verification_status IS NOT 'passed' OR NEW.diff_verified IS NOT 1
     AND (length(NEW.last_error_name) > 64 OR NEW.last_error_name LIKE '% %');
     AND (length(NEW.last_error_name) > 64 OR NEW.last_error_name LIKE '% %');
+    AND (length(NEW.last_error_name) > 64 OR NEW.last_error_name LIKE '% %');
+    AND (length(NEW.last_error_name) > 64 OR NEW.last_error_name LIKE '% %');
     AND NOT EXISTS (
     CHECK (status IN ('in_progress','completed','skipped')),
     FROM autonomy_consents a
@@ -1250,6 +1252,7 @@
   OR NEW.outcome_ref IS NOT OLD.outcome_ref
   PRIMARY KEY (founder_id, product_id, item_key)
   PRIMARY KEY (key, window_start)
+  PRIMARY KEY (product_id, job_name)
   PRIMARY KEY (product_id, prompt, condition_name)
   PRIMARY KEY (scope, scope_id, date)
   REFERENCES support_channel_feeds(provider));
@@ -1316,6 +1319,8 @@
   SELECT RAISE(ABORT,'candidate_promotion:not_promotable') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'candidate_promotion:owner_invalid') WHERE
   SELECT RAISE(ABORT,'candidate_promotion:result_required') WHERE
+  SELECT RAISE(ABORT,'company_loop_health:error_name_is_not_a_message')
+  SELECT RAISE(ABORT,'company_loop_health:error_name_is_not_a_message')
   SELECT RAISE(ABORT,'cost_event:amount_invalid')
   SELECT RAISE(ABORT,'cost_event:attribution_immutable');
   SELECT RAISE(ABORT,'cost_event:capability_mismatch')
@@ -1529,6 +1534,8 @@
   WHERE NEW.intake_key IS NULL OR length(NEW.intake_key)<24;
   WHERE NEW.integration_name IN ('resend');
   WHERE NEW.label IS NULL OR trim(NEW.label)='';
+  WHERE NEW.last_error_name IS NOT NULL
+  WHERE NEW.last_error_name IS NOT NULL
   WHERE NEW.last_error_name IS NOT NULL
   WHERE NEW.last_error_name IS NOT NULL
   WHERE NEW.responsibility_id IS NOT NULL AND NEW.capability IS NOT NULL AND EXISTS (
@@ -1934,6 +1941,7 @@
   conflict_check_passed INTEGER NOT NULL DEFAULT 0
   conflict_points_json TEXT NOT NULL DEFAULT '[]',   -- things agents disagree on
   conflicts_json TEXT, -- JSON array of identified conflicts
+  consecutive_failures INTEGER NOT NULL DEFAULT 0,
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
   consecutive_rejections INTEGER NOT NULL DEFAULT 0,
@@ -2879,6 +2887,7 @@
   item_ref    TEXT NOT NULL,             -- e.g. decision id
   items_json TEXT NOT NULL,       -- JSON: [{id, text, category, impact, done}]
   jargon_level TEXT DEFAULT 'moderate',
+  job_name             TEXT NOT NULL,
   job_name             TEXT PRIMARY KEY,
   job_name TEXT PRIMARY KEY,
   job_title TEXT NOT NULL,
@@ -2933,8 +2942,10 @@
   last_error TEXT,
   last_error TEXT,
   last_error_name      TEXT,
+  last_error_name      TEXT,
   last_evaluated_at TEXT,
   last_event_at TEXT,
+  last_failure_at      DATETIME,
   last_failure_at      TEXT,
   last_login_streak INTEGER DEFAULT 0,
   last_message_at DATETIME,
@@ -2947,6 +2958,7 @@
   last_scanned_at DATETIME,
   last_seen_at DATETIME,
   last_sent_at TEXT,
+  last_success_at      DATETIME,
   last_success_at      TEXT,
   last_successful_sync TEXT,
   last_sync_at TEXT,
@@ -3374,6 +3386,7 @@
   product_id              TEXT NOT NULL,
   product_id            TEXT NOT NULL,
   product_id            TEXT NOT NULL,
+  product_id           TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id           TEXT NOT NULL,
   product_id          TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id          TEXT NOT NULL REFERENCES products(id),
@@ -4108,6 +4121,7 @@
   unit TEXT,                                 -- 'count' | 'usd' | 'pct' | 'days' | other
   updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
@@ -4464,6 +4478,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -4513,6 +4528,7 @@ BEFORE INSERT ON autonomy_consents
 BEFORE INSERT ON autonomy_consents WHEN NEW.responsibility_id IS NOT NULL
 BEFORE INSERT ON company_financial_position
 BEFORE INSERT ON company_financial_position
+BEFORE INSERT ON company_loop_health
 BEFORE INSERT ON company_observation_channels
 BEFORE INSERT ON cost_events
 BEFORE INSERT ON decisions
@@ -4582,6 +4598,7 @@ BEFORE UPDATE ON call_transcripts
 BEFORE UPDATE ON call_transcripts
 BEFORE UPDATE ON company_financial_position
 BEFORE UPDATE ON company_financial_position
+BEFORE UPDATE ON company_loop_health
 BEFORE UPDATE ON company_observation_channels
 BEFORE UPDATE ON cost_events
 BEFORE UPDATE ON development_change_plans
@@ -4592,6 +4609,8 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5066,6 +5085,7 @@ CREATE TABLE cohort_memberships (
 CREATE TABLE cohort_patterns (
 CREATE TABLE communication_budgets (
 CREATE TABLE company_financial_position (
+CREATE TABLE company_loop_health (
 CREATE TABLE company_observation_channels (
 CREATE TABLE company_okrs (
 CREATE TABLE competitive_signals (
@@ -5254,6 +5274,8 @@ CREATE TRIGGER cfp_amounts_are_not_negative_ins
 CREATE TRIGGER cfp_amounts_are_not_negative_upd
 CREATE TRIGGER cfp_as_of_is_not_in_the_future_ins
 CREATE TRIGGER cfp_as_of_is_not_in_the_future_upd
+CREATE TRIGGER company_loop_health_error_name_guard
+CREATE TRIGGER company_loop_health_error_name_update_guard
 CREATE TRIGGER company_observation_channel_guard
 CREATE TRIGGER company_observation_channel_immutable
 CREATE TRIGGER cost_event_attribution_guard
@@ -5377,6 +5399,8 @@ CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, 
 CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
+END;
 END;
 END;
 END;

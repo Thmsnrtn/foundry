@@ -231,8 +231,11 @@ export async function getStepAwayHorizon(
     [productId, now.toISOString()],
   )).rows[0] as Record<string, unknown>;
 
-  const { getFailingInstitutionLoops } = await import('./loop-health.js');
-  const failing = await getFailingInstitutionLoops(now);
+  // THIS COMPANY'S loops, not only Foundry's scheduled work. A tick that
+  // succeeds can still have done nothing at all for one company, and this
+  // caveat is what makes the number beside it honest.
+  const { getFailingLoopsForCompany } = await import('./loop-health.js');
+  const failing = await getFailingLoopsForCompany(productId, now);
 
   const soonestDueAt = dated ? String(dated.due_at) : null;
   return {

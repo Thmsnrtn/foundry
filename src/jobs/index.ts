@@ -2639,6 +2639,25 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const { runJudgmentObservationPass } = await import(
         '../services/institution/institutional-judgment-evaluation.js'
       );
+      // A COMPANY'S LOOPS CAN STOP INSIDE A TICK THAT SUCCEEDS.
+      //
+      // Every unit below is wrapped so that "one product's institutional state
+      // must never stop another's pass" — they log and continue, so this job
+      // resolves and `recordJobSuccess` writes a fresh `last_success_at`. A
+      // company whose pass throws on every run therefore reads a page saying
+      // nothing has stopped, and the staleness branch that would eventually
+      // notice is defeated by the very same write.
+      //
+      // Failures are remembered per company here and recorded once at the end.
+      // A slice failed if something in it was already logged as an ERROR: that
+      // is the code's own judgement, not a new one, which is why the
+      // understanding handler below — "not yet sufficient... is not an error" —
+      // is deliberately not counted.
+      const companyFailures = new Map<string, unknown>();
+      const noteFailure = (productId: string, err: unknown): void => {
+        if (!companyFailures.has(productId)) companyFailures.set(productId, err);
+      };
+
       let raised = 0; let observed = 0;
       for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
         const productId = String(row.id);
@@ -2648,6 +2667,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           if (pass.raised) raised++;
           observed += (await runJudgmentObservationPass(productId)).length;
         } catch (err) {
+          noteFailure(productId, err);
           logger.error(
             `institutional_judgment_tick failed for ${productId}: ${err instanceof Error ? err.message : String(err)}`,
             { jobName: 'institutional_judgment_tick', productId },
@@ -2689,6 +2709,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             const resolved = await resolveExternalMetricShadowing(productId, String(x.id));
             if (resolved.classification !== 'unresolved') compared++;
           } catch (err) {
+            noteFailure(productId, err);
             logger.error(
               `shadow resolution failed for ${String(x.id)}: ${err instanceof Error ? err.message : String(err)}`,
               { jobName: 'institutional_judgment_tick', productId },
@@ -2717,6 +2738,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
               { productId, expectationId: String(x.id) });
             if (resolved.verdict !== 'unresolved') compared++;
           } catch (err) {
+            noteFailure(productId, err);
             logger.error(
               `development shadow resolution failed for ${String(x.id)}: ${err instanceof Error ? err.message : String(err)}`,
               { jobName: 'institutional_judgment_tick', productId },
@@ -2759,6 +2781,18 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           `foundry self-observation failed: ${err instanceof Error ? err.message : String(err)}`,
           { jobName: 'institutional_judgment_tick' },
         );
+      }
+
+      // One outcome per company, whether or not anything went wrong for it —
+      // a run that succeeded has to clear a previous failure, or a company that
+      // recovers stays marked as failing for good.
+      const { recordCompanyLoopOutcome } = await import(
+        '../services/institution/loop-health.js'
+      );
+      for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
+        const productId = String(row.id);
+        await recordCompanyLoopOutcome(
+          productId, 'institutional_judgment_tick', companyFailures.get(productId) ?? null);
       }
 
       if (raised > 0 || observed > 0 || understood > 0 || compared > 0 || selfObserved) {
@@ -2810,7 +2844,15 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const pending = await listActionsAwaitingOutcomeReconciliation();
 
       let reconciled = 0; let verified = 0; let conflicting = 0;
+      // Same reason as the judgment tick: this handler logs and continues, so a
+      // company whose every reconciliation throws sits inside a run that
+      // succeeds. Only companies that actually had work are recorded — a
+      // company with nothing pending had no slice to succeed or fail, and
+      // saying otherwise would be inventing an outcome.
+      const touched = new Set<string>();
+      const companyFailures = new Map<string, unknown>();
       for (const row of pending) {
+        touched.add(row.productId);
         // One company's state must never stop another's reconciliation.
         try {
           const outcome = await reconcileAssistedSupportEmail(row.productId, row.actionId);
@@ -2818,10 +2860,20 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           if (outcome === 'verified_success' || outcome === 'verified_failure') verified++;
           if (outcome === 'conflicting') conflicting++;
         } catch (err) {
+          if (!companyFailures.has(row.productId)) companyFailures.set(row.productId, err);
           logger.error(
             `institutional_effect_reconciliation failed for ${row.actionId}: ${err instanceof Error ? err.message : String(err)}`,
             { jobName: 'institutional_effect_reconciliation', productId: row.productId },
           );
+        }
+      }
+      if (touched.size) {
+        const { recordCompanyLoopOutcome } = await import(
+          '../services/institution/loop-health.js'
+        );
+        for (const productId of touched) {
+          await recordCompanyLoopOutcome(
+            productId, 'institutional_effect_reconciliation', companyFailures.get(productId) ?? null);
         }
       }
       if (reconciled > 0) {
