@@ -71,12 +71,42 @@ describe('the financial and audit surfaces are gated at the router', () => {
     ['dashboard/investors.ts', 'can_view_financials'],
   ];
 
+  /** Does a router-level `use(pattern, …)` cover this declared route path? */
+  const covers = (pattern: string, path: string): boolean => {
+    if (pattern === '*') return true;
+    return new RegExp(`^${pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/:[A-Za-z0-9_]+/g, '[^/]+')
+      .replace(/\*/g, '.*')}$`).test(path);
+  };
+
   for (const [file, capability] of expected) {
     it(`${file} requires ${capability} for every route in it`, () => {
+      // PINNED TO THE PROPERTY, NOT THE EXPRESSION. This required the literal
+      // `use('*', …)`, and that shape had to go: these routers are mounted at
+      // '/', where Hono merges a sub-app's middleware under its MOUNT PATH — so
+      // a catch-all here applied the guard to every path in the application and
+      // killed the REST API and the transcript webhooks.
+      //
+      // The concern is unchanged and is the one this test names: the capability
+      // must be enforced at the ROUTER, not remembered on each handler where one
+      // can be forgotten. So it asks whether every route the file declares is
+      // covered by a router-level guard, which is what that sentence means.
       const src = readFileSync(join(ROUTES, file), 'utf8');
-      expect(src,
+
+      const guards = [...src.matchAll(
+        new RegExp(`\\.use\\(\\s*'([^']+)'\\s*,\\s*requireCompanyCapability\\('${capability}'\\)`, 'g'))]
+        .map((m) => m[1]);
+      expect(guards, `${file} declares no router-level ${capability} guard`).not.toEqual([]);
+
+      const routes = [...src.matchAll(/^\s*[A-Za-z_$][\w$]*\.(?:get|post|put|patch|delete)\(\s*'([^']+)'/gm)]
+        .map((m) => m[1]);
+      expect(routes, `${file} declares no routes`).not.toEqual([]);
+
+      const uncovered = routes.filter((r) => !guards.some((g) => covers(g, r)));
+      expect(uncovered,
         'router-level: a capability remembered per handler is forgotten on one of them')
-        .toMatch(new RegExp(`use\\('\\*',\\s*requireCompanyCapability\\('${capability}'\\)\\)`));
+        .toEqual([]);
     });
   }
 });
