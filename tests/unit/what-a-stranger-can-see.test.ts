@@ -1,9 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
+import { declaredRoutes } from '../helpers/declared-routes.js';
 import { runMigrations } from '../../src/db/migrate.js';
 
 // =============================================================================
@@ -29,8 +27,6 @@ import { runMigrations } from '../../src/db/migrate.js';
 // stated somewhere a change to it shows up in review.
 // =============================================================================
 
-const ROOT = resolve(__dirname, '../..');
-
 /** Pages the world is meant to reach without an account. */
 const PUBLIC = [
   '/',
@@ -48,25 +44,6 @@ const PUBLIC = [
 /** Reports whether the service is healthy, so an unhealthy 503 is its job. */
 const HEALTH = '/internal/health';
 
-function declaredGetRoutes(): string[] {
-  const files: string[] = [];
-  (function walk(dir: string): void {
-    for (const entry of readdirSync(dir)) {
-      const p = join(dir, entry);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (p.endsWith('.ts')) files.push(p);
-    }
-  })(join(ROOT, 'src/routes'));
-
-  const paths = new Set<string>();
-  for (const file of files) {
-    for (const m of stripComments(readFileSync(file, 'utf8')).matchAll(/\.get\('(\/[^']*)'/g)) {
-      paths.add(m[1].replace(/:[A-Za-z0-9_]+/g, 'probe-value'));
-    }
-  }
-  return [...paths].sort();
-}
-
 let app: { request: (path: string) => Promise<Response> };
 let seen: Array<{ path: string; status: number }>;
 
@@ -77,8 +54,11 @@ beforeAll(async () => {
   await runMigrations();
   app = (await import('../../src/index.js')).default as typeof app;
 
+  const declared = declaredRoutes();
+  expect(declared.unresolved, 'a route could not be resolved to a path').toEqual([]);
+
   seen = [];
-  for (const path of declaredGetRoutes()) {
+  for (const path of declared.routes.filter((r) => r.method === 'GET').map((r) => r.path)) {
     try {
       seen.push({ path, status: (await app.request(path)).status });
     } catch {

@@ -1,9 +1,8 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
+import { declaredRoutes } from '../helpers/declared-routes.js';
+import { runMigrations } from '../../src/db/migrate.js';
 
 // =============================================================================
 // NO MUTATING ROUTE ANSWERS A STRANGER.
@@ -23,40 +22,23 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 // prove things about the day somebody last edited it.
 // =============================================================================
 
-const ROOT = resolve(__dirname, '../..');
-const METHODS = ['post', 'put', 'patch', 'delete'] as const;
-
-/** Every mutating route path the source declares, with parameters filled in. */
-function declaredMutatingRoutes(): string[] {
-  const files: string[] = [];
-  (function walk(dir: string): void {
-    for (const entry of readdirSync(dir)) {
-      const p = join(dir, entry);
-      if (statSync(p).isDirectory()) walk(p);
-      else if (p.endsWith('.ts')) files.push(p);
-    }
-  })(join(ROOT, 'src/routes'));
-
-  const found = new Set<string>();
-  for (const file of files) {
-    const src = stripComments(readFileSync(file, 'utf8'));
-    for (const method of METHODS) {
-      for (const m of src.matchAll(new RegExp(`\\.${method}\\('(/[^']*)'`, 'g'))) {
-        // A parameter needs some value; which value cannot matter, because a
-        // stranger must be refused before anything looks it up.
-        found.add(m[1].replace(/:[A-Za-z0-9_]+/g, 'probe-value'));
-      }
-    }
-  }
-  return [...found].sort();
-}
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 let app: { request: (path: string, init?: RequestInit) => Promise<Response> };
 let routes: string[];
 
 beforeAll(async () => {
+  // Migrations first. Without them a route that reads the database throws for
+  // want of a table, and "threw" is not the same fact as "refused" — the
+  // companion test learned this by reporting three public routes as broken when
+  // they were merely unmigrated.
+  await runMigrations();
   app = (await import('../../src/index.js')).default as typeof app;
-  routes = declaredMutatingRoutes();
+  const declared = declaredRoutes();
+  // A sub-router whose mount prefix could not be resolved is a route this test
+  // would silently skip, which is the failure it exists to prevent.
+  expect(declared.unresolved, 'a route could not be resolved to a path').toEqual([]);
+  routes = declared.routes.filter((r) => MUTATING.has(r.method)).map((r) => r.path);
 }, 60_000);
 
 describe('a request with no session', () => {
