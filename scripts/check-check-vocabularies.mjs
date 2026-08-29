@@ -93,9 +93,20 @@ function splitTuple(text) {
   return out;
 }
 
-// Wide enough for every statement in this codebase (the longest is ~1.7k), and
-// overruns are reported below rather than skipped.
-const WINDOW = 4000;
+// Wide enough for every statement in this codebase, and overruns are reported
+// below rather than skipped.
+//
+// WHY A STATEMENT HERE CAN BE THOUSANDS OF CHARACTERS. `stripComments` removes
+// TypeScript comments; the SQL comments INSIDE a template literal are part of
+// the string and survive it. This codebase writes its reasoning next to the SQL
+// it is about, so the measured length is mostly prose — two statements in
+// `assisting-admission.ts` passed 4k that way, and the note here still claimed
+// the longest was ~1.7k.
+//
+// The window only ever grows. A larger one reads MORE of every statement, so
+// raising it cannot weaken what this gate detects — and leaving a statement
+// unread would, which is why an overrun fails rather than being skipped.
+const WINDOW = 12000;
 
 const vocabTables = new Set([...vocab.keys()].map((k) => k.split('.')[0]));
 

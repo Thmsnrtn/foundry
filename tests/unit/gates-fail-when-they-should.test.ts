@@ -237,6 +237,35 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('zz_not_a_status');
   });
 
+  it('check-check-vocabularies fails rather than reading part of a long statement', () => {
+    // THE BRANCH THAT REFUSES TO READ A FRAGMENT. A scan window is a bound on
+    // how much of each statement the gate sees, and a gate that silently reads
+    // the first N characters of what it claims to check is the defect class
+    // this one exists to catch. It reports an overrun instead — and that branch
+    // fired on real code before it had a test, which is why it has one now.
+    //
+    // The padding is a SQL comment, because that is how a statement in this
+    // codebase actually gets long: `stripComments` removes TypeScript comments,
+    // and the SQL comments inside a template literal are part of the string.
+    //
+    // The fixture reads the bound it is testing out of the script, so raising
+    // the window does not silently stop this from exercising the branch — and
+    // renaming the constant fails here rather than going quiet.
+    const window = Number(/const WINDOW = (\d+)/.exec(
+      readFileSync(resolve(ROOT, 'scripts/check-check-vocabularies.mjs'), 'utf8'))?.[1]);
+    expect(window, 'the scan window this test is about could not be read').toBeGreaterThan(0);
+    const line = (i: number) => `      -- padding line ${i}`;
+    const padding = Array.from({ length: Math.ceil(window / line(0).length) + 50 }, (_, i) => line(i)).join('\n');
+    plant('src/services/_gate_fixture_window.ts',
+      'import { query } from "../db/client.js";\n'
+      + j('export const q = () => query(`UPDATE ', 'push_log SET status',
+        " = 'sent'\n", padding, '\n      WHERE id = ?`, []);\n'));
+    const r = run('check-check-vocabularies.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('scan window');
+    expect(r.output).toContain('_gate_fixture_window');
+  });
+
   it('check-autonomous-approval fails on an approval that asks nothing', () => {
     plant('src/services/_gate_fixture_e.ts',
       'import { approveAndExecute } from "../scp/actions/executor.js";\n'
