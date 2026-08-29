@@ -352,11 +352,6 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
             measured cost, estimated revenue
           </div>
         </div>
-        <!-- Evolution Cycles -->
-        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
-          <div style="font-size:2rem;font-weight:700;color:#6c63ff;">${scpSection.total_evolution_cycles}</div>
-          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Evolution Cycles</div>
-        </div>
         <!-- AI Cost -->
         <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
           <div style="font-size:1.3rem;font-weight:700;color:var(--text-primary,#e2e8f0);">$${scpSection.ai_cost_30d_usd.toFixed(2)}</div>

@@ -61,16 +61,40 @@ describe('the counter nothing increments', () => {
     expect(callers).toEqual(['src/services/scp/agents/base.ts']);
   });
 
-  it('is not benchmarked across companies', () => {
+  it('is not benchmarked across companies, and neither is its twin', () => {
+    // TWO IDENTICAL CASES, AND THE FIRST FIX FOUND ONLY ONE.
+    // `total_evolution_cycles` is created DEFAULT 0 by migration 017 on both
+    // `products` and `agent_instances` and incremented by no TypeScript and no
+    // SQL anywhere — the same structural zero, benchmarked in the same set, in
+    // the same function. A metric removed from a set of four is a reason to
+    // check the other three.
     const network = read('src/services/scp/network.ts');
     expect(network).not.toContain("{ name: 'golden_suite_size'");
+    expect(network).not.toContain("{ name: 'total_evolution_cycles'");
     // And the per-company reporter does not ask for a benchmark that is no
     // longer written, which would have reported "no data" as the 50th percentile.
     expect(network).not.toContain("positionFromBenchmark(goldSuiteSize");
   });
 
   it('is not shown to investors as a number they could read meaning into', () => {
-    expect(read('src/routes/dashboard/investors.ts')).not.toContain('Golden Lessons');
+    const investors = read('src/routes/dashboard/investors.ts');
+    expect(investors).not.toContain('Golden Lessons');
+    expect(investors).not.toContain('scpSection.total_evolution_cycles');
+  });
+
+  it('has no writer for the evolution counter either', () => {
+    // The premise for the second removal, asserted the same way as the first.
+    // The two shapes a write to this column can take. An earlier version of
+    // this matched `... WHERE product_id=?` on a SELECT line, which is the
+    // hazard of pattern-matching near a name rather than at it.
+    const WRITE_FORMS = ['SET total_evolution_cycles', 'total_evolution_cycles = total_evolution_cycles'];
+    let anyWriter: string[] = [];
+    try {
+      anyWriter = execFileSync('grep',
+        ['-rlF', '--include=*.ts', '--include=*.sql', WRITE_FORMS.join('\n'), resolve(ROOT, 'src')],
+        { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
+    } catch { anyWriter = []; }
+    expect(anyWriter).toEqual([]);
   });
 
   it('is still explained where a founder might look for it', () => {
