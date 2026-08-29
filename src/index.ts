@@ -15,7 +15,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 import { Hono } from 'hono';
-import { staticAssetRoutes } from './routes/public/static-assets.js';
+import { staticAssetHandler } from './routes/public/static-assets.js';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
 import { CronJob } from 'cron';
@@ -185,7 +185,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-app.route('/', staticAssetRoutes(__dirname));
+app.get('/static/:file', staticAssetHandler(__dirname));
 
 // PWA: manifest and service worker must be served from root scope
 app.get('/manifest.json', (c) => {

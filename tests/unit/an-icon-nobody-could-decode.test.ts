@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { staticAssetRoutes } from '../../src/routes/public/static-assets.js';
+import { Hono } from 'hono';
+import { staticAssetHandler } from '../../src/routes/public/static-assets.js';
 
 // =============================================================================
 // AN ICON NOBODY COULD DECODE.
@@ -27,7 +28,8 @@ const PUBLIC = resolve(__dirname, '../../src/public');
 // module scope, so importing it in a test binds a port — which is why no test
 // has ever imported it, and why this route was never independently exercised.
 // It lives in its own module now, mounted the same way production mounts it.
-const app = staticAssetRoutes(resolve(__dirname, '../../src'));
+const app = new Hono();
+app.get('/static/:file', staticAssetHandler(resolve(__dirname, '../../src')));
 const fetchStatic = (name: string): Promise<Response> => app.request(`/static/${name}`);
 
 describe('a static file arrives as the bytes it is', () => {

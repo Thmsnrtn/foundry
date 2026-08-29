@@ -20,7 +20,7 @@
 // Content-Type saying how to read them.
 // =============================================================================
 
-import { Hono } from 'hono';
+import type { Context } from 'hono';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -60,17 +60,22 @@ export function contentTypeFor(fileName: string): string {
   return MIME_TYPES[fileName.split('.').pop() ?? ''] ?? 'text/plain';
 }
 
-/** Mounted at the app root; serves `/static/:file`. */
-export function staticAssetRoutes(dirname: string): Hono {
-  const routes = new Hono();
-  routes.get('/static/:file', (c) => {
-    const fileName = c.req.param('file');
+/**
+ * The handler for `/static/:file`, registered by `src/index.ts` on the door it
+ * already had.
+ *
+ * A HANDLER RATHER THAN A MOUNTED SUB-APP, because the Attention Law says the
+ * number of top-level route mounts may only shrink: this is the same door moved
+ * for testability, not a new surface, and it must not cost the company one.
+ */
+export function staticAssetHandler(dirname: string): (c: Context) => Response | Promise<Response> {
+  return (c) => {
+    const fileName = c.req.param('file') ?? '';
     const bytes = readStaticAsset(dirname, fileName);
     if (!bytes) return c.notFound();
     return c.body(bytes, 200, {
       'Content-Type': contentTypeFor(fileName),
       'Cache-Control': 'public, max-age=3600',
     });
-  });
-  return routes;
+  };
 }
