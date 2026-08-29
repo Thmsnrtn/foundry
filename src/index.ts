@@ -367,6 +367,27 @@ app.use('/connections', authMiddleware);
 app.use('/connections/*', authMiddleware);
 app.use('/api/*', apiRateLimit);
 
+// ─── REST API v1, MOUNTED BEFORE ANY ROUTER THAT SITS AT THE ROOT ────────────
+//
+// This was mounted near the bottom, after five dashboard routers that are
+// mounted at '/' and each register `use('*', requireCompanyCapability(...))`.
+// In Hono a sub-app's catch-all middleware is merged under its MOUNT PATH, so
+// at '/' it applies to every path in the application — including `/api/v1`.
+//
+// The whole REST API therefore answered `{"error":"Unauthorized"}` to every
+// request, valid key or not, because a financial-capability check written for
+// `/roi` and `/investors` ran in front of it. Mounted alone `apiV1` answers
+// 200; with one of those routers registered above it, 401.
+//
+// Registering it here fixes that without touching a single capability check —
+// the guarded pages stay guarded, which their own tests and the mount test
+// below both assert. It IS order-dependent, which is why the ordering is not
+// the whole fix: `a-key-that-works-through-the-real-door.test.ts` drives a real
+// key through the real app, so a router mounted above this one that shadows the
+// API again fails there rather than in a customer's integration.
+app.route('/api/v1', apiV1);
+
+
 // Per-user AI rate limit (30/hr) — front-stop to the AI client's
 // per-product daily cost ceiling. Mounted AFTER auth so the founder
 // id is available on the context for the keyFn. Routes covered: any
@@ -501,9 +522,6 @@ app.route('/', priorityApi);
 // /agents and LAST among the /agents/* modules so its /:name pattern can
 // never shadow the specific pages (inbox, okr, actions, accuracy, …).
 app.route('/agents', agentRoutes);
-// REST API v1 (API key auth — no session needed)
-app.route('/api/v1', apiV1);
-
 // API routes
 app.route('/', apiProductRoutes);
 app.route('/', apiMetricRoutes);

@@ -30,6 +30,15 @@ import { runMigrations } from '../../src/db/migrate.js';
 /** Pages the world is meant to reach without an account. */
 const PUBLIC = [
   '/',
+  // Declared at `apiV1.get('/health')` BEFORE `apiV1.use('*', apiKeyAuth)`, so
+  // it is public by construction — Hono does not apply middleware to a route
+  // registered above it. It carries a status, a version and a timestamp, and no
+  // company data.
+  //
+  // It appeared here the moment the API was mounted above the routers that were
+  // shadowing it, which is this test doing its job: the public surface changed
+  // and had to be justified rather than absorbed.
+  '/api/v1/health',
   '/auth/login',
   '/auth/logout',
   '/auth/signup',
