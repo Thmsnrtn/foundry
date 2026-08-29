@@ -31,7 +31,20 @@ export const investorRoutes = new Hono<AuthEnv>();
 //
 // Router-level rather than per-route: a capability that has to be remembered
 // on each new handler is one that will be forgotten on one of them.
-investorRoutes.use('*', requireCompanyCapability('can_view_financials'));
+// SCOPED TO THIS ROUTER'S OWN PATHS, NOT '*'.
+//
+// This router is mounted at '/', and in Hono a sub-app's middleware is merged
+// under its MOUNT PATH — so `use('*')` here applied to every path in the whole
+// application. It ran in front of the REST API, which answered
+// `{"error":"Unauthorized"}` to every request with a valid key, and in front of
+// the transcript webhooks, which did the same. Both are dead surfaces caused by
+// a capability check written for these pages.
+//
+// Owners were unaffected (`memberMay` short-circuits for the owner) and
+// `can_view_financials` defaults TRUE for members, so the damage landed exactly
+// where there is no session at all: machine-facing callers.
+investorRoutes.use('/investors', requireCompanyCapability('can_view_financials'));
+investorRoutes.use('/investors/*', requireCompanyCapability('can_view_financials'));
 
 
 // ─── GET /investors ───────────────────────────────────────────────────────────

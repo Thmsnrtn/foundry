@@ -16,7 +16,11 @@ import {
 export const founderIntelRoutes = new Hono<AuthEnv>();
 
 // Guard: all routes require founder email
-founderIntelRoutes.use('*', async (c, next) => {
+// SCOPED TO THIS ROUTER'S OWN PATHS, NOT '*'. Mounted at '/', a `use('*')` here
+// applied this staff-only check to every path in the application — the same
+// defect that made the REST API and the transcript webhooks answer every
+// request with a refusal.
+founderIntelRoutes.use('/api/founder/*', async (c, next) => {
   const founder = c.get('founder');
   if (!isFounder(founder.email)) return c.json({ error: 'Forbidden' }, 403);
   await next();
