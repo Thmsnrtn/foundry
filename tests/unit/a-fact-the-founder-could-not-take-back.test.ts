@@ -8,6 +8,7 @@ import {
   getFounderUnderstandingView, reviseFounderFact, submitFounderFact,
 } from '../../src/services/institution/founder-evidence.js';
 import { projectResponsibilityUnderstanding } from '../../src/services/institution/responsibility-understanding.js';
+import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
 
 // =============================================================================
 // A FACT THE FOUNDER COULD NOT TAKE BACK.
@@ -180,6 +181,32 @@ describe('correcting a fact that is already grounded', () => {
       productId: P, founderId: F, responsibilityId: R, fact: 'systems', statement: 'anything' })).toBeNull();
     expect(await reviseFounderFact({
       productId: P, founderId: F, responsibilityId: R, fact: 'not_a_fact', statement: 'anything' })).toBeNull();
+  });
+
+  it('refuses a claim about this responsibility that is not an understanding fact at all', async () => {
+    // THE CASE THE OTHER TEST DOES NOT REACH, and the reason the capability
+    // check is load-bearing rather than belt-and-braces. Migration 220 refuses
+    // a correction to a predicate nothing has stated — so a predicate that HAS
+    // a claim gets past it. Responsibilities carry claims that are not
+    // understanding facts, and the grounding claim under a shadow expectation
+    // is one: without the capability check, this door would let the founder
+    // rewrite the evidence an expectation rests on.
+    await recordReconstructionClaim({
+      productId: P, subject: `responsibility:${R}`, predicate: 'development_expectation',
+      value: { check: 'a-check', expected: 'passed' }, epistemicStatus: 'inferred', confidence: 0.8,
+      evidenceRefs: [{ kind: 'signal_event', id: 'ftb_sig' }],
+      derivationMethod: 'bounded expectation', observedAt: new Date(),
+    });
+
+    expect(await reviseFounderFact({
+      productId: P, founderId: F, responsibilityId: R,
+      fact: 'development_expectation', statement: 'rewritten' })).toBeNull();
+
+    const claims = await query(
+      `SELECT value_json FROM reconstruction_claims
+        WHERE product_id=? AND predicate='development_expectation'`, [P]);
+    expect(claims.rows).toHaveLength(1);
+    expect(String((claims.rows[0] as Record<string, unknown>).value_json)).not.toContain('rewritten');
   });
 
   it('refuses somebody else, and refuses an empty statement', async () => {
