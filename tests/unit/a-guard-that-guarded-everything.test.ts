@@ -63,6 +63,17 @@ describe('a surface with no session', () => {
     expect(res.status).toBe(400);
     expect(await res.text()).toContain('No transcript');
   });
+
+  it('reaches the voice-reply webhook, which is a different router again', async () => {
+    // A second sessionless surface, in its own router, mounted in the same
+    // region. 400 is this endpoint reading a body it cannot parse — which means
+    // it ran. Through the real app it used to answer 401 to the same request.
+    const res = await app.request('/webhooks/voice-reply', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json',
+    });
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('Invalid JSON');
+  });
 });
 
 describe('the guards still guard', () => {
