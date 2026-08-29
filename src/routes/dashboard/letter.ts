@@ -1253,8 +1253,12 @@ letterRoutes.get('/letter', async (c) => {
     ${deletion ? html`
     <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--danger, #ff6b6b);">
       <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--danger, #ff6b6b);margin-bottom:0.4rem;">This company is being deleted</div>
+      ${deletion.overdue ? html`
+      <div style="font-size:0.95rem;color:var(--text-primary);">${ctx.productName} was due to be removed on ${String(deletion.deletesOn).slice(0, 10)}, and I have no record that it was.</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">I am not going to tell you why — I do not know. What I can tell you is that the day has passed and the removal is not recorded as done. You can still stop it.</div>`
+      : html`
       <div style="font-size:0.95rem;color:var(--text-primary);">${ctx.productName} and everything in it will be removed on ${String(deletion.deletesOn).slice(0, 10)}.</div>
-      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">You can stop this until then — it does not have to be you who asked for it.</div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">You can stop this until then — it does not have to be you who asked for it.</div>`}
       <a href="/privacy" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">Stop the deletion</a>
     </div>` : ''}
     ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0

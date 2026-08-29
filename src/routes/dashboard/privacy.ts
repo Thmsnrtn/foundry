@@ -113,9 +113,12 @@ privacySettings.get('/privacy', async (c) => {
     ? html`<div style="background:#ff6b6b22;border:1px solid #ff6b6b66;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;">
         <div style="color:#ff6b6b;font-weight:600;font-size:0.9rem;margin-bottom:0.35rem;">Deletion scheduled</div>
         <div style="color:var(--text-dim);font-size:0.82rem;line-height:1.5;">
-          All data for ${ctx.productName} is scheduled to be permanently deleted on
-          <strong>${pending.deletesOn.slice(0, 10)}</strong>${pending.requestedBy ? '' : ''}.
-          Until then you can stop it.
+          ${pending.overdue
+            ? html`All data for ${ctx.productName} was due to be permanently deleted on
+              <strong>${pending.deletesOn.slice(0, 10)}</strong>, and there is no record that it was.
+              You can still stop it.`
+            : html`All data for ${ctx.productName} is scheduled to be permanently deleted on
+              <strong>${pending.deletesOn.slice(0, 10)}</strong>. Until then you can stop it.`}
         </div>
         <form method="POST" action="/privacy/delete/cancel" style="margin-top:0.75rem;">
           <button type="submit" class="btn btn-ghost" style="font-size:0.8rem;">Stop the deletion</button>

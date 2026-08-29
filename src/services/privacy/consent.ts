@@ -1616,8 +1616,22 @@ export async function scheduleDataDeletion(
 /** What is pending for this company, or null. The privacy page had no way to
  *  show it: a founder who clicked Delete saw a banner once and then nothing,
  *  for thirty days, with no sign anything was coming. */
-export async function pendingDeletion(productId: string): Promise<{
+export async function pendingDeletion(productId: string, now: Date = new Date()): Promise<{
   scheduledAt: string; deleteAfterDays: number; deletesOn: string; requestedBy: string | null;
+  /**
+   * The day has come and the erasure has not been recorded as done.
+   *
+   * The Letter says "everything in it will be removed on <date>" in the future
+   * tense, and the privacy page says the same. Neither compared that date to
+   * today, so when `data_deletion_processor` stops — a daily job outside the
+   * two loops the "part of me has stopped" card watches — the sentence goes on
+   * promising a removal that is not happening, in the past.
+   *
+   * A FACT, NOT A DIAGNOSIS. This says the date has passed and the completion is
+   * not recorded. It does not say why, because nothing here knows: the job may
+   * have stopped, or failed on this company, or be minutes from running.
+   */
+  overdue: boolean;
 } | null> {
   const res = await query(
     `SELECT metadata_json, actor_id, actor_type, created_at FROM agent_audit_log
@@ -1653,14 +1667,18 @@ export async function pendingDeletion(productId: string): Promise<{
   const claimedDays = Number(metadata.delete_after_days);
   const days = Number.isFinite(claimedDays) && claimedDays > 0 ? claimedDays : 30;
   const base = Date.parse(scheduledAt);
+  const deletesOn = new Date((Number.isFinite(base) ? base : Date.now()) + days * 86_400_000).toISOString();
   return {
     scheduledAt,
     deleteAfterDays: days,
     // If even `created_at` will not parse there is no honest date to give, and
     // the caller gets the day it is read rather than an exception: the founder
     // needs to be told this is happening far more than they need the date.
-    deletesOn: new Date((Number.isFinite(base) ? base : Date.now()) + days * 86_400_000).toISOString(),
+    deletesOn,
     requestedBy: row.actor_type === 'founder' ? String(row.actor_id) : null,
+    // `done` is already known to be absent — this function returns null when the
+    // completion is recorded — so a passed date is all that remains to check.
+    overdue: Date.parse(deletesOn) < now.getTime(),
   };
 }
 
