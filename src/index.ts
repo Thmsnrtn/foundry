@@ -606,7 +606,19 @@ import { serve } from '@hono/node-server';
 // stopped working, the behaviour would revert to what it has always been —
 // starting the server — rather than to a production process that serves
 // nothing. A guard on startup has to fail towards starting.
+let processStarted = false;
+
+/** Whether this process took the startup branch. Observable because the branch
+ *  itself is not: the listen happens inside a promise chain after migrations,
+ *  so a test finishes long before a port would be bound and cannot tell the two
+ *  cases apart by looking. A mutation removing the guard below passed until
+ *  this existed. */
+export function isProcessStarted(): boolean {
+  return processStarted;
+}
+
 function startProcess(): void {
+  processStarted = true;
   runMigrations()
     .then(async () => {
       // Provision SCP instances for any existing products that don't have one yet
