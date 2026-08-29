@@ -306,7 +306,7 @@ pricingRoutes.get('/pricing', async (c) => {
             <li>Up to 5 companies (agent teams per company)</li>
             <li>Board packets — AI-drafted quarterly narratives</li>
             <li>Funding readiness score across 7 dimensions</li>
-            <li>Secure investor deal rooms with live Signal share</li>
+            <li>Live Signal share — a rotatable link to your Signal, history and decisions</li>
             <li>Playbook crystallization — 8 operating playbook types</li>
             <li>Temporal Intelligence — Signal replay + prediction accuracy</li>
             <li>Competitive intelligence — weekly competitor scans</li>

@@ -29,6 +29,7 @@ const CLAIMS = [
   // The processors that actually receive prompt content. Named in the privacy
   // copy and pinned to the endpoints the code calls.
   'Prompts are sent to language models through OpenRouter and OpenAI',
+  'Live Signal share — a rotatable link to your Signal, history and decisions',
 ];
 
 // ── Sources derived from code (single source of truth) ───────────────────────
@@ -109,6 +110,30 @@ sources.push({
   name: 'src/services/ai model endpoints actually called',
   content: `prompts are sent to language models through ${endpoints.join(' and ')} `
     + 'receives every prompt foundry sends to a language model voice replies',
+});
+
+// THE INVESTOR SHARE, and the feature beside it that does not exist.
+//
+// "Secure investor deal rooms with live Signal share" was a $399/month bullet.
+// `deal_rooms` is created by migration 011 and touched by nothing: no INSERT, no
+// SELECT, no service, no route. Its only mention in `src/` is the erasure
+// classifier, and the gate suite cites it BY NAME as the canonical example of a
+// table no code reaches — the repository knew, and the pricing page sold it.
+//
+// The other half was real, so the bullet now claims only that half. Pinned to
+// the route that serves it and the door that mints the token.
+const shareRoute = readFileSync('src/routes/share/index.ts', 'utf8');
+const settings = readFileSync('src/routes/dashboard/settings.ts', 'utf8');
+const dealRoomCode = srcFiles
+  .filter((f) => !f.endsWith('privacy/consent.ts'))
+  .some((f) => readFileSync(f, 'utf8').includes('deal_rooms'));
+sources.push({
+  name: 'investor share: what is actually served',
+  content: [
+    shareRoute.includes("'/share/:token'") ? 'live signal share a rotatable link to your signal history and decisions' : '',
+    settings.includes('share_token = ?') ? 'rotatable link token' : '',
+    dealRoomCode ? 'secure investor deal rooms' : '',
+  ].join(' '),
 });
 
 // ── Verify ───────────────────────────────────────────────────────────────────

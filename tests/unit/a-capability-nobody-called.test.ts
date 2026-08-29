@@ -84,6 +84,36 @@ describe('the privacy copy names the services that actually receive prompts', ()
   });
 });
 
+describe('the investor tier does not sell a table nothing touches', () => {
+  const landing = readFileSync(resolve(ROOT, 'src/routes/public/landing.ts'), 'utf8');
+
+  it('does not offer deal rooms', () => {
+    // `deal_rooms` is created by migration 011 and touched by nothing: no
+    // INSERT, no SELECT, no service, no route. Its only mention in src/ is the
+    // erasure classifier — and the gate suite cites it BY NAME as the canonical
+    // example of a table no code reaches. The repository knew; the page sold it.
+    expect(landing).not.toContain('deal room');
+    // Code only. The migrations legitimately create the table and erase it;
+    // what matters is that no TypeScript reads or writes it.
+    const codeMentions = execFileSync('grep',
+      ['-rl', '--include=*.ts', 'deal_rooms', resolve(ROOT, 'src')], { encoding: 'utf8' })
+      .trim().split('\n').filter(Boolean);
+    expect(codeMentions.map((f) => f.split('/src/')[1]))
+      .toEqual(['services/privacy/consent.ts']);
+  });
+
+  it('claims the half that is real, and that half works', () => {
+    expect(landing).toContain('Live Signal share');
+    // A public unauthenticated page that computes the Signal for a token the
+    // owner can rotate.
+    const share = readFileSync(resolve(ROOT, 'src/routes/share/index.ts'), 'utf8');
+    expect(share).toContain("'/share/:token'");
+    expect(share).toContain('computeSignal');
+    expect(readFileSync(resolve(ROOT, 'src/routes/dashboard/settings.ts'), 'utf8'))
+      .toContain('share_token = ?');
+  });
+});
+
 describe('the public page does not sell either of them', () => {
   const landing = readFileSync(resolve(ROOT, 'src/routes/public/landing.ts'), 'utf8');
 
