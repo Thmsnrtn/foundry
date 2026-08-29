@@ -15,6 +15,7 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 import { Hono } from 'hono';
+import { staticAssetRoutes } from './routes/public/static-assets.js';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
 import { CronJob } from 'cron';
@@ -184,23 +185,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-app.get('/static/:file', (c) => {
-  const fileName = c.req.param('file');
-  if (!/^[\w.-]+$/.test(fileName)) return c.notFound();
-  try {
-    // Try local (src/public) then production (../src/public from dist/)
-    let filePath = resolve(__dirname, 'public', fileName);
-    try { readFileSync(filePath); } catch {
-      filePath = resolve(__dirname, '../src/public', fileName);
-    }
-    const content = readFileSync(filePath, 'utf-8');
-    const ext = fileName.split('.').pop();
-    const mimeTypes: Record<string, string> = { css: 'text/css', js: 'application/javascript', svg: 'image/svg+xml', json: 'application/json', png: 'image/png' };
-    return c.body(content, 200, { 'Content-Type': mimeTypes[ext ?? ''] ?? 'text/plain', 'Cache-Control': 'public, max-age=3600' });
-  } catch {
-    return c.notFound();
-  }
-});
+app.route('/', staticAssetRoutes(__dirname));
 
 // PWA: manifest and service worker must be served from root scope
 app.get('/manifest.json', (c) => {
