@@ -79,14 +79,52 @@ function apiV1Prefixes(): { byFile: Map<string, string>; unresolved: string[] } 
   return { byFile, unresolved };
 }
 
+/**
+ * Which file each router mounted at a NON-ROOT path lives in.
+ *
+ * `app.route('/agents', agentRoutes)` means that router's `.get('/:name')` is
+ * really `/agents/:name`. This helper originally prefixed only the `/api/v1`
+ * sub-routers, so every route in `agentRoutes` and `boardPacket` carried a path
+ * no request would ever use — a population that reads complete and probes the
+ * wrong doors.
+ *
+ * Read from `index.ts` rather than listed, so mounting a router at a prefix
+ * tomorrow does not quietly move its routes out of the population.
+ */
+function prefixedMounts(): { byFile: Map<string, string>; unresolved: string[] } {
+  const src = stripComments(readFileSync(join(ROOT, 'src/index.ts'), 'utf8'));
+  const imports = new Map<string, string>();
+  for (const m of src.matchAll(/import\s*\{\s*([\w\s,]+?)\s*\}\s*from\s*'(\.[^']+)'/g)) {
+    for (const name of m[1].split(',').map((n) => n.trim()).filter(Boolean)) {
+      imports.set(name, m[2]);
+    }
+  }
+  const byFile = new Map<string, string>();
+  const unresolved: string[] = [];
+  for (const m of src.matchAll(/app\.route\('(\/[^']+)',\s*(\w+)\)/g)) {
+    if (m[1] === '/api/v1') continue;                       // resolved separately
+    const rel = imports.get(m[2]);
+    if (!rel) { unresolved.push(m[2]); continue; }
+    byFile.set(basename(rel).replace(/\.js$/, '.ts'), m[1]);
+  }
+  return { byFile, unresolved };
+}
+
+/** Exposed so a test can assert the population is not silently wrong: a router
+ *  mounted at a prefix whose file cannot be resolved would contribute paths no
+ *  request uses, and every assertion about it would be vacuous. */
+export const mountPrefixes = (): Map<string, string> => prefixedMounts().byFile;
+
 /** Every route the app declares, with the path a request would actually use. */
 export function declaredRoutes(): { routes: DeclaredRoute[]; unresolved: string[] } {
   const routes: DeclaredRoute[] = [];
+  const mounts = prefixedMounts();
   for (const file of tsFiles(join(ROOT, 'src/routes'))) {
-    routes.push(...declarationsIn(file, ''));
+    routes.push(...declarationsIn(file, mounts.byFile.get(basename(file)) ?? ''));
   }
 
-  const { byFile, unresolved } = apiV1Prefixes();
+  const { byFile, unresolved: v1Unresolved } = apiV1Prefixes();
+  const unresolved = [...mounts.unresolved, ...v1Unresolved];
   routes.push(...declarationsIn(join(ROOT, 'src/api/v1/index.ts'), '/api/v1'));
   for (const file of tsFiles(join(ROOT, 'src/api'))) {
     if (file.endsWith('src/api/v1/index.ts')) continue;

@@ -1,7 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { declaredRoutes } from '../helpers/declared-routes.js';
+import { declaredRoutes, mountPrefixes } from '../helpers/declared-routes.js';
 import { runMigrations } from '../../src/db/migrate.js';
 
 // =============================================================================
@@ -42,6 +42,18 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('a request with no session', () => {
+  it('probes routers at the prefix they are mounted at', () => {
+    // `app.route('/agents', agentRoutes)` makes that router's `.get('/:name')`
+    // into `/agents/:name`. The population originally prefixed only the
+    // `/api/v1` sub-routers, so every route in the two routers mounted at a
+    // prefix carried a path no request would ever use — and probing a path that
+    // does not exist passes every assertion here for the wrong reason.
+    const prefixes = [...mountPrefixes().values()].sort();
+    expect(prefixes, 'a router mounted at a prefix is missing from the population')
+      .toEqual(['/agents', '/board']);
+    expect(routes.some((p) => p.startsWith('/agents/'))).toBe(true);
+  });
+
   it('finds a substantial mutating surface to check', () => {
     // A regex that quietly matched nothing would make every assertion below
     // vacuous, which is the failure mode of a test like this.
