@@ -79,7 +79,7 @@ export async function getShadowableResponsibilities(
 
   const companyDefined = declared
     .filter((c) => !c.revoked && reported.has(c.channelKey))
-    .map((c) => ({ field: c.channelKey, label: c.unit ? `${c.label} (${c.unit})` : c.label }));
+    .map((c) => ({ field: c.channelKey, label: observationFieldLabel(c.channelKey, declared) }));
 
   const channels = [...builtIn, ...companyDefined];
   if (!channels.length) return [];
@@ -241,6 +241,35 @@ export interface ExternalShadowResolution {
 }
 
 /**
+ * The founder's own words for a field, whichever vocabulary it belongs to.
+ *
+ * A built-in metric and a company-declared channel are both "a channel that has
+ * produced real evidence"; only their vocabulary differs, and the institution
+ * has no reason to prefer one. Stated once here so a surface cannot know about
+ * one kind and not the other — which is exactly how the silent-watch card came
+ * to be blind to half its population.
+ */
+export function observationFieldLabel(
+  field: string, declared: ReadonlyArray<{ channelKey: string; label: string; unit: string | null }>,
+): string {
+  const channel = declared.find((c) => c.channelKey === field);
+  if (channel) return channel.unit ? `${channel.label} (${channel.unit})` : channel.label;
+  return OBSERVABLE_FIELD_LABELS[field] ?? field;
+}
+
+/** The field an external-metric expectation is about. The event type is
+ *  `external_metric:FIELD:DIRECTION` and the direction is a closed set, so the
+ *  field is everything between the prefix and the final colon — a field
+ *  carrying its own colon still reads correctly. */
+export function expectedMetricField(eventType: string): string | null {
+  const PREFIX = 'external_metric:';
+  if (!eventType.startsWith(PREFIX)) return null;
+  const rest = eventType.slice(PREFIX.length);
+  const at = rest.lastIndexOf(':');
+  return at > 0 ? rest.slice(0, at) : null;
+}
+
+/**
  * Watches that are open and cannot resolve, because nothing is arriving.
  *
  * `getDarkenedWatches` says what stopped when the founder disconnected a
@@ -257,57 +286,78 @@ export interface ExternalShadowResolution {
  * cadence, and picking a staleness threshold would be deciding how quiet is too
  * quiet on the owner's behalf. It says when the channel last spoke and that
  * nothing has come since; whether that is a problem is the owner's to say.
+ *
+ * BOTH VOCABULARIES, WHICH THIS FIRST GOT WRONG. It was written by joining
+ * `company_observation_channels`, copying the darkened query beside it — but
+ * that join is correct THERE for a reason that does not carry: only a declared
+ * channel can be revoked, so only a declared channel can go dark. Any channel
+ * can go quiet, and `getShadowableResponsibilities` offers built-in metrics and
+ * declared channels alike. So for every company that posts the standard metrics
+ * and declares nothing of its own, this list was structurally empty and read as
+ * "no watch of mine has gone quiet".
  */
 export async function getSilentWatches(productId: string): Promise<Array<{
   responsibilityId: string; title: string; channelKey: string; channelLabel: string;
   watchingSince: string; lastReadingAt: string | null;
 }>> {
-  const rows = await query(
-    `SELECT r.id, r.title, c.channel_key, c.label, x.created_at AS watching_since,
-            (SELECT MAX(e.created_at) FROM signal_events e
-              WHERE e.product_id=x.product_id AND e.source='external_metric_ingest'
-                AND json_extract(e.payload_json,'$.field')=c.channel_key) AS last_reading_at
+  const open = await query(
+    `SELECT r.id, r.title, x.expected_event_type, x.created_at AS watching_since
        FROM responsibility_shadow_expectations x
        JOIN institutional_responsibilities r
          ON r.id=x.responsibility_id AND r.product_id=x.product_id
-       JOIN company_observation_channels c
-         ON c.product_id=x.product_id
-        -- Same prefix match as the darkened query, for the same reason: the
-        -- channel is the FIELD in the middle of external_metric:FIELD:DIRECTION,
-        -- and matching the prefix alone would catch a channel whose key is a
-        -- prefix of another's.
-        AND x.expected_event_type LIKE 'external_metric:' || c.channel_key || ':%'
-      WHERE x.product_id=? AND c.revoked_at IS NULL
-        AND r.state='shadowing' AND r.disposition='active'
+      WHERE x.product_id=? AND r.state='shadowing' AND r.disposition='active'
+        AND x.expected_event_type LIKE 'external_metric:%'
         AND NOT EXISTS (
           SELECT 1 FROM responsibility_shadow_comparisons cmp
            WHERE cmp.expectation_id=x.id AND cmp.classification IN ('matched','deviated'))
-        -- Only where the silence is real: a reading that arrived after the
-        -- expectation opened means the channel is speaking, and whatever is
-        -- keeping the comparison from being recorded is a different fact.
-        --
-        -- AT-OR-AFTER, WHERE RESOLUTION READS STRICTLY-AFTER. That path
-        -- excludes a
-        -- reading whose order against the expectation is ambiguous, so a
-        -- prediction is never credited by evidence that may predate it. Here
-        -- the claim is the negative one — nothing has come in since you asked
-        -- — and the same principle flips the inequality: an absence may only be
-        -- asserted where the evidence is complete enough to support it, so a
-        -- reading in the expectation's own second is enough to stay quiet.
-        AND NOT EXISTS (
-          SELECT 1 FROM signal_events e
-           WHERE e.product_id=x.product_id AND e.source='external_metric_ingest'
-             AND json_extract(e.payload_json,'$.field')=c.channel_key
-             AND datetime(e.created_at)>=datetime(x.created_at))
       ORDER BY x.created_at`,
     [productId],
   );
-  return (rows.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
-    responsibilityId: String(row.id), title: String(row.title),
-    channelKey: String(row.channel_key), channelLabel: String(row.label),
-    watchingSince: String(row.watching_since),
-    lastReadingAt: row.last_reading_at == null ? null : String(row.last_reading_at),
-  }));
+  if (!open.rows.length) return [];
+
+  // Every field's last reading, in one pass rather than one query per watch.
+  const lastByField = new Map<string, string>();
+  for (const row of (await query(
+    `SELECT json_extract(payload_json,'$.field') AS field, MAX(created_at) AS last_at
+       FROM signal_events WHERE product_id=? AND source='external_metric_ingest'
+      GROUP BY 1`, [productId],
+  )).rows as unknown as Array<Record<string, unknown>>) {
+    if (row.field != null) lastByField.set(String(row.field), String(row.last_at));
+  }
+
+  const declared = await getObservationChannels(productId);
+  const revoked = new Set(declared.filter((c) => c.revoked).map((c) => c.channelKey));
+
+  const out: Array<{
+    responsibilityId: string; title: string; channelKey: string; channelLabel: string;
+    watchingSince: string; lastReadingAt: string | null;
+  }> = [];
+  for (const row of open.rows as unknown as Array<Record<string, unknown>>) {
+    const field = expectedMetricField(String(row.expected_event_type));
+    if (field === null) continue;
+    // A channel the founder disconnected is the other card's subject, and
+    // naming their own decision as silence would hide it from them.
+    if (revoked.has(field)) continue;
+
+    const watchingSince = String(row.watching_since);
+    const lastReadingAt = lastByField.get(field) ?? null;
+
+    // AT-OR-AFTER, WHERE RESOLUTION READS STRICTLY-AFTER. That path excludes a
+    // reading whose order against the expectation is ambiguous, so a prediction
+    // is never credited by evidence that may predate it. Here the claim is the
+    // negative one — nothing has come in since you asked — and the same
+    // principle flips the inequality: an absence may only be asserted where the
+    // evidence is complete enough to support it, so a reading in the
+    // expectation's own second is enough to stay quiet.
+    if (lastReadingAt !== null && lastReadingAt >= watchingSince) continue;
+
+    out.push({
+      responsibilityId: String(row.id), title: String(row.title),
+      channelKey: field, channelLabel: observationFieldLabel(field, declared),
+      watchingSince, lastReadingAt,
+    });
+  }
+  return out;
 }
 
 /**

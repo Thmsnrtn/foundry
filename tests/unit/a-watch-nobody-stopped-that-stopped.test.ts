@@ -11,6 +11,7 @@ import {
 import {
   beginExternalMetricShadowing, getDarkenedWatches, getSilentWatches,
 } from '../../src/services/institution/external-shadowing.js';
+import { recordExternalMetricObservations } from '../../src/services/institution/external-observation.js';
 import { moveResponsibilityTo } from '../fixtures/responsibility-state.js';
 
 // =============================================================================
@@ -85,7 +86,10 @@ describe('a watch nobody stopped, that stopped', () => {
     const [silent] = await getSilentWatches('sil_a');
     expect(silent).toBeTruthy();
     expect(silent.title).toBe('Every timetabled class has a teacher');
-    expect(silent.channelLabel).toBe('Classes taught');
+    // The founder's own words for it, with the unit, exactly as the form that
+    // offered the watch labelled it. The label rule is stated once and shared,
+    // so the two surfaces cannot name the same channel differently.
+    expect(silent.channelLabel).toBe('Classes taught (classes)');
     expect(silent.lastReadingAt).toBeTruthy();
     expect(silent.watchingSince).toBeTruthy();
   });
@@ -121,6 +125,50 @@ describe('a watch nobody stopped, that stopped', () => {
     expect(page).toContain('I am not going to guess whether that is a problem');
     // The founder did not disconnect anything, and is not told they did.
     expect(page).not.toContain('I have stopped watching');
+  });
+
+  it('sees a watch opened on a built-in metric, which it once could not', async () => {
+    // THE HALF THIS CARD WAS BLIND TO. It was written by joining
+    // `company_observation_channels`, copying the darkened query beside it —
+    // but that join is right THERE for a reason that does not carry: only a
+    // declared channel can be revoked, so only a declared channel can go dark.
+    // Any channel can go quiet, and the watch form offers built-in metrics and
+    // declared channels alike. For every company that posts the standard
+    // metrics and declares nothing of its own, this list was structurally
+    // empty and read as "no watch of mine has gone quiet".
+    const id = 'sil_builtin';
+    const resp = `${id}_resp`;
+    await query(`INSERT INTO products (id,name,owner_id) VALUES (?,'Standard Metrics Co',?)`, [id, OWNER]);
+    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+      VALUES (?,?,'repository','development_need_observed','low','{}','seed')`, [`${id}_sig`, id]);
+    await query(`INSERT INTO institutional_responsibilities
+        (id,product_id,title,capability,state,discovery_evidence_ref)
+      VALUES (?,?,'Answer the people who write in','operations','visible',?)`,
+    [resp, id, `signal_event:${id}_sig`]);
+    await moveResponsibilityTo(resp, 'understood', { productId: id });
+
+    // No declared channel at all — the built-in vocabulary, arriving the only
+    // way it can: `/ingest/:token` calls `recordExternalMetricObservations`,
+    // which compares against a snapshot from an earlier day.
+    await query(`INSERT INTO metric_snapshots (id,product_id,snapshot_date,support_volume_7d)
+      VALUES (?,?,date('now','-2 days'),30)`, [`${id}_snap`, id]);
+    await recordExternalMetricObservations({
+      productId: id, origin: 'metrics', readings: [{ field: 'support_volume_7d', observedValue: 24 }] });
+    await query(`UPDATE signal_events SET created_at=datetime('now','-1 hour')
+      WHERE product_id=? AND source='external_metric_ingest'`, [id]);
+    await beginExternalMetricShadowing({
+      productId: id, responsibilityId: resp, founderId: OWNER, field: 'support_volume_7d', direction: 'fell' });
+
+    const [silent] = await getSilentWatches(id);
+    expect(silent, 'a watch on a built-in metric can go quiet like any other').toBeTruthy();
+    expect(silent.channelKey).toBe('support_volume_7d');
+    expect(silent.channelLabel).toBe('how much support comes in');
+    expect(silent.lastReadingAt).toBeTruthy();
+
+    // And it stops the moment that channel speaks again.
+    await recordExternalMetricObservations({
+      productId: id, origin: 'metrics', readings: [{ field: 'support_volume_7d', observedValue: 31 }] });
+    expect(await getSilentWatches(id)).toEqual([]);
   });
 
   it('says nothing at all about a company whose watch is being answered', async () => {
