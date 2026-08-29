@@ -939,7 +939,7 @@ const permissionSection = (
           ? `Last time I acted here it didn't work — ${item.verifiedFailures === 1 ? 'one attempt was' : `${item.verifiedFailures} attempts were`} checked afterwards and failed.`
           : `${item.verifiedFailures === 1 ? 'One attempt' : `${item.verifiedFailures} attempts`} here ${item.verifiedFailures === 1 ? 'was' : 'were'} checked afterwards and failed, though the most recent one worked.`} Worth knowing before you decide.</div>` : ''}
         <a href="/letter/responsibilities/${item.responsibilityId}/understanding"
-          style="font-size:0.72rem;color:var(--text-muted);">What I understand about this, and how to correct it</a>
+          style="font-size:0.72rem;color:var(--text-muted);">What I understand about this</a>
         <div style="font-size:0.78rem;color:var(--text-primary);margin-top:0.35rem;">If you allow it, I may ${item.may}.</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I still may not ${item.mayNot}.</div>
         ${item.granted ? html`
@@ -2026,20 +2026,23 @@ letterRoutes.get('/letter/responsibilities/:responsibilityId/understanding', asy
       <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);">What I understand about this</div>
       <h2 style="font-size:1.05rem;margin:0.4rem 0 0.2rem;">${view.title}</h2>
       <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:1rem;">${view.state} · ${view.capability.replaceAll('_', ' ')}</div>
-      <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">These are the things you have told me. I do not decide when any of them stops being true — if one is wrong or has changed, correct it here and I will use the new one from now on. Correcting a fact does not let me do anything on your behalf.</p>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">${view.mayCorrect
+        ? 'These are the things you have told me. I do not decide when any of them stops being true — if one is wrong or has changed, correct it here and I will use the new one from now on. Correcting a fact does not let me do anything on your behalf.'
+        : 'These are the things this company has told me. I do not decide when any of them stops being true. Changing what the company says it is belongs to whoever owns it, so I do not take a correction from anyone else — but you can see all of it.'}</p>
       ${view.facts.map((f) => html`
         <div style="padding:0.7rem 0;border-top:1px solid rgba(255,255,255,0.06);">
           <div style="font-size:0.86rem;color:var(--text-primary);">${FACT_LABELS[f.fact] ?? f.fact.replaceAll('_', ' ')}</div>
           ${f.statement ? html`
             <div style="font-size:0.86rem;color:var(--text-primary);margin-top:0.2rem;">${f.statement}</div>
             <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">You told me this ${f.observedAt ? f.observedAt.slice(0, 10) : 'at some point I did not record'}.</div>
+            ${view.mayCorrect ? html`
             <form method="POST" action="/letter/responsibilities/${view.responsibilityId}/understanding"
               style="display:flex;gap:0.4rem;margin-top:0.4rem;align-items:center;flex-wrap:wrap;">
               <input type="hidden" name="fact" value="${f.fact}" />
               <input name="statement" required maxlength="2000"
                 placeholder="Say it differently" style="flex:1;min-width:220px;" />
               <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Correct it</button>
-            </form>`
+            </form>` : ''}`
           : html`
             <!-- NO FORM HERE, ON PURPOSE. Telling Foundry a fact for the first
                  time is answering a question, and the question path already

@@ -516,6 +516,10 @@ export interface UnderstandingViewFact {
 export interface UnderstandingView {
   responsibilityId: string; title: string; capability: string; state: string;
   facts: UnderstandingViewFact[];
+  /** Whether THIS viewer may correct a fact. Seeing is not correcting: a
+   *  co-founder reads the company's letter, and the owner states what the
+   *  company is. Migration 220 enforces the same boundary independently. */
+  mayCorrect: boolean;
 }
 
 /** The statement inside a stored understanding value, whatever its shape. */
@@ -540,9 +544,26 @@ function statementOf(value: unknown): string | null {
 export async function getFounderUnderstandingView(input: {
   productId: string; responsibilityId: string; founderId: string; now?: Date;
 }): Promise<UnderstandingView | null> {
-  const owned = await query('SELECT 1 FROM products WHERE id=? AND owner_id=?',
-    [input.productId, input.founderId]);
-  if (!owned.rows.length) return null;
+  // VISIBILITY IS NOT CAPABILITY, AND THIS ASKED THE WRONG ONE.
+  //
+  // The Letter resolves which company you are looking at through
+  // `getVisibleProducts` — owner OR an accepted team member — so a co-founder
+  // reads it daily. This page asked `owner_id` alone, so every responsibility
+  // card offered them "What I understand about this" and answered 404: the
+  // same answer Foundry gives for another company's responsibility. That is
+  // the defect `getVisibleProducts` was created to fix, reintroduced one
+  // surface later, which is why the rule is read from where it lives.
+  //
+  // Correcting stays the owner's. The page says so rather than offering a form
+  // that fails.
+  const viewer = (await query(
+    `SELECT p.owner_id FROM products p WHERE p.id=? AND (p.owner_id=? OR EXISTS (
+       SELECT 1 FROM team_members t
+        WHERE t.product_id=p.id AND t.founder_id=? AND t.status='active'))`,
+    [input.productId, input.founderId, input.founderId],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!viewer) return null;
+  const mayCorrect = String(viewer.owner_id) === input.founderId;
 
   let understanding;
   try {
@@ -560,6 +581,7 @@ export async function getFounderUnderstandingView(input: {
     title: understanding.responsibility.title,
     capability: understanding.responsibility.capability,
     state: understanding.responsibility.state,
+    mayCorrect,
     facts: understanding.requiredFacts.map((fact) => {
       const held = current.get(fact);
       return {
