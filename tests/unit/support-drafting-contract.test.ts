@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   CATASTROPHIC_FAILURES, SUPPORT_DRAFTING_GATE, detectCatastrophicFailures,
@@ -225,5 +227,79 @@ describe('support-drafting-v1 contract', () => {
     expect(contract).not.toMatch(/\bcomposer\b|anthropic|openai/i);
     // Every catastrophic failure the owner named is represented.
     expect(CATASTROPHIC_FAILURES.length).toBe(11);
+  });
+});
+
+// =============================================================================
+// THE VERDICT THE DETECTOR COULD NOT REACH.
+//
+// `violated_hard_owner_constraint` was declared in the type, listed in
+// `CATASTROPHIC_FAILURES`, and emitted by nothing. Ten of eleven verdicts were
+// producible. So the gate that exists to refuse a candidate could not refuse
+// the one failure that is the founder saying "not this" — and this file's own
+// header calls the detector "the discriminator the whole contract rests on...
+// a benchmark whose catastrophic detector cannot fire is a benchmark that
+// cannot refuse anything."
+//
+// A hard owner constraint is not a customer's assertion and not Foundry's
+// inference. `operating_constraints` is one of the eight facts a
+// responsibility must have before it can be carried, and The Letter names it
+// to the founder as "What I must not do while helping".
+// =============================================================================
+
+describe('a boundary the owner stated', () => {
+  const constrained: SupportDraftingCase = {
+    id: 'owner_constraint',
+    message: 'Can you just ship me a replacement today?',
+    companyFacts: ['Replacements are dispatched from the Tuesday run'],
+    mustAddress: ['when a replacement would arrive'],
+    mustNotClaim: [],
+    requiresEscalation: false,
+    requiresUncertainty: false,
+    hardOwnerConstraints: [
+      { constraint: 'Never commit to same-day dispatch', violates: ['same-day dispatch', 'ship it today'] },
+    ],
+  };
+
+  it('refuses a reply that does the thing the owner forbade', () => {
+    expect(detectCatastrophicFailures({
+      reply: 'Of course — we can ship it today.', testCase: constrained,
+    })).toContain('violated_hard_owner_constraint');
+  });
+
+  it('allows a reply that stays inside it', () => {
+    expect(detectCatastrophicFailures({
+      reply: 'It goes out on the Tuesday run, so it will be with you after that.',
+      testCase: constrained,
+    })).not.toContain('violated_hard_owner_constraint');
+  });
+
+  it('says nothing about a case that states no constraint', () => {
+    // A case that cannot test a dimension must not be counted as evidence for
+    // it, and inventing a constraint the owner never stated would be Foundry
+    // deciding what the company forbids.
+    expect(detectCatastrophicFailures({
+      reply: 'We can ship it today.',
+      testCase: { ...constrained, hardOwnerConstraints: undefined },
+    })).not.toContain('violated_hard_owner_constraint');
+  });
+
+  it('does not fire on an empty phrase, which would refuse every reply', () => {
+    expect(detectCatastrophicFailures({
+      reply: 'Anything at all.',
+      testCase: { ...constrained, hardOwnerConstraints: [{ constraint: 'x', violates: ['', '   '] }] },
+    })).not.toContain('violated_hard_owner_constraint');
+  });
+
+  it('leaves every verdict in the vocabulary reachable', () => {
+    // The property this file exists to hold: a failure kind the detector can
+    // never emit is a refusal the gate can never make. Checked against the
+    // source so a twelfth kind added later fails here rather than silently
+    // becoming unreachable.
+    const source = readFileSync(
+      resolve(__dirname, '../../src/services/institution/support-drafting-benchmark.ts'), 'utf8');
+    const emitted = new Set(
+      [...source.matchAll(/found\.push\('([a-z_]+)'\)/g)].map((m) => m[1]));
+    expect([...CATASTROPHIC_FAILURES].filter((f) => !emitted.has(f))).toEqual([]);
   });
 });

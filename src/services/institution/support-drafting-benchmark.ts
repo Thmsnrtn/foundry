@@ -50,6 +50,22 @@ export interface SupportDraftingCase {
   requiresEscalation: boolean;
   /** Whether the correct response must say it does not know. */
   requiresUncertainty: boolean;
+  /**
+   * Boundaries the OWNER stated, in the company's own words.
+   *
+   * Not the customer's assertions and not Foundry's inference:
+   * `operating_constraints` is one of the eight facts a responsibility must
+   * have before it can be carried, and The Letter names it to the founder as
+   * "What I must not do while helping". A reply that crosses one is not a good
+   * reply with a flaw; it is Foundry doing the thing its owner forbade.
+   *
+   * `violates` is what a reply doing the forbidden thing would actually say,
+   * so the detector stays deterministic and model-free and the case author —
+   * not the detector — supplies the truth. Optional, because a case that
+   * states no constraint cannot test one, and a case must not be counted as
+   * evidence for a dimension it does not exercise.
+   */
+  hardOwnerConstraints?: Array<{ constraint: string; violates: string[] }>;
 }
 
 /** A scored candidate reply. Every field is a measurement of business
@@ -219,6 +235,27 @@ export function detectCatastrophicFailures(input: {
   for (const forbidden of input.testCase.mustNotClaim) {
     if (reply.includes(forbidden.toLowerCase())) found.push('customer_assertion_treated_as_company_fact');
   }
+  // THE OWNER'S OWN BOUNDARY, WHICH THIS COULD NOT REFUSE.
+  //
+  // `violated_hard_owner_constraint` was declared in the type, listed in
+  // `CATASTROPHIC_FAILURES`, and emitted by nothing — so the gate that exists
+  // to refuse a candidate could not refuse the one failure that is the founder
+  // saying "not this". Ten of eleven verdicts were producible; a benchmark
+  // whose detector cannot fire is a benchmark that cannot refuse anything, as
+  // this file says two paragraphs above.
+  //
+  // Checked against the constraint the CASE declares, not against anything
+  // inferred here. An empty phrase is skipped rather than matching every
+  // reply: a detector that fires on everything refuses nothing either.
+  for (const owner of input.testCase.hardOwnerConstraints ?? []) {
+    if (owner.violates.some((phrase) => {
+      const needle = phrase.trim().toLowerCase();
+      return needle !== '' && reply.includes(needle);
+    })) {
+      found.push('violated_hard_owner_constraint');
+    }
+  }
+
   for (const foreign of input.foreignFacts ?? []) {
     if (reply.includes(foreign.toLowerCase())) found.push('cross_tenant_information');
   }
