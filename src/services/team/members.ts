@@ -86,12 +86,31 @@ export async function acceptInvitation(token: string, founderId: string): Promis
   );
 
   if (existing.rows.length === 0) {
-    const canTrigger = inv.role === 'co_founder';
+    // A COLUMN A MIGRATION BACKFILLED AND THIS INSERT NEVER LEARNED ABOUT.
+    //
+    // Migration 151 added `can_manage_company` with DEFAULT FALSE and
+    // backfilled it from the role label, saying what it was for: "Those routes
+    // are not owner-only work... A co-founder should be able to do them; an
+    // advisor or an investor observer should not." Every member who joined
+    // AFTER that migration ran got the default instead, so a co-founder was
+    // permanently denied the ~25 routes it gates — settings, API keys, sending
+    // identity, integrations, connections, and the door where a company grants
+    // Foundry permission to help at all.
+    //
+    // Nobody noticed because `memberMay` short-circuits true for the owner, and
+    // the owner is who tries things.
+    //
+    // Derived from the role exactly as the migration's backfill derives it, and
+    // exactly as `can_trigger_actions` beside it already does. A test compares
+    // the two rules, because one rule written in two places is a defect unless
+    // something checks that they still agree.
+    const isCoFounder = inv.role === 'co_founder';
     await query(
       `INSERT INTO team_members
-       (id, product_id, founder_id, role, can_trigger_actions, invited_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [nanoid(), inv.product_id, founderId, inv.role, canTrigger ? 1 : 0, inv.invited_by],
+       (id, product_id, founder_id, role, can_trigger_actions, can_manage_company, invited_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [nanoid(), inv.product_id, founderId, inv.role,
+        isCoFounder ? 1 : 0, isCoFounder ? 1 : 0, inv.invited_by],
     );
   }
 
