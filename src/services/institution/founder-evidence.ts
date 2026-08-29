@@ -482,3 +482,168 @@ export async function getSetAsideQuestions(
     };
   });
 }
+
+// ─── WHAT FOUNDRY BELIEVES, AND HOW TO CORRECT IT ────────────────────────────
+//
+// Nothing showed the founder the facts Foundry holds about a responsibility,
+// and nothing let them change one. `submitFounderFact` says so on its face —
+// "cannot restate one that is already grounded" — which is the right guard for
+// the path it protects and left a company fact write-once. A founder who
+// mis-stated a fact, or whose company changed, had no door; and Foundry goes on
+// to ask for authority on the strength of those facts.
+//
+// No claim in this system is ever given a `valid_until`, so an understanding
+// does not age either: what a founder said once is current forever, and the
+// freshness condition at the authority boundary is always satisfied. Inventing
+// an expiry would be Foundry deciding how old a company fact may be — purpose
+// ages slowly, dependencies quickly — so what is offered instead is the date
+// and a way to correct it.
+//
+// THE INSTITUTION HAD ALREADY ANSWERED THIS ONE FUNCTION AWAY. Deferring a
+// question used to be final, and the fix was not to re-ask: "Not asking again
+// is preserved... The founder reaches it by choosing to." The same answer
+// applies here. Foundry never re-asks a grounded fact, and the founder can
+// reach it.
+
+export interface UnderstandingViewFact {
+  fact: UnderstandingFact;
+  /** What the founder said, or null where nothing has been stated. */
+  statement: string | null;
+  observedAt: string | null;
+  epistemicStatus: string | null;
+}
+
+export interface UnderstandingView {
+  responsibilityId: string; title: string; capability: string; state: string;
+  facts: UnderstandingViewFact[];
+}
+
+/** The statement inside a stored understanding value, whatever its shape. */
+function statementOf(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object' && 'statement' in value) {
+    const inner = (value as { statement?: unknown }).statement;
+    if (typeof inner === 'string') return inner;
+  }
+  return null;
+}
+
+/**
+ * Every fact this responsibility's capability requires, and what Foundry
+ * currently believes about each.
+ *
+ * The belief is the LATEST claim per predicate, which is the same rule
+ * `projectResponsibilityUnderstanding` applies internally to decide what it
+ * knows — read from the same projection rather than re-derived, so the page and
+ * the institution cannot come to disagree about what Foundry believes.
+ */
+export async function getFounderUnderstandingView(input: {
+  productId: string; responsibilityId: string; founderId: string; now?: Date;
+}): Promise<UnderstandingView | null> {
+  const owned = await query('SELECT 1 FROM products WHERE id=? AND owner_id=?',
+    [input.productId, input.founderId]);
+  if (!owned.rows.length) return null;
+
+  let understanding;
+  try {
+    understanding = await projectResponsibilityUnderstanding(
+      input.productId, input.responsibilityId, input.now ?? new Date());
+  } catch {
+    // A responsibility of another company, or none at all. Both answer the
+    // same, so asking cannot reveal which.
+    return null;
+  }
+
+  const current = new Map(understanding.facts.map((f) => [f.predicate, f]));
+  return {
+    responsibilityId: input.responsibilityId,
+    title: understanding.responsibility.title,
+    capability: understanding.responsibility.capability,
+    state: understanding.responsibility.state,
+    facts: understanding.requiredFacts.map((fact) => {
+      const held = current.get(fact);
+      return {
+        fact,
+        statement: held ? statementOf(held.value) : null,
+        observedAt: held ? held.observedAt : null,
+        epistemicStatus: held ? held.epistemicStatus : null,
+      };
+    }),
+  };
+}
+
+/**
+ * The founder corrects a fact Foundry already holds.
+ *
+ * DELIBERATELY NOT `recordFounderEvidenceAnswer`, AND THE DATABASE AGREES.
+ * Migration 125 requires a `founder_assertion` to name an OPEN request of this
+ * company for this predicate — that requirement is what makes a replayed answer
+ * inert, and it is not something to work around. Reopening the answered request
+ * would also put the question back in front of the founder, undoing the rule
+ * that Foundry does not ask again.
+ *
+ * So a correction is its own source with its own guard (migration 220), held to
+ * the same standards: real ownership rather than a caller-supplied founder
+ * string, a responsibility of this company, and a predicate its capability
+ * requires. The CLAIM is identical in shape to an answered one — same subject,
+ * predicate, status and derivation method — so nothing downstream needs a
+ * second way of knowing a fact. Only the provenance differs, which is the part
+ * that should: the record says whether Foundry asked or the founder came back.
+ * Two writers of one claim shape is a defect unless something compares them,
+ * so a test does.
+ *
+ * The scope of the check is what makes replay harmless: the responsibility must
+ * belong to this founder's company, and the predicate must be one its
+ * capability actually requires. A caller cannot volunteer into a predicate the
+ * institution does not consume, which is the property `submitFounderFact`
+ * bought with "must currently be open" — held here without foreclosing
+ * revision.
+ */
+export async function reviseFounderFact(input: {
+  productId: string; founderId: string; responsibilityId: string;
+  fact: string; statement: string; now?: Date;
+}): Promise<{ signalId: string; claimId: string } | null> {
+  const statement = input.statement.trim();
+  if (!statement) return null;
+
+  const owned = (await query(
+    `SELECT r.capability FROM institutional_responsibilities r
+       JOIN products p ON p.id=r.product_id
+      WHERE r.id=? AND r.product_id=? AND p.owner_id=?`,
+    [input.responsibilityId, input.productId, input.founderId],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!owned) return null;
+
+  const required = requiredUnderstandingFacts(String(owned.capability));
+  if (!required.includes(input.fact as UnderstandingFact)) return null;
+
+  const signalId = nanoid();
+  try {
+    await query(
+      `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+       VALUES (?,?,'founder_correction',?,'low',?,?)`,
+      [signalId, input.productId, `founder_corrected:${input.fact}`,
+        JSON.stringify({
+          predicate: input.fact, statement, founder_id: input.founderId,
+          responsibility_id: input.responsibilityId,
+        }),
+        'The founder corrected something they had told me about this responsibility'],
+    );
+  } catch {
+    // Migration 220 re-checks ownership independently and refuses a correction
+    // to a fact nothing has ever stated. Stating one for the first time is
+    // answering a question, and goes the other way.
+    return null;
+  }
+  const claimId = await recordReconstructionClaim({
+    productId: input.productId,
+    subject: `responsibility:${input.responsibilityId}`,
+    predicate: input.fact,
+    value: { statement },
+    epistemicStatus: 'known',
+    evidenceRefs: [{ kind: 'signal_event', id: signalId }],
+    derivationMethod: 'authenticated founder assertion',
+    observedAt: input.now ?? new Date(),
+  });
+  return { signalId, claimId };
+}

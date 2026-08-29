@@ -77,6 +77,8 @@ const responsibilitySection = (
     ${items.map((item) => html`
       <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title} — ${item.state}</div>
+        <a href="/letter/responsibilities/${item.responsibilityId}/understanding"
+          style="font-size:0.72rem;color:var(--text-muted);">What I understand about this</a>
         ${item.needsYouBecause && NEEDS_YOU_REASON[item.needsYouBecause] ? html`
           <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${NEEDS_YOU_REASON[item.needsYouBecause]}</div>` : ''}
         ${item.evidenceRef ? html`
@@ -936,6 +938,8 @@ const permissionSection = (
         <div style="font-size:0.78rem;color:var(--danger, #ff6b6b);margin-top:0.15rem;">${item.lastVerifiedOutcome === 'verified_failure'
           ? `Last time I acted here it didn't work — ${item.verifiedFailures === 1 ? 'one attempt was' : `${item.verifiedFailures} attempts were`} checked afterwards and failed.`
           : `${item.verifiedFailures === 1 ? 'One attempt' : `${item.verifiedFailures} attempts`} here ${item.verifiedFailures === 1 ? 'was' : 'were'} checked afterwards and failed, though the most recent one worked.`} Worth knowing before you decide.</div>` : ''}
+        <a href="/letter/responsibilities/${item.responsibilityId}/understanding"
+          style="font-size:0.72rem;color:var(--text-muted);">What I understand about this, and how to correct it</a>
         <div style="font-size:0.78rem;color:var(--text-primary);margin-top:0.35rem;">If you allow it, I may ${item.may}.</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I still may not ${item.mayNot}.</div>
         ${item.granted ? html`
@@ -1976,6 +1980,97 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/watch',
   // Do not reveal whether another tenant's responsibility exists.
   if (!started) return c.text('Refused', 403);
   return c.redirect('/letter');
+});
+
+const FACT_LABELS: Record<string, string> = {
+  purpose: 'Why this matters',
+  desired_outcome: 'What good looks like',
+  success_conditions: 'How you would know it is going well',
+  operating_constraints: 'What I must not do while helping',
+  dependencies: 'What this depends on',
+  risks: 'What could go wrong',
+  systems: 'What it runs on',
+  failure_modes: 'How it usually fails',
+  current_carrier: 'Who carries it today',
+  failure_conditions: 'What counts as failing',
+  stakeholder_obligations: 'Who is owed what',
+  financial_consequence: 'What it costs when it goes wrong',
+};
+
+// WHAT I UNDERSTAND ABOUT THIS, AND HOW TO CORRECT IT.
+//
+// Nothing showed the founder the facts Foundry holds about a responsibility,
+// and nothing let them change one — while Foundry goes on to ask for authority
+// on the strength of them. No claim is ever given an expiry either, so what was
+// said once is current forever.
+//
+// A date rather than a verdict, for the same reason as everywhere else: how old
+// a company fact may be is the owner's judgement, not Foundry's. Purpose ages
+// slowly and dependencies quickly, and Foundry has no way to tell which.
+letterRoutes.get('/letter/responsibilities/:responsibilityId/understanding', async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.redirect('/dashboard');
+
+  const { getFounderUnderstandingView } = await import('../../services/institution/founder-evidence.js');
+  const view = await getFounderUnderstandingView({
+    productId: ctx.productId, responsibilityId: c.req.param('responsibilityId'),
+    founderId: founder.id as string,
+  });
+  // A responsibility of another company and one that does not exist answer the
+  // same way, so asking cannot reveal which.
+  if (!view) return c.text('Not found', 404);
+
+  const content = html`
+    <div class="card" style="padding:1.5rem;max-width:720px;">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);">What I understand about this</div>
+      <h2 style="font-size:1.05rem;margin:0.4rem 0 0.2rem;">${view.title}</h2>
+      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:1rem;">${view.state} · ${view.capability.replaceAll('_', ' ')}</div>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">These are the things you have told me. I do not decide when any of them stops being true — if one is wrong or has changed, correct it here and I will use the new one from now on. Correcting a fact does not let me do anything on your behalf.</p>
+      ${view.facts.map((f) => html`
+        <div style="padding:0.7rem 0;border-top:1px solid rgba(255,255,255,0.06);">
+          <div style="font-size:0.86rem;color:var(--text-primary);">${FACT_LABELS[f.fact] ?? f.fact.replaceAll('_', ' ')}</div>
+          ${f.statement ? html`
+            <div style="font-size:0.86rem;color:var(--text-primary);margin-top:0.2rem;">${f.statement}</div>
+            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">You told me this ${f.observedAt ? f.observedAt.slice(0, 10) : 'at some point I did not record'}.</div>
+            <form method="POST" action="/letter/responsibilities/${view.responsibilityId}/understanding"
+              style="display:flex;gap:0.4rem;margin-top:0.4rem;align-items:center;flex-wrap:wrap;">
+              <input type="hidden" name="fact" value="${f.fact}" />
+              <input name="statement" required maxlength="2000"
+                placeholder="Say it differently" style="flex:1;min-width:220px;" />
+              <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Correct it</button>
+            </form>`
+          : html`
+            <!-- NO FORM HERE, ON PURPOSE. Telling Foundry a fact for the first
+                 time is answering a question, and the question path already
+                 asks one at a time, in the order that unblocks the most.
+                 Offering a second way in would fight it, and offering a form
+                 that the correction guard refuses would be worse. -->
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.2rem;">You have not told me this yet, so I do not know it. I am not guessing, and I will ask you for it.</div>`}
+        </div>`)}
+      <a href="/letter" class="btn btn-ghost" style="font-size:0.78rem;margin-top:1rem;display:inline-block;">Back</a>
+    </div>`;
+  return c.html(dashboardLayout(ctx, content));
+});
+
+letterRoutes.post('/letter/responsibilities/:responsibilityId/understanding',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
+  if (!ctx.productId) return c.text('No product', 400);
+  const body = await c.req.parseBody();
+
+  const { reviseFounderFact } = await import('../../services/institution/founder-evidence.js');
+  const recorded = await reviseFounderFact({
+    productId: ctx.productId, founderId: founder.id as string,
+    responsibilityId: c.req.param('responsibilityId'),
+    fact: String(body.fact ?? ''), statement: String(body.statement ?? ''),
+  });
+  // Ownership, the responsibility and the predicate are all re-resolved
+  // server-side, so a hand-edited submission fails here rather than recording
+  // a fact about somebody else's company or one nothing consumes.
+  if (!recorded) return c.text('I could not use that', 403);
+  return c.redirect(`/letter/responsibilities/${c.req.param('responsibilityId')}/understanding`);
 });
 
 // Stage one of the founder-initiated fact path: show, do not store. This route

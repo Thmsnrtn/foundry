@@ -102,6 +102,8 @@
 
 
 
+
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -185,7 +187,9 @@
        AND a.capability=r.capability AND a.to_mode='act' AND a.revoked_at IS NULL
        AND c.epistemic_status IN ('known','inferred') AND json_array_length(c.evidence_refs_json) > 0
        AND c.epistemic_status IN ('known','inferred') AND json_array_length(c.evidence_refs_json)>0
+       AND c.predicate=json_extract(NEW.payload_json,'$.predicate'));
        AND c.product_id=r.product_id
+       AND c.subject='responsibility:' || json_extract(NEW.payload_json,'$.responsibility_id')
        AND d.created_at = NEW.disposition_at
        AND d.disposition = NEW.disposition
        AND d.evidence_ref = NEW.disposition_evidence_ref
@@ -195,6 +199,8 @@
        AND from_state = OLD.state
        AND observed.product_id=NEW.product_id
        AND observed.source=x.observation_source_kind
+       AND p.owner_id=json_extract(NEW.payload_json,'$.founder_id'));
+       AND r.product_id=NEW.product_id
        AND to_state = NEW.state
        AND x.observation_source_kind IS NOT NULL
        AND x.product_id=NEW.product_id
@@ -279,6 +285,7 @@
       JOIN institutional_responsibilities r ON r.id=x.responsibility_id
       JOIN products p ON p.id = s.product_id
       JOIN products p ON p.id = s.product_id
+      JOIN products p ON p.id=r.product_id
       JOIN responsibility_shadow_expectations x ON x.id = c.expectation_id
       JOIN responsibility_shadow_expectations x ON x.id=c.expectation_id
       JOIN signal_events observed
@@ -332,12 +339,14 @@
      WHERE NEW.evidence_ref='signal_event:' || e.id AND e.product_id=r.product_id
      WHERE NEW.outcome_ref = 'action_execution:' || x.id AND x.product_id = NEW.product_id
      WHERE NEW.outcome_ref='action_execution:' || x.id AND x.product_id=r.product_id
+     WHERE c.product_id=NEW.product_id
      WHERE d.candidate_id = NEW.id
      WHERE d.responsibility_id = NEW.id
      WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL
      WHERE p.owner_id = NEW.due_stated_by);
      WHERE p.owner_id = NEW.due_stated_by);
+     WHERE r.id=json_extract(NEW.payload_json,'$.responsibility_id')
      WHERE responsibility_id = NEW.id
      WHERE x.id=NEW.expectation_id
      WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
@@ -557,6 +566,7 @@
     OR trim(coalesce(json_extract(NEW.payload_json,'$.effect_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.external_message_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.founder_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.judgment_id'),''))=''
@@ -565,10 +575,13 @@
     OR trim(coalesce(json_extract(NEW.payload_json,'$.obligation_kind'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.origin'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.predicate'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.predicate'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.reported_by'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.reporter'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.request_id'),''))=''
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.responsibility_id'),''))='';
     OR trim(coalesce(json_extract(NEW.payload_json,'$.result'),''))='';
+    OR trim(coalesce(json_extract(NEW.payload_json,'$.statement'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.statement'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.what'),''))=''
     OR trim(coalesce(json_extract(NEW.payload_json,'$.what'),''))=''
@@ -587,6 +600,7 @@
     SELECT 1 FROM inbound_customer_messages m
     SELECT 1 FROM inbound_customer_messages m
     SELECT 1 FROM institutional_responsibilities
+    SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r
     SELECT 1 FROM institutional_responsibilities r
@@ -613,6 +627,7 @@
     SELECT 1 FROM products p
     SELECT 1 FROM products p WHERE p.id=NEW.product_id AND p.owner_id=NEW.owner_id);
     SELECT 1 FROM products p WHERE p.id=NEW.product_id);
+    SELECT 1 FROM reconstruction_claims c
     SELECT 1 FROM reconstruction_claims c
     SELECT 1 FROM reconstruction_claims c JOIN institutional_responsibilities r ON r.id=NEW.responsibility_id
     SELECT 1 FROM reconstruction_claims c WHERE NEW.expectation_evidence_ref='reconstruction_claim:' || c.id
@@ -735,6 +750,7 @@
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
     json_valid(NEW.payload_json)=0
+    json_valid(NEW.payload_json)=0
     outcome_ref = NEW.outcome_ref,
     spent_cents = spent_cents + COALESCE(NEW.actual_cents, 0),
     spent_cents = spent_cents + COALESCE(NEW.actual_cents, 0),
@@ -834,6 +850,7 @@
   -- A capability claim must match the responsibility it is booked against, so
   -- A closed, deliberately small change vocabulary. Broadening it is a
   -- A company channel may not shadow a built-in metric name. If it could, the
+  -- A correction may only be about something the institution is already
   -- A generic strategic decision row carries none of the responsibility and
   -- A grant is still exact: this owner, this company, this responsibility, this
   -- A guessable key is not authentication.
@@ -893,6 +910,7 @@
   -- Health composite (0-100)
   -- Identity is verified against real ownership. A caller-supplied founder
   -- Identity is verified against real ownership. A caller-supplied founder
+  -- Identity is verified against real ownership: a caller-supplied founder
   -- Issuing a credential is a founder assertion and must carry provenance, and
   -- JSON array from the closed set below. Immutable after minting.
   -- JSON object keyed by agent name containing the signal or flag that was raised
@@ -975,6 +993,7 @@
   -- The message must be this company's, and the responsibility on the plan must
   -- The observer may not see, cite, or echo the expectation it will be
   -- The plan must carry a real proposal, authored for that same message.
+  -- The responsibility is this company's, and the person correcting owns it.
   -- The rung the policy chose. 'log' is recorded too: an audit trail the
   -- The same generic operational vocabulary migration 126 established, mirrored
   -- The secret is the whole of the authentication, so its floor is set here and
@@ -1042,6 +1061,7 @@
   -- guards in this schema.
   -- guards in this schema.
   -- here too.
+  -- holding a belief for. Correcting a fact that was never stated is stating
   -- honours it; this is a list of intakes that exist, not of intakes anyone
   -- independence tests caught it. Widening a vocabulary must not become a way
   -- indistinguishable from a real one.
@@ -1049,6 +1069,7 @@
   -- irrespective of later reality.
   -- it unless the account has verified the domain, which is the verification.
   -- it, and ambiguity is refused rather than believed.
+  -- it, and stating one goes through the question path.
   -- judgment time; the owner cannot introduce an unrepresented direction here.
   -- just the plaintext column with a more reassuring name.
   -- justified by another tenant's evidence is not a justification.
@@ -1091,6 +1112,7 @@
   -- silently dropped field is a silently granted one waiting to happen.
   -- single responsibility: the scope must follow the meaning of the fact.
   -- still be current, non-conflicting, and canonically grounded.
+  -- string cannot establish who is speaking for the company.
   -- string cannot establish who is speaking for the company.
   -- string cannot establish who is speaking for the company.
   -- table decision_id points at (the founder-facing queue vs the strategic log).
@@ -1337,6 +1359,9 @@
   SELECT RAISE(ABORT,'founder_assertion:founder_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'founder_assertion:payload_invalid') WHERE
   SELECT RAISE(ABORT,'founder_assertion:request_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'founder_correction:founder_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'founder_correction:nothing_to_correct') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'founder_correction:payload_invalid') WHERE
   SELECT RAISE(ABORT,'founder_evidence:already_resolved') WHERE OLD.status='answered';
   SELECT RAISE(ABORT,'founder_evidence:answer_invalid')
   SELECT RAISE(ABORT,'founder_evidence:born_unanswered')
@@ -4532,6 +4557,7 @@ BEFORE INSERT ON signal_events WHEN NEW.source='development_verification'
 BEFORE INSERT ON signal_events WHEN NEW.source='effect_outcome_report'
 BEFORE INSERT ON signal_events WHEN NEW.source='external_company_report'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_assertion'
+BEFORE INSERT ON signal_events WHEN NEW.source='founder_correction'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_reply_proposal'
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_report'
 BEFORE INSERT ON signal_events WHEN NEW.source='institutional_judgment_observation'
@@ -4566,6 +4592,7 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5246,6 +5273,7 @@ CREATE TRIGGER external_company_report_guard
 CREATE TRIGGER external_metric_observation_guard
 CREATE TRIGGER external_shadow_observation_independence_guard
 CREATE TRIGGER founder_assertion_guard
+CREATE TRIGGER founder_correction_guard
 CREATE TRIGGER founder_evidence_request_guard
 CREATE TRIGGER founder_evidence_request_resolution_guard
 CREATE TRIGGER founder_reply_proposal_guard
@@ -5349,6 +5377,7 @@ CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, 
 CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
 END;
 END;
 END;

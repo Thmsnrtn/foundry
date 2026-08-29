@@ -19,6 +19,10 @@ export function requiredUnderstandingFacts(capability:string):UnderstandingFact[
 export interface UnderstandingValue {
   predicate:UnderstandingFact; value:unknown; epistemicStatus:EpistemicStatus;
   evidenceRefs:ReconstructionEvidenceRef[]; claimId:string;
+  /** When the fact was true of the company, not when the row was written. The
+   *  founder-facing view of what Foundry believes needs to say how old each
+   *  belief is, and nothing else here carried that. */
+  observedAt:string;
 }
 export interface ResponsibilityUnderstanding {
   responsibility:Responsibility; facts:UnderstandingValue[]; missingCriticalFacts:UnderstandingFact[];
@@ -32,7 +36,7 @@ export async function projectResponsibilityUnderstanding(productId:string,respon
   const claims=(await getReconstructionClaims(productId,now)).filter((claim)=>claim.subject===subject);
   const facts:UnderstandingValue[]=claims.filter((claim)=>UNDERSTANDING_FACTS.includes(claim.predicate as UnderstandingFact)).map((claim)=>({
     predicate:claim.predicate as UnderstandingFact,value:claim.value,epistemicStatus:claim.epistemicStatus,
-    evidenceRefs:claim.evidenceRefs,claimId:claim.id,
+    evidenceRefs:claim.evidenceRefs,claimId:claim.id,observedAt:claim.observedAt,
   }));
   const current=new Map(facts.map((fact)=>[fact.predicate,fact]));
   const requiredFacts=requiredUnderstandingFacts(responsibility.capability);
