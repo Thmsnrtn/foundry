@@ -362,11 +362,6 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
           <div style="font-size:1.3rem;font-weight:700;color:var(--text-primary,#e2e8f0);">$${scpSection.ai_cost_30d_usd.toFixed(2)}</div>
           <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">AI Cost (30d)</div>
         </div>
-        <!-- Golden Suite -->
-        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
-          <div style="font-size:2rem;font-weight:700;color:#ffb347;">${scpSection.golden_suite_size}</div>
-          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Golden Lessons</div>
-        </div>
       </div>
 
       ${scpSection.latest_briefing_headline ? html`
