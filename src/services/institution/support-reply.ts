@@ -32,8 +32,14 @@ export interface ReplyProposal {
 }
 
 export type ProposalRefusal = 'message_invalid' | 'content_required' | 'content_too_large';
+/** `already_planned` was here and could never be returned. Planning the same
+ *  message twice CONVERGES — "converge on it rather than queueing a second
+ *  reply to one customer question" — and a plan stranded on a withdrawn grant
+ *  is cancelled and re-planned rather than refused. A refusal the door cannot
+ *  give is a promise the type makes and the code does not keep, and a caller
+ *  writing a branch for it would be handling a case that never arrives. */
 export type PlanRefusal =
-  | 'proposal_invalid' | 'not_assisting' | 'no_authority' | 'already_planned';
+  | 'proposal_invalid' | 'not_assisting' | 'no_authority';
 
 /** Deterministic identity: the same founder proposing the same text for the
  * same message twice is one proposal, not two. */
