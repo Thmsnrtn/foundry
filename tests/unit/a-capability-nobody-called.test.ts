@@ -55,6 +55,35 @@ describe('the claims gate covers capabilities, not only prices', () => {
   });
 });
 
+describe('the privacy copy names the services that actually receive prompts', () => {
+  const landing = readFileSync(resolve(ROOT, 'src/routes/public/landing.ts'), 'utf8');
+  const client = readFileSync(resolve(ROOT, 'src/services/ai/client.ts'), 'utf8');
+
+  it('does not name a processor the code never calls', () => {
+    // `api.anthropic.com` appears nowhere in the repository, and `getBaseUrl()`
+    // returns OpenRouter unconditionally — its own comment says a direct
+    // Anthropic key "still routes through OpenRouter". The disclosure named the
+    // one service that was not in the path.
+    expect(client).not.toContain('api.anthropic.com');
+    expect(landing).not.toContain('Anthropic');
+  });
+
+  it('names the ones it does', () => {
+    expect(client).toContain('https://openrouter.ai/api/v1');
+    expect(landing).toContain('OpenRouter');
+    expect(landing).toContain('OpenAI');
+  });
+
+  it('asserts no contractual term Foundry holds no evidence of', () => {
+    // Foundry sends no data-policy header, so it cannot attest to a no-training
+    // term with either vendor. Restating that promise under a different name
+    // would have repeated the original defect at a higher cost.
+    expect(landing).not.toContain('contractually forbid');
+    expect(landing).not.toContain('no-training');
+    expect(landing).toContain('state no term here on their behalf');
+  });
+});
+
 describe('the public page does not sell either of them', () => {
   const landing = readFileSync(resolve(ROOT, 'src/routes/public/landing.ts'), 'utf8');
 

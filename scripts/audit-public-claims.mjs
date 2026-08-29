@@ -26,6 +26,9 @@ const CLAIMS = [
   // never opened a pull request, and nothing anywhere wrote a golden lesson.
   'Remediation Engine — AI-drafted fixes for blocking audit issues',
   'Agent evolution — versioned configs and change history',
+  // The processors that actually receive prompt content. Named in the privacy
+  // copy and pinned to the endpoints the code calls.
+  'Prompts are sent to language models through OpenRouter and OpenAI',
 ];
 
 // ── Sources derived from code (single source of truth) ───────────────────────
@@ -82,6 +85,30 @@ sources.push({
   content: hasCallerOutside('addGoldenLesson', 'agents/base.ts')
     ? 'agent evolution golden lessons versioned configs and change history'
     : 'agent evolution versioned configs and change history',
+});
+
+// WHO RECEIVES A PROMPT, from the code that sends it.
+//
+// The privacy copy named Anthropic as the processor of every prompt and listed
+// it as the sole AI sub-processor. `api.anthropic.com` appears nowhere in the
+// repository: `client.ts` pins OpenRouter and `getBaseUrl()` returns it
+// unconditionally — its own comment says a direct Anthropic key "still routes
+// through OpenRouter" — and voice replies go to OpenAI. A privacy statement
+// naming the wrong recipient is the one kind of copy where being wrong is not
+// merely embarrassing.
+//
+// Pinned to the endpoints in the code, so the disclosure cannot name a vendor
+// the product does not call.
+const aiClient = readFileSync('src/services/ai/client.ts', 'utf8');
+const voiceReply = readFileSync('src/services/scp/briefing/voice-reply.ts', 'utf8');
+const endpoints = [];
+if (aiClient.includes('openrouter.ai') || voiceReply.includes('openrouter.ai')) endpoints.push('openrouter');
+if (voiceReply.includes('api.openai.com')) endpoints.push('openai');
+if (aiClient.includes('api.anthropic.com') || voiceReply.includes('api.anthropic.com')) endpoints.push('anthropic');
+sources.push({
+  name: 'src/services/ai model endpoints actually called',
+  content: `prompts are sent to language models through ${endpoints.join(' and ')} `
+    + 'receives every prompt foundry sends to a language model voice replies',
 });
 
 // ── Verify ───────────────────────────────────────────────────────────────────

@@ -189,8 +189,8 @@ landingRoutes.get('/', async (c) => {
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:0.5rem;">Your data, your data</div>
         <p style="margin:0;font-size:0.85rem;color:var(--text-dim);line-height:1.6;">
           GitHub access tokens and integration credentials are encrypted at rest.
-          <strong style="color:var(--text-primary);">Your business data is never used to train AI models</strong> — Foundry calls Anthropic with the standard no-training API terms.
-          A DPA is available on request.
+          <strong style="color:var(--text-primary);">Foundry runs no training pipelines on your data.</strong>
+          Prompts are sent to models through OpenRouter, and voice replies through OpenAI. A DPA is available on request.
         </p>
       </div>
 
@@ -523,13 +523,14 @@ legalRoutes.get('/privacy-policy', (c) => {
         <li>To send you operational digests and alerts (which you can configure in Settings)</li>
       </ul>
 
-      <h2>AI Model Training — We Don't Do It</h2>
-      <p>Your business data is never used to train AI models. Foundry sends prompts to
-        Anthropic (Claude) under the standard API terms, which contractually forbid using
-        prompt content for model training. We do not run our own training pipelines on your
-        data, do not share it with third-party AI vendors for training purposes, and do not
-        sell or license it. If Anthropic's API terms change in a way that affects this, we
-        will notify you 30 days before any change takes effect.</p>
+      <h2>AI Models — Who Processes Your Prompts</h2>
+      <p>Foundry sends prompts to language models through <strong>OpenRouter</strong>
+        (https://openrouter.ai), and voice replies through <strong>OpenAI</strong>. Those are the
+        services that receive prompt content; their own terms govern what they do with it, and we
+        state no term here on their behalf. We do not run our own training pipelines on your
+        data, and do not sell or license it. If the services that process prompts change, or
+        their terms change in a way that affects you, we will notify you 30 days before any
+        change takes effect.</p>
 
       <h2>Encryption at Rest</h2>
       <p>Sensitive credentials — GitHub access tokens, Stripe API keys, integration
@@ -550,7 +551,8 @@ legalRoutes.get('/privacy-policy', (c) => {
 
       <h2>Third-Party Processors</h2>
       <ul style="margin:0.5rem 0 1rem 1.5rem;color:var(--text);line-height:1.8;">
-        <li><strong>Anthropic (Claude AI):</strong> Processes your business context to generate agent analyses. Subject to Anthropic's data retention policy.</li>
+        <li><strong>OpenRouter:</strong> Receives every prompt Foundry sends to a language model, and routes it to the model that answers it. Your business context is in those prompts.</li>
+        <li><strong>OpenAI:</strong> Receives the prompts behind voice replies.</li>
         <li><strong>Clerk:</strong> Authentication and user management</li>
         <li><strong>Stripe:</strong> Payment processing</li>
         <li><strong>Turso:</strong> Database hosting</li>

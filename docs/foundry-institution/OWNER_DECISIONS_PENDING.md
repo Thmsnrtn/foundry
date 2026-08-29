@@ -573,3 +573,47 @@ anywhere a customer reads it.
 questions block unrelated development."* Preserve the questions, implement the
 safest locally resolvable structural corrections, and resume autonomous
 stewardship.
+
+---
+
+## PENDING 15 — The AI sub-processor disclosure was wrong, and what replaces it is yours: **COUNSEL**
+
+**What was true.** The public privacy copy said "Foundry sends prompts to
+Anthropic (Claude) under the standard API terms, which contractually forbid
+using prompt content for model training", and listed Anthropic as the only AI
+entry under Third-Party Processors.
+
+`api.anthropic.com` appears nowhere in this repository. `src/services/ai/client.ts`
+pins `https://openrouter.ai/api/v1` and `getBaseUrl()` returns it
+unconditionally — the comment beside it says a direct Anthropic key "still
+routes through OpenRouter for consistency". Voice replies go to OpenAI
+(`src/services/scp/briefing/voice-reply.ts`). So every prompt containing a
+customer's business context has been received by services the disclosure did not
+name, and the one it did name was not in the path.
+
+**What was changed, and why only this much.** The false statements are gone: the
+copy now names OpenRouter and OpenAI as the services that receive prompt
+content, and `audit-public-claims.mjs` pins those names to the endpoints the
+code actually calls, so the disclosure cannot drift from the product again.
+
+The assertion about contractual terms was REMOVED rather than rewritten. Foundry
+sends no data-policy header — the only headers on a model request are
+`Content-Type`, `Authorization`, `HTTP-Referer` and `X-Title` — so it holds no
+evidence of any no-training term with either vendor. Restating that promise
+under a different vendor's name would have repeated the original defect at a
+higher cost: a legal claim with nothing behind it.
+
+**What is yours to decide.**
+1. Whether OpenRouter and OpenAI are acceptable sub-processors for customer
+   business context, or whether prompts should go direct to a named provider.
+2. Whether to obtain and then state a no-training term — and, if so, to
+   configure whatever opt-out each vendor offers, so the claim has a mechanism
+   behind it rather than a sentence.
+3. Whether existing customers must be told. The copy promised a 30-day notice
+   before a change affecting this; the disclosure was wrong rather than changed,
+   which is a different obligation and a question for counsel.
+4. Whether the DPA offered "on request" matches what the corrected list says.
+
+Foundry has not written to any customer about this and will not: telling people
+their data went somewhere they were not told about is an owner's decision, not
+an institution's.
