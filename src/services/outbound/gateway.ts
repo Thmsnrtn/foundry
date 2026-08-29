@@ -22,8 +22,28 @@ export interface GatewayRequest {
   tool: string;                               // 'send_email'|'create_pr'|...
   action: string;                             // human-readable description
   params: Record<string, unknown>;
-  /** Required for at-most-once dedup. Without it, idempotency is skipped. */
-  dedupKey?: string;
+  /**
+   * The at-most-once identity of this effect. `null` means this caller has
+   * decided not to dedup and accepts that a retry sends again.
+   *
+   * REQUIRED, THOUGH IT MAY BE NULL, AND THIS IS DEFENCE IN DEPTH RATHER THAN A
+   * HOLE BEING CLOSED. Every registered tool policy sets `requireDedupKey`
+   * today, so an omitted key is refused below at `policy.requireDedupKey` and
+   * no effect reaches a handler without one.
+   *
+   * What that leaves is a tool registered LATER whose policy forgets the flag:
+   * the runtime requirement is per-policy, so it is exactly as complete as the
+   * next registration remembers to be. The comment here used to say "without
+   * it, idempotency is skipped" while the type let a caller omit the field —
+   * naming the hazard and permitting it in the same breath.
+   *
+   * Making it required costs nothing at runtime, since all twelve call sites
+   * already pass one, and moves the requirement from something each policy
+   * restates to something the compiler keeps. Skipping at-most-once stays
+   * possible, because a caller may genuinely have no stable identity for an
+   * effect — but it has to be written down as `null` rather than forgotten.
+   */
+  dedupKey: string | null;
   /** Customer fact used by policies that require communication budgeting. */
   customerExternalId?: string;
   /** Legacy assertion checked against, but never overrides, server policy. */
