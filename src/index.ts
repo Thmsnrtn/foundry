@@ -592,56 +592,76 @@ logger.info(`FOUNDRY starting — port=${port}, env=${process.env.NODE_ENV ?? 'd
 
 import { serve } from '@hono/node-server';
 
-// Run migrations then start server
-runMigrations()
-  .then(async () => {
-    // Provision SCP instances for any existing products that don't have one yet
-    try {
-      const { ensureProvisioned } = await import('./services/scp/provisioner.js');
-      const { getAllActiveProducts } = await import('./db/client.js');
-      const products = await getAllActiveProducts();
-      for (const row of products.rows) {
-        const p = row as Record<string, string>;
-        await ensureProvisioned(p.id, p.owner_id).catch((err) => {
-          logger.warn(`SCP provision skipped for ${p.id}`, { productId: p.id, error: String(err) });
-        });
+// ─── Starting the process, and why that is a function now ───────────────────
+//
+// This ran at module scope, so importing `src/index.ts` migrated the database,
+// provisioned SCP instances, started the scheduler and BOUND A PORT. No test
+// has ever imported it — which is why the static-asset route served corrupted
+// bytes for its entire life without anything noticing, and why a large part of
+// the route surface is untestable rather than merely untested.
+//
+// The discriminator is the test runner rather than an entry-point check,
+// because the failure DIRECTION matters. `tsx watch` and `node dist/index.js`
+// set no such variable, so both are untouched; and if the detection ever
+// stopped working, the behaviour would revert to what it has always been —
+// starting the server — rather than to a production process that serves
+// nothing. A guard on startup has to fail towards starting.
+function startProcess(): void {
+  runMigrations()
+    .then(async () => {
+      // Provision SCP instances for any existing products that don't have one yet
+      try {
+        const { ensureProvisioned } = await import('./services/scp/provisioner.js');
+        const { getAllActiveProducts } = await import('./db/client.js');
+        const products = await getAllActiveProducts();
+        for (const row of products.rows) {
+          const p = row as Record<string, string>;
+          await ensureProvisioned(p.id, p.owner_id).catch((err) => {
+            logger.warn(`SCP provision skipped for ${p.id}`, { productId: p.id, error: String(err) });
+          });
+        }
+        logger.info(`SCP: provisioned for ${products.rows.length} product(s)`);
+      } catch (err) {
+        // Non-fatal: SCP provisioning failure should not block server startup
+        logger.warn('SCP provisioning error (non-fatal)', { error: String(err) });
       }
-      logger.info(`SCP: provisioned for ${products.rows.length} product(s)`);
-    } catch (err) {
-      // Non-fatal: SCP provisioning failure should not block server startup
-      logger.warn('SCP provisioning error (non-fatal)', { error: String(err) });
-    }
 
-    // Phase 3.1: only the worker (or an all-in-one) process runs the scheduler.
-    // The 'web' process group serves HTTP without the 73 in-process crons.
-    const role = getProcessRole();
-    if (process.env.NODE_ENV === 'production') {
-      if (schedulerEnabledForRole(role)) {
-        startScheduler();
-      } else {
-        logger.info(`Scheduler disabled for PROCESS_ROLE=${role}`);
+      // Phase 3.1: only the worker (or an all-in-one) process runs the scheduler.
+      // The 'web' process group serves HTTP without the 73 in-process crons.
+      const role = getProcessRole();
+      if (process.env.NODE_ENV === 'production') {
+        if (schedulerEnabledForRole(role)) {
+          startScheduler();
+        } else {
+          logger.info(`Scheduler disabled for PROCESS_ROLE=${role}`);
+        }
       }
-    }
-    serve({
-      fetch: app.fetch,
-      port,
-    }, (info) => {
-      logger.info(`Listening on http://localhost:${info.port} (role=${role})`);
+      serve({
+        fetch: app.fetch,
+        port,
+      }, (info) => {
+        logger.info(`Listening on http://localhost:${info.port} (role=${role})`);
+      });
+    })
+    .catch((err) => {
+      logger.error('Migration error', { error: String(err?.message ?? err) });
+      if (process.env.NODE_ENV === 'production') {
+        // In production, migration failures are fatal — don't serve with inconsistent schema
+        logger.error('FATAL: Migrations failed in production. Exiting.');
+        process.exit(1);
+      }
+      // In development, start anyway with a warning
+      const port = parseInt(process.env.PORT ?? '8080');
+      serve({ fetch: app.fetch, port }, (info) => {
+        logger.info(`Listening on http://localhost:${info.port} (with migration warnings — DEV ONLY)`);
+      });
     });
-  })
-  .catch((err) => {
-    logger.error('Migration error', { error: String(err?.message ?? err) });
-    if (process.env.NODE_ENV === 'production') {
-      // In production, migration failures are fatal — don't serve with inconsistent schema
-      logger.error('FATAL: Migrations failed in production. Exiting.');
-      process.exit(1);
-    }
-    // In development, start anyway with a warning
-    const port = parseInt(process.env.PORT ?? '8080');
-    serve({ fetch: app.fetch, port }, (info) => {
-      logger.info(`Listening on http://localhost:${info.port} (with migration warnings — DEV ONLY)`);
-    });
-  });
+
+}
+
+// Importing the app must not start a server. `VITEST` is set in every vitest
+// worker and nowhere else.
+if (!process.env.VITEST) startProcess();
 
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 // Allow in-flight requests to complete on SIGTERM (deployment) and SIGINT (dev)
