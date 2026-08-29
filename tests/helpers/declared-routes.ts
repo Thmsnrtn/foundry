@@ -119,6 +119,13 @@ export const mountPrefixes = (): Map<string, string> => prefixedMounts().byFile;
 export function declaredRoutes(): { routes: DeclaredRoute[]; unresolved: string[] } {
   const routes: DeclaredRoute[] = [];
   const mounts = prefixedMounts();
+
+  // ROUTES DECLARED IN `index.ts` ITSELF, which is not under `src/routes/`.
+  // Five of them, and one is `POST /webhooks/stripe` — mutating, sessionless
+  // and money-handling. Scanning only the router directories left it outside
+  // the population that the stranger-facing invariants check.
+  routes.push(...declarationsIn(join(ROOT, 'src/index.ts'), ''));
+
   for (const file of tsFiles(join(ROOT, 'src/routes'))) {
     routes.push(...declarationsIn(file, mounts.byFile.get(basename(file)) ?? ''));
   }

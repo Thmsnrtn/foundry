@@ -39,6 +39,13 @@ const PUBLIC = [
   // shadowing it, which is this test doing its job: the public surface changed
   // and had to be justified rather than absorbed.
   '/api/v1/health',
+  // The PWA pair. A browser fetches both unauthenticated — it cannot install an
+  // app whose manifest or service worker require a session — and they carry no
+  // company data. Both are declared in `index.ts` itself rather than a router,
+  // which is why they only appeared here once the population learned to read
+  // that file.
+  '/manifest.json',
+  '/sw.js',
   '/auth/login',
   '/auth/logout',
   '/auth/signup',

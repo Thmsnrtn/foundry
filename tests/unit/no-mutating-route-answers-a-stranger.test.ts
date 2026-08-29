@@ -54,6 +54,15 @@ describe('a request with no session', () => {
     expect(routes.some((p) => p.startsWith('/agents/'))).toBe(true);
   });
 
+  it('includes the routes declared in index.ts, not only those in routers', () => {
+    // `POST /webhooks/stripe` is mutating, sessionless and money-handling, and
+    // it is declared in `index.ts` rather than under `src/routes/` — so it sat
+    // outside this population entirely until the helper learned to read that
+    // file. It refuses an unsigned request with 400 "Missing signature", which
+    // is its own check rather than anything above it.
+    expect(routes).toContain('/webhooks/stripe');
+  });
+
   it('finds a substantial mutating surface to check', () => {
     // A regex that quietly matched nothing would make every assertion below
     // vacuous, which is the failure mode of a test like this.

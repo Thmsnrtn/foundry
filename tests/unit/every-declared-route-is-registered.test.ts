@@ -52,4 +52,17 @@ describe('the route table and the source agree', () => {
       .map((r) => `${r.method} ${r.path}  (${r.file})`);
     expect(missing, 'declared in source, not registered on the app at that path').toEqual([]);
   });
+
+  it('declares every route the app registers, so nothing is outside the population', () => {
+    // THE DIRECTION THAT FINDS SURFACE NOBODY KNEW ABOUT. The check above
+    // proves the population is not WRONG; this proves it is not INCOMPLETE, and
+    // only this one could have found the five routes declared in `index.ts`
+    // rather than in a router — one of them `POST /webhooks/stripe`, which is
+    // mutating, sessionless and money-handling, and which sat outside every
+    // stranger-facing invariant in this suite until it did.
+    const accounted = new Set(declared.routes.map((r) => `${r.method} ${r.path}`));
+    const unaccounted = [...registered].filter((r) => !accounted.has(r));
+    expect(unaccounted, 'registered on the app, outside the population every route test uses')
+      .toEqual([]);
+  });
 });
