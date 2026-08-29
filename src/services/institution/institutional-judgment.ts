@@ -112,7 +112,23 @@ export async function createDeterministicCapacityJudgment(productId:string,respo
     `${affected.length} responsibilities demand more ${resource} than current canonical capacity`,
     'Deterministic comparison of provenance-bearing capacity and demand claims',
     'Owner selects a bounded allocation or changes capacity',JSON.stringify(['defer one demand','reallocate capacity','increase capacity']),
-    JSON.stringify([`capacity for ${resource} remains current`]),JSON.stringify(ids),JSON.stringify(evidence.map(x=>`reconstruction_claim:${x}`)),
+    JSON.stringify([`capacity for ${resource} remains current`]),
+    // WHAT THIS JUDGMENT IS ABOUT, NOT WHAT WAS LOOKED AT.
+    //
+    // This stored `ids` — every active responsibility the pass handed in — while
+    // `conflict_identity`, `consequences_json` and the description all use
+    // `affected`, the subset that actually demands the contested resource.
+    //
+    // `runJudgmentObservationPass` reads this column to decide whether the time
+    // the company gave has run out, so any active responsibility passing any due
+    // date stamped this judgment `contradicted` and told the founder so, naming a
+    // responsibility with nothing to do with the resource. The disposition path
+    // reads it to title the responsibilities a consequence names, and titled
+    // ones the consequences never mention.
+    //
+    // The population has to be the subject. A later demand on the same resource
+    // is a different conflict with its own identity, not evidence about this one.
+    JSON.stringify(affected.map(d=>d.responsibilityId)),JSON.stringify(evidence.map(x=>`reconstruction_claim:${x}`)),
     JSON.stringify([{kind:'resource_limit',resource,available:capacity.amount,requested:affected.reduce((n,d)=>n+d.amount,0)},
       ...relevantCommitments.map(c=>({kind:c.kind,text:c.text})),...ownerConstraints.map(c=>({kind:'owner_constraint',text:c.text}))]),
     JSON.stringify([...affected.filter(d=>!d.deadline).map(d=>`deadline unknown for ${d.responsibilityId}`),
