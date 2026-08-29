@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { csvRow } from '../../lib/csv.js';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
@@ -267,16 +268,10 @@ auditLog.get('/audit-log/export', async (c) => {
   // Build CSV
   const csvHeaders = ['created_at', 'actor_type', 'actor_name', 'actor_id', 'action', 'resource_type', 'resource_id', 'details', 'ip_address'];
   const csvRows = entries.map((e) => {
-    return csvHeaders.map((h) => {
-      const val = e[h];
-      if (val === null || val === undefined) return '';
-      const str = typeof val === 'string' ? val : JSON.stringify(val);
-      // Escape CSV: wrap in quotes if contains comma, quote, or newline
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    }).join(',');
+    // One escaper, shared with the privacy export. Both quoted correctly for
+    // RFC 4180 and neither neutralised a formula; the audit log carries
+    // `reasoning` and `trigger` strings that can hold content from outside.
+    return csvRow(csvHeaders, e as Record<string, unknown>);
   });
 
   const csv = [csvHeaders.join(','), ...csvRows].join('\n');

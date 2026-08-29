@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { csvCell, csvRow } from '../../lib/csv.js';
 import { clientIp } from '../../middleware/rate-limit.js';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
@@ -512,16 +513,11 @@ function jsonToCsv(rows: unknown[]): string {
   if (rows.length === 0) return '';
   const headers = Object.keys(rows[0] as Record<string, unknown>);
   const escape = (val: unknown): string => {
-    const str = val === null || val === undefined ? '' : String(val);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
+    return csvCell(val);
   };
   const lines = [headers.join(',')];
   for (const row of rows) {
-    const r = row as Record<string, unknown>;
-    lines.push(headers.map((h) => escape(r[h])).join(','));
+    lines.push(csvRow(headers, row as Record<string, unknown>));
   }
   return lines.join('\n');
 }
