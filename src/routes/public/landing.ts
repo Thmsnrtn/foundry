@@ -150,13 +150,13 @@ landingRoutes.get('/', async (c) => {
       <div class="card" style="padding:2rem;margin-bottom:2.5rem;border-left:3px solid var(--accent);">
         <h3 style="margin:0 0 0.75rem;">Agents that learn</h3>
         <p style="margin:0 0 0.75rem;color:var(--text-dim);line-height:1.6;font-size:0.9rem;">
-          Every time you correct an agent, that correction becomes a <strong style="color:var(--text-primary);">golden lesson</strong>
-          injected into every future session. Agents track their own version history. Day 1 agents operate at
-          maximum oversight. Agents that prove themselves earn autonomy.
+          Every time you correct an agent, that correction is written into its
+          <strong style="color:var(--text-primary);">versioned config</strong> and carried into every future
+          session. Agents track their own version history. Day 1 agents operate at maximum oversight.
         </p>
         <p style="margin:0;color:var(--text-dim);line-height:1.6;font-size:0.9rem;">
-          After 50 sessions with a 91% success rate, an agent transitions from Gate 2 (approval required) to Gate 0
-          (fully autonomous). <strong style="color:var(--text-primary);">You set the pace. They earn the trust.</strong>
+          Raising an agent from Gate 2 (approval required) to Gate 0 is your decision, made from its record —
+          nothing promotes itself. <strong style="color:var(--text-primary);">You set the pace. They earn the trust.</strong>
         </p>
       </div>
 
@@ -273,7 +273,7 @@ pricingRoutes.get('/pricing', async (c) => {
           <ul class="pricing-features">
             <li>1 company · 12 AI agents</li>
             <li>Daily CEO briefing</li>
-            <li>Agent evolution — golden lessons, versioned configs</li>
+            <li>Agent evolution — versioned configs and change history</li>
             <li>Signal score + risk state monitoring</li>
             <li>AI Ask — conversational business advisor</li>
             <li>Decision queue (Gate 0–4)</li>
@@ -292,7 +292,7 @@ pricingRoutes.get('/pricing', async (c) => {
             <li>Co-founder mode — alignment scores, decision voting</li>
             <li>Intelligence Network — anonymized peer benchmarks</li>
             <li>Wisdom Layer — DNA accumulation, failure log, patterns</li>
-            <li>Remediation Engine — automated GitHub PRs</li>
+            <li>Remediation Engine — AI-drafted fixes for blocking audit issues</li>
             <li>Up to 3 team members</li>
           </ul>
           <a href="/auth/signup" class="btn btn-primary" style="width:100%;margin-top:1rem;text-align:center;">Get Started</a>

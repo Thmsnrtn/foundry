@@ -449,7 +449,7 @@ agentRoutes.get('/:name', async (c) => {
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);">Golden Suite — ${goldenEntries.length} active lessons</div>
       </div>
       ${goldenEntries.length === 0
-        ? html`<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:0.85rem;">No golden lessons yet. They accumulate as the agent runs.</div>`
+        ? html`<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:0.85rem;">No golden lessons. Nothing writes one yet, so this stays empty however long the agent runs — your corrections are carried in its versioned config instead.</div>`
         : goldenRows}
     </div>
 

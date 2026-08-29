@@ -14,6 +14,19 @@ export interface GateResult {
   passed: boolean;
   reason: string;
   score?: number;
+  /**
+   * Whether the gate actually examined anything.
+   *
+   * PASSING AND NOT LOOKING ARE DIFFERENT FACTS, and `passed` alone cannot tell
+   * them apart. The regression gate returns `passed: true` on an empty lesson
+   * corpus — correctly, since no lessons means nothing to contradict — and that
+   * verdict then read exactly like a change that had been checked against a
+   * full corpus and cleared. Since nothing writes `golden_suite`, that is every
+   * change for every company.
+   *
+   * Absent means checked, so a gate that does not set it is one that looked.
+   */
+  checked?: boolean;
 }
 
 export interface ValidationResult {
@@ -134,10 +147,22 @@ async function runRegressionGate(
   productId: string
 ): Promise<GateResult> {
   if (goldenLessons.length === 0) {
+    // NOT A PASS — NOTHING TO PASS. An empty corpus is not evidence that this
+    // change is safe; it is the absence of the evidence this gate exists to
+    // weigh. `passed` stays true because refusing every change would stop
+    // evolution on a fact about Foundry rather than about the change, and the
+    // constitution gate above shows the other posture where it belongs: when it
+    // cannot check, it rejects, because there the risk of being wrong is
+    // constitutional.
+    //
+    // `golden_suite` has no writer anywhere in the repository, so this branch
+    // is not the rare case — it is every change, for every company. Saying
+    // "checked" of it would be the instrument reporting a green it never took.
     return {
       gate: 'regression',
       passed: true,
-      reason: 'No golden lessons to check against',
+      checked: false,
+      reason: 'No golden lessons exist for this agent, so nothing was checked against',
     };
   }
 

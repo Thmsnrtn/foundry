@@ -19,6 +19,13 @@ const CLAIMS = [
   'All plans include 12 AI agents',
   '14-day trial',
   '30 founding-rate slots locked at $79/mo for life',
+  // CAPABILITY CLAIMS, not only prices. A wrong number is embarrassing; a
+  // capability a customer pays for and does not get is selling maturity the
+  // product has not earned. Both of these were overclaims found by tracing the
+  // pipeline to its last step: the remediation engine generated fixes and
+  // never opened a pull request, and nothing anywhere wrote a golden lesson.
+  'Remediation Engine — AI-drafted fixes for blocking audit issues',
+  'Agent evolution — versioned configs and change history',
 ];
 
 // ── Sources derived from code (single source of truth) ───────────────────────
@@ -43,6 +50,39 @@ sources.push({ name: 'src/services/scp/agents roster', content: `${agents.length
 const landing = readFileSync('src/routes/public/landing.ts', 'utf8');
 const slotsLine = landing.match(/Math\.max\(0,\s*30[^\n]*/)?.[0] ?? '';
 sources.push({ name: 'src/routes/public/landing.ts founding slots', content: `${slotsLine} founding-rate slots locked life month cost` });
+
+// ── Capability sources: does the code that performs the claim have a caller ──
+//
+// A price is verified against a constant. A CAPABILITY has to be verified
+// against whether the last step of its pipeline actually runs, because the
+// failure mode is a feature that is fully built except for the part that makes
+// it happen — described everywhere by its readers, called by nothing.
+//
+// So the source's CONTENT depends on reality: restore a claim the code no
+// longer supports and its words stop matching anything here. Proven by doing
+// exactly that — "automated GitHub PRs" fails on `automated, github`.
+const srcFiles = globSync('src/**/*.ts', { nodir: true });
+const hasCallerOutside = (fnName, definedInSuffix) => srcFiles
+  .filter((f) => !f.endsWith(definedInSuffix))
+  .some((f) => readFileSync(f, 'utf8').includes(fnName));
+
+// `openRemediationPR` is the only code that creates a branch, commits files and
+// calls the GitHub PR API. `generateFix` runs, records the fix, and returns.
+sources.push({
+  name: 'remediation: does anything open a pull request',
+  content: hasCallerOutside('openRemediationPR', 'audit/remediation.ts')
+    ? 'remediation engine automated github pull requests prs ai-drafted ai drafted fixes for blocking audit issues'
+    : 'remediation engine ai-drafted ai drafted fixes for blocking audit issues; no pull request is opened',
+});
+
+// `addGoldenLesson` is the only writer of `golden_suite`, and the only thing
+// that increments `products.golden_suite_size`.
+sources.push({
+  name: 'agent evolution: does anything write a golden lesson',
+  content: hasCallerOutside('addGoldenLesson', 'agents/base.ts')
+    ? 'agent evolution golden lessons versioned configs and change history'
+    : 'agent evolution versioned configs and change history',
+});
 
 // ── Verify ───────────────────────────────────────────────────────────────────
 //
