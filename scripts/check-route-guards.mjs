@@ -107,8 +107,32 @@ for (const file of tsFiles(DIR)) {
   const rel = relative(ROOT, file).split('\\').join('/');
   if (NOT_A_MEMBER_SURFACE.some((d) => rel.startsWith(d + '/'))) continue;
   const src = strip(readFileSync(file, 'utf8'));
-  // A router-level guard covers every route in the file.
-  if (/\.use\(\s*'\*'\s*,[\s\S]{0,200}?require(CompanyCapability|Owner)\s*\(/.test(src)) continue;
+  // ROUTER-LEVEL GUARDS, AND THE PATHS THEY ACTUALLY COVER.
+  //
+  // This recognised only `.use('*', …)` and treated it as covering every route
+  // in the file. That was the coarse reading of a pattern that turned out to be
+  // the cause of three dead surfaces: a router mounted at '/' with `use('*')`
+  // applies its middleware to the whole application, so those guards had to be
+  // scoped to the paths their own router declares — and once scoped, this gate
+  // could no longer see them and reported thirteen guarded routes as unguarded.
+  //
+  // A guard covers the routes its PATTERN matches. `'*'` still covers the file;
+  // `/exit/*` covers `/exit/...` and nothing else. Strictly more accurate than
+  // what it replaced, and it no longer rewards the shape that caused the defect.
+  const guardPatterns = [];
+  for (const g of src.matchAll(/\.use\(\s*'([^']+)'\s*,[\s\S]{0,200}?require(?:CompanyCapability|Owner)\s*\(/g)) {
+    guardPatterns.push(g[1]);
+  }
+  // `:param` matches one segment; a trailing `*` matches the rest.
+  const covers = (pattern, path) => {
+    if (pattern === '*') return true;
+    const rx = new RegExp('^' + pattern
+      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+      .replace(/:[A-Za-z0-9_]+/g, '[^/]+')
+      .replace(/\*/g, '.*') + '$');
+    return rx.test(path);
+  };
+  if (guardPatterns.includes('*')) continue;
 
   const lines = src.split('\n');
   // Where each route declaration starts, so a handler's own body can be read
@@ -127,6 +151,9 @@ for (const file of tsFiles(DIR)) {
     if (r.method === 'get') return;                       // reads are not this
     const end = n + 1 < starts.length ? starts[n + 1].i : lines.length;
     if (GUARD.test(lines.slice(r.i, end).join('\n'))) return;
+    // A router-level guard whose pattern covers this route guards it, exactly
+    // as the inline form above does.
+    if (guardPatterns.some((pattern) => covers(pattern, r.path))) return;
     found.push(`${r.method.toUpperCase()} ${r.path}`);
   });
 }
