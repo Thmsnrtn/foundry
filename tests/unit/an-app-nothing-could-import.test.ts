@@ -23,8 +23,13 @@ import { describe, expect, it } from 'vitest';
 // =============================================================================
 
 describe('the app can be imported', () => {
-  it('does not bind a port, and hands back something that answers requests', async () => {
-    const { default: app } = await import('../../src/index.js');
+  it('does not take the startup branch, and hands back something that answers requests', async () => {
+    const { default: app, isProcessStarted } = await import('../../src/index.js');
+    // THE ASSERTION THAT ACTUALLY CATCHES IT. Importability and routing are true
+    // whether or not a port is bound — the listen sits inside a promise chain
+    // after migrations, so a test finishes long before it happens. Removing the
+    // guard passed every check in this file until the branch became observable.
+    expect(isProcessStarted()).toBe(false);
     expect(typeof (app as { request?: unknown }).request).toBe('function');
   });
 
