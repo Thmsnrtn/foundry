@@ -584,20 +584,24 @@ agentRoutes.post('/decisions/:id/approve',
   const productId = ctx.productId;
   const body = await c.req.parseBody() as Record<string, string>;
 
-  // Log audit notification
-  try {
-    await query(
-      `INSERT INTO notifications (id, founder_id, product_id, type, title, body, created_at)
-       VALUES (lower(hex(randomblob(16))), ?, ?, 'scp_decision', 'Decision Approved', ?, CURRENT_TIMESTAMP)`,
-      [
-        founder.id,
-        productId,
-        `SCP decision ${decisionId} was approved by founder.`,
-      ]
-    );
-  } catch {
-    // notifications table may not exist yet — non-fatal
-  }
+  // NO NOTIFICATION HERE, DELIBERATELY.
+  //
+  // This wrote one: type 'scp_decision', titled "Decision Approved", body
+  // "SCP decision <id> was approved by founder.", addressed to `founder.id` —
+  // the person who had just clicked approve. Foundry told the founder what the
+  // founder had done, one moment after they did it.
+  //
+  // Its comment called it an audit notification, and the interruption ladder
+  // in `ux/interruption.ts` defines the tier for exactly that: `log` is the
+  // audit trail, "visible if the founder goes looking". A bell is two rungs
+  // above it. The record it was reaching for already exists and is better —
+  // `recordDecisionOutcome` below writes `decision_outcomes` with the outcome,
+  // the agent and the session — so this added no history, only attention.
+  //
+  // The Attention Law optimises for attention RETURNED. An echo of the reader's
+  // own click is the purest form of the opposite, and the raw INSERT also went
+  // around `createNotification`, and so around the founder's own ceiling on how
+  // loud Foundry may be.
 
   // Look up the session and agent that contains this decision
   try {
