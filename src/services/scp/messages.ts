@@ -67,11 +67,28 @@ export async function sendMessage(params: {
     fromAgent,
     toAgent,
     type,
-    priority = 'medium',
+    priority: requestedPriority = 'medium',
     subject,
     body,
     context = {},
   } = params;
+
+  // THE TYPE SAYS FOUR WORDS; THE CALLER SAYS WHATEVER THE MODEL SAID.
+  //
+  // `priority` is declared as a union, and the one caller reaches it by casting
+  // a field straight out of a language model's JSON — so the compiler's
+  // guarantee stops exactly where the data starts. `agent_messages.priority`
+  // carries CHECK(priority IN ('low','medium','high','critical')), so a model
+  // answering 'urgent' or 'p1' aborted the INSERT and the entire message
+  // between two agents was lost to a logged error.
+  //
+  // The default already had the right answer for a priority nobody stated, and
+  // an unrecognised one is no better stated than a missing one. It is coerced
+  // rather than refused because the MESSAGE is the thing worth keeping; losing
+  // a handoff between two agents over the word attached to it is the larger
+  // failure.
+  const VALID_PRIORITIES = new Set(['low', 'medium', 'high', 'critical']);
+  const priority = VALID_PRIORITIES.has(requestedPriority) ? requestedPriority : 'medium';
 
   // A REQUEST-FOR-RESPONSE PROTOCOL NOTHING USED. `requiresResponse` and
   // `responseDeadlineHours` were parameters no caller ever passed, so
