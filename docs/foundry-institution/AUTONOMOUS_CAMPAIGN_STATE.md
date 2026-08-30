@@ -1392,6 +1392,30 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
     holds the direction in the meantime, which is the half that does not need
     the answer.
 
+16. **Prism is four different jobs, and one of them is nobody's.** Found while
+    drafting the action-type table above, and not fixed because deciding what an
+    agent IS is not a cleanup's call.
+
+    - `types.ts` rosters it as **UX** — "user experience, onboarding, friction
+      identification" — and sets its authority with the comment "UX experiments
+      need approval";
+    - its own header says **CFO**, "Financial health, runway, unit economics";
+    - `getRole()` returns **'CFO'**, which is also what Ledger returns;
+    - its prompt tells the model it is the **Chief Product Officer**, asking
+      "is the product getting closer to or further from what customers actually
+      want?";
+    - its response schema demands **financial** answers — `runway_months`,
+      `burn_rate_trend`, `budget_alerts`, `financial_hypotheses` — from
+      `audit_scores`, `beta_intake` and `metric_snapshots`, which hold no
+      financial figure.
+
+    So the model is asked a product question and required to answer in a
+    currency its inputs do not contain. The `?? 12` runway is fixed and tested;
+    the incoherence that produced it is not. Two consequences to weigh before
+    anything is rewritten: **finance has two agents and UX has none**, against a
+    page that sells twelve; and Prism and Ledger both answer 'CFO' to
+    `getRole()`, so anything grouping agents by role sees one of them twice.
+
 ## What keeps working, for whoever comes next
 
 These lenses produced almost everything found in the last two cycles. They are

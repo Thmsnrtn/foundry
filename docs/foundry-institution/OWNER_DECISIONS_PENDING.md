@@ -683,3 +683,34 @@ happen.
 
 *What this forbids:* repointing `integration_name` at a provider as a wiring
 fix, and restoring any success status for an action nothing carried out.
+
+**A CLOSED VOCABULARY, DRAFTED SO POINT 2 IS A YES OR A NO RATHER THAN A
+PROJECT.** Eleven `outboundActions.push` sites exist across the twelve agents
+(Oracle emits none). Six name a literal; five build the string from the model's
+own words, which is the open half:
+
+| emitted by | action type | reaches |
+|---|---|---|
+| atlas | `architecture_proposal` | nobody — a proposal for a person |
+| compass | `strategic_proposal` | nobody — a proposal for a person |
+| ledger, prism | `budget_alert` | the founder |
+| crucible | `quality_improvement_${…}` | nobody — a proposal for a person |
+| scribe | `write_${…}` | content, unpublished |
+| beacon | `action.action_type ?? 'publish_content'` | content, possibly outward |
+| forge | `revenue_expansion_outreach` | **a customer** |
+| harbor | `cs_retention_outreach` | **a customer** |
+| sentinel, shield | `action.type` | unknown — the model names it |
+
+The shape of the decision falls out of the table. **Only two of the eleven
+reach a customer**, and they are the only ones for which "should an agent's
+proposal reach a provider" is really being asked. Six are proposals for a
+person and need no executor at all — they need a queue that says so, rather
+than one that records them as failed actions. The four model-named sites
+(beacon, scribe, sentinel, shield) cannot be mapped to any handler while the
+model supplies the noun, so closing the vocabulary is a precondition for
+answering point 2 at all, not a separate cleanup.
+
+A minimal accept/reject: close the set to the six literals; make the five
+model-named sites choose from that set or be refused, exactly as `configType`
+now is; and split the queue so a proposal-for-a-person is not an action at all.
+Nothing here reaches a provider — that stays point 1, and stays yours.
