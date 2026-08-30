@@ -90,9 +90,9 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `5ecce1f`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `d6bade7`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
-- **Migrations:** 255 files, highest **218**. Ordering gated. **Snapshot
+- **Migrations:** 257 files, highest **221**. Ordering gated. **Snapshot
   freshness is now a GATE, not a note.** It went stale twice in one session —
   once regenerated between 215 and 216 rather than after both, once not
   regenerated for 217 at all, by the author who had written the reminder into
@@ -102,7 +102,7 @@ inherited list because it was inherited.
   the chain. **A note that has to be remembered at the right moment is not a
   control; the distance between a mistake and its discovery is the thing to
   fix.**
-- **Validation:** `npm run check` green end to end — **434 files / 3,759 tests**,
+- **Validation:** `npm run check` green end to end — **467 files / 3,987 tests**,
   `CHECK_EXIT=0`, read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
   also runs `tests/simulation` and `tests/evals`. Checkpoints before this
@@ -140,6 +140,43 @@ inherited list because it was inherited.
 None in flight. Everything below is unstarted or blocked.
 
 ## What this cycle established
+
+**This cycle carried the institution's discipline outward, into the code that
+touches the world.** The institution's own services have been held to it for a
+long time; the product layer around them had not been, and that is where the
+defects were.
+
+- **A language model chose its own authority.** Every agent prompt asks for
+  `"authority_level": 0 | 1 | 2` and none says what the numbers mean; the answer
+  went straight to a branch where 0 executes immediately, and the level the
+  FOUNDER set on `agent_instances` was never read. `proposeAction` now binds the
+  two and takes the stricter — a proposal may be more cautious than its
+  configuration and never less — and a name with no instance row takes level 2,
+  because absence of a grant is a reason to ask.
+- **Three modules claimed executions that never happened, and the lesson had
+  been learned once already.** `scp/actions/executor.ts` had been fixed for
+  claiming a send it had not made. The same shape was still live in
+  `outbound/executor.ts`, which marked EVERY agent-originated action 'executed'
+  beside a stored message reading "no executor registered yet", and in
+  `resend.ts`, which filed an unrecognised gateway result as a completed send
+  and blamed an API key that may well be set. **A lesson fixed in one module is
+  not fixed. Follow it to its siblings the day you learn it.**
+- **A job whose schedule does not parse is invisible, not loud.** It throws
+  inside `startScheduler`, is logged, and then never ticks — so it writes no
+  failure row, and `job_health` cannot tell it from a fresh install. Every
+  registered schedule is now built with the parser `CronJob` uses and must come
+  due within a year, so it cannot ship; and the throw is recorded rather than
+  logged.
+- **The Attention Law was ratchet-enforced on doors the founder walks through,
+  not on the ones that walk through them.** A route wrote a notification telling
+  the founder they had just approved something, one moment after they clicked
+  approve — around `createNotification`, and so around their own ceiling. The
+  table has one writer now, and the callers that skip the ladder are listed with
+  their reasons.
+- **PENDING 16** records what is left and does not decide it: agent actions
+  reach no provider, their action types are model-invented, and `case 'resend'`
+  in `executeAction` has no production caller at all.
+
 
 **The cycle before this one read the exit surface end to end and built the
 phantom-column gate.** Its narrative is in `history/SEAM_CAMPAIGN_HISTORY.md`
