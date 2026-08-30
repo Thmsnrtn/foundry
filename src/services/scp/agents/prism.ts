@@ -31,11 +31,6 @@ interface PrismClaudeResponse {
     success_threshold: number;
     test_duration_days: number;
   }>;
-  budget_alerts: Array<{
-    severity: 'warning' | 'critical';
-    category: string;
-    message: string;
-  }>;
   revenue_attribution: Array<{
     channel: string;
     mrr_contribution_pct: number;
@@ -52,7 +47,13 @@ interface PrismClaudeResponse {
 
 export class PrismAgent extends BaseAgent {
   getName(): AgentName { return 'prism'; }
-  getRole(): string { return 'CFO'; }
+  // Ledger also answered 'CFO', and nothing reads this method at all — it is
+  // declared abstract in `base.ts` and has no consumer anywhere, so the
+  // collision was latent rather than visible. Named for what this agent is
+  // prompted as and rostered as, so the first thing to group agents by role
+  // does not find the same officer twice. That the string is now right does
+  // not make the rest of this file product-shaped; see the campaign entry.
+  getRole(): string { return 'Chief Product Officer'; }
   getActivationCadenceHours(): number { return 48; }
 
   protected async analyzeAndAct(
@@ -96,14 +97,20 @@ export class PrismAgent extends BaseAgent {
       const action: AgentAction = {
         id: nanoid(),
         type: 'analysis_complete',
-        description: 'No financial or UX data found — calibrating',
+        description: 'No product or usage data found — calibrating',
         authority_level: 0,
         executed: true,
         executed_at: new Date().toISOString(),
-        result: 'Awaiting financial data',
+        result: 'Awaiting product and usage data',
       };
       return {
-        observations: ['No financial data available yet — Prism will analyze unit economics and runway as data accumulates.'],
+        // A PROMISE OF THE WRONG ANALYSIS. This told the founder Prism would
+        // analyse unit economics and runway once data accumulated. Its three
+        // sources are `audit_scores`, `beta_intake` and `metric_snapshots`, so
+        // that day was never going to come; what it does analyse is whether the
+        // product is getting closer to what customers want, which is also what
+        // its prompt and the roster say.
+        observations: ['No product or usage data available yet — Prism will analyse activation, retention and friction as data accumulates.'],
         actionsTaken: [action],
         pendingDecisions: [],
         briefingContribution: 'Prism is calibrating — no significant activity to report.',
@@ -184,13 +191,6 @@ Return JSON only (no markdown fences):
       "test_duration_days": number
     }
   ],
-  "budget_alerts": [
-    {
-      "severity": "warning" | "critical",
-      "category": "string",
-      "message": "string"
-    }
-  ],
   "revenue_attribution": [
     {
       "channel": "string",
@@ -247,22 +247,23 @@ Return JSON only (no markdown fences):
       }
     }
 
-    // ── 8. Build outbound actions for critical budget alerts ──────────────────
+    // ── 8. No outbound actions ────────────────────────────────────────────────
+    //
+    // A CRITICAL BUDGET ALERT FROM AN AGENT THAT CANNOT SEE A BUDGET.
+    //
+    // This asked the model for `budget_alerts` and queued every 'critical' one
+    // as a `budget_alert` outbound action reading "CRITICAL budget alert
+    // [category]: message". The model producing them is told it is the Chief
+    // Product Officer and asked whether the product is getting closer to what
+    // customers want, over `audit_scores`, `beta_intake` and `metric_snapshots`
+    // — three sources with no cost, no burn and no budget in them. Nothing it
+    // said there could have been grounded; the field only gave it somewhere to
+    // put an invention, and authority level 1 put that in front of the founder.
+    //
+    // Ledger is the agent with the financial data — `cost_events` and
+    // `revenue_attributions` — and it already emits `budget_alert` from them.
+    // The domain was not missing a watcher; it had two, one of them blind.
     const outboundActions: OutboundActionSignal[] = [];
-    for (const alert of (parsed.budget_alerts ?? [])) {
-      if (alert.severity === 'critical') {
-        outboundActions.push({
-          action_type: 'budget_alert',
-          description: `CRITICAL budget alert [${alert.category}]: ${alert.message}`,
-          parameters: {
-            severity: alert.severity,
-            category: alert.category,
-            message: alert.message,
-          },
-          authority_level: 1,
-        });
-      }
-    }
 
     // ── 9. Build agent messages based on runway and burn rate ─────────────────
     const agentMessages: AgentMessageSignal[] = [];
