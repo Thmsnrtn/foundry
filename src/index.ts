@@ -595,7 +595,19 @@ function startScheduler(): void {
       }, null, true, 'UTC');
       logger.info(`Scheduled ${name} — ${job.schedule}`, { jobName: name });
     } catch (err) {
+      // THE ONE FAILURE THE HEALTH TABLE CANNOT INFER.
+      //
+      // A job whose schedule does not build never ticks, so it never reaches
+      // the success or failure calls above and never writes a `job_health`
+      // row. Absence is what a fresh install looks like too, so the loop
+      // report cannot tell the two apart and correctly refuses to guess.
+      // Recording it here is the only moment the difference is known: at this
+      // point the scheduler has the name, the throw, and the certainty that
+      // this job will not run in this process.
       logger.error(`Failed to schedule ${name}`, { jobName: name, error: String(err) });
+      void import('./services/institution/loop-health.js')
+        .then((m) => m.recordJobFailure(name, err))
+        .catch(() => { /* health is a record, never a gate — as in the tick above */ });
     }
   }
 }

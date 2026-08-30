@@ -86,10 +86,18 @@ export async function recordJobFailure(jobName: string, error: unknown): Promise
  * Institution loops that are failing right now.
  *
  * WHAT THIS CANNOT SEE, and does not pretend to: a job that never runs at all.
- * A bad cron expression, a scheduler that never started, or a process group
- * serving HTTP without crons produces no failure — it produces nothing, and
- * absence of a row is indistinguishable from a fresh install that has not had
- * its first tick yet. Claiming staleness from silence would mean telling every
+ * A scheduler that never started, or a process group serving HTTP without
+ * crons, produces no failure — it produces nothing, and absence of a row is
+ * indistinguishable from a fresh install that has not had its first tick yet.
+ *
+ * That list used to begin with a bad cron expression. It no longer does, and
+ * the narrowing is on evidence rather than hope:
+ * `a-schedule-that-never-comes-due.test.ts` builds every registered schedule
+ * with the same parser `CronJob` uses and requires a next execution within a
+ * year, so an unschedulable expression cannot reach a deploy; and if one ever
+ * did, `startScheduler` now records the throw here instead of only logging it.
+ * The remaining two causes are about whether the process runs at all, which no
+ * table this process writes can answer about itself. Claiming staleness from silence would mean telling every
  * new company that Foundry had stopped. Detecting that properly needs the
  * schedule and a clock the deployment agrees with, and it is worth doing
  * separately rather than guessed at here.
@@ -110,8 +118,9 @@ export async function getFailingInstitutionLoops(now: Date = new Date()): Promis
     const lastSuccessAt = row.last_success_at == null ? null : String(row.last_success_at);
 
     // STOPPED IS NOT ONLY FAILING. A job that never runs throws nothing: a
-    // scheduler that never started, a process group serving HTTP without crons,
-    // a cron expression that never matches. Silence looks identical to calm.
+    // scheduler that never started, or a process group serving HTTP without
+    // crons. Silence looks identical to calm. (A schedule that never matches
+    // belonged on that list until it was made unshippable — see the header.)
     //
     // Judged only against a loop that HAS worked before, so a fresh company is
     // never told Foundry has stopped when it has simply not had its first tick.
