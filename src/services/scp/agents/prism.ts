@@ -41,7 +41,9 @@ interface PrismClaudeResponse {
     mrr_contribution_pct: number;
     cac_estimate: number;
   }>;
-  runway_months: number;
+  /** Optional because the model is asked a product question over sources with
+   *  no financial figure in them; it usually cannot state one. */
+  runway_months?: number | null;
   burn_rate_trend: 'improving' | 'stable' | 'rising';
   domain_health_score?: number;
   briefing_contribution: string;
@@ -264,10 +266,28 @@ Return JSON only (no markdown fences):
 
     // ── 9. Build agent messages based on runway and burn rate ─────────────────
     const agentMessages: AgentMessageSignal[] = [];
-    const runwayMonths = parsed.runway_months ?? 12;
+    // A MESSAGE THAT STATES A RUNWAY MUST HAVE ONE — the same rule Crucible
+    // carries a few files away, arrived at there and not brought here.
+    //
+    // This read `parsed.runway_months ?? 12`. The model that answers it is
+    // asked a PRODUCT question ("is the product getting closer to or further
+    // from what customers actually want?") over `audit_scores`, `beta_intake`
+    // and `metric_snapshots` — three sources with no financial figure in them.
+    // So the usual answer is no runway at all, and the fallback turned that
+    // silence into a claim of twelve months' solvency.
+    //
+    // It was not inert. Below six it sends Beacon and Forge alerts at 'high' or
+    // 'critical' reading "Prism reports runway of X months", asking two agents
+    // to reprioritise acquisition and revenue against a number nothing
+    // produced. Twelve happened to be a number that suppressed those; a
+    // different default would have fired them for every company.
+    //
+    // Absence is not twelve, and it is not zero either. With no runway stated
+    // there is no runway condition to evaluate, so nothing is said about it.
+    const runwayMonths = parsed.runway_months;
     const burnTrend = parsed.burn_rate_trend ?? 'stable';
 
-    if (runwayMonths < 6) {
+    if (runwayMonths != null && Number.isFinite(runwayMonths) && runwayMonths < 6) {
       agentMessages.push({
         to_agent: 'beacon',
         message_type: 'alert',
