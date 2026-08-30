@@ -1367,25 +1367,30 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
     something happened rather than because its hour arrived? That is
     event-driven autonomy, and it is a wider hand than a cadence.
 
-15. **The Attention Law's north star is prose, and the only ratchet counts the
-    wrong things.** The Constitution says "optimize for attention *returned*,
-    not consumed. North star: days the founder could safely not look." Nothing
-    computes that; `scripts/ratchets/route-count.json` caps doors the founder
-    chooses to walk through, not the interruptions that walk through them.
+15. **PARTLY DONE — the law now ratchets on interruptions; the lived metric is
+    still the owner's to define.**
 
-    Meanwhile the volume is real and unbudgeted: default cadences put roughly
-    ninety-three agent runs a week against one company — sentinel alone
-    twenty-eight — and nothing bounds how much of that reaches a person.
+    The Constitution's Attention Law had one enforcement, `route-count`, which
+    caps top-level mounts: doors the founder CHOOSES to walk through.
+    `interruption-sites` now caps the ones that walk through them. Of the four
+    delivery rungs only two spend attention unasked — `action_needed` reaches
+    the in-app bell, `critical` reaches the phone — and there are five such
+    sites and no critical ones. Down-only, on the existing ratchet factory, so a
+    sixth interruption has to be argued for by demoting another to the Letter.
 
-    **This needs a DEFINITION before it needs code, and it must not become
-    another dashboard.** A day the founder could safely not look is plausibly a
-    day on which nothing was delivered above the `letter` rung and nothing
-    expired unreviewed — both already computable from `deliver()` and
-    `outbound_actions.expires_at`. Getting that definition right is the whole
-    task; once it exists the honest instrument is a ratchet on interruptions,
-    the same shape as the route ratchet but pointed at the surface the law is
-    actually about. Propose the definition to the owner before building on it:
-    it decides what Foundry optimises for.
+    Deliberately NOT a dashboard. A page reporting how much Foundry interrupts
+    the founder would cost the attention it measures, and the law is better
+    enforced where the decision is made, at build time.
+
+    **What is left is the lived number, and it is a real decision.** The
+    proposed definition: a day the founder could safely not look is a day on
+    which nothing was delivered above the `letter` rung AND nothing expired
+    unreviewed — both computable now from `deliver()` and
+    `outbound_actions.expires_at`, with no new capture. It is left unbuilt
+    because it decides what Foundry optimises for, and because a metric with
+    nowhere honest to live becomes a dashboard by default. The static ratchet
+    holds the direction in the meantime, which is the half that does not need
+    the answer.
 
 ## What keeps working, for whoever comes next
 
