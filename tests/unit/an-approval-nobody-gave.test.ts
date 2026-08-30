@@ -38,6 +38,17 @@ beforeAll(async () => {
   await runMigrations();
   await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_ap','c_ap','ap@example.com')");
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Acme','f_ap','active')", [P]);
+  // Harbor has to actually HOLD level 1 for a level-1 proposal to stay one.
+  // `proposeAction` binds a proposed level to the founder-set level on
+  // `agent_instances` and takes the stricter, because the level in a proposal
+  // came from a language model and the one here came from the founder. With no
+  // row at all there is no grant to bind to, and an ungranted proposal is
+  // raised to 2 — so without this the two actions below would both be level 2
+  // and the distinction under test would vanish for the wrong reason. 1 is
+  // harbor's own default in DEFAULT_AUTHORITY_LEVELS.
+  await query(
+    `INSERT INTO agent_instances (id, product_id, agent_name, display_name, status, authority_level)
+     VALUES ('ai_ap_harbor', ?, 'harbor', 'Harbor', 'active', 1)`, [P]);
 });
 beforeEach(async () => {
   await query('DELETE FROM outbound_actions');

@@ -77,18 +77,30 @@ async function executeAction(action: OutboundActionRecord): Promise<{ success: b
       throw new Error(`Unknown resend action: ${action.action_type}`);
     }
 
-    // Future integrations: linear, github, etc.
+    // A ROW SAYING 'executed' FOR SOMETHING NOTHING EXECUTED.
+    //
+    // This wrote status 'executed', stamped `executed_at`, and returned
+    // success — while its own result message read "no executor registered
+    // yet". Both halves were stored: the founder's inbox, the actions page and
+    // the Letter all read `status`, and every one of them was told Foundry had
+    // done a thing whose record admits nothing happened.
+    //
+    // It was not a rare path. `executeAction` switches on `integration_name`,
+    // and every agent-originated action carries the AGENT's name there
+    // ('atlas', 'beacon', …), never 'resend' — so this branch is where all of
+    // them land. The sibling module learned this exact lesson already: the SCP
+    // executor's `send_email` case used to claim a send it had not made, and
+    // the honest answer there was a refusal rather than a flattened success.
+    //
+    // So this refuses. Both callers already wrap the call and write status
+    // 'failed' with the reason, which is the true statement: Foundry could not
+    // carry this out. An action nobody can execute is a gap the founder should
+    // see, not a success to be counted.
     default: {
-      // Mark as executed with a log result
-      await query(
-        `UPDATE outbound_actions SET status = 'executed', result_json = ?,
-                executed_at = datetime('now') WHERE id = ?`,
-        [
-          JSON.stringify({ message: `Action ${action.action_type} on ${action.integration_name} logged — no executor registered yet` }),
-          action.id,
-        ],
+      throw new Error(
+        `No executor registered for ${action.integration_name}: ` +
+        `action ${action.action_type} was not carried out`,
       );
-      return { success: true, result: { logged: true } };
     }
   }
 }
@@ -101,6 +113,42 @@ async function executeAction(action: OutboundActionRecord): Promise<{ success: b
  * - authority_level = 1: queue with 1-hour notification window
  * - authority_level = 2: queue for CEO approval
  */
+/**
+ * THE AUTHORITY A PROPOSAL MAY NOT TALK ITS WAY OUT OF.
+ *
+ * `authorityLevel` arrives from the agent, and the agent got it from a language
+ * model. Every agent prompt asks for `"authority_level": 0 | 1 | 2` and not one
+ * of them says what the numbers mean, so the field is chosen uninstructed. It
+ * is not a label: level 0 is a branch below that executes the action
+ * immediately. A model answering 0 was therefore deciding to act without asking
+ * anyone — for an agent whose founder-set level often says the opposite. Atlas
+ * ships configured at 2, commented "Code changes always need approval", and
+ * could proceed at 0 without that number ever being read.
+ *
+ * The level on `agent_instances` is the founder's answer to the same question,
+ * so it wins wherever it is stricter. A proposal may be MORE cautious than its
+ * configuration — a model saying "ask a person about this one" is allowed to be
+ * right — and may never be less. Competence is not authority in either
+ * direction: being confident does not grant permission, and the grant is the
+ * founder's to give.
+ *
+ * ABSENCE IS NOT PERMISSION. A name with no instance row has no founder-set
+ * authority behind it at all, which is a reason to ask rather than a reason to
+ * proceed, so it takes the strictest level rather than the most convenient one.
+ */
+async function bindingAuthority(
+  productId: string, agentName: string, proposed: 0 | 1 | 2,
+): Promise<0 | 1 | 2> {
+  const r = await query(
+    `SELECT authority_level FROM agent_instances WHERE product_id = ? AND agent_name = ?`,
+    [productId, agentName],
+  );
+  const raw = r.rows.length > 0 ? Number(r.rows[0].authority_level) : NaN;
+  const configured = Number.isInteger(raw) && raw >= 0 && raw <= 2 ? raw : 2;
+  const bound = Math.max(proposed, configured);
+  return (bound >= 2 ? 2 : bound === 1 ? 1 : 0);
+}
+
 export async function proposeAction(params: {
   productId: string;
   agentName: string;
@@ -127,12 +175,16 @@ export async function proposeAction(params: {
 
   const id = nanoid();
   const now = new Date().toISOString();
-  const expiresInHours = params.expiresInHours ?? (params.authorityLevel === 2 ? 72 : 24);
+  // Everything below reads this, never `params.authorityLevel` — the proposed
+  // level is an opinion and this is the one that binds.
+  const authorityLevel = await bindingAuthority(
+    params.productId, params.agentName, params.authorityLevel);
+  const expiresInHours = params.expiresInHours ?? (authorityLevel === 2 ? 72 : 24);
   const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
 
   // Determine initial status
   let status: string;
-  if (params.authorityLevel === 0) {
+  if (authorityLevel === 0) {
     status = 'approved'; // Will be executed immediately
   } else {
     status = 'pending_approval';
@@ -150,7 +202,7 @@ export async function proposeAction(params: {
       params.agentName,
       params.integrationName,
       params.actionType,
-      params.authorityLevel,
+      authorityLevel,
       status,
       JSON.stringify(params.parameters),
       params.previewText,
@@ -170,7 +222,7 @@ export async function proposeAction(params: {
   );
 
   // Authority level 0: execute immediately
-  if (params.authorityLevel === 0) {
+  if (authorityLevel === 0) {
     const action = await getAction(id);
     if (action) {
       try {
