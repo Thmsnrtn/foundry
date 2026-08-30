@@ -1337,21 +1337,35 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
     bought an exemption from the architecture freeze, and the last unguarded
     threshold now says "no target stated" rather than "NaN%".
 
-14. **`EVENT_AGENT_MAP` selects agents for ten event types nothing emits.**
-    `emitSignalEvent` is its only reader, and its one caller
-    (`founder/company-report.ts`) emits `founder_reported:<kind>` and
-    `external_company_reported:<kind>` — none of the ten. So
-    `relevant_agents_json` is empty on every signal event ever written, and no
-    agent has ever been selected by an event.
+14. **WITHDRAWN — do not retire `EVENT_AGENT_MAP`. The entry that proposed it
+    was wrong, and the reason is worth keeping.**
 
-    Already asserted by `discovery-is-not-reachable-from-integrations.test.ts`
-    and already named in the agent classification table, which had to correct
-    nine entries that justified themselves by this map. **Retire it rather than
-    wire it:** every agent is reachable through the roster route and through
-    `agent_instances` scheduling, so wiring the map would add a second
-    selection path for a capability that already has one — more doors as
-    autonomy grows, which is the Attention Law backwards. Retiring means the
-    map, the column if nothing else reads it, and the entries that cite it.
+    The facts hold: the map routes ten event types, `emitSignalEvent` is its
+    only producer, and that function's one real caller emits
+    `founder_reported:<kind>` and `external_reported:<kind>` — neither is a key.
+    So `relevant_agents_json` is `[]` on every row, every call to
+    `processSignalEvent` takes the empty-list early return, and nothing past
+    that point has run in production. (`processSignalEvent` itself IS live: a
+    job and a dashboard route both drain through `processPendingSignalEvents`.)
+
+    The argument for retiring it was that every agent is already reachable
+    through the roster route and through `agent_instances` scheduling, so the
+    map is a third door. **That conflates reachability with timeliness.** Those
+    two paths are a manual button and an hourly cadence; neither runs an agent
+    within minutes of a high-severity event, which is the capability this pair
+    was built for. Deleting it would remove a designed capability that has a
+    missing producer, not a pretence — which is exactly what `dispatcher.ts`
+    says in its own header, having already considered and refused this.
+
+    It is also safe where it sits: honestly described, and gated by
+    `discovery-is-not-reachable-from-integrations.test.ts` on both halves, so it
+    cannot come alive silently or be mistaken for live.
+
+    **What remains genuinely open is the producer, and it is an owner's
+    question, not a cleanup's:** should the fifteen direct `signal_events`
+    inserts route their events to agents, and should an agent run because
+    something happened rather than because its hour arrived? That is
+    event-driven autonomy, and it is a wider hand than a cadence.
 
 15. **The Attention Law's north star is prose, and the only ratchet counts the
     wrong things.** The Constitution says "optimize for attention *returned*,
