@@ -163,6 +163,42 @@ describe('executeEmailSend: logged-only mode (no API key)', () => {
   });
 });
 
+// ─── A result the caller does not recognise ──────────────────────────────────
+
+describe('executeEmailSend: unrecognised gateway result', () => {
+  it('records unknown rather than sent, and does not blame the API key', async () => {
+    // Logged-mode and "no idea what came back" used to share one branch and one
+    // explanation: status 'executed' with the message "No RESEND_API_KEY set —
+    // email logged only". The first is true and deliberate. The second was a
+    // guess presented as a cause — a send whose outcome is unknown, filed as a
+    // completed one, blaming an environment variable that may well be set.
+    //
+    // A key IS set here, precisely so a failure to distinguish the two shows
+    // up as the false explanation it is.
+    vi.stubEnv('RESEND_API_KEY', 'test_key');
+    registerToolHandler(
+      'send_email',
+      // A shape this module knows nothing about: no message_id, not logged.
+      async () => ({ queued: 'maybe' }) as unknown as { logged: true },
+      SEND_EMAIL_POLICY,
+    );
+
+    const actionId = await insertAction({ to: `${founderId}@test.local` });
+    const r = await executeEmailSend(actionId);
+    expect(r.success, 'nothing confirmed a send, so this is not a success').toBe(false);
+
+    const row = (await query(
+      'SELECT status, result_json FROM outbound_actions WHERE id = ?', [actionId]
+    )).rows[0] as Record<string, unknown>;
+    expect(String(row.status),
+      'an email whose fate is unknown must not be recorded as sent').toBe('failed');
+    expect(String(row.result_json)).toContain('unknown');
+    expect(String(row.result_json),
+      'the API key is set — naming it would be a fabricated cause')
+      .not.toContain('No RESEND_API_KEY');
+  });
+});
+
 // ─── Real-API path stubbed via global fetch ──────────────────────────────────
 
 describe('executeEmailSend: real send (mocked fetch)', () => {

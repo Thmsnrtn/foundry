@@ -203,20 +203,51 @@ export async function executeEmailSend(
     return { success: true, message_id: handlerResult.message_id };
   }
 
-  // Logged-mode (no API key) or unrecognized result: still mark executed.
+  // TWO DIFFERENT THINGS WERE SHARING THIS BRANCH, AND ONE EXPLANATION.
+  //
+  // It read "Logged-mode (no API key) or unrecognized result: still mark
+  // executed", and wrote the same row for both: status 'executed' and the
+  // message "No RESEND_API_KEY set — email logged only".
+  //
+  // For logged mode that is true and deliberate. It is the dev path for
+  // FOUNDRY's own mail when Foundry has no provider key; a message to a
+  // customer goes out under the COMPANY's key, so "no key" is not a state that
+  // message can be in. `resend-gateway.test.ts` pins that and says why.
+  //
+  // For anything else it was a guess presented as a cause. A null result, or a
+  // shape this function does not recognise, means the send is UNKNOWN — and it
+  // was recorded as a completed send whose stated reason named an environment
+  // variable that may well have been set. Unknown is a valid state here and it
+  // is not this one.
+  if (handlerResult && 'logged' in handlerResult) {
+    await query(
+      `UPDATE outbound_actions SET status = 'executed', result_json = ? WHERE id = ?`,
+      [
+        JSON.stringify({
+          mode: 'logged',
+          message: 'No RESEND_API_KEY set — email logged only',
+          gateway_invocation_id: gatewayResult.invocation_id,
+          cached: gatewayResult.cached,
+        }),
+        actionId,
+      ],
+    );
+    return { success: true };
+  }
+
   await query(
-    `UPDATE outbound_actions SET status = 'executed', result_json = ? WHERE id = ?`,
+    `UPDATE outbound_actions SET status = 'failed', result_json = ? WHERE id = ?`,
     [
       JSON.stringify({
-        mode: 'logged',
-        message: 'No RESEND_API_KEY set — email logged only',
+        message: 'Gateway returned no recognisable send result — whether this '
+          + 'email left is unknown, and it is not recorded as sent',
         gateway_invocation_id: gatewayResult.invocation_id,
         cached: gatewayResult.cached,
       }),
       actionId,
     ],
   );
-  return { success: true };
+  return { success: false };
 }
 
 
