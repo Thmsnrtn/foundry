@@ -262,6 +262,31 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
       [integration.id],
     );
 
+    // AND THE INSTITUTION SEES IT. This sync wrote `metric_snapshots` and
+    // stopped there, which is exactly where the public intake used to stop
+    // before migration 127 — so the part of Foundry that reasons about a
+    // company had nine connected providers and could not see any of them. It
+    // could only see what someone pushed to `/ingest`.
+    //
+    // The same failure must not fail the metrics sync, for the reason the
+    // Intercom branch above already gives: these are two observations sharing
+    // one credential, and losing the count because the institution refused a
+    // reading would trade a working sense for a new one.
+    try {
+      const { recordProviderSyncObservations } = await import(
+        '../institution/external-observation.js');
+      await recordProviderSyncObservations({
+        productId: integration.product_id,
+        provider: integration.provider ?? '',
+        fieldsWritten: metricsUpdated,
+      });
+    } catch (err) {
+      logger.error(
+        `provider-sync observation failed for ${integration.provider ?? 'unknown'}: `
+        + `${err instanceof Error ? err.message : String(err)}`,
+        { productId: integration.product_id });
+    }
+
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await markSyncFailed(logId, integration, errorMessage);

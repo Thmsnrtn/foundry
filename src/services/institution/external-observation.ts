@@ -106,6 +106,70 @@ export async function recordExternalMetricObservations(input: {
  * evidence. Without this, entering the rung would be a promise that observation
  * will arrive rather than proof that it does.
  */
+/**
+ * THE SENSES FOUNDRY ALREADY OWNS, CONNECTED TO THE PART THAT REASONS.
+ *
+ * Until this, the institution's only external evidence arrived through
+ * `POST /ingest/:token` — an endpoint a company has to build a push for. Nine
+ * providers were already connected, syncing on a cadence with encrypted
+ * credentials, writing `metric_snapshots` and stopping exactly where the public
+ * intake used to stop. The reasoning engine and nine sense organs were both
+ * built, and wired to different things.
+ *
+ * WHY THIS IS NOT A NEW KIND OF EVIDENCE, and why no migration was needed. The
+ * `source` column answers one question — is this reading independent of
+ * Foundry — and migration 127 enforces the three properties that make it so:
+ * origin outside, no echo of what it will be compared against, and arrival
+ * after the prediction it tests. A provider sync satisfies all three exactly as
+ * the intake does; it is if anything a stronger case, because Stripe attests
+ * the number rather than the company reporting its own. So the source stays
+ * `external_metric_ingest` — the independence CLASS — and the specific
+ * provenance goes in `origin`, which the guard already requires to be present
+ * and non-empty.
+ *
+ * Inventing a new source value would have been the mistake available here. The
+ * payload guard fires only `WHEN NEW.source='external_metric_ingest'`, so a new
+ * one would be unguarded, and the shadow-independence guard admits only that
+ * source, so the observation could resolve nothing. It would have produced
+ * unchecked rows that call themselves evidence — the precise failure migration
+ * 127 exists to prevent.
+ *
+ * Only the fields the provider says it wrote are read. A sync reports its own
+ * `metricsUpdated`, so nothing here guesses which provider supplied which
+ * number.
+ */
+export async function recordProviderSyncObservations(input: {
+  productId: string; provider: string; fieldsWritten: string[];
+}): Promise<Array<{ id: string; field: string; direction: ObservedDirection }>> {
+  // A provider name reaches `origin`, so it is bounded rather than passed on.
+  // `integrations.provider` lost its CHECK in migration 081 and is written at
+  // connect time, so the column is not the guarantee it looks like.
+  if (!/^[a-z0-9_]{1,32}$/.test(input.provider)) return [];
+
+  const fields = input.fieldsWritten.filter(isObservableField);
+  if (fields.length === 0) return [];
+
+  // Interpolated because a column name cannot be bound, and safe because every
+  // name has been through `isObservableField` — the same closed list migration
+  // 127's trigger enforces.
+  const today = await query(
+    `SELECT ${fields.join(', ')} FROM metric_snapshots
+      WHERE product_id = ? AND snapshot_date = date('now') LIMIT 1`,
+    [input.productId],
+  );
+  if (!today.rows.length) return [];
+
+  const row = today.rows[0] as Record<string, unknown>;
+  const readings = fields
+    .map((field) => ({ field, observedValue: Number(row[field]) }))
+    .filter((r) => Number.isFinite(r.observedValue));
+  if (readings.length === 0) return [];
+
+  return recordExternalMetricObservations({
+    productId: input.productId, origin: `provider_sync:${input.provider}`, readings,
+  });
+}
+
 export async function availableObservationChannels(productId: string): Promise<ObservableField[]> {
   const rows = await query(
     `SELECT DISTINCT json_extract(payload_json,'$.field') AS field FROM signal_events
