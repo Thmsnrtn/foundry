@@ -1305,26 +1305,37 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
     an owner decision, not a repair** — and until it is taken, the readers are
     correct to find an empty table.
 
-13. **The three fixes this cycle made were instances of one class, and the
-    class is not gated.** A model-supplied value reaching a place that decides
-    something: `authority_level` chose whether an action needed a person;
-    `priority` hit a CHECK constraint and destroyed the message carrying it;
-    `hyp.success_threshold` still goes straight into `(x * 100).toFixed(0)`, so
-    a non-numeric answer writes "NaN% improvement" into a stored hypothesis
-    statement. Three found by hand, in one pass, by one person looking. That is
-    the signature of a class, and the house answer to a class is a gate.
+13. **DONE, AND NOT AS A GATE. The class is real; the detector is not
+    buildable without a TypeScript AST.** The spike ran and the numbers are
+    worth keeping.
 
-    **Spike it read-only FIRST.** The nearest precedent is the never-written-
-    column detector, which was honestly recorded as a lead list rather than a
-    gate because its false-positive rate was too high to fail a build on — and
-    the function-level reachability attempt before it produced 394 orphans and
-    was abandoned for the same reason. Full dataflow from `parseJSONResponse`
-    to a `query()` argument is not cleanly mechanizable. What probably IS: a
-    cast of a model-derived field to a closed union (`msg.priority as 'low' |
-    …`), which is the compiler being told to stop checking exactly where the
-    untrusted data starts, and which found two of the three. Measure the hit
-    rate before deciding gate or list. Do not promote a lead list to a gate to
-    make the number look finished.
+    `check-check-vocabularies.mjs` covers LITERAL values written to closed
+    columns and says in its own header that it does not cover values built at
+    runtime. All three defects of this class lived in that declared exclusion.
+    Measured: **82 bound parameters reach a closed-vocabulary column**, of which
+    9 have no runtime guard in the writing function. Hand-checking all 9 left
+    **one** real defect. The other eight were protected by things a scanner
+    cannot see: a compiler-enforced union (`DecisionCategory`, `SendingProvider`,
+    `PlaybookType`, `OutcomeDirection` — a union type IS the question, asked at
+    compile time), a zod `z.enum` at the route, and a mapping function
+    (`toSection`). A gate on this rule would have been ~70% false positives.
+    **This is the third instrument to hit that wall** after function-level
+    reachability (394 orphans) and never-written-column detection. Do not build
+    the fourth without an AST.
+
+    **A CORRECTNESS TRAP FOR WHOEVER TRIES AGAIN.** Reading CHECK constraints
+    out of the migration text gives the WRONG schema. Migrations 080, 081 and
+    082 each rebuild a table specifically to REMOVE a CHECK (`founders.tier`,
+    `integrations.name`, `notifications.type`), under a temporary table name
+    plus a rename, so last-definition-wins still gets it wrong. Three of the
+    first eleven findings were this artifact. `check-check-vocabularies.mjs`
+    already does it correctly: it executes every migration into a real sqlite
+    database and reads the schema back. Do that. `docs/db/schema.snapshot.sql`
+    is a canonicalised diff artifact, not parseable SQL.
+
+    **What it found on the way** is committed: a config type the model chose
+    bought an exemption from the architecture freeze, and the last unguarded
+    threshold now says "no target stated" rather than "NaN%".
 
 14. **`EVENT_AGENT_MAP` selects agents for ten event types nothing emits.**
     `emitSignalEvent` is its only reader, and its one caller

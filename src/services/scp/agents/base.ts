@@ -363,12 +363,26 @@ export abstract class BaseAgent {
       const hypotheses = result.hypotheses;
       import('../experiments.js').then(({ proposeHypothesis }) => {
         for (const hyp of hypotheses) {
-          // Build the statement from title + hypothesis
-          const statement = `[${hyp.title}] ${hyp.hypothesis} — Success metric: ${hyp.success_metric} (target: ${(hyp.success_threshold * 100).toFixed(0)}% improvement)`;
+          // A THRESHOLD IS A NUMBER OR IT IS NOTHING.
+          //
+          // `success_threshold` is typed as a number and arrives from a
+          // language model, which is free to answer "20%", "a fifth", or
+          // nothing at all. Multiplying any of those by 100 yields NaN, and the
+          // statement below is stored and shown to the founder — so a
+          // hypothesis read "target: NaN% improvement" and its
+          // `predicted_effect_size` column took the same value. The target is
+          // the part of a hypothesis that makes it falsifiable; without one
+          // there is a sentence but no prediction, so the number is omitted
+          // rather than invented.
+          const threshold = typeof hyp.success_threshold === 'number'
+            && Number.isFinite(hyp.success_threshold) ? hyp.success_threshold : null;
+          const target = threshold === null
+            ? 'no target stated' : `target: ${(threshold * 100).toFixed(0)}% improvement`;
+          const statement = `[${hyp.title}] ${hyp.hypothesis} — Success metric: ${hyp.success_metric} (${target})`;
           proposeHypothesis(productId, {
             proposedBy: agentName,
             statement,
-            predictedEffectSize: hyp.success_threshold,
+            predictedEffectSize: threshold ?? undefined,
             estimatedDurationDays: hyp.test_duration_days,
             riskAssessment: `Proposed by ${agentName} — requires human validation before running.`,
           }).catch((err) => { logger.error(`proposeHypothesis failed for ${agentName}/${productId}: ${err}`); });
