@@ -617,3 +617,69 @@ higher cost: a legal claim with nothing behind it.
 Foundry has not written to any customer about this and will not: telling people
 their data went somewhere they were not told about is an owner's decision, not
 an institution's.
+
+---
+
+## PENDING 16 — Twelve agents propose actions nothing can carry out: **OWNER**
+
+Each of the twelve agents can emit `outboundActions`, which become rows in
+`outbound_actions`. None of those rows has ever been executed by anything, and
+until now every one of them was recorded as though it had been.
+
+**What was there.** `executeAction` dispatches on `integration_name`, and
+`base.ts` fills that field with the AGENT's name — 'atlas', 'beacon' — never a
+provider. Only `'resend'` has a case, so every agent-originated action fell to a
+default branch that set `status = 'executed'`, stamped `executed_at`, and
+returned success, while the message it stored beside them read "no executor
+registered yet". The founder's inbox, the actions page and the Letter all read
+`status`. That branch now refuses, and both callers write `status = 'failed'`
+with the reason, so these actions report what actually happened to them.
+
+A second defect sat on the same path: the authority level came from the language
+model. Every agent prompt asks for `"authority_level": 0 | 1 | 2` without saying
+what the numbers mean, and level 0 executes immediately. `proposeAction` now
+binds a proposed level to the founder-set level on `agent_instances` and takes
+the stricter, so a model can ask to be more careful and can no longer ask to be
+less. That part needed no decision — it is the difference between competence and
+authority — and it is done.
+
+**What only the owner can answer.** Whether these actions should be able to
+execute at all is about widening Foundry's hands, which is not an engineering
+call:
+
+1. **Should an agent's proposal reach a provider?** Pointing `integration_name`
+   at 'resend' instead of the agent's name is a small edit, and it would connect
+   twelve language models to a live email door. The gateway's kill-switch,
+   budget and audit would apply; the question of whether they SHOULD be sending
+   is upstream of all of that.
+
+   It would also be the first time that door opened. `case 'resend'` in
+   `executeAction` has no production caller: the only rows carrying that
+   integration name are written by `planAssistedSupportEmail` already
+   `approved`, and dispatched by `executeAssistedSupportEmail` across the
+   gateway directly — so they never pass through `executeAction`, and
+   `getPendingApprovals` (which filters `pending_approval`) never offers them
+   to `approveAction` either. `executeEmailSend` is thoroughly tested and
+   nothing live calls it. The default branch was not an edge case; it was the
+   only branch anything reached.
+2. **Against what vocabulary?** The action types are largely model-invented —
+   `write_${proposal.type}`, `revenue_${action.type}`, `publish_content`. An
+   open vocabulary cannot be mapped to handlers, so making these executable
+   means first deciding the closed set an agent may ask for. That is the same
+   shape as `ALL_AGENTS`, and for the same reason.
+3. **Or should agents stop proposing what nothing can do?** The honest
+   alternative is that these are proposals FOR A PERSON and were never meant to
+   execute — in which case the queue should say so, rather than accumulating
+   failures. Today a founder approving one gets a failure, which is true but
+   reads like a malfunction rather than a design.
+4. **Does level 0 belong to any agent?** Oracle ships configured at 0, "fully
+   autonomous". Nothing has tested what that means when the door on the far side
+   is real.
+
+**Until it is answered.** Agent-originated actions are proposed, bound to the
+founder's configured authority, and refused at the dispatch with the reason
+recorded. Nothing reaches a provider. No row claims an execution that did not
+happen.
+
+*What this forbids:* repointing `integration_name` at a provider as a wiring
+fix, and restoring any success status for an action nothing carried out.
