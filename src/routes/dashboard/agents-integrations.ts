@@ -311,13 +311,26 @@ function actionHistoryRow(action: OutboundActionRecord, viewerId: string) {
   };
   const cls = statusMap[action.status] ?? 'badge-muted';
 
+  // A RED BADGE THAT EXPLAINED NOTHING. The reason a failure happened is
+  // already written to `result_json` when the executor refuses — "No executor
+  // registered for atlas: action architecture_proposal was not carried out" —
+  // and this row showed the founder the word "failed" and nothing else. Every
+  // agent-originated action lands there today, so the one thing the page most
+  // needed to say was the one thing it withheld.
+  const reason = action.status === 'failed' && action.result !== null
+    ? String((action.result as Record<string, unknown>).error ?? '').slice(0, 160)
+    : '';
+
   return html`
   <tr>
     <td style="font-size:12px;">${action.created_at.slice(0, 16).replace('T', ' ')}</td>
     <td><span class="badge badge-muted" style="font-size:11px;">${action.agent_name}</span></td>
     <td>${action.integration_name} / ${action.action_type}</td>
     <td>${action.preview_text ?? action.rationale.slice(0, 60)}</td>
-    <td><span class="badge ${cls}">${action.status}</span></td>
+    <td>
+      <span class="badge ${cls}">${action.status}</span>
+      ${reason ? html`<div class="text-muted" style="font-size:11px;margin-top:4px;">${reason}</div>` : ''}
+    </td>
     <td style="font-size:12px;">${approverText(action.approved_by, viewerId)}</td>
   </tr>`;
 }

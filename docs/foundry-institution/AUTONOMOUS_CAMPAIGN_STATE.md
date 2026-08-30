@@ -138,7 +138,43 @@ inherited list because it was inherited.
 
 ## Active work
 
-None in flight. Everything below is unstarted or blocked.
+**PHASE: CONNECT THE SENSES, THEN PILOT. DO NOT WIDEN THE HANDS.**
+
+A deep audit put the binding constraint somewhere other than where the effort
+had been going. Integrity is the finished side — 123k lines of source against
+77k of tests, 31+ gates, `operating` frozen by trigger at
+`responsibility_operating:not_earned`. Decisions are not the bottleneck either:
+seven pending, of which three are counsel, one a key rotation and one a
+180-vs-365-day choice.
+
+The constraint was that **the institution had never observed a real company
+through the senses Foundry already owned.** Its only external evidence arrived
+through `POST /ingest/:token`, an endpoint a company has to build a push for,
+while nine providers sat connected with encrypted credentials, syncing on a
+cadence, writing `metric_snapshots` and stopping there. A reasoning engine and
+nine sense organs, both built, wired to different things.
+
+1. **DONE — the bridge.** A provider sync now records what it wrote as an
+   external observation, keyed on the `metricsUpdated` the provider itself
+   reports. No migration: the source stays `external_metric_ingest` because that
+   column answers "is this independent of Foundry", and a provider sync meets
+   migration 127's three properties as well as the intake does — better, since
+   Stripe attests the number rather than the company reporting its own. The
+   provenance goes in `origin`, which the guard already requires.
+2. **NEXT — one pilot company to E4.** The proof program makes E4 the gate to
+   commercial exposure, and it was unreachable in practice: a design partner had
+   to build an ingest push before the institution could see anything. Now they
+   connect a provider. This is also the directive's own test — requiring a
+   founder to build a push IS company machinery.
+3. **DEFERRED — PENDING 16.** Letting agent actions reach providers is the
+   tempting move and the wrong order. After 1 and 2 it is answerable on
+   evidence.
+
+**What was cleared for the pilot, and what was not.** Prism no longer emits
+budget alerts it cannot ground, and a failed action now says why on the page.
+The queue split was NOT done: routing proposals-for-a-person away from the
+action queue means deciding what an agent proposal IS, which is §16 point 3 and
+the owner's.
 
 ## What this cycle established
 
