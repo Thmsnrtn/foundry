@@ -16,6 +16,23 @@ export type ConfigType =
   | 'error_recovery'
   | 'shared_knowledge';
 
+/**
+ * THE VOCABULARY WAS DECLARED AND NEVER ASKED.
+ *
+ * `ConfigType` and `CONFIG_TYPES` have both existed since evolution v2, and
+ * nothing consulted either: `applyConfigChange` takes `configType: string`, and
+ * the value reaching it comes from a language model. The prompt asks for one of
+ * six words and adds "configType must be one of the 6 valid types" — a
+ * constraint stated in English, to the model, and enforced nowhere.
+ *
+ * `agent_configs.config_type` carries a CHECK for the same six, so a seventh
+ * answer aborts the INSERT. That is the smaller half of the problem; see
+ * `classifyEvolutionChange` for the larger one.
+ */
+export function isConfigType(value: unknown): value is ConfigType {
+  return typeof value === 'string' && (CONFIG_TYPES as string[]).includes(value);
+}
+
 export const CONFIG_TYPES: ConfigType[] = [
   'persona',
   'domain_knowledge',
