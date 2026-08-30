@@ -22,10 +22,11 @@ commits AHEAD of `origin/<branch>`, tree clean, nothing lost — the restart had
 simply landed between a commit and its push. `git merge-base --is-ancestor
 origin/<branch> HEAD` answers which case you are in, and it is the first thing
 to run. If the remote is an ancestor, push; if HEAD is, reset. The rest of this
-note is the other case, which has now happened EIGHT TIMES: this working
+note is the other case, which has now happened NINE TIMES: this working
 directory came up rolled back — by fourteen, twenty, thirty-eight, fifty-two,
 eighty-one, ninety-four, a hundred and eight, and a hundred and twenty commits
-— with `origin/<branch>`, the LOCAL TRACKING REF, agreeing with the stale HEAD,
+and, the ninth time, TWO HUNDRED AND EIGHTY-FIVE — with `origin/<branch>`, the
+LOCAL TRACKING REF, agreeing with the stale HEAD,
 so `git status` said "up to date" and a whole cycle of work looked lost. It was
 not: it was on the remote the whole time. **Three times now it has followed a
 container restart mid-suite** — the fifth, seventh and eighth, all while
@@ -1303,6 +1304,63 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
     contribution explicitly opt-in with broad release as counsel debt. **This is
     an owner decision, not a repair** — and until it is taken, the readers are
     correct to find an empty table.
+
+13. **The three fixes this cycle made were instances of one class, and the
+    class is not gated.** A model-supplied value reaching a place that decides
+    something: `authority_level` chose whether an action needed a person;
+    `priority` hit a CHECK constraint and destroyed the message carrying it;
+    `hyp.success_threshold` still goes straight into `(x * 100).toFixed(0)`, so
+    a non-numeric answer writes "NaN% improvement" into a stored hypothesis
+    statement. Three found by hand, in one pass, by one person looking. That is
+    the signature of a class, and the house answer to a class is a gate.
+
+    **Spike it read-only FIRST.** The nearest precedent is the never-written-
+    column detector, which was honestly recorded as a lead list rather than a
+    gate because its false-positive rate was too high to fail a build on — and
+    the function-level reachability attempt before it produced 394 orphans and
+    was abandoned for the same reason. Full dataflow from `parseJSONResponse`
+    to a `query()` argument is not cleanly mechanizable. What probably IS: a
+    cast of a model-derived field to a closed union (`msg.priority as 'low' |
+    …`), which is the compiler being told to stop checking exactly where the
+    untrusted data starts, and which found two of the three. Measure the hit
+    rate before deciding gate or list. Do not promote a lead list to a gate to
+    make the number look finished.
+
+14. **`EVENT_AGENT_MAP` selects agents for ten event types nothing emits.**
+    `emitSignalEvent` is its only reader, and its one caller
+    (`founder/company-report.ts`) emits `founder_reported:<kind>` and
+    `external_company_reported:<kind>` — none of the ten. So
+    `relevant_agents_json` is empty on every signal event ever written, and no
+    agent has ever been selected by an event.
+
+    Already asserted by `discovery-is-not-reachable-from-integrations.test.ts`
+    and already named in the agent classification table, which had to correct
+    nine entries that justified themselves by this map. **Retire it rather than
+    wire it:** every agent is reachable through the roster route and through
+    `agent_instances` scheduling, so wiring the map would add a second
+    selection path for a capability that already has one — more doors as
+    autonomy grows, which is the Attention Law backwards. Retiring means the
+    map, the column if nothing else reads it, and the entries that cite it.
+
+15. **The Attention Law's north star is prose, and the only ratchet counts the
+    wrong things.** The Constitution says "optimize for attention *returned*,
+    not consumed. North star: days the founder could safely not look." Nothing
+    computes that; `scripts/ratchets/route-count.json` caps doors the founder
+    chooses to walk through, not the interruptions that walk through them.
+
+    Meanwhile the volume is real and unbudgeted: default cadences put roughly
+    ninety-three agent runs a week against one company — sentinel alone
+    twenty-eight — and nothing bounds how much of that reaches a person.
+
+    **This needs a DEFINITION before it needs code, and it must not become
+    another dashboard.** A day the founder could safely not look is plausibly a
+    day on which nothing was delivered above the `letter` rung and nothing
+    expired unreviewed — both already computable from `deliver()` and
+    `outbound_actions.expires_at`. Getting that definition right is the whole
+    task; once it exists the honest instrument is a ratchet on interruptions,
+    the same shape as the route ratchet but pointed at the surface the law is
+    actually about. Propose the definition to the owner before building on it:
+    it decides what Foundry optimises for.
 
 ## What keeps working, for whoever comes next
 
