@@ -73,6 +73,51 @@ export function isPathWithinAuthority(path: string, authority: DevelopmentAuthor
  * the closed vocabulary, verification must be required, and the grant must
  * expire.
  */
+/**
+ * THE DEVELOPMENT RESPONSIBILITIES AN OWNER COULD ACTUALLY GRANT TODAY.
+ *
+ * `grantDevelopmentAuthority` had no caller anywhere: the whole recursive path
+ * — self-observation on a schedule, the ladder, plan, apply, verify, outcome,
+ * rollback — was built, governed and reachable except for the one act that
+ * starts it. The door existed and had no handle.
+ *
+ * This is what the handle needs to know. A responsibility is offerable when it
+ * is a development responsibility this company owns, standing in Shadowing (the
+ * rung the database requires before any grant), and shadowing a check whose
+ * module has declared what a grant for it may touch. Anything else is not
+ * offered, because the alternative is a door that asks the owner to invent a
+ * path scope.
+ */
+export async function listGrantableDevelopmentResponsibilities(
+  productId: string,
+): Promise<Array<{ responsibilityId: string; title: string; check: string }>> {
+  const rows = (await query(
+    `SELECT DISTINCT r.id AS id, r.title AS title, x.expected_event_type AS event_type
+       FROM institutional_responsibilities r
+       JOIN responsibility_shadow_expectations x
+         ON x.responsibility_id = r.id AND x.product_id = r.product_id
+      WHERE r.product_id = ? AND r.capability = 'development'
+        AND r.state = 'shadowing' AND r.disposition = 'active'
+      ORDER BY r.updated_at DESC`,
+    [productId],
+  )).rows as Array<Record<string, unknown>>;
+
+  const { developmentEventCheck } = await import('./development-observation.js');
+  const { SELF_MAINTENANCE_SCOPES } = await import('../foundry/self-observation.js');
+
+  const seen = new Set<string>();
+  const out: Array<{ responsibilityId: string; title: string; check: string }> = [];
+  for (const row of rows) {
+    const check = developmentEventCheck(String(row.event_type));
+    if (!check || !SELF_MAINTENANCE_SCOPES[check]) continue;
+    const key = `${String(row.id)}:${check}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ responsibilityId: String(row.id), title: String(row.title), check });
+  }
+  return out;
+}
+
 export async function grantDevelopmentAuthority(input: {
   productId: string; responsibilityId: string; ownerId: string;
   repository: string; allowedPathPrefixes: string[];

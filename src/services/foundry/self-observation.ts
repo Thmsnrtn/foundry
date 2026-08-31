@@ -53,6 +53,36 @@ export const SCHEMA_SNAPSHOT_CHECK = 'schema-snapshot-freshness';
 export const SNAPSHOT_PATH = 'docs/db/schema.snapshot.sql';
 
 /** Every schema object the snapshot claims to describe. */
+/**
+ * WHAT A GRANT FOR THIS CHECK MAY TOUCH, DECLARED WHERE THE CHECK LIVES.
+ *
+ * The authority module can enforce a path scope but cannot know which path
+ * belongs to which obligation, and the route that offers a grant must not
+ * invent one. So the module that owns an observation also states the smallest
+ * scope that could satisfy it, and the owner-facing door reads this rather
+ * than guessing.
+ *
+ * `plainly` is the sentence shown to the owner. It says what Foundry would DO,
+ * not which table or class it would use: granting authority should not require
+ * reading the institution.
+ *
+ * Adding an entry here is the act that makes a self-maintenance obligation
+ * offerable. It is deliberately a short list.
+ */
+export const SELF_MAINTENANCE_SCOPES: Record<string, {
+  path: string;
+  changeClass: 'generated_artifact' | 'test' | 'documentation';
+  verification: string[];
+  plainly: string;
+}> = {
+  [SCHEMA_SNAPSHOT_CHECK]: {
+    path: SNAPSHOT_PATH,
+    changeClass: 'generated_artifact',
+    verification: [SCHEMA_SNAPSHOT_CHECK],
+    plainly: 'regenerate the committed schema snapshot after a migration changes the schema',
+  },
+};
+
 export function snapshotObjectNames(snapshotSql: string): Set<string> {
   return new Set(
     [...snapshotSql.matchAll(

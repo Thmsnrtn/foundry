@@ -7,6 +7,8 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
+import { requireOwner } from '../../middleware/rbac.js';
+import { logger } from '../../services/logger.js';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
@@ -1531,6 +1533,60 @@ letterRoutes.post('/letter/attention/:decisionId', async (c) => {
 // Per-category dials in plain language, the evidence behind each level, and the
 // big red button. Granting 'act' is the founder's explicit consent moment.
 
+// ─── Development authority (recursive operation) ──────────────────────────────
+//
+// THE ONE ACT THAT WAS MISSING. Foundry observes its own repository on a
+// schedule, climbs the identical responsibility ladder it makes every company
+// climb, and can plan, apply, verify, record and roll back a change to itself.
+// Every rung of that was built and reachable except granting the authority,
+// which had no caller anywhere — so the capability existed and could not start.
+//
+// What the owner is asked is not which paths or which change class. It is
+// whether Foundry may do one named piece of maintenance, for a week. The scope
+// is declared by the module that owns the observation, the constitutional ring
+// is refused by the database whatever this page sends, and every change is
+// verified and reversible.
+const developmentAuthoritySection = (
+  items: Array<{
+    responsibilityId: string; title: string; plainly: string; path: string;
+    current: { consentId: string; expiresAt: string; allowedPathPrefixes: string[] } | null;
+  }>,
+): HtmlEscapedString | Promise<HtmlEscapedString> => items.length === 0 ? html`` : html`
+  <section style="margin-top:1.75rem;">
+    <h2 style="font-size:0.95rem;margin:0 0 0.35rem;">Foundry's own upkeep</h2>
+    <p style="color:var(--text-dim);font-size:0.8rem;margin:0 0 0.85rem;">
+      Foundry has been watching these in its own repository and predicting them correctly
+      long enough to ask. A grant lasts seven days, touches only what is named, and can be
+      withdrawn at any moment.
+    </p>
+    ${items.map((item) => html`
+      <div class="card" style="padding:1rem;margin-bottom:0.6rem;">
+        <div style="font-size:0.9rem;color:var(--text-primary);font-weight:600;">${item.title}</div>
+        <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.3rem;line-height:1.5;">
+          Foundry would ${item.plainly}.
+        </div>
+        <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.5rem;">
+          It may change <code>${item.path}</code> and nothing else. It may never touch the
+          migrations, the institution, the checks that enforce it, or its own instructions —
+          the database refuses those regardless of what this page asks for.
+        </div>
+        ${item.current ? html`
+          <div style="font-size:0.78rem;color:var(--signal-high);margin-top:0.6rem;">
+            Allowed until ${item.current.expiresAt.slice(0, 16).replace('T', ' ')}.
+          </div>
+          <form method="POST" action="/autopilot/development/revoke" style="margin-top:0.5rem;">
+            <input type="hidden" name="consent_id" value="${item.current.consentId}" />
+            <button type="submit" class="btn btn-secondary" style="font-size:0.78rem;">Withdraw this</button>
+          </form>
+        ` : html`
+          <form method="POST" action="/autopilot/development/grant" style="margin-top:0.6rem;">
+            <input type="hidden" name="responsibility_id" value="${item.responsibilityId}" />
+            <button type="submit" class="btn btn-primary" style="font-size:0.78rem;">Allow this for 7 days</button>
+          </form>
+        `}
+      </div>`)}
+  </section>`;
+
 letterRoutes.get('/autopilot', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
@@ -1544,6 +1600,7 @@ letterRoutes.get('/autopilot', async (c) => {
     getShadowStats(ctx.productId),
     getAllCalibrations(ctx.productId),
   ]);
+  const developmentItems = await loadDevelopmentAuthorityItems(ctx.productId);
   const shadowByCat = new Map(shadow.map((s) => [s.category, s]));
   const calByCat = new Map(calibrations.map((c) => [c.category, c]));
 
@@ -1613,7 +1670,8 @@ letterRoutes.get('/autopilot', async (c) => {
     ` : rows}
     <p style="font-size:0.72rem;color:var(--text-muted);margin-top:1rem;">
       Ladder: Watching only → Suggests (earned at ${PROMOTION_THRESHOLD} clean cycles, quality-held) → Acts (your explicit grant, gate-≤1 only, ${12}h grace, 24h undo).
-    </p>`;
+    </p>
+    ${developmentAuthoritySection(developmentItems)}`;
   return c.html(dashboardLayout(ctx, content));
 });
 
@@ -1634,6 +1692,84 @@ letterRoutes.post('/autopilot/policy',
     await setPolicy(ctx.productId, category, mode, founder.id as string);
   }
   return c.redirect('/autopilot');
+});
+
+/** The grantable items with their declared scope and any live grant. */
+async function loadDevelopmentAuthorityItems(productId: string): Promise<Array<{
+  responsibilityId: string; title: string; plainly: string; path: string;
+  current: { consentId: string; expiresAt: string; allowedPathPrefixes: string[] } | null;
+}>> {
+  const { listGrantableDevelopmentResponsibilities, getCurrentDevelopmentAuthority } =
+    await import('../../services/institution/development-authority.js');
+  const { SELF_MAINTENANCE_SCOPES } = await import('../../services/foundry/self-observation.js');
+  const grantable = await listGrantableDevelopmentResponsibilities(productId);
+  const out = [];
+  for (const g of grantable) {
+    const scope = SELF_MAINTENANCE_SCOPES[g.check];
+    if (!scope) continue;
+    const current = await getCurrentDevelopmentAuthority(productId, g.responsibilityId);
+    out.push({
+      responsibilityId: g.responsibilityId, title: g.title,
+      plainly: scope.plainly, path: scope.path,
+      current: current ? {
+        consentId: current.consentId, expiresAt: current.expiresAt,
+        allowedPathPrefixes: current.allowedPathPrefixes,
+      } : null,
+    });
+  }
+  return out;
+}
+
+// SEVEN DAYS, AND THE SCOPE IS NOT THE OWNER'S TO TYPE. The route sends only a
+// responsibility id; the paths, change class and required verification come
+// from the module that declared the check. An owner cannot widen a grant by
+// editing a form, and the database refuses the constitutional ring regardless.
+letterRoutes.post('/autopilot/development/grant', requireOwner(), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
+  if (!ctx.productId) return c.redirect('/dashboard');
+  const body = await c.req.parseBody() as Record<string, string>;
+  const responsibilityId = String(body.responsibility_id ?? '');
+
+  const { listGrantableDevelopmentResponsibilities, grantDevelopmentAuthority } =
+    await import('../../services/institution/development-authority.js');
+  const { SELF_MAINTENANCE_SCOPES } = await import('../../services/foundry/self-observation.js');
+
+  // Offerable is decided here, not by what arrived. A responsibility that is
+  // not in Shadowing, not this company's, or not shadowing a check with a
+  // declared scope is simply not grantable, whatever the form said.
+  const match = (await listGrantableDevelopmentResponsibilities(ctx.productId))
+    .find((g) => g.responsibilityId === responsibilityId);
+  const scope = match ? SELF_MAINTENANCE_SCOPES[match.check] : undefined;
+  if (!match || !scope) return c.redirect('/autopilot?error=not_grantable');
+
+  try {
+    await grantDevelopmentAuthority({
+      productId: ctx.productId,
+      responsibilityId: match.responsibilityId,
+      ownerId: String(founder.id),
+      repository: 'foundry',
+      allowedPathPrefixes: [scope.path],
+      changeClass: scope.changeClass,
+      requiredVerification: scope.verification,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+  } catch (err) {
+    logger.error(`development authority grant refused: ${err instanceof Error ? err.message : String(err)}`,
+      { productId: ctx.productId });
+    return c.redirect('/autopilot?error=grant_refused');
+  }
+  return c.redirect('/autopilot?granted=development');
+});
+
+letterRoutes.post('/autopilot/development/revoke', requireOwner(), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
+  if (!ctx.productId) return c.redirect('/dashboard');
+  const body = await c.req.parseBody() as Record<string, string>;
+  const { revokeDevelopmentAuthority } = await import('../../services/institution/development-authority.js');
+  await revokeDevelopmentAuthority(ctx.productId, String(body.consent_id ?? ''), String(founder.id));
+  return c.redirect('/autopilot?revoked=development');
 });
 
 letterRoutes.post('/autopilot/panic', async (c) => {
