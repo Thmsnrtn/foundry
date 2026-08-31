@@ -138,7 +138,72 @@ inherited list because it was inherited.
 
 ## Active work
 
-**PHASE: CONNECT THE SENSES, THEN PILOT. DO NOT WIDEN THE HANDS.**
+**PHASE: PRIVATE-FIRST. THE OWNER IS CUSTOMER ZERO.**
+
+Superseded sequencing, kept because the findings under it stand. Commercial
+launch is no longer the optimization target; it becomes a downstream maturity
+event extracted from capabilities Private Foundry has proven in real
+owner-controlled operation. Commercial-readiness work continues only where it
+strengthens the shared institutional kernel.
+
+**The north star for Private Foundry.** Not "an AI that helps operate my
+companies" but a private, owner-controlled entrepreneurial institution sitting
+between the owner and the machinery of discovering, creating, developing,
+operating, improving, allocating across, and retiring businesses. The owner
+supplies intent, objectives, values, capital and risk boundaries, hard stops and
+irreducible judgment. Foundry carries the rest. The success condition is
+**maximum entrepreneurial leverage with minimum owner machinery** — not maximum
+autonomous activity.
+
+**What that changes about how work is chosen.** These are priority weights, not
+a backlog:
+
+- **Owner attention is a first-class scarce resource**, alongside capital,
+  compute and cognition. The portfolio optimises economic value ÷ owner
+  attention. A smaller business consuming almost no attention can beat a larger
+  one that does not. A mature Letter is often able to say *nothing requires you*.
+- **Venture origination is general, not a micro-SaaS factory.** The company form
+  follows the economic opportunity, and one legitimate answer is **do not start
+  another company**. Build, buy, partner and wait are peers of build.
+- **Selectivity over volume.** A finalist survives independent adversarial
+  attack and carries an explicit *how this company dies* thesis before it earns
+  meaningful capital or attention. High standards must never be expressed as
+  fabricated confidence about market outcomes.
+- **Unknowns are managed objects**, not gaps in model confidence. For any major
+  decision: which unknown would most change it, and is resolving that a better
+  use of resources than more implementation?
+- **Cognition spend versus reality spend.** Track when another million tokens is
+  worth less than a five-dollar experiment. The failure mode is infinite
+  analysis that never meets a customer.
+- **Capital, compute and attention follow evidence.** A hypothesis earns almost
+  nothing; a product showing real behaviour earns more; a weak business loses
+  resources.
+- **Predictions are scored against reality**, and repeated forecasting error
+  lowers confidence in related judgments.
+- **The graveyard is an asset** — rejected opportunities, failed experiments and
+  the reasons things were terminated, kept so a returning idea can be asked what
+  has changed.
+- **Adaptive organisation over permanent agent theatre.** Instantiate bounded
+  structures around a real responsibility; dissolve them after, keeping the
+  evidence.
+- **Cognition is allocatable and model-agnostic.** No single model is Foundry.
+
+**Three failure modes to refuse:** an agent circus (visible activity, no
+economic consequence), a company factory (creation outrunning operating
+capacity), an infinite analysis machine (research that never reaches reality).
+
+**Where this actually stands today.** Foundry-on-Foundry is the nearest real
+proof and it is further along than any audit suggested: self-observation runs on
+a schedule, the recursive ladder is implemented and tested — being Foundry skips
+no rung — and plan/apply/verify/outcome/rollback exists behind path-scoped
+authority with a constitutional ring the database enforces. The one missing act
+was granting that authority, which had no caller; Controls now offers it. The
+next proofs are real ones: a persistent owner-controlled deployment, and the
+first genuine grant against the real repository.
+
+---
+
+**Superseded phase, findings retained: CONNECT THE SENSES, THEN PILOT.**
 
 A deep audit put the binding constraint somewhere other than where the effort
 had been going. Integrity is the finished side — 123k lines of source against
