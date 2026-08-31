@@ -2,6 +2,7 @@
 // FOUNDRY — Settings Route
 // =============================================================================
 
+import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { getCookie } from 'hono/cookie';
@@ -140,7 +141,7 @@ settingsRoutes.get('/settings', async (c) => {
       products.rows as Array<Record<string, unknown>>,
       comps.rows as Array<Record<string, unknown>>,
     )}
-    <div class="card">
+    ${isPrivateOwnerInstance() ? '' : html`<div class="card">
       <h3>Subscription</h3>
       <p><strong>Current Plan:</strong> <span class="badge badge-watch">${tierLabel}</span></p>
       <p style="font-size:0.87rem;color:#6b7280;">You have access to ${capabilities.length} features.</p>
@@ -157,7 +158,7 @@ settingsRoutes.get('/settings', async (c) => {
           <form method="POST" action="/settings/manage-subscription"><button type="submit" class="btn btn-secondary btn-sm">Manage Subscription</button></form>
         ` : ''}
       </div>
-    </div>
+    </div>`}
 
     <div class="card">
       <h3>Products</h3>

@@ -3,6 +3,7 @@
 // GitHub connection → repo selection → competitors → first audit
 // =============================================================================
 
+import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../../middleware/auth.js';
@@ -57,9 +58,95 @@ async function parseBody(c: { req: { header: (n: string) => string | undefined; 
 }
 
 // Step 1: Show onboarding page
+
+// ─── Establishing the institution's first company ────────────────────────────
+//
+// WHAT THE OWNER MET INSTEAD, AND WHY IT WAS WRONG.
+//
+// A private owner arriving at his own institution with nothing established was
+// shown a four-step customer funnel: Connect GitHub → Select Repository →
+// Identify Competitors → First Audit, opening "First, Foundry gets to know your
+// product so it can give you an honest health check". That is onboarding for a
+// SaaS customer bringing a product to be audited. There was no way to say "this
+// institution is mine and it begins with Foundry" — the company existed only as
+// a side effect of completing the funnel, and the funnel's first requirement
+// was a GitHub OAuth app this deployment does not have configured.
+//
+// So the owner could not establish anything at all, and the recursion could not
+// begin, because `resolveFoundryProductId()` needs a product row that nothing
+// could create.
+//
+// WHAT THIS DOES, AND DELIBERATELY DOES NOT DO. It writes the smallest true
+// thing: a company named Foundry, owned by the owner, bound to the canonical
+// `foundry` identity so self-observation can resolve it. No agents are
+// provisioned, no audit is run, no competitors are invented and no knowledge is
+// fabricated. The institution is allowed to say it knows almost nothing yet,
+// because that is the truth and the alternative is a richer-looking lie.
+const establishedFoundry = (companyName: string) => html`
+  <section style="max-width:640px;">
+    <h1 style="margin:0 0 0.4rem;">Begin with Foundry</h1>
+    <p style="color:var(--text-muted);font-size:0.9rem;line-height:1.6;margin:0 0 1.25rem;">
+      This institution is yours and nothing is established in it yet. The first company it
+      should understand is the one you are standing in.
+    </p>
+    <div class="card" style="padding:1.25rem;">
+      <div style="font-size:0.95rem;color:var(--text-primary);font-weight:600;">${companyName}</div>
+      <div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.6;">
+        Establishing it records three true things and nothing more: that this company is
+        Foundry, that you own it, and that Foundry may begin observing itself. It will know
+        very little else until you connect a sense.
+      </div>
+      <form method="POST" action="/establish" style="margin-top:1rem;">
+        <button type="submit" class="btn btn-primary">Establish ${companyName}</button>
+      </form>
+      <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.85rem;line-height:1.55;">
+        No agents are started, nothing is audited and no model is called. Connecting the
+        repository afterwards lets Foundry <em>observe</em> its own software — observing is
+        not permission to change anything, and changing requires a separate, expiring grant
+        you issue in Controls.
+      </div>
+    </div>
+  </section>`;
+
+onboardingRoutes.post('/establish', async (c) => {
+  const founder = c.get('founder');
+  if (!isPrivateOwnerInstance()) return c.redirect('/onboarding');
+
+  const { resolveFoundryProductId, establishSystemIdentity, FOUNDRY_IDENTITY_KEY } =
+    await import('../../services/system-identity.js');
+
+  // Idempotent by the institution's own rule: an identity that is already bound
+  // does not move, so pressing this twice orients rather than duplicates.
+  const existing = await resolveFoundryProductId();
+  if (existing) return c.redirect('/letter');
+
+  const { nanoid } = await import('nanoid');
+  const productId = nanoid();
+  await query(
+    `INSERT INTO products (id, name, owner_id, status) VALUES (?, ?, ?, 'active')`,
+    [productId, 'Foundry', String(founder.id)]);
+  await query(
+    `INSERT INTO lifecycle_state (product_id, current_prompt, risk_state)
+     VALUES (?, 'prompt_1', 'green')`, [productId]).catch(() => { /* optional */ });
+  await establishSystemIdentity(FOUNDRY_IDENTITY_KEY, productId,
+    'owner established the institution\'s first company');
+
+  return c.redirect('/letter');
+});
+
 onboardingRoutes.get('/onboarding', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, '', 'Get Started');
+
+  // The owner of a private institution is not a prospect evaluating a product.
+  if (isPrivateOwnerInstance()) {
+    const { resolveFoundryProductId } = await import('../../services/system-identity.js');
+    if (!(await resolveFoundryProductId())) {
+      return c.html(dashboardLayout(ctx,
+        establishedFoundry('Foundry')));
+    }
+    return c.redirect('/letter');
+  }
   const ghClientId = process.env.GITHUB_CLIENT_ID ?? '';
   const appUrl = process.env.APP_URL ?? '';
   const redirectUri = `${appUrl}/onboarding/github/callback`;
@@ -130,7 +217,13 @@ onboardingRoutes.post('/onboarding/create-product', validateBody(createProductSc
     solo: 1,
     growth: 3,
   };
-  const isUnlimited = founder.tier === 'investor_ready';
+  // A PORTFOLIO INSTITUTION CAPPED AT ONE COMPANY IS NOT ONE. With no tier the
+  // limit is 1, so a private owner whose institution exists to operate Foundry,
+  // AcreOS and whatever comes next is refused the second company and shown
+  // "Upgrade to add more" — an offer to buy capacity in something he owns
+  // outright. The cap is commercial packaging; it does not apply where nobody
+  // is buying access. Two call sites enforced it, which is why both say so.
+  const isUnlimited = founder.tier === 'investor_ready' || isPrivateOwnerInstance();
   const limit = isUnlimited ? Infinity : (founder.tier ? (productLimits[founder.tier] ?? 1) : 1);
   const existing = await query(
     "SELECT COUNT(*) as c FROM products WHERE owner_id = ? AND status != 'archived'",
@@ -253,7 +346,13 @@ onboardingRoutes.post('/onboarding/select-repo', validateBody(selectRepoSchema),
     solo: 1,
     growth: 3,
   };
-  const isUnlimited = founder.tier === 'investor_ready';
+  // A PORTFOLIO INSTITUTION CAPPED AT ONE COMPANY IS NOT ONE. With no tier the
+  // limit is 1, so a private owner whose institution exists to operate Foundry,
+  // AcreOS and whatever comes next is refused the second company and shown
+  // "Upgrade to add more" — an offer to buy capacity in something he owns
+  // outright. The cap is commercial packaging; it does not apply where nobody
+  // is buying access. Two call sites enforced it, which is why both say so.
+  const isUnlimited = founder.tier === 'investor_ready' || isPrivateOwnerInstance();
   const limit = isUnlimited ? Infinity : (founder.tier ? (productLimits[founder.tier] ?? 1) : 1);
   const existing = await query(
     "SELECT COUNT(*) as c FROM products WHERE owner_id = ? AND status != 'archived'",
