@@ -1271,7 +1271,18 @@ letterRoutes.get('/letter', async (c) => {
           This letter is where your AI team reports in each morning. It's empty because there's no data yet — that's expected on day one. Two things bring it to life:
         </div>
         <div style="margin-top:0.85rem;display:flex;flex-direction:column;gap:0.5rem;">
-          <a href="/connections" class="btn btn-primary" style="font-size:0.85rem;align-self:flex-start;">Connect your tools → so Foundry can see your real numbers</a>
+          <!-- THE MOST IMPORTANT LINK IN THE PRODUCT POINTED AT THE WRONG PAGE.
+               This sent a day-one founder to /connections, which asks for a
+               "Tool server address (MCP)" and an access token, and mentions the
+               providers they actually came to connect in a footnote at the
+               bottom. A founder who wants to connect Stripe met a form for a
+               protocol they have never heard of.
+               /agents/integrations is the page with Stripe, PostHog, Plausible,
+               Resend and GitHub on it, each with a description and a connect
+               form — and it is the one that starts the institution's loop,
+               because a provider sync records external observations and an MCP
+               connection does not. -->
+          <a href="/agents/integrations" class="btn btn-primary" style="font-size:0.85rem;align-self:flex-start;">Connect Stripe or your analytics → so Foundry can see your real numbers</a>
           <a href="/decisions" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">Log your first decision → and the belief behind it, so Foundry can watch it</a>
         </div>
       </div>` : letter.quiet && !hasResponsibilitySummary && !hasDevelopmentActivity
