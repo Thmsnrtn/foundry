@@ -120,6 +120,38 @@ export async function actingSubject(c: any): Promise<{ userId?: string; productI
  */
 
 /** The exceptional boundary. */
+/**
+ * THE OWNER OF THE INSTITUTION, WHEN THERE IS NO COMPANY TO OWN YET.
+ *
+ * `requireOwner` asks whether you own the SELECTED company, and returns 400
+ * "No company selected" when none is. That is the right question almost
+ * everywhere and the wrong one at exactly one moment: founding the
+ * institution's first company. Guarding that with `requireOwner` makes it
+ * permanently unreachable — you would need a company to create your first
+ * company.
+ *
+ * So this asks the question that actually applies: are you the principal this
+ * deployment belongs to? On a private instance that is the one admitted
+ * account; `mayBeAdmitted` already refuses anyone else a session at all, and
+ * this is the second lock rather than the first — authentication is not
+ * authorization, and a route that founds companies should say who may.
+ *
+ * It is deliberately NOT usable as a general substitute for company
+ * permissions: it answers a deployment-level question and grants nothing about
+ * any particular company's data.
+ */
+export function requireInstitutionOwner() {
+  return createMiddleware(async (c, next) => {
+    const founder = c.get('founder') as { email?: string | null } | undefined;
+    const email = founder?.email ?? '';
+    const { isFounder } = await import('../services/founder/intelligence.js');
+    if (!email || !isFounder(String(email))) {
+      return c.json({ error: 'Only the owner of this institution can do this' }, 403);
+    }
+    await next();
+  });
+}
+
 export function requireOwner() {
   return createMiddleware(async (c, next) => {
     const { userId, productId } = await actingSubject(c);

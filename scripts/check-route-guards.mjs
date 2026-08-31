@@ -100,7 +100,12 @@ function strip(src) {
     .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
 }
 
-const GUARD = /require(CompanyCapability|Owner)\s*\(|\bmemberMay\s*\(/;
+// `requireInstitutionOwner` counts too. It asks a deployment-level question —
+// are you the principal this institution belongs to — for the one route that
+// cannot ask a company-level one, because it is the route that creates the
+// first company. It grants nothing about any company's data, so it is not a
+// general substitute for the two above.
+const GUARD = /require(CompanyCapability|Owner|InstitutionOwner)\s*\(|\bmemberMay\s*\(/;
 const found = [];
 
 for (const file of tsFiles(DIR)) {

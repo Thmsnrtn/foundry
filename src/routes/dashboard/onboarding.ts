@@ -3,6 +3,7 @@
 // GitHub connection → repo selection → competitors → first audit
 // =============================================================================
 
+import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -108,7 +109,12 @@ const establishedFoundry = (companyName: string) => html`
     </div>
   </section>`;
 
-onboardingRoutes.post('/establish', async (c) => {
+// `requireInstitutionOwner()` rather than `requireOwner()`: the latter asks
+// whether you own the SELECTED company and answers 400 when none is selected,
+// which is every caller of this route by definition. The posture check below
+// answers "is this deployment private" and cannot stand in for "may this caller
+// found a company" — one is about the deployment, the other about the principal.
+onboardingRoutes.post('/establish', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   if (!isPrivateOwnerInstance()) return c.redirect('/onboarding');
 

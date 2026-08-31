@@ -78,6 +78,22 @@ describe('an owner with nothing established', () => {
   });
 });
 
+describe("only the institution owner may found its companies", () => {
+  it('refuses a session that is not the owner principal', async () => {
+    const stranger = new Hono();
+    stranger.use('*', async (c, next) => {
+      c.set('founder', { id: 'someone', email: 'stranger@example.com' }); await next();
+    });
+    const mod = await import('../../src/routes/dashboard/onboarding.js');
+    for (const v of Object.values(mod)) {
+      if (v && typeof v === 'object' && 'routes' in (v as object)) stranger.route('/', v as never);
+    }
+    const res = await stranger.request('/establish', { method: 'POST' });
+    expect(res.status, 'founding a company is not something any session may do').toBe(403);
+    expect(await resolveFoundryProductId()).toBeNull();
+  });
+});
+
 describe('establishing writes the smallest true thing', () => {
   it('refuses on a commercial deployment, where companies are customers', async () => {
     // Runs before establishment: nothing is bound yet, which is the state this
