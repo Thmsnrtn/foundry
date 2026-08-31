@@ -3,6 +3,7 @@
 // Server-rendered pages using Hono's html tagged template literal.
 // =============================================================================
 
+import { isFounder } from '../services/founder/intelligence.js';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { NextAction, AppNotification, MilestoneEvent, NavBadges } from '../types/index.js';
@@ -359,7 +360,7 @@ function groupedSidebar(
     </details>`)}
 
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
-      ${founderEmail?.toLowerCase() === 'thmsnrtn@gmail.com' ? html`<li><a href="/founder-ops" class="${active === 'founder-ops' ? 'active' : ''}" style="color:#f59e0b;">Founder Ops</a></li>` : ''}
+      ${founderEmail && isFounder(founderEmail) ? html`<li><a href="/founder-ops" class="${active === 'founder-ops' ? 'active' : ''}" style="color:#f59e0b;">Founder Ops</a></li>` : ''}
       <li><a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a></li>
       <li><a href="/auth/logout" style="color:var(--text-muted);">Sign out</a></li>
     </ul>

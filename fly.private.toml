@@ -59,6 +59,18 @@ kill_timeout = 5
   # ceilings, authority, consent, the kill-switch and every constitutional guard
   # are untouched.
   FOUNDRY_INSTANCE_POSTURE = "private_owner"
+
+  # THE ONE PRINCIPAL THIS INSTITUTION SERVES.
+  #
+  # A private Foundry is single-principal. Without this, auto-provision admits
+  # any Clerk user with a verified address, so anyone who found this hostname
+  # could obtain a founder row, create companies inside the owner's institution
+  # and spend his model budget doing it.
+  #
+  # Stated here rather than compiled into source: it is an authorization input,
+  # and an authorization boundary that needs a release to change is one that
+  # locks the owner out the day his primary address differs from the literal.
+  FOUNDRY_OWNER_EMAIL = "thmsnrtn@gmail.com"
   TURSO_DATABASE_URL = "file:/data/foundry.db"   # on the volume below, not the image
 
   # COST AS A CONSTRAINT, NOT AN INTENTION.

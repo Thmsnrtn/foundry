@@ -1,6 +1,7 @@
 // =============================================================================
 // FOUNDRY — Founder Operations Dashboard
-// Locked to thmsnrtn@gmail.com. Pulls real AcreOS business data.
+// Locked to the deployment's owner principal via `isFounder`. Pulls real
+// AcreOS business data, so it stays inside the standing owner deferment.
 // =============================================================================
 
 import { Hono } from 'hono';
@@ -15,7 +16,6 @@ import {
   getGrowthSignals, getAICostData, generateMorningBriefing,
 } from '../../services/founder/intelligence.js';
 
-const FOUNDER_EMAIL = 'thmsnrtn@gmail.com';
 
 export const founderOpsRoutes = new Hono<AuthEnv>();
 

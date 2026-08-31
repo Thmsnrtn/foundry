@@ -1,6 +1,7 @@
 // =============================================================================
 // FOUNDRY — Founder Intelligence API Routes
-// All endpoints require founder authentication (thmsnrtn@gmail.com).
+// All endpoints require the owner principal — `isFounder`, which reads the
+// deployment's configured owner rather than a literal in this file.
 // =============================================================================
 
 import { Hono } from 'hono';

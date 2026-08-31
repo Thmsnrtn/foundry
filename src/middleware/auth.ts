@@ -3,6 +3,7 @@
 // Validates Clerk session and resolves founder from database.
 // =============================================================================
 
+import { mayBeAdmitted } from '../lib/instance-posture.js';
 import { createMiddleware } from 'hono/factory';
 import { Clerk as ClerkBackend, verifyToken, type VerifyTokenOptions } from '@clerk/backend';
 import { getFounderByClerkId, query } from '../db/client.js';
@@ -142,6 +143,25 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
           logger.warn('Auto-provision refused: no verified primary email', { clerkUserId });
           throw new Error('unverified_primary_email');
         }
+        // A PRIVATE INSTITUTION HAS EXACTLY ONE PRINCIPAL.
+        //
+        // Auto-provision asked only whether the identity provider had verified
+        // the address — which is the right question for a commercial service
+        // and the wrong one for a private institution on a public hostname.
+        // Anyone who found the URL could obtain a founder row, create
+        // companies inside the owner's institution, and spend his model budget
+        // doing it. Refused here rather than at a later gate, so no row, no
+        // company and no spend exists to clean up afterwards.
+        //
+        // Commercial deployments are unaffected: `mayBeAdmitted` returns true
+        // for every verified address unless the deployment declares itself
+        // private.
+        if (!mayBeAdmitted(email)) {
+          logger.warn('Auto-provision refused: not the owner of this private instance',
+            { clerkUserId });
+          throw new Error('not_the_owner_of_this_instance');
+        }
+
         const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || null;
         const founderId = nanoid();
 

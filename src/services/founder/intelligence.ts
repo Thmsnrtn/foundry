@@ -4,6 +4,7 @@
 // intelligence layer, tailored to Foundry's data model.
 // =============================================================================
 
+import { getOwnerEmail } from '../../lib/instance-posture.js';
 import { query } from '../../db/client.js';
 import { callOpus, callSonnet } from '../ai/client.js';
 import { nanoid } from 'nanoid';
@@ -62,10 +63,21 @@ async function jobHealthCounts(): Promise<{
   };
 }
 
-const FOUNDER_EMAIL = 'thmsnrtn@gmail.com';
-
+/**
+ * ONE DEFINITION, IN DEPLOYMENT CONFIGURATION, NOT FOUR IN SOURCE.
+ *
+ * This literal appeared in four files, and this comparison is the only thing
+ * standing between a session and the platform-operator surface — which performs
+ * deliberately unscoped writes across every tenant. An authorization boundary
+ * compiled into source cannot be changed without a release, and silently
+ * redirects the owner to /dashboard if his verified primary address ever
+ * differs from the string somebody typed.
+ *
+ * `getOwnerEmail` reads deployment configuration and defaults to the historic
+ * literal, so behaviour is unchanged and the value now has one home.
+ */
 export function isFounder(email: string): boolean {
-  return email.toLowerCase() === FOUNDER_EMAIL;
+  return email.trim().toLowerCase() === getOwnerEmail();
 }
 
 // ─── Pulse: 5-Minute Health Scan ────────────────────────────────────────────
