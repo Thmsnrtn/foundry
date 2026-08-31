@@ -66,6 +66,12 @@ kill_timeout = 5
 [mounts]
   source = "foundry_data"
   destination = "/data"
+  # Stated so the volume is not left to flyctl's version-dependent behaviour on
+  # first deploy. 1GB is the smallest billable size and far more than
+  # institutional state needs: applying all 257 migrations produces a fully
+  # formed, empty institution of 4.4MB (245 tables), measured, so the headroom
+  # here is roughly two hundred fold.
+  initial_size = "1gb"
 
 [http_service]
   internal_port = 8080
