@@ -25,6 +25,46 @@ be broadly empowered. It may not be epistemically or ethically reckless. Any
 control that a mode removes must be a permission control, and the removal must
 be visible in the same records everyone else's actions produce.
 
+**This deployment is the owner's permanent private institution.** Not a trial,
+not staging, not a future public SaaS, and its owner does not subscribe to it.
+The relationship is a hierarchy rather than a spectrum: Private Foundry is the
+parent institution, and the businesses it understands and operates sit beneath
+it — Foundry itself, AcreOS, future owner-controlled companies, and Commercial
+Foundry if it ever earns existence. Commercial Foundry would be **one of its
+businesses**, with its own repository, deployment and customer environment,
+inheriting the architecture but never this instance's identity, owner context,
+customer state or authority.
+
+**Posture is a deployment fact, not a user attribute.**
+`FOUNDRY_INSTANCE_POSTURE=private_owner`, read through
+`lib/instance-posture.ts`, is decided once at the deployment's edge. Ownership
+is never expressed as `if (email === owner)`: scattered bypasses are places a
+rule gets forgotten, and none of them says why. The default is `commercial`,
+the restrictive answer.
+
+**It removes exactly one thing: commercial metering of ACCESS.** Trials, plan
+prompts, upgrade gating and the entitlement sweep's pause do not apply to
+someone who cannot be a customer of himself. This is not cosmetic — left in
+place, the hourly sweep pauses the owner's own company, `operatingProduct()`
+drops it, and the institution stops observing the company it exists to operate.
+
+**It touches nothing else.** Stripe, subscriptions, prices, MRR, revenue
+reconciliation, failed-payment handling and pricing capability all remain,
+because a private institution operates businesses that bill *their* customers —
+possibly including Commercial Foundry. **Foundry access billing** and **business
+operating billing** are different things: the first must not restrict the owner,
+the second is a major institutional capability.
+
+**Economic governance strengthens rather than relaxes.** Commercial metering
+asks "has this customer paid enough to use this?" Private governance asks "is
+this resource justified by the owner's objectives, authority, economics and risk
+envelope?" Remove the first for the legitimate owner; strengthen the second —
+spend ceilings, cost attribution, anomaly detection, runaway protection, and
+owner attention as a first-class scarce resource.
+
+Broad owner authority is made safe by stronger integrity, never by absent
+safeguards.
+
 ## Core laws
 
 - Company over platform.

@@ -45,6 +45,20 @@ kill_timeout = 5
   NODE_ENV = "production"          # the scheduler starts on this value alone
   PORT = "8080"
   PROCESS_ROLE = "all"             # one process serves HTTP and runs the schedule
+
+  # THIS DEPLOYMENT IS A PRIVATE OWNER INSTITUTION, NOT A COMMERCIAL SERVICE.
+  #
+  # Nobody buys access here, so nothing about access is metered, sold, gated or
+  # expired. Without this the hourly entitlement sweep pauses the owner's own
+  # companies for having no subscription, operatingProduct() then drops them,
+  # and Foundry stops observing the companies it exists to operate.
+  #
+  # It touches that one axis only. Stripe, subscriptions, prices, MRR, revenue
+  # reconciliation and failed-payment handling all remain, because a private
+  # institution still operates businesses that bill their own customers. Spend
+  # ceilings, authority, consent, the kill-switch and every constitutional guard
+  # are untouched.
+  FOUNDRY_INSTANCE_POSTURE = "private_owner"
   TURSO_DATABASE_URL = "file:/data/foundry.db"   # on the volume below, not the image
 
   # COST AS A CONSTRAINT, NOT AN INTENTION.

@@ -27,6 +27,7 @@
 // "you withdrew permission" are different facts.
 // =============================================================================
 
+import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { productRecordLives, query } from '../../db/client.js';
 import { getTrialStatus } from './trial.js';
 
@@ -113,9 +114,24 @@ async function applyToRows(
 ): Promise<EntitlementSweep> {
   const paused: string[] = [];
   const resumed: string[] = [];
+
+  // A PRIVATE INSTITUTION HAS NOBODY TO BILL FOR ACCESS TO ITSELF.
+  //
+  // This sweep answers a commercial question — has this customer paid enough to
+  // keep acting — and in a private owner deployment that question has no
+  // subject. Left unasked, it pauses the owner's own companies within the hour,
+  // `operatingProduct()` drops them, and the institution stops observing the
+  // very companies it exists to operate. Nothing here is skipped or weakened
+  // for a paying customer: the posture is a property of the deployment, and the
+  // default is commercial.
+  //
+  // A previously paused product is resumed rather than left alone, because the
+  // pause was the wrong answer to a question that should not have been asked.
+  const privateInstitution = isPrivateOwnerInstance();
+
   for (const raw of rows) {
     const productId = String(raw.id);
-    const mayAct = entitledToAct({
+    const mayAct = privateInstitution || entitledToAct({
       tier: raw.tier as string | null,
       trialEndsAt: raw.trial_ends_at as string | null,
       paidThrough: raw.paid_through as string | null,
