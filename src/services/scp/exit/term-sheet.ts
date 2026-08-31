@@ -47,21 +47,32 @@ export interface TermSheetModel {
   created_at: string;
 }
 
-export interface MarketComparison {
-  assessment: 'founder_friendly' | 'market_standard' | 'investor_friendly';
-  explanation: string;
-  key_differences: string[];
-}
+// ─── Commonly cited terms ─────────────────────────────────────────────────────
+//
+// THIS IS NOT MARKET DATA AND FOUNDRY HAS NONE. It is a small fixed table of
+// terms commonly cited for these three rounds, written into the source. Nothing
+// samples term sheets, nothing dates these ranges, and nothing revises them.
+//
+// It was called MARKET_BENCHMARKS and every sentence built from it said "market
+// standard" — to the founder, and to the model in a prompt that then repeated
+// it back as fact. Renamed for what it is, and every sentence that cites it now
+// says where it came from.
+//
+// THERE IS NO FALLBACK ANY MORE. `?? COMMON_TERMS['seed']` meant a round type
+// with no entry was told SEED's numbers under its own name: "Market standard
+// for series_c: 15-25% dilution". The round type arrives from an unvalidated
+// form field into a column with no CHECK constraint, so that was reachable with
+// any string. A round this table does not cover now gets no comparison at all.
 
-// ─── Market benchmarks ────────────────────────────────────────────────────────
-
-const MARKET_BENCHMARKS: Record<string, {
+interface CommonTerms {
   typical_dilution_min: number;
   typical_dilution_max: number;
   standard_liq_pref: string;
   standard_anti_dilution: string;
   standard_board_seats: number;
-}> = {
+}
+
+const COMMON_TERMS: Record<string, CommonTerms> = {
   seed: {
     typical_dilution_min: 15,
     typical_dilution_max: 25,
@@ -108,11 +119,11 @@ export async function modelTermSheet(
   const new_dilution_pct = investor_ownership_pct;
   const founder_retention_pct = parseFloat((100 - new_dilution_pct).toFixed(2));
 
-  // Generate market commentary via Claude
-  const benchmark = MARKET_BENCHMARKS[round_type.toLowerCase()] ?? MARKET_BENCHMARKS['seed'];
+  const benchmark: CommonTerms | undefined = COMMON_TERMS[round_type.toLowerCase()];
 
-  const systemPrompt = `You are a venture capital term sheet advisor. Provide concise, accurate market context about fundraising terms.
-Be direct and founder-friendly. Keep response to 2-3 sentences.`;
+  const systemPrompt = `You are a venture capital term sheet advisor. Provide concise commentary on fundraising terms.
+Be direct and founder-friendly. Keep response to 2-3 sentences.
+You have no market data for this round beyond what the message states. Do not cite dilution ranges, valuations, or "market standard" figures of your own — describe what these specific terms mean for this founder.`;
 
   const userPrompt = `Analyze these ${round_type} round terms and briefly describe how they compare to market standard:
 
@@ -125,16 +136,26 @@ Be direct and founder-friendly. Keep response to 2-3 sentences.`;
 - Pro-rata rights: ${pro_rata_rights ? 'Yes' : 'No'}
 - Board seats: ${board_seats}
 
-Market standard for ${round_type}: ${benchmark.typical_dilution_min}-${benchmark.typical_dilution_max}% dilution, ${benchmark.standard_liq_pref} liquidation preference, ${benchmark.standard_board_seats} board seat(s).
+${benchmark
+  ? `Terms commonly cited for a ${round_type} (a fixed reference list, not measured market data): ${benchmark.typical_dilution_min}-${benchmark.typical_dilution_max}% dilution, ${benchmark.standard_liq_pref} liquidation preference, ${benchmark.standard_board_seats} board seat(s).`
+  : `No reference terms are on file for a ${round_type}. Do not compare these terms to a range.`}
 
-Is this founder-friendly, market standard, or investor-friendly? Explain in 2-3 sentences.`;
+Are these terms founder-friendly or investor-friendly, and why? Explain in 2-3 sentences. Say "commonly cited" rather than "market standard", and do not describe the comparison as market data.`;
 
   let market_context = '';
   try {
     const response = await callSonnet(systemPrompt, userPrompt, 300, productId);
     market_context = response.content;
   } catch {
-    market_context = `This ${round_type} round results in ${investor_ownership_pct}% dilution. Market standard for this stage is ${benchmark.typical_dilution_min}-${benchmark.typical_dilution_max}%. ${liquidation_preference === '1x_non_participating' ? 'The 1x non-participating liquidation preference is market standard.' : 'Review liquidation preference terms carefully.'}`;
+    market_context = [
+      `This ${round_type} round results in ${investor_ownership_pct}% dilution.`,
+      benchmark
+        ? `${benchmark.typical_dilution_min}-${benchmark.typical_dilution_max}% is the range commonly cited for this stage — a fixed reference, not a measurement of the current market.`
+        : `Foundry has no reference terms on file for a ${round_type}, so there is nothing here to compare it against.`,
+      liquidation_preference === '1x_non_participating'
+        ? 'A 1x non-participating liquidation preference is the term most commonly cited as standard.'
+        : 'Review the liquidation preference terms carefully.',
+    ].join(' ');
   }
 
   const id = nanoid();
@@ -205,95 +226,4 @@ export async function getTermSheetModels(productId: string): Promise<TermSheetMo
       created_at: row.created_at as string,
     };
   });
-}
-
-// ─── compareToMarketTerms ─────────────────────────────────────────────────────
-
-export async function compareToMarketTerms(
-  productId: string,
-  modelId: string
-): Promise<MarketComparison> {
-  const res = await query(
-    'SELECT * FROM term_sheet_models WHERE id=? AND product_id=?',
-    [modelId, productId]
-  );
-
-  if (res.rows.length === 0) {
-    return {
-      assessment: 'market_standard',
-      explanation: 'Term sheet not found.',
-      key_differences: [],
-    };
-  }
-
-  const model = res.rows[0] as Record<string, unknown>;
-  const roundType = (model.round_type as string).toLowerCase();
-  const benchmark = MARKET_BENCHMARKS[roundType] ?? MARKET_BENCHMARKS['seed'];
-  const dilution = model.new_dilution_pct as number;
-  const liqPref = model.liquidation_preference as string;
-  const antiDilution = model.anti_dilution as string;
-  const boardSeats = model.board_seats as number;
-
-  const differences: string[] = [];
-
-  // Dilution assessment
-  if (dilution < benchmark.typical_dilution_min - 3) {
-    differences.push(`Dilution (${dilution}%) is below market range of ${benchmark.typical_dilution_min}-${benchmark.typical_dilution_max}% — very founder-friendly`);
-  } else if (dilution > benchmark.typical_dilution_max + 3) {
-    differences.push(`Dilution (${dilution}%) exceeds typical ${roundType} range of ${benchmark.typical_dilution_min}-${benchmark.typical_dilution_max}%`);
-  }
-
-  // Liquidation preference
-  if (liqPref.includes('participating')) {
-    differences.push('Participating preferred is investor-friendly — converts to a tax on your exit proceeds');
-  } else if (liqPref === '1x_non_participating') {
-    differences.push('1x non-participating is market standard and founder-friendly');
-  } else if (liqPref.includes('2x') || liqPref.includes('3x')) {
-    differences.push(`${liqPref} liquidation preference is above market — pushes proceeds to investors before founders see returns`);
-  }
-
-  // Anti-dilution
-  if (antiDilution === 'full_ratchet') {
-    differences.push('Full ratchet anti-dilution is rare and heavily investor-friendly — negotiate to broad-based weighted average');
-  } else if (antiDilution === 'broad_based_weighted_avg') {
-    differences.push('Broad-based weighted average anti-dilution is market standard');
-  }
-
-  // Board seats
-  if (boardSeats > benchmark.standard_board_seats) {
-    differences.push(`${boardSeats} board seat(s) for a ${roundType} is above standard (typically ${benchmark.standard_board_seats})`);
-  }
-
-  // Determine overall assessment
-  let investorFriendlyCount = 0;
-  let founderFriendlyCount = 0;
-
-  if (dilution > benchmark.typical_dilution_max) investorFriendlyCount++;
-  if (dilution < benchmark.typical_dilution_min) founderFriendlyCount++;
-  if (liqPref.includes('participating') || liqPref.includes('2x')) investorFriendlyCount++;
-  if (liqPref === '1x_non_participating') founderFriendlyCount++;
-  if (antiDilution === 'full_ratchet') investorFriendlyCount++;
-  if (boardSeats > benchmark.standard_board_seats) investorFriendlyCount++;
-
-  let assessment: 'founder_friendly' | 'market_standard' | 'investor_friendly';
-  if (founderFriendlyCount > investorFriendlyCount) {
-    assessment = 'founder_friendly';
-  } else if (investorFriendlyCount > founderFriendlyCount) {
-    assessment = 'investor_friendly';
-  } else {
-    assessment = 'market_standard';
-  }
-
-  const explanation =
-    assessment === 'founder_friendly'
-      ? `These ${roundType} terms are founder-friendly — dilution is within or below market range and key protective provisions are reasonable.`
-      : assessment === 'investor_friendly'
-      ? `These ${roundType} terms lean investor-friendly — one or more provisions (liquidation preference, anti-dilution, or dilution) are above market standard for this stage.`
-      : `These ${roundType} terms are broadly market standard for this stage.`;
-
-  return {
-    assessment,
-    explanation,
-    key_differences: differences.length > 0 ? differences : ['Terms are broadly in line with market standard.'],
-  };
 }

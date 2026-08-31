@@ -21,10 +21,36 @@ import {
   runMultipleExitScenarios,
   type Stakeholder,
 } from '../../services/scp/exit/cap-table.js';
-import { modelTermSheet, getTermSheetModels, compareToMarketTerms } from '../../services/scp/exit/term-sheet.js';
+import { modelTermSheet, getTermSheetModels } from '../../services/scp/exit/term-sheet.js';
 import { requireTier } from '../../middleware/tier-gate.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const exitRoutes = new Hono<AuthEnv>();
+
+// EVERY ROUTE IN THIS ROUTER IS EXIT AND VALUATION MATERIAL.
+//
+// `team_members.can_view_financials` has existed since migration 010 and nothing read it.
+// That was survivable only because an invited member could not see the company
+// at all — the dashboard listed by `owner_id`. Now that membership makes the
+// company visible, this is the guard that was always supposed to be here.
+//
+// Router-level rather than per-route: a capability that has to be remembered
+// on each new handler is one that will be forgotten on one of them.
+// SCOPED TO THIS ROUTER'S OWN PATHS, NOT '*'.
+//
+// This router is mounted at '/', and in Hono a sub-app's middleware is merged
+// under its MOUNT PATH — so `use('*')` here applied to every path in the whole
+// application. It ran in front of the REST API, which answered
+// `{"error":"Unauthorized"}` to every request with a valid key, and in front of
+// the transcript webhooks, which did the same. Both are dead surfaces caused by
+// a capability check written for these pages.
+//
+// Owners were unaffected (`memberMay` short-circuits for the owner) and
+// `can_view_financials` defaults TRUE for members, so the damage landed exactly
+// where there is no session at all: machine-facing callers.
+exitRoutes.use('/exit', requireCompanyCapability('can_view_financials'));
+exitRoutes.use('/exit/*', requireCompanyCapability('can_view_financials'));
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -88,6 +114,12 @@ exitRoutes.get('/exit', requireTier('investor_layer'), async (c) => {
             <span class="score-label">/ 10</span>
             ${readinessBadge(maScore.overall_score)}
           </div>
+          ${maScore.customer_concentration_score === null ? html`
+            <p class="text-muted text-sm" style="margin:0.35rem 0 0;">
+              Scored over four of five dimensions: Foundry knows of no paying
+              customers for this company, so customer concentration is not part
+              of this number.
+            </p>` : ''}
           ${maScore.estimated_multiple_range ? html`
             <div class="multiple-range">
               <span class="text-muted">Estimated multiple:</span>
@@ -105,8 +137,10 @@ exitRoutes.get('/exit', requireTier('investor_layer'), async (c) => {
           ].map(([label, score]) => html`
             <div class="dimension-row">
               <span class="dimension-label">${label}</span>
-              ${scoreBar(score as number)}
-              <span class="dimension-score">${(score as number).toFixed(1)}</span>
+              ${score === null
+                ? html`<span class="dimension-score text-muted">not scored</span>`
+                : html`${scoreBar(score as number)}
+              <span class="dimension-score">${(score as number).toFixed(1)}</span>`}
             </div>
           `)}
         </div>
@@ -411,6 +445,15 @@ exitRoutes.get('/exit/cap-table', async (c) => {
             <input type="text" name="scenario_name" class="form-control" required placeholder="Current cap table" />
           </div>
           <div class="form-group">
+            <label>Exit valuation to save against (optional, $)</label>
+            <input type="number" name="exit_valuation" class="form-control" placeholder="50000000" />
+            <p class="text-muted text-xs" style="margin-top:4px">
+              The table below models six exit sizes either way. This is the one
+              the saved scenario keeps its proceeds for — without it the saved
+              row holds the stakeholders and nothing else.
+            </p>
+          </div>
+          <div class="form-group">
             <label>Stakeholders (JSON array)</label>
             <textarea name="stakeholders_json" class="form-control" rows="8" required placeholder='[
   {"name":"Founder A","type":"founder","shares":3000000,"options":0,"invested":0,"preference_multiple":1,"is_participating":false,"vested_pct":100},
@@ -426,14 +469,20 @@ exitRoutes.get('/exit/cap-table', async (c) => {
       <div class="section">
         <h2>Saved Scenarios</h2>
         <table class="data-table">
-          <thead><tr><th>Name</th><th>Exit Valuation</th><th>Founder Proceeds</th><th>Dilution</th><th>Created</th></tr></thead>
+          <thead><tr><th>Name</th><th>Exit Valuation</th><th>Founder Proceeds</th><th>Investor share of proceeds</th><th>Created</th></tr></thead>
           <tbody>
             ${scenarios.map(s => html`
               <tr>
                 <td>${s.scenario_name}</td>
-                <td>${s.exit_valuation ? '$' + (Number(s.exit_valuation) / 1_000_000).toFixed(1) + 'M' : '—'}</td>
-                <td>${s.founder_proceeds ? '$' + (Number(s.founder_proceeds) / 1_000).toFixed(0) + 'K' : '—'}</td>
-                <td>${s.total_dilution_pct ? Number(s.total_dilution_pct).toFixed(1) + '%' : '—'}</td>
+                <td>${s.exit_valuation === null
+                  ? html`<span class="text-muted">not modelled</span>`
+                  : '$' + (Number(s.exit_valuation) / 1_000_000).toFixed(1) + 'M'}</td>
+                <td>${s.founder_proceeds === null
+                  ? html`<span class="text-muted">not modelled</span>`
+                  : '$' + (Number(s.founder_proceeds) / 1_000).toFixed(0) + 'K'}</td>
+                <td>${s.investor_proceeds_pct === null
+                  ? html`<span class="text-muted">not modelled</span>`
+                  : Number(s.investor_proceeds_pct).toFixed(1) + '%'}</td>
                 <td class="text-muted text-xs">${String(s.created_at).slice(0, 10)}</td>
               </tr>
             `)}
@@ -462,8 +511,20 @@ exitRoutes.post('/exit/cap-table', async (c) => {
   }
 
   const scenarioName = String(body['scenario_name'] ?? 'Scenario');
+
+  // THE SAVED ROW USED TO HOLD NOTHING BUT NAMES. `saveCapTableScenario` fills
+  // `founder_proceeds` and `investor_proceeds_pct` only when it is given an
+  // exit valuation to model against, and this call never passed one — so both
+  // columns were NULL in every row ever written, and the Saved Scenarios table
+  // advertised two numbers it could not produce.
+  const rawValuation = parseFloat(String(body['exit_valuation'] ?? ''));
+  const exitValuation = Number.isFinite(rawValuation) && rawValuation > 0
+    ? rawValuation : undefined;
+
   const exitScenarios = await runMultipleExitScenarios(ctx.productId, stakeholders).catch(() => []);
-  await saveCapTableScenario(ctx.productId, { scenario_name: scenarioName, stakeholders }).catch(() => {});
+  await saveCapTableScenario(ctx.productId, {
+    scenario_name: scenarioName, stakeholders, exit_valuation: exitValuation,
+  }).catch(() => {});
 
   const content = html`
     <div class="page-header">
@@ -471,17 +532,28 @@ exitRoutes.post('/exit/cap-table', async (c) => {
       <h1>${scenarioName} — Exit Proceeds</h1>
     </div>
     <table class="data-table" style="max-width:600px">
-      <thead><tr><th>Exit Valuation</th><th>Founder Proceeds</th><th>Founder %</th></tr></thead>
+      <thead><tr><th>Exit Valuation</th><th>Founder Proceeds</th><th>Founder %</th><th>Converts to common</th></tr></thead>
       <tbody>
         ${exitScenarios.map(s => html`
           <tr>
             <td><strong>${s.label}</strong></td>
             <td>$${(s.founder_proceeds / 1_000_000).toFixed(2)}M</td>
             <td>${s.founder_pct.toFixed(1)}%</td>
+            <td class="text-muted text-sm">${s.converting_investors.length > 0
+              ? s.converting_investors.join(', ')
+              : '—'}</td>
           </tr>
         `)}
       </tbody>
     </table>
+    <p class="text-muted text-sm" style="max-width:600px;margin-top:10px">
+      A non-participating investor takes whichever is larger: their liquidation
+      preference, or their shares converted to common. The last column names the
+      ones who do better converting at that valuation — which is why the
+      founder's share falls as the exit grows rather than approaching 100%.
+      Not modelled: participation caps, seniority stacks, accrued dividends,
+      option-pool refresh at close.
+    </p>
     <div style="margin-top:16px">
       <a href="/exit/cap-table" class="btn btn-secondary">Back</a>
     </div>
@@ -605,8 +677,14 @@ exitRoutes.post('/exit/term-sheet', async (c) => {
 
     ${result.market_context ? html`
       <div class="insight-card" style="max-width:700px;margin-top:16px">
-        <h3>Market Context</h3>
+        <h3>Commentary</h3>
         <p class="text-muted">${result.market_context}</p>
+        <p class="text-muted text-xs" style="margin-top:8px">
+          Written by a model from the terms above and a fixed reference list of
+          commonly cited terms. Foundry has no market data feed: nothing here
+          samples current term sheets, and no range on this page is a
+          measurement. It was headed "Market Context".
+        </p>
       </div>
     ` : ''}
 

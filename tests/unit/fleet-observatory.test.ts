@@ -4,21 +4,31 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { getFleetOverview } from '../../src/services/fleet/observatory.js';
 import { nanoid } from 'nanoid';
 
 beforeAll(async () => {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT, owner_id TEXT, status TEXT DEFAULT 'active', scp_status TEXT DEFAULT 'active');
-    CREATE TABLE IF NOT EXISTS agent_instances (id TEXT PRIMARY KEY, product_id TEXT, agent_name TEXT, display_name TEXT, status TEXT, last_run_at TEXT, next_run_at TEXT, domain_health_score INTEGER);
-    CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, product_id TEXT, status TEXT);
-  `);
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
 });
 
 beforeEach(async () => {
-  await executeRaw('DELETE FROM products');
+  // CHILDREN BEFORE PARENTS. The real schema has foreign keys, and not all of
+  // them cascade — so deleting products while its agent rows and decisions
+  // still exist raises. The hand-written stand-in had no keys at all, which is
+  // why the order never mattered here before.
   await executeRaw('DELETE FROM agent_instances');
   await executeRaw('DELETE FROM decisions');
+  await executeRaw('DELETE FROM products');
+  // Real products rows have an owner; the stand-in did not, so every product
+  // in this file belonged to a founder that does not exist.
+  await query(
+    `INSERT OR IGNORE INTO founders (id, clerk_user_id, email)
+     VALUES ('f1','clerk_f1','f1@test.local'), ('f2','clerk_f2','f2@test.local'),
+            ('other','clerk_other','other@test.local')`);
 });
 
 async function addProduct(id: string, owner: string, name: string, status = 'active'): Promise<void> {
@@ -39,8 +49,11 @@ describe('getFleetOverview', () => {
     await addAgent('p1', 'atlas', 'active', 80);
     await addAgent('p1', 'forge', 'paused', 30);
     await addAgent('p2', 'oracle', 'active', 60);
-    await query(`INSERT INTO decisions (id, product_id, status) VALUES (?, 'p1', 'pending')`, [nanoid()]);
-    await query(`INSERT INTO decisions (id, product_id, status) VALUES (?, 'p1', 'approved')`, [nanoid()]);
+    for (const status of ['pending', 'approved']) {
+      await query(
+        `INSERT INTO decisions (id, product_id, what, why_now, status)
+         VALUES (?, 'p1', 'ship it', 'the window is now', ?)`, [nanoid(), status]);
+    }
 
     const fleet = await getFleetOverview('f1');
     expect(fleet.totals.products).toBe(2);

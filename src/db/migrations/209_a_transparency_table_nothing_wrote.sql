@@ -1,0 +1,27 @@
+-- =============================================================================
+-- Migration 209: `agent_run_details` is dropped
+--
+-- The Agent Transparency pages read this table for cost per agent, recent runs,
+-- per-run detail, prompt previews and a domain health score. Nothing has ever
+-- written a row into it. The three functions that would have — `startRunRecord`,
+-- `completeRunRecord`, `failRunRecord` — had no caller anywhere in the codebase:
+-- not the agents, not the orchestrator, not a job, not a test.
+--
+-- So every table on every one of those pages was empty for every company, and
+-- said so in the language of a company with no history: "No run data yet. Agents
+-- will appear here once they complete their first run." The agents run daily.
+--
+-- The runs are recorded. `agents/base.ts` inserts an `agent_sessions` row when a
+-- run starts and updates it on completion or failure, with status, tokens, cost,
+-- error and the agent's briefing contribution. One concept, two tables, and the
+-- surface pointed at the one with no writer — the same shape as migrations 197
+-- and 206. The reads now go to `agent_sessions`.
+--
+-- WHAT IS LOST BY DROPPING IT: nothing. The table has no rows anywhere it has
+-- ever been migrated, because it has no writer. What the pages showed FROM it —
+-- prompt previews, a context summary, an input/output token split, a per-run
+-- health score — was never available either, and those sections are gone from
+-- the pages rather than reimplemented against a store that does not have them.
+-- =============================================================================
+
+DROP TABLE IF EXISTS agent_run_details;

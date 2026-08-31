@@ -16,6 +16,23 @@ export type ConfigType =
   | 'error_recovery'
   | 'shared_knowledge';
 
+/**
+ * THE VOCABULARY WAS DECLARED AND NEVER ASKED.
+ *
+ * `ConfigType` and `CONFIG_TYPES` have both existed since evolution v2, and
+ * nothing consulted either: `applyConfigChange` takes `configType: string`, and
+ * the value reaching it comes from a language model. The prompt asks for one of
+ * six words and adds "configType must be one of the 6 valid types" — a
+ * constraint stated in English, to the model, and enforced nowhere.
+ *
+ * `agent_configs.config_type` carries a CHECK for the same six, so a seventh
+ * answer aborts the INSERT. That is the smaller half of the problem; see
+ * `classifyEvolutionChange` for the larger one.
+ */
+export function isConfigType(value: unknown): value is ConfigType {
+  return typeof value === 'string' && (CONFIG_TYPES as string[]).includes(value);
+}
+
 export const CONFIG_TYPES: ConfigType[] = [
   'persona',
   'domain_knowledge',
@@ -37,52 +54,6 @@ export interface ConfigHistoryEntry {
   rationale: string | null;
   session_id: string | null;
   gate_scores: Record<string, number> | null;
-}
-
-// ─── 12 SCP Agents ───────────────────────────────────────────────────────────
-
-const AGENT_NAMES = [
-  'Atlas',       // CTO — code quality, architecture, security, dependencies, deployments
-  'Meridian',    // CPO — product strategy, roadmap, feature prioritization
-  'Beacon',      // CMO — marketing strategy, positioning, content
-  'Forge',       // COO — operations, processes, efficiency
-  'Nexus',       // CFO — financial modeling, pricing, revenue optimization
-  'Catalyst',    // CRO — sales, conversion, revenue growth
-  'Compass',     // CHRO — culture, hiring, team dynamics
-  'Oracle',      // Chief Data Officer — analytics, metrics, insights
-  'Sentinel',    // Chief Security Officer — security, compliance, risk
-  'Vanguard',    // Chief Strategy Officer — competitive analysis, market positioning
-  'Echo',        // Chief Customer Officer — support, success, retention
-  'Prism',       // Chief Design Officer — UX, design, accessibility
-];
-
-// ─── Starter content generators ───────────────────────────────────────────────
-
-function getStarterContent(agentName: string, configType: ConfigType): string {
-  const role = getAgentRole(agentName);
-
-  switch (configType) {
-    case 'persona':
-      return `${agentName} is the ${role} of this company. ${agentName} is analytical, direct, and focused on high-impact decisions. ${agentName} provides actionable recommendations backed by data and clear reasoning.`;
-
-    case 'domain_knowledge':
-      return getDomainKnowledge(agentName, role);
-
-    case 'task_patterns':
-      return `${agentName} prioritizes tasks by business impact. ${agentName} breaks complex problems into actionable steps. ${agentName} escalates decisions with high uncertainty to human review.`;
-
-    case 'tool_preferences':
-      return `${agentName} prefers structured data formats for analysis. ${agentName} uses concise summaries for communication. ${agentName} documents reasoning for all significant decisions.`;
-
-    case 'error_recovery':
-      return `When ${agentName} encounters ambiguous data, it requests clarification before proceeding. When ${agentName} hits a failure, it logs the error, applies the most conservative fallback, and flags for human review.`;
-
-    case 'shared_knowledge':
-      return `${agentName} shares relevant findings with other agents through structured summaries. ${agentName} avoids duplicating analysis already performed by peer agents.`;
-
-    default:
-      return '';
-  }
 }
 
 function getAgentRole(agentName: string): string {
@@ -271,44 +242,6 @@ export async function getConfigHistory(
       gate_scores: r.gate_scores ? JSON.parse(r.gate_scores as string) as Record<string, number> : null,
     };
   });
-}
-
-/**
- * Seed initial config stubs for all 12 agents for a product
- */
-export async function seedAgentConfigs(productId: string): Promise<void> {
-  const now = new Date().toISOString();
-
-  for (const agentName of AGENT_NAMES) {
-    for (const configType of CONFIG_TYPES) {
-      // Check if already exists
-      const existing = await query(
-        'SELECT id FROM agent_configs WHERE product_id = ? AND agent_name = ? AND config_type = ?',
-        [productId, agentName, configType]
-      );
-
-      if (existing.rows.length > 0) continue;
-
-      const content = getStarterContent(agentName, configType);
-      const lineCount = content.split('\n').filter(l => l.trim().length > 0).length;
-      const wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
-      const configId = nanoid();
-
-      // Insert initial config
-      await query(
-        `INSERT INTO agent_configs (id, product_id, agent_name, config_type, content, version, parent_version, line_count, word_count, updated_at, updated_by)
-         VALUES (?, ?, ?, ?, ?, 1, NULL, ?, ?, ?, 'system')`,
-        [configId, productId, agentName, configType, content, lineCount, wordCount, now]
-      );
-
-      // Write to history as version 1
-      await query(
-        `INSERT INTO agent_config_history (id, product_id, agent_name, config_type, version, content, changed_at, changed_by, rationale, session_id, gate_scores)
-         VALUES (?, ?, ?, ?, 1, ?, ?, 'system', 'Initial seed', NULL, NULL)`,
-        [nanoid(), productId, agentName, configType, content, now]
-      );
-    }
-  }
 }
 
 /**

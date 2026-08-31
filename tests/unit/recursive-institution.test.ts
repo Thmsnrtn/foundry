@@ -191,7 +191,13 @@ describe('recursive institution: Foundry is an ordinary company', () => {
       const source = readFileSync(path, 'utf8');
       return /name\s*=\s*['"]Foundry['"]/.test(source)
         || /product_id\s*=\s*['"]foundry/i.test(source)
-        || /FOUNDRY_PRODUCT|isFoundryProduct|isFoundryCompany|isFoundryTenant/i.test(source);
+        || /FOUNDRY_PRODUCT|isFoundryProduct|isFoundryCompany|isFoundryTenant/i.test(source)
+        // Migration 123 gave Foundry a canonical identity so the *platform*
+        // paths stop guessing at a display name. The kernel must still not be
+        // able to ask the question at all: resolving canonical identity inside
+        // the institution would reintroduce exactly the special case this
+        // invariant exists to forbid.
+        || /system_identities|resolveFoundryProductId|resolveSystemIdentity|FOUNDRY_IDENTITY_KEY/.test(source);
     });
     expect(selfAware).toEqual([]);
   });
@@ -203,5 +209,65 @@ describe('recursive institution: Foundry is an ordinary company', () => {
     expect(CONSTITUTIONAL_PATHS).toContain('src/db/migrations/');
     expect(isConstitutionalPath('src/db/migrations/120_development_authority.sql')).toBe(true);
     expect(isConstitutionalPath('src/db/migrations/999_widen_the_ring.sql')).toBe(true);
+  });
+});
+
+// =============================================================================
+// The new billing rules must not have quietly exempted Foundry.
+//
+// Two changes this session gate capability on a company's billing state: the
+// governed-effect authority read requires `scp_status <> 'paused'`, and the
+// hourly entitlement sweep pauses any company whose owner has no paid tier and
+// no live trial.
+//
+// Foundry's own company is a company. If either rule had been written with an
+// "unless it is us" branch — or if the sweep skipped the canonical product, or
+// if the effect read exempted it — that would be `recursive_privilege_absence`
+// broken, and it would have been broken by a change made for a completely
+// unrelated reason. Which is how that dimension actually fails in practice: not
+// by someone deciding Foundry deserves an exemption, but by a rule written for
+// customers that nobody thought to apply to the platform.
+//
+// The correct answer is that the ordinary rule applies. If Foundry's own
+// company is not entitled, its recursive operation stops, and the fix is to
+// make it entitled by ordinary means — not to add a branch.
+// =============================================================================
+
+describe('the entitlement rules reach Foundry too', () => {
+  it('contains no branch that asks whether the subject is Foundry', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    for (const rel of [
+      'src/services/billing/entitlement.ts',
+      'src/services/institution/responsibility-assisted-email.ts',
+    ]) {
+      const source = readFileSync(resolve(__dirname, '../..', rel), 'utf8')
+        .replace(/^[ \t]*\/\*[\s\S]*?\*\//gm, ' ')
+        .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
+      expect(source, `${rel} must not know who Foundry is`)
+        .not.toMatch(/resolveFoundryProductId|FOUNDRY_PRODUCT|isFoundry/i);
+    }
+  });
+
+  it('pauses the platform own company on exactly the same terms', async () => {
+    const { sweepEntitlements } = await import('../../src/services/billing/entitlement.js');
+    await query(
+      `INSERT INTO founders (id,clerk_user_id,email,tier) VALUES ('ri_self_owner','ri_sc','self@example.com',NULL)`,
+      []);
+    await query(
+      `INSERT INTO products (id,name,owner_id,status,scp_status)
+       VALUES ('ri_self','Foundry','ri_self_owner','active','active')`, []);
+
+    const { paused } = await sweepEntitlements();
+    expect(paused,
+      'the platform is not exempt from a rule written for its customers')
+      .toContain('ri_self');
+  });
+
+  it('and lifts it the same way, with no special path', async () => {
+    const { sweepEntitlements } = await import('../../src/services/billing/entitlement.js');
+    await query("UPDATE founders SET tier='investor_ready' WHERE id='ri_self_owner'", []);
+    const { resumed } = await sweepEntitlements();
+    expect(resumed).toContain('ri_self');
   });
 });

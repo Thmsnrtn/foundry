@@ -8,7 +8,7 @@ import { query, insertAuditLog } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import { runAllGates } from './gates.js';
-import { applyConfigChange, rollbackConfig } from './agent-config.js';
+import { applyConfigChange, rollbackConfig, isConfigType, type ConfigType } from './agent-config.js';
 import { isBlocked, type ChangeCategory } from '../discipline/freeze-periods.js';
 import { queueProposal } from '../discipline/proposals-queue.js';
 import { logger } from '../logger.js';
@@ -279,12 +279,31 @@ async function getSessionCount(productId: string, agentName: string): Promise<nu
  *     the agent thinks
  */
 export function classifyEvolutionChange(
-  configType: string,
+  configType: ConfigType,
   isCorrection: boolean
 ): ChangeCategory {
-  if (isCorrection) return 'correction';
-  if (configType === 'behavioral_constraints') return 'tightening';
-  return 'prompt_refinement';
+  // TWO VOCABULARIES THAT SHARE NOT ONE WORD.
+  //
+  // This used to return 'tightening' for `configType === 'behavioral_constraints'`,
+  // and took a `string` so it could. `agent_configs.config_type` permits six
+  // values — persona, domain_knowledge, task_patterns, tool_preferences,
+  // error_recovery, shared_knowledge — and 'behavioral_constraints' is not one
+  // of them, nor were 'system_prompt', 'domain_context' or
+  // 'system_prompt_core', which the test exercised. The classifier and the
+  // column disagreed about what a config type IS, completely.
+  //
+  // That mattered because 'tightening' is in the freeze gate's `alwaysAllowed`
+  // list. The word arrived from a language model, chose a category the freeze
+  // never blocks, and only thirty lines later would the column have refused it
+  // — so a freeze could be answered on a value that could not exist.
+  //
+  // No STORABLE config type is a constraint addition: a type names which part
+  // of an agent's configuration changed, never which direction. So the honest
+  // mapping over the real six is correction or prompt_refinement, and an
+  // evolution config change is no longer exempt from a freeze on the strength
+  // of its type name. The parameter is the union now, so the next attempt to
+  // classify a word from outside it does not compile.
+  return isCorrection ? 'correction' : 'prompt_refinement';
 }
 
 // ─── Main Evolution Function ───────────────────────────────────────────────────
@@ -371,6 +390,22 @@ export async function evolveAgent(session: EvolutionSession): Promise<EvolutionR
     });
 
     if (validationResult.approved) {
+      // A WORD THE MODEL CHOSE, ASKED BEFORE IT IS BELIEVED.
+      //
+      // `proposed.configType` is a language model's answer, and everything
+      // below acts on it: it selects a freeze category thirty lines before
+      // `agent_configs.config_type` would refuse it. An answer outside the
+      // vocabulary bought a decision from the freeze gate and then failed to
+      // store, so the control was consulted and answered on a value that could
+      // never have existed. Refusing here is the only place that ordering is
+      // safe.
+      if (!isConfigType(proposed.configType)) {
+        logger.warn(
+          `${agentName}/${productId}: evolution proposed a config type that is not one — ` +
+          `${JSON.stringify(proposed.configType).slice(0, 60)}`);
+        continue;
+      }
+
       // V3.1 Layer A: architecture freeze gate.
       // Classify the change and check freeze before applying. Tightening
       // (constraint additions) and founder corrections always pass; other

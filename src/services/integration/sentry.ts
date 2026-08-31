@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { storeEvent, getIntegration } from './fabric.js';
+import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export async function syncSentryEvents(productId: string): Promise<{ synced: num
     return { synced: 0 };
   }
 
-  const authToken = integration.config_json.auth_token as string | undefined;
+  const authToken = (await getIntegrationCredentials(productId, 'sentry')).auth_token;
   const orgSlug = integration.config_json.org_slug as string | undefined;
   const projectSlug = integration.config_json.project_slug as string | undefined;
 
@@ -47,13 +47,19 @@ export async function syncSentryEvents(productId: string): Promise<{ synced: num
   let synced = 0;
 
   try {
-    // Fetch open issues
+    // Fetch open issues. `limit` is what makes the count below a floor rather
+    // than a total, and the field names say which — the same correction the
+    // GitHub summaries needed, for the same reason: this row is read by
+    // Sentinel, and "25 unresolved issues" and "at least 25" are different
+    // things to tell an agent reasoning about whether a system is in trouble.
+    const ISSUE_LIMIT = 100;
     const issues = await sentryFetch<SentryIssue[]>(
-      `/projects/${orgSlug}/${projectSlug}/issues/?query=is:unresolved&limit=25`,
+      `/projects/${orgSlug}/${projectSlug}/issues/?query=is:unresolved&limit=${ISSUE_LIMIT}`,
       authToken
     );
 
     if (issues) {
+      const truncated = issues.length >= ISSUE_LIMIT;
       const criticalIssues = issues.filter(i =>
         i.level === 'critical' || i.level === 'fatal'
       );
@@ -64,8 +70,11 @@ export async function syncSentryEvents(productId: string): Promise<{ synced: num
         actor_type: 'project',
         actor_id: `${orgSlug}/${projectSlug}`,
         data: {
-          open_count: issues.length,
-          critical_count: criticalIssues.length,
+          ...(truncated
+            ? { open_count_at_least: issues.length, open_page_truncated: true }
+            : { open_count: issues.length, open_page_truncated: false }),
+          // Counted within the page either way, and named so.
+          critical_count_in_page: criticalIssues.length,
           top_error: issues[0]?.title ?? null,
         },
       });
@@ -123,6 +132,8 @@ export async function syncSentryEvents(productId: string): Promise<{ synced: num
 export async function getSentrySummary(productId: string): Promise<{
   connected: boolean;
   openIssues: number | null;
+  /** True when `openIssues` is a floor from a truncated page, not a total. */
+  openIssuesIsFloor: boolean;
   criticalIssues: number | null;
   errorRate24h: number | null;
   releaseHealth: string | null;
@@ -132,6 +143,7 @@ export async function getSentrySummary(productId: string): Promise<{
     return {
       connected: false,
       openIssues: null,
+      openIssuesIsFloor: false,
       criticalIssues: null,
       errorRate24h: null,
       releaseHealth: null,
@@ -147,14 +159,23 @@ export async function getSentrySummary(productId: string): Promise<{
   );
 
   let openIssues: number | null = null;
+  let openIssuesIsFloor = false;
   let criticalIssues: number | null = null;
   let errorRate24h: number | null = null;
 
   for (const row of eventsResult.rows as Record<string, unknown>[]) {
     const data = (() => { try { return JSON.parse(row.data_json as string || '{}'); } catch { return {}; } })();
     if (row.event_type === 'error_summary') {
-      openIssues = Number(data.open_count) || null;
-      criticalIssues = Number(data.critical_count) || null;
+      // A floor is still worth having, and losing it silently would have been
+      // the cost of naming it honestly upstream. `openIssuesIsFloor` travels
+      // with the number so a caller can say "at least" rather than implying a
+      // total it does not have. `critical_count_in_page` is always page-bound;
+      // its old name said otherwise.
+      const exact = data.open_count;
+      const floor = data.open_count_at_least;
+      openIssues = exact != null ? Number(exact) : floor != null ? Number(floor) : null;
+      openIssuesIsFloor = exact == null && floor != null;
+      criticalIssues = Number(data.critical_count_in_page) || null;
     }
     if (row.event_type === 'error_rate') {
       errorRate24h = Number(data.rate_24h) || null;
@@ -173,7 +194,7 @@ export async function getSentrySummary(productId: string): Promise<{
     }
   }
 
-  return { connected: true, openIssues, criticalIssues, errorRate24h, releaseHealth };
+  return { connected: true, openIssues, openIssuesIsFloor, criticalIssues, errorRate24h, releaseHealth };
 }
 
 // ─── Internal API helpers ─────────────────────────────────────────────────────

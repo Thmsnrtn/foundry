@@ -13,13 +13,14 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { foundryJudgementTestedSql } from '../decisions/foundry-proposed.js';
 
 export const TRUST_MIN_SAMPLE = 8;      // no proposals on thin evidence
 export const TRUST_BAR = 0.8;           // 80% positive outcomes to earn a gate
 
 export interface CategoryTrust {
   category: string;
-  decided: number;               // founder-decided, outcome recorded
+  decided: number;               // decisions that tested Foundry's judgement, outcome recorded
   positive: number;
   positiveRate: number | null;   // null below any evidence
   currentMinGate: number | null; // the lowest gate seen in this category
@@ -32,6 +33,18 @@ export interface TrustLedger {
 }
 
 export async function getTrustLedger(productId: string): Promise<TrustLedger> {
+  // `decided_by = 'founder'` SAYS WHO RESOLVED THE ROW, NOT WHO PROPOSED IT.
+  // That was the only filter here, under a header promising a track record of
+  // "founder-approved agent proposals". Founder-authored decisions land in the
+  // same table with the same category and gate — Ask Foundry and the mobile app
+  // both insert them — so a founder who dictates their own strategic calls,
+  // resolves them, and records good outcomes crossed TRUST_MIN_SAMPLE at
+  // TRUST_BAR on their OWN judgment, and was then shown a proposal saying
+  // Foundry had earned the gate. A legitimacy the query could not support,
+  // offered at the moment the founder decides whether to grant authority.
+  //
+  // The rule lives in `decisions/foundry-proposed.ts` because three places ask
+  // it and all three decide how much authority Foundry gets.
   const rows = await query(
     `SELECT category,
             COUNT(*) AS decided,
@@ -39,9 +52,9 @@ export async function getTrustLedger(productId: string): Promise<TrustLedger> {
             MIN(gate) AS min_gate
      FROM decisions
      WHERE product_id = ?
-       AND decided_by = 'founder'
        AND status = 'approved'
        AND outcome_valence IS NOT NULL
+       AND ${foundryJudgementTestedSql()}
      GROUP BY category`,
     [productId],
   );

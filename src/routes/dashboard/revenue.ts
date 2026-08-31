@@ -13,8 +13,34 @@ import { mrrDecomposition, metricsGrid } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
 import { reportMetricsSchema, validate } from '../../lib/validation.js';
 import { nanoid } from 'nanoid';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const revenueRoutes = new Hono<AuthEnv>();
+
+// EVERY ROUTE IN THIS ROUTER IS THE COMPANY’S REVENUE.
+//
+// `team_members.can_view_financials` has existed since migration 010 and nothing read it.
+// That was survivable only because an invited member could not see the company
+// at all — the dashboard listed by `owner_id`. Now that membership makes the
+// company visible, this is the guard that was always supposed to be here.
+//
+// Router-level rather than per-route: a capability that has to be remembered
+// on each new handler is one that will be forgotten on one of them.
+// SCOPED TO THIS ROUTER'S OWN PATHS, NOT '*'.
+//
+// This router is mounted at '/', and in Hono a sub-app's middleware is merged
+// under its MOUNT PATH — so `use('*')` here applied to every path in the whole
+// application. It ran in front of the REST API, which answered
+// `{"error":"Unauthorized"}` to every request with a valid key, and in front of
+// the transcript webhooks, which did the same. Both are dead surfaces caused by
+// a capability check written for these pages.
+//
+// Owners were unaffected (`memberMay` short-circuits for the owner) and
+// `can_view_financials` defaults TRUE for members, so the damage landed exactly
+// where there is no session at all: machine-facing callers.
+revenueRoutes.use('/products/:id/revenue', requireCompanyCapability('can_view_financials'));
+revenueRoutes.use('/products/:id/revenue/*', requireCompanyCapability('can_view_financials'));
+
 
 revenueRoutes.get('/products/:id/revenue', async (c) => {
   const founder = c.get('founder');
@@ -47,11 +73,11 @@ revenueRoutes.get('/products/:id/revenue', async (c) => {
           <h3>Revenue Summary</h3>
           <div class="metrics-grid">
             <div class="metric-card">
-              <span class="metric-value">$${(totalMrr / 100).toFixed(0)}</span>
-              <span class="metric-label">Total MRR</span>
+              <span class="metric-value">${totalMrr === null ? 'Not reported' : `$${(totalMrr / 100).toFixed(0)}`}</span>
+              <span class="metric-label">MRR</span>
             </div>
             <div class="metric-card">
-              <span class="metric-value" style="color:${mrrHealth.indicator === 'red' ? '#dc2626' : mrrHealth.indicator === 'yellow' ? '#d97706' : '#059669'}">${mrrHealth.value > 0 ? mrrHealth.value.toFixed(2) : '—'}</span>
+              <span class="metric-value" style="color:${mrrHealth.indicator === 'red' ? '#dc2626' : mrrHealth.indicator === 'yellow' ? '#d97706' : mrrHealth.indicator === 'unknown' ? '#64748b' : '#059669'}">${mrrHealth.value === null ? '—' : mrrHealth.value.toFixed(2)}</span>
               <span class="metric-label">Health Ratio</span>
             </div>
           </div>
@@ -125,7 +151,7 @@ curl -X POST ${process.env.APP_URL ?? 'https://foundry.dev'}/api/v1/products/${p
   -H "Content-Type: application/json" \\
   -d '{"new_mrr_cents": 9900, "churned_mrr_cents": 0, "signups_7d": 12, "active_users": 320}'
       </code>
-      <p style="font-size:0.8rem;color:#9ca3af;margin-top:0.5rem;">Create an API key via <code>POST /api/v1/settings/api-keys</code> (authenticated) — a Settings UI for keys is coming.</p>
+      <p style="font-size:0.8rem;color:#9ca3af;margin-top:0.5rem;">Issue an API key in <a href="/settings">Settings</a>, choosing exactly what it may do and when it expires.</p>
     </div>
   `;
 

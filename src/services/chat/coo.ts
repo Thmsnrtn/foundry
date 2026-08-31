@@ -107,7 +107,7 @@ export async function sendMessage(
   const model = isStrategic ? callOpus : callSonnet;
   const maxTokens = isStrategic ? 4096 : 2048;
 
-  const response = await model(systemPrompt, userPrompt, maxTokens);
+  const response = await model(systemPrompt, userPrompt, maxTokens, productId);
 
   // Parse any action proposals from the response
   const actions = extractActionProposals(response.content);
@@ -188,7 +188,6 @@ export async function sendProactiveMessage(
   founderId: string,
   productId: string,
   message: string,
-  channel?: string
 ): Promise<void> {
   // Find or create a session
   let sessionResult = await query(
@@ -208,23 +207,14 @@ export async function sendProactiveMessage(
     [nanoid(), sessionId, message]
   );
 
-  // Deliver via webhook if configured
-  if (channel) {
-    const webhook = await query(
-      `SELECT webhook_url, config FROM chat_webhooks WHERE founder_id = ? AND channel = ? AND active = 1`,
-      [founderId, channel]
-    );
-    const wh = webhook.rows[0] as Record<string, string> | undefined;
-    if (wh?.webhook_url) {
-      try {
-        await fetch(wh.webhook_url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: message, channel: 'foundry-coo' }),
-        });
-      } catch { /* Fire and forget */ }
-    }
-  }
+  // WEBHOOK DELIVERY REMOVED. This read `chat_webhooks` for a founder-configured
+  // destination and posted the COO's message to it. Nothing anywhere wrote a row
+  // into that table — there was no settings page, no API, no onboarding step —
+  // so the branch never once fired. The consuming half shipped and the
+  // producing half never did, which reads as a delivery channel and behaves as
+  // an absence. The message is still recorded in `chat_messages`, which is where
+  // the founder actually reads it.
+
 }
 
 // ─── Internal Helpers ───────────────────────────────────────────────────────
@@ -250,7 +240,9 @@ async function buildConversationContext(
   const growthStage = (p?.growth_stage as GrowthStage) ?? 'growth';
 
   const mrrSummary = mrr
-    ? `MRR: $${(mrr.total_cents / 100).toFixed(0)}/mo, Health ratio: ${mrr.health_ratio?.toFixed(2) ?? 'N/A'}`
+    ? `MRR: ${mrr.level_cents === null ? 'not reported' : `$${(mrr.level_cents / 100).toFixed(0)}/mo`}`
+      + `, net new this period: ${mrr.net_new_cents === null ? 'not reported' : `$${(mrr.net_new_cents / 100).toFixed(0)}`}`
+      + `, health ratio: ${mrr.health_ratio?.toFixed(2) ?? 'unknown — no new MRR to divide by'}`
     : 'No MRR data yet.';
 
   const stressorSummary = stressors.rows.length > 0

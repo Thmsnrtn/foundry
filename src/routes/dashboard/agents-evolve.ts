@@ -10,6 +10,7 @@ import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
 import { runEvolutionSynthesis } from '../../services/scp/evolution.js';
 import { query } from '../../db/client.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import {
   ALL_AGENTS,
   AGENT_DISPLAY_NAMES,
@@ -261,7 +262,8 @@ agentEvolveRoutes.get('/agents/evolve', async (c) => {
 
 // ─── POST /agents/evolve/:name/synthesize — Trigger Evolution ─────────────────
 
-agentEvolveRoutes.post('/agents/evolve/:name/synthesize', async (c) => {
+agentEvolveRoutes.post('/agents/evolve/:name/synthesize',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const name = c.req.param('name');
 

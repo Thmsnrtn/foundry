@@ -1,0 +1,8 @@
+{
+  "name": "interruption-sites",
+  "description": "Attention Law, pointed at the surface the law is actually about. The route ratchet counts doors the founder CHOOSES to walk through; this counts the ones that walk through them. An 'action_needed' reaches the in-app bell, a 'critical' reaches the phone — those two rungs are the only ones that spend the founder's attention without being asked, and the north star is days they could safely not look. The count may only shrink: a new interruption is a claim that something is worth a person's day, and it should be argued for by lowering another. Demoting a site to 'attention' (a line in tomorrow's Letter) or 'info' (log only) lowers this baseline in the same commit.",
+  "pattern": "importance: '(?:action_needed|critical)'",
+  "roots": ["src"],
+  "baseline": 5,
+  "direction": "down"
+}

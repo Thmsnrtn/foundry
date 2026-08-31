@@ -1,5 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { principalRef } from '../../src/services/outbound/acting-principal.js';
 import { executeRaw, query } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 
 const { integration, urlGuard } = vi.hoisted(() => ({ integration: vi.fn(), urlGuard: vi.fn() }));
 vi.mock('../../src/services/integration/fabric.js', () => ({ getIntegration: integration }));
@@ -8,13 +10,19 @@ vi.mock('../../src/services/outbound/ssrf.js', () => ({ assertUrlSafe: urlGuard 
 import { approveAndExecute, createExecution, type ActionPayload } from '../../src/services/scp/actions/executor.js';
 
 beforeAll(async () => {
-  await executeRaw(`CREATE TABLE IF NOT EXISTS action_executions (
-    id TEXT PRIMARY KEY, product_id TEXT NOT NULL, outbound_action_id TEXT,
-    action_type TEXT NOT NULL, integration TEXT NOT NULL, payload_json TEXT NOT NULL DEFAULT '{}',
-    status TEXT NOT NULL DEFAULT 'pending', approved_by TEXT, approved_at TEXT, executed_at TEXT,
-    result_json TEXT, error_message TEXT, effect_certainty TEXT,
-    provider_acknowledged_at DATETIME, reconcile_after DATETIME, created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  )`);
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
+  // A real company. The kill switch refuses an id that names no product, and
+  // this path now passes through it — which is the point: an outward effect
+  // for a company that does not exist is not a thing Foundry should do.
+  await query(
+    `INSERT OR IGNORE INTO founders (id, clerk_user_id, email)
+     VALUES ('f1','clerk_f1','f1@test.local')`);
+  await query(
+    `INSERT OR IGNORE INTO products (id, name, owner_id, status, scp_status)
+     VALUES ('p1','Effect Co','f1','active','active')`);
 });
 
 beforeEach(async () => {
@@ -26,7 +34,7 @@ beforeEach(async () => {
 
 async function run(payload: ActionPayload) {
   const id = await createExecution('p1', null, payload);
-  const result = await approveAndExecute(id, 'founder-1');
+  const result = await approveAndExecute(id, principalRef('founder', 'founder-1'));
   const row = (await query('SELECT * FROM action_executions WHERE id=?', [id])).rows[0] as Record<string, unknown>;
   return { id, result, row };
 }
@@ -40,7 +48,7 @@ const webhookPayload: ActionPayload = {
 
 describe('approved action runtime effect certainty', () => {
   it('persists Linear provider acknowledgment without claiming outcome', async () => {
-    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    integration.mockResolvedValue({ status: 'active', config_json: { api_key: 'lin-secret' } });
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: { issueCreate: { success: true, issue: { id: 'i1', identifier: 'F-1' } } } }), { status: 200 }));
     const { result, row } = await run(linearPayload);
     expect(result.effect_certainty).toBe('provider_acknowledged');
@@ -49,19 +57,19 @@ describe('approved action runtime effect certainty', () => {
   });
 
   it('persists adversarial HTTP-200 Linear rejection', async () => {
-    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    integration.mockResolvedValue({ status: 'active', config_json: { api_key: 'lin-secret' } });
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ errors: [{ message: 'forbidden' }] }), { status: 200 }));
     const { row } = await run(linearPayload);
     expect(row.effect_certainty).toBe('provider_rejected');
   });
 
   it('preserves Linear transport ambiguity and never retries the claimed execution', async () => {
-    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    integration.mockResolvedValue({ status: 'active', config_json: { api_key: 'lin-secret' } });
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('timeout after write'));
     const { id, row } = await run(linearPayload);
     expect(row.effect_certainty).toBe('ambiguous');
     expect(row.reconcile_after).toBeTruthy();
-    await expect(approveAndExecute(id, 'founder-1')).resolves.toMatchObject({ success: false });
+    await expect(approveAndExecute(id, principalRef('founder', 'founder-1'))).resolves.toMatchObject({ success: false });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
@@ -87,5 +95,40 @@ describe('approved action runtime effect certainty', () => {
     expect(row.effect_certainty).toBe('ambiguous');
     expect(row.reconcile_after).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
+describe('the guard on the Linear executor', () => {
+  // These fixtures used to mock `status: 'connected'`, which is the value
+  // migration 074 retired: nothing writes it, nothing selects it, and every
+  // other adapter guards on 'active'. The tests passed because the guard was
+  // wrong in the same direction — a test written against the defect.
+  //
+  // In production the consequence was inverted: a correctly connected Linear
+  // integration is 'active', so every ticket Foundry tried to file came back
+  // "Linear integration not connected", and the only state that satisfied the
+  // guard was the broken one that cannot sync.
+
+  it('acts on an integration that is active', async () => {
+    integration.mockResolvedValue({ status: 'active', config_json: { api_key: 'lin-secret' } });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify({ data: { issueCreate: { success: true, issue: { id: 'i9', identifier: 'F-9' } } } }),
+      { status: 200 }));
+
+    const { result } = await run(linearPayload);
+
+    expect(result.success).toBe(true);
+  });
+
+  it('refuses one still carrying the retired status', async () => {
+    integration.mockResolvedValue({ status: 'connected', config_json: { api_key: 'lin-secret' } });
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+    const { result } = await run(linearPayload);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('not connected');
+    // And nothing was dispatched on the strength of a status nothing writes.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

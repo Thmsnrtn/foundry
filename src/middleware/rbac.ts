@@ -4,92 +4,218 @@
 // =============================================================================
 
 import { createMiddleware } from 'hono/factory';
-import { hasPermission } from '../services/rbac/permissions.js';
+
+import type { MemberCapability } from '../services/team/members.js';
 
 /**
- * Require a specific RBAC permission for a route.
- * Falls back to owner-level access (always allowed) if user is the product owner.
+ * WHO IS ACTING, AS A HUMAN, AND ON WHICH COMPANY.
  *
- * Usage in routes:
- *   router.use('*', requirePermission('experiments:manage'));
- *   router.get('/', requirePermission('briefings:view'), handler);
+ * Both guards below read `c.get('productId')` and `c.get('userId')` — context
+ * keys that ONLY the public API's key middleware sets. Every dashboard route
+ * they guard therefore returned 401 to the founder who owns the company: pause,
+ * resume, checkout, manage subscription, API keys, ingest credentials, share
+ * links, the wisdom-network toggle. Twelve founder-facing routes, guarded into
+ * unreachability by a check that was looking at the wrong surface's identity.
+ *
+ * The policy is "the acting user must hold this role on this company". This
+ * resolves that subject once, for whichever surface the request arrived on,
+ * so the two guards cannot disagree about who is asking.
+ *
+ * The selected-company cookie is a SELECTION, not an authorisation: it says
+ * which company the user means, and the role check below decides whether they
+ * may. A forged cookie therefore buys nothing — it can only name a company the
+ * caller must still prove a role on.
  */
-export function requirePermission(permission: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function actingSubject(c: any): Promise<{ userId?: string; productId?: string }> {
+  const { principalOf } = await import('./principal.js');
+  const principal = principalOf(c);
+
+  // A ROLE IS A PROPERTY OF A PERSON. `requireRole` and `requirePermission` ask
+  // whether the acting HUMAN holds a role on this company, so only a human
+  // session can answer them.
+  //
+  // An API key cannot: `api_keys.created_by` names the founder who minted it,
+  // and reading that as the acting user would let a scoped, revocable metrics
+  // credential pause the company it was issued for. An ingest credential and a
+  // service principal cannot either — neither is a person, and neither has a
+  // role to hold.
+  //
+  // Their own authority is real and checked elsewhere: `requireScope` for API
+  // keys, the intake purpose check for ingest. This guard is not the place, and
+  // conflating them is how a transport became an authority.
+  if (!principal || principal.kind !== 'human_session') return {};
+
+  // A ROUTE THAT NAMES A COMPANY IN ITS PATH IS NAMING THE COMPANY THE HANDLER
+  // WILL SERVE. `getLayoutContext` treats that param as the highest-priority
+  // override, and this read did not look at it at all — so on `/products/:id/
+  // revenue` the guard asked about whichever company the cookie happened to
+  // hold while the handler served `:id`. Reading it here is what makes the two
+  // agree. An id the caller cannot see is passed through unchanged rather than
+  // replaced by a fallback: the capability check then fails on it, which is
+  // both the right answer and one that reveals nothing.
+  const routeNamed = (c.req.param('productId') as string | undefined)
+    ?? (typeof c.req.routePath === 'string' && c.req.routePath.includes('/products/:id')
+      ? (c.req.param('id') as string | undefined)
+      : undefined);
+
+  const product = c.get('product') as { id?: string } | undefined;
+  const { getCookie } = await import('hono/cookie');
+  const named = principal.productId ?? product?.id ?? getCookie(c, 'foundry_product');
+
+  // THE GUARD AND THE HANDLER MUST NAME THE SAME COMPANY.
+  //
+  // `getLayoutContext` resolves the acting company as: explicit override, then
+  // the cookie, then THE FIRST COMPANY THIS PERSON CAN SEE — and it falls back
+  // to the first when the cookie names a company they cannot see. This read
+  // stopped at the cookie, so a founder whose browser had not set one yet (a
+  // fresh session, a client that drops it, a direct POST) got "No company
+  // selected" from the guard on a route whose handler would have worked
+  // perfectly. That is a guard refusing the legitimate principal, which is not
+  // extra secure.
+  //
+  // Falling back the same way is not a widening: the fallback only ever names
+  // a company this person is already a member of, and the capability check
+  // still has to pass on it. A forged cookie still buys nothing — it can only
+  // name a company they must prove a permission on, or be ignored.
+  const { visibleProductIds } = await import('../services/team/members.js');
+  const visible = await visibleProductIds(principal.founderId);
+  const productId = routeNamed
+    ?? (named && visible.includes(named) ? named : visible[0]);
+
+  return { userId: principal.founderId, productId };
+}
+
+/**
+ * ONE COMPANY AUTHORIZATION MODEL, NOT TWO.
+ *
+ * There were two. `account_roles` held a viewer/analyst/admin/owner ladder that
+ * `requireRole` read, and `assignRole` — its only writer — had no callers
+ * anywhere, so no row was ever created. `getUserRole` always returned null and
+ * `requireRole('admin')` reduced to the owner check inside it: seventeen
+ * routes that read as "an admin may do this" were owner-only in practice, and
+ * an accepted co-founder could reach none of them. `requirePermission` and its
+ * eleven-permission map had no call sites at all.
+ *
+ * Meanwhile `team_members` — what the invite flow actually writes — carried the
+ * real permissions and nothing consulted them.
+ *
+ * The owner's decision is that company membership is canonical and ownership is
+ * a distinct, stronger property. So there are two questions and two guards:
+ *
+ *   requireOwner()              the exceptional boundary. Ending the
+ *                               subscription, pausing the company, archiving
+ *                               the product. Not a capability; nothing grants
+ *                               it.
+ *
+ *   requireCompanyCapability()  ordinary company work, resolved through the
+ *                               member's explicit permissions. The owner
+ *                               passes because they hold every capability by
+ *                               virtue of being the owner, not because they
+ *                               sit at the top of a ladder.
+ *
+ * A role label — co_founder, advisor, investor_observer — is product shorthand.
+ * It is what the permissions were backfilled from and what a settings page
+ * shows a human. It grants nothing by itself, and no guard reads it.
+ */
+
+/** The exceptional boundary. */
+/**
+ * THE OWNER OF THE INSTITUTION, WHEN THERE IS NO COMPANY TO OWN YET.
+ *
+ * `requireOwner` asks whether you own the SELECTED company, and returns 400
+ * "No company selected" when none is. That is the right question almost
+ * everywhere and the wrong one at exactly one moment: founding the
+ * institution's first company. Guarding that with `requireOwner` makes it
+ * permanently unreachable — you would need a company to create your first
+ * company.
+ *
+ * So this asks the question that actually applies: are you the principal this
+ * deployment belongs to? On a private instance that is the one admitted
+ * account; `mayBeAdmitted` already refuses anyone else a session at all, and
+ * this is the second lock rather than the first — authentication is not
+ * authorization, and a route that founds companies should say who may.
+ *
+ * It is deliberately NOT usable as a general substitute for company
+ * permissions: it answers a deployment-level question and grants nothing about
+ * any particular company's data.
+ */
+export function requireInstitutionOwner() {
   return createMiddleware(async (c, next) => {
-    const productId = c.get('productId') as string | undefined;
-    const userId = c.get('userId') as string | undefined;
-
-    if (!productId || !userId) {
-      return c.json({ error: 'Unauthorized' }, 401);
+    const founder = c.get('founder') as { email?: string | null } | undefined;
+    const email = founder?.email ?? '';
+    const { isFounder } = await import('../services/founder/intelligence.js');
+    if (!email || !isFounder(String(email))) {
+      return c.json({ error: 'Only the owner of this institution can do this' }, 403);
     }
+    await next();
+  });
+}
 
-    // Check if user is the product owner (owners always have all permissions)
-    const { query } = await import('../db/client.js');
-    const ownerCheck = await query(
-      `SELECT id FROM products WHERE id=? AND owner_id=?`,
-      [productId, userId]
-    );
+export function requireOwner() {
+  return createMiddleware(async (c, next) => {
+    const { userId, productId } = await actingSubject(c);
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+    if (!productId) return c.json({ error: 'No company selected' }, 400);
 
-    if (ownerCheck.rows.length > 0) {
-      // Product owner — skip RBAC check
-      await next();
-      return;
+    const { isCompanyOwner } = await import('../services/team/members.js');
+    if (!(await isCompanyOwner(productId, userId))) {
+      return c.json({ error: 'Only the company owner can do this' }, 403);
     }
-
-    // Check RBAC permission
-    const allowed = await hasPermission(productId, userId, permission);
-    if (!allowed) {
-      // Return HTML forbidden page for browser requests, JSON for API requests
-      const acceptHeader = c.req.header('Accept') ?? '';
-      if (acceptHeader.includes('text/html')) {
-        return c.html(`
-          <!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;margin:100px auto;text-align:center;">
-          <h2>Access Restricted</h2>
-          <p>You don't have permission to access this area. Required: <code>${permission}</code></p>
-          <a href="/dashboard">&#8592; Back to Dashboard</a>
-          </body></html>
-        `, 403);
-      }
-      return c.json({ error: `Insufficient permissions. Required: ${permission}` }, 403);
-    }
-
     await next();
   });
 }
 
 /**
- * Require a minimum role level.
- * Roles in order: viewer < analyst < admin < owner
+ * Ordinary company work, gated on the member's explicit permission.
+ *
+ * WHERE `can_trigger_actions` IS NOW APPLIED, and why it is one capability
+ * rather than a new one. It started as "who may approve an outward effect" —
+ * the actions queue. An audit of the dashboard then found ~54 mutating routes
+ * that reach a PAID MODEL CALL with no capability check at all: every
+ * `/synthesize`, `/generate`, `/scan`, `/assess`, the institution chat, voice
+ * transcription, the weekly brief, the strategy and wisdom syntheses. Any
+ * active member — an investor observer included — could spend the company's AI
+ * budget by pressing a button.
+ *
+ * The owner's decision is that spending the company's money is not watching,
+ * and that it is the same permission rather than a sixth column: the thing
+ * being asked in both cases is "may this person make Foundry do something that
+ * costs". Co-founders keep every one of these; advisors and observers lose
+ * them.
+ *
+ * What is deliberately NOT gated, and asserted so it stays that way: anything
+ * that only LOWERS what Foundry may do — the panic switch, pausing an agent,
+ * disconnecting an integration, revoking a grant or a channel, undoing an
+ * autopilot action — and attention telemetry, which spends nothing. Making the
+ * brake harder to reach than the accelerator would be the same defect wearing a
+ * safety label.
+ *
+ * Two routes ask this inline instead, because their company arrives in the
+ * REQUEST BODY: a guard resolving the company from the path or the selection
+ * would authorize one company while the handler acted on another.
  */
-export function requireRole(minimumRole: 'viewer' | 'analyst' | 'admin' | 'owner') {
-  const roleRank = { viewer: 1, analyst: 2, admin: 3, owner: 4 };
-
+export function requireCompanyCapability(capability: MemberCapability) {
   return createMiddleware(async (c, next) => {
-    const productId = c.get('productId') as string | undefined;
-    const userId = c.get('userId') as string | undefined;
+    const { userId, productId } = await actingSubject(c);
+    if (!userId) return c.json({ error: 'Unauthorized' }, 401);
+    if (!productId) return c.json({ error: 'No company selected' }, 400);
 
-    if (!productId || !userId) {
-      return c.json({ error: 'Unauthorized' }, 401);
+    const { memberMay } = await import('../services/team/members.js');
+    if (!(await memberMay(productId, userId, capability))) {
+      // The same answer for "not a member" and "member without this
+      // permission": telling them apart tells a stranger who is on the team.
+      const acceptHeader = c.req.header('Accept') ?? '';
+      if (acceptHeader.includes('text/html')) {
+        return c.html(
+          '<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:480px;'
+          + 'margin:100px auto;text-align:center;">'
+          + '<h2>Not available to you</h2>'
+          + '<p>Your access to this company does not include this.</p>'
+          + '<a href="/dashboard">&#8592; Back to Dashboard</a></body></html>', 403);
+      }
+      return c.json({ error: 'Not permitted for your access to this company' }, 403);
     }
-
-    const { getUserRole } = await import('../services/rbac/permissions.js');
-    const { query } = await import('../db/client.js');
-
-    // Check if owner
-    const ownerCheck = await query(`SELECT id FROM products WHERE id=? AND owner_id=?`, [productId, userId]);
-    if (ownerCheck.rows.length > 0) {
-      await next();
-      return;
-    }
-
-    const role = await getUserRole(productId, userId);
-    const userRank = role ? (roleRank[role as keyof typeof roleRank] ?? 0) : 0;
-    const requiredRank = roleRank[minimumRole];
-
-    if (userRank < requiredRank) {
-      return c.json({ error: `Requires ${minimumRole} role or higher` }, 403);
-    }
-
     await next();
   });
 }

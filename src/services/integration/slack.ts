@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { storeEvent, getIntegration } from './fabric.js';
+import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,7 @@ export async function syncSlackEvents(productId: string): Promise<{ synced: numb
     return { synced: 0 };
   }
 
-  const botToken = integration.config_json.bot_token as string | undefined;
+  const botToken = (await getIntegrationCredentials(productId, 'slack')).bot_token;
 
   if (!botToken) {
     return { synced: 0, error: 'Missing required Slack config field (bot_token)' };
@@ -112,7 +112,7 @@ export async function sendSlackNotification(
     return { certainty: 'not_attempted', reason: 'Slack integration is not active' };
   }
 
-  const botToken = integration.config_json.bot_token as string | undefined;
+  const botToken = (await getIntegrationCredentials(productId, 'slack')).bot_token;
   const defaultChannel = integration.config_json.channel_id as string | undefined;
 
   if (!botToken) return { certainty: 'not_attempted', reason: 'Slack bot token is missing' };
@@ -179,7 +179,7 @@ export async function getSlackSummary(productId: string): Promise<{
     };
   }
 
-  const botToken = integration.config_json.bot_token as string | undefined;
+  const botToken = (await getIntegrationCredentials(productId, 'slack')).bot_token;
   const channelId = integration.config_json.channel_id as string | undefined;
 
   // Fetch channel name if we have a channel ID

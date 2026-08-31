@@ -4,12 +4,14 @@
 // missing source tables.
 // =============================================================================
 
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+process.env.ENCRYPTION_KEY = '0'.repeat(64);
+
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
-import { query, executeRaw } from '../../src/db/client.js';
+import { query } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 
 import {
   computeAndStoreHealth,
@@ -38,59 +40,20 @@ async function createFounderAndProduct(): Promise<{ founderId: string; productId
   return { founderId: fId, productId: pId };
 }
 
+// THIS TEST USED TO BUILD ITS OWN SCHEMA.
+//
+// Eight tables, hand-written in this file, "just enough of those tables to
+// test the computation path". Two of them were wrong: `agent_messages` was
+// given a `message_type` column (the real one is `type`) and
+// `agent_predictions` a `measured_at` (the real one is `outcome_measured_at`).
+// The service read exactly those names, the test agreed with it, and both were
+// wrong about the product. Every assertion here passed against a database that
+// does not exist anywhere else.
+//
+// A test that constructs its own reality verifies the code against that
+// reality. The migrations are the schema; this runs them.
 async function setupSchema(): Promise<void> {
-  // Note: this test exercises team-health against the source tables it
-  // depends on. We create just enough of those tables to test the
-  // computation path; defensive try/catch in the service ensures missing
-  // tables produce nulls rather than crashes.
-  const TEST_SCHEMA = `
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS decisions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      what TEXT NOT NULL,
-      why_now TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      created_at TEXT DEFAULT (datetime('now')),
-      decided_at TEXT,
-      decided_by TEXT
-    );
-    CREATE TABLE IF NOT EXISTS agent_messages (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      message_type TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS agent_evolution_versions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      change_type TEXT NOT NULL,
-      promoted_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS agent_predictions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      accuracy_score REAL,
-      measured_at TEXT
-    );
-  `;
-  await executeRaw(TEST_SCHEMA);
-  const m = resolve(__dirname, '../../src/db/migrations/062_team_health_metrics.sql');
-  await executeRaw(readFileSync(m, 'utf-8'));
+  await runMigrations();
 }
 
 beforeAll(async () => {
@@ -190,13 +153,17 @@ describe('computeAndStoreHealth: end-to-end', () => {
 
   it('computes yield score from promoted evolutions', async () => {
     await query(
-      `INSERT INTO agent_evolution_versions (id, product_id, change_type, promoted_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO agent_evolution_versions
+         (id, product_id, agent_name, version, change_type, change_description,
+          new_config, promoted_at)
+       VALUES (?, ?, 'oracle', 1, ?, 'learned something', '{}', ?)`,
       [nanoid(), productId, 'golden_lesson', within]
     );
     await query(
-      `INSERT INTO agent_evolution_versions (id, product_id, change_type, promoted_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO agent_evolution_versions
+         (id, product_id, agent_name, version, change_type, change_description,
+          new_config, promoted_at)
+       VALUES (?, ?, 'oracle', 2, ?, 'reworded a prompt', '{}', ?)`,
       [nanoid(), productId, 'prompt_refinement', within]
     );
     const m = await computeAndStoreHealth({ product_id: productId, week_starting: week });
@@ -206,13 +173,19 @@ describe('computeAndStoreHealth: end-to-end', () => {
 
   it('computes action accuracy from agent_predictions', async () => {
     await query(
-      `INSERT INTO agent_predictions (id, product_id, accuracy_score, measured_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO agent_predictions
+         (id, product_id, agent_name, session_id, prediction_type, prediction_text,
+          confidence, measure_by_date, outcome_criteria, accuracy_score, outcome_measured_at)
+       VALUES (?, ?, 'oracle', 'sess', 'metric', 'mrr will rise',
+               0.8, '2030-01-01', 'mrr > x', ?, ?)`,
       [nanoid(), productId, 0.8, within]
     );
     await query(
-      `INSERT INTO agent_predictions (id, product_id, accuracy_score, measured_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO agent_predictions
+         (id, product_id, agent_name, session_id, prediction_type, prediction_text,
+          confidence, measure_by_date, outcome_criteria, accuracy_score, outcome_measured_at)
+       VALUES (?, ?, 'oracle', 'sess', 'metric', 'mrr will rise',
+               0.8, '2030-01-01', 'mrr > x', ?, ?)`,
       [nanoid(), productId, 0.6, within]
     );
     const m = await computeAndStoreHealth({ product_id: productId, week_starting: week });

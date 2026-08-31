@@ -21,7 +21,18 @@ export interface PsychologyInsight {
   id: string;
   pattern_type: PatternType;
   description: string;
-  confidence: number;
+  /**
+   * How sure the producer said it was, or NULL when it did not say.
+   *
+   * The deterministic detectors below state a fixed prior — 0.7 for
+   * perfectionism, 0.65 for scope creep — which is a number the DETECTOR
+   * stands behind, not something measured about this founder. The model-driven
+   * one reports its own. A model that returned none used to get 0.5 written in
+   * for it: the exact middle of the scale, stored and served indistinguishably
+   * from a model that had actually said "half sure" about a claim regarding
+   * someone's mind.
+   */
+  confidence: number | null;
   evidence: string[];
   intervention_suggestion: string;
   status: string;
@@ -64,7 +75,7 @@ If no overcorrection detected:
   const response = await callOpus(
     'You are a founder behavior analyst. Detect overcorrection patterns. Be sensitive and non-judgmental.',
     prompt,
-    1024
+    1024, productId
   );
 
   const result = parseJSONResponse<{
@@ -77,13 +88,35 @@ If no overcorrection detected:
 
   if (!result.detected) return null;
 
+  // A CLAIM ABOUT SOMEONE'S MIND NEEDS SOMETHING BEHIND IT.
+  //
+  // Every field here had a fallback, so a model that answered `{"detected":
+  // true}` and nothing else produced a stored insight reading "Overcorrection
+  // pattern detected", with an empty evidence array and a confidence of 0.5 —
+  // and `GET /api/psychology-insights` returns the row verbatim to the founder.
+  // The header of this file promises insights that are "non-judgmental,
+  // actionable and dismissable"; an observation about a person with no
+  // description of what was noticed and nothing it was noticed from is a
+  // judgement they cannot act on or argue with.
+  //
+  // It also travels further than the page: `ai/calibration.ts` reads the
+  // pattern_type of active insights and changes how Foundry speaks to this
+  // founder. A substituted insight quietly re-tunes the whole relationship.
+  //
+  // So the substance is required and the confidence is not invented. A detector
+  // that finds something and cannot say what it found has not found anything.
+  const description = result.description?.trim();
+  const evidence = (result.evidence ?? []).map((e) => String(e).trim()).filter((e) => e.length > 0);
+  if (!description || evidence.length === 0) return null;
+
   const insight: PsychologyInsight = {
     id: nanoid(),
     pattern_type: 'overcorrection',
-    description: result.description ?? 'Overcorrection pattern detected',
-    confidence: result.confidence ?? 0.5,
-    evidence: result.evidence ?? [],
-    intervention_suggestion: result.suggestion ?? 'Consider whether your current approach is balanced.',
+    description,
+    confidence: result.confidence ?? null,
+    evidence,
+    intervention_suggestion: result.suggestion?.trim()
+      ?? 'Consider whether your current approach is balanced.',
     status: 'active',
   };
 
@@ -169,19 +202,42 @@ export async function detectEmpathyScopeCreep(productId: string, founderId: stri
  * Detect isolation drift (solo founders): declining engagement signals.
  */
 export async function detectIsolationDrift(founderId: string, productId: string): Promise<PsychologyInsight | null> {
-  // Check if solo founder (no co-founders)
+  // IS THIS FOUNDER ACTUALLY ALONE?
+  //
+  // This counted `cofounder_profiles`, a table nothing anywhere writes — no
+  // INSERT in the codebase, no trigger, no migration seed. So the count was
+  // always zero and EVERY founder read as solo, including one running a company
+  // with three co-founders. The insight below then told them "As a solo
+  // founder, your engagement has been declining", which is a false statement
+  // about their own company delivered at the moment they are least able to
+  // shrug it off.
+  //
+  // The real record of who is in a company is `team_members` — the canonical
+  // membership model, the one the invite flow writes and every permission
+  // check reads. `co_founder` is the role label the invite form offers for a
+  // second founder; advisors and investor observers are not co-founders and
+  // are deliberately not counted, because the thing being detected is building
+  // ALONE, not having nobody to talk to.
   const cofounders = await query(
-    'SELECT COUNT(*) as c FROM cofounder_profiles WHERE product_id = ?',
+    `SELECT COUNT(*) AS c FROM team_members
+      WHERE product_id = ? AND status = 'active' AND role = 'co_founder'`,
     [productId]
   );
-  const cofounderCount = (cofounders.rows[0] as Record<string, number>)?.c ?? 0;
+  const cofounderCount = Number((cofounders.rows[0] as Record<string, unknown>)?.c ?? 0);
   if (cofounderCount > 0) return null; // Not solo
 
   // Check engagement trend from founder health
   const health = await query('SELECT engagement_trend, motivation_score FROM founder_health WHERE founder_id = ?', [founderId]);
   const h = health.rows[0] as Record<string, unknown> | undefined;
 
-  if (h && ((h.engagement_trend === 'declining' || h.engagement_trend === 'critical') && ((h.motivation_score as number) ?? 100) < 40)) {
+  // `?? 100` read an unknown motivation as the maximum, so this never fired for
+  // a founder nobody had measured — the quiet direction, but by accident rather
+  // than by decision. Stated as a decision now: an insight about a person needs
+  // an observation of that person.
+  const motivation = h?.motivation_score == null ? null : Number(h.motivation_score);
+  if (h && motivation !== null
+      && (h.engagement_trend === 'declining' || h.engagement_trend === 'critical')
+      && motivation < 40) {
     const insight: PsychologyInsight = {
       id: nanoid(),
       pattern_type: 'isolation_drift',

@@ -1,6 +1,27 @@
 // =============================================================================
 // FOUNDRY — Financial Autonomy: AI Company P&L and Economics
-// Tracks costs, revenue attribution, and ROI for the autonomous agent suite.
+//
+// ONE HALF OF THIS P&L IS MEASURED AND THE OTHER HALF IS FOUNDRY'S OPINION OF
+// ITSELF, AND EVERY NUMBER BUILT FROM BOTH INHERITS THE OPINION.
+//
+// Costs are real: `cost_events` rows are written by the agent runner from token
+// counts actually spent. Revenue is not. `revenue_attributions` is written by
+// ONE caller — the Ledger agent — from a language model's estimate of how much
+// revenue another agent's action produced, with a confidence the same model
+// assigned to its own estimate, filtered at `> 0.6` and then multiplied by that
+// confidence. Nothing reconciles it against Stripe, an invoice, or a customer.
+//
+// That is a legitimate thing to show a founder, LABELLED. What is not
+// legitimate is subtracting it from a measured cost and calling the difference
+// "Profit", dividing by cost and calling it "ROI", or comparing the two and
+// answering "Self-Funding: Yes" — which is Foundry stating that it pays for
+// itself, on the strength of its own guess about what it earned.
+//
+// So the shape of every field here says which half it came from:
+// `attributed_*` for anything derived from those estimates, and the page and
+// the strategy prompt both carry the provenance rather than the number alone.
+// An unmeasured ratio is NULL, not 0: with no cost recorded, "ROI 0%" was the
+// answer for every company that had not run an agent yet.
 // =============================================================================
 
 import { query } from '../../db/client.js';
@@ -10,19 +31,27 @@ import { nanoid } from 'nanoid';
 
 export interface AICompanyPL {
   period: { start: string; end: string };
-  revenue: {
+  /** Foundry's own estimate of revenue its actions produced, weighted by the
+   *  confidence the estimate carried. Not measured revenue. */
+  attributed_revenue: {
     total_usd: number;
     by_agent: Record<string, number>;
     by_type: Record<string, number>;
   };
+  /** Measured: token and integration spend actually incurred. */
   costs: {
     total_usd: number;
     by_agent: Record<string, number>;
     by_type: Record<string, number>;
   };
-  profit_usd: number;
-  roi: number;
-  self_funding: boolean;
+  /** Attributed revenue minus measured cost. Half opinion, by construction. */
+  attributed_profit_usd: number;
+  /** NULL when no cost was recorded — an unmeasured ratio, not a ratio of 0. */
+  attributed_roi: number | null;
+  /** Whether the ATTRIBUTED revenue covers the measured cost. Deliberately not
+   *  called `self_funding`: that is a claim about the world, and this is a
+   *  comparison against Foundry's own estimate. */
+  attributed_revenue_covers_cost: boolean;
 }
 
 // ─── P&L ─────────────────────────────────────────────────────────────────────
@@ -34,16 +63,24 @@ export async function getAICompanyPL(
   productId: string,
   days: number = 30,
 ): Promise<AICompanyPL> {
+  // Reported as the period's label; the queries below ask SQLite for the bound.
   const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
   const now = new Date().toISOString();
 
   // Costs
+  // ONE FORMAT ON BOTH SIDES. `created_at` defaults to CURRENT_TIMESTAMP, which
+  // SQLite writes as 'YYYY-MM-DD HH:MM:SS'; the bound was a JavaScript
+  // `toISOString()`, 'YYYY-MM-DDTHH:MM:SS.sssZ'. These are compared as TEXT, and
+  // at index 10 a space (0x20) sorts before 'T' (0x54) — so every row written on
+  // the boundary DATE compared as earlier than the boundary whatever its time,
+  // and a "trailing 30 days" window silently dropped its oldest day. Asking
+  // SQLite for the bound keeps both sides in SQLite's format.
   const costResult = await query(
     `SELECT agent_name, cost_type, SUM(amount_usd) as total
      FROM cost_events
-     WHERE product_id = ? AND created_at >= ?
+     WHERE product_id = ? AND created_at >= datetime('now', ? || ' days')
      GROUP BY agent_name, cost_type`,
-    [productId, since],
+    [productId, `-${days}`],
   );
 
   const costsByAgent: Record<string, number> = {};
@@ -62,12 +99,24 @@ export async function getAICompanyPL(
   }
 
   // Revenue attributions
+  // WINDOWED ON `created_at`, NOT `period_start`, AND THAT WAS NOT COSMETIC.
+  //
+  // `logRevenue` stores `period_start = now - 30 days` and `period_end = now`:
+  // the row describes the period the revenue is attributed OVER. This query
+  // asked for `period_start >= now - 30 days`, evaluated later than the write,
+  // so the attribution's own start was ALWAYS a hair before the boundary and
+  // ALWAYS excluded. Attributed revenue was therefore 0 for every company, in
+  // every window, since the P&L was written — which made "Profit" the negative
+  // of cost, ROI -100%, and "Self-Funding: No" the permanent answer.
+  //
+  // `created_at` is when Foundry recorded the attribution, which is the
+  // question a trailing-30-days P&L is asking.
   const revenueResult = await query(
     `SELECT agent_name, attribution_type, SUM(amount_usd * confidence) as total
      FROM revenue_attributions
-     WHERE product_id = ? AND period_start >= ?
+     WHERE product_id = ? AND created_at >= datetime('now', ? || ' days')
      GROUP BY agent_name, attribution_type`,
-    [productId, since],
+    [productId, `-${days}`],
   );
 
   const revenueByAgent: Record<string, number> = {};
@@ -86,11 +135,10 @@ export async function getAICompanyPL(
   }
 
   const profit = totalRevenue - totalCosts;
-  const roi = totalCosts > 0 ? profit / totalCosts : 0;
 
   return {
     period: { start: since, end: now },
-    revenue: {
+    attributed_revenue: {
       total_usd: totalRevenue,
       by_agent: revenueByAgent,
       by_type: revenueByType,
@@ -100,9 +148,9 @@ export async function getAICompanyPL(
       by_agent: costsByAgent,
       by_type: costsByType,
     },
-    profit_usd: profit,
-    roi,
-    self_funding: totalRevenue >= totalCosts,
+    attributed_profit_usd: profit,
+    attributed_roi: totalCosts > 0 ? profit / totalCosts : null,
+    attributed_revenue_covers_cost: totalRevenue >= totalCosts,
   };
 }
 
@@ -120,27 +168,30 @@ export async function getAgentCostBreakdown(
   llm_cost_usd: number;
   integration_cost_usd: number;
   attributed_revenue_usd: number;
-  roi: number;
+  /** NULL when this agent recorded no cost in the window. */
+  attributed_roi: number | null;
 }>> {
-  const since = new Date(Date.now() - days * 86400 * 1000).toISOString();
-
   const costResult = await query(
     `SELECT agent_name,
             SUM(amount_usd) as total_cost,
             SUM(CASE WHEN cost_type = 'llm_tokens' THEN amount_usd ELSE 0 END) as llm_cost,
             SUM(CASE WHEN cost_type = 'integration_api' THEN amount_usd ELSE 0 END) as integration_cost
      FROM cost_events
-     WHERE product_id = ? AND created_at >= ? AND agent_name IS NOT NULL
+     WHERE product_id = ? AND created_at >= datetime('now', ? || ' days')
+       AND agent_name IS NOT NULL
      GROUP BY agent_name`,
-    [productId, since],
+    [productId, `-${days}`],
   );
 
+  // `created_at`, for the reason given in `getAICompanyPL`: an attribution's
+  // `period_start` is 30 days BEFORE it was written, so a 30-day window keyed
+  // on it excluded every row that had ever been written.
   const revenueResult = await query(
     `SELECT agent_name, SUM(amount_usd * confidence) as attributed_revenue
      FROM revenue_attributions
-     WHERE product_id = ? AND period_start >= ?
+     WHERE product_id = ? AND created_at >= datetime('now', ? || ' days')
      GROUP BY agent_name`,
-    [productId, since],
+    [productId, `-${days}`],
   );
 
   const revenueByAgent: Record<string, number> = {};
@@ -156,7 +207,7 @@ export async function getAgentCostBreakdown(
     const llmCost = (r.llm_cost as number) ?? 0;
     const integrationCost = (r.integration_cost as number) ?? 0;
     const attributedRevenue = revenueByAgent[agentName] ?? 0;
-    const roi = totalCost > 0 ? (attributedRevenue - totalCost) / totalCost : 0;
+    const roi = totalCost > 0 ? (attributedRevenue - totalCost) / totalCost : null;
 
     return {
       agent_name: agentName,
@@ -164,7 +215,7 @@ export async function getAgentCostBreakdown(
       llm_cost_usd: llmCost,
       integration_cost_usd: integrationCost,
       attributed_revenue_usd: attributedRevenue,
-      roi,
+      attributed_roi: roi,
     };
   });
 }
@@ -181,10 +232,17 @@ export async function logCost(params: {
   amountUsd: number;
   details?: Record<string, unknown>;
   sessionId?: string;
+  /** Institutional attribution (migration 134). A persona is not a unit of
+   * company work; a responsibility is. Optional because pre-institutional
+   * callers exist, and booking their spend against an invented responsibility
+   * would be worse than leaving it unattributed. */
+  responsibilityId?: string;
+  capability?: string;
 }): Promise<void> {
   await query(
-    `INSERT INTO cost_events (id, product_id, agent_name, cost_type, amount_usd, details_json, session_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO cost_events (id, product_id, agent_name, cost_type, amount_usd, details_json, session_id,
+       responsibility_id, capability)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       nanoid(),
       params.productId,
@@ -193,6 +251,8 @@ export async function logCost(params: {
       params.amountUsd,
       params.details ? JSON.stringify(params.details) : null,
       params.sessionId ?? null,
+      params.responsibilityId ?? null,
+      params.capability ?? null,
     ],
   );
 }
@@ -258,14 +318,20 @@ export async function getBudgetUtilization(productId: string): Promise<{
   const prodRow = prodResult.rows[0] as Record<string, unknown> | undefined;
   const budgetUsd = (prodRow?.operating_budget_monthly_usd as number | null) ?? 500;
 
-  // Current month spend
+  // CURRENT MONTH SPEND, IN THE DATABASE'S CALENDAR AND THE DATABASE'S FORMAT.
+  //
+  // Two problems in one line. `new Date(y, m, 1)` builds LOCAL midnight and
+  // `.toISOString()` then converts it to UTC, so on a host east of Greenwich
+  // the "start of month" landed in the previous month and the bar counted a day
+  // that belongs to the last bill. And the result was an ISO string compared as
+  // text against CURRENT_TIMESTAMP values, where a space sorts before 'T' — so
+  // everything written on the first of the month was excluded anyway.
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
   const spendResult = await query(
     `SELECT SUM(amount_usd) as total FROM cost_events
-     WHERE product_id = ? AND created_at >= ?`,
-    [productId, monthStart],
+     WHERE product_id = ? AND created_at >= datetime('now', 'start of month')`,
+    [productId],
   );
 
   const spentUsd = ((spendResult.rows[0] as Record<string, unknown>)?.total as number) ?? 0;
@@ -299,25 +365,34 @@ export async function getBudgetUtilization(productId: string): Promise<{
 export async function getROISummary(productId: string): Promise<{
   total_cost_30d: number;
   attributed_revenue_30d: number;
-  roi_ratio: number;
-  top_roi_agent: string;
-  bottom_roi_agent: string;
+  /** NULL when no cost was recorded in the window. */
+  attributed_roi_ratio: number | null;
+  /** NULL when no agent recorded a cost, so no agent can be ranked. */
+  top_attributed_roi_agent: string | null;
+  bottom_attributed_roi_agent: string | null;
+  /** Travels with the numbers, because both consumers hand them to a reader. */
+  provenance: string;
 }> {
   const breakdown = await getAgentCostBreakdown(productId, 30);
 
   const totalCost = breakdown.reduce((sum, a) => sum + a.total_cost_usd, 0);
   const totalRevenue = breakdown.reduce((sum, a) => sum + a.attributed_revenue_usd, 0);
-  const roiRatio = totalCost > 0 ? totalRevenue / totalCost : 0;
 
-  const sorted = [...breakdown].sort((a, b) => b.roi - a.roi);
-  const topAgent = sorted[0]?.agent_name ?? 'none';
-  const bottomAgent = sorted[sorted.length - 1]?.agent_name ?? 'none';
+  // Only agents with a measured cost can be ranked by a ratio that divides by
+  // it. `'none'` used to be returned as an agent name for both ends.
+  const ranked = breakdown
+    .filter((a): a is typeof a & { attributed_roi: number } => a.attributed_roi !== null)
+    .sort((a, b) => b.attributed_roi - a.attributed_roi);
 
   return {
     total_cost_30d: totalCost,
     attributed_revenue_30d: totalRevenue,
-    roi_ratio: roiRatio,
-    top_roi_agent: topAgent,
-    bottom_roi_agent: bottomAgent,
+    attributed_roi_ratio: totalCost > 0 ? totalRevenue / totalCost : null,
+    top_attributed_roi_agent: ranked[0]?.agent_name ?? null,
+    bottom_attributed_roi_agent: ranked.length > 0 ? ranked[ranked.length - 1].agent_name : null,
+    provenance: 'Costs are measured token and integration spend. Attributed revenue is '
+      + "Foundry's own estimate of revenue its actions produced, weighted by the confidence "
+      + 'the estimate carried, and reconciled against nothing. Every ratio here compares a '
+      + 'measured cost with an estimate.',
   };
 }

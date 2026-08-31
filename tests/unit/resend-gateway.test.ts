@@ -14,6 +14,7 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 
 // Importing resend.ts has the side-effect of registering the gateway
 // handler at module load — that's what we're testing. The handler is
@@ -27,80 +28,6 @@ let founderId: string;
 let productId: string;
 
 async function setupSchema(): Promise<void> {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      disabled_tools TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS agent_instances (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      agent_name TEXT NOT NULL,
-      status TEXT DEFAULT 'active'
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      action_type TEXT NOT NULL,
-      gate INTEGER NOT NULL,
-      trigger TEXT NOT NULL,
-      reasoning TEXT NOT NULL,
-      input_context TEXT,
-      output TEXT,
-      outcome TEXT,
-      confidence_score REAL,
-      risk_state_at_action TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS outbound_actions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      agent_name TEXT NOT NULL,
-      integration_name TEXT NOT NULL,
-      action_type TEXT NOT NULL,
-      authority_level INTEGER NOT NULL DEFAULT 2,
-      status TEXT NOT NULL DEFAULT 'pending_approval',
-      parameters_json TEXT,
-      preview_text TEXT,
-      rationale TEXT,
-      confidence REAL,
-      approved_by TEXT,
-      approved_at TEXT,
-      executed_at TEXT,
-      result_json TEXT,
-      expires_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS integrations (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      type TEXT,
-      status TEXT,
-      credentials_json TEXT,
-      config_json TEXT,
-      authorized_agents TEXT,
-      last_error TEXT,
-      total_outbound_actions INTEGER DEFAULT 0,
-      error_count_trailing_7d INTEGER DEFAULT 0,
-      cost_trailing_30d_usd REAL DEFAULT 0.0,
-      total_inbound_events INTEGER DEFAULT 0,
-      created_at TEXT,
-      updated_at TEXT
-    );
-  `);
   await executeRaw(
     readFileSync(
       resolve(__dirname, '../../src/db/migrations/065_idempotency_keys.sql'),
@@ -122,6 +49,10 @@ async function setupSchema(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   await setupSchema();
 });
 
@@ -137,6 +68,17 @@ beforeEach(async () => {
     'Test',
     founderId,
   ]);
+  // This file's sends go to 'cust@example.com' — a customer, not the founder —
+  // so the company needs a sender of its own. Before migration 150 these went
+  // out under 'Foundry <noreply@foundry.app>', which is the thing
+  // sender-of-record.ts has always forbidden. What follows exercises the
+  // gateway machinery; the sender rule itself is proved in
+  // sender-of-record-reach.test.ts.
+  const { setSendingIdentity } = await import('../../src/services/outbound/sending-identity.js');
+  await setSendingIdentity({
+    productId, provider: 'resend', credential: 're_company_key',
+    fromEmail: 'hello@testco.example', fromName: 'Test Co',
+  });
   // Reset cross-test state.
   await executeRaw(`DELETE FROM idempotency_keys`);
   await executeRaw(`DELETE FROM data_classifications`);
@@ -162,18 +104,30 @@ async function insertAction(opts: {
   to?: string;
   subject?: string;
   agentName?: string;
+  approvedBy?: string;
+  /** Stored verbatim, so a test can seed a row that is malformed on purpose. */
+  rawParams?: Record<string, unknown>;
 }): Promise<string> {
   const id = nanoid();
-  const params = {
+  const params: Record<string, unknown> = opts.rawParams ?? {
     to: [opts.to ?? 'cust@example.com'],
     subject: opts.subject ?? 'Hi',
     html: '<p>hello</p>',
   };
+  // BORN WAITING, THEN APPROVED BY SOMEBODY. This inserted an approved row
+  // directly, which migration 173 now refuses for an integration that can
+  // actually do something: an outbound action that is approved from birth,
+  // names no responsibility, and points at a real integration is authority the
+  // caller asserted. Production reaches this state the way a person does — the
+  // row waits, and an owner approves it — so the fixture does too.
   await query(
     `INSERT INTO outbound_actions (id, product_id, agent_name, integration_name, action_type, authority_level, status, parameters_json, preview_text, rationale, confidence)
-     VALUES (?, ?, ?, 'resend', 'send_email', 0, 'approved', ?, ?, ?, 0.9)`,
+     VALUES (?, ?, ?, 'resend', 'send_email', 2, 'pending_approval', ?, ?, ?, 0.9)`,
     [id, productId, opts.agentName ?? 'beacon', JSON.stringify(params), 'preview', 'because']
   );
+  await query(
+    `UPDATE outbound_actions SET status='approved', approved_by=?, approved_at=datetime('now') WHERE id=?`,
+    [opts.approvedBy ?? 'rg_owner', id]);
   return id;
 }
 
@@ -184,7 +138,12 @@ describe('executeEmailSend: logged-only mode (no API key)', () => {
     vi.stubEnv('RESEND_API_KEY', '');
     delete process.env.RESEND_API_KEY;
 
-    const actionId = await insertAction({});
+    // ADDRESSED TO THE FOUNDER. Logged-only is the dev path for FOUNDRY having
+    // no provider key — it is about Foundry's own mail. A message to a
+    // customer goes through the COMPANY's key, which is connected above, so
+    // "no key" is not a state that message can be in. Pointing this at a
+    // customer would have tested a scenario that cannot happen.
+    const actionId = await insertAction({ to: `${founderId}@test.local` });
     const r = await executeEmailSend(actionId);
     expect(r.success).toBe(true);
 
@@ -201,6 +160,42 @@ describe('executeEmailSend: logged-only mode (no API key)', () => {
     expect(audit.rows.length).toBe(1);
     expect((audit.rows[0] as Record<string, string>).outcome).toBe('allowed');
     expect((audit.rows[0] as Record<string, string>).action_type).toBe('gateway:send_email');
+  });
+});
+
+// ─── A result the caller does not recognise ──────────────────────────────────
+
+describe('executeEmailSend: unrecognised gateway result', () => {
+  it('records unknown rather than sent, and does not blame the API key', async () => {
+    // Logged-mode and "no idea what came back" used to share one branch and one
+    // explanation: status 'executed' with the message "No RESEND_API_KEY set —
+    // email logged only". The first is true and deliberate. The second was a
+    // guess presented as a cause — a send whose outcome is unknown, filed as a
+    // completed one, blaming an environment variable that may well be set.
+    //
+    // A key IS set here, precisely so a failure to distinguish the two shows
+    // up as the false explanation it is.
+    vi.stubEnv('RESEND_API_KEY', 'test_key');
+    registerToolHandler(
+      'send_email',
+      // A shape this module knows nothing about: no message_id, not logged.
+      async () => ({ queued: 'maybe' }) as unknown as { logged: true },
+      SEND_EMAIL_POLICY,
+    );
+
+    const actionId = await insertAction({ to: `${founderId}@test.local` });
+    const r = await executeEmailSend(actionId);
+    expect(r.success, 'nothing confirmed a send, so this is not a success').toBe(false);
+
+    const row = (await query(
+      'SELECT status, result_json FROM outbound_actions WHERE id = ?', [actionId]
+    )).rows[0] as Record<string, unknown>;
+    expect(String(row.status),
+      'an email whose fate is unknown must not be recorded as sent').toBe('failed');
+    expect(String(row.result_json)).toContain('unknown');
+    expect(String(row.result_json),
+      'the API key is set — naming it would be a fabricated cause')
+      .not.toContain('No RESEND_API_KEY');
   });
 });
 
@@ -260,7 +255,11 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
     vi.stubEnv('RESEND_API_KEY', 'test_key');
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);
-    await query(`UPDATE products SET status = 'paused' WHERE id = ?`, [productId]);
+    // `scp_status`, not `status`. This used to set `status='paused'`, which the
+    // real schema forbids outright (migration 145's axis trigger) — so the
+    // test was proving the ARCHIVE branch of the kill-switch while its name
+    // claimed the pause branch, and the fabricated fixture hid the difference.
+    await query(`UPDATE products SET scp_status = 'paused' WHERE id = ?`, [productId]);
 
     const actionId = await insertAction({});
     const r = await executeEmailSend(actionId);
@@ -268,7 +267,10 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
 
     const row = await query('SELECT status FROM outbound_actions WHERE id = ?', [actionId]);
-    expect((row.rows[0] as Record<string, string>).status).toBe('refused');
+    // 'rejected' with effect_certainty 'not_attempted', not 'refused' —
+    // which the schema has never permitted. This assertion passed only
+    // because this file built its own outbound_actions with no CHECK.
+    expect((row.rows[0] as Record<string, string>).status).toBe('rejected');
   });
 
   it('refuses when send_email is in disabled_tools', async () => {
@@ -304,24 +306,85 @@ describe('executeEmailSend: real send (mocked fetch)', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(3); // not re-called
 
     const row = await query('SELECT status FROM outbound_actions WHERE id = ?', [fourthId]);
-    expect((row.rows[0] as Record<string, string>).status).toBe('refused');
+    // 'rejected' with effect_certainty 'not_attempted', not 'refused' —
+    // which the schema has never permitted. This assertion passed only
+    // because this file built its own outbound_actions with no CHECK.
+    expect((row.rows[0] as Record<string, string>).status).toBe('rejected');
   });
 });
 
 describe('send_email provider routing', () => {
   it('uses the server-owned SendGrid fallback without caller provider selection', async () => {
+    // ALSO FOUNDER MAIL. The SendGrid fallback is FOUNDRY's account, so it is
+    // deliberately unavailable to a company's own mail: falling back would put
+    // the founder's From through Foundry's provider, which is the exact
+    // substitution sender-of-record exists to prevent. The fallback is for
+    // Foundry's own messages, and that is what this proves.
     delete process.env.RESEND_API_KEY;
     vi.stubEnv('SENDGRID_API_KEY', 'sg_test');
     const fetchSpy = vi.fn(async () => new Response('', {
       status: 202, headers: { 'x-message-id': 'sg_1' },
     }));
     vi.stubGlobal('fetch', fetchSpy);
+    // The real product and the real founder. 'p1' names no company here, and
+    // a message to a company that does not exist has no founder to be
+    // addressed to — so it would be third-party mail with no sender, which is
+    // a different test than this one.
+    const founderEmail = `${founderId}@test.local`;
     const result = await sendEmailHandler({
-      productId: 'p1', agent: 'system', tool: 'send_email', action: 'digest',
-      params: { to: ['founder@example.com'], subject: 'Weekly', html: '<p>Hi</p>', text: 'Hi' },
-      dedupKey: 'weekly:p1:2026-08-14', customerExternalId: 'founder@example.com',
+      productId, agent: 'system', tool: 'send_email', action: 'digest',
+      params: { to: [founderEmail], subject: 'Weekly', html: '<p>Hi</p>', text: 'Hi' },
+      dedupKey: `weekly:${productId}:2026-08-14`, customerExternalId: founderEmail,
     });
     expect(result).toMatchObject({ message_id: 'sg_1' });
     expect(String(fetchSpy.mock.calls[0][0])).toContain('sendgrid.com');
   });
+});
+
+
+// ─── A coercion that manufactured a recipient ────────────────────────────────
+//
+// `[String(parameters.to)]` turned an ABSENT `to` into the one-element list
+// `["undefined"]`, and the gateway's `requireCustomerExternalId` is satisfied by
+// any non-empty string. So a row whose `parameters_json` PARSED but carried no
+// recipient reached the provider as an attempted send to the address
+// "undefined" — burning the dedup key and marking the action executed or
+// failed, rather than refusing it as malformed.
+//
+// The parse-FAILURE path was already safe, because it produces `to: []`. Valid
+// JSON missing a field was the gap, and it is the more likely of the two: a
+// caller that writes the row wrongly, rather than a row that is corrupt.
+
+describe('executeEmailSend: a row with no recipient', () => {
+  it('is refused rather than sent to the address "undefined"', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'test_key');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const id = await insertAction({ rawParams: { subject: 'Hi', html: '<p>hi</p>' } });
+    await executeEmailSend(id).catch(() => undefined);
+
+    expect(fetchSpy, 'no provider call may be attempted for a malformed row')
+      .not.toHaveBeenCalled();
+
+    const row = (await query('SELECT status FROM outbound_actions WHERE id = ?', [id]))
+      .rows[0] as Record<string, unknown>;
+    expect(String(row.status), 'executed or failed would both claim an attempt was made')
+      .not.toBe('executed');
+  });
+
+  it('is refused when every recipient is blank', async () => {
+    vi.stubEnv('RESEND_API_KEY', 'test_key');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const id = await insertAction({ rawParams: { to: ['', '   '], subject: 'Hi', html: 'x' } });
+    await executeEmailSend(id).catch(() => undefined);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // No positive control here on purpose: the happy-path describes above already
+  // prove a well-formed row sends, and repeating it at the end of the file
+  // would couple this describe to whatever kill-switch state they leave behind.
 });

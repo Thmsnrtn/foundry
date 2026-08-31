@@ -6,6 +6,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { callSonnet } from '../../ai/client.js';
+import { experimentOutcome } from './board-packet.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,15 @@ function monthToDateRange(month: string): { start: string; end: string } {
 
 export async function generateInvestorUpdate(
   productId: string,
-  month: string
+  month: string,
+  /**
+   * A line the founder wants the update built around. The public API route
+   * accepts one and the surface that replaced it did not, so consolidating the
+   * two writers would have meant silently discarding caller input — which is
+   * how a parameter comes to look supported and do nothing. One optional
+   * argument is cheaper than a second writer.
+   */
+  highlight?: string
 ): Promise<string> {
   // Check if update already exists
   const existing = await query(
@@ -72,8 +81,25 @@ export async function generateInvestorUpdate(
     if (metricsResult.rows.length > 1) prevMetricsRow = metricsResult.rows[1] as Record<string, unknown>;
   } catch { /* ok */ }
 
+
+  // AN UNREAD SOURCE IS NOT AN EMPTY ONE.
+  //
+  // Each of the sections below was initialised to its own negative claim —
+  // "None active.", "No experiments this month.", "No briefings available." —
+  // and then wrapped in `try { ... } catch { /* ok */ }`. A query that threw
+  // therefore produced the confident sentence rather than the true one, and the
+  // confident sentence went to an INVESTOR: "no active risks" is a materially
+  // different statement from "we could not read our risks", and only one of them
+  // was ever sent.
+  //
+  // The negative claims are still made — an investor update that cannot say "no
+  // experiments this month" is useless — but only from the branch that actually
+  // looked. A failed read says it failed. There is no new vocabulary for this
+  // and no epistemic enum: the variable simply is not pre-loaded with the answer
+  // it is supposed to go and find out.
+
   // Load briefings this month
-  let briefingHeadlines = 'No briefings available.';
+  let briefingHeadlines = 'Briefings for this period could not be read.';
   try {
     const briefingsResult = await query(
       `SELECT headline, briefing_date FROM scp_briefings
@@ -88,14 +114,16 @@ export async function generateInvestorUpdate(
           return `- [${row.briefing_date as string}] ${row.headline as string}`;
         })
         .join('\n');
+    } else {
+      briefingHeadlines = 'No briefings this period.';
     }
   } catch { /* ok */ }
 
   // Load active stressors
-  let stressorsText = 'None active.';
+  let stressorsText = 'Active risks could not be read for this period.';
   try {
     const stressorsResult = await query(
-      `SELECT title, severity FROM stressor_history
+      `SELECT stressor_name AS title, severity FROM stressor_history
        WHERE product_id=? AND status='active'`,
       [productId]
     );
@@ -106,14 +134,16 @@ export async function generateInvestorUpdate(
           return `[${row.severity as string}] ${row.title as string}`;
         })
         .join(', ');
+    } else {
+      stressorsText = 'None active.';
     }
   } catch { /* ok */ }
 
   // Load recent experiments
-  let experimentsText = 'No experiments this month.';
+  let experimentsText = 'Experiments for this period could not be read.';
   try {
     const expResult = await query(
-      `SELECT name, status, outcome_summary FROM experiments
+      `SELECT name, status, winner, early_stop_reason FROM experiments
        WHERE product_id=? AND updated_at >= ? ORDER BY updated_at DESC LIMIT 5`,
       [productId, start]
     );
@@ -121,20 +151,52 @@ export async function generateInvestorUpdate(
       experimentsText = expResult.rows
         .map((r) => {
           const row = r as Record<string, unknown>;
-          return `${row.name as string} (${row.status as string})`;
+          return `${row.name as string} (${experimentOutcome(row)})`;
         })
         .join(', ');
+    } else {
+      experimentsText = 'No experiments this month.';
     }
   } catch { /* ok */ }
 
   // Compute key metrics
+  //
+  // TWO COLUMNS THAT DO NOT EXIST, IN THE DOCUMENT THAT GOES TO INVESTORS.
+  // `mrr_growth_pct` and `customer_count` have never been columns on
+  // `metric_snapshots` — the same pair the fundraising assessment was found
+  // reading. Off a `SELECT *` row they are `undefined` forever, so every
+  // investor update ever generated reported growth and customer count as "N/A",
+  // and the prior snapshot fetched two queries above to compute growth was
+  // never used.
+  //
+  // Growth is derived from the two snapshots, as a MONTHLY-EQUIVALENT rate from
+  // the gap between their dates: consecutive rows are a day apart for most
+  // companies, and this line is read as a monthly figure by whoever receives
+  // the update. The customer count comes from the accessor that reads both
+  // customer stores.
   const mrrCents = (metricsRow.mrr_cents as number) ?? null;
   const prevMrrCents = (prevMetricsRow.mrr_cents as number) ?? null;
   const mrrDisplay = mrrCents !== null ? `$${(mrrCents / 100).toLocaleString()}` : 'N/A';
-  const mrrGrowth = (metricsRow.mrr_growth_pct as number) ?? null;
-  const churnRate = (metricsRow.churn_rate as number) ?? null;
-  const activationRate = (metricsRow.activation_rate as number) ?? null;
-  const customerCount = (metricsRow.customer_count as number) ?? null;
+
+  let mrrGrowth: number | null = null;
+  {
+    const gapDays = (Date.parse(`${String(metricsRow.snapshot_date)}T00:00:00Z`)
+      - Date.parse(`${String(prevMetricsRow.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+    if (mrrCents !== null && prevMrrCents !== null && prevMrrCents > 0
+      && Number.isFinite(gapDays) && gapDays > 0) {
+      mrrGrowth = Math.round(((mrrCents / prevMrrCents) ** (30.44 / gapDays) - 1) * 1000) / 10;
+    }
+  }
+  // `* 100`: stored as 0–1 fractions. An investor update reporting "0.0%
+  // churn" for a company churning 2% a month is the version of this that
+  // matters most.
+  const churnRate = metricsRow.churn_rate == null ? null : Number(metricsRow.churn_rate) * 100;
+  const activationRate = metricsRow.activation_rate == null ? null : Number(metricsRow.activation_rate) * 100;
+  let customerCount: number | null = null;
+  try {
+    const { getCompanyCustomers } = await import('../../institution/company-customers.js');
+    customerCount = (await getCompanyCustomers(productId)).length;
+  } catch { /* an unreadable customer store is not a count of zero */ }
 
   const keyMetrics: Record<string, unknown> = {
     mrr: mrrDisplay,
@@ -150,7 +212,7 @@ Write in a direct, honest, founder voice. Be specific with numbers. Keep it conc
 Format as clean markdown with the exact sections requested.`;
 
   const userPrompt = `Write a monthly investor update for ${companyName} — ${month}.
-
+${highlight ? `\nThe founder asked that this update be built around: ${highlight}\n` : ''}
 Key Metrics:
 - MRR: ${mrrDisplay}${mrrGrowth !== null ? ` (${mrrGrowth >= 0 ? '+' : ''}${mrrGrowth.toFixed(1)}% MoM)` : ''}
 - Customers: ${customerCount ?? 'N/A'}
@@ -191,11 +253,29 @@ Write the update in this exact markdown format:
   const draftText = response.content.trim();
 
   // INSERT into investor_updates
+  //
+  // `owner_id`, `period`, `subject` and `content` are NOT NULL with no default
+  // and none of them was supplied, so this raised every time — AFTER the model
+  // call that wrote the update had been made and paid for. The founder pressed
+  // Generate, the money went, the draft was written, the write threw, and
+  // nothing appeared. The investor-update feature has never produced an update.
+  //
+  // The table carries two generations of column names for the same facts
+  // (`month`/`period`, `draft_text`/`content`) because a later migration
+  // redefined it with `CREATE TABLE IF NOT EXISTS` and was a silent no-op.
+  // Both are written rather than one, so every reader of either sees the same
+  // update instead of half of them seeing none.
+  const ownerRow = (await query('SELECT owner_id FROM products WHERE id = ?', [productId]))
+    .rows[0] as Record<string, unknown> | undefined;
   const id = nanoid();
   await query(
-    `INSERT INTO investor_updates (id, product_id, month, draft_text, key_metrics_json, status)
-     VALUES (?, ?, ?, ?, ?, 'draft')`,
-    [id, productId, month, draftText, JSON.stringify(keyMetrics)]
+    `INSERT INTO investor_updates
+       (id, product_id, owner_id, period, subject, content,
+        month, draft_text, key_metrics_json, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft')`,
+    [id, productId, String(ownerRow?.owner_id ?? ''), month,
+      `${companyName} — ${month} Investor Update`, draftText,
+      month, draftText, JSON.stringify(keyMetrics)]
   );
 
   return id;

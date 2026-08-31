@@ -8,7 +8,12 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { computeCostCents, MODELS, CACHE_BREAKPOINT } from '../../ai/client.js';
-import { sanitizeForPrompt } from '../../ai/sanitize.js';
+import { dataBlockInstruction, sanitizeForPrompt, wrapDataBlock } from '../../ai/sanitize.js';
+
+/** Tags for the two blocks of third-party text every agent run carries. Named
+ *  constants so the fence and the sentence explaining it cannot drift apart. */
+const INTEGRATION_SIGNALS_TAG = 'integration_signals';
+const AGENT_MESSAGES_TAG = 'agent_messages';
 import { logger } from '../../logger.js';
 import type {
   AgentName,
@@ -187,7 +192,12 @@ export abstract class BaseAgent {
       import('../coordination/scratchpad.js').then(({ writeAgentFinding }) => {
         writeAgentFinding(productId, agentName, {
           position: result.briefingContribution,
-          confidence: result.domainHealthScore !== undefined ? result.domainHealthScore / 100 : 0.5,
+          // The same substitution as the 50: a run that did not score the
+          // domain has no confidence to state, and 0.5 was printed to every
+          // other agent's prompt as "50% confidence" in this agent's position.
+          confidence: result.domainHealthScore !== undefined
+            ? result.domainHealthScore / 100
+            : null,
         }).catch((err) => { logger.error(`writeAgentFinding failed for ${agentName}/${productId}: ${err}`); });
       }).catch((err) => { logger.error(`import scratchpad.js failed: ${err}`); });
     }
@@ -274,34 +284,32 @@ export abstract class BaseAgent {
     // 16. Process v2/v3 signal fields (all fire-and-forget, non-fatal)
 
     // Customer signals → customer_intelligence
+    //
+    // A MODEL MAY JUDGE A CUSTOMER; IT MAY NOT INVENT ONE. This called
+    // `upsertCustomer`, whose insert branch created a customer record from a
+    // model's `external_id`, `name`, `email`, `plan` and `mrr_cents` —
+    // indistinguishable, once written, from one a real billing system reported
+    // through the public API. `recordAgentCustomerSignal` resolves an existing
+    // customer or refuses, and writes only the health sub-scores and the note,
+    // which are assessments rather than facts about the world.
     if (result.customerSignals && result.customerSignals.length > 0) {
       const signals = result.customerSignals;
-      import('../../customer/intelligence.js').then(({ upsertCustomer, addAgentNote, updateHealthScore }) => {
+      import('../../customer/intelligence.js').then(async ({ recordAgentCustomerSignal }) => {
         for (const sig of signals) {
-          const { note, external_id, name, email, mrr_cents, plan,
-                  health_login_score, health_feature_score,
-                  health_sentiment_score, health_billing_score, stage } = sig;
-          upsertCustomer(productId, {
-            external_customer_id: external_id,
-            account_name: name,
-            email,
-            plan,
-            mrr_cents,
-          }).then(async (customer) => {
-            // Update health sub-scores if provided
-            if (health_login_score !== undefined || health_feature_score !== undefined ||
-                health_sentiment_score !== undefined || health_billing_score !== undefined) {
-              await updateHealthScore(customer.id, {
-                login_frequency_score: health_login_score,
-                feature_depth_score: health_feature_score,
-                support_sentiment_score: health_sentiment_score,
-                billing_health_score: health_billing_score,
-              }).catch((err) => { logger.error(`updateHealthScore failed for customer ${customer.id}: ${err}`); });
-            }
-            if (note) {
-              await addAgentNote(customer.id, agentName, note).catch((err) => { logger.error(`addAgentNote failed for customer ${customer.id}: ${err}`); });
-            }
-          }).catch((err) => { logger.error(`upsertCustomer failed for ${agentName}/${productId}: ${err}`); });
+          const outcome = await recordAgentCustomerSignal(productId, agentName, {
+            external_id: sig.external_id,
+            note: sig.note,
+            health_login_score: sig.health_login_score,
+            health_feature_score: sig.health_feature_score,
+            health_sentiment_score: sig.health_sentiment_score,
+            health_billing_score: sig.health_billing_score,
+          }).catch((err) => {
+            logger.error(`recordAgentCustomerSignal failed for ${agentName}/${productId}: ${err}`);
+            return null;
+          });
+          if (outcome && 'refused' in outcome) {
+            logger.warn(`${agentName} named a customer ${productId} does not have: ${outcome.refused}`);
+          }
         }
       }).catch((err) => { logger.error(`import customer/intelligence.js failed: ${err}`); });
     }
@@ -355,12 +363,26 @@ export abstract class BaseAgent {
       const hypotheses = result.hypotheses;
       import('../experiments.js').then(({ proposeHypothesis }) => {
         for (const hyp of hypotheses) {
-          // Build the statement from title + hypothesis
-          const statement = `[${hyp.title}] ${hyp.hypothesis} — Success metric: ${hyp.success_metric} (target: ${(hyp.success_threshold * 100).toFixed(0)}% improvement)`;
+          // A THRESHOLD IS A NUMBER OR IT IS NOTHING.
+          //
+          // `success_threshold` is typed as a number and arrives from a
+          // language model, which is free to answer "20%", "a fifth", or
+          // nothing at all. Multiplying any of those by 100 yields NaN, and the
+          // statement below is stored and shown to the founder — so a
+          // hypothesis read "target: NaN% improvement" and its
+          // `predicted_effect_size` column took the same value. The target is
+          // the part of a hypothesis that makes it falsifiable; without one
+          // there is a sentence but no prediction, so the number is omitted
+          // rather than invented.
+          const threshold = typeof hyp.success_threshold === 'number'
+            && Number.isFinite(hyp.success_threshold) ? hyp.success_threshold : null;
+          const target = threshold === null
+            ? 'no target stated' : `target: ${(threshold * 100).toFixed(0)}% improvement`;
+          const statement = `[${hyp.title}] ${hyp.hypothesis} — Success metric: ${hyp.success_metric} (${target})`;
           proposeHypothesis(productId, {
             proposedBy: agentName,
             statement,
-            predictedEffectSize: hyp.success_threshold,
+            predictedEffectSize: threshold ?? undefined,
             estimatedDurationDays: hyp.test_duration_days,
             riskAssessment: `Proposed by ${agentName} — requires human validation before running.`,
           }).catch((err) => { logger.error(`proposeHypothesis failed for ${agentName}/${productId}: ${err}`); });
@@ -549,6 +571,13 @@ export abstract class BaseAgent {
       );
     }
 
+    // The sentence that makes the fences below mean something. In the STABLE
+    // half deliberately: it is identical for every agent and every run, so it
+    // belongs before the cache breakpoint, and `dataBlockInstruction` says it
+    // must sit in the system prompt rather than beside the data.
+    stable.push(`${dataBlockInstruction(INTEGRATION_SIGNALS_TAG)}\n`
+      + `${dataBlockInstruction(AGENT_MESSAGES_TAG)}`);
+
     // ── C-Suite Output Standard (stable — identical for every agent/run) ──────
     stable.push(`
 REQUIRED OUTPUT FORMAT — C-SUITE STANDARD:
@@ -571,20 +600,40 @@ Rules:
     // ── VOLATILE blocks (change every run — must sit AFTER the cache breakpoint)
     const volatile: string[] = [];
 
-    // Inject integration events (v2) — sanitize summaries (user-controlled data)
+    // A DENYLIST WAS THE ONLY THING BETWEEN THIRD-PARTY TEXT AND TWELVE AGENTS.
+    //
+    // These two blocks carry the most external content in the product:
+    // integration summaries built from Intercom conversations, Linear issues,
+    // GitHub commits and Sentry errors, and agent messages whose bodies quote
+    // them. Both were passed through `sanitizeForPrompt` — seventeen regexes
+    // for known injection phrases, plus tag stripping — and then interpolated
+    // bare into the prompt of every agent run, the highest-traffic model path
+    // in the product.
+    //
+    // `sanitize.ts` documents the stronger mechanism a few lines from that
+    // function and says why it is stronger: a fenced block, plus a sentence in
+    // the SYSTEM prompt saying what the fence means, because "a delimiter with
+    // nothing telling the model what the delimiter is for is decoration". Two
+    // of seventy-eight model-calling files used it. This is now a third and a
+    // fourth.
+    //
+    // Both, not either. The denylist stays — it also redacts PII out of these
+    // summaries before they reach a provider — and the fence is what holds when
+    // the phrase is one nobody listed.
     if (context.integrationEvents && context.integrationEvents.length > 0) {
       const eventLines = context.integrationEvents.slice(0, 15).map(e =>
         `[${sanitizeForPrompt(e.source)}/${sanitizeForPrompt(e.event_type)}] ${sanitizeForPrompt(e.summary)}`
       ).join('\n');
-      volatile.push(`INTEGRATION SIGNALS (${context.integrationEvents.length} since last run):\n${eventLines}`);
+      volatile.push(`INTEGRATION SIGNALS (${context.integrationEvents.length} since last run):\n`
+        + wrapDataBlock(INTEGRATION_SIGNALS_TAG, eventLines));
     }
 
-    // Inject unread agent messages (v2) — sanitize subject/body (may contain external data)
     if (context.unreadMessages && context.unreadMessages.length > 0) {
       const msgLines = context.unreadMessages.map(m =>
         `[${sanitizeForPrompt(m.from_agent)} · ${m.priority}] ${sanitizeForPrompt(m.subject)}: ${sanitizeForPrompt(m.body.slice(0, 300))}`
       ).join('\n');
-      volatile.push(`MESSAGES FROM AGENT NETWORK:\n${msgLines}`);
+      volatile.push(`MESSAGES FROM AGENT NETWORK:\n`
+        + wrapDataBlock(AGENT_MESSAGES_TAG, msgLines));
     }
 
     // Inject scratchpad context — what other agents found today
@@ -678,7 +727,8 @@ Rules:
     // Check for pending self-initiated actions from the initiative queue
     try {
       const result = await query(
-        `SELECT id, action_type, action_description, parameters_json
+        `SELECT id, initiative_type AS action_type, description AS action_description,
+                context AS parameters_json
          FROM agent_initiative_queue
          WHERE product_id=? AND agent_name=? AND status='pending'
          ORDER BY priority DESC, created_at ASC
@@ -696,6 +746,7 @@ Rules:
         // Route into outbound executor for human approval
         const { proposeAction } = await import('../../outbound/executor.js');
         const actionDesc = row.action_description as string;
+        let proposed = false;
         await proposeAction({
           productId,
           agentName,
@@ -705,11 +756,21 @@ Rules:
           previewText: actionDesc.slice(0, 200),
           parameters: this._parseJSON<Record<string, unknown>>(row.parameters_json as string | null, {}),
           authorityLevel: 2, // All initiative queue items require approval
-        }).catch(() => {});
-        // Mark as completed (proposed into the outbound queue for approval)
+        }).then(
+          () => { proposed = true; },
+          (err: unknown) => {
+            // `.catch(() => {})` swallowed this, and the row was then marked
+            // 'completed' with a comment reading "proposed into the outbound
+            // queue for approval". So an initiative whose proposal failed was
+            // recorded as done, and nothing was queued for anybody to approve.
+            // The queue's own vocabulary already has a word for this.
+            logger.error(
+              `proposeAction failed for initiative ${String(row.id)}: ${String(err)}`,
+              { productId, agentName });
+          });
         await query(
-          `UPDATE agent_initiative_queue SET status='completed', processed_at=CURRENT_TIMESTAMP WHERE id=?`,
-          [row.id as string]
+          `UPDATE agent_initiative_queue SET status=?, processed_at=CURRENT_TIMESTAMP WHERE id=?`,
+          [proposed ? 'completed' : 'failed', row.id as string]
         );
       }
     } catch {
@@ -758,7 +819,7 @@ Rules:
       total_decisions_proposed: r.total_decisions_proposed as number,
       total_decisions_approved: r.total_decisions_approved as number,
       total_evolution_cycles: r.total_evolution_cycles as number,
-      domain_health_score: r.domain_health_score as number,
+      domain_health_score: (r.domain_health_score ?? null) as number | null,
       system_prompt_core: r.system_prompt_core as string | null,
       behavioral_constraints: this._parseJSON<string[] | null>(r.behavioral_constraints as string | null, null),
       config_json: this._parseJSON<Record<string, unknown> | null>(r.config_json as string | null, null),

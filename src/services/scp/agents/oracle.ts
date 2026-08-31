@@ -15,6 +15,7 @@ import type {
 } from '../types.js';
 import { callOpus, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { pctOfFraction, measured, money } from '../../ai/measured.js';
 
 interface OracleClaudeResponse {
   observations: string[];
@@ -44,7 +45,7 @@ interface OracleClaudeResponse {
     insight: string;
     priority: 'critical' | 'high' | 'normal' | 'low';
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -104,7 +105,7 @@ export class OracleAgent extends BaseAgent {
 
     // ── 5. Query running experiments for context ──────────────────────────────
     const experimentsResult = await db(
-      `SELECT title, hypothesis, success_metric, status, started_at
+      `SELECT name AS title, hypothesis, success_metric, status, started_at
        FROM experiments
        WHERE product_id = ? AND status IN ('running', 'completed')
        ORDER BY started_at DESC
@@ -132,7 +133,6 @@ export class OracleAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -141,15 +141,19 @@ export class OracleAgent extends BaseAgent {
 
     const metricSeries = metricRows.map(row => {
       const date = row.snapshot_date as string;
-      const signups = Number(row.signups_7d) || 0;
-      const active = Number(row.active_users) || 0;
-      const newMrr = (Number(row.new_mrr_cents) || 0) / 100;
-      const activation = ((Number(row.activation_rate) || 0) * 100).toFixed(1);
-      const retention = ((Number(row.day_30_retention) || 0) * 100).toFixed(1);
-      const churn = ((Number(row.churn_rate) || 0) * 100).toFixed(1);
-      const nps = Number(row.nps_score) || 0;
-      const healthRatio = Number(row.mrr_health_ratio) || 0;
-      return `${date}: signups=${signups} active=${active} newMRR=$${newMrr.toFixed(2)} activation=${activation}% ret30d=${retention}% churn=${churn}% nps=${nps} healthRatio=${healthRatio.toFixed(2)}`;
+      // A SERIES IS WHERE THIS MATTERS MOST. Oracle is asked to find trends
+      // across these rows, and a column the company stopped reporting used to
+      // become a run of zeros — which is not missing data to a model looking
+      // for a trend, it is a collapse. See `ai/measured.ts`.
+      const signups = measured(row.signups_7d);
+      const active = measured(row.active_users);
+      const newMrr = money(row.new_mrr_cents);
+      const activation = pctOfFraction(row.activation_rate);
+      const retention = pctOfFraction(row.day_30_retention);
+      const churn = pctOfFraction(row.churn_rate);
+      const nps = measured(row.nps_score);
+      const healthRatio = measured(row.mrr_health_ratio, 2);
+      return `${date}: signups=${signups} active=${active} newMRR=${newMrr} activation=${activation} ret30d=${retention} churn=${churn} nps=${nps} healthRatio=${healthRatio}`;
     }).join('\n');
 
     const signalRows = signalHistoryResult.rows as Record<string, unknown>[];
@@ -246,7 +250,9 @@ Return JSON only (no markdown fences):
       "priority": "critical" | "high" | "normal" | "low"
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -268,7 +274,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -339,7 +344,7 @@ Return JSON only (no markdown fences):
       }] : [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      domainHealthScore: parsed.domain_health_score,
       hypotheses,
       agentMessages,
     };

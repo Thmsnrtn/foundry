@@ -8,6 +8,7 @@ import { html } from 'hono/html';
 import { nanoid } from 'nanoid';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
+import { requireOwner } from '../../middleware/rbac.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
 
@@ -38,6 +39,37 @@ function progressColor(pct: number): string {
   return '#ff6b6b';
 }
 
+/**
+ * WHO MOVED THIS NUMBER.
+ *
+ * `okr_progress_updates` records every change to a key result — from what, to
+ * what, by whom, and why. Nothing read it. The page showed a current value and
+ * a progress bar, so "78%" was a fact with no history and no author: a founder
+ * could not see that they had moved it themselves last Tuesday with a note
+ * explaining why, still less that something else had.
+ *
+ * The `source` column exists to tell a founder-made change from an agent-made
+ * one. Right now every row says 'founder_manual', because the only code that
+ * would have written 'agent_session' was `services/scp/okr.ts`, which nothing
+ * could call and which is retired in this change. The distinction is rendered
+ * anyway rather than assumed away — if an agent path comes back, the founder
+ * sees it the day it does, not the day someone remembers to add a label.
+ */
+function updateAuthor(source: string): string {
+  if (source === 'founder_manual') return 'you';
+  if (source === 'agent_session') return 'an agent';
+  return source;
+}
+
+interface ProgressUpdate {
+  key_result_id: string;
+  previous_value: number | null;
+  new_value: number;
+  source: string;
+  note: string | null;
+  created_at: string;
+}
+
 // ─── GET /okrs ─────────────────────────────────────────────────────────────────
 
 agentsOkr.get('/agents/okr', async (c) => {
@@ -46,7 +78,56 @@ agentsOkr.get('/agents/okr', async (c) => {
   const quarter = c.req.query('quarter') ?? '';
 
   if (!ctx.productId) {
-    const content = html`
+    // NOTHING COULD CREATE AN OBJECTIVE.
+  //
+  // This page renders objectives, key results, progress bars, a quarter filter
+  // and an update form — and until this form existed there was no way, anywhere
+  // in the running system, to produce a row for it to render. `createOKR` lived
+  // in `services/scp/okr.ts`, which nothing imported; `compass.ts` and
+  // `forecasting/targets.ts` read `company_okrs` too, so agents were reasoning
+  // about objectives that could not exist. The empty state said so, which was
+  // honest, and left the feature hollow.
+  //
+  // The gate that says a table read by live code must have a live writer found
+  // it the moment the unreachable module was deleted — it had been counting the
+  // INSERT inside that module as a writer, because a text scanner cannot see
+  // reachability. Deleting the module made the hollow half visible.
+  const createForm = html`
+    <details class="card" style="padding:1.25rem;margin-bottom:1rem;">
+      <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--accent);">New objective</summary>
+      <form method="POST" action="/agents/okr/create" style="margin-top:1rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+          <div style="flex:2;min-width:240px;">
+            <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:2px;">Objective</label>
+            <input type="text" name="objective" required placeholder="Reach 100 paying teams"
+              style="width:100%;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.85rem;" />
+          </div>
+          <div style="min-width:120px;">
+            <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:2px;">Period</label>
+            <input type="text" name="period" required placeholder="2026-Q4"
+              style="width:130px;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.85rem;" />
+          </div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">Key results — at least one. An objective with nothing to measure is a wish, so a blank set is refused. Leave a row blank to skip it.</div>
+        ${[0, 1, 2].map((i) => html`
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;">
+          <div style="flex:2;min-width:200px;">
+            <input type="text" name="kr_description_${i}" placeholder="What you will measure"
+              style="width:100%;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.82rem;" />
+          </div>
+          <div><input type="number" step="any" name="kr_start_${i}" placeholder="from"
+            style="width:90px;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.82rem;" /></div>
+          <div><input type="number" step="any" name="kr_target_${i}" placeholder="to"
+            style="width:90px;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.82rem;" /></div>
+          <div><input type="text" name="kr_unit_${i}" placeholder="unit"
+            style="width:80px;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.82rem;" /></div>
+        </div>`)}
+        <div><button type="submit" class="btn btn-primary" style="font-size:0.82rem;">Create objective</button></div>
+      </form>
+    </details>
+  `;
+
+  const content = html`
       <h1 style="margin:0 0 1rem;">OKRs</h1>
       <div class="card" style="padding:2rem;text-align:center;color:var(--text-muted);">No product selected.</div>
     `;
@@ -78,6 +159,33 @@ agentsOkr.get('/agents/okr', async (c) => {
   sql += ` GROUP BY co.id ORDER BY co.created_at DESC`;
 
   const result = await query(sql, params);
+
+  // One query for every key result on the page, grouped in memory — a history
+  // query per key result would be one round trip per row.
+  const historyRows = (await query(
+    `SELECT u.key_result_id, u.previous_value, u.new_value, u.source, u.note, u.created_at
+       FROM okr_progress_updates u
+       JOIN key_results kr ON kr.id = u.key_result_id
+       JOIN company_okrs co ON co.id = kr.okr_id
+      WHERE co.product_id = ?
+      ORDER BY u.created_at DESC`,
+    [productId],
+  )).rows as unknown as Array<Record<string, unknown>>;
+
+  const historyByKr = new Map<string, ProgressUpdate[]>();
+  for (const r of historyRows) {
+    const krId = String(r.key_result_id);
+    const list = historyByKr.get(krId) ?? [];
+    list.push({
+      key_result_id: krId,
+      previous_value: r.previous_value == null ? null : Number(r.previous_value),
+      new_value: Number(r.new_value),
+      source: String(r.source),
+      note: r.note == null ? null : String(r.note),
+      created_at: String(r.created_at),
+    });
+    historyByKr.set(krId, list);
+  }
   const okrs = result.rows as Array<Record<string, unknown>>;
 
   // Get available periods for the selector
@@ -106,13 +214,37 @@ agentsOkr.get('/agents/okr', async (c) => {
       return html`
         <div style="padding:0.875rem 1rem;border-top:1px solid rgba(255,255,255,0.05);">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;gap:0.5rem;flex-wrap:wrap;">
-            <span style="font-size:0.85rem;color:var(--text-primary);">${kr.description ?? '(unnamed)'}</span>
+            <span style="font-size:0.85rem;color:var(--text-primary);">${kr.description ?? '(unnamed)'}${
+              kr.owner_agent == null
+                ? ''
+                : html`<span style="font-size:0.7rem;color:var(--text-muted);margin-left:0.5rem;">owned by ${String(kr.owner_agent)}</span>`
+            }</span>
             <span style="font-size:0.78rem;color:var(--text-muted);white-space:nowrap;">${Number(baseline).toLocaleString()} → <strong style="color:var(--text-dim);">${Number(current).toLocaleString()}</strong> → ${Number(target).toLocaleString()}</span>
           </div>
           <div style="display:flex;align-items:center;gap:0.75rem;">
             <div style="flex:1;">${{ toString: () => progressBarHtml(krProgress, progressColor(krProgress)) }}</div>
             <span style="font-size:0.8rem;font-weight:700;color:${progressColor(krProgress)};min-width:36px;text-align:right;">${krProgress.toFixed(0)}%</span>
           </div>
+          ${(() => {
+            const history = historyByKr.get(String(kr.id)) ?? [];
+            if (history.length === 0) {
+              return html`<div style="margin-top:0.5rem;font-size:0.72rem;color:var(--text-muted);">
+                This value has not been changed since the key result was created.
+              </div>`;
+            }
+            return html`<div style="margin-top:0.5rem;">
+              ${history.slice(0, 5).map((u) => html`
+                <div style="font-size:0.72rem;color:var(--text-muted);line-height:1.6;">
+                  <span style="color:var(--text-dim);">${u.created_at.slice(0, 10)}</span>
+                  &nbsp;${u.previous_value == null ? '—' : u.previous_value.toLocaleString()}
+                  → <strong style="color:var(--text-dim);">${u.new_value.toLocaleString()}</strong>
+                  &nbsp;by ${updateAuthor(u.source)}${u.note ? html` — ${u.note}` : ''}
+                </div>`)}
+              ${history.length > 5
+                ? html`<div style="font-size:0.7rem;color:var(--text-muted);">and ${history.length - 5} earlier ${history.length - 5 === 1 ? 'change' : 'changes'}.</div>`
+                : ''}
+            </div>`;
+          })()}
           <!-- Update form -->
           <details style="margin-top:0.75rem;">
             <summary style="cursor:pointer;font-size:0.75rem;color:var(--accent);font-weight:600;">Update progress</summary>
@@ -141,6 +273,9 @@ agentsOkr.get('/agents/okr', async (c) => {
             <div style="flex:1;">
               <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.25rem;">${okr.quarter ?? ''} Objective</div>
               <h3 style="margin:0;font-size:1.05rem;color:var(--text-primary);">${okr.objective_text ?? '(untitled)'}</h3>
+              ${String(okr.objective_owner ?? 'founder') === 'founder'
+                ? ''
+                : html`<div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;">Owned by ${String(okr.objective_owner)}</div>`}
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.4rem;flex-shrink:0;">
               <span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;${statusBadgeStyle(okr.status as string ?? 'draft')}">${statusLabel(okr.status as string ?? 'draft')}</span>
@@ -160,6 +295,55 @@ agentsOkr.get('/agents/okr', async (c) => {
     `;
   }));
 
+  // NOTHING COULD CREATE AN OBJECTIVE.
+  //
+  // This page renders objectives, key results, progress bars, a quarter filter
+  // and an update form — and until this form existed there was no way, anywhere
+  // in the running system, to produce a row for it to render. `createOKR` lived
+  // in `services/scp/okr.ts`, which nothing imported; `compass.ts` and
+  // `forecasting/targets.ts` read `company_okrs` too, so agents were reasoning
+  // about objectives that could not exist. The empty state said so, which was
+  // honest, and left the feature hollow.
+  //
+  // The gate that says a table read by live code must have a live writer found
+  // it the moment the unreachable module was deleted — it had been counting the
+  // INSERT inside that module as a writer, because a text scanner cannot see
+  // reachability. Deleting the module made the hollow half visible.
+  const createForm = html`
+    <details class="card" style="padding:1.25rem;margin-bottom:1rem;">
+      <summary style="cursor:pointer;font-weight:600;font-size:0.9rem;color:var(--accent);">New objective</summary>
+      <form method="POST" action="/agents/okr/create" style="margin-top:1rem;display:flex;flex-direction:column;gap:0.75rem;">
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+          <div style="flex:2;min-width:240px;">
+            <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:2px;">Objective</label>
+            <input type="text" name="objective" required placeholder="Reach 100 paying teams"
+              style="width:100%;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.85rem;" />
+          </div>
+          <div style="min-width:120px;">
+            <label style="font-size:0.72rem;color:var(--text-muted);display:block;margin-bottom:2px;">Period</label>
+            <input type="text" name="period" required placeholder="2026-Q4"
+              style="width:130px;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.85rem;" />
+          </div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--text-muted);">Key results — at least one. An objective with nothing to measure is a wish, so a blank set is refused. Leave a row blank to skip it.</div>
+        ${[0, 1, 2].map((i) => html`
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;">
+          <div style="flex:2;min-width:200px;">
+            <input type="text" name="kr_description_${i}" placeholder="What you will measure"
+              style="width:100%;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.82rem;" />
+          </div>
+          <div><input type="number" step="any" name="kr_start_${i}" placeholder="from"
+            style="width:90px;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.82rem;" /></div>
+          <div><input type="number" step="any" name="kr_target_${i}" placeholder="to"
+            style="width:90px;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.82rem;" /></div>
+          <div><input type="text" name="kr_unit_${i}" placeholder="unit"
+            style="width:80px;padding:6px 9px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.82rem;" /></div>
+        </div>`)}
+        <div><button type="submit" class="btn btn-primary" style="font-size:0.82rem;">Create objective</button></div>
+      </form>
+    </details>
+  `;
+
   const content = html`
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:0.5rem;">
       <h1 style="margin:0;">OKRs</h1>
@@ -174,8 +358,13 @@ agentsOkr.get('/agents/okr', async (c) => {
       ` : ''}
     </div>
 
+    ${createForm}
+
     ${okrs.length === 0
-      ? html`<div class="card" style="padding:3rem;text-align:center;color:var(--text-muted);font-size:0.9rem;">No OKRs defined yet. Agents will create objectives as your strategy evolves.</div>`
+      ? html`<div class="card" style="padding:3rem;text-align:center;color:var(--text-muted);font-size:0.9rem;">
+          <div>No objectives here.</div>
+          <div style="margin-top:0.5rem;font-size:0.82rem;">Add one above. Nothing in Foundry writes objectives for you — agents read them, and Compass and the forecasting targets reason about them, but you set them.</div>
+        </div>`
       : okrCards}
   `;
 
@@ -183,6 +372,62 @@ agentsOkr.get('/agents/okr', async (c) => {
 });
 
 // ─── POST /okrs/:okrId/key-results/:krId/update ───────────────────────────────
+
+// Setting the company's objectives is an owner act: it defines what the company
+// is trying to do, and agents read it. A team member with `can_trigger_actions`
+// may move a key result — that is reporting a number — but not decide what the
+// company is aiming at.
+agentsOkr.post('/agents/okr/create', requireOwner(), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'okrs', 'OKRs', undefined, c);
+  if (!ctx.productId) return c.redirect('/agents/okr');
+
+  const body = await c.req.parseBody();
+  const objective = String(body.objective ?? '').trim();
+  const period = String(body.period ?? '').trim();
+  if (objective.length === 0 || period.length === 0) return c.redirect('/agents/okr');
+
+  const krs: Array<{ description: string; start: number; target: number; unit: string | null }> = [];
+  for (const i of [0, 1, 2]) {
+    const description = String(body[`kr_description_${i}`] ?? '').trim();
+    if (description.length === 0) continue;
+    const start = parseFloat(String(body[`kr_start_${i}`] ?? ''));
+    const target = parseFloat(String(body[`kr_target_${i}`] ?? ''));
+    // No target, nothing to measure against. The row is dropped rather than
+    // stored with a target of zero, which every key result would instantly meet.
+    if (!Number.isFinite(target)) continue;
+    const unit = String(body[`kr_unit_${i}`] ?? '').trim();
+    krs.push({
+      description,
+      start: Number.isFinite(start) ? start : 0,
+      target,
+      unit: unit.length > 0 ? unit : null,
+    });
+  }
+  // An objective with no key result is a wish. Refuse it rather than store a
+  // card whose progress bar can never move.
+  if (krs.length === 0) return c.redirect('/agents/okr');
+
+  const okrId = nanoid();
+  await query(
+    `INSERT INTO company_okrs (id, product_id, period, objective_text, objective_owner, status)
+     VALUES (?, ?, ?, ?, 'founder', 'on_track')`,
+    [okrId, ctx.productId, period, objective]);
+
+  for (const kr of krs) {
+    await query(
+      // `owner_agent` is documented as "agent name, or NULL for founder-owned".
+      // Writing the string 'founder' into it would contradict the column's own
+      // meaning and make every key result look agent-owned to a reader that
+      // tested for non-null.
+      `INSERT INTO key_results
+         (id, okr_id, description, start_value, target_value, current_value, unit, owner_agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      [nanoid(), okrId, kr.description, kr.start, kr.target, kr.start, kr.unit]);
+  }
+
+  return c.redirect(`/agents/okr?quarter=${encodeURIComponent(period)}`);
+});
 
 agentsOkr.post('/agents/okr/:okrId/key-results/:krId/update', async (c) => {
   const founder = c.get('founder');

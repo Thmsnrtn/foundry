@@ -25,48 +25,15 @@ export const requestIdMiddleware = createMiddleware(async (c, next) => {
   await withTrace({ traceId }, () => next());
 });
 
-/**
- * Security headers middleware. Sets protective headers on all responses.
- */
-export const securityHeaders = createMiddleware(async (c, next) => {
-  await next();
+// THE SECOND CONTENT-SECURITY-POLICY LIVED HERE, AND NOTHING IMPORTED IT.
+//
+// `index.ts` mounts `securityHeaders` from `middleware/security-headers.ts`;
+// this file exported a function of the same name, with a different policy —
+// allowing unpkg but not jsdelivr, and carrying `object-src 'none'` and
+// `base-uri 'self'` that the live one did not. Two policies for one question,
+// one of them enforced, and the dead one was the stricter-looking of the two.
+//
+// A reader comparing them could not tell which governed the product. The
+// directives worth keeping moved to the live file; this one is gone rather than
+// left as a second answer.
 
-  // Prevent clickjacking
-  c.header('X-Frame-Options', 'DENY');
-
-  // Prevent MIME type sniffing
-  c.header('X-Content-Type-Options', 'nosniff');
-
-  // Referrer policy — send origin only for cross-origin
-  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-
-  // XSS protection (legacy but still useful for older browsers)
-  c.header('X-XSS-Protection', '1; mode=block');
-
-  // Content Security Policy
-  c.header(
-    'Content-Security-Policy',
-    [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://unpkg.com https://*.clerk.accounts.dev",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: https:",
-      "font-src 'self' data:",
-      "connect-src 'self' https://*.clerk.accounts.dev https://api.clerk.com",
-      "frame-src https://*.clerk.accounts.dev",
-      "object-src 'none'",
-      "base-uri 'self'",
-    ].join('; ')
-  );
-
-  // Strict Transport Security (only in production behind TLS)
-  if (process.env.NODE_ENV === 'production') {
-    c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  }
-
-  // Permissions Policy — disable unused browser features
-  c.header(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(), payment=(self)'
-  );
-});

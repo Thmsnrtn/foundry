@@ -11,10 +11,14 @@ import { query, getProductByOwner } from '../../db/client.js';
 import { upsertCustomer, recordCustomerEvent, refreshAllCustomerHealth, getAtRiskCustomers, getExpansionCandidates, generateCustomerInsights, detectRevenueConcentration } from '../../services/customers/intelligence.js';
 import { designExperiment, createExperiment, recordExperimentEvent, analyzeExperiment, getActiveExperiments, stopExperiment } from '../../services/experiments/engine.js';
 import { ingestEvent, createEventRule, getRecentEvents, getActiveAnomalies } from '../../services/events/bus.js';
-import { generateInvestorUpdate, generateBoardDeck, assessFundraiseReadiness } from '../../services/investor/automation.js';
-import { processVoiceMemo, generateSpokenDigest, startVoiceSession, endVoiceSession } from '../../services/voice/processor.js';
+import { generateBoardDeck } from '../../services/investor/automation.js';
+import { assessFundraisingReadiness } from '../../services/scp/investor/fundraising-readiness.js';
+// One writer per table — see migration 164. This route had its own, which
+// left `month` unset and made its updates invisible to the dashboard.
+import { generateInvestorUpdate } from '../../services/scp/investor/investor-update.js';
+import { processVoiceMemo, generateSpokenDigest, startVoiceSession, endVoiceSession, getVoiceConversations } from '../../services/voice/processor.js';
 import { buildProductGraph, discoverCausalChains, queryNeighborhood } from '../../services/graph/engine.js';
-import { createPortfolio, addToPortfolio, getPortfolioOverview, benchmarkProduct, generatePortfolioSnapshot, authenticatePortfolioKey } from '../../services/portfolio/manager.js';
+import { createPortfolio, addToPortfolio, getPortfolioOverview, benchmarkProduct, generatePortfolioSnapshot, getPortfolioSnapshots } from '../../services/portfolio/manager.js';
 
 export const platformApiRoutes = new Hono<AuthEnv>();
 
@@ -220,8 +224,13 @@ platformApiRoutes.post('/api/products/:id/investor-update', async (c) => {
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
   const body = await c.req.json() as Record<string, unknown>;
-  const update = await generateInvestorUpdate(productId, founder.id, body.highlight as string);
-  return c.json(update);
+  // The canonical writer keys on the month, which is the column every reader
+  // of this table uses. This route used to write through a second generator
+  // that left it null, so its updates were invisible to the dashboard that
+  // shows them and to the check that stops a duplicate being written.
+  const month = new Date().toISOString().slice(0, 7);
+  const update = await generateInvestorUpdate(productId, month, body.highlight as string | undefined);
+  return c.json({ investor_update_id: update });
 });
 
 platformApiRoutes.post('/api/products/:id/board-deck', async (c) => {
@@ -241,7 +250,18 @@ platformApiRoutes.post('/api/products/:id/fundraise-readiness', async (c) => {
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
   const body = await c.req.json() as Record<string, unknown>;
-  const readiness = await assessFundraiseReadiness(productId, founder.id, body.target_round as string);
+  // THE ROUND IS A CLOSED VOCABULARY AND THE CALLER IS OUTSIDE. The canonical
+  // assessment indexes a multiplier table by this value, so an unrecognised
+  // round produces `undefined` and every score downstream becomes NaN — a
+  // readiness report made of nothing, returned with a 200. Reject it here
+  // rather than compute it.
+  const ROUNDS = ['pre_seed', 'seed', 'series_a', 'series_b'] as const;
+  const round = String(body.target_round ?? 'seed');
+  if (!(ROUNDS as readonly string[]).includes(round)) {
+    return c.json({ error: `target_round must be one of ${ROUNDS.join(', ')}` }, 400);
+  }
+  const readiness = await assessFundraisingReadiness(
+    productId, round as (typeof ROUNDS)[number]);
   return c.json(readiness);
 });
 
@@ -283,8 +303,46 @@ platformApiRoutes.get('/api/voice/digest/:productId', async (c) => {
 platformApiRoutes.post('/api/voice/session/start', async (c) => {
   const founder = c.get('founder');
   const body = await c.req.json() as Record<string, unknown>;
-  const session = await startVoiceSession(founder.id, body.product_id as string);
+  // RT02-04: Verify founder owns the product before starting a voice session.
+  //
+  // THIS SAT BETWEEN TWO ROUTES THAT BOTH CHECK, and both cite the ticket that
+  // made them: `/api/voice/memo` above (RT02-03) and `/api/voice/session/:id/end`
+  // below (RT02-02). The audit that raised all three recorded this one as
+  // RT02-04 with the remediation spelled out — "Add product ownership
+  // verification before startVoiceSession" — and it was the one not applied.
+  //
+  // It was not only a write. `startVoiceSession` calls `startSession`, which
+  // INSERTs a `chat_sessions` row carrying the CALLER as `founder_id` and the
+  // named product as `product_id`, and returns the chat session id. `sendMessage`
+  // then authorises on `(id, founder_id)` alone — which the caller's own planted
+  // row satisfies — and takes `productId` from that row to build the COO
+  // context: the product, its lifecycle state, its wisdom DNA, its MRR
+  // decomposition and its five active stressors, none of them ownership-scoped,
+  // narrated back by the model under an instruction not to hedge.
+  //
+  // Product ids are not secret to non-owners: `getVisibleProducts` hands every
+  // active team member ids that `getProductByOwner` refuses, so this needed no
+  // guessing. `POST /api/chat/sessions` already calls `getProductByOwner` before
+  // `startSession`; this was a second, unguarded door onto the same capability.
+  const productId = body.product_id as string;
+  const prodCheck = await getProductByOwner(productId, founder.id);
+  if (prodCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  const session = await startVoiceSession(founder.id, productId);
   return c.json(session);
+});
+
+// The read half. `end` pays for a Sonnet call to extract decisions and action
+// items from the transcript, and until this route existed there was no way to
+// read any of it back.
+platformApiRoutes.get('/api/voice/conversations/:productId', async (c) => {
+  const founder = c.get('founder');
+  const productId = c.req.param('productId');
+  const prodCheck = await getProductByOwner(productId, founder.id);
+  if (prodCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  const limitRaw = Number(c.req.query('limit') ?? 20);
+  const conversations = await getVoiceConversations(
+    productId, Number.isFinite(limitRaw) ? limitRaw : 20);
+  return c.json({ data: conversations, meta: { total: conversations.length } });
 });
 
 platformApiRoutes.post('/api/voice/session/:id/end', async (c) => {
@@ -292,9 +350,9 @@ platformApiRoutes.post('/api/voice/session/:id/end', async (c) => {
   const sessionId = c.req.param('id')!;
   // RT02-02: Verify founder owns this voice session before ending it
   const sessionCheck = await query(
-    `SELECT vs.id FROM voice_sessions vs
-     JOIN products p ON vs.product_id = p.id
-     WHERE vs.id = ? AND p.owner_id = ?`,
+    `SELECT vc.id FROM voice_conversations vc
+     JOIN products p ON vc.product_id = p.id
+     WHERE vc.id = ? AND p.owner_id = ?`,
     [sessionId, founder.id]
   );
   if (sessionCheck.rows.length === 0) return c.json({ error: 'Not found' }, 404);
@@ -323,8 +381,30 @@ platformApiRoutes.get('/api/products/:id/graph/causal-chains', async (c) => {
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
+  // This used to call Opus on every request, with a 4096-token budget, for a
+  // question the weekly graph_rebuild job had already answered and stored. Two
+  // payments for one answer, and the job's copy went to a log line.
+  //
+  // Read the stored batch. Compute only when none has ever been stored, so a
+  // product whose first rebuild has not run still gets an answer rather than an
+  // empty list that reads as "no causal chains exist".
+  const { getStoredCausalChains } = await import('../../services/graph/engine.js');
+  const stored = await getStoredCausalChains(productId);
+  if (stored.discovered_at !== null) {
+    return c.json({
+      causal_chains: stored.chains,
+      discovered_at: stored.discovered_at,
+      computed_now: false,
+    });
+  }
+
   const chains = await discoverCausalChains(productId);
-  return c.json({ causal_chains: chains });
+  const after = await getStoredCausalChains(productId);
+  return c.json({
+    causal_chains: chains,
+    discovered_at: after.discovered_at,
+    computed_now: true,
+  });
 });
 
 platformApiRoutes.get('/api/products/:id/graph/neighborhood/:entityId', async (c) => {
@@ -363,10 +443,14 @@ platformApiRoutes.post('/api/portfolios/:id/companies', async (c) => {
   const portfolioId = c.req.param('id');
   if (!(await verifyPortfolioOwnership(portfolioId, founder.email))) return c.json({ error: 'Not found' }, 404);
   const body = await c.req.json() as Record<string, unknown>;
-  await addToPortfolio(
+  // Owning the portfolio is not owning the company. `addToPortfolio` decides
+  // whether this company may be held here; the route surfaces its answer
+  // instead of discarding it.
+  const refusal = await addToPortfolio(
     portfolioId, body.product_id as string,
     body.founder_id as string, body.investment as any
   );
+  if (refusal) return c.json({ error: refusal.refused }, 403);
   return c.json({ status: 'added' });
 });
 
@@ -382,8 +466,25 @@ platformApiRoutes.get('/api/portfolios/:id/benchmark/:productId', async (c) => {
   const founder = c.get('founder');
   const portfolioId = c.req.param('id');
   if (!(await verifyPortfolioOwnership(portfolioId, founder.email))) return c.json({ error: 'Not found' }, 404);
+  // RT02-05: null means the product is not a member of this portfolio. Owning
+  // the portfolio is not permission to benchmark an arbitrary company against
+  // it — see the note on `benchmarkProduct`.
   const result = await benchmarkProduct(portfolioId, c.req.param('productId'));
+  if (result === null) return c.json({ error: 'Not found' }, 404);
   return c.json(result);
+});
+
+// The read half of the write below. `POST .../snapshot` had been answering
+// "generated" since the endpoint existed, with no way to read one back, and a
+// weekly job writing one per portfolio as well.
+platformApiRoutes.get('/api/portfolios/:id/snapshots', async (c) => {
+  const founder = c.get('founder');
+  const portfolioId = c.req.param('id');
+  if (!(await verifyPortfolioOwnership(portfolioId, founder.email))) return c.json({ error: 'Not found' }, 404);
+  const limitRaw = Number(c.req.query('limit') ?? 26);
+  const limit = Number.isFinite(limitRaw) ? limitRaw : 26;
+  const snapshots = await getPortfolioSnapshots(portfolioId, limit);
+  return c.json({ data: snapshots, meta: { total: snapshots.length } });
 });
 
 platformApiRoutes.post('/api/portfolios/:id/snapshot', async (c) => {

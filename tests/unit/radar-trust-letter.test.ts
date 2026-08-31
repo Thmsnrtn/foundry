@@ -49,15 +49,21 @@ beforeAll(async () => {
   // plus a thin category (3 decisions).
   for (let i = 0; i < 10; i++) {
     await query(
-      `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence)
-       VALUES (?, 'p_trust', 'marketing', 1, 'x', 'y', 'approved', 'founder', datetime('now','-3 days'), ?)`,
+      // FOUNDRY PROPOSED IT AND THE FOUNDER TOOK IT. The ledger prices
+      // autonomy on Foundry's own record, and `decided_by = 'founder'` says who
+      // RESOLVED the row, not who proposed it — a founder's own good calls used
+      // to earn Foundry the gate. These fixtures now carry the recommendation
+      // and the matching choice, which is what a proposal Foundry made and the
+      // founder accepted actually looks like in this table.
+      `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence, recommendation, chosen_option)
+       VALUES (?, 'p_trust', 'marketing', 1, 'x', 'y', 'approved', 'founder', datetime('now','-3 days'), ?, 'Run it', 'run it')`,
       [id(), i < 9 ? 1 : -1],
     );
   }
   for (let i = 0; i < 3; i++) {
     await query(
-      `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence)
-       VALUES (?, 'p_trust', 'product', 2, 'x', 'y', 'approved', 'founder', datetime('now','-3 days'), 1)`,
+      `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, decided_by, decided_at, outcome_valence, recommendation, chosen_option)
+       VALUES (?, 'p_trust', 'product', 2, 'x', 'y', 'approved', 'founder', datetime('now','-3 days'), 1, 'Ship it', 'ship it')`,
       [id()],
     );
   }

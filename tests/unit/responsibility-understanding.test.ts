@@ -3,6 +3,7 @@ import { beforeAll,describe,expect,it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
+import { grantAuthority,moveResponsibilityTo } from '../fixtures/responsibility-state.js';
 import { earnResponsibilityUnderstanding,projectResponsibilityUnderstanding,
   type UnderstandingFact } from '../../src/services/institution/responsibility-understanding.js';
 
@@ -17,8 +18,8 @@ beforeAll(async()=>{
   await query("INSERT INTO founders (id,clerk_user_id,email) VALUES ('under_owner','under_clerk','under@example.com'),('under_foreign_owner','under_foreign_clerk','foreign@example.com')",[]);
   await query("INSERT INTO products (id,name,owner_id) VALUES ('under_product','Support Company','under_owner'),('under_foreign','Foreign','under_foreign_owner')",[]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    ('under_signal','under_product','support','support_spike','high','{}','Support demand exceeds capacity'),
-    ('under_foreign_signal','under_foreign','support','support_spike','high','{}','Foreign')`,[]);
+    ('under_signal','under_product','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Support demand exceeds capacity'),
+    ('under_foreign_signal','under_foreign','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Foreign')`,[]);
   await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state)
     VALUES ('under_resp','under_product','Restore support response capacity','customer_support','visible')`,[]);
 });
@@ -61,5 +62,45 @@ describe('earned responsibility understanding',()=>{
     await expect(earnResponsibilityUnderstanding('under_product','under_blocked',new Date('2026-01-01'))).rejects.toThrow(/insufficient/);
     await expect(recordReconstructionClaim({productId:'under_product',subject:'responsibility:under_blocked',predicate:'dependencies',value:['foreign'],
       epistemicStatus:'known',evidenceRefs:[{kind:'signal_event',id:'under_foreign_signal'}],derivationMethod:'attack',observedAt:new Date()})).rejects.toThrow();
+  });
+});
+
+describe('authority is required until something LIVE says otherwise',()=>{
+  it('reports authority as required again the moment the founder withdraws it',async()=>{
+    // `authorityRequired` was `authority_ref === null`, and that column is not
+    // cleared when a founder withdraws permission — the consent it names gets a
+    // `revoked_at` and the pointer stays, because the ledger keeps the history
+    // and every execution path re-reads `revoked_at IS NULL` when it acts.
+    // Correct behaviour, wrong reading here: the projection said authority was
+    // NO LONGER REQUIRED for a responsibility whose permission had just been
+    // taken away — the answer exactly inverted on the question the founder had
+    // just acted on.
+    await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability)
+      VALUES ('under_auth','under_product','Answer the support queue','customer_support')`,[]);
+    // The order is forced by migration 112: a responsibility-bound consent may
+    // only be created while the responsibility is already being shadowed. The
+    // first draft of this test granted at `unknown` and the database refused
+    // it, which is the guard doing its job.
+    await moveResponsibilityTo('under_auth','shadowing',{productId:'under_product'});
+    const authorityRef=await grantAuthority('under_product','under_owner','customer_support','under_auth');
+    await moveResponsibilityTo('under_auth','assisting',{productId:'under_product',authorityRef});
+
+    const granted=await projectResponsibilityUnderstanding('under_product','under_auth');
+    expect(granted.authorityRequired,'a live grant means nothing more is needed').toBe(false);
+
+    const consentId=authorityRef.replace('autonomy_consent:','');
+    await query("UPDATE autonomy_consents SET revoked_at=datetime('now') WHERE id=?",[consentId]);
+
+    const withdrawn=await projectResponsibilityUnderstanding('under_product','under_auth');
+    expect(withdrawn.authorityRequired,'a withdrawal must read as a withdrawal here too').toBe(true);
+    // The state is NOT rewound either: what Foundry learned survives a
+    // withdrawal, and only the permission goes.
+    expect(withdrawn.responsibility.state).toBe('assisting');
+
+    // An expiry is the same answer by a different route, and it is NOT tested
+    // by un-revoking this one: `responsibility_authority:revocation_permanent`
+    // refuses that, which is correct — a revocation is a decision, not a
+    // toggle. `absence-summary` already distinguishes the two reasons on live
+    // data; the predicate here checks both in one clause.
   });
 });

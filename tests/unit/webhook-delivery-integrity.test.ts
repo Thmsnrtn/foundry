@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { executeRaw, query } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { dispatchWebhook } from '../../src/lib/webhooks.js';
 import { encrypt } from '../../src/services/encryption.js';
 import { isEncrypted } from '../../src/services/encryption.js';
@@ -9,24 +10,25 @@ import { webhooksApi } from '../../src/api/v1/webhooks.js';
 import type { ApiAuthEnv } from '../../src/api/middleware/auth.js';
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   process.env.ENCRYPTION_KEY = '1'.repeat(64);
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS webhooks (
-      id TEXT PRIMARY KEY, founder_id TEXT NOT NULL, product_id TEXT, created_by TEXT, url TEXT NOT NULL,
-      events TEXT NOT NULL, secret TEXT NOT NULL, active INTEGER DEFAULT 1,
-      failure_count INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      last_delivery_at TEXT
-    );
-    CREATE TABLE IF NOT EXISTS webhook_deliveries (
-      id TEXT PRIMARY KEY, webhook_id TEXT NOT NULL, event TEXT NOT NULL,
-      status_code INTEGER, delivered_at TEXT, error TEXT,
-      effect_certainty TEXT, provider_acknowledged_at TEXT, reconcile_after TEXT
-    );
-  `);
 });
 
 beforeEach(async () => {
   await executeRaw('DELETE FROM webhook_deliveries;\nDELETE FROM webhooks;');
+  // The real `webhooks` table has foreign keys to founders and products; the
+  // hand-written stand-in had none, so every one of these tests registered a
+  // webhook against a company that did not exist.
+  await query(
+    `INSERT OR IGNORE INTO founders (id, clerk_user_id, email)
+     VALUES ('f1','clerk_f1','f1@test.local'), ('f_api','clerk_f_api','fapi@test.local')`);
+  for (const [pid, owner] of [['p1','f1'], ['p2','f1'], ['p_api','f_api']]) {
+    await query(`INSERT OR IGNORE INTO products (id, name, owner_id) VALUES (?, ?, ?)`,
+      [pid, `Company ${pid}`, owner]);
+  }
   vi.unstubAllGlobals();
 });
 

@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { logger } from '../../logger.js';
 
 interface ScribeClaudeResponse {
   observations: string[];
@@ -38,6 +39,7 @@ interface ScribeClaudeResponse {
     title: string;
     content: string;
     tags: string[];
+    section?: string;
   }>;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
@@ -83,10 +85,20 @@ export class ScribeAgent extends BaseAgent {
     );
 
     // ── 4. Query recent wiki entries ──────────────────────────────────────────
-    const wikiResult = await db(
-      `SELECT title, category FROM agent_wiki_entries WHERE product_id=? ORDER BY created_at DESC LIMIT 5`,
-      [productId]
-    );
+    //
+    // ORDERED BY WHEN AN ARTICLE LAST CHANGED, NOT WHEN IT FIRST APPEARED.
+    // `createWikiEntry` upserts on (product, section, title) and bumps
+    // `updated_at`, so revising an article edits the row rather than adding
+    // one. Ordering by `created_at` meant that once five distinct titles
+    // existed, this list froze on those five forever and every revision Scribe
+    // made was invisible to Scribe's own next run.
+    //
+    // Through `listWikiEntries` rather than a second copy of the query here,
+    // which is also where the total comes from: five entries is a PAGE, and an
+    // agent asked to name knowledge gaps has to know whether it is looking at
+    // the whole wiki or the top of it.
+    const { listWikiEntries } = await import('../wiki.js');
+    const wikiPage = await listWikiEntries(productId, { limit: 5 });
 
     // ── 5. Handle no-data case ────────────────────────────────────────────────
     if (artifactsResult.rows.length === 0 && testimonialsResult.rows.length === 0 && dnaResult.rows.length === 0) {
@@ -134,10 +146,15 @@ export class ScribeAgent extends BaseAgent {
     const voicePrinciples = dna ? ((dna.voice_principles as string) ?? 'Not defined') : 'Not defined';
     const icp = dna ? ((dna.icp_description as string) ?? 'Not defined') : 'Not defined';
 
-    const wikiRows = wikiResult.rows as Record<string, unknown>[];
-    const wikiSummary = wikiRows.length > 0
-      ? wikiRows.map(w => `"${w.title as string}" [${w.category as string ?? 'general'}]`).join(', ')
-      : 'No wiki entries yet';
+    const wikiTitles = wikiPage.entries
+      .map((e) => `"${e.title}" [${e.category || 'general'}]`).join(', ');
+    // Named as a page of a known whole, so the model does not read five titles
+    // as the sum of what the company has written down.
+    const wikiSummary = wikiPage.total === 0
+      ? 'No wiki entries yet'
+      : wikiPage.total > wikiPage.entries.length
+        ? `${wikiTitles} (${wikiPage.entries.length} most recently updated of ${wikiPage.total})`
+        : wikiTitles;
 
     // ── 7. Call Claude Sonnet ─────────────────────────────────────────────────
     const systemPrompt = this.buildSystemPrompt(
@@ -194,8 +211,9 @@ Return JSON only (no markdown fences):
   "wiki_contributions": [
     {
       "title": "string",
-      "content": "string",
-      "tags": ["string", ...]
+      "content": "string — the article itself, written to be read by another agent",
+      "tags": ["string", ...],
+      "section": "customers|product|market|operations|team|financial|technical|strategy|other"
     }
   ],
   "briefing_contribution": "string (2-3 sentences max)",
@@ -289,15 +307,76 @@ Return JSON only (no markdown fences):
       }
     }
 
+    // ── 10b. Store what was written ───────────────────────────────────────────
+    //
+    // WHAT WAS ASKED FOR EVERY RUN AND THROWN AWAY EVERY RUN. The prompt above
+    // has always asked for `wiki_contributions`, the response type has always
+    // declared them, and nothing consumed the field. Scribe paid for those
+    // tokens on every cycle and discarded the articles.
+    //
+    // Meanwhile it READS `agent_wiki_entries` at step 4 to see what the company
+    // already knows, and the only module that could write that table —
+    // `services/scp/wiki.ts` — was imported by nothing at all. So the wiki was
+    // permanently empty, `wikiSummary` was permanently 'No wiki entries yet',
+    // and this agent's stated purpose in its own header ("queries
+    // agent_wiki_entries table for knowledge gaps") could not be served. Step 4
+    // now goes through that module too, so there is one definition of what the
+    // wiki most recently says rather than two.
+    //
+    // Three halves existed — a producer, a store and a reader — with no wire
+    // between them. This is the wire, not a new feature.
+    //
+    // Internal knowledge only: no outward effect, nothing consequential, so
+    // authority level 0. `createWikiEntry` upserts on (product, section, title)
+    // and bumps `version`, so a weekly run revising an article edits it rather
+    // than accumulating near-duplicates.
+    const wikiWritten: string[] = [];
+    for (const article of (parsed.wiki_contributions ?? [])) {
+      const title = String(article.title ?? '').trim();
+      const content = String(article.content ?? '').trim();
+      // An article with no title or no body is not knowledge. Dropped rather
+      // than stored as an empty row the next reader has to discount.
+      if (title.length === 0 || content.length === 0) continue;
+      try {
+        const { createWikiEntry } = await import('../wiki.js');
+        await createWikiEntry(context.productId, {
+          title,
+          content,
+          // `toSection` maps anything outside the CHECK vocabulary to 'other',
+          // so an unstated or invented section lands there rather than raising.
+          category: String(article.section ?? 'other'),
+          tags: Array.isArray(article.tags) ? article.tags.map(String) : [],
+          created_by_agent: 'scribe',
+          // The model is not asked to rate its own articles and does not, so
+          // this is not a confidence the model expressed. It is the store's
+          // default, and reading it as a judgement would be reading something
+          // nobody made.
+          confidence_score: 0,
+        });
+        wikiWritten.push(title);
+      } catch (error) {
+        // A wiki write must never cost the founder the rest of the run.
+        logger.error('[scribe] could not store a wiki contribution', {
+          productId: context.productId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     // ── 11. Record analysis action ────────────────────────────────────────────
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed knowledge analysis: ${artifactCount} published artifacts, ${testimonialCount} testimonials, ${pendingDecisions.length} briefs, ${highPriorityGaps.length} high-priority gaps`,
+      description: `Completed knowledge analysis: ${artifactCount} published artifacts, `
+        + `${testimonialCount} testimonials, ${pendingDecisions.length} briefs, `
+        + `${highPriorityGaps.length} high-priority gaps, `
+        + `${wikiWritten.length} wiki ${wikiWritten.length === 1 ? 'article' : 'articles'} written`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
-      result: 'Analysis stored in session',
+      result: wikiWritten.length > 0
+        ? `Analysis stored in session. Wiki: ${wikiWritten.join('; ')}`
+        : 'Analysis stored in session',
     };
 
     return {

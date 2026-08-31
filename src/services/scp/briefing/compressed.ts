@@ -40,7 +40,12 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
 
   // 3. Load latest metric_snapshot
   let latestMetrics: Record<string, unknown> = {};
-  let lastWeekMetrics: Record<string, unknown> = {};
+  // NOT LAST WEEK. This is the snapshot BEFORE the latest one, whenever that
+  // was: `metric_snapshots` is keyed by DATE and most companies report daily.
+  // Every delta below is computed against it and reaches the model — and the
+  // founder — as a change, with the name claiming a week. The interval is
+  // measured and travels with the deltas instead.
+  let priorMetrics: Record<string, unknown> = {};
   try {
     const metricsResult = await query(
       'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 2',
@@ -50,7 +55,7 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
       latestMetrics = metricsResult.rows[0] as Record<string, unknown>;
     }
     if (metricsResult.rows.length > 1) {
-      lastWeekMetrics = metricsResult.rows[1] as Record<string, unknown>;
+      priorMetrics = metricsResult.rows[1] as Record<string, unknown>;
     }
   } catch {
     // metric_snapshots may not have data
@@ -78,7 +83,7 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
   let stressorSummaries: string[] = [];
   try {
     const stressorsResult = await query(
-      `SELECT type, severity FROM stressor_history
+      `SELECT stressor_name AS type, severity FROM stressor_history
        WHERE product_id = ? AND status = 'active'
        ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'elevated' THEN 2 ELSE 3 END
        LIMIT 5`,
@@ -104,8 +109,10 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
     // no decisions table
   }
 
-  // 7. Compute current health score
-  let healthScore = 50;
+  // 7. Compute current health score. Null when no agent has scored its domain —
+  //    it used to start at 50 and stay there, so a company nothing had assessed
+  //    opened its weekly brief with "Health score is 50/100 this week."
+  let healthScore: number | null = null;
   try {
     const { SCPInstance } = await import('../instance.js');
     healthScore = await new SCPInstance(productId).computeHealthScore();
@@ -138,21 +145,25 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
     // non-fatal
   }
 
-  // 9. Compute metrics deltas
+  // 9. Compute metrics deltas, over whatever interval the two snapshots span
   const metricsDelta: Record<string, unknown> = {};
   try {
+    const gapDays = Math.round(
+      (Date.parse(`${String(latestMetrics.snapshot_date)}T00:00:00Z`)
+        - Date.parse(`${String(priorMetrics.snapshot_date)}T00:00:00Z`)) / 86_400_000);
+    if (Number.isFinite(gapDays) && gapDays > 0) metricsDelta.over_days = gapDays;
     const currentMrr = latestMetrics.mrr_cents as number | null;
-    const prevMrr = lastWeekMetrics.mrr_cents as number | null;
+    const prevMrr = priorMetrics.mrr_cents as number | null;
     if (currentMrr !== null && prevMrr !== null && prevMrr > 0) {
       metricsDelta.mrr_change_pct = Number((((currentMrr - prevMrr) / prevMrr) * 100).toFixed(1));
     }
     const currentChurn = latestMetrics.churn_rate as number | null;
-    const prevChurn = lastWeekMetrics.churn_rate as number | null;
+    const prevChurn = priorMetrics.churn_rate as number | null;
     if (currentChurn !== null && prevChurn !== null) {
       metricsDelta.churn_change = Number((currentChurn - prevChurn).toFixed(2));
     }
     const currentActivation = latestMetrics.activation_rate as number | null;
-    const prevActivation = lastWeekMetrics.activation_rate as number | null;
+    const prevActivation = priorMetrics.activation_rate as number | null;
     if (currentActivation !== null && prevActivation !== null) {
       metricsDelta.activation_change = Number((currentActivation - prevActivation).toFixed(2));
     }
@@ -161,22 +172,36 @@ export async function generateCompressedWeeklyBrief(productId: string): Promise<
   }
 
   // 10. Build context for AI synthesis
-  const mrrDisplay = latestMetrics.mrr_cents
+  // `!= null`, NOT TRUTHINESS. A company that recorded exactly $0 of MRR — a
+  // pre-revenue company, which is most of them — reported as 'unknown', which
+  // is the same confusion as everything else in this area running backwards.
+  const mrrDisplay = latestMetrics.mrr_cents != null
     ? `$${((latestMetrics.mrr_cents as number) / 100).toLocaleString()}`
     : 'unknown';
-  const mrrGrowth = latestMetrics.mrr_growth_pct != null
-    ? `${(latestMetrics.mrr_growth_pct as number).toFixed(1)}% MoM`
+  // `mrr_growth_pct` HAS NEVER BEEN A COLUMN, so this said "unknown growth" in
+  // every compressed briefing ever generated. The prior snapshot is already
+  // loaded above; the rate is monthly-equivalent over the gap between the two
+  // dates, and says so.
+  const priorMrr = priorMetrics.mrr_cents as number | null;
+  const currentMrr = latestMetrics.mrr_cents as number | null;
+  const growthGapDays = (Date.parse(`${String(latestMetrics.snapshot_date)}T00:00:00Z`)
+    - Date.parse(`${String(priorMetrics.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+  const mrrGrowth = (currentMrr != null && priorMrr != null && priorMrr > 0
+    && Number.isFinite(growthGapDays) && growthGapDays > 0)
+    ? `${(((currentMrr / priorMrr) ** (30.44 / growthGapDays) - 1) * 100).toFixed(1)}% MoM`
     : 'unknown growth';
   const churnDisplay = latestMetrics.churn_rate != null
-    ? `${(latestMetrics.churn_rate as number).toFixed(1)}%`
+    // `* 100`: these are stored as 0–1 fractions (`ux/fluency.ts` names them
+    // as such), so 2% churn rendered as "0.0%" in a briefing a founder reads.
+    ? `${((latestMetrics.churn_rate as number) * 100).toFixed(1)}%`
     : 'unknown';
   const activationDisplay = latestMetrics.activation_rate != null
-    ? `${(latestMetrics.activation_rate as number).toFixed(1)}%`
+    ? `${((latestMetrics.activation_rate as number) * 100).toFixed(1)}%`
     : 'unknown';
 
   const contextForAI = `
 Week: ${weekOf}
-Health Score: ${healthScore}/100 (${healthTrend})
+Health Score: ${healthScore === null ? 'not yet scored — do not invent one' : `${healthScore}/100`} (${healthTrend})
 MRR: ${mrrDisplay} (${mrrGrowth})
 Churn: ${churnDisplay}
 Activation Rate: ${activationDisplay}
@@ -188,7 +213,9 @@ ${recentHeadlines.join('\n') || 'No recent briefings.'}
   `.trim();
 
   // 11. Call Claude to synthesize
-  let oneSentenceStatus = `Health score is ${healthScore}/100 this week.`;
+  let oneSentenceStatus = healthScore === null
+    ? 'No agent has scored this company yet, so there is no health score this week.'
+    : `Health score is ${healthScore}/100 this week.`;
   let top3ThisWeek: string[] = ['Review key metrics', 'Check agent recommendations', 'Address pending decisions'];
   let agentConsensus: string | null = null;
   let oneDecisionToMake: string | null = null;
@@ -267,7 +294,11 @@ Be specific: use actual numbers when available.`,
  * Get the most recent weekly compressed brief for a product.
  */
 export async function getLatestCompressedBrief(productId: string): Promise<{
-  health_score: number;
+  /** Null when nothing has scored this company. Migration 190 made the column
+   *  nullable for this reason and the writer 200 lines above stores NULL; this
+   *  reader turned it back into 50 before anyone could see it, so the route's
+   *  "not scored" branch could never execute. */
+  health_score: number | null;
   health_trend: string;
   one_sentence_status: string;
   top_3: string[];
@@ -305,7 +336,7 @@ export async function getLatestCompressedBrief(productId: string): Promise<{
   }
 
   return {
-    health_score: (r.health_score as number) ?? 50,
+    health_score: (r.health_score as number | null) ?? null,
     health_trend: (r.health_trend as string) ?? 'stable',
     one_sentence_status: (r.one_sentence_status as string) ?? '',
     top_3: top3,

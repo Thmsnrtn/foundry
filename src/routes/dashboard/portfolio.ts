@@ -44,6 +44,8 @@ interface FleetItem {
 
 portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
   const founder = c.get('founder');
+  // DELIBERATELY OWNER-ONLY: a portfolio is the owner's view across the
+  // companies they own, not a company surface.
   const products = await getProductsByOwner(founder.id);
 
   if (products.rows.length === 0) return c.redirect('/onboarding');
@@ -65,13 +67,26 @@ portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
   // Build fleet items and sort: lowest Signal first (most urgent at top)
   const fleet: FleetItem[] = productRows
     .map((p, i) => ({ product: p, signal: signals[i], pendingCount: pendingCounts[i] }))
-    .sort((a, b) => a.signal.score - b.signal.score);
+    // Lowest Signal first — but an UNMEASURED company sorts last rather than
+    // wherever its default happens to fall. It is not the most urgent thing in
+    // the fleet, and it is not the calmest either; it is the one nothing is
+    // known about, and it says so in its own row.
+    .sort((a, b) => {
+      if (a.signal.hasData !== b.signal.hasData) return a.signal.hasData ? -1 : 1;
+      return a.signal.score - b.signal.score;
+    });
 
   // Fleet-wide stats
   const totalPending = fleet.reduce((sum, f) => sum + f.pendingCount, 0);
   const redCount = fleet.filter((f) => f.signal.riskState === 'red').length;
   const yellowCount = fleet.filter((f) => f.signal.riskState === 'yellow').length;
-  const avgSignal = Math.round(fleet.reduce((sum, f) => sum + f.signal.score, 0) / fleet.length);
+  // AVERAGED OVER THE MEASURED ONES. A company with no metrics scores a default
+  // and was pulling the fleet average toward it, on a page whose whole purpose
+  // is deciding which company to look at first. NULL when none is measured.
+  const measured = fleet.filter((f) => f.signal.hasData);
+  const avgSignal = measured.length > 0
+    ? Math.round(measured.reduce((sum, f) => sum + f.signal.score, 0) / measured.length)
+    : null;
 
   const content = html`
     <div class="portfolio-header" style="margin-bottom:1.5rem;">
@@ -82,7 +97,7 @@ portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
     <!-- Fleet Summary Bar -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:0.75rem;margin-bottom:1.75rem;">
       <div class="card" style="padding:0.875rem 1rem;text-align:center;">
-        <div style="font-size:1.5rem;font-weight:700;color:var(--text-primary);">${avgSignal}</div>
+        <div style="font-size:1.5rem;font-weight:700;color:var(--text-primary);">${avgSignal ?? 'no data'}</div>
         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);font-weight:600;">Avg Signal</div>
       </div>
       <div class="card" style="padding:0.875rem 1rem;text-align:center;">
@@ -142,9 +157,9 @@ portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
             </td>
             <td style="padding:0.75rem 1rem;text-align:center;">
               <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
-                <div style="font-size:1.1rem;font-weight:700;color:${signalBarColor(signal.score)};">${signal.score}</div>
+                <div style="font-size:1.1rem;font-weight:700;color:${signal.hasData ? signalBarColor(signal.score) : 'var(--text-muted)'};">${signal.hasData ? signal.score : 'no data'}</div>
                 <div style="width:48px;height:6px;border-radius:3px;background:rgba(255,255,255,0.08);overflow:hidden;">
-                  <div style="width:${signal.score}%;height:100%;border-radius:3px;background:${signalBarColor(signal.score)};"></div>
+                  <div style="width:${signal.hasData ? signal.score : 0}%;height:100%;border-radius:3px;background:${signal.hasData ? signalBarColor(signal.score) : 'transparent'};"></div>
                 </div>
               </div>
             </td>
@@ -175,8 +190,13 @@ portfolioRoutes.get('/portfolio', requireTier('multi_product'), async (c) => {
       ${fleet.map(({ product, signal }) => html`
       <form method="POST" action="/switch-product" style="display:contents;">
         <input type="hidden" name="product_id" value="${product.id as string}" />
-        <button type="submit" class="portfolio-card tier-${signal.tier}" aria-label="Switch to ${product.name as string}">
-          <div class="portfolio-signal-number">${signal.score}</div>
+        <!-- The same hasData contract the table, the average and the sort in
+             this file all honour. Without it the card printed the default 80
+             at 3.5rem in the green tier colour for a company Foundry has never
+             measured, directly under a table row that said "no data" — which
+             is the failure services/signal.ts documents in so many words. -->
+        <button type="submit" class="portfolio-card ${signal.hasData ? `tier-${signal.tier}` : 'tier-unmeasured'}" aria-label="Switch to ${product.name as string}">
+          <div class="portfolio-signal-number">${signal.hasData ? signal.score : '—'}</div>
           <div class="portfolio-product-name">${product.name as string}</div>
           <div class="portfolio-product-status">${signal.prose.split('.')[0]}.</div>
         </button>

@@ -14,7 +14,12 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { runMarketingSweep, draftContentBrief } from '../../src/services/departments/marketing.js';
 import { runProductSweep, deriveHypothesis } from '../../src/services/departments/product.js';
-import { runOutreachSweep, addSuppression } from '../../src/services/departments/outreach.js';
+import { runOutreachSweep } from '../../src/services/departments/outreach.js';
+// `addSuppression` is gone. It had no caller anywhere in `src/` and its list
+// was consulted by one department while the governed email path ignored it, so
+// the record and the refusal have moved to one place: a recorded constraint
+// held by the person an effect reaches, checked where every effect converges.
+import { recordContactConstraint } from '../../src/services/institution/contact-constraint.js';
 import { setPolicy } from '../../src/services/autopilot/policy.js';
 import { checkPremises } from '../../src/services/memory/kernel.js';
 
@@ -149,9 +154,16 @@ describe('the loop closes', () => {
 describe('outreach: the slowest ladder, the hardest rails', () => {
   beforeAll(async () => {
     await query(
-      `INSERT INTO customers (id, product_id, owner_id, name, email, health_score, is_champion)
-       VALUES ('or_c1', 'dp_p', 'dp_f', 'Ada', 'ada@fan.co', 0.95, 1),
-              ('or_c2', 'dp_p', 'dp_f', 'Sup', 'sup@fan.co', 0.9, 1)`,
+      // HEALTH IS 0–100, AND THIS FIXTURE SAID 0.95. The champion flag was
+      // hand-set, so the rails below were proven while the criterion that
+      // SELECTS who gets written to was bypassed entirely — the production job
+      // marks a champion at `health_score > 80` and would never have marked
+      // either of these. Corrected to what the job actually writes; the flag is
+      // kept because `customers` still carries it, and the accessor derives the
+      // same two conditions rather than trusting it.
+      `INSERT INTO customers (id, product_id, owner_id, name, email, health_score, churn_risk, is_champion)
+       VALUES ('or_c1', 'dp_p', 'dp_f', 'Ada', 'ada@fan.co', 95, 0.05, 1),
+              ('or_c2', 'dp_p', 'dp_f', 'Sup', 'sup@fan.co', 90, 0.10, 1)`,
       [],
     );
   });
@@ -169,7 +181,11 @@ describe('outreach: the slowest ladder, the hardest rails', () => {
   });
 
   it('the suppression list beats every mode', async () => {
-    await addSuppression('dp_p', 'ADA@fan.co', 'unsubscribed'); // case-insensitive
+    // Recorded by the company through the same door a founder uses, and still
+    // case-insensitive: an address is not two people because of a capital.
+    expect(await recordContactConstraint({
+      productId: 'dp_p', founderId: 'dp_f', email: 'ADA@fan.co', reason: 'they_asked',
+    })).toEqual({ recorded: true });
     await query("DELETE FROM action_executions WHERE product_id='dp_p'", []); // clear dedup
     const res = await runOutreachSweep('dp_p');
     expect(res.suppressed).toBe(1);

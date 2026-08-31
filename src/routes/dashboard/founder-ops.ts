@@ -1,6 +1,7 @@
 // =============================================================================
 // FOUNDRY — Founder Operations Dashboard
-// Locked to thmsnrtn@gmail.com. Pulls real AcreOS business data.
+// Locked to the deployment's owner principal via `isFounder`. Pulls real
+// AcreOS business data, so it stays inside the standing owner deferment.
 // =============================================================================
 
 import { Hono } from 'hono';
@@ -15,7 +16,6 @@ import {
   getGrowthSignals, getAICostData, generateMorningBriefing,
 } from '../../services/founder/intelligence.js';
 
-const FOUNDER_EMAIL = 'thmsnrtn@gmail.com';
 
 export const founderOpsRoutes = new Hono<AuthEnv>();
 
@@ -32,14 +32,14 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
     try { return await fn(); } catch { return fallback; }
   };
 
-  const defaultPulse = { status: 'healthy' as const, mrr: 0, mrr_delta_pct: 0, active_products: 0, active_founders: 0, founders_this_month: 0, churn_this_month: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
-  const defaultMRR = { current_mrr: 0, mrr_30d_ago: 0, mrr_trend: 'flat' as const, growth_rate_pct: 0, arr: 0, by_tier: {}, mrr_history: [], forecast_3m: 0, forecast_6m: 0 };
-  const defaultChurn = { churn_rate_30d: 0, at_risk_count: 0, at_risk_products: [], churned_this_month: 0, rescue_opportunities: 0 };
-  const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_degraded: 0, jobs_failed: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: 0, recent_actions: [] };
-  const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: 0, top_at_risk: [], champions: 0, revenue_at_risk: 0 };
-  const defaultWellbeing = { energy_score: 70, stress_signals: [], days_since_break: 0, override_count_7d: 0, burnout_trajectory: 'stable' as const, recommendation: null };
-  const defaultGrowth = { new_signups_7d: 0, new_signups_30d: 0, activation_rate: 0, trial_to_paid_rate: 0, expansion_revenue: 0, top_acquisition_channels: [] };
-  const defaultAICost = { total_tokens_24h: 0, total_cost_24h: 0, avg_latency_ms: 0, calls_by_model: {}, cost_per_founder: 0 };
+  const defaultPulse = { status: 'healthy' as const, portfolio_mrr_movement_30d: null, portfolio_mrr_movement_delta_pct: null, active_products: 0, active_founders: 0, founders_this_month: 0, signups_never_converted: 0, active_stressors: 0, critical_stressors: 0, pending_decisions: 0, job_health: { healthy: 0, degraded: 0, failed: 0 }, system_uptime: '0h', last_audit_run: null, alerts: [] };
+  const defaultMRR = { current_mrr: 0, trialing: { count: 0, list_price_mrr: 0 }, mrr_30d_ago: null, mrr_trend: 'unknown' as const, growth_rate_pct: null, arr: 0, by_tier: {}, portfolio_mrr_movement_history: [], forecast_3m: null, forecast_6m: null };
+  const defaultChurn = { at_risk_share_pct: null, at_risk_count: 0, at_risk_products: [], churned_this_month: null, rescue_opportunities: 0 };
+  const defaultAutomation = { total_jobs: 0, jobs_healthy: 0, jobs_failing: 0, jobs_never_reported: 0, auto_decisions_24h: 0, escalated_decisions_24h: 0, auto_execute_rate: null, recent_actions: [] };
+  const defaultHealth = { total_customers: 0, healthy: 0, warning: 0, critical: 0, avg_health_score: null, at_risk_by_company: [], champions: 0, revenue_at_risk: 0 };
+  const defaultWellbeing = { energy_score: null, stress_signals: [], days_since_break: null, override_count_7d: null, burnout_trajectory: 'unknown' as const, recommendation: null };
+  const defaultGrowth = { new_signups_7d: 0, new_signups_30d: 0, paid_share_pct: null, trial_to_paid_rate: null, expansion_revenue: null, top_acquisition_channels: [] };
+  const defaultAICost = { total_tokens_24h: 0, total_cost_24h: 0, avg_latency_ms: null, calls_by_model: null, cost_per_founder: 0 };
 
   const [pulse, mrr, churn, automation, customerHealth, wellbeing, growth, aiCost] = await Promise.all([
     safe(getPulse, defaultPulse),
@@ -87,7 +87,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
 
     <!-- KPI Row -->
     <div class="dashboard-grid" style="margin-bottom:1.5rem;">
-      ${kpiCard('MRR', '$' + mrr.current_mrr.toLocaleString(), mrr.growth_rate_pct > 0 ? '+' + mrr.growth_rate_pct + '%' : mrr.growth_rate_pct + '%')}
+      ${kpiCard('MRR', '$' + mrr.current_mrr.toLocaleString(), mrr.growth_rate_pct === null ? 'no 30d level recorded' : (mrr.growth_rate_pct > 0 ? '+' : '') + mrr.growth_rate_pct + '%')}
       ${kpiCard('ARR', '$' + mrr.arr.toLocaleString(), null)}
       ${kpiCard('Founders', pulse.active_founders.toString(), pulse.founders_this_month > 0 ? '+' + pulse.founders_this_month + ' this mo' : null)}
       ${kpiCard('At Risk', churn.at_risk_count.toString(), churn.at_risk_count > 0 ? '$' + customerHealth.revenue_at_risk + ' MRR' : 'None')}
@@ -103,7 +103,11 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
           ${tierCard('Solo', mrr.by_tier.solo?.count ?? 0, '$' + (mrr.by_tier.solo?.mrr ?? 0))}
           ${tierCard('Growth', mrr.by_tier.growth?.count ?? 0, '$' + (mrr.by_tier.growth?.mrr ?? 0))}
           ${tierCard('Investor-Ready', mrr.by_tier.investor_ready?.count ?? 0, '$' + (mrr.by_tier.investor_ready?.mrr ?? 0))}
-          ${tierCard('Forecast 3mo', 0, '$' + mrr.forecast_3m.toLocaleString())}
+          ${tierCard('In trial', mrr.trialing.count, '$' + mrr.trialing.list_price_mrr.toLocaleString())}
+        </div>
+        <div style="font-size:0.75rem;color:#6b7280;margin-top:0.5rem;">
+          Trials are counted apart from revenue: nothing has been charged yet, and the
+          figure beside them is list price if every one converted.
         </div>
       </div>
 
@@ -125,7 +129,7 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
           </div>
         </div>
         <div style="margin-top:0.75rem;font-size:0.8rem;color:#6b7280;">
-          Avg health: ${customerHealth.avg_health_score}/100 | Champions: ${customerHealth.champions} | Revenue at risk: $${customerHealth.revenue_at_risk}
+          Avg health: ${customerHealth.avg_health_score == null ? 'nobody scored' : customerHealth.avg_health_score + '/100'} | Champions: ${customerHealth.champions} | Revenue at risk: $${customerHealth.revenue_at_risk}
         </div>
       </div>
     </div>
@@ -145,6 +149,8 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
     ${churn.at_risk_products.length > 0 ? html`
     <div class="card" style="margin-bottom:1.5rem;">
       <h3>At-Risk Products</h3>
+      ${churn.at_risk_count > churn.at_risk_products.length ? html`
+        <div style="font-size:0.8rem;color:#6b7280;">the worst ${churn.at_risk_products.length} of ${churn.at_risk_count} — this table is capped, the count above is not</div>` : ''}
       <table style="width:100%;font-size:0.87rem;margin-top:0.5rem;">
         <thead><tr style="text-align:left;border-bottom:1px solid #e5e7eb;">
           <th style="padding:0.5rem;">Product</th><th>Risk State</th><th>Stressors</th></tr></thead>
@@ -211,10 +217,16 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
       <div class="card">
         <h3>Automation Health</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
-          ${metricBadge('Auto-Execute Rate', automation.auto_execute_rate + '%')}
+          ${metricBadge('Auto-Execute Rate', automation.auto_execute_rate == null ? 'no decisions yet' : automation.auto_execute_rate + '%')}
           ${metricBadge('Auto Decisions (24h)', automation.auto_decisions_24h)}
           ${metricBadge('Escalated (24h)', automation.escalated_decisions_24h)}
-          ${metricBadge('Jobs Running', automation.total_jobs)}
+          <!-- "Jobs Running: 30" was a constant, and told the operator nothing
+               about whether anything was running. What is actionable is how many
+               are failing right now, and how many have never reported at all —
+               which is not the same fact as healthy. -->
+          ${metricBadge('Jobs Failing', automation.jobs_failing + ' of ' + automation.total_jobs)}
+          ${automation.jobs_never_reported > 0
+            ? metricBadge('Never Reported', automation.jobs_never_reported) : ''}
         </div>
       </div>
 
@@ -223,8 +235,8 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
           ${metricBadge('Signups (7d)', growth.new_signups_7d)}
           ${metricBadge('Signups (30d)', growth.new_signups_30d)}
-          ${metricBadge('Activation Rate', growth.activation_rate + '%')}
-          ${metricBadge('Trial → Paid', growth.trial_to_paid_rate + '%')}
+          ${metricBadge('On a Paid Tier', growth.paid_share_pct == null ? 'no founders yet' : growth.paid_share_pct + '%')}
+          ${metricBadge('Trial → Paid', growth.trial_to_paid_rate == null ? 'nobody has trialed' : growth.trial_to_paid_rate + '%')}
         </div>
       </div>
     </div>
@@ -237,18 +249,23 @@ founderOpsRoutes.get('/founder-ops', async (c) => {
           ${metricBadge('Tokens (24h)', aiCost.total_tokens_24h.toLocaleString())}
           ${metricBadge('Cost (24h)', '$' + aiCost.total_cost_24h)}
           ${metricBadge('Cost/Founder', '$' + aiCost.cost_per_founder)}
-          ${metricBadge('Models', Object.keys(aiCost.calls_by_model).length)}
+          <!-- This counted the keys of a hardcoded three-key object, so the
+               badge read 3 whatever had actually run. No caller records which
+               model was used, so the honest answer is that it is not recorded. -->
+          ${metricBadge('Models', aiCost.calls_by_model
+            ? String(Object.keys(aiCost.calls_by_model).length) : 'not recorded')}
         </div>
       </div>
 
-      <div class="card" style="border-left:4px solid ${wellbeing.energy_score > 60 ? '#059669' : wellbeing.energy_score > 35 ? '#d97706' : '#dc2626'};">
+      <div class="card" style="border-left:4px solid ${wellbeing.energy_score == null ? '#9ca3af' : wellbeing.energy_score > 60 ? '#059669' : wellbeing.energy_score > 35 ? '#d97706' : '#dc2626'};">
         <h3>Founder Wellbeing</h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
-          ${metricBadge('Energy Score', wellbeing.energy_score + '/100')}
+          ${metricBadge('Energy Score', wellbeing.energy_score == null ? 'not observed' : wellbeing.energy_score + '/100')}
           ${metricBadge('Trajectory', wellbeing.burnout_trajectory)}
-          ${metricBadge('Stress Signals', wellbeing.stress_signals.length)}
-          ${metricBadge('Overrides (7d)', wellbeing.override_count_7d)}
+          ${metricBadge('Stress Signals', wellbeing.energy_score == null ? 'not observed' : wellbeing.stress_signals.length)}
+          ${metricBadge('Overrides (7d)', wellbeing.override_count_7d == null ? 'not recorded' : wellbeing.override_count_7d)}
         </div>
+        ${wellbeing.energy_score == null ? html`<p style="font-size:0.8rem;color:#6b7280;margin-top:0.5rem;">Nothing has been recorded about how you are doing. This card is grey rather than green because a green one would be a guess.</p>` : ''}
         ${wellbeing.recommendation ? html`<p style="font-size:0.8rem;color:#d97706;margin-top:0.5rem;">${wellbeing.recommendation}</p>` : ''}
       </div>
     </div>

@@ -11,7 +11,7 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { liveActGrant, query } from '../../db/client.js';
 
 /**
  * The constitutional ring: code, migrations, documents, and enforcement
@@ -73,6 +73,51 @@ export function isPathWithinAuthority(path: string, authority: DevelopmentAuthor
  * the closed vocabulary, verification must be required, and the grant must
  * expire.
  */
+/**
+ * THE DEVELOPMENT RESPONSIBILITIES AN OWNER COULD ACTUALLY GRANT TODAY.
+ *
+ * `grantDevelopmentAuthority` had no caller anywhere: the whole recursive path
+ * — self-observation on a schedule, the ladder, plan, apply, verify, outcome,
+ * rollback — was built, governed and reachable except for the one act that
+ * starts it. The door existed and had no handle.
+ *
+ * This is what the handle needs to know. A responsibility is offerable when it
+ * is a development responsibility this company owns, standing in Shadowing (the
+ * rung the database requires before any grant), and shadowing a check whose
+ * module has declared what a grant for it may touch. Anything else is not
+ * offered, because the alternative is a door that asks the owner to invent a
+ * path scope.
+ */
+export async function listGrantableDevelopmentResponsibilities(
+  productId: string,
+): Promise<Array<{ responsibilityId: string; title: string; check: string }>> {
+  const rows = (await query(
+    `SELECT DISTINCT r.id AS id, r.title AS title, x.expected_event_type AS event_type
+       FROM institutional_responsibilities r
+       JOIN responsibility_shadow_expectations x
+         ON x.responsibility_id = r.id AND x.product_id = r.product_id
+      WHERE r.product_id = ? AND r.capability = 'development'
+        AND r.state = 'shadowing' AND r.disposition = 'active'
+      ORDER BY r.updated_at DESC`,
+    [productId],
+  )).rows as Array<Record<string, unknown>>;
+
+  const { developmentEventCheck } = await import('./development-observation.js');
+  const { SELF_MAINTENANCE_SCOPES } = await import('../foundry/self-observation.js');
+
+  const seen = new Set<string>();
+  const out: Array<{ responsibilityId: string; title: string; check: string }> = [];
+  for (const row of rows) {
+    const check = developmentEventCheck(String(row.event_type));
+    if (!check || !SELF_MAINTENANCE_SCOPES[check]) continue;
+    const key = `${String(row.id)}:${check}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ responsibilityId: String(row.id), title: String(row.title), check });
+  }
+  return out;
+}
+
 export async function grantDevelopmentAuthority(input: {
   productId: string; responsibilityId: string; ownerId: string;
   repository: string; allowedPathPrefixes: string[];
@@ -85,8 +130,17 @@ export async function grantDevelopmentAuthority(input: {
      (id,founder_id,product_id,capability,from_mode,to_mode,disclosure_version,
       responsibility_id,allowed_scope_json,consequence_boundary,expires_at,
       repository_ref,allowed_path_prefixes_json,allowed_change_class,required_verification_json)
-     VALUES (?,?,?,'development','suggest','act',?,?,?,'low',?,?,?,?,?)`,
-    [id, input.ownerId, input.productId, input.disclosureVersion ?? 'development-authority-v1',
+     -- The from-mode column records the RUNG the responsibility is on. It said
+     -- 'suggest', which is autopilot vocabulary and not a rung, in the one
+     -- record that exists to make an authorisation provable rather than
+     -- asserted.
+     VALUES (?,?,?,'development',
+       COALESCE((SELECT state FROM institutional_responsibilities
+                  WHERE id=? AND product_id=?),'unknown'),
+       'act',?,?,?,'low',?,?,?,?,?)`,
+    [id, input.ownerId, input.productId,
+      input.responsibilityId, input.productId,
+      input.disclosureVersion ?? 'development-authority-v1',
       input.responsibilityId, JSON.stringify([input.changeClass]), input.expiresAt.toISOString(),
       input.repository, JSON.stringify(input.allowedPathPrefixes), input.changeClass,
       JSON.stringify(input.requiredVerification)],
@@ -112,7 +166,7 @@ export async function getCurrentDevelopmentAuthority(
      JOIN institutional_responsibilities r ON r.id=a.responsibility_id
      WHERE a.product_id=? AND a.responsibility_id=? AND a.capability='development'
        AND r.product_id=a.product_id AND r.capability='development'
-       AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime('now')
+       AND ${liveActGrant('a')}
      ORDER BY a.accepted_at DESC,a.rowid DESC LIMIT 1`,
     [productId, responsibilityId],
   )).rows[0] as Record<string, unknown> | undefined;

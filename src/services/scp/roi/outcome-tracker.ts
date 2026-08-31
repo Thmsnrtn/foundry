@@ -116,11 +116,16 @@ export async function inferOutcomesFromData(productId: string): Promise<number> 
 
     if (category === 'churn_prevented') {
       // Check if there's any active MRR / lifecycle state indicating customer is still active
+      // `metric_snapshots` is one wide row per day, not a key/value series:
+      // there is no `metric_name`, no `value` and no `recorded_at`. This query
+      // raised, so `hasActivity` was never true and no churn-prevention action
+      // was ever auto-measured as having worked. The same three facts are in
+      // the columns that do exist.
       const activityResult = await query(
         `SELECT COUNT(*) as cnt FROM metric_snapshots
          WHERE product_id = ?
-           AND metric_name IN ('mrr', 'active_customers', 'arr')
-           AND recorded_at >= date('now', '-7 days')`,
+           AND snapshot_date >= date('now', '-7 days')
+           AND (COALESCE(mrr_cents, 0) > 0 OR COALESCE(active_users, 0) > 0)`,
         [productId],
       );
       const hasActivity = ((activityResult.rows[0] as Record<string, number>)?.cnt ?? 0) > 0;
@@ -134,30 +139,38 @@ export async function inferOutcomesFromData(productId: string): Promise<number> 
     } else if (category === 'expansion_captured') {
       // Check if expansion MRR increased compared to recommendation date
       const expansionResult = await query(
-        `SELECT value FROM metric_snapshots
+        `SELECT expansion_mrr_cents FROM metric_snapshots
          WHERE product_id = ?
-           AND metric_name = 'expansion_mrr'
-         ORDER BY recorded_at DESC
+         ORDER BY snapshot_date DESC
          LIMIT 1`,
         [productId],
       );
       if (expansionResult.rows.length > 0) {
-        const expansionMrr = (expansionResult.rows[0] as Record<string, number>).value ?? 0;
-        if (expansionMrr > 0) {
+        const expansionCents =
+          Number((expansionResult.rows[0] as Record<string, unknown>).expansion_mrr_cents ?? 0);
+        if (expansionCents > 0) {
           await recordOutcome(id, {
+            // Cents, and the note said dollars. A report of "$4200 of expansion"
+            // that means $42 is a wrong number, not a rounding.
             outcome: 'positive',
-            notes: `Auto-measured: expansion MRR detected at $${expansionMrr} after expansion action.`,
+            notes: `Auto-measured: expansion MRR of $${(expansionCents / 100).toFixed(2)} recorded after expansion action.`,
           });
           measured++;
         }
       }
     } else {
-      // For other categories, mark as positive if acted on and 30+ days old with no bad signals
-      await recordOutcome(id, {
-        outcome: 'positive',
-        notes: 'Auto-measured: acted-on recommendation with no negative signals after 30 days.',
-      });
-      measured++;
+      // NOTHING WAS MEASURED HERE.
+      //
+      // This branch recorded `positive` with the note "acted-on recommendation
+      // with no negative signals after 30 days" — and checked nothing at all.
+      // No query, no signal, no threshold. Every recommendation in a category
+      // this function has no measurement for was counted as a success, and the
+      // note asserted a check that does not exist anywhere in the file.
+      //
+      // "We cannot measure this" is a fact about the institution, not about
+      // the recommendation, and it must not be filed as the recommendation
+      // having worked. Left unmeasured, and not counted.
+      continue;
     }
   }
 

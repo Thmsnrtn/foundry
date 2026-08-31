@@ -25,33 +25,56 @@ export async function detectGrowthStage(productId: string): Promise<GrowthStage>
   if (!m) return 'pre_launch';
 
   const activeUsers = (m.active_users as number) ?? 0;
-  const mrrCents = ((m.new_mrr_cents as number) ?? 0) +
-    ((m.expansion_mrr_cents as number) ?? 0) -
-    ((m.contraction_mrr_cents as number) ?? 0) -
-    ((m.churned_mrr_cents as number) ?? 0);
-  const mrrDollars = mrrCents / 100;
 
-  // Check for mature: 12+ months of <10% monthly growth AND MRR > $10K
-  if (mrrDollars > 10000) {
+  // THE LEVEL, NOT THE MOVEMENT. This added the four MRR MOVEMENT columns —
+  // new + expansion − contraction − churned — and called the result the
+  // company's MRR. That is the change over the latest period, so a company at
+  // $60,000/month with a flat month was classified from about $0 and came out
+  // `pre_launch` or `early_traction`: stressors suppressed, thresholds relaxed
+  // by 1.5–2×, and the digest told to say "no MRR analysis until you have
+  // customers". `mrr_cents` is the level and is what the rest of this system
+  // reads. Migration 202 made these columns nullable so absent means absent —
+  // and an unreported level is not a level of zero, so a company that has not
+  // told us its MRR is classified on the customer count alone.
+  const mrrDollars = m.mrr_cents == null ? null : Number(m.mrr_cents) / 100;
+
+  // Check for mature: a year of <10% monthly growth AND MRR > $10K
+  if (mrrDollars !== null && mrrDollars > 10000) {
     const yearAgo = await query(
-      `SELECT * FROM metric_snapshots WHERE product_id = ? AND snapshot_date > date('now', '-12 months') ORDER BY snapshot_date ASC`,
+      `SELECT snapshot_date, mrr_cents FROM metric_snapshots
+        WHERE product_id = ? AND snapshot_date > date('now', '-12 months')
+          AND mrr_cents IS NOT NULL
+        ORDER BY snapshot_date ASC`,
       [productId]
     );
-    if (yearAgo.rows.length >= 12) {
-      const growthRates = computeMonthlyGrowthRates(yearAgo.rows as unknown as Array<Record<string, number>>);
-      const allBelow10 = growthRates.every((r) => r < 0.10);
-      if (allBelow10) return 'mature';
+    const rows = yearAgo.rows as unknown as Array<Record<string, string | number>>;
+    // TWELVE ROWS IS NOT TWELVE MONTHS. `metric_snapshots` is keyed by DATE and
+    // most companies report daily, so `rows.length >= 12` was satisfied by a
+    // fortnight — and the rates it fed on were month-over-month growth of the
+    // MOVEMENT columns, not of MRR. Both are corrected: the span must actually
+    // be most of a year, and the rates are monthly-equivalent changes in the
+    // LEVEL.
+    const spanDays = rows.length < 2 ? 0
+      : (Date.parse(`${String(rows[rows.length - 1].snapshot_date)}T00:00:00Z`)
+        - Date.parse(`${String(rows[0].snapshot_date)}T00:00:00Z`)) / 86_400_000;
+    if (rows.length >= 12 && spanDays >= 330) {
+      const growthRates = computeMonthlyGrowthRates(rows);
+      if (growthRates.length > 0 && growthRates.every((r) => r < 0.10)) return 'mature';
     }
   }
 
   // Scale: 500+ customers OR $50K+ MRR
-  if (activeUsers >= 500 || mrrDollars >= 50000) return 'scale';
+  if (activeUsers >= 500 || (mrrDollars !== null && mrrDollars >= 50000)) return 'scale';
 
   // Growth: 50-500 customers OR $5K-$50K MRR
-  if ((activeUsers >= 50 && activeUsers < 500) || (mrrDollars >= 5000 && mrrDollars < 50000)) return 'growth';
+  if ((activeUsers >= 50 && activeUsers < 500)
+    || (mrrDollars !== null && mrrDollars >= 5000 && mrrDollars < 50000)) return 'growth';
 
-  // Early traction: 1-50 customers AND < $5K MRR
-  if (activeUsers >= 1 && activeUsers <= 50 && mrrDollars < 5000) return 'early_traction';
+  // Early traction: 1-50 customers AND under $5K MRR — or no MRR reported at
+  // all, which is a company we have customers for and no revenue figure from.
+  if (activeUsers >= 1 && activeUsers <= 50 && (mrrDollars === null || mrrDollars < 5000)) {
+    return 'early_traction';
+  }
 
   // Pre-launch: 0 customers or no metrics
   return 'pre_launch';
@@ -132,16 +155,24 @@ export async function updateGrowthStage(productId: string, stage: GrowthStage): 
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function computeMonthlyGrowthRates(snapshots: Array<Record<string, number>>): number[] {
+/** Monthly-equivalent growth in the MRR LEVEL between consecutive snapshots.
+ *
+ *  This compared `new + expansion` between rows — the growth of one period's
+ *  ACQUISITION, not of the company's revenue — and called the result a monthly
+ *  growth rate whatever the gap between the two dates was. A pair whose level
+ *  is unknown or zero contributes nothing rather than a zero: "we were not
+ *  told" is not "it did not grow". */
+function computeMonthlyGrowthRates(snapshots: Array<Record<string, string | number>>): number[] {
+  const DAYS_PER_MONTH = 30.44;
   const rates: number[] = [];
   for (let i = 1; i < snapshots.length; i++) {
-    const prev = (snapshots[i - 1]!.new_mrr_cents ?? 0) + (snapshots[i - 1]!.expansion_mrr_cents ?? 0);
-    const curr = (snapshots[i]!.new_mrr_cents ?? 0) + (snapshots[i]!.expansion_mrr_cents ?? 0);
-    if (prev > 0) {
-      rates.push((curr - prev) / prev);
-    } else {
-      rates.push(0);
-    }
+    const prev = Number(snapshots[i - 1]!.mrr_cents ?? 0);
+    const curr = Number(snapshots[i]!.mrr_cents ?? 0);
+    if (!(prev > 0) || !(curr > 0)) continue;
+    const gapDays = (Date.parse(`${String(snapshots[i]!.snapshot_date)}T00:00:00Z`)
+      - Date.parse(`${String(snapshots[i - 1]!.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+    if (!Number.isFinite(gapDays) || gapDays <= 0) continue;
+    rates.push((curr / prev) ** (DAYS_PER_MONTH / gapDays) - 1);
   }
   return rates;
 }

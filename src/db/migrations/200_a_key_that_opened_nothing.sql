@@ -1,0 +1,29 @@
+-- =============================================================================
+-- A KEY THAT OPENED NOTHING, KEPT IN THE CLEAR.
+--
+-- `createPortfolio` minted `pfk_<32 chars>`, stored it in `portfolios.api_key`
+-- as plaintext, and RETURNED it to the portfolio owner. The red-team audit
+-- raised that as RT02-10: a database leak, a backup, a replica or any SQL-read
+-- primitive hands over every portfolio's live API key in cleartext, with no
+-- cracking step — while the main API keys are SHA-256 hashed before storage.
+--
+-- Reading it again found something the ticket did not. The only reader,
+-- `authenticatePortfolioKey`, HAD NO CALLER. It was imported by the routes file
+-- and never invoked. So the key authenticated nothing, anywhere.
+--
+-- Hashing it would have reduced the blast radius of a leak and left the worse
+-- half standing: AN API KEY HANDED TO A CUSTOMER SAYS A DOOR EXISTS. There was
+-- no door. So the minting is gone, the reader is gone, and this clears the
+-- secrets already written — which is the part a code change cannot do.
+--
+-- The column stays, nulled. Dropping it needs a table rebuild, and the value of
+-- the rebuild is tidiness where the value of this statement is that a plaintext
+-- credential stops existing. `check-unreferenced-tables` and the write-only
+-- column ratchet will both see `portfolios.api_key` for what it now is.
+--
+-- If portfolio-key authentication is wanted, it comes back whole: minted,
+-- hashed, accepted by a documented route, and revocable — against a reader that
+-- exists.
+-- =============================================================================
+
+UPDATE portfolios SET api_key = NULL WHERE api_key IS NOT NULL;

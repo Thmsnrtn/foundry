@@ -167,7 +167,7 @@ Analyze this allocation and identify misalignments. Return a JSON object:
 Only include areas with meaningful misalignment (gap > 10 percentage points). Limit to 4 misalignments.`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 1024);
+    const response = await callSonnet(systemPrompt, userPrompt, 1024, productId);
 
     // Parse JSON response
     let parsed: { analysis: string; misalignments: Array<{ area: string; time_pct: number; recommended_pct: number; gap: string }> };

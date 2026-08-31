@@ -66,8 +66,34 @@ export async function processStripeEventChain(
     actions_generated: 0,
   };
 
-  // 1. Persist raw event
-  await processStripeWebhookEvent(productId, event.id, event.type, event.data.object as Record<string, unknown>);
+  // 1. Persist raw event — and STOP IF IT IS NOT NEW.
+  //
+  // RT02-09. This ran the whole chain whether or not the event had been seen,
+  // because `processStripeWebhookEvent` returned void. Everything below mutates
+  // the named company: `updateMetricsFromEvent` rewrites its MRR movement
+  // columns and active users from amounts in the event body, a stressor row is
+  // inserted, `transitionRiskState` is called, the founder receives a COO
+  // message quoting a customer email lifted from the event, and a gate-1 urgent
+  // decision plus an AI action draft are created on their budget.
+  //
+  // The dedupe that stops it was already there and is GLOBAL on
+  // `stripe_event_id`, with no product predicate — so it knows an event has
+  // been seen for ANY product. A captured genuine delivery replayed N times
+  // drove that chain N times; replayed at a DIFFERENT product id it drove it
+  // against a company the event had nothing to do with. The row that would have
+  // refused it was in the table the whole time and nobody asked.
+  //
+  // WHAT THIS DOES NOT CLOSE, stated rather than implied: the signature proves
+  // the event came from Stripe, not which product it belongs to, and there is
+  // one STRIPE_WEBHOOK_SECRET for every tenant. Someone holding that secret can
+  // mint fresh event ids, and a replay that arrives BEFORE the genuine delivery
+  // still wins the race. Binding an event to a product needs an identifier the
+  // event carries and the product owns — a Connect account id stored when the
+  // integration is connected — which is schema and a connect-flow change, and
+  // is recorded on the frontier rather than guessed at here.
+  const { recorded } = await processStripeWebhookEvent(
+    productId, event.id, event.type, event.data.object as Record<string, unknown>);
+  if (!recorded) return result;
 
   // 2. Update metrics based on event type
   const metricsUpdated = await updateMetricsFromEvent(productId, event);
@@ -185,7 +211,7 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
       const sub = event.data.object as Stripe.Subscription;
       const mrrCents = computeSubscriptionMRR(sub);
       await query(
-        `UPDATE metric_snapshots SET new_mrr_cents = new_mrr_cents + ?, active_users = active_users + 1
+        `UPDATE metric_snapshots SET new_mrr_cents = COALESCE(new_mrr_cents, 0) + ?, active_users = COALESCE(active_users, 0) + 1
          WHERE product_id = ? AND snapshot_date = ?`,
         [mrrCents, productId, today]
       );
@@ -198,7 +224,7 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
       const sub = event.data.object as Stripe.Subscription;
       const mrrCents = computeSubscriptionMRR(sub);
       await query(
-        `UPDATE metric_snapshots SET churned_mrr_cents = churned_mrr_cents + ?, active_users = MAX(0, active_users - 1)
+        `UPDATE metric_snapshots SET churned_mrr_cents = COALESCE(churned_mrr_cents, 0) + ?, active_users = MAX(0, COALESCE(active_users, 0) - 1)
          WHERE product_id = ? AND snapshot_date = ?`,
         [mrrCents, productId, today]
       );
@@ -217,12 +243,12 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
         const delta = newMRR - oldMRR;
         if (delta > 0) {
           await query(
-            `UPDATE metric_snapshots SET expansion_mrr_cents = expansion_mrr_cents + ? WHERE product_id = ? AND snapshot_date = ?`,
+            `UPDATE metric_snapshots SET expansion_mrr_cents = COALESCE(expansion_mrr_cents, 0) + ? WHERE product_id = ? AND snapshot_date = ?`,
             [delta, productId, today]
           );
         } else if (delta < 0) {
           await query(
-            `UPDATE metric_snapshots SET contraction_mrr_cents = contraction_mrr_cents + ? WHERE product_id = ? AND snapshot_date = ?`,
+            `UPDATE metric_snapshots SET contraction_mrr_cents = COALESCE(contraction_mrr_cents, 0) + ? WHERE product_id = ? AND snapshot_date = ?`,
             [Math.abs(delta), productId, today]
           );
         }
@@ -236,7 +262,7 @@ async function updateMetricsFromEvent(productId: string, event: Stripe.Event): P
       const charge = event.data.object as Stripe.Charge;
       const refundAmount = charge.amount_refunded ?? 0;
       await query(
-        `UPDATE metric_snapshots SET churned_mrr_cents = churned_mrr_cents + ? WHERE product_id = ? AND snapshot_date = ?`,
+        `UPDATE metric_snapshots SET churned_mrr_cents = COALESCE(churned_mrr_cents, 0) + ? WHERE product_id = ? AND snapshot_date = ?`,
         [refundAmount, productId, today]
       );
       await ensureSnapshot(productId, today);
@@ -259,6 +285,11 @@ function computeSubscriptionMRR(sub: Stripe.Subscription): number {
   return total;
 }
 
+// NULL + 5 IS NULL. Migration 202 made the four movement columns nullable, so
+// "we were not told" is expressible — and every `col = col + ?` above would have
+// discarded its event against a column nobody had written yet. `COALESCE(col, 0)`
+// is the right arithmetic for the first movement we have been told about, and
+// it is the ONLY place a zero may be substituted for one of these columns.
 async function ensureSnapshot(productId: string, date: string): Promise<void> {
   const existing = await query(
     'SELECT id FROM metric_snapshots WHERE product_id = ? AND snapshot_date = ?',
@@ -274,8 +305,16 @@ async function ensureSnapshot(productId: string, date: string): Promise<void> {
 
 async function recomputeHealthRatio(productId: string, date: string): Promise<void> {
   await query(
-    `UPDATE metric_snapshots SET mrr_health_ratio = CASE WHEN new_mrr_cents > 0 THEN CAST(churned_mrr_cents AS REAL) / new_mrr_cents ELSE NULL END
-     WHERE product_id = ? AND snapshot_date = ?`,
+    // NULL means the movement was never reported, and a ratio over an
+    // unreported denominator is not zero — it is unknown, which is what the
+    // ELSE branch already says. `COALESCE(churned, 0)` is right in the
+    // numerator only because this branch has already established that new_mrr
+    // was reported and is positive.
+    `UPDATE metric_snapshots
+        SET mrr_health_ratio = CASE WHEN COALESCE(new_mrr_cents, 0) > 0
+              THEN CAST(COALESCE(churned_mrr_cents, 0) AS REAL) / new_mrr_cents
+              ELSE NULL END
+      WHERE product_id = ? AND snapshot_date = ?`,
     [productId, date]
   );
 }

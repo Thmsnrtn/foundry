@@ -1,0 +1,31 @@
+-- =============================================================================
+-- Migration 205: `leading_indicators` — a library nobody wrote
+--
+-- Migration 023 created it under the header "Predictive Intelligence Engine —
+-- leading indicators, pre-stressor detection, probability forecasts", and
+-- `intelligence/predictive.ts` repeats that sentence at the top of the file.
+-- Nothing has ever written a row, and nothing has ever read one.
+--
+-- Its columns are the reason it stayed empty. `confidence`, `sample_size`,
+-- `lead_time_days` and `predicts` describe an EMPIRICAL body of knowledge: this
+-- indicator precedes that outcome, by this much, with this confidence, over
+-- this many observations. Foundry has never had a way to establish any of those
+-- numbers — filling them would have meant writing them down, which is the
+-- fabrication the rest of this campaign has been removing.
+--
+-- THE SUCCESSOR EXISTS AND IS LIVE, under a different name. `failure_patterns`
+-- holds the same idea honestly: named shapes with warning signals, match
+-- criteria the engine actually evaluates against a company's own metrics, and a
+-- `typical_lead_time_days` rule of thumb. It is seeded by hand and says so —
+-- and in the commit that carries this migration, the four descriptions that
+-- stated invented frequencies were corrected and the founder-facing card
+-- learned to say which half is editorial and which half is theirs.
+--
+-- So the table goes. An empty table named for a capability is a claim of the
+-- capability, and this one names the most quantitative capability in the
+-- product. If a real leading-indicator library is ever wanted it comes back
+-- whole — with a writer that has counted something.
+-- =============================================================================
+
+DROP INDEX IF EXISTS idx_leading_sector;
+DROP TABLE IF EXISTS leading_indicators;

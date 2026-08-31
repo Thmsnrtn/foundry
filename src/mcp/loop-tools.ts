@@ -60,7 +60,7 @@ export const LOOP_TOOLS: MCPTool[] = [
         premise: { type: 'string', description: 'The belief this decision rests on, in plain words' },
         premise_metric: { type: 'string', description: 'Optional metric key to auto-check the premise against' },
         premise_comparator: { type: 'string', description: 'One of < <= > >= — the condition that must KEEP holding' },
-        premise_threshold: { type: 'number', description: 'The threshold for the comparator' },
+        premise_threshold: { type: 'number', description: 'The threshold for the comparator. Rates (churn_rate, activation_rate, day_30_retention, mrr_health_ratio) are stored 0-1; either form is accepted — a value above 1 is read as percentage points, so 5 and 0.05 both mean five per cent.' },
       },
       required: ['title', 'decision'],
     },
@@ -76,7 +76,7 @@ export const LOOP_TOOLS: MCPTool[] = [
   },
   {
     name: 'foundry_fork_reality',
-    description: 'Simulate each option\'s 90-day MRR trajectory (1,000-run seeded Monte Carlo on the company\'s OWN growth history). Returns p10/p50/p90 bands per option plus a do-nothing ghost. Abstains honestly if the company has under 4 months of history.',
+    description: 'Simulate each option\'s 90-day MRR trajectory (1,000-run seeded Monte Carlo on the company\'s OWN growth history, most recent 24 snapshots). Returns p10/p50/p90 bands per option plus a do-nothing ghost, with the number of snapshots and the days they span in the stored assumptions. Abstains honestly when the company has fewer than four usable MRR snapshots.',
     inputSchema: {
       type: 'object',
       properties: { decision_id: { type: 'string', description: 'The pending decision to fork' } },
@@ -129,8 +129,17 @@ export async function executeLoopTool(
         if (Number(row.gate) >= 3 && !reasoning) {
           return text('Error: gate-3 decisions require reasoning. Consider foundry_red_team first.');
         }
+        // A KEY ACTS AS THE PERSON WHO ISSUED IT. The transport already proved
+        // the scope (`agents:write`) and that Foundry may act for this company;
+        // neither answers whether that person may decide for it. `ctx.founderId`
+        // is `api_keys.created_by`, and a founder who has left the team does not
+        // keep resolving decisions through a key they left behind.
+        const { memberMay } = await import('../services/team/members.js');
+        if (!(await memberMay(ctx.productId, ctx.founderId, 'can_vote_decisions'))) {
+          return text('Error: this key\'s issuer does not have a say in this company\'s decisions');
+        }
         const { resolveDecision } = await import('../services/decisions/queue.js');
-        await resolveDecision(decisionId, ctx.productId, chosen, 'founder');
+        await resolveDecision(decisionId, ctx.productId, chosen, 'founder', ctx.founderId);
         if (reasoning) {
           await query('UPDATE decisions SET resolution_reasoning = ? WHERE id = ?', [reasoning, decisionId]);
         }

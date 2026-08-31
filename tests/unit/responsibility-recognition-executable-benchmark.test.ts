@@ -44,7 +44,7 @@ beforeAll(async()=>{
     ('recognition_dispatch','recognition_service','dispatch','coverage_gap','high','{}','Shift uncovered'),
     ('recognition_conflict_a','recognition_conflict','warehouse','owner_changed','medium','{}','Operations owns it'),
     ('recognition_conflict_b','recognition_conflict','manual','owner_changed','medium','{}','Support owns it'),
-    ('recognition_stale_signal','recognition_stale','stripe','payment_failed','medium','{}','Old failure'),
+    ('recognition_stale_signal','recognition_stale','company_observation_baseline','company_observation_baseline:observed','low','{}','Old failure'),
     ('recognition_foreign_signal','recognition_foreign','manual','secret','high','{}','Foreign evidence')`,[]);
   const knownInputs=[
     {productId:'recognition_saas',subject:'deployments',title:'Restore deployment reliability',capability:'development',signal:'recognition_deploy'},

@@ -31,36 +31,19 @@ export async function publishArtifact(artifactId: string, productId: string): Pr
   return `${appUrl}/case-studies/${artifactId}`;
 }
 
-export function generateCaseStudyHTML(artifact: FoundingStoryArtifact): string {
-  const timestamp = new Date(artifact.created_at).toISOString();
+// `generateCaseStudyHTML` REMOVED.
+//
+// It rendered "Cryptographic timestamp: ${timestamp}" where `timestamp` was
+// `new Date(artifact.created_at).toISOString()` — no hash, no signature, no
+// anchor, anywhere in this file. A date presented as cryptographic evidence is
+// exactly the fabrication the constitution forbids: presentation is allowed,
+// evidence is not invented.
+//
+// It had no caller — the live page is `routes/public/landing.ts` — so deleting
+// it removes a false claim and an orphan in one go. The same claim was being
+// SOLD in the tier-gate upgrade copy, which is why this mattered more than a
+// dead function usually would; that copy is corrected too.
+//
+// If a case study ever needs to be verifiable, that is a real feature with a
+// real mechanism, and it starts by not saying so until it is.
 
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>${artifact.title} — Foundry Case Study</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; }
-    .timestamp { color: #666; font-size: 0.875rem; margin-bottom: 24px; }
-    .badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
-    .content { line-height: 1.7; }
-    .evidence { background: #f5f5f5; padding: 16px; border-radius: 8px; margin-top: 24px; }
-    .footer { margin-top: 48px; border-top: 1px solid #eee; padding-top: 16px; font-size: 0.75rem; color: #999; }
-  </style>
-</head>
-<body>
-  <h1>${artifact.title}</h1>
-  <div class="timestamp">
-    <span class="badge" style="background: #e0f2fe; color: #0369a1;">${artifact.artifact_type}</span>
-    Phase: ${artifact.phase} · Generated: ${timestamp}
-  </div>
-  <div class="content">${artifact.content}</div>
-  ${artifact.evidence_links ? `<div class="evidence"><h3>Evidence</h3><ul>${(artifact.evidence_links as string[]).map((l) => `<li><a href="${l}">${l}</a></li>`).join('')}</ul></div>` : ''}
-  <div class="footer">
-    Cryptographic timestamp: ${timestamp}<br>
-    Published via Foundry — Autonomous Business Intelligence Platform
-  </div>
-</body>
-</html>`;
-}

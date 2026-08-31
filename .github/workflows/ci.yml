@@ -1,8 +1,21 @@
 name: CI
 
+# WHAT THIS RUNS ON, AND WHY IT WAS WRONG.
+#
+# This triggered on `master` and `main` only. All development happens on a
+# long-lived working branch that is deliberately never merged to master, and no
+# pull request is opened for it — so every gate in this repository, including
+# the twelve in `lint:columns` and the four audit gates in `check`, had never
+# once run here. They were enforced by somebody remembering to run them, which
+# is the exact shape of defect those gates exist to catch: a rule with no edge
+# to the thing it governs.
+#
+# `claude/**` covers the working branches. Keeping master and main explicit
+# rather than dropping to `'**'` means the trigger still states which branches
+# are expected to be green, rather than quietly including every experiment.
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, 'claude/**']
   pull_request:
     branches: [master, main]
 
@@ -16,10 +29,20 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run typecheck
-      - run: npm run ratchet
+      # `npm run check` is the composite gate: typecheck, ratchets, kernel
+      # boundary, guard NULL-safety, public-claims audit, consequential-effects
+      # audit, the twelve schema/authority gates in `lint:columns`, and the full
+      # test suite. CI used to run typecheck, ratchet and the tests
+      # individually, which meant the audit gates ran ONLY on a developer's
+      # machine — a PR could turn one red and still go green here.
+      #
+      # `lint:columns` also runs as its own job below. That duplication is
+      # deliberate: the job gives the failure its own name in the CI output,
+      # and including it here means the thing called "check" actually checks
+      # everything, so a developer running it locally is not told they are
+      # green on twelve gates they never ran.
+      - run: npm run check
       - run: npm run build
-      - run: npm test -- --run
       - run: npm audit --audit-level=high || true
 
   column-drift:
@@ -36,6 +59,10 @@ jobs:
       # Verifies every INSERT column list and UPDATE-SET column against the real
       # migrated schema — the drift class that shipped ~55 runtime 500s this cycle.
       - run: npm run lint:columns
+      # Every model call must name the company paying for it. Without a
+      # productId only the GLOBAL spend ceiling applies, so one company's
+      # runaway loop exhausts the budget for all of them.
+      - run: npm run lint:ai-attribution
 
   evals:
     name: Prompt/AI eval net (2.7)

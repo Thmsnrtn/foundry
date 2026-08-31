@@ -1,64 +1,130 @@
 // =============================================================================
-// FOUNDRY — Environment Validation
-// Validates all required env vars at startup. Fails fast with clear errors.
+// FOUNDRY — Environment validation, in one place
+//
+// THERE WERE THREE OF THESE AND TWO OF THEM RAN.
+//
+//   `src/env.ts`      — this file. `validateEnvironment()`, called from
+//                       `index.ts` at boot. Its fatal set was the database and
+//                       Clerk; AN AI KEY WAS OPTIONAL. It never mentioned
+//                       `ENCRYPTION_KEY`. It ended by printing
+//                       "✓ Environment validated".
+//   `src/index.ts`    — a second, inline pair of lists a few lines after the
+//                       call. Same three fatal PLUS an AI key, and a degraded
+//                       list naming the consequence of each absence.
+//   `src/lib/env.ts`  — a zod schema nothing imported. It required
+//                       `STRIPE_SECRET_KEY` and `ANTHROPIC_API_KEY` with no
+//                       OpenRouter alternative, so a deployment on OpenRouter
+//                       would have been refused boot; it omitted
+//                       `ENCRYPTION_KEY`; and it named
+//                       `STRIPE_FOUNDING_COHORT_PRICE_ID` and
+//                       `STRIPE_SCALE_PRICE_ID`, two tiers no code reads.
+//
+// The disagreement was visible in the boot log and nobody had to read code to
+// see it: on a deployment with no AI key at all, this file printed
+// "✓ Environment validated" and the block below it then printed "FATAL:
+// required config missing". The tick was false at the moment it was printed,
+// and outside production the fatal line only warns — so what an operator took
+// away from a broken boot was a green tick.
+//
+// One list now, and the tick is printed only when nothing fatal is missing.
+// The fatal/degraded distinction and the CONSEQUENCE text come from the
+// `index.ts` version, which was the better of the two: "missing" is not
+// information, "billing/checkout disabled" is.
 // =============================================================================
 
-interface EnvVar {
-  name: string;
-  required: boolean;
-  description: string;
+/** A requirement satisfied by any one of `names`. Alternatives exist because
+ *  the AI gateway is either OpenRouter or Anthropic and either will do. */
+export interface EnvRequirement {
+  names: string[];
+  consequence: string;
 }
 
-const REQUIRED_VARS: EnvVar[] = [
-  // Core — app won't start without these
-  { name: 'TURSO_DATABASE_URL', required: true, description: 'Turso database URL' },
-  { name: 'CLERK_SECRET_KEY', required: true, description: 'Clerk backend secret key' },
-  { name: 'CLERK_PUBLISHABLE_KEY', required: true, description: 'Clerk frontend publishable key' },
-
-  // Degraded without these — features disabled, app still runs
-  { name: 'TURSO_AUTH_TOKEN', required: false, description: 'Turso auth token (required for remote DB)' },
-  { name: 'CLERK_WEBHOOK_SECRET', required: false, description: 'Clerk webhook signing secret — webhook endpoint disabled without this' },
-  { name: 'OPENROUTER_API_KEY', required: false, description: 'OpenRouter API key — primary AI gateway for all LLM calls' },
-  { name: 'ANTHROPIC_API_KEY', required: false, description: 'Anthropic API key — fallback if OpenRouter not set' },
-  { name: 'STRIPE_SECRET_KEY', required: false, description: 'Stripe secret key — billing disabled without this' },
-  { name: 'STRIPE_WEBHOOK_SECRET', required: false, description: 'Stripe webhook signing secret' },
-  // Prices resolve by Stripe lookup_key (foundry_<tier>_monthly); these env vars
-  // are the fallback until every price is backfilled. See docs/stripe-shared-account.md.
-  { name: 'STRIPE_SOLO_PRICE_ID', required: false, description: 'Fallback Stripe Price ID for Solo ($79) — prefer lookup_key foundry_solo_monthly' },
-  { name: 'STRIPE_GROWTH_PRICE_ID', required: false, description: 'Fallback Stripe Price ID for Growth ($199) — prefer lookup_key foundry_growth_monthly' },
-  { name: 'STRIPE_INVESTOR_READY_PRICE_ID', required: false, description: 'Fallback Stripe Price ID for Investor-Ready/"Scale" ($399) — prefer lookup_key foundry_investor_ready_monthly' },
-  { name: 'RESEND_API_KEY', required: false, description: 'Resend API key — email disabled without this' },
-  { name: 'RESEND_FROM_ADDRESS', required: false, description: 'From address for emails' },
-  { name: 'APP_URL', required: false, description: 'Public app URL — defaults to http://localhost:8080' },
-  { name: 'GITHUB_CLIENT_ID', required: false, description: 'GitHub OAuth app client ID' },
-  { name: 'GITHUB_CLIENT_SECRET', required: false, description: 'GitHub OAuth app client secret' },
-  { name: 'ECOSYSTEM_SERVICE_KEY', required: false, description: 'Internal API authentication key' },
+/** Absent, the app cannot function. */
+export const FATAL_ENV: EnvRequirement[] = [
+  { names: ['TURSO_DATABASE_URL'], consequence: 'no database — nothing works' },
+  { names: ['CLERK_SECRET_KEY'], consequence: 'no authentication — nobody can sign in' },
+  { names: ['CLERK_PUBLISHABLE_KEY'], consequence: 'no authentication — nobody can sign in' },
+  {
+    names: ['OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY'],
+    consequence: 'no AI gateway — Foundry is an AI product, so no key is no product',
+  },
 ];
 
-export function validateEnvironment(): void {
-  const missing: string[] = [];
-  const warnings: string[] = [];
+/** Absent, a named thing stops working and the rest of the app runs. */
+export const DEGRADED_ENV: EnvRequirement[] = [
+  { names: ['TURSO_AUTH_TOKEN'], consequence: 'a remote Turso database cannot be reached' },
+  { names: ['CLERK_WEBHOOK_SECRET'], consequence: 'the Clerk webhook endpoint is disabled' },
+  // NOT "cannot be encrypted at rest", which is what the inline list said and
+  // is not what the code does: `lib/crypto.ts` derives from ENCRYPTION_KEY or
+  // falls back to CLERK_SECRET_KEY, which is fatal-required — so the fallback
+  // is always available and always used when this is unset. The cost is real
+  // and it is a different one: one secret doing two jobs, and rotating the
+  // Clerk key silently re-keys every stored integration credential.
+  {
+    names: ['ENCRYPTION_KEY'],
+    consequence: 'integration credentials are encrypted with the Clerk secret instead, '
+      + 'so rotating that key makes every stored credential unreadable',
+  },
+  { names: ['OLD_ENCRYPTION_KEY'], consequence: 'credentials written under a previous key cannot be read' },
+  { names: ['STRIPE_SECRET_KEY'], consequence: 'billing and checkout are disabled' },
+  { names: ['STRIPE_WEBHOOK_SECRET'], consequence: 'subscription and trial state will not update' },
+  { names: ['STRIPE_SOLO_PRICE_ID'], consequence: 'Solo checkout falls back to the Stripe lookup_key' },
+  { names: ['STRIPE_GROWTH_PRICE_ID'], consequence: 'Growth checkout falls back to the Stripe lookup_key' },
+  { names: ['STRIPE_INVESTOR_READY_PRICE_ID'], consequence: 'Investor-Ready checkout falls back to the Stripe lookup_key' },
+  { names: ['RESEND_API_KEY'], consequence: 'all outbound email is logged rather than sent' },
+  { names: ['RESEND_FROM_ADDRESS'], consequence: 'outbound email has no from address' },
+  { names: ['APP_URL'], consequence: 'links in email and OAuth redirects point at localhost' },
+  { names: ['GITHUB_CLIENT_ID'], consequence: 'the GitHub OAuth app cannot be used' },
+  { names: ['GITHUB_CLIENT_SECRET'], consequence: 'the GitHub OAuth app cannot be used' },
+  { names: ['ECOSYSTEM_SERVICE_KEY'], consequence: 'internal ecosystem endpoints refuse every caller' },
+  { names: ['SENTRY_DSN'], consequence: 'error tracking falls back to stderr only' },
+];
 
-  for (const v of REQUIRED_VARS) {
-    const value = process.env[v.name];
-    if (v.required && !value) {
-      missing.push(`  ${v.name} — ${v.description}`);
-    } else if (!v.required && !value) {
-      warnings.push(`  ${v.name} — ${v.description} (optional, some features disabled)`);
-    }
+export interface EnvVerdict {
+  fatalMissing: string[];
+  degradedMissing: Array<{ name: string; consequence: string }>;
+}
+
+const label = (r: EnvRequirement): string => r.names.join(' or ');
+
+/** Read the environment and say what is missing. Pure — it decides nothing
+ *  about the process, which is what makes it testable. */
+export function inspectEnvironment(env: NodeJS.ProcessEnv = process.env): EnvVerdict {
+  const present = (r: EnvRequirement): boolean => r.names.some((n) => Boolean(env[n]));
+  return {
+    fatalMissing: FATAL_ENV.filter((r) => !present(r)).map(label),
+    degradedMissing: DEGRADED_ENV.filter((r) => !present(r))
+      .map((r) => ({ name: label(r), consequence: r.consequence })),
+  };
+}
+
+/**
+ * Validate at boot. Exits in production when something fatal is missing; warns
+ * and continues elsewhere, because a developer without a Stripe key should
+ * still be able to run the app.
+ */
+export function validateEnvironment(env: NodeJS.ProcessEnv = process.env): EnvVerdict {
+  const verdict = inspectEnvironment(env);
+
+  for (const d of verdict.degradedMissing) {
+    console.warn(`⚠️  ${d.name} is not set — ${d.consequence}`);
   }
 
-  if (warnings.length > 0) {
-    console.warn('\n⚠️  Optional environment variables not set:');
-    for (const w of warnings) console.warn(w);
+  if (verdict.fatalMissing.length > 0) {
+    const detail = FATAL_ENV
+      .filter((r) => verdict.fatalMissing.includes(label(r)))
+      .map((r) => `  ${label(r)} — ${r.consequence}`)
+      .join('\n');
+    const msg = `FATAL: required config missing —\n${detail}`;
+    console.error(`\n❌ ${msg}\n`);
+    // A misconfigured boot must fail visibly in production rather than serve a
+    // half-working app.
+    if (env.NODE_ENV === 'production') process.exit(1);
+    console.warn('[STARTUP] continuing in non-production with the above missing');
+    return verdict;
   }
 
-  if (missing.length > 0) {
-    console.error('\n❌ Missing required environment variables:\n');
-    for (const m of missing) console.error(m);
-    console.error(`\nSet these in your .env file or deployment config.\n`);
-    process.exit(1);
-  }
-
+  // ONLY HERE. The tick used to print regardless of what the second list found.
   console.log('✓ Environment validated');
+  return verdict;
 }

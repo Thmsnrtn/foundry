@@ -7,6 +7,7 @@ import type { Digest } from '../../types/index.js';
 import { invoke } from '../outbound/gateway.js';
 // Registers the canonical send_email capability and its trusted policy.
 import '../integration/resend.js';
+import { measured, pctOfFraction } from '../ai/measured.js';
 
 function dailyDedup(productId: string, kind: string, content: string): string {
   const date = new Date().toISOString().slice(0, 10);
@@ -36,7 +37,16 @@ export async function sendDigestEmail(
     : digest.digest_type === 'yellow_pulse'
       ? `🟡 ${productName} — Thursday Pulse`
       : `${productName} — Weekly Digest`;
-  const mrrTotal = (digest.mrr.total_cents / 100).toFixed(2);
+  // "Total MRR" in an email to the founder, and it was the period's net change.
+  const mrrTotal = digest.mrr.level_cents === null
+    ? 'not reported'
+    : `$${(digest.mrr.level_cents / 100).toFixed(2)}`;
+  const netNew = digest.mrr.net_new_cents === null
+    ? 'not reported'
+    : `$${(digest.mrr.net_new_cents / 100).toFixed(2)}`;
+  const healthRatio = digest.mrr_health.value === null
+    ? 'unknown — no new MRR to divide by'
+    : digest.mrr_health.value.toFixed(2);
   const stressorList = digest.stressor_report?.stressors
     .map((s) => `• ${s.name}: ${s.signal} (${s.severity})`).join('\n') ?? 'No stressors identified.';
   const html = `<div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -44,8 +54,8 @@ export async function sendDigestEmail(
     <h2>Stressor Report</h2><pre style="white-space: pre-wrap;">${stressorList}</pre>
     ${digest.competitive_context ? `<h3>Competitive Context</h3><p>${digest.competitive_context}</p>` : ''}
     <h2>This Week</h2><p>${digest.narrative}</p>
-    <h2>Revenue</h2><p>Total MRR: $${mrrTotal} | Health Ratio: ${digest.mrr_health.value.toFixed(2)}</p>
-    <h2>Key Metrics</h2><p>Signups: ${digest.metrics.signups_7d} | Active: ${digest.metrics.active_users} | Activation: ${(digest.metrics.activation_rate * 100).toFixed(1)}%</p>
+    <h2>Revenue</h2><p>MRR: ${mrrTotal} | Net new this period: ${netNew} | Health Ratio: ${healthRatio}</p>
+    <h2>Key Metrics</h2><p>Signups: ${measured(digest.metrics.signups_7d)} | Active: ${measured(digest.metrics.active_users)} | Activation: ${pctOfFraction(digest.metrics.activation_rate)}</p>
   </div>`;
   await sendGovernedEmail({ productId, to, subject, html, kind: `digest:${digest.digest_type}` });
 }

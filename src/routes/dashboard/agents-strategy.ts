@@ -20,6 +20,7 @@ import {
   getAgentCostBreakdown,
 } from '../../services/financial/economics.js';
 import { getExperimentSummary } from '../../services/scp/experiments.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentStrategyRoutes = new Hono<AuthEnv>();
 
@@ -62,7 +63,8 @@ agentStrategyRoutes.get('/products/:id/agents/strategy', async (c) => {
 
 // ─── POST /products/:id/agents/strategy/synthesize ───────────────────────────
 
-agentStrategyRoutes.post('/products/:id/agents/strategy/synthesize', async (c) => {
+agentStrategyRoutes.post('/products/:id/agents/strategy/synthesize',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
 
@@ -155,34 +157,44 @@ function plCard(
   budget: Awaited<ReturnType<typeof getBudgetUtilization>>,
   agentBreakdown: Awaited<ReturnType<typeof getAgentCostBreakdown>>,
 ) {
-  const roiPct = (pl.roi * 100).toFixed(1);
-  const roiColor = pl.roi >= 1 ? '#059669' : pl.roi >= 0 ? '#d97706' : '#dc2626';
+  // NULL when no cost was recorded, which used to render as "0.0%" ROI for a
+  // company whose agents had not run.
+  const roiPct = pl.attributed_roi === null ? null : (pl.attributed_roi * 100).toFixed(1);
+  const roiColor = pl.attributed_roi === null ? '#6b7280'
+    : pl.attributed_roi >= 1 ? '#059669' : pl.attributed_roi >= 0 ? '#d97706' : '#dc2626';
   const budgetBarColor = budget.status === 'critical' ? '#dc2626' : budget.status === 'warning' ? '#d97706' : '#059669';
   const budgetPct = Math.min(100, budget.utilization_pct).toFixed(1);
 
   return html`
     <div class="card">
       <h3>AI Company P&amp;L (Last 30 Days)</h3>
+      <p style="font-size:12px;color:#6b7280;margin:-4px 0 12px;">
+        Costs are measured: token and integration spend actually incurred.
+        Revenue is <strong>attributed</strong> — Foundry's own estimate of what
+        its actions produced, weighted by the confidence that estimate carried,
+        and reconciled against no invoice or payment. Every figure below that
+        combines the two is a measured cost compared with an estimate.
+      </p>
       <div class="metrics-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem;">
         <div class="metric-card">
-          <span class="metric-value" style="color:#059669;">$${pl.revenue.total_usd.toFixed(2)}</span>
-          <span class="metric-label">Attributed Revenue</span>
+          <span class="metric-value" style="color:#059669;">$${pl.attributed_revenue.total_usd.toFixed(2)}</span>
+          <span class="metric-label">Attributed Revenue (estimated)</span>
         </div>
         <div class="metric-card">
           <span class="metric-value" style="color:#dc2626;">$${pl.costs.total_usd.toFixed(2)}</span>
           <span class="metric-label">Total Costs</span>
         </div>
         <div class="metric-card">
-          <span class="metric-value" style="color:${pl.profit_usd >= 0 ? '#059669' : '#dc2626'};">$${pl.profit_usd.toFixed(2)}</span>
-          <span class="metric-label">Profit</span>
+          <span class="metric-value" style="color:${pl.attributed_profit_usd >= 0 ? '#059669' : '#dc2626'};">$${pl.attributed_profit_usd.toFixed(2)}</span>
+          <span class="metric-label">Attributed minus cost</span>
         </div>
         <div class="metric-card">
-          <span class="metric-value" style="color:${roiColor};">${roiPct}%</span>
-          <span class="metric-label">ROI</span>
+          <span class="metric-value" style="color:${roiColor};">${roiPct === null ? 'not measured' : roiPct + '%'}</span>
+          <span class="metric-label">Attributed ROI</span>
         </div>
         <div class="metric-card">
-          <span class="metric-value" style="color:${pl.self_funding ? '#059669' : '#dc2626'};">${pl.self_funding ? 'Yes' : 'No'}</span>
-          <span class="metric-label">Self-Funding</span>
+          <span class="metric-value" style="color:${pl.attributed_revenue_covers_cost ? '#059669' : '#dc2626'};">${pl.attributed_revenue_covers_cost ? 'Yes' : 'No'}</span>
+          <span class="metric-label">Attributed revenue covers cost</span>
         </div>
       </div>
 
@@ -207,8 +219,8 @@ function plCard(
             <tr style="border-bottom:1px solid #e5e7eb;color:#6b7280;">
               <th style="text-align:left;padding:4px 8px;">Agent</th>
               <th style="text-align:right;padding:4px 8px;">Cost</th>
-              <th style="text-align:right;padding:4px 8px;">Revenue</th>
-              <th style="text-align:right;padding:4px 8px;">ROI</th>
+              <th style="text-align:right;padding:4px 8px;">Attributed Revenue</th>
+              <th style="text-align:right;padding:4px 8px;">Attributed ROI</th>
             </tr>
           </thead>
           <tbody>
@@ -217,7 +229,7 @@ function plCard(
                 <td style="padding:6px 8px;font-weight:500;">${a.agent_name}</td>
                 <td style="padding:6px 8px;text-align:right;color:#dc2626;">$${a.total_cost_usd.toFixed(3)}</td>
                 <td style="padding:6px 8px;text-align:right;color:#059669;">$${a.attributed_revenue_usd.toFixed(2)}</td>
-                <td style="padding:6px 8px;text-align:right;color:${a.roi >= 0 ? '#059669' : '#dc2626'};">${(a.roi * 100).toFixed(0)}%</td>
+                <td style="padding:6px 8px;text-align:right;color:${a.attributed_roi === null ? '#6b7280' : a.attributed_roi >= 0 ? '#059669' : '#dc2626'};">${a.attributed_roi === null ? 'not measured' : (a.attributed_roi * 100).toFixed(0) + '%'}</td>
               </tr>`)}
           </tbody>
         </table>` : html`<p style="color:#6b7280;font-size:14px;">No agent cost data yet.</p>`}
@@ -258,7 +270,9 @@ function experimentPortfolioCard(
           <strong style="color:#065f46;font-size:13px;">Recent Win:</strong>
           <span style="color:#047857;font-size:13px;margin-left:6px;">${summary.recent_win.name}</span>
           <span style="color:#6b7280;font-size:12px;margin-left:8px;">
-            +${(summary.recent_win.effect_size * 100).toFixed(1)}% on ${summary.recent_win.metric}
+            ${summary.recent_win.effect_size === null
+              ? html`effect size not recorded — on ${summary.recent_win.metric}`
+              : html`${summary.recent_win.effect_size > 0 ? '+' : ''}${(summary.recent_win.effect_size * 100).toFixed(1)}% on ${summary.recent_win.metric}`}
           </span>
         </div>` : ''}
     </div>`;
@@ -331,7 +345,8 @@ agentStrategyRoutes.get('/agents/strategy', async (c) => {
   return c.redirect(`/products/${ctx.productId}/agents/strategy`);
 });
 
-agentStrategyRoutes.post('/agents/strategy/synthesize', async (c) => {
+agentStrategyRoutes.post('/agents/strategy/synthesize',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await import('./_shared.js').then(m => m.getLayoutContext(founder, 'agents-strategy', 'Strategy'));
   if (!ctx.productId) return c.redirect('/dashboard');

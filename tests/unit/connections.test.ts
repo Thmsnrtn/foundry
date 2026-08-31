@@ -9,6 +9,7 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import { principalRef } from '../../src/services/outbound/acting-principal.js';
 import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
@@ -116,7 +117,7 @@ describe('the hands obey the law end-to-end (standing-order mcp_tool action)', (
       action_type: 'mcp_tool', integration: 'my-crm',
       server_name: 'my-crm', tool: 'send_email', tool_args: { to: 'x@y.z' },
     });
-    const result = await approveAndExecute(execId, 'cx_f');
+    const result = await approveAndExecute(execId, principalRef('founder', 'cx_f'));
     expect(result.success).toBe(false);
     expect(result.error).toContain('no live grant'); // revoked above — Hands Law holds
   });

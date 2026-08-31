@@ -62,9 +62,20 @@ export async function promoteResponsibilityCandidate(input:{
   if (!signal) throw new Error('candidate promotion refused');
   const responsibilityId=`candidate_${input.candidateId}`;
   const actor=input.mechanism==='deterministic'?'institution:deterministic_candidate_grounder':`founder:${input.ownerId??''}`;
+  // THE DECISION LEDGER IS PROVENANCE, and the columns below are read by
+  // triggers and by people rather than by code — `grounding_mechanism`,
+  // `grounding_evidence_json` and `resulting_initial_state` answer "how did
+  // this responsibility come to exist, and on whose say-so", at a point where
+  // the responsibility itself only carries its own evidence ref. Migrations 108
+  // and 109 check them; validation is not consumption, and this is the answer
+  // `check-write-only-columns.mjs` asks for, stated where they are written.
   try {
     await batch([
-      {sql:`INSERT INTO institutional_responsibilities (id,product_id,title,capability) VALUES (?,?,?,?)`,args:[responsibilityId,input.productId,String(c.proposed_responsibility),String(c.capability_dependency??'general')]},
+      // The responsibility carries the observation it came from, same as the
+      // discovery path and `createResponsibility`. Migration 105's unique index
+      // then makes two candidates resolving to one signal converge or refuse
+      // rather than quietly becoming two obligations for one observation.
+      {sql:`INSERT INTO institutional_responsibilities (id,product_id,title,capability,discovery_evidence_ref) VALUES (?,?,?,?,?)`,args:[responsibilityId,input.productId,String(c.proposed_responsibility),String(c.capability_dependency??'general'),`signal_event:${signal.id}`]},
       {sql:`INSERT INTO responsibility_transitions (id,responsibility_id,from_state,to_state,evidence_ref,reason,actor_ref)
         VALUES (?,?,'unknown','visible',?,?,?)`,args:[nanoid(),responsibilityId,`signal_event:${signal.id}`,'Candidate explicitly grounded as a visible responsibility',actor]},
       {sql:`INSERT INTO responsibility_candidate_decisions

@@ -16,6 +16,15 @@ export interface SynthesisOutput {
     weight: number;
   }>;
   dissenting_view: string | null; // strongest minority position worth surfacing
+  /**
+   * Null when this really is a synthesis. A sentence saying why not when it
+   * isn't — the model returned unparseable output, or came back with nothing to
+   * summarise. The orchestrator marks the debate session 'failed' on this and
+   * keeps a non-synthesis out of the daily briefing. Before it existed, a parse
+   * failure returned a well-formed object with an apologetic summary and zero
+   * conflicts, and the debate page painted that green and called it Complete.
+   */
+  failure_reason: string | null;
 }
 
 interface SynthesizerResponse {
@@ -35,14 +44,10 @@ interface SynthesizerResponse {
  */
 export async function runSynthesizerPass(
   productId: string,
-  debateSessionId: string,
   assertions: AgentAssertion[],
   challenges: Challenge[],
   accuracyWeights: Record<string, number>
 ): Promise<SynthesisOutput> {
-  // Suppress unused parameter warnings — available for future use
-  void productId;
-  void debateSessionId;
 
   const assertionLines = assertions
     .map((a) => {
@@ -104,17 +109,30 @@ Include up to 3 key_conflicts and up to 5 confidence_weighted_recommendations, o
   try {
     parsed = parseJSONResponse<SynthesizerResponse>(response.content);
   } catch {
-    // Return a minimal fallback synthesis on parse failure
     return {
-      executiveSummary: 'Agent synthesis encountered a parsing error. Manual review of agent positions is recommended.',
+      executiveSummary: '',
       keyConflicts: [],
       confidenceWeightedRecommendations: [],
       dissenting_view: null,
+      failure_reason: 'The synthesizer\'s response could not be parsed, so no synthesis was produced.',
+    };
+  }
+
+  // A synthesis with no executive summary is not a synthesis. It used to become
+  // an empty green card headed "Unified Synthesis".
+  const executiveSummary = (parsed.executive_summary ?? '').trim();
+  if (executiveSummary.length === 0) {
+    return {
+      executiveSummary: '',
+      keyConflicts: [],
+      confidenceWeightedRecommendations: [],
+      dissenting_view: null,
+      failure_reason: 'The synthesizer returned no executive summary.',
     };
   }
 
   return {
-    executiveSummary: parsed.executive_summary ?? '',
+    executiveSummary,
     keyConflicts: (parsed.key_conflicts ?? []).slice(0, 3),
     confidenceWeightedRecommendations: (parsed.confidence_weighted_recommendations ?? [])
       .slice(0, 5)
@@ -124,5 +142,6 @@ Include up to 3 key_conflicts and up to 5 confidence_weighted_recommendations, o
         weight: r.weight ?? 0.5,
       })),
     dissenting_view: parsed.dissenting_view ?? null,
+    failure_reason: null,
   };
 }

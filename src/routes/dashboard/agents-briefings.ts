@@ -333,8 +333,8 @@ agentBriefingRoutes.get('/agents/briefings/:date', async (c) => {
   const mrrDisplay = fin?.mrr_cents !== null && fin?.mrr_cents !== undefined
     ? `$${(fin.mrr_cents / 100).toLocaleString()}`
     : 'N/A';
-  const roiDisplay = fin?.roi !== null && fin?.roi !== undefined
-    ? `${fin.roi.toFixed(1)}x`
+  const roiDisplay = fin?.attributed_roi !== null && fin?.attributed_roi !== undefined
+    ? `${fin.attributed_roi.toFixed(1)}x`
     : 'N/A';
 
   const content = html`
@@ -414,8 +414,8 @@ agentBriefingRoutes.get('/agents/briefings/:date', async (c) => {
           <div style="font-size:1.4rem;font-weight:700;color:var(--text-primary);">$${fin ? fin.ai_cost_30d_usd.toFixed(2) : '0.00'}</div>
         </div>
         <div>
-          <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">ROI</div>
-          <div style="font-size:1.4rem;font-weight:700;color:${fin?.roi !== null && fin?.roi !== undefined && fin.roi >= 1 ? '#4ecca3' : 'var(--text-primary)'};">${roiDisplay}</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">Attributed ROI</div>
+          <div style="font-size:1.4rem;font-weight:700;color:${fin?.attributed_roi !== null && fin?.attributed_roi !== undefined && fin.attributed_roi >= 1 ? '#4ecca3' : 'var(--text-primary)'};">${roiDisplay}</div>
           <div style="font-size:0.7rem;color:var(--text-muted);">attributed / AI cost</div>
         </div>
       </div>

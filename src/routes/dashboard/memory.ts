@@ -25,6 +25,7 @@ import {
   getNodeForProduct,
 } from '../../services/scp/memory/archaeology.js';
 import { query } from '../../db/client.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const memoryGraph = new Hono<AuthEnv>();
 
@@ -276,7 +277,8 @@ memoryGraph.get('/memory/archaeology', async (c) => {
 
 // ─── POST /memory/archaeology ─────────────────────────────────────────────────
 
-memoryGraph.post('/memory/archaeology', async (c) => {
+memoryGraph.post('/memory/archaeology',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'memory', 'Ask Company Memory', undefined, c);
   const body = await c.req.parseBody();
@@ -473,7 +475,8 @@ memoryGraph.get('/memory/node/:id', async (c) => {
 
 // ─── POST /memory/sync ────────────────────────────────────────────────────────
 
-memoryGraph.post('/memory/sync', async (c) => {
+memoryGraph.post('/memory/sync',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'memory', 'Memory Sync', undefined, c);
 
@@ -541,7 +544,8 @@ memoryGraph.get('/memory/counterfactuals', async (c) => {
 
 // ─── POST /memory/counterfactuals ─────────────────────────────────────────────
 
-memoryGraph.post('/memory/counterfactuals', async (c) => {
+memoryGraph.post('/memory/counterfactuals',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'memory', 'Counterfactuals', undefined, c);
 

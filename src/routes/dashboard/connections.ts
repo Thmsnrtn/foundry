@@ -20,6 +20,7 @@ import { encryptToken } from '../../lib/crypto.js';
 import { issueGrant, revokeGrant } from '../../services/integration/mcp-client.js';
 import { getCap, getUsage, setCap } from '../../services/outbound/envelopes.js';
 import { getFluency, explain } from '../../services/ux/fluency.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const connectionRoutes = new Hono<AuthEnv>();
 
@@ -203,7 +204,10 @@ connectionRoutes.get('/connections', async (c) => {
   return c.html(dashboardLayout(ctx, content));
 });
 
-connectionRoutes.post('/connections/add', async (c) => {
+// Stores a credential for the company. Revoking and disconnecting stay open
+// — those only ever remove reach.
+connectionRoutes.post('/connections/add',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');
@@ -228,7 +232,9 @@ connectionRoutes.post('/connections/add', async (c) => {
     );
   } else {
     await query(
-      `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
+      // An MCP server is something Foundry CALLS. It has always been outbound;
+      // that fact was in `type`, which two other writers use for a provider key.
+      `INSERT INTO integrations (id, product_id, owner_id, name, provider, direction, status, credentials, config)
        VALUES (?, ?, ?, ?, 'mcp', 'outbound', 'active', ?, ?)`,
       [nanoid(), ctx.productId, founder.id, name, credentials, config],
     );
@@ -236,7 +242,9 @@ connectionRoutes.post('/connections/add', async (c) => {
   return c.redirect('/connections');
 });
 
-connectionRoutes.post('/connections/grant', async (c) => {
+// Grants a connection the right to be used. Authority, not configuration.
+connectionRoutes.post('/connections/grant',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');
@@ -261,7 +269,10 @@ connectionRoutes.post('/connections/grant', async (c) => {
   return c.redirect('/connections');
 });
 
-connectionRoutes.post('/connections/envelope', async (c) => {
+// The weekly cap on a connected server. Raising it raises how far Foundry
+// may reach through it, which is the same kind of decision as granting it.
+connectionRoutes.post('/connections/envelope',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');

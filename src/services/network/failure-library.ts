@@ -6,6 +6,8 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { ratePoints } from '../ai/measured.js';
+import { getFinancialPosition } from '../financial/position.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -55,6 +57,29 @@ interface MatchCriteria {
 /**
  * Seeds the failure_patterns table with well-known startup failure patterns.
  * Safe to call repeatedly — uses INSERT OR IGNORE.
+ *
+ * THESE ARE EDITORIAL, AND FOUR OF THEM USED TO SAY OTHERWISE. The library
+ * ships with Foundry: it is received startup practice about shapes worth
+ * watching, written by hand, and NOT derived from any company's data — not this
+ * company's, not the benchmark pool's, not the network's. Nothing measures a
+ * lead time and nothing counts how often a pattern was followed by the failure
+ * it names.
+ *
+ * Four descriptions stated frequencies as if something had counted them:
+ *
+ *   "typically see churn double within 60 days"
+ *   "most companies in this pattern see negative MRR growth within 8 weeks"
+ *   "the most common failure mode for B2B SaaS at the $10k-50k MRR range"
+ *   "NPS captures the deterioration 60-90 days before it hits revenue"
+ *
+ * A founder reads those on a card headed with their own match score, beside
+ * signals drawn from their own metrics — which is exactly the context that makes
+ * a rule of thumb read as a finding about their company. The direction each one
+ * describes is worth saying; the number was never measured, so it is not said.
+ *
+ * `typical_lead_time_days` stays, because a rule of thumb about how much warning
+ * a shape usually gives is useful — and the card that renders it now says which
+ * kind of number it is.
  */
 export async function seedDefaultPatterns(): Promise<void> {
   const existing = await query('SELECT COUNT(*) as cnt FROM failure_patterns', []);
@@ -77,7 +102,7 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_churn_precursor',
       pattern_name: 'Churn Precursor',
-      description: 'Elevated churn rate combined with low NPS is a leading indicator of accelerating revenue loss. Companies that hit this combination without intervention typically see churn double within 60 days.',
+      description: 'Elevated churn combined with low NPS is a shape that tends to precede accelerating revenue loss: the customers most likely to leave are already telling you, and the rate is already moving. Left alone it usually gets worse rather than better.',
       category: 'churn_spike',
       warning_signals: [
         'Churn rate exceeds 8% monthly',
@@ -98,7 +123,7 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_growth_plateau_pre_stall',
       pattern_name: 'Growth Plateau Pre-Stall',
-      description: 'Sustained near-zero MRR growth over multiple weeks indicates the product is approaching a growth stall. Without intervention, most companies in this pattern see negative MRR growth within 8 weeks.',
+      description: 'Sustained near-zero MRR growth over multiple weeks is what a growth stall looks like from inside it. Flat is not stable: churn continues while new business does not, so the same trajectory tends to turn negative rather than hold.',
       category: 'growth_stall',
       warning_signals: [
         'MRR growth below 2% for 3+ consecutive weeks',
@@ -245,7 +270,7 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_seed_to_growth_stall',
       pattern_name: 'Seed-to-Growth Stall',
-      description: 'Companies that exhaust their seed capital before reaching repeatable growth motions stall at the transition to Series A. This is the most common failure mode for B2B SaaS at the $10k-50k MRR range.',
+      description: 'Exhausting seed capital before reaching a repeatable growth motion is a well-known way to stall at the transition to Series A: the money runs out while the thing that would raise the next round is still being looked for.',
       category: 'growth_stall',
       warning_signals: [
         'MRR growth declining 3+ consecutive months',
@@ -266,7 +291,7 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_nps_freefall',
       pattern_name: 'NPS Freefall',
-      description: 'A rapidly declining NPS score is one of the strongest leading indicators of future churn. Customers rarely churn silently — NPS captures the deterioration 60-90 days before it hits revenue.',
+      description: 'A rapidly declining NPS is one of the shapes most often cited as preceding churn. Customers rarely leave silently, and sentiment tends to move before revenue does — which is the whole reason to watch it.',
       category: 'churn_spike',
       warning_signals: [
         'NPS below 0 or declining >10 points over 60 days',
@@ -323,11 +348,19 @@ interface ProductState {
   risk_state: string;
 }
 
+/** Exposed for the test that holds the runway to being a measurement. */
+export async function __loadProductStateForTest(productId: string): Promise<ProductState> {
+  return loadProductState(productId);
+}
+
 async function loadProductState(productId: string): Promise<ProductState> {
   const [snapshotsResult, stressorsResult, lifecycleResult, fundraisingResult] = await Promise.all([
     query(
-      `SELECT new_mrr_cents, churn_rate, activation_rate, nps_score, snapshot_date
-       FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 8`,
+      // A DATE WINDOW, NOT A ROW COUNT — see the note above the week counters.
+      `SELECT mrr_cents, new_mrr_cents, churn_rate, activation_rate, nps_score, snapshot_date
+       FROM metric_snapshots
+       WHERE product_id = ? AND snapshot_date >= date('now', '-70 days')
+       ORDER BY snapshot_date DESC`,
       [productId],
     ),
     query(
@@ -346,51 +379,110 @@ async function loadProductState(productId: string): Promise<ProductState> {
 
   const snapshots = snapshotsResult.rows as Array<Record<string, unknown>>;
   const latest = snapshots[0] ?? null;
-  const oldest = snapshots[Math.min(snapshots.length - 1, 7)] ?? null;
 
-  // MRR growth rate (latest vs 4-week-ago snapshot)
-  let mrr_growth_rate: number | null = null;
-  const compare = snapshots[3] ?? null;
-  if (latest && compare) {
-    const lMrr = (latest.new_mrr_cents as number | null) ?? 0;
-    const cMrr = (compare.new_mrr_cents as number | null) ?? 0;
-    if (cMrr > 0) mrr_growth_rate = ((lMrr - cMrr) / cMrr) * 100;
-  }
-
-  // Count weeks where MRR growth was below 2%
-  let mrr_growth_weeks = 0;
-  for (let i = 0; i < Math.min(snapshots.length - 1, 6); i++) {
-    const curr = (snapshots[i]?.new_mrr_cents as number | null) ?? 0;
-    const prev = (snapshots[i + 1]?.new_mrr_cents as number | null) ?? 0;
-    if (prev > 0 && ((curr - prev) / prev) * 100 < 2) mrr_growth_weeks++;
-  }
-
-  // Count weeks where activation rate was declining
-  let activation_declining_weeks = 0;
-  for (let i = 0; i < Math.min(snapshots.length - 1, 6); i++) {
-    const curr = (snapshots[i]?.activation_rate as number | null) ?? null;
-    const prev = (snapshots[i + 1]?.activation_rate as number | null) ?? null;
-    if (curr !== null && prev !== null && curr < prev) activation_declining_weeks++;
-  }
-
-  // Rough runway estimate from MRR trajectory vs burn (using MRR as proxy)
-  let runway_months: number | null = null;
-  if (latest && oldest && snapshots.length >= 4) {
-    const latestMrr = (latest.new_mrr_cents as number | null) ?? 0;
-    const weeklyBurn = latestMrr > 0 ? latestMrr / 4 : null; // rough proxy
-    if (weeklyBurn && weeklyBurn > 0) {
-      runway_months = Math.min(24, (latestMrr * 2) / weeklyBurn); // simplified heuristic
+  // A WEEK IS SEVEN DAYS, NOT ONE ROW.
+  //
+  // Both counters below stepped through consecutive `metric_snapshots` rows and
+  // called each step a week. The table is keyed by DATE and most companies
+  // report daily, so "activation declining for four weeks" — a criterion that
+  // matches the Activation Decay pattern and tells the founder they have a
+  // 60-day lead time on it — was four consecutive DAYS. The MRR comparison had
+  // the same shape twice over: `snapshots[3]` was called "the 4-week-ago
+  // snapshot" and was three rows back, and it compared `new_mrr_cents`, which
+  // is the revenue ACQUIRED in a period rather than the company's revenue.
+  //
+  // Each step now looks for the snapshot nearest a real number of days back,
+  // within half that interval — so a weekly reporter answers on its own rows, a
+  // daily one answers on the right ones, and a monthly one simply cannot
+  // resolve a week and counts nothing rather than counting days as weeks.
+  const dayOf = (row: Record<string, unknown> | undefined): number | null => {
+    if (!row) return null;
+    const t = Date.parse(`${String(row.snapshot_date)}T00:00:00Z`);
+    return Number.isFinite(t) ? t / 86_400_000 : null;
+  };
+  const today = dayOf(latest ?? undefined);
+  /** The snapshot closest to `daysBack`, if one is within half that distance. */
+  const nearest = (daysBack: number): Record<string, unknown> | null => {
+    if (today === null) return null;
+    const target = today - daysBack;
+    let best: Record<string, unknown> | null = null;
+    let bestGap = Infinity;
+    for (const row of snapshots) {
+      const d = dayOf(row);
+      if (d === null) continue;
+      const gap = Math.abs(d - target);
+      if (gap < bestGap) { bestGap = gap; best = row; }
     }
+    return bestGap <= daysBack / 2 ? best : null;
+  };
+  const levelOf = (row: Record<string, unknown> | null): number | null => {
+    const v = row?.mrr_cents;
+    return v == null ? null : Number(v);
+  };
+
+  // MRR growth over four weeks, from the LEVEL.
+  let mrr_growth_rate: number | null = null;
+  const nowLevel = levelOf(latest);
+  const monthAgoLevel = levelOf(nearest(28));
+  if (nowLevel !== null && monthAgoLevel !== null && monthAgoLevel > 0) {
+    mrr_growth_rate = ((nowLevel - monthAgoLevel) / monthAgoLevel) * 100;
   }
+
+  // Weeks whose MRR grew less than 2%, counted from the last six weeks.
+  let mrr_growth_weeks = 0;
+  for (let w = 0; w < 6; w++) {
+    const end = levelOf(w === 0 ? latest : nearest(w * 7));
+    const start = levelOf(nearest((w + 1) * 7));
+    if (end === null || start === null || !(start > 0)) continue;
+    if (((end - start) / start) * 100 < 2) mrr_growth_weeks++;
+  }
+
+  // Weeks whose activation rate fell.
+  let activation_declining_weeks = 0;
+  for (let w = 0; w < 6; w++) {
+    const endRow = w === 0 ? latest : nearest(w * 7);
+    const startRow = nearest((w + 1) * 7);
+    const end = endRow?.activation_rate as number | null | undefined;
+    const start = startRow?.activation_rate as number | null | undefined;
+    if (end == null || start == null) continue;
+    if (end < start) activation_declining_weeks++;
+  }
+
+  // A RUNWAY THAT WAS THE CONSTANT 8, FOR EVERY COMPANY.
+  //
+  // The old estimate was `min(24, (mrr * 2) / (mrr / 4))`. The "burn" it
+  // divided by was the same MRR figure it divided, so the MRR cancels and the
+  // expression is 8 — always, for every company with any revenue at all, and
+  // null for every company without. Two failure patterns key on it: one asks
+  // for runway under 6 months and could therefore NEVER match, and the other
+  // asks for under 9 and therefore ALWAYS matched. A founder was shown "8" as
+  // an estimate of how long their cash lasts.
+  //
+  // Foundry cannot derive a cash balance. Migration 181 settled that: it is a
+  // fact about a bank account, so it is STATED by the founder, dated, and
+  // attributed — and absent, runway is unknown. This reads that one source and
+  // says nothing when there is nothing to say, which leaves both thresholds
+  // unfired rather than one permanently on.
+  const position = await getFinancialPosition(productId);
+  const runway_months = position !== null && position.monthlyBurnCents > 0
+    ? position.cashOnHandCents / position.monthlyBurnCents
+    : null;
 
   const active_stressor_count = (stressorsResult.rows[0] as Record<string, number>)?.cnt ?? 0;
   const risk_state = (lifecycleResult.rows[0] as Record<string, string>)?.risk_state ?? 'green';
   const has_fundraising_activity = ((fundraisingResult.rows[0] as Record<string, number>)?.cnt ?? 0) > 0;
 
+  // PERCENTAGE POINTS, BECAUSE THE CRITERIA ARE WRITTEN IN THEM.
+  // `match_criteria: { churn_rate_gt: 8 }` means eight per cent, and
+  // `churn_rate` is stored as a 0–1 fraction — so `0.08 > 8` was false and no
+  // failure pattern keyed on churn could ever match, for any company. The
+  // library looked like it was working: it matched on the other criteria and
+  // simply never fired on this one. `nps_score` is already on its own -100..100
+  // scale and is left alone.
   return {
-    churn_rate: (latest?.churn_rate as number | null) ?? null,
+    churn_rate: ratePoints(latest?.churn_rate),
     nps_score: (latest?.nps_score as number | null) ?? null,
-    activation_rate: (latest?.activation_rate as number | null) ?? null,
+    activation_rate: ratePoints(latest?.activation_rate),
     mrr_growth_rate,
     mrr_growth_weeks,
     runway_months,

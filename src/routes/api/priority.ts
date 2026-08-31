@@ -91,19 +91,21 @@ priorityApi.post('/api/priority/:id/dismiss', async (c) => {
   const founder = c.get('founder');
   const actionId = c.req.param('id');
 
-  // Verify the action belongs to this founder's product
-  const products = await query('SELECT id FROM products WHERE owner_id = ?', [founder.id]);
-  if (products.rows.length > 0) {
-    const productId = (products.rows[0] as Record<string, string>).id;
-    // Only dismiss if it belongs to this product
-    const check = await query(
-      'SELECT id FROM priority_actions WHERE id = ? AND product_id = ?',
-      [actionId, productId]
-    );
-    if (check.rows.length > 0) {
-      await dismissAction(actionId).catch(() => {});
-    }
+  // ANY COMPANY THIS FOUNDER OWNS, NOT WHICHEVER SORTS FIRST. This resolved
+  // `products.rows[0]` — one arbitrary company — so a founder with more than
+  // one could only act on whichever the database happened to return first, and
+  // every other action silently did nothing and returned 200. It reads as an
+  // authority check and was really an accident of row order.
+  const check = await query(
+    `SELECT a.id FROM priority_actions a
+       JOIN products p ON p.id = a.product_id
+      WHERE a.id = ? AND p.owner_id = ?`,
+    [actionId, founder.id]
+  );
+  if (check.rows.length > 0) {
+    await dismissAction(actionId).catch(() => {});
   }
+  const products = await query('SELECT id FROM products WHERE owner_id = ?', [founder.id]);
 
   // Re-render the banner with the next top action
   const nextProductId = products.rows.length > 0
@@ -144,17 +146,21 @@ priorityApi.post('/api/priority/:id/complete', async (c) => {
   const founder = c.get('founder');
   const actionId = c.req.param('id');
 
-  const products = await query('SELECT id FROM products WHERE owner_id = ?', [founder.id]);
-  if (products.rows.length > 0) {
-    const productId = (products.rows[0] as Record<string, string>).id;
-    const check = await query(
-      'SELECT id FROM priority_actions WHERE id = ? AND product_id = ?',
-      [actionId, productId]
-    );
-    if (check.rows.length > 0) {
-      await completeAction(actionId).catch(() => {});
-    }
+  // ANY COMPANY THIS FOUNDER OWNS, NOT WHICHEVER SORTS FIRST. This resolved
+  // `products.rows[0]` — one arbitrary company — so a founder with more than
+  // one could only act on whichever the database happened to return first, and
+  // every other action silently did nothing and returned 200. It reads as an
+  // authority check and was really an accident of row order.
+  const check = await query(
+    `SELECT a.id FROM priority_actions a
+       JOIN products p ON p.id = a.product_id
+      WHERE a.id = ? AND p.owner_id = ?`,
+    [actionId, founder.id]
+  );
+  if (check.rows.length > 0) {
+    await completeAction(actionId).catch(() => {});
   }
+  const products = await query('SELECT id FROM products WHERE owner_id = ?', [founder.id]);
 
   return c.json({ status: 'completed' });
 });

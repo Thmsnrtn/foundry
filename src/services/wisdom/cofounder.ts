@@ -7,19 +7,67 @@ import { query } from '../../db/client.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 
+/**
+ * PERFECT AGREEMENT WITH SOMEONE WHO NEVER ANSWERED.
+ *
+ * These four were plain numbers, and the two branches that have nothing to
+ * compare returned opposite extremes of the same absence:
+ *
+ *   no responses at all   → 0, 0, 0, 0     (complete disagreement)
+ *   one founder responded → 100, 100, 100, 100  (perfect agreement)
+ *
+ * The recommendation string explained which case it was. The numbers did not,
+ * and a number is what a caller renders. A solo founder was reported as being
+ * in perfect alignment with co-founders who had said nothing.
+ *
+ * Null now, in both branches. `recommendations` still says why.
+ */
 export interface AlignmentScore {
-  overall_alignment: number;
-  vision_alignment: number;
-  priority_alignment: number;
-  risk_alignment: number;
+  overall_alignment: number | null;
+  vision_alignment: number | null;
+  priority_alignment: number | null;
+  risk_alignment: number | null;
   divergence_axis: string | null;
   recommendations: string[];
+  /** How many co-founders have answered. Zero and one both mean "cannot score". */
+  respondents: number;
 }
 
+/**
+ * WHICH CO-FOUNDER, AND WHICH KIND OF DECIDER.
+ *
+ * `by_founder` was keyed on `decisions.decided_by`. That column does not hold a
+ * person. Migration 153 said so in as many words — "`decided_by` holds
+ * 'founder' or 'second_self'. That is a KIND" — and added
+ * `decided_by_founder_id` for the person. Migration 158 put the CHECK on it.
+ *
+ * So "by_founder" had at most two keys, and neither was a co-founder. One was
+ * the human role and the other was Foundry deciding for itself. The imbalance
+ * check then compared those two and reported: "One co-founder is approving
+ * significantly more decisions than the other." It was telling a founder their
+ * co-founder was out of balance, about a comparison between the founder and the
+ * machine.
+ *
+ * Both questions are worth answering and they are different questions, so both
+ * are answered, from the columns that hold each.
+ *
+ * `decided` was called `proposed`. It counts decisions CLOSED. Nobody proposed
+ * them; `decisions` has no proposer column.
+ */
 export interface DecisionAttribution {
   total_decisions: number;
-  by_founder: Record<string, { proposed: number; approved: number }>;
-  imbalance_detected: boolean;
+  /** Keyed by `decided_by_founder_id` — an actual person. */
+  by_founder: Record<string, { decided: number; approved: number }>;
+  /** Closed decisions with no founder id recorded, which cannot be attributed. */
+  unattributed: number;
+  /** How many the founder closed and how many Foundry closed for them. */
+  by_decider_kind: { founder: number; second_self: number };
+  /**
+   * Null when fewer than two PEOPLE have decided anything — there is nobody to
+   * be imbalanced against. It used to be `false` in that case, which reads as
+   * "we checked and they are balanced".
+   */
+  imbalance_detected: boolean | null;
   imbalance_description: string | null;
 }
 
@@ -35,12 +83,13 @@ export async function getAlignmentScore(productId: string): Promise<AlignmentSco
 
   if (responses.rows.length === 0) {
     return {
-      overall_alignment: 0,
-      vision_alignment: 0,
-      priority_alignment: 0,
-      risk_alignment: 0,
+      overall_alignment: null,
+      vision_alignment: null,
+      priority_alignment: null,
+      risk_alignment: null,
       divergence_axis: null,
       recommendations: ['No co-founder DNA responses collected yet.'],
+      respondents: 0,
     };
   }
 
@@ -54,12 +103,54 @@ export async function getAlignmentScore(productId: string): Promise<AlignmentSco
   const founderIds = Object.keys(byFounder);
   if (founderIds.length < 2) {
     return {
-      overall_alignment: 100,
-      vision_alignment: 100,
-      priority_alignment: 100,
-      risk_alignment: 100,
+      overall_alignment: null,
+      vision_alignment: null,
+      priority_alignment: null,
+      risk_alignment: null,
       divergence_axis: null,
       recommendations: ['Only one co-founder has responded. Need at least two for alignment analysis.'],
+      respondents: founderIds.length,
+    };
+  }
+
+  // A SCORE THAT COST A MODEL CALL EVERY TIME IT WAS ASKED FOR, AND WAS NEVER
+  // READ BACK. Each call to this function ran Opus and appended a row to
+  // `cofounder_alignment_scores`; nothing anywhere read that table, so two
+  // requests on the same unchanged responses paid twice and could disagree
+  // with each other. The responses are the whole input: if the newest one
+  // predates the newest stored score, that score still describes them.
+  //
+  // Strictly `>`: `responded_at` and `created_at` are both `datetime('now')`,
+  // a whole second. A tie means we cannot tell which was written first, so we
+  // re-score rather than serve an answer that may predate its own input.
+  const latestResponseAt = (responses.rows as unknown as Array<Record<string, string>>)
+    .reduce((max, r) => (r.responded_at && r.responded_at > max ? r.responded_at : max), '');
+  const cachedResult = await query(
+    `SELECT overall_alignment, vision_alignment, priority_alignment, risk_alignment,
+            divergence_axis, recommendations, created_at
+       FROM cofounder_alignment_scores
+      WHERE product_id = ?
+      ORDER BY created_at DESC, rowid DESC
+      LIMIT 1`,
+    [productId],
+  );
+  const cached = cachedResult.rows[0] as unknown as Record<string, unknown> | undefined;
+  if (cached && latestResponseAt && String(cached.created_at) > latestResponseAt) {
+    let recommendations: string[] = [];
+    try {
+      const decoded: unknown = JSON.parse(String(cached.recommendations ?? '[]'));
+      if (Array.isArray(decoded)) recommendations = decoded.map((r) => String(r));
+    } catch {
+      recommendations = [];
+    }
+    return {
+      overall_alignment: cached.overall_alignment == null ? null : Number(cached.overall_alignment),
+      vision_alignment: cached.vision_alignment == null ? null : Number(cached.vision_alignment),
+      priority_alignment: cached.priority_alignment == null ? null : Number(cached.priority_alignment),
+      risk_alignment: cached.risk_alignment == null ? null : Number(cached.risk_alignment),
+      divergence_axis: cached.divergence_axis == null ? null : String(cached.divergence_axis),
+      recommendations,
+      respondents: founderIds.length,
     };
   }
 
@@ -88,7 +179,8 @@ Score 100 = perfect agreement, 0 = complete disagreement. Be specific about wher
     productId
   );
 
-  const result = parseJSONResponse<AlignmentScore>(response.content);
+  const parsed = parseJSONResponse<Omit<AlignmentScore, 'respondents'>>(response.content);
+  const result: AlignmentScore = { ...parsed, respondents: founderIds.length };
 
   // Persist
   const today = new Date().toISOString().split('T')[0]!;
@@ -144,7 +236,8 @@ export async function getDecisionAttribution(
   productId: string,
   dateRange?: { start: string; end: string }
 ): Promise<DecisionAttribution> {
-  let sql = `SELECT * FROM decisions WHERE product_id = ? AND decided_at IS NOT NULL`;
+  let sql = `SELECT status, decided_by, decided_by_founder_id
+               FROM decisions WHERE product_id = ? AND decided_at IS NOT NULL`;
   const args: unknown[] = [productId];
 
   if (dateRange) {
@@ -153,17 +246,26 @@ export async function getDecisionAttribution(
   }
 
   const result = await query(sql, args);
-  const byFounder: Record<string, { proposed: number; approved: number }> = {};
+  const byFounder: Record<string, { decided: number; approved: number }> = {};
+  const byKind = { founder: 0, second_self: 0 };
+  let unattributed = 0;
 
   for (const row of result.rows as unknown as Array<Record<string, string>>) {
-    const decidedBy = row.decided_by ?? 'system';
-    if (!byFounder[decidedBy]) byFounder[decidedBy] = { proposed: 0, approved: 0 };
-    if (row.status === 'approved') byFounder[decidedBy]!.approved++;
-    byFounder[decidedBy]!.proposed++;
+    if (row.decided_by === 'founder') byKind.founder++;
+    else if (row.decided_by === 'second_self') byKind.second_self++;
+
+    const founderId = row.decided_by_founder_id ?? null;
+    if (founderId === null) { unattributed++; continue; }
+    if (!byFounder[founderId]) byFounder[founderId] = { decided: 0, approved: 0 };
+    if (row.status === 'approved') byFounder[founderId]!.approved++;
+    byFounder[founderId]!.decided++;
   }
 
-  const founders = Object.keys(byFounder).filter((k) => !k.startsWith('system'));
-  let imbalance = false;
+  const founders = Object.keys(byFounder);
+  // Null, not false: with fewer than two people there is nobody to be
+  // imbalanced against, and `false` reads as "we checked, they are balanced" —
+  // which is the opposite of what one person deciding everything means.
+  let imbalance: boolean | null = founders.length >= 2 ? false : null;
   let desc: string | null = null;
 
   if (founders.length >= 2) {
@@ -179,6 +281,8 @@ export async function getDecisionAttribution(
   return {
     total_decisions: result.rows.length,
     by_founder: byFounder,
+    unattributed,
+    by_decider_kind: byKind,
     imbalance_detected: imbalance,
     imbalance_description: desc,
   };

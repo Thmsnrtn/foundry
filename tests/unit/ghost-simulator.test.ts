@@ -64,6 +64,82 @@ beforeAll(async () => {
   );
 });
 
+// =============================================================================
+// A GROWTH RATE HAS A PERIOD, AND THIS ONE'S WAS THE REPORTING CADENCE.
+//
+// The rate between two consecutive snapshots was called `monthlyGrowthMean` and
+// compounded three times for a 90-day horizon. `metric_snapshots` is keyed by
+// DATE and companies report daily, so for most of them that was the mean DAILY
+// growth compounded over three days, presented as a 90-day forecast with
+// p10/p50/p90 bands — over MCP, to an agent making a gate-3 decision.
+//
+// And the window took the OLDEST 24 snapshots (`ORDER BY snapshot_date ASC
+// LIMIT 24`), so a company with two years of history was simulated forward from
+// the growth rate of its first three weeks.
+// =============================================================================
+
+async function seedDated(productId: string, rows: Array<[string, number]>): Promise<void> {
+  for (const [date, mrr] of rows) {
+    await query(
+      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents)
+       VALUES (?, ?, ?, ?)`,
+      [`sd_${productId}_${date}`, productId, date, mrr],
+    );
+  }
+}
+
+describe('the period of the growth rate', () => {
+  it('reads a daily reporter as daily, not monthly', async () => {
+    await query("INSERT INTO products (id, name, owner_id) VALUES ('p_daily','DailyCo','o1')", []);
+    // 1% a day for four days.
+    await seedDated('p_daily', [
+      ['2026-03-01', 10000], ['2026-03-02', 10100],
+      ['2026-03-03', 10201], ['2026-03-04', 10303],
+    ]);
+
+    const b = await estimateBaseline('p_daily');
+    expect(b).toBeTruthy();
+    // 1%/day compounds to about 35%/month — the old code called it 1%/month.
+    expect(b!.monthlyGrowthMean).toBeGreaterThan(0.3);
+    expect(b!.monthlyGrowthMean).toBeLessThan(0.4);
+    expect(b!.historySpanDays).toBe(3);
+  });
+
+  it('reads a monthly reporter as monthly', async () => {
+    await query("INSERT INTO products (id, name, owner_id) VALUES ('p_monthly','MonthlyCo','o1')", []);
+    await seedDated('p_monthly', [
+      ['2026-01-01', 10000], ['2026-02-01', 10500],
+      ['2026-03-01', 11025], ['2026-04-01', 11576],
+    ]);
+    const b = await estimateBaseline('p_monthly');
+    expect(b!.monthlyGrowthMean).toBeGreaterThan(0.045);
+    expect(b!.monthlyGrowthMean).toBeLessThan(0.055);
+    expect(b!.historySpanDays).toBe(90);
+  });
+
+  it('uses the most recent snapshots, not the first ones', async () => {
+    await query("INSERT INTO products (id, name, owner_id) VALUES ('p_long','LongCo','o1')", []);
+    // Two flat years, then two years of 20%-a-month growth. The window is 24
+    // snapshots, so it should cover the growth and none of the flat stretch.
+    const rows: Array<[string, number]> = [];
+    for (let i = 0; i < 24; i++) {
+      rows.push([`${2020 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}-01`, 10000]);
+    }
+    let mrr = 10000;
+    for (let i = 0; i < 24; i++) {
+      mrr = Math.round(mrr * 1.2);
+      rows.push([`${2024 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}-01`, mrr]);
+    }
+    await seedDated('p_long', rows);
+
+    const b = await estimateBaseline('p_long');
+    expect(b!.nSnapshots).toBe(24);
+    // Reading the FIRST 24 gave a flat 0% for a company growing 20% a month.
+    expect(b!.monthlyGrowthMean).toBeGreaterThan(0.15);
+    expect(b!.monthlyGrowthMean).toBeLessThan(0.25);
+  });
+});
+
 describe('Ghost Company simulator', () => {
   it('estimates the baseline from the company\'s own history', async () => {
     const b = await estimateBaseline('p_gh');

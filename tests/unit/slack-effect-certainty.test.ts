@@ -1,10 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// The bot token comes from the ENCRYPTED credential store, not from the
+// plaintext config blob. This fixture used to put it in `config_json`, which
+// modelled the defect rather than the design: every adapter read its secret
+// from there, so the founder-facing form that encrypted credentials correctly
+// produced integrations that could never find them. `channel_id` stays in
+// config because it is an identifier, not a secret.
 vi.mock('../../src/services/integration/fabric.js', () => ({
   getIntegration: vi.fn(async () => ({
     status: 'active',
-    config_json: { bot_token: 'xoxb-secret', channel_id: 'C1' },
+    config_json: { channel_id: 'C1' },
   })),
+  getIntegrationCredentials: vi.fn(async () => ({ bot_token: 'xoxb-secret' })),
   storeEvent: vi.fn(),
 }));
 

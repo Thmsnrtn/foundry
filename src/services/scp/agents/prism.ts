@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { pctOfFraction, measured } from '../../ai/measured.js';
 
 interface PrismClaudeResponse {
   observations: string[];
@@ -30,26 +31,29 @@ interface PrismClaudeResponse {
     success_threshold: number;
     test_duration_days: number;
   }>;
-  budget_alerts: Array<{
-    severity: 'warning' | 'critical';
-    category: string;
-    message: string;
-  }>;
   revenue_attribution: Array<{
     channel: string;
     mrr_contribution_pct: number;
     cac_estimate: number;
   }>;
-  runway_months: number;
+  /** Optional because the model is asked a product question over sources with
+   *  no financial figure in them; it usually cannot state one. */
+  runway_months?: number | null;
   burn_rate_trend: 'improving' | 'stable' | 'rising';
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
 
 export class PrismAgent extends BaseAgent {
   getName(): AgentName { return 'prism'; }
-  getRole(): string { return 'CFO'; }
+  // Ledger also answered 'CFO', and nothing reads this method at all — it is
+  // declared abstract in `base.ts` and has no consumer anywhere, so the
+  // collision was latent rather than visible. Named for what this agent is
+  // prompted as and rostered as, so the first thing to group agents by role
+  // does not find the same officer twice. That the string is now right does
+  // not make the rest of this file product-shaped; see the campaign entry.
+  getRole(): string { return 'Chief Product Officer'; }
   getActivationCadenceHours(): number { return 48; }
 
   protected async analyzeAndAct(
@@ -93,14 +97,20 @@ export class PrismAgent extends BaseAgent {
       const action: AgentAction = {
         id: nanoid(),
         type: 'analysis_complete',
-        description: 'No financial or UX data found — calibrating',
+        description: 'No product or usage data found — calibrating',
         authority_level: 0,
         executed: true,
         executed_at: new Date().toISOString(),
-        result: 'Awaiting financial data',
+        result: 'Awaiting product and usage data',
       };
       return {
-        observations: ['No financial data available yet — Prism will analyze unit economics and runway as data accumulates.'],
+        // A PROMISE OF THE WRONG ANALYSIS. This told the founder Prism would
+        // analyse unit economics and runway once data accumulated. Its three
+        // sources are `audit_scores`, `beta_intake` and `metric_snapshots`, so
+        // that day was never going to come; what it does analyse is whether the
+        // product is getting closer to what customers want, which is also what
+        // its prompt and the roster say.
+        observations: ['No product or usage data available yet — Prism will analyse activation, retention and friction as data accumulates.'],
         actionsTaken: [action],
         pendingDecisions: [],
         briefingContribution: 'Prism is calibrating — no significant activity to report.',
@@ -108,7 +118,6 @@ export class PrismAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -116,14 +125,16 @@ export class PrismAgent extends BaseAgent {
     const metrics = metricsResult.rows.length > 0
       ? (metricsResult.rows[0] as Record<string, unknown>)
       : null;
-    const activationRate = metrics ? (Number(metrics.activation_rate) || 0) * 100 : 0;
-    const day30Retention = metrics ? (Number(metrics.day_30_retention) || 0) * 100 : 0;
+    // See `ai/measured.ts`: a company that has reported nothing is not a company
+    // with a 0.0% activation rate, and a model asked to judge experience quality
+    // should be told which of those it is looking at.
 
     const audit = auditResult.rows.length > 0
       ? (auditResult.rows[0] as Record<string, unknown>)
       : null;
-    const d2 = audit ? Number(audit.d2_score) || 0 : 0;
-    const d4 = audit ? Number(audit.d4_score) || 0 : 0;
+    // 0/10 is the worst possible audit score. Never audited is not that.
+    const d2 = measured(audit?.d2_score);
+    const d4 = measured(audit?.d4_score);
 
     const betaRows = betaResult.rows as Record<string, unknown>[];
     const feedbackThemes: string[] = [];
@@ -156,8 +167,8 @@ You name specific friction points with specificity — not "onboarding needs imp
 You defend the user experience when business pressure threatens it.`
     );
 
-    const userPrompt = `Activation rate: ${activationRate.toFixed(1)}%. Day-30 retention: ${day30Retention.toFixed(1)}%.
-UX audit scores: Experience Coherence ${d2}/10, Value Legibility ${d4}/10.
+    const userPrompt = `Activation rate: ${pctOfFraction(metrics?.activation_rate)}. Day-30 retention: ${pctOfFraction(metrics?.day_30_retention)}.
+UX audit scores: Experience Coherence ${d2 === 'unknown' ? 'unknown' : `${d2}/10`}, Value Legibility ${d4 === 'unknown' ? 'unknown' : `${d4}/10`}.
 Beta feedback themes: ${feedbackSummary}.
 
 Return JSON only (no markdown fences):
@@ -180,13 +191,6 @@ Return JSON only (no markdown fences):
       "test_duration_days": number
     }
   ],
-  "budget_alerts": [
-    {
-      "severity": "warning" | "critical",
-      "category": "string",
-      "message": "string"
-    }
-  ],
   "revenue_attribution": [
     {
       "channel": "string",
@@ -196,7 +200,9 @@ Return JSON only (no markdown fences):
   ],
   "runway_months": number,
   "burn_rate_trend": "improving" | "stable" | "rising",
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -218,7 +224,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -242,29 +247,48 @@ Return JSON only (no markdown fences):
       }
     }
 
-    // ── 8. Build outbound actions for critical budget alerts ──────────────────
+    // ── 8. No outbound actions ────────────────────────────────────────────────
+    //
+    // A CRITICAL BUDGET ALERT FROM AN AGENT THAT CANNOT SEE A BUDGET.
+    //
+    // This asked the model for `budget_alerts` and queued every 'critical' one
+    // as a `budget_alert` outbound action reading "CRITICAL budget alert
+    // [category]: message". The model producing them is told it is the Chief
+    // Product Officer and asked whether the product is getting closer to what
+    // customers want, over `audit_scores`, `beta_intake` and `metric_snapshots`
+    // — three sources with no cost, no burn and no budget in them. Nothing it
+    // said there could have been grounded; the field only gave it somewhere to
+    // put an invention, and authority level 1 put that in front of the founder.
+    //
+    // Ledger is the agent with the financial data — `cost_events` and
+    // `revenue_attributions` — and it already emits `budget_alert` from them.
+    // The domain was not missing a watcher; it had two, one of them blind.
     const outboundActions: OutboundActionSignal[] = [];
-    for (const alert of (parsed.budget_alerts ?? [])) {
-      if (alert.severity === 'critical') {
-        outboundActions.push({
-          action_type: 'budget_alert',
-          description: `CRITICAL budget alert [${alert.category}]: ${alert.message}`,
-          parameters: {
-            severity: alert.severity,
-            category: alert.category,
-            message: alert.message,
-          },
-          authority_level: 1,
-        });
-      }
-    }
 
     // ── 9. Build agent messages based on runway and burn rate ─────────────────
     const agentMessages: AgentMessageSignal[] = [];
-    const runwayMonths = parsed.runway_months ?? 12;
+    // A MESSAGE THAT STATES A RUNWAY MUST HAVE ONE — the same rule Crucible
+    // carries a few files away, arrived at there and not brought here.
+    //
+    // This read `parsed.runway_months ?? 12`. The model that answers it is
+    // asked a PRODUCT question ("is the product getting closer to or further
+    // from what customers actually want?") over `audit_scores`, `beta_intake`
+    // and `metric_snapshots` — three sources with no financial figure in them.
+    // So the usual answer is no runway at all, and the fallback turned that
+    // silence into a claim of twelve months' solvency.
+    //
+    // It was not inert. Below six it sends Beacon and Forge alerts at 'high' or
+    // 'critical' reading "Prism reports runway of X months", asking two agents
+    // to reprioritise acquisition and revenue against a number nothing
+    // produced. Twelve happened to be a number that suppressed those; a
+    // different default would have fired them for every company.
+    //
+    // Absence is not twelve, and it is not zero either. With no runway stated
+    // there is no runway condition to evaluate, so nothing is said about it.
+    const runwayMonths = parsed.runway_months;
     const burnTrend = parsed.burn_rate_trend ?? 'stable';
 
-    if (runwayMonths < 6) {
+    if (runwayMonths != null && Number.isFinite(runwayMonths) && runwayMonths < 6) {
       agentMessages.push({
         to_agent: 'beacon',
         message_type: 'alert',
@@ -305,7 +329,7 @@ Return JSON only (no markdown fences):
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed financial analysis: activation ${activationRate.toFixed(1)}%, retention ${day30Retention.toFixed(1)}%, ${betaRows.length} beta records, runway=${runwayMonths}mo`,
+      description: `Completed financial analysis: activation ${pctOfFraction(metrics?.activation_rate)}, retention ${pctOfFraction(metrics?.day_30_retention)}, ${betaRows.length} beta records, runway=${runwayMonths}mo`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -321,7 +345,7 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      domainHealthScore: parsed.domain_health_score,
       outboundActions,
       agentMessages,
       hypotheses,

@@ -84,8 +84,14 @@ export async function runPreMortem(decisionId: string, productId: string): Promi
     'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
     [productId],
   );
+  // THE FIVE MOST SEVERE, not five arbitrary ones. An unordered `LIMIT 5` hands
+  // a red team a biased sample of a company's risks without either of them
+  // knowing it was a sample at all.
   const stressors = await query(
-    "SELECT stressor_name, signal FROM stressor_history WHERE product_id = ? AND status = 'active' LIMIT 5",
+    `SELECT stressor_name, signal FROM stressor_history
+      WHERE product_id = ? AND status = 'active'
+      ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'elevated' THEN 2 ELSE 3 END, identified_at ASC
+      LIMIT 5`,
     [productId],
   );
   const latest = (snap.rows[0] as Record<string, unknown> | undefined) ?? {};

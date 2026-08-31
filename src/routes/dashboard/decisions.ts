@@ -7,13 +7,14 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query, getProductByOwner, getScenarioModels, getRelevantPatterns } from '../../db/client.js';
-import { getPeerSignal } from '../../services/decisions/patterns.js';
+import { getPeerSignal, PEER_SIGNAL_MIN_SAMPLE } from '../../services/decisions/patterns.js';
 import { getDecisionQueue, resolveDecision, recordOutcome } from '../../services/decisions/queue.js';
 import { dashboardLayout, layout } from '../../views/layout.js';
 // chamberLayout = full-screen focused mode without sidebar
 const chamberLayout = (opts: any, content: any) => layout({ ...opts, showNav: false }, content);
 import { decisionList, type DecisionData } from '../../views/components.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import { callSonnet } from '../../services/ai/client.js';
 import type { RiskStateValue } from '../../types/index.js';
@@ -147,7 +148,10 @@ decisionRoutes.get('/decisions/:id', async (c, next) => {
       <div class="chamber-section-label">Peer signal · Intelligence Network</div>
       <p class="chamber-why" style="margin:0;">${peerSignal.summary}</p>
       <p class="text-muted" style="font-size:0.75rem;margin-top:0.35rem;">
-        Based on ${peerSignal.sampleSize} anonymized peer outcome${peerSignal.sampleSize === 1 ? '' : 's'} · abstains below ${5}.
+        Based on ${peerSignal.sampleSize} anonymized peer
+        ${peerSignal.sampleSize === 1 ? 'company' : 'companies'} · abstains below
+        ${PEER_SIGNAL_MIN_SAMPLE}. An eligibility floor, not a claim of
+        statistical significance.
       </p>
     </div>` : ''}
 
@@ -415,7 +419,8 @@ decisionRoutes.post('/decisions/:id/undo-auto', async (c) => {
 });
 
 // ─── POST /decisions/:id/ghost — fork reality (Ghost Company simulation) ─────
-decisionRoutes.post('/decisions/:id/ghost', async (c) => {
+decisionRoutes.post('/decisions/:id/ghost',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const owned = await query(
@@ -433,7 +438,8 @@ decisionRoutes.post('/decisions/:id/ghost', async (c) => {
 });
 
 // ─── POST /decisions/:id/redteam — summon the adversarial pre-mortem ─────────
-decisionRoutes.post('/decisions/:id/redteam', async (c) => {
+decisionRoutes.post('/decisions/:id/redteam',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const owned = await query(
@@ -450,16 +456,25 @@ decisionRoutes.post('/decisions/:id/redteam', async (c) => {
   return c.redirect(`/decisions/${decisionId}`);
 });
 
-decisionRoutes.post('/decisions/:id/resolve', async (c) => {
+// RESOLVING A DECISION IS THE INSTITUTION'S CENTRAL ACT, and this door asked
+// nothing about who was doing it. The scope was `p.owner_id = ?`, so a
+// co-founder holding `can_vote_decisions` — the permission that exists to say
+// who has a say in decisions — could not resolve one, while nothing stopped an
+// observer who happened to own a different company from reaching the route.
+// The permission answers the question; the scope was answering a different one.
+decisionRoutes.post('/decisions/:id/resolve',
+  requireCompanyCapability('can_vote_decisions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const body = await c.req.json().catch(() => null) as { chosen_option: string; resolution_reasoning?: string } | null;
   if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
+  const ctx = await getLayoutContext(founder, 'decisions', 'Decisions', undefined, c);
+  if (!ctx.productId) return c.json({ error: 'Not found' }, 404);
+  // Scoped to the company the guard just authorized, not to ownership.
   const result = await query(
     `SELECT d.product_id, d.gate FROM decisions d
-     JOIN products p ON d.product_id = p.id
-     WHERE d.id = ? AND p.owner_id = ?`,
-    [decisionId, founder.id]
+     WHERE d.id = ? AND d.product_id = ?`,
+    [decisionId, ctx.productId]
   );
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const row = result.rows[0] as Record<string, unknown>;
@@ -470,7 +485,7 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
     return c.json({ error: 'Gate 3 decisions require resolution_reasoning' }, 400);
   }
 
-  await resolveDecision(decisionId, productId, body.chosen_option, 'founder');
+  await resolveDecision(decisionId, productId, body.chosen_option, 'founder', founder.id);
 
   // Dissent Law: proceeding past unresolved Red Team objections converts each
   // falsifiable objection's inverse into a monitored premise, so the overruling
@@ -498,7 +513,8 @@ decisionRoutes.post('/decisions/:id/resolve', async (c) => {
 
 // ─── Record Outcome ───────────────────────────────────────────────────────────
 
-decisionRoutes.post('/decisions/:id/outcome', async (c) => {
+decisionRoutes.post('/decisions/:id/outcome',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const body = await c.req.json().catch(() => null) as { outcome: string; valence?: number } | null;
@@ -511,14 +527,24 @@ decisionRoutes.post('/decisions/:id/outcome', async (c) => {
   );
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const productId = (result.rows[0] as Record<string, string>).product_id;
+  // THREE VALUES, AND EVERY READER ASSUMES THEM. `outcome_valence` is read as
+  // 1 = positive, -1 = negative, anything else = neutral by the trust ledger,
+  // the pattern generator and the prediction-accuracy job — and the board
+  // packet maps the average through `((avg + 1) / 2) * 100`, so a valence of 5
+  // would print a decision score of 300%. The form offers exactly -1, 0 and 1;
+  // this door accepted any number at all and the column has no constraint.
   const valence = body.valence != null ? Number(body.valence) : null;
+  if (valence !== null && ![-1, 0, 1].includes(valence)) {
+    return c.json({ error: 'valence must be -1, 0 or 1' }, 400);
+  }
   await recordOutcome(decisionId, productId, body.outcome, valence);
   return c.json({ status: 'recorded' });
 });
 
 // ─── Reflect: AI Clarity on Uncertainty ──────────────────────────────────────
 
-decisionRoutes.post('/api/decisions/:id/reflect', async (c) => {
+decisionRoutes.post('/api/decisions/:id/reflect',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
   const body = await c.req.json().catch(() => null) as { uncertainty: string } | null;
@@ -549,7 +575,7 @@ Context: ${decision.why_now ?? ''}
 Give them 2-3 sentences of direct clarity on their specific uncertainty. Address exactly what they're unsure about.`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 300);
+    const response = await callSonnet(systemPrompt, userPrompt, 300, decision.product_id as string);
     return c.json({ clarity: response.content.trim() });
   } catch {
     return c.json({ clarity: 'Unable to generate clarity right now. Trust what you know.' });
@@ -636,7 +662,7 @@ decisionRoutes.get('/decisions/analytics', async (c) => {
       const raw = await callOpus(
         'You are Foundry. Given decision history data, synthesize the founder\'s pattern in 2-3 direct sentences. No markdown. No hedging. Address them as "You".',
         `Categories:\n${catSummary}\n\nSpeed vs quality:\n${speedSummary}\n\nReturn JSON only: { "synthesis": "2-3 sentence pattern insight" }`,
-        350,
+        350, productId,
       );
       const parsed = parseJSONResponse<{ synthesis: string }>(raw.content);
       synthesis = parsed?.synthesis ?? null;

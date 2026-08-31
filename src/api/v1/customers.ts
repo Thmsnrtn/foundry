@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
+import { logger } from '../../services/logger.js';
 import { requireScope } from '../middleware/auth.js';
 import type { ApiAuthEnv } from '../middleware/auth.js';
 
@@ -22,14 +23,26 @@ customersApi.get('/', requireScope('customers:read'), async (c) => {
     const args: unknown[] = [productId];
 
     if (stage) {
-      conditions.push('ci.lifecycle_stage = ?');
+      conditions.push('ci.stage = ?');
       args.push(stage);
     }
 
     const where = conditions.join(' AND ');
+    // THREE COLUMNS THAT DO NOT EXIST. This selected `ci.name`,
+    // `ci.company` and `ci.lifecycle_stage`, and `customer_intelligence` has
+    // `account_name`, `stage`, and no company at all — so the documented
+    // list-customers endpoint threw on every request since it was written and
+    // returned the generic 500 below. The POST handler seventy lines down
+    // carries a comment naming this exact mapping: somebody fixed the write
+    // and left the read.
+    //
+    // `account_name` is aliased to the API's `name` because that is the field
+    // the POST accepts and what an integrator is told the resource has.
+    // `company` is not returned: nothing writes it and nothing stores it, and
+    // a field that can only ever be null is worse than an absent one.
     const result = await query(
-      `SELECT ci.id, ci.external_customer_id, ci.name, ci.email, ci.company,
-              ci.lifecycle_stage, ci.mrr_cents, ci.health_score,
+      `SELECT ci.id, ci.external_customer_id, ci.account_name AS name, ci.email,
+              ci.stage AS lifecycle_stage, ci.mrr_cents, ci.health_score,
               ci.created_at, ci.updated_at
        FROM customer_intelligence ci
        WHERE ${where}
@@ -46,6 +59,11 @@ customersApi.get('/', requireScope('customers:read'), async (c) => {
 
     return c.json({ data: result.rows, meta: { total, limit, offset } });
   } catch (err) {
+    // The reason used to go nowhere: a 500 with a fixed sentence, and the
+    // SQLite error naming the missing column discarded. Three years of every
+    // request failing looks exactly like a quiet endpoint nobody calls.
+    logger.error(`v1 customers list failed: ${err instanceof Error ? err.message : String(err)}`,
+      { productId });
     return c.json({ error: 'Failed to fetch customers' }, 500);
   }
 });
@@ -67,21 +85,15 @@ customersApi.get('/:customerId', requireScope('customers:read'), async (c) => {
 
     const customer = result.rows[0] as Record<string, unknown>;
 
-    // Fetch recent notes
-    const notesResult = await query(
-      `SELECT id, note, created_at FROM customer_notes
-       WHERE customer_id = ? AND product_id = ?
-       ORDER BY created_at DESC LIMIT 20`,
-      [customerId, productId]
-    );
-
-    return c.json({
-      data: {
-        ...customer,
-        recent_notes: notesResult.rows,
-      },
-    });
+    // `recent_notes` USED TO BE HERE AND WAS ALWAYS `[]`. `customer_notes` was
+    // created by migration 083 so this query would stop 500-ing, and nothing
+    // ever wrote a row into it — no route, no agent, no job. A documented API
+    // field that can only ever be empty is worse than an absent one: an
+    // integrator builds against it and concludes their customers have no notes.
+    return c.json({ data: customer });
   } catch (err) {
+    logger.error(`v1 customer fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+      { productId });
     return c.json({ error: 'Failed to fetch customer' }, 500);
   }
 });
@@ -145,6 +157,8 @@ customersApi.post('/', requireScope('customers:manage'), async (c) => {
 
     return c.json({ data: result.rows[0] }, 201);
   } catch (err) {
+    logger.error(`v1 customer upsert failed: ${err instanceof Error ? err.message : String(err)}`,
+      { productId });
     return c.json({ error: 'Failed to create/upsert customer' }, 500);
   }
 });
@@ -182,7 +196,8 @@ customersApi.put('/:customerId/health', requireScope('customers:manage'), async 
     );
 
     const result = await query(
-      `SELECT id, external_customer_id, name, health_score, updated_at
+      // The column is `account_name`.
+      `SELECT id, external_customer_id, account_name, health_score, updated_at
        FROM customer_intelligence WHERE id = ? AND product_id = ?`,
       [customerId, productId]
     );
@@ -208,9 +223,13 @@ customersApi.get('/:customerId/timeline', requireScope('customers:read'), async 
       return c.json({ error: 'Customer not found' }, 404);
     }
 
+    // `customer_timeline_events` exists in no migration and no snapshot: this
+    // route queried a table that has never been created, so it answered 500 to
+    // every request. The real ledger is `customer_events`, whose payload column
+    // is `event_data`.
     const result = await query(
-      `SELECT id, event_type, event_data_json, created_at
-       FROM customer_timeline_events
+      `SELECT id, event_type, event_data, created_at
+       FROM customer_events
        WHERE customer_id = ? AND product_id = ?
        ORDER BY created_at DESC
        LIMIT ?`,

@@ -13,7 +13,12 @@ interface TriggerCheck {
   condition: string;
   subject: string;
   body: string;
-  check: (founderId: string, productId: string) => Promise<boolean>;
+  /** Every one of these asks a question about the FOUNDER, across all their
+   *  companies — "your audit", "you have pending decisions". The company id
+   *  used to be passed here too and no check ever read it; a parameter that
+   *  looks supported and does nothing is how a caller comes to believe the
+   *  check is company-scoped. */
+  check: (founderId: string) => Promise<boolean>;
 }
 
 const STANDARD_TRIGGERS: TriggerCheck[] = [
@@ -86,7 +91,20 @@ export async function evaluateTriggers(): Promise<void> {
 
   for (const fRow of founders.rows) {
     const founder = fRow as Record<string, string>;
-    const products = await query('SELECT id FROM products WHERE owner_id = ?', [founder.id]);
+    // WHICH COMPANY IS THIS CHARGED TO. The triggers are founder-level, but
+    // the gateway needs a company for authority and `audit_log.product_id` is
+    // NOT NULL — so one has to be named. This took `products.rows[0]` with no
+    // ORDER BY, so for a founder with two companies the email about their
+    // account was logged against whichever row SQLite returned first, and the
+    // dedup key that stops it repeating was keyed on that same arbitrary
+    // choice. The founder's OLDEST active company is deterministic and is the
+    // one their account was opened with; the compromise — a founder-level
+    // message charged to a company — is the gateway's shape, and is named here
+    // rather than hidden behind row order.
+    const products = await query(
+      `SELECT id FROM products WHERE owner_id = ? AND status != 'archived'
+        ORDER BY created_at ASC, rowid ASC LIMIT 1`,
+      [founder.id]);
     const productId = (products.rows[0] as Record<string, string>)?.id ?? '';
 
     // Get risk state
@@ -104,12 +122,12 @@ export async function evaluateTriggers(): Promise<void> {
       );
       if (sent.rows.length > 0) continue;
 
-      const shouldFire = await trigger.check(founder.id, productId);
+      const shouldFire = await trigger.check(founder.id);
       if (shouldFire) {
         if (!productId) continue; // no company authority context: fail closed
         await sendTriggerEmail(productId, founder.email, trigger.name, trigger.subject, trigger.body);
         await insertAuditLog({
-          id: nanoid(), product_id: productId || 'system',
+          id: nanoid(), product_id: productId,
           action_type: `trigger_${trigger.name}`, gate: 0,
           trigger: 'behavioral_trigger', reasoning: trigger.condition,
           risk_state_at_action: riskState,

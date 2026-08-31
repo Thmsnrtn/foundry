@@ -1,3 +1,26 @@
+// =============================================================================
+// FOUNDRY — the daily AI spend ceiling, reserved before the request is made
+//
+// FIVE OF THIS TABLE'S COLUMNS LOOK WRITE-ONLY FROM TYPESCRIPT AND ARE NOT.
+// `reserved_cents`, `global_cap_cents`, `product_cap_cents`, `founder_cap_cents`
+// and `actual_cents` appear on the write-only-columns baseline because nothing
+// in `src/` reads them back. What reads them is migration 099's triggers, and
+// they are not validating the row — they ARE the control:
+//
+//   `ai_spend_reservation_guard`  compares the running total against
+//                                 NEW.global_cap_cents / product / founder and
+//                                 RAISEs, which is how a ceiling is enforced.
+//   `ai_spend_reservation_apply`  adds NEW.reserved_cents to `ai_daily_spend`.
+//   `ai_spend_reservation_finish` subtracts OLD.reserved_cents and adds
+//                                 NEW.actual_cents when the call settles.
+//
+// The gate's own header draws the right distinction — a trigger CHECKING what
+// you recorded is not something CONSUMING it — and these five are on the
+// consuming side of that line. Written here rather than left as five open
+// questions on a list, because the gate is a ratchet on a count and the answers
+// belong next to the code.
+// =============================================================================
+
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 

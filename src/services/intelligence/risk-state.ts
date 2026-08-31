@@ -6,6 +6,7 @@
 import { query, insertAuditLog } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import type { RiskStateValue, StressorSeverity, GrowthStage } from '../../types/index.js';
+import type { FounderPreferences } from '../../types/index.js';
 
 interface RiskAssessmentInput {
   productId: string;
@@ -141,6 +142,56 @@ export async function transitionRiskState(
       headline: `Risk state ${fromState} → ${toState.toUpperCase()} for ${ownerRow?.name ?? 'product'}`,
       detail: reason,
       url: `${process.env.APP_URL ?? ''}/dashboard`,
+    }).catch(() => {});
+
+    // And the founder's phone. Device registration and per-type preferences
+    // have been live since the mobile API shipped; nothing ever sent to them,
+    // so a founder could switch on 'risk state change' and never hear from it
+    // again. This is the caller that makes the promise true.
+    //
+    // Governed like every other outward effect: it goes through the gateway, so
+    // a paused company sends nothing, a re-run cannot double-notify, and the
+    // send is in audit_log either way. Failure is swallowed on purpose — the
+    // transition is the fact, and a notification is not worth losing it over.
+    // THE FOUNDER'S CEILING APPLIES TO THIS PUSH TOO.
+    //
+    // `ux/interruption.ts` opens by saying "this module alone decides HOW
+    // LOUDLY to deliver", and this call was the counter-example: it reached the
+    // founder's phone without ever consulting `preferences.max_channel`, the
+    // setting where they say how loudly Foundry may EVER interrupt them. A
+    // founder who set `letter` — meaning do not interrupt my life — got a push
+    // on every risk-state change.
+    //
+    // The gateway governs whether an outward effect may LEAVE. The ceiling
+    // governs how loudly Foundry may interrupt THIS PERSON. Passing the first
+    // says nothing about the second, and the comment below used to treat them
+    // as one thing.
+    //
+    // The notification type stays `risk_state_change` rather than routing
+    // through `deliver()`, because that is a real preference column the founder
+    // subscribed to and the front door flattens it to `daily_briefing`.
+    const prefsRow = (await query('SELECT preferences FROM founders WHERE id = ?', [ownerId]))
+      .rows[0] as Record<string, unknown> | undefined;
+    let prefs: FounderPreferences | null = null;
+    try {
+      prefs = prefsRow?.preferences ? JSON.parse(String(prefsRow.preferences)) as FounderPreferences : null;
+    } catch { /* unset or unreadable preferences are no ceiling */ }
+
+    const { mayPush } = await import('../ux/interruption.js');
+    // A company entering RED is the kill-switch-worthy end of this; anything
+    // else is a change worth acting on but not worth a phone buzzing.
+    const importance = toState === 'red' ? 'critical' as const : 'action_needed' as const;
+    if (!await mayPush(ownerId, productId, importance, prefs)) return;
+
+    const { notifyFounder } = await import('../notifications/push.js');
+    notifyFounder({
+      productId, founderId: ownerId, notificationType: 'risk_state_change',
+      payload: {
+        title: `${ownerRow?.name ?? 'Your company'} is now ${toState.toUpperCase()}`,
+        body: reason,
+        tag: `risk:${productId}:${toState}`,
+        data: { product_id: productId, from_state: fromState, to_state: toState },
+      },
     }).catch(() => {});
   }
 }

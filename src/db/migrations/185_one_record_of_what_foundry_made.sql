@@ -1,0 +1,34 @@
+-- =============================================================================
+-- Migration 185: one record of what Foundry made, and a reader for it
+--
+-- `action_drafts` is a second execution path beside `action_executions`:
+-- pricing copy, landing copy, an onboarding flow, a remediation PR. When one
+-- executes, the result was written TWICE — `action_drafts.execution_result` on
+-- the draft itself, and a whole row in `auto_execution_log` carrying the draft
+-- id, the action type, a trigger of 'auto_gate_0' or 'founder_approved', the
+-- output and a success flag.
+--
+-- NOTHING READ EITHER. So the one path where Foundry produces something by
+-- itself was the one path a founder could not see it had. The Letter's "what
+-- ran without you" reads `action_executions` and gate-0 `decisions`; this path
+-- appeared in neither.
+--
+-- EVERY FIELD OF THE LOG IS ALREADY ON THE DRAFT. `action_draft_id` is the
+-- draft; `action_type` and `output` are its `action_type` and
+-- `execution_result`; `success` is `status = 'executed'` versus `'failed'`; and
+-- the trigger — the one field that carries accountability — is
+-- `approved_at IS NULL`, which is what "Foundry did this alone" actually means.
+-- A second table added nothing except a second place to look and a second
+-- chance for the two to disagree.
+--
+-- So the log goes, and the draft gains a reader: `letter/composer.ts` now puts
+-- executed drafts into `handled`, saying which ones the founder approved and
+-- which Foundry did on its own. That distinction is the whole reason the
+-- trigger column existed, and it now reaches the person it concerns.
+--
+-- Same reasoning and same owner decision as migration 157: "remove the
+-- consuming halves rather than build the producing ones." Here the consuming
+-- half was a duplicate of a record that just needed somewhere to be read.
+-- =============================================================================
+
+DROP TABLE IF EXISTS auto_execution_log;

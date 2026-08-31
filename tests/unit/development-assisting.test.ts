@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
@@ -350,5 +351,108 @@ describe('what the founder is told about development', () => {
 
     // A change that was made and then undone says exactly that.
     expect(activity.changes.some((c) => /made this change and then undid it/.test(c.detail))).toBe(true);
+  });
+
+  it('reads back what it learned about its own changes instead of only writing it', async () => {
+    // WHAT THIS CLOSES. `recordDevelopmentOutcome` wrote every outcome twice —
+    // to `development_change_plans.outcome_status`, and as a
+    // `development_change_outcome` claim carrying the verification evidence.
+    // The column was read; the claim was read by nothing. Foundry was paying to
+    // record what it had learned about its own changes and never consulting it,
+    // which is a cognition that pays no rent and a dual-write with a dead side.
+    const { getFounderDevelopmentActivity } = await import('../../src/services/institution/development-assisting.js');
+    const activity = await getFounderDevelopmentActivity('as_main');
+
+    // The claims exist, and the count is theirs — not the plans'.
+    const claims = await query(
+      `SELECT id FROM reconstruction_claims
+        WHERE product_id='as_main' AND predicate='development_change_outcome'`, []);
+    expect(claims.rows.length).toBeGreaterThan(0);
+    expect(activity.record).not.toBeNull();
+    const { confirmed, failed, unconfirmed } = activity.record!;
+    expect(confirmed + failed + unconfirmed).toBe(claims.rows.length);
+
+    // A rolled-back change loses its verified success on the PLAN and keeps its
+    // claim, which is the whole reason the two are counted separately. So the
+    // record here is the append-only history, not the current plan state.
+    expect(confirmed).toBeGreaterThan(0);
+
+    // A company that has changed nothing is told nothing, rather than shown a
+    // vacuous perfect record.
+    expect((await getFounderDevelopmentActivity('as_revoke')).record).toBeNull();
+  });
+
+  it('puts the track record on the page, not just in a return value', async () => {
+    // PRODUCTION REACHABLE IS NOT HUMAN REACHABLE. A service that computes an
+    // honest track record and a page that never renders it are the same thing
+    // to a founder as not computing it at all.
+    //
+    // A SOLO FOUNDER, deliberately. `as_owner` holds five companies, and the
+    // letter routes anyone with more than one to the fleet composition — which
+    // has no development section at all. That is a real gap and it is recorded
+    // in the live frontier; it is not this test's subject, and writing the test
+    // against the fleet path would have quietly made it this test's subject.
+    await query(`INSERT INTO founders (id,clerk_user_id,email) VALUES
+      ('as_solo','as_solo_clerk','solo@example.com')`, []);
+    await query(`INSERT INTO products (id,name,owner_id) VALUES ('as_solo_co','Solo Co','as_solo')`, []);
+    const signalId = 'as_solo_sig';
+    await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+      VALUES (?,'as_solo_co','development_observation','development_check_observed','low','{}','A check ran')`,
+    [signalId]);
+    await recordReconstructionClaim({
+      productId: 'as_solo_co', subject: 'responsibility:as_solo_resp',
+      predicate: 'development_change_outcome',
+      value: { changeId: 'chg_solo', path: TARGET, outcome: 'verified_success' },
+      epistemicStatus: 'known', evidenceRefs: [{ kind: 'signal_event', id: signalId }],
+      derivationMethod: 'bounded development change verification', observedAt: new Date(),
+    });
+
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: 'as_solo', email: 'solo@example.com', preferences: {} } as never);
+      c.set('csrfToken' as never, 't' as never);
+      await next();
+    });
+    app.route('/', letterRoutes);
+
+    const page = await (await app.request('/letter')).text();
+    expect(page, 'the track record must reach the page').toContain('Across everything I have changed');
+    // Counts in the founder's language, with the word that says what each means.
+    expect(page).toContain('an independent check confirmed');
+    // And no rate, anywhere near it.
+    expect(page).not.toMatch(/\d+% (reliable|success|confirmed)/);
+  });
+
+  it('lets a stale verification fall out of the record rather than standing forever', async () => {
+    // A check that passed four months ago is not current evidence that
+    // Foundry's changes hold. The plan column cannot express that; the claim
+    // corpus can, and reading the record through it is what makes the
+    // distinction real rather than stated.
+    const { getFounderDevelopmentActivity } = await import('../../src/services/institution/development-assisting.js');
+    const now = await getFounderDevelopmentActivity('as_main');
+    expect(now.record).not.toBeNull();
+
+    await query(
+      `UPDATE reconstruction_claims SET valid_until = datetime('now','-1 day')
+        WHERE product_id='as_main' AND predicate='development_change_outcome'`, []);
+    const later = await getFounderDevelopmentActivity('as_main');
+    // The confirmed success falls back to unconfirmed. Nothing is dropped — the
+    // change was still made — and nothing is invented.
+    expect(later.record).toMatchObject({ confirmed: 0 });
+    expect(later.record!.confirmed + later.record!.failed + later.record!.unconfirmed)
+      .toBe(now.record!.confirmed + now.record!.failed + now.record!.unconfirmed);
+
+    // And the asymmetry runs one way only: a recorded FAILURE does not become
+    // "nobody knows" by being left alone, which would let Foundry improve its
+    // own record by waiting.
+    const failing = (await query(
+      `SELECT id FROM reconstruction_claims
+        WHERE product_id='as_main' AND predicate='development_change_outcome' LIMIT 1`, []))
+      .rows[0] as Record<string, unknown>;
+    await query(
+      `UPDATE reconstruction_claims SET value_json=? WHERE id=?`,
+      [JSON.stringify({ outcome: 'verified_failure' }), String(failing.id)]);
+    expect((await getFounderDevelopmentActivity('as_main')).record!.failed).toBe(1);
   });
 });

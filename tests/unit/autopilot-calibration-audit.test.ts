@@ -13,7 +13,7 @@ import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { getCategoryCalibration, calibrationHold } from '../../src/services/autopilot/calibration.js';
-import { runSelfAudit, deferenceLine } from '../../src/services/autopilot/self-audit.js';
+import { runFleetSelfAudit, deferenceLine } from '../../src/services/autopilot/self-audit.js';
 
 beforeAll(async () => {
   await runMigrations();
@@ -81,10 +81,16 @@ describe('calibration = truthfulness of confidence', () => {
     await setPolicy('ca_p', 'product', 'shadow', 'ca_f');
     // Bank enough clean cycles to trip promotion, plus positive outcomes so
     // the quality hold does NOT fire — isolating the calibration gate.
+    //
+    // `outcome_valence` IS AN INTEGER VOCABULARY: 1, 0, -1. This seeded the
+    // string 'positive', which every reader compares against 1 and therefore
+    // read as NOT positive — so the fixture did not do what its comment says,
+    // and the assertion passed for either reason. Migration 214 refuses the
+    // string outright, which is how it surfaced.
     for (let i = 0; i < 12; i++) {
       await query(
         `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status, outcome_valence)
-         VALUES (?, 'ca_p', 'product', 1, 'q', 'r', 'executed', 'positive')`, [nanoid()],
+         VALUES (?, 'ca_p', 'product', 1, 'q', 'r', 'executed', 1)`, [nanoid()],
       );
       await recordCleanCycle('ca_p', 'product');
     }
@@ -112,7 +118,7 @@ describe('self-audit catches over-deference', () => {
   });
 
   it('flags permission-seeking and menu-handing in system output only', async () => {
-    const audit = await runSelfAudit();
+    const audit = await runFleetSelfAudit();
     const kinds = audit.findings.map((f) => f.kind).sort();
     expect(kinds).toContain('permission_seeking');
     expect(kinds).toContain('menu_handing');

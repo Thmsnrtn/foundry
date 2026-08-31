@@ -9,6 +9,7 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import {
   getCohortPatterns,
   getCohortBenchmarks,
@@ -57,9 +58,25 @@ function fmtScore(score: number): string {
   return `${Math.round(score * 100)}%`;
 }
 
+/**
+ * TWO SCALES, ONE FORMATTER, ONE PER CENT SIGN.
+ *
+ * `churn_rate`, `activation_rate` and `day_30_retention` are stored as 0–1
+ * FRACTIONS; `mrr_growth_rate` is computed in this module as a percentage
+ * already multiplied by 100; `nps_score` is on its own -100..100 scale. This
+ * printed all of them as `value.toFixed(1)%`, so a company churning five per
+ * cent a month read "0.1%" on its own cohort page — a number a founder would
+ * take as extraordinary retention.
+ */
+const FRACTION_METRICS = new Set(['churn_rate', 'activation_rate', 'day_30_retention']);
+
+/** Exposed for the test that holds the two scales apart. */
+export const __fmtMetricForTest = (v: number | null, m: string): string => fmtMetric(v, m);
+
 function fmtMetric(value: number | null, metric: string): string {
   if (value === null || value === undefined) return '—';
   if (metric === 'nps_score') return value.toFixed(0);
+  if (FRACTION_METRICS.has(metric)) return `${(value * 100).toFixed(1)}%`;
   return `${value.toFixed(1)}%`;
 }
 
@@ -87,8 +104,14 @@ function renderPatternAlert(match: PatternMatch, productId: string): string {
     .map((a) => `<li style="margin-bottom:0.25rem;color:var(--text-dim);">${a}</li>`)
     .join('');
 
+  // A RULE OF THUMB, ON A CARD FULL OF THIS COMPANY'S OWN NUMBERS. The match
+  // score and the matched signals come from this company's metrics; the pattern
+  // itself is editorial — a library Foundry ships, written by hand, derived from
+  // no company's data. Beside a score computed from real numbers, "~45d lead
+  // time" reads as something Foundry measured. It is not, and the card says so
+  // once rather than qualifying every line.
   const daysNote = match.days_until_typical_failure !== null
-    ? `<span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.5rem;">~${match.days_until_typical_failure}d lead time</span>`
+    ? `<span style="font-size:0.72rem;color:var(--text-muted);margin-left:0.5rem;" title="A rule of thumb from the pattern library, not a measurement of your company.">~${match.days_until_typical_failure}d typical lead time (rule of thumb)</span>`
     : '';
 
   return `<div class="card" style="padding:1.25rem;margin-bottom:0.75rem;border-left:3px solid ${color};background:${bg};">
@@ -100,6 +123,11 @@ function renderPatternAlert(match: PatternMatch, productId: string): string {
           ${daysNote}
         </div>
         <p style="margin:0;font-size:0.82rem;color:var(--text-muted);max-width:600px;">${match.pattern.description}</p>
+        <p style="margin:0.35rem 0 0;font-size:0.72rem;color:var(--text-dim);max-width:600px;">
+          The pattern is one Foundry ships — received startup practice, not a
+          measurement of your company or of other companies on Foundry. What is
+          yours is the match score and the signals below it.
+        </p>
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-size:1.1rem;font-weight:700;color:${color};">${fmtScore(match.match_score)}</div>
@@ -210,12 +238,19 @@ networkIntelligence.get('/network', async (c) => {
           </div>
         </div>
         <div style="margin-bottom:0.5rem;">${bar}</div>
-        <div style="display:flex;justify-content:space-between;font-size:0.67rem;color:var(--text-muted);margin-bottom:0.5rem;">
+        ${b.cohort_median !== null
+          ? `<div style="display:flex;justify-content:space-between;font-size:0.67rem;color:var(--text-muted);margin-bottom:0.5rem;">
           <span>P25: ${fmtMetric(b.cohort_p25, b.metric)}</span>
           <span>Median: ${fmtMetric(b.cohort_median, b.metric)}</span>
           <span>P75: ${fmtMetric(b.cohort_p75, b.metric)}</span>
-        </div>
-        <div style="font-size:0.78rem;color:var(--text-dim);border-top:1px solid rgba(255,255,255,0.06);padding-top:0.5rem;">${b.cohort_insight}</div>
+        </div>`
+          : `<div style="font-size:0.67rem;color:var(--text-muted);margin-bottom:0.5rem;">
+          No cohort distribution published yet — a percentile is only shown once
+          enough distinct companies in this segment have contributed.
+        </div>`}
+        ${b.cohort_insight !== null
+          ? `<div style="font-size:0.78rem;color:var(--text-dim);border-top:1px solid rgba(255,255,255,0.06);padding-top:0.5rem;">${b.cohort_insight}</div>`
+          : ''}
       </div>`;
     })
     .join('');
@@ -258,7 +293,8 @@ networkIntelligence.get('/network', async (c) => {
 
 // ─── POST /network/scan ───────────────────────────────────────────────────────
 
-networkIntelligence.post('/network/scan', async (c) => {
+networkIntelligence.post('/network/scan',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'network', 'Network Intelligence', undefined, c);
 

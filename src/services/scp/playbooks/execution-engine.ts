@@ -5,9 +5,14 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query } from '../../../db/client.js';
+import { insertAuditLog, query } from '../../../db/client.js';
 import { createExecution } from '../actions/executor.js';
 import type { ActionPayload, ActionType } from '../actions/executor.js';
+import { activeConsent } from '../../autopilot/consent.js';
+import { effectiveMode, platformCap } from '../../autopilot/platform-cap.js';
+import { getPolicy } from '../../autopilot/policy.js';
+import { ensurePolicyVisible } from '../../departments/shared.js';
+import { log } from '../../../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,6 +68,10 @@ export async function createExecutionPlaybook(
   data: Omit<ExecutionPlaybook, 'id' | 'is_active' | 'last_triggered_at'>
 ): Promise<string> {
   const id = nanoid();
+  // The capability this playbook will exercise gets a dial in Controls now,
+  // not on first evaluation — a founder who ticked "auto-execute" needs
+  // somewhere to grant the autonomy they just asked for.
+  await ensurePolicyVisible(productId, playbookCapability(data.action_type));
   await query(
     `INSERT INTO execution_playbooks
        (id, product_id, name, description, trigger_type, trigger_config_json,
@@ -98,29 +107,144 @@ export async function listExecutionPlaybooks(productId: string): Promise<Executi
 }
 
 /**
- * Toggle a playbook active or inactive.
+ * Pause or resume a standing order, within the company the caller was
+ * authorized on.
+ *
+ * THE SCOPE USED TO BE `owner_id = ?`. A standing order is the one thing in
+ * the system that keeps sending after everyone has stopped looking at it, and
+ * the person most likely to notice it misfiring — a co-founder watching the
+ * action queue — could not turn it off. Company membership is canonical
+ * through `team_members`; the route asks `can_trigger_actions` and passes
+ * the company it asked about, so this scope means "the company the caller was
+ * authorized for" rather than "a company the caller owns".
  */
-export async function togglePlaybook(playbookId: string, active: boolean, ownerId: string): Promise<void> {
+export async function togglePlaybook(
+  playbookId: string, active: boolean, scopeProductId: string,
+): Promise<void> {
   await query(
-    `UPDATE execution_playbooks SET is_active=?
-     WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
-    [active ? 1 : 0, playbookId, ownerId]
+    `UPDATE execution_playbooks SET is_active=? WHERE id=? AND product_id=?`,
+    [active ? 1 : 0, playbookId, scopeProductId]
   );
 }
 
 /**
- * Delete a playbook and its trigger log entries. Scoped to the owning founder
- * — a foreign id deletes nothing.
+ * Delete a playbook and its trigger log entries, within the authorized
+ * company. A foreign id deletes nothing.
  */
-export async function deletePlaybook(playbookId: string, ownerId: string): Promise<void> {
-  const owned = await query(
-    `SELECT id FROM execution_playbooks
-     WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
-    [playbookId, ownerId]
+export async function deletePlaybook(
+  playbookId: string, scopeProductId: string,
+): Promise<void> {
+  const found = await query(
+    `SELECT id FROM execution_playbooks WHERE id=? AND product_id=?`,
+    [playbookId, scopeProductId]
   );
-  if (owned.rows.length === 0) return;
+  if (found.rows.length === 0) return;
   await query(`DELETE FROM playbook_trigger_log WHERE playbook_id=?`, [playbookId]);
   await query(`DELETE FROM execution_playbooks WHERE id=?`, [playbookId]);
+}
+
+// ─── The autonomy a standing order exercises ─────────────────────────────────
+//
+// A PLAYBOOK IS AUTONOMY WITH A DIFFERENT NAME. `auto_execute` is a checkbox
+// on a form that says "no approval required", and until now it meant exactly
+// that: the evaluator created an execution and approved it in the same breath,
+// under the approver id `system:playbook`. It reached none of the machinery
+// that governs every other autonomous act —
+//
+//   • the trust ladder (shadow → suggest → act, earned over clean cycles),
+//   • the platform cap, the operator-controlled ceiling the clean-hands
+//     posture depends on (`outreach: 'suggest'`, `billing/refunds/pricing:
+//     'shadow'`),
+//   • the consent ledger, whose whole purpose is a recorded, versioned,
+//     expiring, revocable acknowledgment before Foundry acts on its own,
+//   • the demotion that an anomaly or an undo applies to a category.
+//
+// `hasActConsent` documents itself as "the gate: no autonomous 'act' without
+// this." That was true of the autopilot tick and true of customer success, and
+// false here — so revoking consent, or a platform cap holding a capability at
+// shadow, or a demotion after a bad outcome, left a standing order sending
+// exactly as before. A rule believed by three call sites and unknown to a
+// fourth is not a rule.
+//
+// WHY IT REUSES THE EXISTING CATEGORIES rather than inventing a permission of
+// its own: the founder already has one dial for "Foundry may reach my
+// customers", and a second dial that could contradict it would be two
+// authorization systems for one question. A playbook whose action leaves the
+// founder's own tools is outreach, and is governed by the outreach dial and
+// the outreach cap. Everything else is the company's own workspace, governed
+// by a 'playbooks' dial that appears in Controls the moment a playbook exists.
+//
+// The consequence is deliberate and worth stating plainly: because the
+// platform caps outreach at 'suggest', an auto-executing send_email playbook
+// cannot fire on its own today. That is the same rail outreach.ts already
+// holds ("'act' mode still queues for founder approval in v1"); the defect was
+// that this door did not hold it. Lifting the cap is an operator decision, not
+// something a checkbox on a form should decide.
+//
+// It deliberately does NOT discriminate on the recipient — a send_email
+// playbook addressed to the founder is treated as outreach too. The send
+// boundary already decides sender-of-record per recipient; doing it a second
+// time here, from a template that may interpolate, would be a second answer to
+// a question that already has one.
+
+/** The trust-ladder category a playbook with no third-party reach exercises.
+ *  Visible in Controls as soon as a playbook exists, so the founder has
+ *  somewhere to grant (or withhold) the autonomy. */
+export const PLAYBOOK_CATEGORY = 'playbooks';
+
+/** Action types whose effect lands outside the founder's own tools. Anything
+ *  not listed here stays inside the workspace the founder connected. Unknown
+ *  action types are treated as reaching out — a new integration is not
+ *  trusted by virtue of being new. */
+const REACHES_THIRD_PARTY = new Set<string>([
+  'send_email', 'schedule_call', 'custom_webhook', 'mcp_tool',
+]);
+const STAYS_INTERNAL = new Set<string>(['post_slack', 'create_ticket', 'update_crm']);
+
+/** Which capability a playbook's action exercises. */
+export function playbookCapability(actionType: string): string {
+  return STAYS_INTERNAL.has(actionType) ? PLAYBOOK_CATEGORY : 'outreach';
+}
+
+export type AutoExecuteVerdict =
+  | { allowed: true; capability: string; consentId: string; disclosureVersion: string }
+  | { allowed: false; capability: string; reason: string };
+
+/**
+ * May this playbook approve its own action? The same three questions the
+ * autopilot tick asks, asked here so there is one answer rather than two.
+ *
+ * A pure read: the list page renders the founder's real ceiling from it, and a
+ * page render must not write. Making the dial visible is a separate call, on
+ * the paths that already write.
+ */
+export async function autoExecuteVerdict(
+  productId: string, actionType: string,
+): Promise<AutoExecuteVerdict> {
+  const capability = playbookCapability(actionType);
+  const configured = (await getPolicy(productId, capability)).mode;
+  const mode = effectiveMode(configured, capability);
+  if (mode !== 'act') {
+    const ceiling = platformCap(capability);
+    return {
+      allowed: false, capability,
+      reason: ceiling !== 'act' && ceiling !== configured
+        ? `the platform holds '${capability}' at '${ceiling}' — a standing order cannot exceed it`
+        : `'${capability}' is set to '${mode}', not 'act'`,
+    };
+  }
+
+  const consent = await activeConsent(productId, capability);
+  if (!consent) {
+    return {
+      allowed: false, capability,
+      reason: `no live consent on record for '${capability}' — grant it in Controls`,
+    };
+  }
+  return {
+    allowed: true, capability,
+    consentId: consent.id, disclosureVersion: consent.disclosure_version,
+  };
 }
 
 // ─── Evaluation ───────────────────────────────────────────────────────────────
@@ -138,7 +262,7 @@ export async function deletePlaybook(playbookId: string, ownerId: string): Promi
  */
 export async function evaluatePlaybooksForProduct(
   productId: string
-): Promise<{ triggered: number; skipped: number }> {
+): Promise<{ triggered: number; skipped: number; held: number }> {
   // Load active playbooks
   const playbooksResult = await query(
     `SELECT * FROM execution_playbooks WHERE product_id=? AND is_active=1`,
@@ -147,7 +271,7 @@ export async function evaluatePlaybooksForProduct(
   const playbooks = (playbooksResult.rows as Array<Record<string, unknown>>).map(rowToPlaybook);
 
   if (playbooks.length === 0) {
-    return { triggered: 0, skipped: 0 };
+    return { triggered: 0, skipped: 0, held: 0 };
   }
 
   // Load latest metric snapshot
@@ -161,6 +285,7 @@ export async function evaluatePlaybooksForProduct(
 
   let triggered = 0;
   let skipped = 0;
+  let held = 0;
 
   const now = new Date().toISOString();
 
@@ -185,11 +310,18 @@ export async function evaluatePlaybooksForProduct(
 
     // Check weekly budget
     if (playbook.execution_budget_weekly !== null) {
-      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      // THE BUDGET COUNTED SIX DAYS AND A BIT. `triggered_at` is written as
+      // `datetime('now')` — 'YYYY-MM-DD HH:MM:SS' — and this bound was a
+      // JavaScript ISO string. Compared as text, a space sorts before 'T', so
+      // every trigger recorded on the boundary DATE read as older than the
+      // window whatever its clock time. A playbook's weekly execution budget is
+      // a control on how often Foundry may act on a company's behalf, and it
+      // was systematically undercounting its own executions.
       const countResult = await query(
         `SELECT COUNT(*) as cnt FROM playbook_trigger_log
-         WHERE playbook_id=? AND evaluation_result='triggered' AND triggered_at > ?`,
-        [playbook.id, weekAgo]
+         WHERE playbook_id=? AND evaluation_result='triggered'
+           AND triggered_at > datetime('now', '-7 days')`,
+        [playbook.id]
       );
       const count = ((countResult.rows[0] as Record<string, unknown>)?.cnt as number) ?? 0;
       if (count >= playbook.execution_budget_weekly) {
@@ -205,11 +337,59 @@ export async function evaluatePlaybooksForProduct(
     // Create execution record
     const executionId = await createExecution(productId, null, payload);
 
-    // If auto_execute, immediately approve and run
+    // If auto_execute, ask whether this company may act on its own before
+    // approving anything. A refusal leaves the execution PENDING — the founder
+    // still gets the action, in the queue, where a human eye is the thing the
+    // refusal was protecting.
+    let outcome: TriggerResult = 'triggered';
     if (playbook.auto_execute) {
-      // We import approveAndExecute lazily to avoid circular dependency concerns
-      const { approveAndExecute } = await import('../actions/executor.js');
-      await approveAndExecute(executionId, 'system:playbook');
+      // The dial has to exist before a founder can turn it up.
+      await ensurePolicyVisible(productId, playbookCapability(playbook.action_type));
+      const verdict = await autoExecuteVerdict(productId, playbook.action_type);
+      if (verdict.allowed) {
+        // We import approveAndExecute lazily to avoid circular dependency concerns
+        const { approveAndExecute } = await import('../actions/executor.js');
+        await approveAndExecute(executionId, 'system:playbook');
+        // The disclosed-agent paper trail, same shape customer success writes:
+        // what was done, under which consent, under which disclosure version.
+        await insertAuditLog({
+          id: nanoid(),
+          product_id: productId,
+          action_type: 'attribution:playbook',
+          gate: 0,
+          trigger: `standing order "${playbook.name}" auto-executed`,
+          reasoning: `Foundry ran ${playbook.action_type} on the founder's behalf under `
+            + `consent ${verdict.consentId} (disclosure ${verdict.disclosureVersion}, `
+            + `capability ${verdict.capability})`,
+          input_context: JSON.stringify({
+            playbook_id: playbook.id, execution_id: executionId,
+            consent_id: verdict.consentId, capability: verdict.capability,
+          }),
+          output: undefined,
+          outcome: 'allowed',
+        });
+      } else {
+        outcome = 'held_for_approval';
+        await insertAuditLog({
+          id: nanoid(),
+          product_id: productId,
+          action_type: 'attribution:playbook',
+          gate: 0,
+          trigger: `standing order "${playbook.name}" held for approval`,
+          reasoning: `Auto-execute was requested but refused: ${verdict.reason}. `
+            + `The action is waiting in the approval queue.`,
+          input_context: JSON.stringify({
+            playbook_id: playbook.id, execution_id: executionId,
+            capability: verdict.capability,
+          }),
+          output: undefined,
+          outcome: 'held',
+        });
+        log.info('playbook auto-execute withheld', {
+          productId, playbookId: playbook.id, reason: verdict.reason,
+        });
+        held++;
+      }
     }
 
     // Update last_triggered_at on the playbook
@@ -218,11 +398,11 @@ export async function evaluatePlaybooksForProduct(
       [now, playbook.id]
     );
 
-    await writeLog(playbook.id, productId, 'triggered', conditionSnapshot, executionId);
+    await writeLog(playbook.id, productId, outcome, conditionSnapshot, executionId);
     triggered++;
   }
 
-  return { triggered, skipped };
+  return { triggered, skipped, held };
 }
 
 // ─── Trigger Log ──────────────────────────────────────────────────────────────
@@ -276,13 +456,14 @@ export async function getTriggerLog(productId: string, limit = 50): Promise<Trig
  * Count executions this week per playbook (for budget badge).
  */
 export async function getWeeklyExecutionCounts(productId: string): Promise<Record<string, number>> {
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // The badge and the budget must count the same week; see `evaluatePlaybooks`.
   const result = await query(
     `SELECT playbook_id, COUNT(*) as cnt
      FROM playbook_trigger_log
-     WHERE product_id=? AND evaluation_result='triggered' AND triggered_at > ?
+     WHERE product_id=? AND evaluation_result='triggered'
+       AND triggered_at > datetime('now', '-7 days')
      GROUP BY playbook_id`,
-    [productId, weekAgo]
+    [productId]
   );
 
   const counts: Record<string, number> = {};
@@ -376,10 +557,16 @@ function buildActionPayload(playbook: ExecutionPlaybook): ActionPayload {
   } as ActionPayload;
 }
 
+/** What an evaluation did. `held_for_approval` is the honest name for a
+ *  playbook that triggered while its auto-execute was refused: the action
+ *  exists and is waiting, which is neither "triggered and sent" nor "skipped".
+ *  The founder reading the log needs to be able to tell those apart. */
+export type TriggerResult = 'triggered' | 'skipped' | 'budget_exceeded' | 'held_for_approval';
+
 async function writeLog(
   playbookId: string,
   productId: string,
-  result: 'triggered' | 'skipped' | 'budget_exceeded',
+  result: TriggerResult,
   conditionSnapshot: Record<string, unknown>,
   actionExecutionId: string | null
 ): Promise<void> {

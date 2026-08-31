@@ -12,6 +12,7 @@ import { query } from '../../db/client.js';
 import { getAgentAccuracyReport, measurePendingPredictions } from '../../services/scp/accuracy/tracker.js';
 import { AGENT_DISPLAY_NAMES, ALL_AGENTS } from '../../services/scp/types.js';
 import type { AgentName } from '../../services/scp/types.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentsAccuracy = new Hono<AuthEnv>();
 
@@ -399,7 +400,8 @@ agentsAccuracy.get('/agents/accuracy/:agentName', async (c) => {
 
 // ─── POST /agents/accuracy/measure — Trigger measurement ──────────────────────
 
-agentsAccuracy.post('/agents/accuracy/measure', async (c) => {
+agentsAccuracy.post('/agents/accuracy/measure',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Prediction Accuracy', undefined, c);
 

@@ -115,16 +115,38 @@ export async function syncStripeMetrics(
     }
   }
 
+  // THE LEVEL, COMPUTED HERE SINCE THIS FILE WAS WRITTEN AND NEVER STORED.
+  //
+  // `mrr_cents` is a company's MRR LEVEL; `new_mrr_cents` is the new business it
+  // won this period. Every investor-facing surface reads the level — the board
+  // deck, the portfolio overview, the investor packet, fundraising readiness.
+  //
+  // `mrr_cents` had exactly TWO writers in the whole system, and both of them
+  // are the company REPORTING its own numbers: the v1 metrics API and the ingest
+  // route. Not one integration wrote it. So a company that connected Stripe —
+  // the most obvious way a SaaS company expects Foundry to learn its revenue —
+  // left the level permanently null while Foundry synced its subscriptions every
+  // hour and computed the answer on this line.
+  //
+  // It was invisible for as long as the readers substituted a fallback. Removing
+  // those substitutions this cycle is what made the gap show, which is the
+  // argument for removing them: a zero looks like an answer, and a null asks a
+  // question.
+  //
+  // Writing it introduces no new conflict. Both this path and the company's own
+  // reports already write `new_mrr_cents`, `churned_mrr_cents` and
+  // `active_users` into the same (product, date) row, last write winning. The
+  // level was the anomaly, not the rule.
   const totalMrr = activeSubs.reduce((sum, s) => sum + getSubscriptionMonthlyCents(s), 0);
   const healthRatio = newMrrCents > 0 ? parseFloat((churnedMrrCents / newMrrCents).toFixed(4)) : null;
   const activeUserCount = activeSubs.length;
 
   // ── Upsert today's metric snapshot ──────────────────────────────────────
   const columns = [
-    'new_mrr_cents', 'churned_mrr_cents', 'expansion_mrr_cents',
+    'mrr_cents', 'new_mrr_cents', 'churned_mrr_cents', 'expansion_mrr_cents',
     'contraction_mrr_cents', 'active_users',
   ];
-  const values = [newMrrCents, churnedMrrCents, expansionMrrCents, contractionMrrCents, activeUserCount];
+  const values = [totalMrr, newMrrCents, churnedMrrCents, expansionMrrCents, contractionMrrCents, activeUserCount];
 
   if (healthRatio !== null) {
     columns.push('mrr_health_ratio');
@@ -171,6 +193,10 @@ export async function handleStripeIntegrationEvent(
 ): Promise<void> {
   const today = new Date().toISOString().slice(0, 10);
 
+  // NULL + 5 IS NULL. Migration 202 made the movement columns nullable, so an
+  // accumulate-in-place increment against a row another writer created without
+  // mentioning this column would discard the event — the row is touched, the
+  // number stays unknown, and nothing reports a failure.
   if (eventType === 'customer.subscription.deleted') {
     const sub = eventData.object as StripeSubscription;
     const churnedCents = getSubscriptionMonthlyCents(sub);
@@ -179,7 +205,7 @@ export async function handleStripeIntegrationEvent(
       `INSERT INTO metric_snapshots (id, product_id, snapshot_date, churned_mrr_cents)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(product_id, snapshot_date) DO UPDATE SET
-         churned_mrr_cents = churned_mrr_cents + ?`,
+         churned_mrr_cents = COALESCE(churned_mrr_cents, 0) + ?`,
       [nanoid(), productId, today, churnedCents, churnedCents],
     );
     invalidateSignalCache(productId);
@@ -193,7 +219,7 @@ export async function handleStripeIntegrationEvent(
       `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(product_id, snapshot_date) DO UPDATE SET
-         new_mrr_cents = new_mrr_cents + ?`,
+         new_mrr_cents = COALESCE(new_mrr_cents, 0) + ?`,
       [nanoid(), productId, today, newCents, newCents],
     );
     invalidateSignalCache(productId);

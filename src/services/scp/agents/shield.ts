@@ -38,7 +38,7 @@ interface ShieldClaudeResponse {
     update_reason: string;
     draft_summary: string;
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -55,25 +55,38 @@ export class ShieldAgent extends BaseAgent {
     const { productId, companyName } = context;
 
     // ── 1. Query products for company age and lifecycle state ─────────────────
+    // `lifecycle_state` has never been a column on `products`. The column is
+    // `company_lifecycle_state`, so this query raised SQLITE_ERROR on every
+    // run and Shield's session was marked failed before it read anything.
     const productResult = await db(
-      `SELECT created_at, lifecycle_state
+      `SELECT created_at, company_lifecycle_state AS lifecycle_state
        FROM products
        WHERE id = ?`,
       [productId]
     );
 
     // ── 2. Query founders for company details ──────────────────────────────────
+    // Four columns that do not exist, on a table that does not carry
+    // `product_id`. The founder is reached through `products.owner_id`, their
+    // name is `name`, and the company's name and URL live on the product —
+    // which is where they always were, because the company IS the product.
     const founderResult = await db(
-      `SELECT full_name, email, company_name, company_url
-       FROM founders
-       WHERE product_id = ?
+      `SELECT f.name AS founder_name, f.email,
+              p.name AS company_name, p.github_repo_url AS company_url
+       FROM products p JOIN founders f ON f.id = p.owner_id
+       WHERE p.id = ?
        LIMIT 1`,
       [productId]
     );
 
     // ── 3. Query integrations for credential expiry ───────────────────────────
     const integrationsResult = await db(
-      `SELECT source, last_synced_at,
+      // WHO the credential belongs to, which is what "source" means here.
+      // `type` held a provider key on one path and a direction or a category on
+      // three others, so this named a direction as the source of a credential
+      // for every integration that came through the fabric. Migration 204
+      // retired it.
+      `SELECT provider AS source, last_synced_at,
               datetime(last_synced_at, '+90 days') as estimated_expiry
        FROM integrations
        WHERE product_id = ?
@@ -120,7 +133,6 @@ export class ShieldAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -138,7 +150,7 @@ export class ShieldAgent extends BaseAgent {
       ? (founderResult.rows[0] as Record<string, unknown>)
       : null;
     const founderContext = founderRow
-      ? `Founder: ${founderRow.full_name as string ?? 'Unknown'}. Company URL: ${founderRow.company_url as string ?? 'Not set'}.`
+      ? `Founder: ${founderRow.founder_name as string ?? 'Unknown'}. Company URL: ${founderRow.company_url as string ?? 'Not set'}.`
       : 'No founder details available.';
 
     const integrationRows = integrationsResult.rows as Record<string, unknown>[];
@@ -230,7 +242,9 @@ Return JSON only (no markdown fences):
       "draft_summary": "string"
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -252,7 +266,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -343,7 +356,13 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      // No `?? 50`. The type says `domainHealthScore?: number` — "if provided" —
+      // and a model that did not return a score has not scored the domain. 50 is
+      // the middle of the bar the dashboard draws, so an unscored agent used to
+      // render as exactly average, in amber, next to agents that were measured.
+      // Migration-free fix: the column is already nullable and run-recorder
+      // already writes null.
+      domainHealthScore: parsed.domain_health_score,
       outboundActions,
       agentMessages,
     };

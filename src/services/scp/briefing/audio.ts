@@ -9,6 +9,7 @@ import { query } from '../../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { getLatestBriefing } from '../briefing.js';
 import { getLatestCompressedBrief } from './compressed.js';
+import { log } from '../../../lib/logger.js';
 
 // ─── Init table ───────────────────────────────────────────────────────────────
 
@@ -120,21 +121,67 @@ Return ONLY valid JSON in this exact format:
     closing: string;
   }
 
-  let segments: AIScriptResponse = {
+  // WHAT THE FOUNDER HEARS WHEN THE BRIEF COULD NOT BE WRITTEN.
+  //
+  // These defaults used to be one set, and it was the confident set: "No
+  // significant signals detected in the last 24 hours. Your agents are running
+  // and monitoring your business. No immediate action items require your
+  // attention right now." Those sentences were spoken whenever the model call
+  // FAILED — a provider outage, a spend ceiling, a company Foundry may not
+  // spend for, a malformed response — because the catch below swallowed the
+  // error and returned the defaults unchanged.
+  //
+  // So the one case where Foundry had observed nothing at all was the case
+  // where it told the founder, out loud, first thing in the morning, that
+  // there was nothing to see. The stated window made it worse rather than
+  // better: "in the last 24 hours" is the sound of a search that happened.
+  //
+  // Having no observation of a thing is not an observation that the thing is
+  // absent. There is no new vocabulary here and no enum — just three sets of
+  // words for the three situations that were being described with one, and the
+  // right one chosen by which is actually true.
+  const nothingIsConnected = contextBlock.trim().length === 0;
+
+  // NOT INSTRUMENTED — the brief has nothing to read, and saying "no signals"
+  // would describe an empty pipe as a quiet one.
+  const uninstrumented: AIScriptResponse = {
     intro: `Good morning. Here is your Foundry brief for ${dateStr}.`,
-    metrics_segment: 'Your metrics are being tracked. Check the dashboard for the latest numbers.',
-    top_signal_segment: 'No significant signals detected in the last 24 hours.',
-    agent_highlight_segment: 'Your agents are running and monitoring your business.',
-    action_items_segment: 'No immediate action items require your attention right now.',
-    closing: 'That is your brief for today. Have a focused day.',
+    metrics_segment: 'I do not have metrics for you yet — nothing is reporting into Foundry so far.',
+    top_signal_segment: 'I cannot tell you what is happening in your business yet, because nothing is connected for me to watch.',
+    agent_highlight_segment: 'Once your data is connected, your agents will have something to work from.',
+    action_items_segment: 'Connecting your metrics is the thing that would make tomorrow\'s brief worth listening to.',
+    closing: 'That is everything I can tell you today.',
   };
 
-  try {
-    const aiResponse = await callSonnet(systemPrompt, userPrompt, 1024, productId);
-    const parsed = parseJSONResponse<AIScriptResponse>(aiResponse.content);
-    segments = { ...segments, ...parsed };
-  } catch {
-    // fall back to defaults
+  // UNKNOWN — the brief could not be written. Note what is NOT claimed: not
+  // that things are quiet, not that the agents are running, not that nothing
+  // needs attention.
+  const couldNotPrepare: AIScriptResponse = {
+    intro: `Good morning. This is your Foundry brief for ${dateStr}, and it is a short one.`,
+    metrics_segment: 'I was not able to prepare your brief this morning, so I am not going to tell you how things are going — I do not know.',
+    top_signal_segment: 'That means I have not checked your signals today, not that there was nothing to find.',
+    agent_highlight_segment: 'Your dashboard has the current numbers and is not affected by this.',
+    action_items_segment: 'If something needed your attention, this brief would not have caught it. Please check the dashboard today.',
+    closing: 'I will try again tomorrow.',
+  };
+
+  let segments: AIScriptResponse = nothingIsConnected ? uninstrumented : couldNotPrepare;
+
+  if (!nothingIsConnected) {
+    try {
+      const aiResponse = await callSonnet(systemPrompt, userPrompt, 1024, productId);
+      const parsed = parseJSONResponse<AIScriptResponse>(aiResponse.content);
+      // OBSERVED — the only branch entitled to say what is or is not there,
+      // because it is the only one where something looked.
+      segments = { ...segments, ...parsed };
+    } catch (err) {
+      // Not swallowed any more. A brief that silently degrades to reassurance
+      // is worse than one that is missing, and nothing was recording that this
+      // happened at all.
+      log.warn('audio_brief.script_generation_failed', {
+        productId, date: dateStr, error: (err as Error).message,
+      });
+    }
   }
 
   const full_script = [

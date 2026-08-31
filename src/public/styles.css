@@ -144,7 +144,15 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
   cursor: pointer;
   transition: all var(--transition);
   text-decoration: none;
+  /* Short labels should not break mid-phrase, so nowrap stays the default. But
+     a button is laid out by its label, and a long one then makes the button
+     wider than the screen: on a 390px viewport the day-one call to action ran
+     off the right edge with its text cut in half, and so did every other long
+     button in the product. `max-width` stops the button exceeding its
+     container; the narrow-viewport rule below lets the label wrap instead of
+     the page overflowing. */
   white-space: nowrap;
+  max-width: 100%;
 }
 .btn:hover { text-decoration: none; }
 
@@ -286,6 +294,40 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 .badge-watch    { background: rgba(120,120,180,0.15); color: #9999cc; }
 .badge-elevated { background: rgba(255,179,71,0.15);  color: var(--signal-mid); }
 .badge-critical { background: rgba(255,107,107,0.15); color: var(--signal-low); }
+
+/* The Integrations page asks for these three by name. Until they existed,
+   "Connected", "Error" and "Not connected" all rendered as the same grey pill —
+   the page's entire distinction between a working integration and a dead one
+   was a colour class that was never defined. */
+.badge-green { background: rgba(78,204,163,0.15);  color: var(--signal-high); }
+.badge-red   { background: rgba(255,107,107,0.15); color: var(--signal-low); }
+.badge-gray  { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+
+/* ─── Integrations ───────────────────────────────────────────────────────────── */
+.integration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+.integration-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+}
+.integration-card.error { border-color: rgba(255,107,107,0.35); }
+.integration-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.6rem; }
+.integration-title { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.integration-title h3 { margin: 0; font-size: 1rem; }
+.integration-icon { font-size: 1.35rem; }
+.integration-description { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 0.6rem; line-height: 1.5; }
+.integration-sync-time { font-size: 0.78rem; color: var(--text-muted); margin: 0 0 0.3rem; }
+.integration-error { font-size: 0.8rem; color: var(--signal-low); margin: 0 0 0.4rem; line-height: 1.5; }
+/* Sync attempt history. Grey when every attempt succeeded, amber when any did
+   not — a founder should not have to compare two numbers to notice. */
+.integration-sync-history { font-size: 0.78rem; color: var(--text-muted); margin: 0 0 0.6rem; line-height: 1.5; }
+.integration-sync-history-warn { color: var(--signal-mid); font-weight: 600; }
+.integration-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 
 /* ─── Risk State ─────────────────────────────────────────────────────────────── */
 .risk-badge {
@@ -1177,6 +1219,9 @@ body.chamber-mode .main-full { max-width: 700px; padding: 2.5rem 2rem 4rem; }
 .portfolio-card.tier-high .portfolio-signal-number { color: var(--signal-high); }
 .portfolio-card.tier-mid  .portfolio-signal-number { color: var(--signal-mid); }
 .portfolio-card.tier-low  .portfolio-signal-number { color: var(--signal-low); }
+/* Nothing measured this company. Muted rather than any signal colour: a tier is
+   a verdict, and there is no verdict to render. */
+.portfolio-card.tier-unmeasured .portfolio-signal-number { color: var(--text-muted); }
 
 .portfolio-product-name   { font-size: 0.9rem; font-weight: 600; color: var(--text); margin-top: 0.25rem; }
 .portfolio-product-status { font-size: 0.78rem; color: var(--text-muted); line-height: 1.4; }
@@ -1360,6 +1405,9 @@ textarea { resize: vertical; min-height: 100px; }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* A phone is where a founder asks "does anything need me?", so a button that
+     runs off the screen costs the answer. Wrapping beats overflowing. */
+  .btn               { white-space: normal; text-align: center; }
   .sidebar           { display: none; }
   .main-with-sidebar { margin-left: 0; padding: 1rem; padding-bottom: calc(56px + env(safe-area-inset-bottom) + 1rem); }
   .main-full         { padding-bottom: calc(56px + env(safe-area-inset-bottom) + 1rem); }

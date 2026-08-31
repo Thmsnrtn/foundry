@@ -6,10 +6,12 @@
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
+import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 const SRC = resolve(__dirname, '../../src');
+const ROOT = resolve(__dirname, '../..');
 
 let clientSource: string;
 let portfolioSource: string;
@@ -17,7 +19,6 @@ let experimentSource: string;
 let voiceBriefingSource: string;
 let voiceProcessorSource: string;
 let schemaSource: string;
-let tenantMiddlewareSource: string;
 let authMiddlewareSource: string;
 
 beforeAll(() => {
@@ -27,7 +28,6 @@ beforeAll(() => {
   voiceBriefingSource = readFileSync(resolve(SRC, 'services/voice/briefing.ts'), 'utf-8');
   voiceProcessorSource = readFileSync(resolve(SRC, 'services/voice/processor.ts'), 'utf-8');
   schemaSource = readFileSync(resolve(SRC, 'db/schema.sql'), 'utf-8');
-  tenantMiddlewareSource = readFileSync(resolve(SRC, 'middleware/tenant.ts'), 'utf-8');
   authMiddlewareSource = readFileSync(resolve(SRC, 'middleware/auth.ts'), 'utf-8');
 });
 
@@ -150,13 +150,21 @@ describe('Portfolio API has ownership checks', () => {
     expect(sql).toMatch(/portfolio_id\s*=\s*\?/i);
   });
 
-  it('authenticatePortfolioKey queries by api_key (not id)', () => {
-    const fn = extractFunction(portfolioSource, 'authenticatePortfolioKey');
-    expect(fn).toMatch(/api_key\s*=\s*\?/);
-  });
-
-  it('portfolio API keys use prefixed format (pfk_*)', () => {
-    expect(portfolioSource).toMatch(/pfk_/);
+  it('mints no portfolio API key, because nothing accepts one', () => {
+    // These two tests used to pin `authenticatePortfolioKey` — which queried
+    // `api_key = ?` against a PLAINTEXT column — and the `pfk_` prefix format.
+    // RT02-10 asked for the key to be hashed. Reading it for that fix found
+    // that `authenticatePortfolioKey` HAD NO CALLER: the key was minted, stored
+    // in the clear, returned to the portfolio owner, and opened nothing. An API
+    // key handed to a customer says a door exists; there was no door. So the
+    // credential is gone rather than hashed, and migration 200 nulls the ones
+    // already written.
+    //
+    // Comments stripped: the paragraph above names both the function and the
+    // prefix, and a test that greps source must not read its own explanation.
+    const code = stripComments(portfolioSource, { lineComments: true });
+    expect(code).not.toMatch(/authenticatePortfolioKey/);
+    expect(code).not.toMatch(/pfk_/);
   });
 });
 
@@ -289,17 +297,16 @@ describe('decision_patterns is intentionally unscoped (anonymized)', () => {
 
 describe('Cross-company data contract enforcement', () => {
 
-  it('tenant middleware verifies product ownership via getProductByOwner', () => {
-    expect(tenantMiddlewareSource).toMatch(/getProductByOwner/);
-  });
-
-  it('tenant middleware returns 404 for non-owned products (not 403)', () => {
-    expect(tenantMiddlewareSource).toMatch(/404/);
-    // After the ownership check (rows.length === 0), there should be a 404 response
-    const ownershipBlock = tenantMiddlewareSource.match(
-      /rows\.length\s*===\s*0[\s\S]*?c\.json\([^)]+,\s*404\s*\)/
-    );
-    expect(ownershipBlock).toBeTruthy();
+  // THESE TWO READ A FILE THAT DID NOT RUN. `middleware/tenant.ts` was mounted
+  // on no router; routes scope ownership inline, one query at a time. Asserting
+  // that the unmounted file was well written told a reader that tenancy was
+  // enforced centrally, and could not have failed whatever the live routes did.
+  // The executing version lives in `tests/unit/tenancy-isolation.test.ts`,
+  // which requests another founder's company and reads the answer;
+  // `check-tenant-scope.mjs` is the ratchet across every route.
+  it('every route module scopes reads by owner — the ratchet, not a source string', () => {
+    expect(existsSync(resolve(SRC, 'middleware/tenant.ts'))).toBe(false);
+    expect(existsSync(resolve(ROOT, 'scripts/check-tenant-scope.mjs'))).toBe(true);
   });
 
   it('auth middleware resolves founder from Clerk JWT (not from query params)', () => {

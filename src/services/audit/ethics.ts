@@ -87,7 +87,7 @@ Be rigorous but fair. Most B2B SaaS products will score well. Only flag genuine 
   const response = await callOpus(
     'You are an AI ethics evaluator for SaaS products. Be rigorous but proportionate.',
     prompt,
-    4096
+    4096, productId
   );
 
   const assessment = parseJSONResponse<EthicalAssessment>(response.content);
@@ -135,7 +135,7 @@ Return JSON: {"steps": ["specific step 1", "step 2"], "priority": "immediate|soo
   const response = await callOpus(
     'You are an ethics remediation advisor. Be specific and practical.',
     prompt,
-    1024
+    1024, productId
   );
 
   return parseJSONResponse<{ steps: string[]; priority: string; estimated_effort: string }>(response.content);

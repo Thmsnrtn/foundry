@@ -75,8 +75,15 @@ describe('Stripe money idempotency', () => {
     expect(key(calls.subCreate[0])).toBeTruthy();
     expect(key(calls.checkoutCreate[0])).toBeTruthy();
     expect(key(calls.portalCreate[0])).toBeTruthy();
+    // pauseSubscription and cancelSubscription are BOTH subscription updates
+    // now: cancelling sets cancel_at_period_end rather than terminating, so the
+    // founder keeps the period they paid for. subscriptions.cancel is no longer
+    // called at all, which is why nothing here reads calls.subCancel.
+    expect(calls.subUpdate.length).toBe(2);
     expect(key(calls.subUpdate[0])).toBeTruthy();
-    expect(key(calls.subCancel[0])).toBeTruthy();
+    expect(key(calls.subUpdate[1])).toBeTruthy();
+    expect(calls.subCancel.length, 'immediate cancellation forfeits paid time').toBe(0);
+    expect((calls.subUpdate[1][1] as Record<string, unknown>).cancel_at_period_end).toBe(true);
   });
 
   it('reuses the SAME key across retries of one logical call (retry dedups)', async () => {

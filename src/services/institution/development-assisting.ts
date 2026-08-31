@@ -17,7 +17,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { recordReconstructionClaim } from './reconstruction.js';
+import { getReconstructionClaims, recordReconstructionClaim } from './reconstruction.js';
 import { enterResponsibilityAssisting } from './responsibility-assisting.js';
 import { getCurrentDevelopmentAuthority, isPathWithinAuthority } from './development-authority.js';
 import { decideDevelopmentDisposition } from './development-disposition.js';
@@ -178,16 +178,52 @@ export async function executeDevelopmentChange(input: {
 }
 
 /**
+ * Whether the repository's ACTUAL change set is exactly what was planned.
+ *
+ * Everything else in this file verifies the intended file. That is necessary
+ * and not sufficient: it cannot see a second file that also changed. A
+ * generator that rewrites a lockfile, a formatter that reflows a neighbour, a
+ * command with a side effect nobody documented — each produces a correct target
+ * file and an unauthorised repository, and every check downstream would pass.
+ *
+ * Deliberately pure. The kernel does not run `git`, spawn processes, or read
+ * the working tree; the caller observes what changed and hands the list in.
+ * That keeps the institution free of process execution and makes the rule
+ * itself trivially testable.
+ *
+ * Unexpected mutation is failure even when the target file is perfect and every
+ * test passes.
+ */
+export function verifyDiffScope(input: {
+  observedChangedPaths: string[]; plannedPaths: string[];
+}): { withinScope: boolean; unexpected: string[] } {
+  const planned = new Set(input.plannedPaths.map((p) => p.replace(/^\.\//, '')));
+  const unexpected = input.observedChangedPaths
+    .map((p) => p.replace(/^\.\//, ''))
+    .filter((p) => p.length > 0 && !planned.has(p))
+    .sort();
+  return { withinScope: unexpected.length === 0, unexpected };
+}
+
+/**
  * Verify the change independently.
  *
- * Two separate things must both hold: the bytes on disk are re-read and
- * compared against what was authorized (never inferred from a successful
- * write), and the required checks must appear among independently recorded
- * development observations. A check nobody ran is `unresolved`, not a pass.
+ * Three separate things must hold: the bytes on disk are re-read and compared
+ * against what was authorized (never inferred from a successful write), the
+ * repository's actual change set must contain nothing beyond the planned path
+ * when the caller supplies one, and the required checks must appear among
+ * independently recorded development observations. A check nobody ran is
+ * `unresolved`, not a pass.
  */
 export async function verifyDevelopmentChange(input: {
   productId: string; planId: string; repositoryRoot: string; expectedContent: string;
-}): Promise<{ diffVerified: boolean; verificationStatus: 'passed' | 'failed' | 'unresolved'; evidence: string[] }> {
+  /** What actually changed in the working tree, observed by the caller. When
+   * omitted, diff scope is simply not established — it is never assumed clean. */
+  observedChangedPaths?: string[];
+}): Promise<{
+  diffVerified: boolean; verificationStatus: 'passed' | 'failed' | 'unresolved';
+  evidence: string[]; unexpectedPaths: string[];
+}> {
   const row = (await query(
     'SELECT * FROM development_change_plans WHERE id=? AND product_id=?', [input.planId, input.productId],
   )).rows[0] as Record<string, unknown> | undefined;
@@ -195,9 +231,20 @@ export async function verifyDevelopmentChange(input: {
 
   const responsibilityId = String(row.responsibility_id);
   const onDisk = readRepositoryFile(input.repositoryRoot, String(row.target_path));
-  const diffVerified = onDisk !== null && repositoryChangeId({
+  const bytesMatch = onDisk !== null && repositoryChangeId({
     productId: input.productId, responsibilityId, path: String(row.target_path), content: onDisk,
   }) === String(row.change_id) && onDisk === input.expectedContent;
+
+  // A correct target file in an incorrectly-changed repository is not a
+  // verified change. When the caller observed the working tree, anything it
+  // saw beyond the planned path fails the diff outright.
+  const scope = input.observedChangedPaths === undefined
+    ? { withinScope: true, unexpected: [] as string[] }
+    : verifyDiffScope({
+      observedChangedPaths: input.observedChangedPaths,
+      plannedPaths: [String(row.target_path)],
+    });
+  const diffVerified = bytesMatch && scope.withinScope;
 
   // The verification that must hold is the one bound to the consent that
   // authorized this change, not whatever a current grant happens to say.
@@ -228,15 +275,19 @@ export async function verifyDevelopmentChange(input: {
     evidence.push(String(observation.id));
   }
 
-  const verificationStatus = required.some((check) => results.get(check) === 'failed') ? 'failed'
-    : required.every((check) => results.get(check) === 'passed') ? 'passed'
-      : 'unresolved';
+  // An out-of-scope mutation is a failed verification, not merely an
+  // unverified diff — passing checks must never be able to certify a
+  // repository that changed in ways nobody authorized.
+  const verificationStatus = !scope.withinScope ? 'failed'
+    : required.some((check) => results.get(check) === 'failed') ? 'failed'
+      : required.every((check) => results.get(check) === 'passed') ? 'passed'
+        : 'unresolved';
 
   await query(
     'UPDATE development_change_plans SET diff_verified=?,verification_status=?,verification_evidence_json=? WHERE id=? AND product_id=?',
     [diffVerified ? 1 : 0, verificationStatus, JSON.stringify(evidence), input.planId, input.productId],
   );
-  return { diffVerified, verificationStatus, evidence };
+  return { diffVerified, verificationStatus, evidence, unexpectedPaths: scope.unexpected };
 }
 
 /**
@@ -307,6 +358,76 @@ export interface FounderDevelopmentActivity {
   permitted: Array<{ what: string; where: string[]; until: string }>;
   /** Only changes with a material state — quiet successes stay quiet. */
   changes: Array<{ what: string; detail: string }>;
+  /** How Foundry's changes have held up over everything it has recorded, or
+   *  null when it has recorded nothing. Never a rate, never a score. */
+  record: { confirmed: number; failed: number; unconfirmed: number } | null;
+}
+
+/**
+ * THE TRACK RECORD, FROM THE CLAIMS RATHER THAN THE PLANS.
+ *
+ * `recordDevelopmentOutcome` wrote every outcome twice: once to
+ * `development_change_plans.outcome_status`, and once as a
+ * `development_change_outcome` reconstruction claim with the verification
+ * evidence attached. The column was read; the claim was read by nothing. That
+ * is a permanent dual-write with a dead side — Foundry paying to record what it
+ * learned about its own changes and never once consulting it.
+ *
+ * The two sides get different jobs rather than one getting deleted. The plans
+ * answer "what happened to this change", which needs a path and a status. The
+ * claims answer "how has this held up", which needs provenance and staleness —
+ * and staleness matters here, because a verification from four months ago is not
+ * current evidence that Foundry's changes hold. `getReconstructionClaims`
+ * applies that; the column cannot.
+ *
+ * Counts, not a rate. Three verified successes out of four is not "75%
+ * reliable", and a percentage invites exactly the reading the evidence cannot
+ * support. `unresolved` is carried as its own number rather than folded into
+ * either side, because "nobody checked" is not a failure and is not a success.
+ *
+ * STALENESS IS ASYMMETRIC, deliberately. `getReconstructionClaims` exists, in
+ * its own words, so "an old positive claim" does not "silently remain current":
+ * a check that passed before its evidence expired is no longer current evidence
+ * that Foundry's change holds, so it falls back to unconfirmed. A check that
+ * FAILED is not retired the same way — a failure is a thing that happened, and
+ * letting time turn it into "nobody knows" would be Foundry improving its own
+ * record by waiting. The asymmetry only ever runs against Foundry.
+ */
+// A QUESTION ASKED OF THIS FUNCTION AND ANSWERED AGAINST THE ASKER, recorded so
+// it is not re-opened. `recordDevelopmentOutcome` writes a claim only when the
+// plan carries verification evidence — `evidence.length ? … : null` — so a
+// change applied and then checked by NOTHING has no claim and lands in no
+// bucket here, while the founder reads "Across everything I have changed and
+// recorded". Counting from `development_change_plans` instead looks like the
+// obvious repair and is wrong.
+//
+// A ROLLBACK MUTATES THE PLAN AND CANNOT TOUCH THE CLAIM. `outcome_status` is
+// current state; the claim is append-only history. Tallying plans would let a
+// rolled-back failure vanish from the record — Foundry improving its own track
+// record by undoing something — which is the exact asymmetry the rest of this
+// module exists to prevent. The two are counted separately on purpose, and
+// `development-assisting.test.ts` says so in as many words.
+//
+// So the total is what was changed AND RECORDED, which is what the sentence
+// says. The unmeasured case is not hidden: an applied change nothing checked
+// carries `outcome_status = 'unresolved'` on its plan and appears on the
+// founder's page as work in progress, not as a settled outcome.
+async function developmentRecord(
+  productId: string, now: Date,
+): Promise<FounderDevelopmentActivity['record']> {
+  const claims = (await getReconstructionClaims(productId, now))
+    .filter((claim) => claim.predicate === 'development_change_outcome');
+  if (!claims.length) return null;
+
+  const tally = { confirmed: 0, failed: 0, unconfirmed: 0 };
+  for (const claim of claims) {
+    const outcome = (claim.value as { outcome?: unknown } | null)?.outcome;
+    const current = claim.epistemicStatus === 'known' || claim.epistemicStatus === 'inferred';
+    if (outcome === 'verified_failure') tally.failed++;
+    else if (outcome === 'verified_success' && current) tally.confirmed++;
+    else tally.unconfirmed++;
+  }
+  return tally;
 }
 
 /**
@@ -315,7 +436,9 @@ export interface FounderDevelopmentActivity {
  * even when nothing happened, because permission is not something to discover
  * after the fact.
  */
-export async function getFounderDevelopmentActivity(productId: string): Promise<FounderDevelopmentActivity> {
+export async function getFounderDevelopmentActivity(
+  productId: string, now: Date = new Date(),
+): Promise<FounderDevelopmentActivity> {
   const grants = (await query(
     `SELECT a.allowed_change_class,a.allowed_path_prefixes_json,a.expires_at,r.title
      FROM autonomy_consents a JOIN institutional_responsibilities r ON r.id=a.responsibility_id
@@ -339,7 +462,10 @@ export async function getFounderDevelopmentActivity(productId: string): Promise<
     documentation: 'update documentation',
   };
 
+  const record = await developmentRecord(productId, now);
+
   return {
+    record,
     permitted: grants.map((grant) => ({
       what: CHANGE_CLASS_LABELS[String(grant.allowed_change_class)] ?? String(grant.allowed_change_class),
       where: JSON.parse(String(grant.allowed_path_prefixes_json)) as string[],

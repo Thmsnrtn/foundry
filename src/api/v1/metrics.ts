@@ -5,6 +5,7 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
+import { logger } from '../../services/logger.js';
 import { requireScope } from '../middleware/auth.js';
 import type { ApiAuthEnv } from '../middleware/auth.js';
 
@@ -35,7 +36,7 @@ metricsApi.get('/snapshots', requireScope('agents:read'), async (c) => {
 });
 
 // POST /snapshots — create new snapshot
-metricsApi.post('/snapshots', requireScope('agents:read'), async (c) => {
+metricsApi.post('/snapshots', requireScope('metrics:write'), async (c) => {
   const productId = c.get('productId');
 
   let body: Record<string, unknown>;
@@ -91,6 +92,16 @@ metricsApi.post('/snapshots', requireScope('agents:read'), async (c) => {
       ]
     );
 
+    // A FORECAST THAT HAS COME DUE IS SCORED HERE TOO. This door writes the MRR
+    // LEVEL — the quantity `forecast_checkpoints` predicts — and the
+    // reconciliation was wired only at the founder's own ingest token, so a
+    // company integrating through the documented API with issued credentials
+    // never had a prediction checked. Never fails the report.
+    const { reconcileForecastsFromSnapshot } = await import(
+      '../../services/scp/forecasting/runway.js'
+    );
+    await reconcileForecastsFromSnapshot(productId, mrr_cents as number | null | undefined);
+
     const result = await query(
       `SELECT * FROM metric_snapshots WHERE product_id = ? AND snapshot_date = ?`,
       [productId, snapshot_date]
@@ -101,7 +112,14 @@ metricsApi.post('/snapshots', requireScope('agents:read'), async (c) => {
   }
 });
 
-// GET /health — current data quality score and alerts
+// GET /health — how fresh this company's reported numbers are.
+//
+// This said "current data quality score and alerts" and returned neither. No
+// score was computed, and `active_alerts` could only ever be empty: the
+// validator that writes alerts had no caller, and the rules it would check
+// against had no way to be created. Four dead layers under one live promise
+// to API consumers. Retired in migration 167; what is left is what this
+// endpoint can actually observe.
 metricsApi.get('/health', requireScope('agents:read'), async (c) => {
   const productId = c.get('productId');
 
@@ -114,25 +132,55 @@ metricsApi.get('/health', requireScope('agents:read'), async (c) => {
       [productId]
     );
 
-    // Active data quality alerts
-    const alertsResult = await query(
-      `SELECT id, alert_type, severity, message, created_at FROM data_quality_alerts
-       WHERE product_id = ? AND resolved_at IS NULL
-       ORDER BY created_at DESC`,
-      [productId]
-    );
+    const latestSnapshot = (snapshotResult.rows[0] ?? null) as
+      { snapshot_date?: string; mrr_cents?: number | null; active_users?: number | null;
+        churn_rate?: number | null } | null;
 
-    const latestSnapshot = snapshotResult.rows[0] ?? null;
-    const alerts = alertsResult.rows;
+    // IS_STALE WAS COMPUTED FROM THE ROW'S EXISTENCE, NOT FROM ITS DATE.
+    //
+    // The comment beside it said `snapshot_date` was the whole answer, and then
+    // the expression read `latestSnapshot == null`. A daily job inserts an
+    // EMPTY placeholder snapshot for every active product, so a row exists for
+    // today for every company from its first day — which made `is_stale`
+    // structurally false, for everyone, forever, no matter how long ago a
+    // number was last reported.
+    //
+    // Two different questions were also wearing one name. "When was the last
+    // snapshot?" and "does that snapshot contain anything?" are not the same,
+    // and the placeholder is precisely the row where the answers diverge.
+    const ageDays = latestSnapshot?.snapshot_date == null
+      ? null
+      : Math.floor(
+        (Date.now() - new Date(`${latestSnapshot.snapshot_date}T00:00:00Z`).getTime())
+        / 86_400_000);
+
+    // The snapshot job runs daily at midnight UTC, so yesterday's date is
+    // normal operation and anything older than that means a day was missed.
+    const STALE_AFTER_DAYS = 2;
+
+    const hasMeasurements = latestSnapshot != null && (
+      latestSnapshot.mrr_cents != null
+      || latestSnapshot.active_users != null
+      || latestSnapshot.churn_rate != null
+    );
 
     return c.json({
       data: {
         latest_snapshot: latestSnapshot,
-        active_alerts: alerts,
-        alert_count: alerts.length,
+        snapshot_age_days: ageDays,
+        // Null when there is no snapshot at all: absent data is not stale data,
+        // and an integrator reading `is_stale === false` should not be told
+        // "current" about a company that has never reported anything.
+        is_stale: ageDays == null ? null : ageDays > STALE_AFTER_DAYS,
+        stale_after_days: STALE_AFTER_DAYS,
+        // Whether the newest snapshot carries any measurement at all. The
+        // placeholder carries none.
+        has_measurements: hasMeasurements,
       },
     });
   } catch (err) {
+    logger.error(`v1 metrics health failed: ${err instanceof Error ? err.message : String(err)}`,
+      { productId });
     return c.json({ error: 'Failed to fetch health data' }, 500);
   }
 });

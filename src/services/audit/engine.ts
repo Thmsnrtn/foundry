@@ -98,7 +98,7 @@ export async function runAudit(
     analysis_results: pipelineOutput,
     prior_audit: priorAudit,
     key_file_excerpts: keyFileExcerpts,
-  }, wisdomContext);
+  }, product.id, wisdomContext);
 
   // Persist
   await report(7, 'Finalizing audit & queuing fixes');
@@ -214,6 +214,11 @@ function analyzeConfiguration(tree: TreeEntry[], files: Map<string, string>) {
   return { env_vars: envVars, config_files: configFiles, deployment_manifests: deployFiles, has_production_config: deployFiles.length > 0 };
 }
 
+/** Exposed for the test that holds `auth_protected` to being a measurement. */
+export function __analyzeRoutesForTest(tree: TreeEntry[], files: Map<string, string>) {
+  return analyzeRoutes(tree, files);
+}
+
 function analyzeRoutes(tree: TreeEntry[], files: Map<string, string>) {
   const apiRoutes: string[] = [];
   const pageRoutes: string[] = [];
@@ -224,8 +229,24 @@ function analyzeRoutes(tree: TreeEntry[], files: Map<string, string>) {
       if (route?.startsWith('/api')) apiRoutes.push(route); else if (route) pageRoutes.push(route);
     }
   }
-  const middleware = [...files.entries()].filter(([p]) => p.includes('middleware')).map(([p]) => p);
-  return { api_routes: apiRoutes, page_routes: pageRoutes, middleware, auth_protected: middleware.some(([, c]) => c.includes('auth')) };
+  // A HARDCODED FALSE WEARING THE SHAPE OF A MEASUREMENT.
+  //
+  // `middleware` is a list of PATHS, and this destructured each path as if it
+  // were a `[path, content]` entry: `c` was the second CHARACTER of a filename,
+  // so `c.includes('auth')` was false for every repository ever audited. The
+  // scorer puts the answer in the prompt as "Auth protected: false", so every
+  // customer's repository was described to the model as having unprotected
+  // routes — a claim, produced by a line that never looked at anything.
+  //
+  // Null when there is no middleware file to read. This detector can say "a
+  // middleware file mentions auth" and cannot say more, and "no middleware
+  // files were fetched" is not evidence that routes are unprotected.
+  const middlewareFiles = [...files.entries()].filter(([p]) => p.includes('middleware'));
+  const middleware = middlewareFiles.map(([p]) => p);
+  const authProtected = middlewareFiles.length === 0
+    ? null
+    : middlewareFiles.some(([, c]) => /auth/i.test(c));
+  return { api_routes: apiRoutes, page_routes: pageRoutes, middleware, auth_protected: authProtected };
 }
 
 function analyzeBilling(files: Map<string, string>) {

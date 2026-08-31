@@ -1,0 +1,36 @@
+-- =============================================================================
+-- Migration 167: retire the data-quality chain nothing could reach
+--
+-- `GET /v1/metrics/health` is a live, scoped, public API endpoint. Its comment
+-- says it returns "current data quality score and alerts". It returned neither:
+-- no score was computed, and `active_alerts` could only ever be `[]`.
+--
+-- Four layers, all dead, under one live promise:
+--
+--   `createValidationRule`     no caller anywhere, so no rule can exist
+--   `validateMetricSnapshot`   no caller, and no rules to check against
+--   `data_quality_alerts`      written only by that validator
+--   `metric_validation_rules`  written only by that rule creator
+--
+-- The metric ingest path writes `metric_snapshots` and never validated them.
+-- So the endpoint advertised a capability to API consumers that nothing in the
+-- system could produce — PUBLIC CLAIMS MAY NOT OUTRUN EVIDENCE, and this one
+-- had outrun it since the day it shipped.
+--
+-- WIRING IT WAS THE WRONG FIX. There are no validation rules and no way to
+-- create one, so making the chain reachable would mean inventing thresholds
+-- Foundry has no basis for and then reporting a company's numbers as
+-- implausible against them. That is manufacturing a sense rather than having
+-- one. The same owner decision that retired peer review applies: do not build
+-- three layers to justify a field.
+--
+-- The endpoint keeps what it can actually observe — how fresh the company's
+-- last snapshot is — and stops claiming the rest.
+--
+-- If data-quality validation is wanted later it starts from the company
+-- stating what a plausible value looks like, the way every other observation
+-- in this system starts, and it will need a route a founder can reach.
+-- =============================================================================
+
+DROP TABLE IF EXISTS data_quality_alerts;
+DROP TABLE IF EXISTS metric_validation_rules;

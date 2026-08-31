@@ -17,7 +17,7 @@ async function setupCanonicalLedgers() {
   await query("INSERT OR IGNORE INTO action_executions (id,product_id,action_type,integration,payload_json,status,verify_status) VALUES ('out1','p1','test','test','{}','completed','passed'),('out_other','p2','test','test','{}','completed','passed'),('out_unverified','p1','test','test','{}','completed','pending')");
 }
 
-beforeAll(async () => { await setupCanonicalLedgers(); for (const file of ['102_responsibility_transfer.sql','103_responsibility_disposition.sql','104_responsibility_reference_provenance.sql']) for (const sql of splitSqlStatements(readFileSync(resolve(__dirname, `../../src/db/migrations/${file}`), 'utf8'))) await query(sql); });
+beforeAll(async () => { await setupCanonicalLedgers(); for (const file of ['102_responsibility_transfer.sql','103_responsibility_disposition.sql','104_responsibility_reference_provenance.sql','105_responsibility_discovery.sql']) for (const sql of splitSqlStatements(readFileSync(resolve(__dirname, `../../src/db/migrations/${file}`), 'utf8'))) await query(sql); });
 beforeEach(async () => executeRaw('DELETE FROM responsibility_transitions;\nDELETE FROM institutional_responsibilities;'));
 
 const step = (id: string, from: Parameters<typeof transitionResponsibility>[0]['from'], to: Parameters<typeof transitionResponsibility>[0]['to'], extra: Record<string,string> = {}) =>
@@ -25,7 +25,7 @@ const step = (id: string, from: Parameters<typeof transitionResponsibility>[0]['
 
 describe('responsibility transfer truth', () => {
   it('starts unknown and advances one evidence-bearing rung at a time', async () => {
-    let r = await createResponsibility({ productId: 'p1', title: '  Reconcile customer billing  ', capability:'general' });
+    let r = await createResponsibility({ productId: 'p1', title: '  Reconcile customer billing  ', capability:'general', discoveryEvidenceRef:'signal_event:sig1' });
     expect(r).toMatchObject({ title: 'Reconcile customer billing', state: 'unknown', authorityRef: null });
     r = await step(r.id, 'unknown', 'visible');
     r = await step(r.id, 'visible', 'understood');
@@ -39,7 +39,7 @@ describe('responsibility transfer truth', () => {
   });
 
   it('refuses skipped promotions and promotion without evidence, authority, or outcome', async () => {
-    const r = await createResponsibility({ productId: 'p1', title: 'Close support loops', capability:'general' });
+    const r = await createResponsibility({ productId: 'p1', title: 'Close support loops', capability:'general', discoveryEvidenceRef:'signal_event:sig1' });
     await expect(step(r.id, 'unknown', 'understood')).rejects.toThrow(/cannot_skip/);
     await expect(transitionResponsibility({ productId:'p1', responsibilityId:r.id, from:'unknown', to:'visible', reason:'seen', actorRef:'owner' })).rejects.toThrow(/evidence_required/);
     await step(r.id, 'unknown', 'visible'); await step(r.id, 'visible', 'understood'); await step(r.id, 'understood', 'shadowing');
@@ -49,7 +49,7 @@ describe('responsibility transfer truth', () => {
   });
 
   it('allows explicit demotion, clears authority, and rejects stale concurrent transitions', async () => {
-    let r = await createResponsibility({ productId: 'p1', title: 'Publish weekly report', capability:'general' });
+    let r = await createResponsibility({ productId: 'p1', title: 'Publish weekly report', capability:'general', discoveryEvidenceRef:'signal_event:sig1' });
     r = await step(r.id, 'unknown', 'visible'); r = await step(r.id, 'visible', 'understood');
     r = await step(r.id, 'understood', 'shadowing'); r = await step(r.id, 'shadowing', 'assisting', { authorityRef:'autonomy_consent:cons1' });
     const stale = transitionResponsibility({ productId:'p1', responsibilityId:r.id, from:'assisting', to:'operating', evidenceRef:'signal_event:sig1', authorityRef:'autonomy_consent:cons1', reason:'first', actorRef:'system' });
@@ -60,13 +60,35 @@ describe('responsibility transfer truth', () => {
     expect(r).toMatchObject({ state:'visible', authorityRef:null, outcomeRef:null });
   });
 
+  // A RESPONSIBILITY MAY NOT APPEAR FROM NOWHERE. This constructor used to
+  // insert with no `discovery_evidence_ref` at all, so an institutional
+  // obligation could exist with nothing to point at when a founder asks why
+  // Foundry thinks their company owes it. The reference is checked against a
+  // real signal of this company, not trusted as a string — a TypeScript
+  // parameter is erased at runtime and would refuse nothing.
+  it('refuses a responsibility whose discovery evidence names nothing real', async () => {
+    for (const ref of ['', 'not-a-reference', 'autonomy_consent:cons1', 'signal_event:missing']) {
+      await expect(createResponsibility({
+        productId: 'p1', title: 'Appeared from nowhere', capability: 'general',
+        discoveryEvidenceRef: ref,
+      })).rejects.toThrow(/discovery evidence/);
+    }
+    // Another company's observation is not this company's evidence.
+    await expect(createResponsibility({
+      productId: 'p1', title: 'Borrowed provenance', capability: 'general',
+      discoveryEvidenceRef: 'signal_event:sig_other',
+    })).rejects.toThrow(/no signal of this company/);
+    expect(Number(((await query(
+      'SELECT COUNT(*) n FROM institutional_responsibilities')).rows[0] as Record<string,number>).n)).toBe(0);
+  });
+
   it('never crosses product boundaries', async () => {
-    const r = await createResponsibility({ productId:'p1', title:'Protect tenant truth', capability:'general' });
+    const r = await createResponsibility({ productId:'p1', title:'Protect tenant truth', capability:'general', discoveryEvidenceRef:'signal_event:sig1' });
     await expect(transitionResponsibility({ productId:'p2', responsibilityId:r.id, from:'unknown', to:'visible', evidenceRef:'signal_event:sig1', reason:'attack', actorRef:'caller' })).rejects.toThrow(/not found/);
   });
 
   it('rejects fabricated, cross-tenant, stale, wrong-kind, and immature references', async () => {
-    const r = await createResponsibility({ productId:'p1', title:'Ground every claim', capability:'general' });
+    const r = await createResponsibility({ productId:'p1', title:'Ground every claim', capability:'general', discoveryEvidenceRef:'signal_event:sig1' });
     for (const evidenceRef of ['signal_event:missing', 'signal_event:sig_other', 'autonomy_consent:cons1']) {
       await expect(transitionResponsibility({ productId:'p1', responsibilityId:r.id, from:'unknown', to:'visible', evidenceRef, reason:'attack', actorRef:'caller' })).rejects.toThrow(/evidence_invalid/);
     }

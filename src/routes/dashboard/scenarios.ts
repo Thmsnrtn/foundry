@@ -11,13 +11,51 @@ import { getLayoutContext } from './_shared.js';
 import { query } from '../../db/client.js';
 import {
   generateScenariosForProduct,
+  getForecastAccuracy,
   getLatestScenarios,
 } from '../../services/scp/forecasting/runway.js';
 import { getActiveTargetForecasts } from '../../services/scp/forecasting/targets.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
+import { log } from '../../lib/logger.js';
+import {
+  getFinancialPosition, stateFinancialPosition, isStale, STALE_AFTER_DAYS,
+  type FinancialPosition,
+} from '../../services/financial/position.js';
 
 export const scenarios = new Hono<AuthEnv>();
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** The two numbers Foundry cannot see. Dollars, because that is what a person
+ *  reads off a bank statement, and a date, because a balance is a fact about a
+ *  moment rather than a standing property of the company. */
+function financialPositionForm(current: FinancialPosition | null) {
+  const cash = current ? (current.cashOnHandCents / 100).toFixed(2) : '';
+  const burn = current ? (current.monthlyBurnCents / 100).toFixed(2) : '';
+  const asOf = current ? current.asOfDate.slice(0, 10) : '';
+  return html`
+    <form method="POST" action="/scenarios/financial-position"
+          style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:flex-end;">
+      <label style="font-size:0.75rem;color:var(--text-muted);">
+        Cash on hand ($)<br/>
+        <input type="number" name="cash_on_hand" step="0.01" min="0" required value="${cash}"
+               style="margin-top:0.25rem;padding:0.4rem 0.6rem;" />
+      </label>
+      <label style="font-size:0.75rem;color:var(--text-muted);">
+        Monthly burn ($)<br/>
+        <input type="number" name="monthly_burn" step="0.01" min="0" required value="${burn}"
+               style="margin-top:0.25rem;padding:0.4rem 0.6rem;" />
+      </label>
+      <label style="font-size:0.75rem;color:var(--text-muted);">
+        True as of<br/>
+        <input type="date" name="as_of_date" required value="${asOf}"
+               style="margin-top:0.25rem;padding:0.4rem 0.6rem;" />
+      </label>
+      <button type="submit" class="btn btn-primary" style="font-size:0.8rem;">
+        Save and model
+      </button>
+    </form>`;
+}
 
 function fmtCents(cents: number): string {
   const dollars = cents / 100;
@@ -122,10 +160,35 @@ scenarios.get('/scenarios', async (c) => {
 
   const productId = ctx.productId;
 
-  const [scenarioList, targetForecasts] = await Promise.all([
+  const [scenarioList, targetForecasts, position, accuracy] = await Promise.all([
     getLatestScenarios(productId),
     getActiveTargetForecasts(productId),
+    getFinancialPosition(productId),
+    getForecastAccuracy(productId),
   ]);
+
+  // ── Nothing to model ───────────────────────────────────────────────────────
+  //
+  // Runway used to be computed from cash = 12 x the AI spend cap, which
+  // defaults to $50/month. The simulation ran, the bands rendered, and none of
+  // it was about this company's money. A cash balance is a fact about a bank
+  // account and the founder is the only source, so the page asks.
+  if (position === null) {
+    const content = html`
+      <h1 style="margin:0 0 1rem;">Scenario Modeling</h1>
+      <div class="card" style="padding:1.5rem;margin-bottom:1.5rem;">
+        <h2 style="margin:0 0 0.5rem;font-size:1rem;">Runway needs two numbers only you have</h2>
+        <p style="color:var(--text-dim);font-size:0.85rem;line-height:1.6;margin:0 0 1rem;">
+          Foundry can see what your customers pay you. It cannot see your bank balance or
+          what you spend, and it will not guess: a survival forecast built on a guess looks
+          exactly like one built on your books. Tell it these two, and the scenarios below
+          are about your company.
+        </p>
+        ${financialPositionForm(null)}
+      </div>
+    `;
+    return c.html(dashboardLayout(ctx, content));
+  }
 
   // ── Empty state ──────────────────────────────────────────────────────────────
   if (scenarioList.length === 0) {
@@ -213,6 +276,45 @@ scenarios.get('/scenarios', async (c) => {
       </div>
     </div>
 
+    <!-- What the simulation was given -->
+    <div class="card" style="padding:1rem 1.25rem;margin-bottom:1.5rem;">
+      <div style="font-size:0.78rem;color:var(--text-dim);line-height:1.6;">
+        Modelled from the position you stated: <strong>${fmtCents(position.cashOnHandCents)}</strong>
+        on hand, <strong>${fmtCents(position.monthlyBurnCents)}</strong> a month out, as of
+        ${position.asOfDate}${position.daysOld > 0 ? ` — ${position.daysOld} days ago` : ''}.
+        ${isStale(position) ? html`<span style="color:#ffb347;font-weight:600;">
+          That is more than ${STALE_AFTER_DAYS} days old, so these projections start from a
+          balance you have since spent or grown.</span>` : ''}
+      </div>
+      <details style="margin-top:0.75rem;">
+        <summary style="font-size:0.78rem;color:var(--text-muted);cursor:pointer;">Update it</summary>
+        <div style="margin-top:0.75rem;">${financialPositionForm(position)}</div>
+      </details>
+    </div>
+
+    <!-- How right these have been -->
+    <div class="card" style="padding:1rem 1.25rem;margin-bottom:1.5rem;">
+      <div style="font-size:0.78rem;color:var(--text-dim);line-height:1.6;">
+        ${accuracy.resolved === 0 ? html`
+          <strong>No forecast has come due yet.</strong>
+          ${accuracy.pending > 0
+            ? `${accuracy.pending} prediction${accuracy.pending > 1 ? 's are' : ' is'} written down and waiting for the month to arrive.`
+            : 'Predictions are written down at one, three and six months so they can be checked against what actually happens.'}
+        ` : html`
+          <strong>Past forecasts have been out by a median of
+          ${accuracy.median_abs_variance_pct}%</strong> across ${accuracy.resolved}
+          prediction${accuracy.resolved > 1 ? 's' : ''} that have come due${
+            accuracy.median_signed_variance_pct === null ? '' :
+            accuracy.median_signed_variance_pct > 0
+              ? ' — running high, so the numbers above are probably optimistic'
+              : accuracy.median_signed_variance_pct < 0
+                ? ' — running low, so the numbers above are probably conservative'
+                : ''}.
+          ${accuracy.pending > 0 ? `${accuracy.pending} more are waiting.` : ''}
+        `}
+      </div>
+    </div>
+
     <!-- Scenario Cards -->
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.875rem;">Runway Scenarios</div>
     <div style="display:flex;flex-wrap:wrap;gap:1rem;margin-bottom:2rem;">
@@ -257,7 +359,8 @@ scenarios.get('/scenarios', async (c) => {
 
 // ─── POST /scenarios/regenerate — Trigger regeneration ────────────────────────
 
-scenarios.post('/scenarios/regenerate', async (c) => {
+scenarios.post('/scenarios/regenerate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'scenarios', 'Scenario Modeling', undefined, c);
 
@@ -267,6 +370,51 @@ scenarios.post('/scenarios/regenerate', async (c) => {
     await generateScenariosForProduct(ctx.productId);
   } catch (err) {
     console.error('[scenarios] Failed to generate scenarios:', err);
+  }
+
+  return c.redirect('/scenarios');
+});
+
+// ─── POST /scenarios/financial-position — the founder states cash and burn ────
+//
+// Same capability as regenerating, because that is what it does: this is the
+// only input to the runway model that Foundry cannot observe, and stating it is
+// what makes a forecast possible at all.
+scenarios.post('/scenarios/financial-position',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'scenarios', 'Scenario Modeling', undefined, c);
+  if (!ctx.productId) return c.redirect('/scenarios');
+
+  const form = await c.req.parseBody();
+  const cash = Number(form.cash_on_hand);
+  const burn = Number(form.monthly_burn);
+  const asOf = String(form.as_of_date ?? '').slice(0, 10);
+
+  // REFUSED, NOT CORRECTED. A clamped typo becomes a plausible number, and this
+  // one drives what a founder is told about surviving. The amount and date
+  // rules are also triggers in migration 181, so a second caller cannot skip
+  // them; this check is here so the person gets a page rather than a 500.
+  if (!Number.isFinite(cash) || !Number.isFinite(burn) || cash < 0 || burn < 0
+      || !/^\d{4}-\d{2}-\d{2}$/.test(asOf) || asOf > new Date().toISOString().slice(0, 10)) {
+    return c.redirect('/scenarios?error=position_invalid');
+  }
+
+  await stateFinancialPosition({
+    productId: ctx.productId,
+    cashOnHandDollars: cash,
+    monthlyBurnDollars: burn,
+    asOfDate: asOf,
+    statedBy: founder.id,
+  });
+
+  // Model it immediately: the founder just answered the question that was
+  // blocking the page, and sending them back to an empty one would be odd.
+  try {
+    await generateScenariosForProduct(ctx.productId);
+  } catch (err) {
+    log.error('scenarios: generation failed after position stated', {
+      productId: ctx.productId, error: (err as Error)?.name ?? 'Error' });
   }
 
   return c.redirect('/scenarios');

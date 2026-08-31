@@ -54,9 +54,18 @@ export async function getNextAction(
     }
   }
 
-  // 3. Critical active stressor
+  // 3. Critical active stressor — THE OLDEST ONE, not an arbitrary one.
+  //
+  // This took `LIMIT 1` with no ORDER BY, so a company with three critical
+  // stressors was told to act on whichever row the database returned first.
+  // "What needs you next" is the whole point of this function; picking it by
+  // storage order is picking it by nothing. The one that has been open longest
+  // is the one that has been waiting.
   const criticalStressors = await query(
-    "SELECT id, stressor_name FROM stressor_history WHERE product_id = ? AND severity = 'critical' AND status = 'active' LIMIT 1",
+    `SELECT id, stressor_name FROM stressor_history
+      WHERE product_id = ? AND severity = 'critical' AND status = 'active'
+      ORDER BY identified_at ASC
+      LIMIT 1`,
     [productId],
   );
   if (criticalStressors.rows.length > 0) {

@@ -9,18 +9,52 @@ import { getProductDNA } from '../../wisdom/dna.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * WHAT FOUNDRY IS WORTH TO A COMPANY, AND WHETHER ANYBODY MEASURED IT.
+ *
+ * `/roi` is a mounted, authenticated page headlined "Value Delivered This
+ * Month". It reported **$0** and an action rate of **0%** for every company,
+ * always, because `recommendation_outcomes` has no writer:
+ * `recordRecommendation` and `markActedOn` are exported from
+ * `roi/outcome-tracker.ts` and called from nowhere.
+ *
+ * A founder reading that concludes Foundry delivered nothing. That is a claim
+ * about Foundry's own performance drawn from an absent measurement path, and it
+ * is the commercially sharpest version of this defect in the repository — a
+ * product telling its customer it was worthless, on no evidence.
+ *
+ * NOT HALF-WIRED. The obvious move is to call `recordRecommendation` from every
+ * agent run, and it would be worse than doing nothing: recommendations would
+ * accumulate while `markActedOn` still had no caller, turning an UNMEASURED
+ * action rate into a MEASURED 0%. A loop that records its denominator and never
+ * its numerator produces a confident wrong answer, which is harder to notice
+ * than an honest blank. Wiring the other half needs a real answer to "what
+ * counts as acting on a recommendation", and that is recorded as the next step
+ * rather than guessed at here.
+ */
 export interface MonthlyROI {
   month: string;
   churn_prevented_dollars: number;
   expansion_captured_dollars: number;
   cost_avoided_dollars: number;
+  /** SEPARATE FROM MEASURED DOLLARS, and never added to them. This is
+   *  `acted_on x 2 hours x $200` — two invented coefficients — and it used to
+   *  be summed into `total_value_dollars` beside real outcome values, so an
+   *  assumption and a measurement arrived as one number. */
   time_saved_dollars: number;
-  total_value_dollars: number;
+  /** Measured value only: churn prevented + expansion captured + cost avoided.
+   *  NULL when no recommendation has ever been recorded — nothing was valued,
+   *  which is not the same as nothing being worth anything. */
+  total_value_dollars: number | null;
   recommendations_made: number;
-  action_rate_pct: number;
-  outcome_rate_pct: number;
+  /** NULL until a recommendation exists to act on. */
+  action_rate_pct: number | null;
+  /** NULL until an outcome has been measured either way. */
+  outcome_rate_pct: number | null;
   platform_cost_dollars: number | null;
   roi_multiple: number | null;
+  /** Why the numbers above are missing, when they are. */
+  measurement: 'measured' | 'no_recommendations_recorded';
 }
 
 const DEFAULT_HOURLY_RATE = 200;
@@ -69,11 +103,13 @@ export async function computeMonthlyROI(productId: string, month: string): Promi
   const timeSavedHours = recommendationsActedOn * HOURS_SAVED_PER_ACTION;
   const timeSavedDollars = timeSavedHours * hourlyRate;
 
-  // Totals and rates
-  const totalValue = churnPrevented + expansionCaptured + costAvoided + timeSavedDollars;
-  const actionRatePct = recommendationsMade > 0 ? (recommendationsActedOn / recommendationsMade) * 100 : 0;
+  // MEASURED VALUE ONLY. `timeSavedDollars` is an assumption and is reported
+  // beside this rather than inside it.
+  const anyRecorded = recommendationsMade > 0;
+  const totalValue = anyRecorded ? churnPrevented + expansionCaptured + costAvoided : null;
+  const actionRatePct = anyRecorded ? (recommendationsActedOn / recommendationsMade) * 100 : null;
   const measuredOutcomes = positiveOutcomes + negativeOutcomes;
-  const outcomeRatePct = measuredOutcomes > 0 ? (positiveOutcomes / measuredOutcomes) * 100 : 0;
+  const outcomeRatePct = measuredOutcomes > 0 ? (positiveOutcomes / measuredOutcomes) * 100 : null;
 
   // Look up platform cost from roi_monthly_summaries (if previously set by billing)
   const existingResult = await query(
@@ -82,9 +118,19 @@ export async function computeMonthlyROI(productId: string, month: string): Promi
   );
   const existingRow = (existingResult.rows[0] as Record<string, unknown> | undefined);
   const platformCost = (existingRow?.platform_cost_dollars as number | null) ?? null;
-  const roiMultiple = platformCost && platformCost > 0 ? totalValue / platformCost : null;
+  const roiMultiple = platformCost && platformCost > 0 && totalValue !== null
+    ? totalValue / platformCost : null;
 
-  // Upsert into roi_monthly_summaries
+  // Upsert into roi_monthly_summaries.
+  //
+  // THE CACHE STORES ZEROS; THE READER DECIDES WHAT THEY MEAN. Those columns
+  // are NOT NULL DEFAULT 0 and the table already carries
+  // `recommendations_made`, which is exactly the discriminator between "we
+  // measured nothing" and "we measured nothing worth anything". So the null is
+  // not persisted — it is re-derived on read, in one place, by both the live
+  // path and the cached path. Changing the schema to hold the null would put
+  // the same distinction in two places and let them disagree.
+  const zero = (v: number | null) => v ?? 0;
   const existingId = (existingRow as Record<string, unknown> | undefined);
   const summaryId = nanoid();
   await query(
@@ -114,9 +160,9 @@ export async function computeMonthlyROI(productId: string, month: string): Promi
     [
       summaryId, productId, month,
       churnPrevented, expansionCaptured, costAvoided,
-      timeSavedHours, timeSavedDollars, totalValue,
-      recommendationsMade, recommendationsActedOn, actionRatePct,
-      positiveOutcomes, negativeOutcomes, outcomeRatePct,
+      timeSavedHours, timeSavedDollars, zero(totalValue),
+      recommendationsMade, recommendationsActedOn, zero(actionRatePct),
+      positiveOutcomes, negativeOutcomes, zero(outcomeRatePct),
       platformCost, roiMultiple,
     ],
   );
@@ -133,6 +179,7 @@ export async function computeMonthlyROI(productId: string, month: string): Promi
     outcome_rate_pct: outcomeRatePct,
     platform_cost_dollars: platformCost,
     roi_multiple: roiMultiple,
+    measurement: anyRecorded ? 'measured' : 'no_recommendations_recorded',
   };
 }
 
@@ -147,7 +194,8 @@ export async function getROISummary(
 ): Promise<{
   current_month: MonthlyROI;
   trailing_3_months: MonthlyROI[];
-  all_time_value: number;
+  /** NULL when no month recorded a recommendation. */
+  all_time_value: number | null;
   all_time_roi_multiple: number | null;
   top_performing_agent: string;
   headline: string;
@@ -181,10 +229,17 @@ export async function getROISummary(
         expansion_captured_dollars: (r.expansion_captured_dollars as number) ?? 0,
         cost_avoided_dollars: (r.cost_avoided_dollars as number) ?? 0,
         time_saved_dollars: (r.time_saved_dollars as number) ?? 0,
-        total_value_dollars: (r.total_value_dollars as number) ?? 0,
+        // A cached month with no recommendations is the same blank as a live
+        // one: the row exists because the summary was computed, not because
+        // anything was measured.
+        total_value_dollars: ((r.recommendations_made as number) ?? 0) > 0
+          ? ((r.total_value_dollars as number) ?? 0) : null,
         recommendations_made: (r.recommendations_made as number) ?? 0,
-        action_rate_pct: (r.action_rate_pct as number) ?? 0,
-        outcome_rate_pct: (r.outcome_rate_pct as number) ?? 0,
+        action_rate_pct: ((r.recommendations_made as number) ?? 0) > 0
+          ? ((r.action_rate_pct as number) ?? 0) : null,
+        outcome_rate_pct: (r.outcome_rate_pct as number | null) ?? null,
+        measurement: ((r.recommendations_made as number) ?? 0) > 0
+          ? 'measured' : 'no_recommendations_recorded',
         platform_cost_dollars: (r.platform_cost_dollars as number | null) ?? null,
         roi_multiple: (r.roi_multiple as number | null) ?? null,
       });
@@ -194,18 +249,22 @@ export async function getROISummary(
     }
   }
 
-  // All-time value from summaries
+  // All-time value from summaries — over the months that actually recorded a
+  // recommendation. Summing every month gives 0 across a row of blanks and
+  // prints it as an all-time figure.
   const allTimeResult = await query(
     `SELECT COALESCE(SUM(total_value_dollars), 0) AS total,
-            COALESCE(SUM(platform_cost_dollars), 0) AS cost
+            COALESCE(SUM(platform_cost_dollars), 0) AS cost,
+            COALESCE(SUM(recommendations_made), 0) AS recs
      FROM roi_monthly_summaries
      WHERE product_id = ?`,
     [productId],
   );
   const allTimeRow = (allTimeResult.rows[0] as Record<string, number>) ?? {};
-  const allTimeValue = allTimeRow.total ?? 0;
+  const allTimeValue = (allTimeRow.recs ?? 0) > 0 ? (allTimeRow.total ?? 0) : null;
   const allTimeCost = allTimeRow.cost ?? 0;
-  const allTimeRoiMultiple = allTimeCost > 0 ? allTimeValue / allTimeCost : null;
+  const allTimeRoiMultiple = allTimeCost > 0 && allTimeValue !== null
+    ? allTimeValue / allTimeCost : null;
 
   // Top performing agent (most positive-outcome value)
   const agentResult = await query(
@@ -225,12 +284,18 @@ export async function getROISummary(
   const fmtDollars = (v: number) =>
     v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${v.toFixed(0)}`;
   let headline: string;
-  if (current.total_value_dollars > 0 && current.roi_multiple) {
-    headline = `Foundry has delivered ${fmtDollars(current.total_value_dollars)} in value this month — ${current.roi_multiple.toFixed(1)}× your investment`;
-  } else if (current.total_value_dollars > 0) {
-    headline = `Foundry has delivered ${fmtDollars(current.total_value_dollars)} in value this month`;
+  const value = current.total_value_dollars;
+  if (value !== null && value > 0 && current.roi_multiple) {
+    headline = `Foundry has delivered ${fmtDollars(value)} in value this month — ${current.roi_multiple.toFixed(1)}× your investment`;
+  } else if (value !== null && value > 0) {
+    headline = `Foundry has delivered ${fmtDollars(value)} in value this month`;
+  } else if (value !== null) {
+    headline = 'No recommendation has produced a measured outcome this month';
   } else {
-    headline = 'Foundry is tracking recommendations — value will appear as outcomes are measured';
+    // "Foundry is tracking recommendations" was not true: nothing writes
+    // `recommendation_outcomes`, so nothing is being tracked and the sentence
+    // promised a measurement that was not coming.
+    headline = 'Outcome capture is not wired up, so there is nothing to value yet';
   }
 
   return {

@@ -8,6 +8,7 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import {
   getWisdomSummary,
   getDecisionOutcomes,
@@ -226,7 +227,8 @@ agentWisdomRoutes.get('/agents/wisdom', async (c) => {
 
 // ─── POST /agents/wisdom/synthesize — Run Synthesis ──────────────────────────
 
-agentWisdomRoutes.post('/agents/wisdom/synthesize', async (c) => {
+agentWisdomRoutes.post('/agents/wisdom/synthesize',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Wisdom Layer', undefined, c);
 

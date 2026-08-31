@@ -35,6 +35,8 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 
 let app: Hono;
+/** The transport itself, so a test can mount it behind a narrower key. */
+let mcpApiRef: Hono;
 
 async function rpc(method: string, params?: Record<string, unknown>, id: number | null = 1): Promise<{ status: number; body: Record<string, unknown> | null }> {
   const res = await app.request('/mcp', {
@@ -66,11 +68,19 @@ beforeAll(async () => {
   );
 
   const { mcpApi } = await import('../../src/api/v1/mcp.js');
+  mcpApiRef = mcpApi as unknown as Hono;
   app = new Hono();
-  // Stand-in for apiKeyAuth: the key fixes the tenant.
+  // Stand-in for apiKeyAuth: the key fixes the tenant AND carries scopes.
+  //
+  // It used to set only the first two, which is exactly how this surface went
+  // its whole life without a scope check — the fixture modelled an auth
+  // middleware that resolves no permissions, so nothing here could notice that
+  // the endpoint consulted none. A stand-in that is weaker than the thing it
+  // stands in for tests a system nobody runs.
   app.use('*', async (c, next) => {
     c.set('productId' as never, 'mcp_p' as never);
     c.set('userId' as never, 'mcp_f' as never);
+    c.set('scopes' as never, ['agents:read', 'agents:write'] as never);
     await next();
   });
   app.route('/mcp', mcpApi);
@@ -154,5 +164,70 @@ describe('the loop over MCP', () => {
     expect(toolText(r.body!)).toContain('not found');
     const foreign = await query("SELECT status FROM decisions WHERE id='mcp_dforeign'", []);
     expect((foreign.rows[0] as Record<string, unknown>).status).toBe('pending');
+  });
+});
+
+// =============================================================================
+// Scope, on the one surface that never had any.
+//
+// This endpoint sat behind `apiKeyAuth` and nothing else for its whole life.
+// The middleware resolved scopes and this transport never consulted them, so a
+// key issued to read metrics could resolve a decision and record a new one.
+//
+// `tools/call` is a single route carrying twenty different consequences, which
+// is why the check is per TOOL. An endpoint-level scope would have to be the
+// widest of them, and that is precisely how a read key ends up able to write.
+// =============================================================================
+
+describe('a narrow key over MCP', () => {
+  /** The same transport, reached with a key that may only read. */
+  async function readOnlyRpc(method: string, params?: Record<string, unknown>) {
+    const narrow = new Hono();
+    narrow.use('*', async (c, next) => {
+      c.set('productId' as never, 'mcp_p' as never);
+      c.set('userId' as never, 'mcp_f' as never);
+      c.set('scopes' as never, ['agents:read'] as never);
+      await next();
+    });
+    narrow.route('/mcp', mcpApiRef);
+    const res = await narrow.request('/mcp', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    });
+    const text = await res.text();
+    return { status: res.status, body: text ? JSON.parse(text) as Record<string, unknown> : null };
+  }
+
+  it('may read', async () => {
+    const r = await readOnlyRpc('tools/call', { name: 'foundry_letter', arguments: {} });
+    expect(r.status).toBe(200);
+  });
+
+  it('may not resolve or record a decision', async () => {
+    for (const name of ['foundry_resolve_decision', 'foundry_record_decision']) {
+      const r = await readOnlyRpc('tools/call', { name, arguments: {} });
+      expect(r.status, `${name} must be refused for a read-only key`).toBe(403);
+      expect(JSON.stringify(r.body)).toContain('agents:write');
+    }
+    // And nothing happened as a side effect of being refused.
+    const still = await query("SELECT status FROM decisions WHERE id='mcp_dforeign'", []);
+    expect((still.rows[0] as Record<string, unknown>).status).toBe('pending');
+  });
+
+  it('is not offered tools it cannot call', async () => {
+    // Advertising a tool and then refusing it teaches a client that the server
+    // is unreliable, when in fact the key is narrower than the server.
+    const listed = await readOnlyRpc('tools/list');
+    const names = ((listed.body!.result as Record<string, unknown>).tools as Array<{ name: string }>)
+      .map((t) => t.name);
+    expect(names).toContain('foundry_letter');
+    expect(names).not.toContain('foundry_resolve_decision');
+    expect(names).not.toContain('foundry_record_decision');
+  });
+
+  it('treats a tool it has never heard of as writing, not as harmless', async () => {
+    const r = await readOnlyRpc('tools/call', { name: 'foundry_something_new', arguments: {} });
+    expect(r.status).toBe(403);
   });
 });

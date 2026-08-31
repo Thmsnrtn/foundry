@@ -1,0 +1,87 @@
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+
+import { beforeAll, describe, expect, it } from 'vitest';
+import { declaredRoutes, mountPrefixes } from '../helpers/declared-routes.js';
+import { runMigrations } from '../../src/db/migrate.js';
+
+// =============================================================================
+// NO MUTATING ROUTE ANSWERS A STRANGER.
+//
+// `check-route-guards.mjs` baselines 112 "unguarded mutating routes" — routes
+// carrying no explicit per-route capability check. That is a STATIC count, and
+// it cannot see the authentication middleware that stands in front of them, so
+// it reads far more alarming than the product is.
+//
+// This asks the question the other way, by firing an unauthenticated request at
+// every mutating route the source declares and checking what actually comes
+// back. It could not be asked before: `src/index.ts` started a server at module
+// scope, so no test could import the app.
+//
+// The route list is DERIVED FROM SOURCE at test time rather than written down,
+// so a route added tomorrow is covered by this tomorrow. A list would only ever
+// prove things about the day somebody last edited it.
+// =============================================================================
+
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+let app: { request: (path: string, init?: RequestInit) => Promise<Response> };
+let routes: string[];
+
+beforeAll(async () => {
+  // Migrations first. Without them a route that reads the database throws for
+  // want of a table, and "threw" is not the same fact as "refused" — the
+  // companion test learned this by reporting three public routes as broken when
+  // they were merely unmigrated.
+  await runMigrations();
+  app = (await import('../../src/index.js')).default as typeof app;
+  const declared = declaredRoutes();
+  // A sub-router whose mount prefix could not be resolved is a route this test
+  // would silently skip, which is the failure it exists to prevent.
+  expect(declared.unresolved, 'a route could not be resolved to a path').toEqual([]);
+  routes = declared.routes.filter((r) => MUTATING.has(r.method)).map((r) => r.path);
+}, 60_000);
+
+describe('a request with no session', () => {
+  it('probes routers at the prefix they are mounted at', () => {
+    // `app.route('/agents', agentRoutes)` makes that router's `.get('/:name')`
+    // into `/agents/:name`. The population originally prefixed only the
+    // `/api/v1` sub-routers, so every route in the two routers mounted at a
+    // prefix carried a path no request would ever use — and probing a path that
+    // does not exist passes every assertion here for the wrong reason.
+    const prefixes = [...mountPrefixes().values()].sort();
+    expect(prefixes, 'a router mounted at a prefix is missing from the population')
+      .toEqual(['/agents', '/board']);
+    expect(routes.some((p) => p.startsWith('/agents/'))).toBe(true);
+  });
+
+  it('includes the routes declared in index.ts, not only those in routers', () => {
+    // `POST /webhooks/stripe` is mutating, sessionless and money-handling, and
+    // it is declared in `index.ts` rather than under `src/routes/` — so it sat
+    // outside this population entirely until the helper learned to read that
+    // file. It refuses an unsigned request with 400 "Missing signature", which
+    // is its own check rather than anything above it.
+    expect(routes).toContain('/webhooks/stripe');
+  });
+
+  it('finds a substantial mutating surface to check', () => {
+    // A regex that quietly matched nothing would make every assertion below
+    // vacuous, which is the failure mode of a test like this.
+    expect(routes.length).toBeGreaterThan(100);
+  });
+
+  it('is refused by every one of them', async () => {
+    const answered: Array<{ route: string; status: number }> = [];
+    for (const route of routes) {
+      let status: number;
+      try {
+        status = (await app.request(route, { method: 'POST' })).status;
+      } catch {
+        // A handler that throws has not served the stranger either, and the
+        // gateway of last resort is the framework's own error response.
+        continue;
+      }
+      if (status >= 200 && status < 300) answered.push({ route, status });
+    }
+    expect(answered, 'a mutating route answered a request with no session').toEqual([]);
+  }, 300_000);
+});

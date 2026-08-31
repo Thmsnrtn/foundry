@@ -23,10 +23,44 @@ const byRank = (a: AutopilotMode, b: AutopilotMode): AutopilotMode => (RANK[a] <
 
 // Category → the loudest autonomy the platform permits, whatever the founder
 // sets. Absent → 'act' (no platform ceiling; the ladder alone governs).
+// ABSENCE MEANT MAXIMUM AUTONOMY, and that is why `customer_success` slipped
+// through: `category` is open text with no CHECK, so a capability nobody
+// remembered to list here reached 'act' by default. The default is stated
+// below rather than left implicit; a capability that reaches outside the
+// company belongs in this table, and the way to find out that it is missing
+// should not be a founder's customer receiving mail.
 const PLATFORM_CAP: Record<string, AutopilotMode> = {
-  // Outreach reaches third parties — capped at Suggest until a sender-of-record
-  // + suppression posture is configured (a human eye on every send).
+  // Outreach reaches third parties — capped at Suggest, permanently by owner
+  // decision rather than pending a prerequisite.
+  //
+  // This used to read "until a sender-of-record + suppression posture is
+  // configured". Both now exist: a per-company verified sending identity, a
+  // suppression list, a per-customer weekly budget and a 30-day dedup. Asked
+  // whether the cap should therefore lift, the owner's answer was no, and the
+  // reasoning is worth keeping next to the value: THE SENDING IDENTITY MAKES A
+  // SEND SAFE, NOT SUPERVISED. It puts the founder's domain, reputation and
+  // CAN-SPAM liability behind the message — which is exactly why nobody but a
+  // human should decide that the message goes.
+  //
+  // The visible consequence, and it is deliberate: an auto-executing
+  // send_email playbook can never fire on its own, and the Playbooks page says
+  // so on the row rather than showing a badge that means nothing.
   outreach: 'suggest',
+  // Customer success reaches third parties too, and by the same post. It was
+  // absent from this table, so it defaulted to 'act': a per-person churn score
+  // selected which named customers got an email, daily, with nobody in the
+  // loop.
+  //
+  // CORRECTION TO AN EARLIER VERSION OF THIS NOTE, which called that score
+  // "assigned by a model". It is not. `computeCustomerHealth` derives it
+  // deterministically from `customer_events` and `last_active_at`
+  // (`services/customers/intelligence.ts`), and the cap does not rest on the
+  // score's provenance. It rests on what a send costs the founder: their
+  // domain, their reputation, their liability — identical to outreach, which
+  // is capped for exactly that reason. The asymmetry was an omission rather
+  // than a decision, and nothing about this category was ever argued to be
+  // different.
+  customer_success: 'suggest',
   // Any future money-touching capability caps here, permanently (immutable:
   // never auto-move money without explicit, recent, revocable consent).
   billing: 'shadow',

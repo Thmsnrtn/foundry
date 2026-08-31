@@ -10,3 +10,11 @@ coverage/
 .wrangler/
 .claude/
 foundry.db
+
+# Fixtures planted by `gates-fail-when-they-should` to prove each gate refuses
+# the defect it exists for. The test deletes them; a run that is KILLED does not,
+# and one such leftover was committed and reached the branch — where the
+# public-claims audit read it as a thirteenth AI agent against a pricing claim
+# of twelve. The test writes and removes them regardless of this rule; what this
+# stops is an interrupted run becoming a commit.
+_gate_fixture_*.ts

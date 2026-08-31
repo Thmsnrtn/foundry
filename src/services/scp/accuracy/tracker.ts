@@ -5,6 +5,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { likeContains } from '../../../lib/sql-like.js';
 
 export interface PredictionInput {
   productId: string;
@@ -104,11 +105,18 @@ export async function measurePendingPredictions(
         if (match) {
           const customerId = match[1];
           const result = await query(
+            // 'completed' is not in `outbound_actions.status`; the value
+            // for an action that ran is 'executed'. This matched nothing, so
+            // every prediction of this kind scored as unfulfilled.
+            // `customerId` is parsed out of a prediction's criteria text and
+            // searched for inside a JSON blob; a wildcard in it would count
+            // actions belonging to any customer at all. The literal
+            // '%expansion%' beside it is the query's own pattern and stays.
             `SELECT COUNT(*) as cnt FROM outbound_actions
-             WHERE product_id = ? AND status = 'completed'
-               AND (parameters LIKE ? OR parameters LIKE ?)
+             WHERE product_id = ? AND status = 'executed'
+               AND (parameters_json LIKE ? ESCAPE '\\' OR parameters_json LIKE ?)
              LIMIT 1`,
-            [productId, `%${customerId}%`, '%expansion%']
+            [productId, likeContains(customerId), '%expansion%']
           );
           const cnt = (result.rows[0] as Record<string, unknown>)?.cnt as number ?? 0;
           outcome = cnt > 0 ? 'correct' : 'incorrect';
@@ -150,16 +158,24 @@ export async function measurePendingPredictions(
         if (expMatch) {
           const experimentId = expMatch[1];
           const expectedWinner = winnerMatch ? winnerMatch[1] : null;
+          // `hypotheses` has neither `winner_variant` nor `title`. Both live
+          // where the winner is decided — on `experiments`, which is also what
+          // `experiment_id=` in the criteria names. Querying the hypothesis for
+          // the experiment's result raised on every prediction of this kind, so
+          // none of them was ever scored.
+          // `experimentId` is parsed out of a prediction's criteria text, so
+          // it is whatever was written there — including a `%`, which would
+          // match the first experiment of any name.
           const result = await query(
-            `SELECT status, winner_variant FROM hypotheses
-             WHERE product_id = ? AND (id = ? OR title LIKE ?)
+            `SELECT status, winner FROM experiments
+             WHERE product_id = ? AND (id = ? OR name LIKE ? ESCAPE '\\')
              LIMIT 1`,
-            [productId, experimentId, `%${experimentId}%`]
+            [productId, experimentId, likeContains(experimentId)]
           );
           if (result.rows.length > 0) {
             const expRow = result.rows[0] as Record<string, unknown>;
             const status = expRow.status as string;
-            const winner = expRow.winner_variant as string | null;
+            const winner = expRow.winner as string | null;
             if (status === 'concluded' || status === 'completed') {
               if (expectedWinner && winner) {
                 outcome = winner === expectedWinner ? 'correct' : 'incorrect';

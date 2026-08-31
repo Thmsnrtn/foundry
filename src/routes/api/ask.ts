@@ -22,6 +22,7 @@ import { callOpus, callSonnet } from '../../services/ai/client.js';
 import { buildConversationContext, formatContextForPrompt } from '../../services/conversation/context.js';
 import { classifyIntent, buildSystemPromptForIntent } from '../../services/conversation/intent.js';
 import type { ConversationIntent } from '../../types/index.js';
+import { likeContains } from '../../lib/sql-like.js';
 
 export const apiAskRoutes = new Hono<AuthEnv>();
 
@@ -64,7 +65,7 @@ apiAskRoutes.post('/api/ask', validateBody(askSchema), async (c) => {
 
   const [ctx, classified] = await Promise.all([
     buildConversationContext(body.product_id, product.name as string, product.market_category as string | null),
-    classifyIntent(question),
+    classifyIntent(question, body.product_id),
   ]);
 
   const systemPrompt = buildSystemPromptForIntent(classified.intent);
@@ -76,11 +77,13 @@ apiAskRoutes.post('/api/ask', validateBody(askSchema), async (c) => {
   const maxTokens = classified.intent === 'scenario' ? 1024 : 512;
 
   try {
-    const response = await callFn(systemPrompt, userPrompt, maxTokens);
+    const response = await callFn(systemPrompt, userPrompt, maxTokens, body.product_id);
 
     // Build data points for UI
     const dataPoints: Array<{ label: string; value: string }> = [];
-    if (ctx.signal) dataPoints.push({ label: 'Signal', value: String(ctx.signal) });
+    // `!== null`, not truthiness: a measured Signal of 0 is a real and alarming
+    // number, and it was the one score this line would not show.
+    if (ctx.signal !== null) dataPoints.push({ label: 'Signal', value: String(ctx.signal) });
     if (ctx.metrics.healthRatio !== null) dataPoints.push({ label: 'MRR Health', value: ctx.metrics.healthRatio.toFixed(2) });
     if (ctx.stressors.length > 0) dataPoints.push({ label: 'Stressors', value: `${ctx.stressors.length} active` });
     if (ctx.pendingDecisions.length > 0) dataPoints.push({ label: 'Decisions', value: `${ctx.pendingDecisions.length} pending` });
@@ -106,11 +109,11 @@ apiAskRoutes.post('/api/threads', validateBody(createThreadSchema), async (c) =>
 
   const [ctx, classified] = await Promise.all([
     buildConversationContext(body.product_id, product.name as string, product.market_category as string | null),
-    classifyIntent(firstMsg),
+    classifyIntent(firstMsg, body.product_id),
   ]);
 
   // Generate thread title from first message
-  const title = await generateThreadTitle(firstMsg);
+  const title = await generateThreadTitle(firstMsg, body.product_id);
 
   const threadId = nanoid();
   const contextSnapshot = {
@@ -239,7 +242,7 @@ apiAskRoutes.post('/api/threads/:id/messages', validateBody(threadMessageSchema)
 
   const [ctx, classified] = await Promise.all([
     buildConversationContext(thread.product_id as string, product.name as string, product.market_category as string | null),
-    classifyIntent(body.message.trim()),
+    classifyIntent(body.message.trim(), thread.product_id as string),
   ]);
 
   const reply = await processMessage(
@@ -331,7 +334,7 @@ async function processMessage(
   const actionsTaken: Array<{ type: string; description: string; entity_id?: string }> = [];
 
   if (intent === 'action') {
-    const classified = await classifyIntent(message);
+    const classified = await classifyIntent(message, productId);
     if (classified.actionable && classified.action_type) {
       const action = await executeAction(classified, productId, founderId);
       if (action) actionsTaken.push(action);
@@ -351,7 +354,8 @@ async function processMessage(
   // Build Anthropic-style messages array
   const anthropicMessages = [
     ...history.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
-    { role: 'user' as const, content: isFirstMessage ? message : `[Current context: Signal ${ctx.signal}/100, ${ctx.riskState.toUpperCase()}]\n\n${message}` },
+    { role: 'user' as const, content: isFirstMessage ? message
+      : `[Current context: Signal ${ctx.signal === null ? 'not enough data yet' : `${ctx.signal}/100`}, ${ctx.riskState.toUpperCase()}]\n\n${message}` },
   ];
 
   // 4. Call Claude
@@ -372,7 +376,7 @@ async function processMessage(
   } catch {
     // Fall back to single-turn
     try {
-      const r = await callFn(fullSystem, message, maxTokens);
+      const r = await callFn(fullSystem, message, maxTokens, productId);
       content = r.content.trim();
       modelUsed = r.model;
       tokensUsed = r.usage.output_tokens;
@@ -385,7 +389,8 @@ async function processMessage(
   const dataPoints: Array<{ label: string; value: string }> = [];
   if (ctx.signal) dataPoints.push({ label: 'Signal', value: String(ctx.signal) });
   if (ctx.metrics.healthRatio !== null) dataPoints.push({ label: 'Health Ratio', value: ctx.metrics.healthRatio.toFixed(2) });
-  if (ctx.mrr) dataPoints.push({ label: 'MRR', value: `$${ctx.mrr.total.toLocaleString()}` });
+  if (ctx.mrr?.total != null) dataPoints.push({ label: 'MRR', value: `$${ctx.mrr.total.toLocaleString()}` });
+  if (ctx.mrr?.net_new != null) dataPoints.push({ label: 'Net new MRR this period', value: `$${ctx.mrr.net_new.toLocaleString()}` });
   if (ctx.stressors.length > 0) dataPoints.push({ label: 'Active Stressors', value: String(ctx.stressors.length) });
 
   // 6. Save assistant message
@@ -439,10 +444,15 @@ async function executeAction(
 
     case 'resolve_stressor': {
       if (!classified.entities.stressor_name) return null;
+      // The name comes from a MODEL reading a founder's message, and the row
+      // this finds is the row that gets marked resolved. A `%` in that name —
+      // "the 20% churn stressor", or a message that talks the classifier into
+      // answering `%` — matched the company's first active stressor, whatever
+      // it was. The wildcards belong to the query, not to the value.
       const result = await query(
         `SELECT id FROM stressor_history WHERE product_id = ? AND status = 'active'
-         AND stressor_name LIKE ? LIMIT 1`,
-        [productId, `%${classified.entities.stressor_name}%`],
+         AND stressor_name LIKE ? ESCAPE '\\' LIMIT 1`,
+        [productId, likeContains(classified.entities.stressor_name)],
       );
       if (result.rows.length === 0) return null;
       const stressorId = (result.rows[0] as Record<string, string>).id;
@@ -488,13 +498,13 @@ async function executeAction(
 
 // ─── Thread Title Generation ──────────────────────────────────────────────────
 
-async function generateThreadTitle(firstMessage: string): Promise<string> {
+async function generateThreadTitle(firstMessage: string, productId: string): Promise<string> {
   if (firstMessage.length <= 60) return firstMessage;
   try {
     const r = await callSonnet(
       'Generate a concise title (max 60 chars) for a business conversation starting with this message. Return only the title, no quotes.',
       firstMessage,
-      64,
+      64, productId,
     );
     return r.content.trim().slice(0, 60);
   } catch {

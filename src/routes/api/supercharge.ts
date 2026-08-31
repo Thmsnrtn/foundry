@@ -22,7 +22,7 @@ import { generateActionDraft, approveDraft, rejectDraft, getPendingDrafts, gener
 import { generatePredictions, getActivePredictions, recordPredictionOutcome } from '../../services/intelligence/predictive.js';
 
 // Founder Network
-import { upsertNetworkProfile, findMatches, proposeIntroduction, respondToIntroduction, submitPeerReview, joinCohortGroup } from '../../services/network/matchmaking.js';
+import { upsertNetworkProfile, findMatches, proposeIntroduction, respondToIntroduction, joinCohortGroup } from '../../services/network/matchmaking.js';
 
 // AI Calibration
 import { getFounderAIProfile, updateAIProfile, recordOutputFeedback } from '../../services/ai/calibration.js';
@@ -120,7 +120,12 @@ superchargeApiRoutes.post('/api/products/:id/integrations/:integrationId/sync', 
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const result = await runSync(integrationId);
+  // `:id` was checked above and `:integrationId` was not, so the integration
+  // is loaded inside the scope of the product that WAS checked. An integration
+  // belonging to another company is not found here, exactly as if it did not
+  // exist.
+  const result = await runSync(integrationId, { onBehalfOfProduct: productId });
+  if (result === null) return c.json({ error: 'Not found' }, 404);
   return c.json({ sync_result: result });
 });
 
@@ -136,6 +141,9 @@ function webhookStripe(): Stripe | null {
   return _whStripe;
 }
 
+// No founder session to scope against: Stripe authenticates itself by
+// signature, which is the check that matters here. On the tenant-scope
+// baseline for that reason, not by oversight.
 superchargeApiRoutes.post('/api/webhooks/stripe/:productId', async (c) => {
   const productId = c.req.param('productId');
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -296,19 +304,6 @@ superchargeApiRoutes.post('/api/network/introductions/:id/respond', async (c) =>
   return c.json({ status: body.accept ? 'accepted' : 'declined' });
 });
 
-superchargeApiRoutes.post('/api/network/peer-review', async (c) => {
-  const founder = c.get('founder');
-  const body = await c.req.json() as Record<string, unknown>;
-  const id = await submitPeerReview(
-    founder.id,
-    body.product_id as string,
-    body.review_type as string,
-    body.content as string,
-    body.rating as number
-  );
-  return c.json({ review_id: id });
-});
-
 superchargeApiRoutes.post('/api/network/cohort/join', async (c) => {
   const founder = c.get('founder');
   const groupId = await joinCohortGroup(founder.id);
@@ -358,6 +353,18 @@ superchargeApiRoutes.get('/api/products/:id/runway', async (c) => {
 
   const model = await computeRunwayModel(founder.id, productId);
   const gap = await analyzeRunwayGap(founder.id, productId);
+  if (model === null) {
+    // 200 with a null and a reason, not an error: the company is fine, it has
+    // simply never told Foundry what is in the bank, and the API says which of
+    // those two it is. Previously this returned a runway derived from cash
+    // invented as six times revenue.
+    return c.json({
+      runway: null,
+      gap_analysis: gap,
+      reason: 'no_financial_position',
+      detail: 'Cash on hand and monthly burn have not been stated for this company. They cannot be derived from anything Foundry holds.',
+    });
+  }
   return c.json({ runway: model, gap_analysis: gap });
 });
 
@@ -368,12 +375,24 @@ superchargeApiRoutes.post('/api/products/:id/financial-scenario', async (c) => {
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
   const body = await c.req.json() as Record<string, unknown>;
-  const scenario = await runWhatIfScenario(productId, founder.id, {
-    name: body.name as string ?? 'What-if scenario',
-    type: body.type as any ?? 'custom',
-    inputs: body.inputs as Record<string, unknown> ?? {},
-  });
-  return c.json({ scenario });
+  try {
+    const scenario = await runWhatIfScenario(productId, founder.id, {
+      name: body.name as string ?? 'What-if scenario',
+      type: body.type as any ?? 'custom',
+      inputs: body.inputs as Record<string, unknown> ?? {},
+    });
+    return c.json({ scenario });
+  } catch (err) {
+    // A what-if needs a what-is: without a stated cash position there is
+    // nothing to model against, and inventing one is how this used to answer.
+    if ((err as Error)?.message === 'financial_position_required') {
+      return c.json({
+        error: 'no_financial_position',
+        detail: 'State cash on hand and monthly burn for this company before modelling a scenario.',
+      }, 409);
+    }
+    throw err;
+  }
 });
 
 superchargeApiRoutes.get('/api/products/:id/financial-scenarios', async (c) => {

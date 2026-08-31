@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { storeEvent, getIntegration } from './fabric.js';
+import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ export async function syncPostHogEvents(productId: string): Promise<{ synced: nu
     return { synced: 0 };
   }
 
-  const apiKey = integration.config_json.api_key as string | undefined;
+  const apiKey = (await getIntegrationCredentials(productId, 'posthog')).api_key;
   const host = (integration.config_json.host as string | undefined) ?? 'https://app.posthog.com';
   const projectId = integration.config_json.project_id as string | undefined;
 
@@ -160,7 +160,10 @@ async function fetchPostHogTrend(
 
   const url = `${host}${projectPath}/insights/trend/?events=[{"id":"${encodeURIComponent(eventName)}"}]&date_from=${dateFrom}&interval=day`;
 
-  const resp = await fetch(url, {
+  // `host` is founder-configured, so this URL is founder-supplied. Checked at
+  // call time with DNS re-resolution, exactly as the webhook senders are.
+  const { safeFetch } = await import('../outbound/ssrf.js');
+  const resp = await safeFetch(url, {
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     signal: AbortSignal.timeout(10000),
   });
@@ -191,7 +194,10 @@ async function fetchTopEvents(
   const projectPath = projectId ? `/api/projects/${projectId}` : '/api/projects/@current';
   const url = `${host}${projectPath}/events/values/?key=event&limit=10`;
 
-  const resp = await fetch(url, {
+  // `host` is founder-configured, so this URL is founder-supplied. Checked at
+  // call time with DNS re-resolution, exactly as the webhook senders are.
+  const { safeFetch } = await import('../outbound/ssrf.js');
+  const resp = await safeFetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(8000),
   });
@@ -203,3 +209,4 @@ async function fetchTopEvents(
 
   return json.slice(0, 10).map(e => ({ name: e.name, count: e.count ?? 0 }));
 }
+

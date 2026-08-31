@@ -253,12 +253,20 @@ async function autoCalibrate(founderId: string): Promise<FounderAIProfile> {
   );
   profile.active_psychology_patterns = (psych.rows as unknown as Array<Record<string, string>>).map((r) => r.pattern_type);
 
-  // Check sector for jargon/tone
-  const product = await query(
-    "SELECT sector_profile FROM products WHERE owner_id = ? AND status = 'active' LIMIT 1",
+  // Check sector for jargon/tone.
+  //
+  // ONE ARBITRARY COMPANY USED TO SET THE TONE FOR ALL OF THEM. This was
+  // `LIMIT 1` with no ORDER BY, so a founder running an education company and a
+  // developer-tools company got whichever row SQLite returned first — and the
+  // two rules below pull in opposite directions. The sector rule applies when
+  // the founder's active companies agree; when they do not, the default stands,
+  // because there is no single answer to give.
+  const productsResult = await query(
+    "SELECT DISTINCT sector_profile FROM products WHERE owner_id = ? AND status = 'active' AND sector_profile IS NOT NULL",
     [founderId]
   );
-  const sector = (product.rows[0] as Record<string, string> | undefined)?.sector_profile;
+  const sectors = (productsResult.rows as Array<Record<string, string>>).map((r) => r.sector_profile);
+  const sector = sectors.length === 1 ? sectors[0] : undefined;
   if (sector === 'education' || sector === 'government') {
     profile.jargon_level = 'low';
   }

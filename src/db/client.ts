@@ -6,6 +6,7 @@
 import { createClient, type Client, type InStatement, type InValue, type InArgs, type ResultSet } from '@libsql/client';
 
 let _client: Client | null = null;
+let _ready: Promise<void> | null = null;
 
 const QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS ?? '10000', 10);
 
@@ -20,14 +21,67 @@ export function getDb(): Client {
       authToken: authToken || undefined,
     });
 
-    // Enable foreign key enforcement — without this, all REFERENCES clauses are decorative
-    _client.execute('PRAGMA foreign_keys = ON').catch(() => {
-      // Some Turso configurations may not support this; log but don't fail
-      console.warn('[DB] Could not enable foreign_keys PRAGMA');
-    });
+    // Enable foreign key enforcement — without this, all REFERENCES clauses are
+    // decorative. This used to be fire-and-forget, which made enforcement a
+    // race: the first statements after client creation could run before the
+    // PRAGMA landed, so whether a REFERENCES clause was live depended on
+    // scheduling. Every entry point now awaits `ready()` first, so the window
+    // is closed by construction rather than by luck.
+    _ready = _client.execute('PRAGMA foreign_keys = ON').then(
+      () => undefined,
+      (err: unknown) => {
+        // Some Turso configurations may not support this. It must be visible:
+        // running without foreign keys is a real loss of integrity, not a
+        // detail to swallow.
+        console.warn(`[DB] Could not enable foreign_keys PRAGMA: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    );
   }
   return _client;
 }
+
+/**
+ * CLOSE THE CONNECTION. Nothing ever did.
+ *
+ * `getDb()` creates a native libsql handle on first use and there was no way to
+ * release one. In a long-lived server that is fine — the process holds one for
+ * its life and exits with it. In this repository's own suite it is not: each
+ * test file gets its own module registry and therefore its own client, so a
+ * full run created hundreds of native handles and closed none of them, leaving
+ * every one for the garbage collector to finalise whenever it chose.
+ *
+ * The suite aborts intermittently with a Rust panic out of that binding —
+ * `PendingException` where `Ok` was expected — at the boundary between test
+ * files, which is exactly where an abandoned handle from the file just finished
+ * would be collected while the next file is calling into the same library. An
+ * abort is worse than a failure: it takes the run with it, so "validation
+ * green" becomes a claim about whether the process survived long enough to say
+ * so.
+ *
+ * That is a HYPOTHESIS, not a diagnosis, and the record says so. Closing a
+ * connection you opened is correct regardless of whether it is the cause, and
+ * it is the first thing this code should have done.
+ *
+ * Idempotent: closing twice is not an error, and neither is closing something
+ * that was never opened.
+ */
+export async function closeDb(): Promise<void> {
+  const client = _client;
+  _client = null;
+  _ready = null;
+  if (!client) return;
+  try {
+    client.close();
+  } catch {
+    // A close that fails has still released what it could, and throwing here
+    // would turn shutdown into a second failure on top of whatever caused it.
+  }
+}
+
+// Readiness is deliberately NOT exported. Every entry point below awaits it, so
+// no caller can forget to — and the tenancy gate scans exported client
+// functions for tenant scoping, which a connection-lifecycle helper would fail
+// for the wrong reason.
 
 /**
  * Execute a query and return the result set.
@@ -36,12 +90,35 @@ export function getDb(): Client {
  */
 export async function query(sql: string, args: unknown[] = []): Promise<ResultSet> {
   const db = getDb();
-  return Promise.race([
-    db.execute({ sql, args: args as InArgs }),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`DB query timeout after ${QUERY_TIMEOUT_MS}ms`)), QUERY_TIMEOUT_MS)
-    ),
-  ]);
+  await _ready;
+  // THE TIMER IS CLEARED WHEN THE QUERY SETTLES, which it was not.
+  //
+  // `Promise.race` abandons the loser but does not cancel it, so every query
+  // this process ever ran left a live ten-second timer holding a rejection
+  // closure. Under load that is a retained closure per query for ten seconds
+  // after it finished, and at shutdown it is a queue of timers keeping the
+  // event loop alive with a native database handle still open beneath them —
+  // which is the shape of the intermittent native abort this suite shows.
+  //
+  // `unref()` as well as `clearTimeout`, and they do different jobs: clearing
+  // handles the ordinary path, and unref means that even a query still in
+  // flight cannot be the reason a process refuses to exit. A timeout is a
+  // safety net for a hung query; it is not a reason to stay alive.
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      db.execute({ sql, args: args as InArgs }),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`DB query timeout after ${QUERY_TIMEOUT_MS}ms`)),
+          QUERY_TIMEOUT_MS,
+        );
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
@@ -49,6 +126,7 @@ export async function query(sql: string, args: unknown[] = []): Promise<ResultSe
  */
 export async function batch(statements: Array<{ sql: string; args?: unknown[] }>): Promise<ResultSet[]> {
   const db = getDb();
+  await _ready;
   return db.batch(
     statements.map((s) => ({
       sql: s.sql,
@@ -65,6 +143,7 @@ export async function batch(statements: Array<{ sql: string; args?: unknown[] }>
  */
 export async function executeRaw(sql: string): Promise<void> {
   const db = getDb();
+  await _ready;
   // Split on semicolons that are followed by a newline (statement boundaries),
   // not semicolons inside parenthesized expressions.
   const statements = sql
@@ -84,6 +163,33 @@ export async function executeRaw(sql: string): Promise<void> {
  */
 export async function getProductsByOwner(founderId: string): Promise<ResultSet> {
   return query('SELECT * FROM products WHERE owner_id = ? AND status != ?', [founderId, 'archived']);
+}
+
+/**
+ * The companies a person may SEE: the ones they own, and the ones they have
+ * been accepted into.
+ *
+ * THE DASHBOARD LISTED BY `owner_id` ALONE. A founder could invite a
+ * co-founder, have the invitation accepted, and that person would open the
+ * dashboard to nothing — no company, no pages, no way in. The invite flow
+ * existed, the membership row existed, and no query joined them to anything
+ * anybody could see. The team feature was a surface you could be let into and
+ * then not arrive.
+ *
+ * VISIBILITY IS NOT CAPABILITY. Seeing the company is where the question
+ * starts; every consequential route still asks its own, and the owner-only
+ * boundary is asked separately again.
+ */
+export async function getVisibleProducts(founderId: string): Promise<ResultSet> {
+  return query(
+    `SELECT p.* FROM products p
+      WHERE p.owner_id = ? AND p.status != 'archived'
+      UNION
+     SELECT p.* FROM products p
+       JOIN team_members t ON t.product_id = p.id
+      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'
+     ORDER BY 1`,
+    [founderId, founderId]);
 }
 
 /**
@@ -328,7 +434,116 @@ export async function getFounderByClerkId(clerkUserId: string): Promise<ResultSe
 
 /**
  * Get all active products (for scheduled jobs that iterate all products).
+ *
+ * ACTIVE ON BOTH AXES. `status` says the record exists; `scp_status` says the
+ * company is being operated. Thirty-four background jobs choose their work
+ * through this one function — competitive scans, daily insight generation,
+ * morning briefings, autopilot, customer success — and nearly all of them spend
+ * money on model calls per product they are handed.
+ *
+ * Filtering only on `status` meant a cancelled or read-only company kept being
+ * handed to every one of them. The outbound gateway now refuses the resulting
+ * effect, but refusing the send after paying for the work is the expensive half
+ * of the fix and none of the value: `redDaily` generates an Opus narrative and
+ * THEN emails it. The pause has to reach the work.
+ *
+ * 'provisioning' is deliberately kept. A product is provisioning before its
+ * first agent run, and excluding it would stall onboarding to enforce billing.
  */
 export async function getAllActiveProducts(): Promise<ResultSet> {
-  return query("SELECT * FROM products WHERE status = 'active'", []);
+  return query(`SELECT * FROM products WHERE ${operatingProduct()}`, []);
+}
+
+/**
+ * MAY THE INSTITUTION ACT FOR THIS PRODUCT NOW?
+ *
+ * The canonical predicate. Three independent facts have to be true, and each is
+ * owned by a different writer — which is the whole reason they are three fields
+ * and not one:
+ *
+ *   status = 'active'          LIFECYCLE. The record exists. Written by
+ *                              onboarding and by erasure.
+ *   scp_status not paused      OPERATING PERMISSION. Written by the founder
+ *                              pausing their own company, or by an operator.
+ *   entitlement_paused_at NULL COMMERCIAL ENTITLEMENT. Written by the billing
+ *                              sweep, and by nobody else.
+ *
+ * They used to share two fields between them, so a billing sweep could resume a
+ * company its founder had deliberately paused, and pausing a company removed it
+ * from the population that billing mail is selected against. A field cannot
+ * record which of three subjects spoke into it.
+ *
+ * Exported as one definition rather than copied, because several jobs cannot
+ * use `getAllActiveProducts` — they join `founders` or `lifecycle_state` and
+ * need the predicate under an alias. Copying it is how the two halves of a rule
+ * start to disagree, which is the defect shape this codebase keeps finding.
+ *
+ * Takes a table alias, never a caller value: it is composed into SQL text, so
+ * there is nothing here for a request to reach.
+ *
+ * COALESCE, not a bare comparison. `scp_status` is NULL on rows older than
+ * migration 017, and in SQLite `NULL NOT IN (...)` is NULL, which is not true,
+ * which would silently drop every legacy company from every job.
+ */
+export function operatingProduct(alias = ''): string {
+  const p = alias ? `${alias}.` : '';
+  return `${p}status = 'active'`
+    + ` AND COALESCE(${p}scp_status,'active') NOT IN ('paused','archived')`
+    + ` AND ${p}entitlement_paused_at IS NULL`
+    // THE THIRD PAUSE AXIS. A company with a deletion scheduled is on its way
+    // out, and for the thirty days of the grace window Foundry used to keep
+    // running its agents, mailing its customers and spending its AI budget on
+    // data it was about to delete. The owner's decision is that a scheduled
+    // erasure stops the institution acting. It does NOT stop the founder using
+    // their own account — see `companyMayBeChanged`, which asks a different
+    // question and says so.
+    + ` AND ${p}erasure_scheduled_at IS NULL`;
+}
+
+/**
+ * A LIVE GRANT TO ACT, as a fragment, for the same reason `operatingProduct`
+ * is one.
+ *
+ * Seven files wrote this predicate by hand and they did not agree.
+ * `reconstruction.ts` checked `to_mode='act' AND revoked_at IS NULL` and
+ * nothing else, so an EXPIRED grant reported as active authority — and it
+ * matched any grant for the same capability rather than one bound to the
+ * responsibility, so a grant for one responsibility made every other
+ * responsibility of that capability report authority it did not have.
+ *
+ * "A copied fragment of a rule drifts the moment the rule grows another axis"
+ * is written in this codebase already, about the operating predicate. Authority
+ * grew two axes — expiry and responsibility binding — and the copies did not
+ * follow.
+ *
+ * `expires_at IS NULL` means "until revoked", which migration 112 forbids for a
+ * responsibility-bound grant and permits for a capability-level one. Both are
+ * covered here so the fragment is correct wherever it is used.
+ *
+ * The RESPONSIBILITY BINDING is deliberately not folded in: it needs the
+ * caller's own column and differs between a bound grant and a capability-level
+ * one. Callers add it, and the ones reporting a responsibility's authority must.
+ */
+export function liveActGrant(alias = ''): string {
+  const a = alias ? `${alias}.` : '';
+  return `${a}to_mode = 'act'`
+    + ` AND ${a}revoked_at IS NULL`
+    + ` AND (${a}expires_at IS NULL OR datetime(${a}expires_at) > datetime('now'))`;
+}
+
+/**
+ * DOES THIS PRODUCT RECORD STILL EXIST?
+ *
+ * The administration predicate, and deliberately NOT the one above. A company
+ * that is paused — by its founder, or by an unpaid bill — still has an owner,
+ * still has data, and still has an account. It must stay reachable by the
+ * things that administer the relationship rather than operate the company:
+ * the entitlement sweep, account mail, data export, erasure.
+ *
+ * Selecting those on `status = 'active'` is what silently stopped a paused
+ * founder being told their subscription had been cancelled.
+ */
+export function productRecordLives(alias = ''): string {
+  const p = alias ? `${alias}.` : '';
+  return `COALESCE(${p}status,'active') <> 'archived'`;
 }

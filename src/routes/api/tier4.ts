@@ -74,7 +74,7 @@ tier4ApiRoutes.get('/api/products/:id/expansion-brief', requireTier('investor_la
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const brief = await generateExpansionBrief(productId, founder.id);
+  const brief = await generateExpansionBrief(productId);
   return c.json({ brief });
 });
 

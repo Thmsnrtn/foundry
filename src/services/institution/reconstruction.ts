@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { liveActGrant, query } from '../../db/client.js';
 
 export type EpistemicStatus = 'known' | 'inferred' | 'unknown' | 'conflicting' | 'stale';
 export type ReconstructionEvidenceKind =
@@ -31,7 +31,11 @@ export async function recordReconstructionClaim(input: {
 
 /** Read-time expiry prevents an old positive claim from silently remaining current. */
 export async function getReconstructionClaims(productId: string, now: Date = new Date()): Promise<ReconstructionClaim[]> {
-  const result = await query(`SELECT * FROM reconstruction_claims WHERE product_id=? ORDER BY created_at,id`, [productId]);
+  // Ties are broken by insertion order, not by id. Claim id is a nanoid, so
+  // ordering by it made "which claim is current" random whenever two claims
+  // about the same subject were recorded in the same second — a later
+  // correction could silently lose to the value it was correcting.
+  const result = await query(`SELECT * FROM reconstruction_claims WHERE product_id=? ORDER BY created_at,rowid`, [productId]);
   return (result.rows as unknown as Array<Record<string, unknown>>).map((row) => ({
     id:String(row.id), productId:String(row.product_id), subject:String(row.subject), predicate:String(row.predicate),
     value:row.value_json == null ? null : JSON.parse(String(row.value_json)),
@@ -56,9 +60,17 @@ export interface CompanyReconstruction {
 export async function reconstructCompany(productId: string, now: Date = new Date()): Promise<CompanyReconstruction> {
   const product = (await query('SELECT id,name,owner_id FROM products WHERE id=?',[productId])).rows[0] as Record<string,unknown> | undefined;
   if (!product) return { identity:null,systems:[],responsibilities:[],claims:[],unknowns:['company_identity'] };
-  const integrations = await query('SELECT id,COALESCE(name,provider,type) AS name,status,COALESCE(last_synced_at,last_sync_at) AS observed_at FROM integrations WHERE product_id=?',[productId]);
+  const integrations = await query('SELECT id,COALESCE(name,provider) AS name,status,COALESCE(last_synced_at,last_sync_at) AS observed_at FROM integrations WHERE product_id=?',[productId]);
+  // AUTHORITY REPORTED THE WAY EXECUTION READS IT. This asked only for an
+  // unrevoked act-grant for the same CAPABILITY, so an expired grant reported
+  // as active, and a grant bound to one responsibility made every other
+  // responsibility of that capability report authority it did not have.
+  // Execution requires a grant bound to the responsibility and still in date
+  // (`activeResponsibilityAuthority`); the reconstruction now says the same.
   const responsibilityRows = await query(`SELECT r.id,r.title,r.state,r.capability,
-    EXISTS(SELECT 1 FROM autonomy_consents a WHERE a.product_id=r.product_id AND a.capability=r.capability AND a.to_mode='act' AND a.revoked_at IS NULL) AS active_authority
+    EXISTS(SELECT 1 FROM autonomy_consents a
+            WHERE a.product_id=r.product_id AND a.capability=r.capability
+              AND a.responsibility_id=r.id AND ${liveActGrant('a')}) AS active_authority
     FROM institutional_responsibilities r WHERE r.product_id=? ORDER BY r.created_at,r.id`,[productId]);
   const claims = await getReconstructionClaims(productId,now);
   const purposeKnown = claims.some((claim) => claim.subject==='company' && claim.predicate==='purpose' && !['unknown','stale'].includes(claim.epistemicStatus));

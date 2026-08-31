@@ -1,41 +1,25 @@
 // =============================================================================
-// FOUNDRY — RBAC Permissions Service
-// Manages roles, permissions, and API keys for product access control.
-// Based on migration 024 (account_roles, role_permissions, api_keys tables).
+// FOUNDRY — API keys
+//
+// THIS FILE USED TO HOLD A SECOND COMPANY AUTHORIZATION MODEL. `account_roles`
+// carried a viewer/analyst/admin/owner ladder and `ROLE_PERMISSIONS_MAP` an
+// eleven-permission map, read by `requireRole` and `requirePermission`.
+// `assignRole` was the only thing that could write a row and had no callers
+// anywhere, so no row was ever created: `getUserRole` always returned null,
+// `requireRole('admin')` reduced to the owner check inside it, and
+// `requirePermission` had no call sites at all.
+//
+// Company membership and its permissions are canonical in
+// `services/team/members.ts`, and ownership is asked separately as the
+// exceptional boundary. Two company authorization systems is one too many, and
+// the one nobody wrote to was the one the guards were reading.
+//
+// What is left here is what was always live and is a different subject: API
+// keys, which authenticate a CREDENTIAL rather than a person.
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-
-// ─── Role Permissions Map ─────────────────────────────────────────────────────
-
-const ALL_PERMISSIONS = [
-  'agents:run',
-  'agents:configure',
-  'integrations:manage',
-  'briefings:view',
-  'decisions:approve',
-  'experiments:manage',
-  'customers:view',
-  'customers:manage',
-  'billing:manage',
-  'api:read',
-  'api:write',
-];
-
-const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
-  owner: [...ALL_PERMISSIONS],
-  admin: ALL_PERMISSIONS.filter((p) => p !== 'billing:manage'),
-  analyst: [
-    'agents:run',
-    'briefings:view',
-    'decisions:approve',
-    'experiments:manage',
-    'customers:view',
-    'api:read',
-  ],
-  viewer: ['briefings:view', 'customers:view', 'api:read'],
-};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,84 +31,24 @@ async function hashKey(key: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ─── getUserRole ──────────────────────────────────────────────────────────────
-
-export async function getUserRole(productId: string, userId: string): Promise<string | null> {
-  const result = await query(
-    `SELECT role FROM account_roles
-     WHERE founder_id = ? AND (product_id = ? OR product_id IS NULL)
-       AND revoked_at IS NULL
-     ORDER BY CASE WHEN product_id = ? THEN 0 ELSE 1 END ASC
-     LIMIT 1`,
-    [userId, productId, productId]
-  );
-  if (result.rows.length === 0) return null;
-  return (result.rows[0] as Record<string, unknown>).role as string;
-}
-
-// ─── assignRole ───────────────────────────────────────────────────────────────
-
-export async function assignRole(
-  productId: string,
-  userId: string,
-  role: string,
-  assignedBy: string
-): Promise<void> {
-  // Revoke any existing active role for the same (user, product) pair
-  await query(
-    `UPDATE account_roles SET revoked_at = datetime('now')
-     WHERE founder_id = ? AND product_id = ? AND revoked_at IS NULL`,
-    [userId, productId]
-  );
-
-  await query(
-    `INSERT INTO account_roles (id, founder_id, product_id, role, granted_by)
-     VALUES (?, ?, ?, ?, ?)`,
-    [nanoid(), userId, productId, role, assignedBy]
-  );
-}
-
-// ─── getRolePermissions ───────────────────────────────────────────────────────
-
-export async function getRolePermissions(role: string): Promise<string[]> {
-  return ROLE_PERMISSIONS_MAP[role] ?? [];
-}
-
-// ─── hasPermission ────────────────────────────────────────────────────────────
-
-export async function hasPermission(
-  productId: string,
-  userId: string,
-  permission: string
-): Promise<boolean> {
-  const role = await getUserRole(productId, userId);
-  if (!role) return false;
-  const perms = await getRolePermissions(role);
-  return perms.includes(permission);
-}
-
-// ─── createApiKey ─────────────────────────────────────────────────────────────
-
-export async function createApiKey(
-  productId: string,
-  userId: string,
-  label: string,
-  scopes: string[]
-): Promise<{ key: string; keyId: string }> {
-  const keyId = nanoid();
-  const rawKey = 'fnd_' + nanoid(40);
-  const keyHash = await hashKey(rawKey);
-  const keyPrefix = rawKey.slice(0, 12); // 'fnd_' + first 8 chars
-
-  await query(
-    `INSERT INTO api_keys (id, founder_id, product_id, name, key_hash, key_prefix, role, scopes, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [keyId, userId, productId, label, keyHash, keyPrefix, 'viewer', JSON.stringify(scopes), userId]
-  );
-
-  return { key: rawKey, keyId };
-}
-
+// ─── createApiKey: REMOVED ────────────────────────────────────────────────────
+//
+// A SECOND WAY TO MINT A KEY, WITH NO CLOSED SET BEHIND IT. This took a
+// `scopes: string[]` and wrote it to `api_keys.scopes` verbatim — no
+// `isApiScope`, no expiry, no record that a founder had asserted anything. It
+// had no callers: `api-key-issuance.ts` says so in its own header, calling this
+// one of "the two dead helpers it replaces".
+//
+// Dead is not harmless here. The settings page promises the founder that "a key
+// does exactly what you tick and nothing else", and `issueApiKey` keeps that
+// promise by refusing any scope no route honours — `'*'` included, which is
+// what `api-key-issuance.test.ts` pins. This function would have accepted `'*'`,
+// and `api/v1/mcp.ts` read `'*'` as every tool. One caller away from a key that
+// does everything, under a page that says there is no everything option.
+//
+// The `'*'` branch in `mcp.ts` goes with it: no issuable scope is `'*'`, and a
+// value that silently means "all of them" is a fail-open default for an unknown
+// string. Narrowing what a credential may do is always permitted.
 // ─── validateApiKey ───────────────────────────────────────────────────────────
 
 export async function validateApiKey(

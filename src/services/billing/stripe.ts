@@ -119,10 +119,70 @@ export async function pauseSubscription(subscriptionId: string): Promise<void> {
   ));
 }
 
+/**
+ * Cancel at the end of the current period — the ordinary convention, and what
+ * the founder is owed. `subscriptions.cancel()` ends it immediately and issues
+ * no refund for the remainder, so a founder who cancelled on day 2 of a month
+ * they had paid for lost twenty-eight days of service they had bought.
+ *
+ * Stripe then sends `customer.subscription.deleted` when the period actually
+ * ends, which is where entitlement is re-evaluated.
+ */
 export async function cancelSubscription(subscriptionId: string): Promise<void> {
   const stripe = getStripe();
   const key = idemKey();
-  await withRetry(() => stripe.subscriptions.cancel(subscriptionId, undefined, { idempotencyKey: key }));
+  await withRetry(() => stripe.subscriptions.update(
+    subscriptionId,
+    { cancel_at_period_end: true },
+    { idempotencyKey: key },
+  ));
+}
+
+/**
+ * Send one account notice per company a founder owns.
+ *
+ * Account mail is addressed to a person, but the gateway governs effects per
+ * COMPANY — that is where the kill-switch, the pause and the audit row live. So
+ * a notice about the account goes out once per company, through the same door,
+ * rather than around it. Failures are swallowed: a billing webhook that throws
+ * gets retried by Stripe, and re-running it for the sake of an email would
+ * re-run everything else with it.
+ */
+async function notifyOwnedCompanies(
+  founderId: string,
+  notice: { kind: 'payment_failed' | 'subscription_cancelled'; effectiveAt: string | null },
+): Promise<void> {
+  try {
+    const { sendAccountNotice } = await import('./account-notice.js');
+    const { productRecordLives } = await import('../../db/client.js');
+    const rows = await query(
+      `SELECT p.id, p.name, f.email FROM products p JOIN founders f ON f.id = p.owner_id
+        WHERE f.id = ? AND ${productRecordLives('p')}`, [founderId]);
+    for (const raw of rows.rows as unknown as Array<Record<string, unknown>>) {
+      await sendAccountNotice({
+        productId: String(raw.id),
+        to: String(raw.email ?? ''),
+        notice: {
+          kind: notice.kind,
+          companyName: String(raw.name ?? 'Your company'),
+          effectiveAt: notice.effectiveAt,
+        },
+      });
+    }
+  } catch {
+    /* the billing fact is recorded either way */
+  }
+}
+
+/** Stripe's `current_period_end`, as an ISO string, or null when the payload
+ * does not carry one. Typed loosely on purpose: the field moved to the
+ * subscription item in newer API versions, and reading it defensively is
+ * cheaper than being wrong about which shape arrived. */
+function periodEndIso(sub: Stripe.Subscription): string | null {
+  const raw = (sub as unknown as Record<string, unknown>).current_period_end
+    ?? (sub.items?.data?.[0] as unknown as Record<string, unknown> | undefined)?.current_period_end;
+  const seconds = typeof raw === 'number' ? raw : Number.NaN;
+  return Number.isFinite(seconds) ? new Date(seconds * 1000).toISOString() : null;
 }
 
 export async function getSoloSlotCount(): Promise<number> {
@@ -162,10 +222,33 @@ export async function handleWebhook(payload: string, signature: string): Promise
           sub.status === 'trialing' && sub.trial_end
             ? new Date(sub.trial_end * 1000).toISOString()
             : null;
+        // The period the founder has paid for. Recorded on every subscription
+        // event, including the one that flags a cancellation at period end,
+        // because that is the date the service is owed until. Stripe advances
+        // it when it issues the next invoice, so a past-due account keeps its
+        // access through the dunning retries rather than being cut off on the
+        // first failed charge.
+        const paidThrough = periodEndIso(sub);
         await query(
-          'UPDATE founders SET tier = ?, trial_ends_at = ? WHERE stripe_customer_id = ?',
-          [tier, trialEndsAt, sub.customer],
+          `UPDATE founders SET tier = ?, trial_ends_at = ?,
+                  paid_through = COALESCE(?, paid_through)
+            WHERE stripe_customer_id = ?`,
+          [tier, trialEndsAt, paidThrough, sub.customer],
         );
+
+        // A cancellation scheduled for the period end is the ordinary shape,
+        // and the ordinary thing to do is confirm it and say when access
+        // actually stops — which is not today.
+        if ((sub as unknown as Record<string, unknown>).cancel_at_period_end === true) {
+          const cancelling = await query(
+            'SELECT id FROM founders WHERE stripe_customer_id = ?', [sub.customer]);
+          const cancellingId = (cancelling.rows[0] as Record<string, string> | undefined)?.id;
+          if (cancellingId) {
+            await notifyOwnedCompanies(cancellingId, {
+              kind: 'subscription_cancelled', effectiveAt: paidThrough,
+            });
+          }
+        }
 
         // Activation funnel: trial_started (trialing) / paid (active) — Phase 5.2.
         void (async () => {
@@ -216,6 +299,17 @@ export async function handleWebhook(payload: string, signature: string): Promise
         );
         if (pastDueFounder.rows.length > 0) {
           const founder = pastDueFounder.rows[0] as Record<string, string>;
+          // NOT THROUGH THE INTERRUPTION POLICY, AND DELIBERATELY.
+          //
+          // `preferences.max_channel` is an ATTENTION preference — how loudly
+          // Foundry may interrupt about the work. The owner's §14 decision
+          // draws the line this sits on: necessary service, billing, security
+          // and configuration state stays ungated and disclosed; optional
+          // product telemetry and celebration honour the preference. A founder
+          // whose card is failing must be told their service is about to lapse
+          // whatever they set about notification volume, and a company-scoped
+          // policy is the wrong instrument anyway — this is founder-scoped and
+          // carries no product id.
           await createNotification(
             founder.id,
             null,
@@ -231,23 +325,40 @@ export async function handleWebhook(payload: string, signature: string): Promise
     }
     case 'customer.subscription.deleted': {
       const sub = event.data.object as Stripe.Subscription;
-      await query('UPDATE founders SET tier = NULL, trial_ends_at = NULL WHERE stripe_customer_id = ?', [sub.customer]);
-      // EDGE-02 + RT08-P0: Pause SCP at BOTH levels to stop AI credit burn
-      // The scheduler checks products.scp_status, not agent_instances.status
+      // RECORD THE FACTS, THEN ASK THE RULE.
+      //
+      // This branch used to clear the tier and pause every product inline,
+      // which cut the service off the instant a cancellation arrived. For a
+      // period-end cancellation Stripe sends this event AT the period end, so
+      // it usually looked right — but an immediate cancellation, a plan change
+      // that deletes and recreates, or a refunded upgrade all ended service the
+      // founder had already been charged for.
+      //
+      // The plan is over, so `tier` goes; the period they bought is not, so
+      // `paid_through` stays and is refreshed from the subscription. Then
+      // `applyEntitlementForFounder` — the same rule the hourly sweep runs —
+      // decides whether that means paused. When the period really has ended,
+      // that is immediate; when it has not, the sweep pauses them the hour it
+      // does.
+      const paidThrough = periodEndIso(sub);
+      await query(
+        `UPDATE founders SET tier = NULL, trial_ends_at = NULL,
+                paid_through = COALESCE(?, paid_through)
+          WHERE stripe_customer_id = ?`,
+        [paidThrough, sub.customer]);
       const cancelledFounder = await query('SELECT id FROM founders WHERE stripe_customer_id = ?', [sub.customer]);
       if (cancelledFounder.rows.length > 0) {
         const founderId = (cancelledFounder.rows[0] as Record<string, string>).id;
-        // Pause at product level (scheduler checks this)
-        await query(
-          `UPDATE products SET scp_status = 'paused' WHERE owner_id = ?`,
-          [founderId]
-        );
-        // Also pause individual instances
-        await query(
-          `UPDATE agent_instances SET status = 'paused', updated_at = datetime('now')
-           WHERE product_id IN (SELECT id FROM products WHERE owner_id = ?)`,
-          [founderId]
-        );
+        const { applyEntitlementForFounder } = await import('./entitlement.js');
+        const { paused } = await applyEntitlementForFounder(founderId);
+        // agent_instances is a second axis the scheduler does not read, but the
+        // dashboard does. Kept in step with the products that actually paused,
+        // rather than paused unconditionally.
+        for (const productId of paused) {
+          await query(
+            `UPDATE agent_instances SET status = 'paused', updated_at = datetime('now')
+              WHERE product_id = ?`, [productId]);
+        }
       }
       break;
     }
@@ -262,6 +373,8 @@ export async function handleWebhook(payload: string, signature: string): Promise
       );
       if (founderResult.rows.length > 0) {
         const founder = founderResult.rows[0] as Record<string, string>;
+        // Ungated for the same reason as the past-due notice above: billing
+        // state is not attention, and the §14 line keeps it disclosed.
         await createNotification(
           founder.id,
           null,
@@ -271,6 +384,13 @@ export async function handleWebhook(payload: string, signature: string): Promise
           '/settings/billing',
           'Update Payment Method',
         );
+        // And by email. An in-app notice reaches a founder who happens to log
+        // in; a failed card is the one thing every subscription product emails
+        // about, because the person who needs to act may not be looking.
+        await notifyOwnedCompanies(founder.id, {
+          kind: 'payment_failed',
+          effectiveAt: String(invoice.id ?? ''),
+        });
       }
       break;
     }

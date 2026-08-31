@@ -8,6 +8,7 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import {
   generateCompressedWeeklyBrief,
   getLatestCompressedBrief,
@@ -54,7 +55,11 @@ function fmtDelta(val: unknown, suffix = '%'): string {
   return `${sign}${n.toFixed(1)}${suffix}`;
 }
 
-function healthColor(score: number): string {
+/** Muted when nothing has scored the company. A null health score used to be
+ *  turned into 50 by its reader, and 50 is amber — so an unassessed company was
+ *  painted the same colour as a measured mediocre one. */
+function healthColor(score: number | null): string {
+  if (score === null) return 'var(--text-muted)';
   return score >= 70 ? '#4ecca3' : score >= 40 ? '#ffb347' : '#ff6b6b';
 }
 
@@ -144,10 +149,13 @@ weeklyBrief.get('/brief', async (c) => {
 
         <!-- Health score -->
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.5rem;">
-          <span style="font-size:2rem;font-weight:800;color:${hColor};">${brief.health_score}</span>
+          <span style="font-size:${brief.health_score == null ? '0.95rem' : '2rem'};font-weight:800;color:${brief.health_score == null ? 'var(--text-muted)' : hColor};">${brief.health_score == null ? 'not scored' : brief.health_score}</span>
           <div>
             <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);">Health Score</div>
-            <div style="font-size:0.9rem;font-weight:600;color:${trendColor(trend)};">${trendArrow(trend)} ${trend}</div>
+            <!-- A trend is a statement about movement between two scores. With
+                 nothing scored there is nothing to move, and 'stable' beside
+                 'not scored' reads as a reassurance nobody measured. -->
+            ${brief.health_score == null ? '' : html`<div style="font-size:0.9rem;font-weight:600;color:${trendColor(trend)};">${trendArrow(trend)} ${trend}</div>`}
           </div>
         </div>
 
@@ -220,7 +228,8 @@ weeklyBrief.get('/brief', async (c) => {
 
 // ─── POST /brief/generate ─────────────────────────────────────────────────────
 
-weeklyBrief.post('/brief/generate', async (c) => {
+weeklyBrief.post('/brief/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Generate Brief', undefined, c);
 

@@ -11,6 +11,7 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import {
   invoke,
   registerToolHandler,
@@ -23,50 +24,16 @@ let founderId: string;
 let productId: string;
 
 const TEST_POLICY = {
-  actor: 'test_gateway',
+  // A REAL AGENT NAME. `agent_instances.agent_name` is a closed vocabulary in
+  // the real schema, and 'test_gateway' is not in it — so the agent-paused
+  // kill-switch test could only ever have been set up against a fabricated
+  // table. The actor a policy names has to be an actor that can exist.
+  actor: 'atlas',
   surface: 'email_outbound', dataClass: 'customer',
   requireDedupKey: false, requireCustomerExternalId: false,
 } as const;
 
 async function setupSchema(): Promise<void> {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      disabled_tools TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS agent_instances (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      agent_name TEXT NOT NULL,
-      status TEXT DEFAULT 'active'
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      action_type TEXT NOT NULL,
-      gate INTEGER NOT NULL,
-      trigger TEXT NOT NULL,
-      reasoning TEXT NOT NULL,
-      input_context TEXT,
-      output TEXT,
-      outcome TEXT,
-      confidence_score REAL,
-      risk_state_at_action TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
   await executeRaw(
     readFileSync(
       resolve(__dirname, '../../src/db/migrations/065_idempotency_keys.sql'),
@@ -88,6 +55,10 @@ async function setupSchema(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   await setupSchema();
 });
 
@@ -177,7 +148,11 @@ describe('invoke: happy path', () => {
 
 describe('invoke: kill-switch', () => {
   it('refuses when product is paused', async () => {
-    await query(`UPDATE products SET status = 'paused' WHERE id = ?`, [productId]);
+    // `scp_status`, not `status`. This used to set `status='paused'`, which the
+    // real schema forbids outright (migration 145's axis trigger) — so the
+    // test was proving the ARCHIVE branch of the kill-switch while its name
+    // claimed the pause branch, and the fabricated fixture hid the difference.
+    await query(`UPDATE products SET scp_status = 'paused' WHERE id = ?`, [productId]);
     const handler = vi.fn();
     registerToolHandler('send_email', handler, TEST_POLICY);
 
@@ -198,8 +173,9 @@ describe('invoke: kill-switch', () => {
 
   it('refuses when agent is paused', async () => {
     await query(
-      `INSERT INTO agent_instances (id, product_id, agent_name, status) VALUES (?, ?, ?, ?)`,
-      [nanoid(), productId, 'test_gateway', 'paused']
+      `INSERT INTO agent_instances (id, product_id, agent_name, display_name, status)
+       VALUES (?, ?, ?, 'Test Gateway', ?)`,
+      [nanoid(), productId, 'atlas', 'paused']
     );
     registerToolHandler('send_email', vi.fn(), TEST_POLICY);
 
@@ -301,7 +277,7 @@ describe('invoke: idempotency', () => {
     const r = await invoke(malicious);
     expect(r.ok).toBe(true);
     const audit = await query(`SELECT trigger FROM audit_log WHERE product_id = ?`, [productId]);
-    expect((audit.rows[0] as Record<string, string>).trigger).toContain('test_gateway');
+    expect((audit.rows[0] as Record<string, string>).trigger).toContain('atlas');
     expect((audit.rows[0] as Record<string, string>).trigger).not.toContain('caller_selected');
   });
 });
@@ -358,7 +334,11 @@ describe('invoke: execution failure', () => {
 
 describe('invoke: short-circuit order', () => {
   it('kill-switch fires before classification, budget, or handler', async () => {
-    await query(`UPDATE products SET status = 'paused' WHERE id = ?`, [productId]);
+    // `scp_status`, not `status`. This used to set `status='paused'`, which the
+    // real schema forbids outright (migration 145's axis trigger) — so the
+    // test was proving the ARCHIVE branch of the kill-switch while its name
+    // claimed the pause branch, and the fabricated fixture hid the difference.
+    await query(`UPDATE products SET scp_status = 'paused' WHERE id = ?`, [productId]);
     const handler = vi.fn();
     registerToolHandler('send_email', handler, TEST_POLICY);
     await invoke(

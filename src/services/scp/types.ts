@@ -71,6 +71,25 @@ export const ALL_AGENTS: AgentName[] = [
   'harbor', 'sentinel', 'ledger', 'shield', 'oracle', 'crucible',
 ];
 
+/**
+ * The closed vocabulary a dynamic loader may act on.
+ *
+ * Three places load an agent module by name through `import()`. Their names
+ * arrive from three different sources: a static event map that round-trips
+ * through `signal_events.relevant_agents_json`, an `agent_instances` row, and
+ * an HTTP path parameter. Only the HTTP one validated — which meant a stored
+ * string reached a module specifier, and a specifier is not an identifier: it
+ * resolves paths, so `../` in a name is a directory traversal rather than a
+ * missing agent.
+ *
+ * Every loader now narrows through here first. A name outside the vocabulary
+ * is skipped rather than imported, so what can be loaded is bounded by this
+ * list and not by whatever happens to be in a column.
+ */
+export function isLoadableAgentName(name: unknown): name is AgentName {
+  return typeof name === 'string' && (ALL_AGENTS as string[]).includes(name);
+}
+
 // ─── Authority Levels ─────────────────────────────────────────────────────────
 
 /**
@@ -145,7 +164,9 @@ export interface AgentInstance {
   total_decisions_proposed: number;
   total_decisions_approved: number;
   total_evolution_cycles: number;
-  domain_health_score: number;
+  /** NULL until some run scores the domain — the column is nullable and every
+   *  agent now leaves it alone rather than writing 50. */
+  domain_health_score: number | null;
   system_prompt_core: string | null;
   behavioral_constraints: string[] | null;
   config_json: Record<string, unknown> | null;
@@ -255,7 +276,16 @@ export interface AgentAnalysisResult {
   evolutionCandidates: EvolutionCandidate[];
   tokensUsed: number;
   costUsd?: number;                    // Optional: if provided, used directly; otherwise computed from tokensUsed
-  domainHealthScore?: number;          // 0-100; if provided, updates agent_instances.domain_health_score
+  /** 0-100; when provided, OVERWRITES `agent_instances.domain_health_score`.
+   *
+   *  UNDEFINED MEANS UNSCORED, AND UNSCORED IS NOT 50. Every agent had two
+   *  early-exit paths — "no data yet", "parsing error" — that returned 50, and
+   *  eight also wrote `?? 50` when the model answered without a score. Fifty is
+   *  the middle of the bar the dashboard draws and it OVERWROTE the score the
+   *  agent's last real run had earned, in the column the investor board packet
+   *  ranks its top three agents by. Leaving it undefined leaves the previous
+   *  score standing, which is the honest statement: this run did not score. */
+  domainHealthScore?: number;
   // v2/v3 signal fields — optional; BaseAgent processes these after analyzeAndAct returns
   customerSignals?: CustomerSignal[];  // Upserted into customer_intelligence
   outboundActions?: OutboundActionSignal[]; // Queued in outbound_actions
@@ -374,7 +404,12 @@ export interface FinancialSummary {
   mrr_growth_pct: number | null;
   ai_cost_30d_usd: number;
   attributed_revenue_usd: number;
-  roi: number | null;                  // attributed_revenue / ai_cost
+  /** attributed_revenue / ai_cost. THE NUMERATOR IS AN ESTIMATE — see
+   *  `financial/economics.ts`: attributed revenue is the Ledger agent's
+   *  model-generated guess at what each action earned, weighted by its own
+   *  confidence and reconciled against nothing. Anywhere this is rendered it
+   *  must be labelled as attributed rather than as a measured return. */
+  attributed_roi: number | null;
 }
 
 export interface SCPBriefing {
@@ -452,7 +487,8 @@ export interface SCPInstanceStatus {
   companyName: string;
   lifecycleState: CompanyLifecycleState;
   scpStatus: SCPStatus;
-  healthScore: number;
+  /** Null when no weighted agent has scored its domain. Not 50, which is a score. */
+  healthScore: number | null;
   agents: Array<{
     name: AgentName;
     displayName: string;
@@ -460,8 +496,10 @@ export interface SCPInstanceStatus {
     authorityLevel: AgentAuthorityLevel;
     status: 'active' | 'paused' | 'error';
     totalSessions: number;
-    successRate: number;
-    domainHealthScore: number;
+    /** Null when the agent has never run. Zero means it ran and never succeeded. */
+    successRate: number | null;
+    /** Null when nothing has scored this domain. Not 50, which is a score. */
+    domainHealthScore: number | null;
     lastRunAt: string | null;
     nextRunAt: string | null;
   }>;

@@ -14,6 +14,7 @@ import {
   listDebateSessions,
 } from '../../services/scp/debate/orchestrator.js';
 import type { SynthesisOutput } from '../../services/scp/agents/synthesizer.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentsDebate = new Hono<AuthEnv>();
 
@@ -39,6 +40,13 @@ function severityColor(severity: 'high' | 'medium' | 'low'): string {
 }
 
 function statusBadge(status: string): string {
+  // 'failed' exists because it used to not exist: a debate that threw, or whose
+  // synthesizer returned nothing usable, was stored as 'complete' and shown
+  // here in green beside a conflict count of zero — the same row a debate in
+  // which every agent agreed would produce.
+  if (status === 'failed') {
+    return '<span style="font-size:0.7rem;background:#ff6b6b22;color:#ff6b6b;padding:2px 8px;border-radius:99px;font-weight:700;">Failed</span>';
+  }
   if (status === 'complete') {
     return '<span style="font-size:0.7rem;background:#4ecca322;color:#4ecca3;padding:2px 8px;border-radius:99px;font-weight:700;">Complete</span>';
   }
@@ -108,13 +116,17 @@ agentsDebate.get('/agents/debate', async (c) => {
       </div>
       <div>${statusBadge(s.status)}</div>
       <div>
-        ${conflicts.length > 0
+        ${synthesis?.failure_reason
+          ? html`<span style="font-size:0.72rem;color:var(--text-muted);">not reached</span>`
+          : conflicts.length > 0
           ? html`<span style="font-size:0.8rem;font-weight:700;color:#ff6b6b;">${conflicts.length}</span>
                  <span style="font-size:0.7rem;color:var(--text-muted);"> conflicts</span>`
-          : html`<span style="font-size:0.75rem;color:var(--text-muted);">—</span>`}
+          : html`<span style="font-size:0.75rem;color:var(--text-muted);">none</span>`}
       </div>
       <div style="font-size:0.82rem;color:var(--text-dim);line-height:1.4;padding-right:1rem;">
-        ${topRec
+        ${synthesis?.failure_reason
+          ? html`<span style="color:#ff6b6b;">${synthesis.failure_reason.slice(0, 140)}</span>`
+          : topRec
           ? html`<span style="color:var(--text-primary);">${topRec.recommendation.slice(0, 120)}${topRec.recommendation.length > 120 ? '…' : ''}</span>
                  <span style="font-size:0.7rem;color:var(--text-muted);margin-left:0.5rem;">w=${topRec.weight.toFixed(2)}</span>`
           : synthesis?.executiveSummary
@@ -230,7 +242,15 @@ agentsDebate.get('/agents/debate/:date', async (c) => {
   }
 
   // ── Synthesis section ──────────────────────────────────────────────────────
-  const synthesisSection = synthesis ? html`
+  // A failed run gets its own card. The failure text used to be rendered as the
+  // executive summary inside the green "Unified Synthesis" card.
+  const synthesisSection = synthesis?.failure_reason ? html`
+    <div class="card" style="padding:1.5rem 2rem;margin-bottom:1.5rem;background:rgba(255,107,107,0.05);border:1px solid rgba(255,107,107,0.25);">
+      <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ff6b6b;margin-bottom:0.75rem;">This Debate Did Not Finish</div>
+      <p style="font-size:0.95rem;line-height:1.6;color:var(--text-dim);margin:0 0 1rem;">${synthesis.failure_reason}</p>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin:0;">The positions below were collected before it stopped. There is no synthesis, and nothing from this run reached your daily briefing.</p>
+    </div>
+  ` : synthesis ? html`
     <div class="card" style="padding:1.5rem 2rem;margin-bottom:1.5rem;background:rgba(78,204,163,0.04);border:1px solid rgba(78,204,163,0.2);">
       <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#4ecca3;margin-bottom:0.75rem;">Unified Synthesis</div>
       <p style="font-size:1.05rem;line-height:1.65;color:var(--text-primary);margin:0 0 1.25rem;font-weight:500;">${synthesis.executiveSummary}</p>
@@ -367,7 +387,8 @@ agentsDebate.get('/agents/debate/:date', async (c) => {
 
 // ─── POST /agents/debate/run — Trigger debate for today ──────────────────────
 
-agentsDebate.post('/agents/debate/run', async (c) => {
+agentsDebate.post('/agents/debate/run',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Debate & Synthesis', undefined, c);
 

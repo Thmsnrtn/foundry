@@ -13,6 +13,8 @@ import { nanoid } from 'nanoid';
 import type { IntegrationType } from '../../types/index.js';
 import { requireTier } from '../../middleware/tier-gate.js';
 import { encryptCredentialPayload } from '../../services/encryption.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
+import { directionOf } from '../../services/integration/direction.js';
 
 export const integrationsRoutes = new Hono<AuthEnv>();
 
@@ -127,18 +129,40 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
 
+  // Keyed by PROVIDER, which is what `INTEGRATION_META` is keyed by and what
+  // this form collects. It read `type`, a column that held a provider key here
+  // and a direction or a category on three other paths; migration 204 retired
+  // it. A row written by the fabric — provider in `name`, direction in `type` —
+  // never matched a card on this page, so a connected integration could show as
+  // not connected depending on which door it came through.
   const existing = await query(
-    `SELECT type, status, last_synced_at, last_error FROM integrations WHERE product_id = ?`,
+    `SELECT id, provider, status, last_synced_at, last_error, COALESCE(error_count, 0) AS error_count
+       FROM integrations WHERE product_id = ?`,
     [ctx.product.id],
   );
 
-  const connectedTypes = new Map<string, { status: string; last_synced_at: string | null; last_error: string | null }>();
+  // `status`, `last_synced_at` and `last_error` describe this moment and forget
+  // everything before it — a successful sync clears the error, so an
+  // integration failing four nights in five looked perfectly healthy here. The
+  // attempt history was being recorded the whole time and nothing read it.
+  const { getSyncHealth, SYNC_HEALTH_WINDOW_DAYS } =
+    await import('../../services/integrations/health.js');
+  const { MAX_CONSECUTIVE_SYNC_FAILURES } =
+    await import('../../services/integrations/sync.js');
+  const health = await getSyncHealth(ctx.product.id);
+
+  const connectedTypes = new Map<string, {
+    status: string; last_synced_at: string | null; last_error: string | null;
+    error_count: number; health: import('../../services/integrations/health.js').SyncHealth | null;
+  }>();
   for (const row of existing.rows) {
-    const r = row as Record<string, string | null>;
-    connectedTypes.set(r.type as string, {
+    const r = row as Record<string, string | number | null>;
+    connectedTypes.set(r.provider as string, {
       status: r.status as string,
-      last_synced_at: r.last_synced_at,
-      last_error: r.last_error,
+      last_synced_at: r.last_synced_at as string | null,
+      last_error: r.last_error as string | null,
+      error_count: Number(r.error_count ?? 0),
+      health: health.get(String(r.id)) ?? null,
     });
   }
 
@@ -153,6 +177,10 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
         const connected = connectedTypes.get(type);
         const isConnected = connected?.status === 'active';
         const hasError = connected?.status === 'error' || connected?.status === 'errored';
+        // Foundry has stopped retrying this one. Say so, rather than showing the
+        // same red badge it showed after the first failure — the two are very
+        // different facts, and only one of them needs the founder.
+        const givenUp = !!connected && connected.error_count >= MAX_CONSECUTIVE_SYNC_FAILURES;
 
         return html`
           <div class="integration-card ${isConnected ? 'connected' : ''} ${hasError ? 'error' : ''}">
@@ -167,7 +195,15 @@ integrationsRoutes.get('/integrations', requireTier('integrations'), async (c) =
             </div>
             <p class="integration-description">${meta.description}</p>
             ${connected?.last_synced_at ? html`<p class="integration-sync-time">Last synced: ${new Date(connected.last_synced_at).toLocaleDateString()}</p>` : ''}
+            ${givenUp ? html`<p class="integration-error"><strong>Foundry has stopped syncing this.</strong> ${connected.error_count} syncs failed in a row, so it is no longer being tried. Its data is not updating. Reconnect to start again.</p>` : ''}
             ${hasError && connected?.last_error ? html`<p class="integration-error">${connected.last_error}</p>` : ''}
+            ${connected ? html`<p class="integration-sync-history">${
+              connected.health === null
+                ? html`No sync has been attempted in the last ${SYNC_HEALTH_WINDOW_DAYS} days.`
+                : connected.health.failed === 0 && connected.health.unfinished === 0
+                  ? html`${connected.health.succeeded} of ${connected.health.attempts} syncs succeeded in the last ${SYNC_HEALTH_WINDOW_DAYS} days.`
+                  : html`<span class="integration-sync-history-warn">${connected.health.failed} of ${connected.health.attempts} syncs failed in the last ${SYNC_HEALTH_WINDOW_DAYS} days${connected.health.unfinished > 0 ? html`, and ${connected.health.unfinished} never finished` : ''}.</span>${connected.health.last_success_at ? html` Last success: ${new Date(connected.health.last_success_at).toLocaleDateString()}.` : html` None have succeeded.`}`
+            }</p>` : ''}
             <div class="integration-actions">
               ${isConnected ? html`
                 <form method="POST" action="/integrations/${type}/disconnect">
@@ -234,7 +270,10 @@ integrationsRoutes.get('/integrations/:type/connect', async (c) => {
 
 // ─── POST /integrations/:type/connect ────────────────────────────────────────
 
-integrationsRoutes.post('/integrations/:type/connect', async (c) => {
+// Stores a third-party credential against the company. Disconnect stays
+// open: it only removes reach.
+integrationsRoutes.post('/integrations/:type/connect',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const type = c.req.param('type') as IntegrationType;
   const meta = INTEGRATION_META[type];
@@ -245,46 +284,101 @@ integrationsRoutes.post('/integrations/:type/connect', async (c) => {
 
   const body = await c.req.parseBody() as Record<string, string>;
 
-  // Build credentials object from form fields
-  const credentials: Record<string, string> = {};
-  const config: Record<string, unknown> = {};
-
+  // The same split the sibling form at /agents/integrations uses. It used to be
+  // a literal list here and nothing there, which is how one form encrypted a
+  // bot token while the other wrote it to a plaintext column.
+  const { splitIntegrationFields } = await import('../../services/integration/fabric.js');
+  const submitted: Record<string, unknown> = {};
   for (const field of (meta.fields ?? [])) {
-    if (body[field.key]) {
-      // Separate config fields from credential fields
-      if (['activation_event', 'active_user_event', 'team_id', 'host', 'account_id'].includes(field.key)) {
-        config[field.key] = body[field.key];
-      } else {
-        credentials[field.key] = body[field.key];
-      }
-    }
+    if (body[field.key]) submitted[field.key] = body[field.key];
   }
-
-  const existing = await query(
-    `SELECT id FROM integrations WHERE product_id = ? AND type = ?`,
-    [ctx.product.id, type],
-  );
+  const { config, credentials } = splitIntegrationFields(submitted);
 
   // Encrypt credentials at rest. config_json stays plaintext — it's
   // non-sensitive (event names, account ids).
   const credentialsCiphertext = encryptCredentialPayload(JSON.stringify(credentials));
 
-  if (existing.rows.length > 0) {
-    await query(
-      `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
-       last_error = NULL, updated_at = CURRENT_TIMESTAMP WHERE product_id = ? AND type = ?`,
-      [credentialsCiphertext, JSON.stringify(config), ctx.product.id, type],
-    );
-  } else {
-    await query(
-      `INSERT INTO integrations (id, product_id, type, status, credentials_json, config_json)
-       VALUES (?, ?, ?, 'connected', ?, ?)`,
-      [nanoid(), ctx.product.id, type, credentialsCiphertext, JSON.stringify(config)],
-    );
-  }
+  await saveConnectedIntegration({
+    productId: ctx.product.id, type, credentialsCiphertext, config,
+  });
 
   return c.redirect('/integrations?connected=' + type);
 });
+
+/**
+ * Write what this page's connect form was given, and return nothing but the
+ * fact that it happened.
+ *
+ * EXPORTED SO THE WRITER CAN BE RUN RATHER THAN IMITATED. It was inline in the
+ * handler, and the first test written for it built its own INSERT that looked
+ * like this one — so removing the fix from the handler left the test green.
+ * A test that reproduces the writer proves only that the test agrees with
+ * itself.
+ *
+ * 'active', THE SAME VALUE THE UPDATE BRANCH WRITES. The INSERT used to write
+ * 'connected', and migration 074 exists because nothing reads that: `sync.ts`
+ * selects `status IN ('active','error')`, every adapter in
+ * `services/integration/` guards on `status === 'active'`, `framework.ts`
+ * selects `WHERE status = 'active'`, and this page's own badge tests it too.
+ * So a founder connecting FOR THE FIRST TIME stored their credentials, was
+ * redirected to `?connected=<type>`, and read "Not connected" over an
+ * integration nothing would ever sync. Reconnecting took the UPDATE branch and
+ * worked, which is why it was easy to miss — and why 074's repair was undone
+ * one founder at a time.
+ *
+ * AND `name`, WHICH THIS PAGE NEVER WROTE. It is how the event syncs identify
+ * an integration: `getIntegration(productId, name)` matches on it, and all six
+ * of sentry/linear/intercom/slack/posthog/github call it that way. With `name`
+ * NULL they return `{ synced: 0 }` on their first branch — silently, because
+ * "not connected" and "connected but found nothing" are the same return.
+ * `sync.ts` matches on `type` instead, so the SAME ROW was visible to one sync
+ * and invisible to the other, and which of Foundry's two connect pages a
+ * founder used decided whether their integration produced events.
+ *
+ * Here the two are the same string, because this route's `:type` param IS the
+ * provider key. That is not true of every writer — `fabric.ts` and
+ * `framework.ts` put a CATEGORY in `type`, `connections.ts` puts a direction —
+ * which is why migration 199's repair names the nine values this page can
+ * produce instead of copying `type` wholesale.
+ */
+export async function saveConnectedIntegration(input: {
+  productId: string;
+  type: string;
+  /** `string | null` because `encryptCredentialPayload` returns null for an
+   *  empty payload, and this preserves what the inline version stored. */
+  credentialsCiphertext: string | null;
+  config: Record<string, unknown>;
+}): Promise<void> {
+  const existing = await query(
+    `SELECT id FROM integrations WHERE product_id = ? AND provider = ?`,
+    [input.productId, input.type],
+  );
+
+  if (existing.rows.length > 0) {
+    // `name` is set here too, which repairs a row this page created before it
+    // started writing one.
+    await query(
+      `UPDATE integrations SET credentials_json = ?, config_json = ?, status = 'active',
+       name = COALESCE(name, ?), provider = COALESCE(provider, ?), direction = ?,
+       last_error = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE product_id = ? AND provider = ?`,
+      [input.credentialsCiphertext, JSON.stringify(input.config), input.type,
+       input.type, directionOf(input.type), input.productId, input.type],
+    );
+    return;
+  }
+
+  // `input.type` IS A PROVIDER KEY — that is what this form collects and what
+  // `INTEGRATION_META` is keyed by. The field keeps its name in this function's
+  // input because the route's path parameter is `:type`; what it means has
+  // never changed, and now it is stored in the column that means it.
+  await query(
+    `INSERT INTO integrations (id, product_id, name, provider, direction, status, credentials_json, config_json)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
+    [nanoid(), input.productId, input.type, input.type, directionOf(input.type),
+     input.credentialsCiphertext, JSON.stringify(input.config)],
+  );
+}
 
 // ─── POST /integrations/:type/disconnect ─────────────────────────────────────
 
@@ -295,7 +389,11 @@ integrationsRoutes.post('/integrations/:type/disconnect', async (c) => {
   if (!ctx.product) return c.redirect('/products');
 
   await query(
-    `UPDATE integrations SET status = 'revoked', credentials_json = NULL WHERE product_id = ? AND type = ?`,
+    // `:type` in this route's path is a PROVIDER KEY, and now it meets the
+    // column that means one. Against `type` this disconnected a row only if the
+    // row had come through this same form: a Stripe integration connected
+    // through the fabric or the OAuth flow ignored the button entirely.
+    `UPDATE integrations SET status = 'revoked', credentials_json = NULL WHERE product_id = ? AND provider = ?`,
     [ctx.product.id, type],
   );
 

@@ -10,6 +10,7 @@ import { query } from '../../db/client.js';
 import { computeSignal } from '../../services/signal.js';
 import { generateMorningBriefing, processVoiceTranscript } from '../../services/voice/briefing.js';
 import { nanoid } from 'nanoid';
+import { getMRRDecomposition } from '../../services/intelligence/revenue.js';
 
 export const mobileRoutes = new Hono<AuthEnv>();
 
@@ -46,17 +47,22 @@ mobileRoutes.get('/api/dashboard', async (c) => {
        LIMIT 10`,
       [productId],
     ),
-    query(
-      `SELECT new_mrr_cents, churned_mrr_cents, expansion_mrr_cents, contraction_mrr_cents, mrr_health_ratio
-       FROM metric_snapshots WHERE product_id = ?
-       ORDER BY snapshot_date DESC LIMIT 1`,
-      [productId],
-    ),
+    // THE CANONICAL READER, NOT A SECOND COPY OF THE QUESTION.
+    //
+    // This read the four movement columns straight off the newest snapshot —
+    // the exact query the canonical reader was rewritten to stop doing. A daily
+    // job inserts an empty placeholder snapshot for every active company, and
+    // those columns are `INTEGER DEFAULT 0`, so the newest row is usually a
+    // placeholder reporting nothing and this reported it as a month in which
+    // nothing was won, nothing churned, and nothing expanded.
+    //
+    // `getMRRDecomposition` selects the newest snapshot that reports SOMETHING
+    // about revenue, and returns null when none does.
+    getMRRDecomposition(productId),
   ]);
 
   type StressorRow = { id: string; stressor_name: string; signal: string; severity: string; neutralizing_action: string; status: string };
   type DecisionRow = { id: string; what: string; category: string; gate: number; status: string; created_at: string; deadline: string | null; decided_at: string | null; chosen_option: string | null; outcome: string | null; options: string | null };
-  type MrrRow = { new_mrr_cents: number; churned_mrr_cents: number; expansion_mrr_cents: number; contraction_mrr_cents: number; mrr_health_ratio: number | null };
 
   const stressors = (stressorData.rows as unknown as StressorRow[]).map((s) => ({
     id: s.id,
@@ -82,20 +88,27 @@ mobileRoutes.get('/api/dashboard', async (c) => {
     options: d.options ? JSON.parse(d.options) as string[] : null,
   }));
 
-  const mrrRow = mrrData.rows.length > 0 ? (mrrData.rows[0] as unknown as MrrRow) : null;
-  const mrr = mrrRow ? {
-    new: Math.round(mrrRow.new_mrr_cents / 100),
-    churned: Math.round(mrrRow.churned_mrr_cents / 100),
-    expansion: Math.round(mrrRow.expansion_mrr_cents / 100),
-    contraction: Math.round(mrrRow.contraction_mrr_cents / 100),
-    health_ratio: mrrRow.mrr_health_ratio,
+  // Null when no snapshot reports anything about revenue. A client that reads
+  // zeros cannot tell "a flat month" from "we have never been told".
+  const mrr = mrrData ? {
+    level: mrrData.level_cents === null ? null : Math.round(mrrData.level_cents / 100),
+    // Null for a movement nobody reported. A client reading zeros cannot tell
+    // a flat month from a company that has never been asked.
+    new: mrrData.new_cents === null ? null : Math.round(mrrData.new_cents / 100),
+    churned: mrrData.churned_cents === null ? null : Math.round(mrrData.churned_cents / 100),
+    expansion: mrrData.expansion_cents === null ? null : Math.round(mrrData.expansion_cents / 100),
+    contraction: mrrData.contraction_cents === null ? null : Math.round(mrrData.contraction_cents / 100),
+    health_ratio: mrrData.health_ratio,
   } : null;
 
   return c.json({
     product_name: product.name,
     signal: {
-      score: signalData.score,
-      tier: signalData.tier,
+      // `has_data` travels with the score so a client cannot present a default
+      // as a measurement; `score` is null when there is nothing behind it.
+      score: signalData.hasData ? signalData.score : null,
+      tier: signalData.hasData ? signalData.tier : null,
+      has_data: signalData.hasData,
       prose: signalData.prose,
       risk_state: signalData.riskState,
     },
@@ -208,12 +221,15 @@ mobileRoutes.get('/api/voice/briefing', async (c) => {
 
     // Build key metrics from latest snapshot
     const metricsResult = await query(
-      `SELECT new_mrr_cents, mrr_health_ratio, activation_rate, churn_rate, nps_score, day_30_retention
+      // The LEVEL is what a briefing is about; `new_mrr_cents` is one period's
+      // new business and is labelled as such below.
+      `SELECT mrr_cents, new_mrr_cents, mrr_health_ratio, activation_rate, churn_rate, nps_score, day_30_retention
        FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1`,
       [productId],
     );
 
     type MetricSnapshotRow = {
+      mrr_cents: number | null;
       new_mrr_cents: number | null;
       mrr_health_ratio: number | null;
       activation_rate: number | null;
@@ -226,6 +242,7 @@ mobileRoutes.get('/api/voice/briefing', async (c) => {
 
     const keyMetrics: Array<{ label: string; value: string }> = [];
     if (snap) {
+      if (snap.mrr_cents != null) keyMetrics.push({ label: 'MRR', value: `$${Math.round(snap.mrr_cents / 100).toLocaleString()}` });
       if (snap.new_mrr_cents != null) keyMetrics.push({ label: 'New MRR', value: `$${Math.round(snap.new_mrr_cents / 100).toLocaleString()}` });
       if (snap.mrr_health_ratio != null) keyMetrics.push({ label: 'MRR Health', value: snap.mrr_health_ratio.toFixed(2) });
       if (snap.activation_rate != null) keyMetrics.push({ label: 'Activation Rate', value: `${(snap.activation_rate * 100).toFixed(1)}%` });

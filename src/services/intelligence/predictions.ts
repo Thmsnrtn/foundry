@@ -116,8 +116,10 @@ export async function assessChurnRisk(productId: string): Promise<ChurnRiskAsses
   const signals: ChurnRiskAssessment['signals'] = [];
   let riskScore = 0;
 
-  // Signal 1: MRR Health Ratio
-  if (mrrHealth) {
+  // Signal 1: MRR Health Ratio. A null ratio used to arrive here as 0 and take
+  // the last branch — "Healthy churn-to-revenue ratio" asserted about a company
+  // with no new MRR to divide by.
+  if (mrrHealth?.value != null) {
     if (mrrHealth.value >= 1.0) {
       signals.push({ signal: 'Churn exceeds new revenue', weight: 30, direction: 'negative' });
       riskScore += 30;
@@ -176,7 +178,7 @@ export async function assessChurnRisk(productId: string): Promise<ChurnRiskAsses
 
   // Recommended actions
   const actions: string[] = [];
-  if (mrrHealth && mrrHealth.value >= 0.7) actions.push('Investigate top churn reasons — conduct exit surveys');
+  if (mrrHealth?.value != null && mrrHealth.value >= 0.7) actions.push('Investigate top churn reasons — conduct exit surveys');
   if (metricsRow?.day_30_retention != null && metricsRow.day_30_retention < 0.5) actions.push('Review onboarding flow — activation-to-retention gap detected');
   if (metricsRow?.activation_rate != null && metricsRow.activation_rate < 0.4) actions.push('Simplify time-to-value — reduce steps to first success');
   if (actions.length === 0) actions.push('No immediate action required — continue monitoring');
@@ -203,7 +205,17 @@ export async function generateProactiveInsights(productId: string): Promise<Proa
   const insights: ProactiveInsight[] = [];
   const now = new Date().toISOString();
 
-  // Get last 2 metric snapshots for comparison
+  // "LAST PERIOD" WAS WHATEVER THE PREVIOUS ROW HAPPENED TO BE. These insights
+  // compare the two most recent snapshots and every one of them says "from last
+  // period" or "recently". `metric_snapshots` is keyed by DATE and most
+  // companies report daily, so for them this is yesterday against the day
+  // before — and `signups_7d` and `support_volume_7d` are SEVEN-DAY ROLLING
+  // WINDOWS, so two adjacent days share six of their seven days. A 50% jump
+  // between overlapping windows is a different event from a 50% jump between
+  // periods, and the founder was told the second.
+  //
+  // The comparison is unchanged; what changes is that the interval it actually
+  // covers travels with the sentence, so the reader can weigh it.
   const snapshots = await query(
     'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 2',
     [productId]
@@ -213,6 +225,13 @@ export async function generateProactiveInsights(productId: string): Promise<Proa
 
   const current = snapshots.rows[0] as Record<string, number>;
   const prior = snapshots.rows[1] as Record<string, number>;
+  const gapDays = Math.round(
+    (Date.parse(`${String((current as unknown as Record<string, string>).snapshot_date)}T00:00:00Z`)
+      - Date.parse(`${String((prior as unknown as Record<string, string>).snapshot_date)}T00:00:00Z`))
+    / 86_400_000);
+  const over = Number.isFinite(gapDays) && gapDays > 0
+    ? (gapDays === 1 ? 'over one day' : `over ${gapDays} days`)
+    : 'between the last two reports';
 
   // Activation + Signup divergence
   if (current.signups_7d && prior.signups_7d && current.activation_rate && prior.activation_rate) {
@@ -224,7 +243,7 @@ export async function generateProactiveInsights(productId: string): Promise<Proa
         id: `insight-signup-activation-${productId}`,
         type: 'anomaly',
         title: 'Signups up but activation down',
-        body: `Signups grew ${(signupGrowth * 100).toFixed(0)}% but activation dropped ${(Math.abs(activationDelta) * 100).toFixed(1)}pp. This usually means lower-intent traffic. Check which acquisition channel grew and whether your onboarding handles these users.`,
+        body: `Signups grew ${(signupGrowth * 100).toFixed(0)}% ${over} while activation dropped ${(Math.abs(activationDelta) * 100).toFixed(1)}pp. Both are seven-day rolling figures, so consecutive reports overlap. This usually means lower-intent traffic. Check which acquisition channel grew and whether your onboarding handles these users.`,
         urgency: 'high',
         action: { label: 'View Cohorts', url: `/products/${productId}/cohorts` },
         generated_at: now,
@@ -242,7 +261,7 @@ export async function generateProactiveInsights(productId: string): Promise<Proa
         id: `insight-churn-spike-${productId}`,
         type: 'warning',
         title: 'Churn accelerating',
-        body: `Churned MRR increased ${(churnGrowth * 100).toFixed(0)}% from last period ($${(prior.churned_mrr_cents / 100).toFixed(0)} → $${(current.churned_mrr_cents / 100).toFixed(0)}). Identify the cohort driving this before it compounds.`,
+        body: `Churned MRR increased ${(churnGrowth * 100).toFixed(0)}% ${over} ($${(prior.churned_mrr_cents / 100).toFixed(0)} → $${(current.churned_mrr_cents / 100).toFixed(0)}). Identify the cohort driving this before it compounds.`,
         urgency: 'high',
         action: { label: 'View Revenue', url: `/products/${productId}/revenue` },
         generated_at: now,
@@ -258,7 +277,7 @@ export async function generateProactiveInsights(productId: string): Promise<Proa
         id: `insight-retention-up-${productId}`,
         type: 'opportunity',
         title: 'Retention improving',
-        body: `Day-30 retention increased ${(retDelta * 100).toFixed(1)}pp (${(prior.day_30_retention * 100).toFixed(0)}% → ${(current.day_30_retention * 100).toFixed(0)}%). Whatever you changed recently is working. Consider documenting it in the Failure Log (as a success).`,
+        body: `Day-30 retention increased ${(retDelta * 100).toFixed(1)}pp ${over} (${(prior.day_30_retention * 100).toFixed(0)}% → ${(current.day_30_retention * 100).toFixed(0)}%). Whatever you changed is working. Consider documenting it in the Failure Log (as a success).`,
         urgency: 'low',
         generated_at: now,
       });
@@ -275,7 +294,7 @@ export async function generateProactiveInsights(productId: string): Promise<Proa
         id: `insight-support-spike-${productId}`,
         type: 'warning',
         title: 'Support volume spike',
-        body: `Support tickets up ${(supportGrowth * 100).toFixed(0)}% (${prior.support_volume_7d} → ${current.support_volume_7d}). Check if a recent deploy introduced issues or if a new cohort is hitting friction points.`,
+        body: `Support tickets up ${(supportGrowth * 100).toFixed(0)}% ${over} (${prior.support_volume_7d} → ${current.support_volume_7d}, both seven-day figures). Check if a recent deploy introduced issues or if a new cohort is hitting friction points.`,
         urgency: 'medium',
         generated_at: now,
       });

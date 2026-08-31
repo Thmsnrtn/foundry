@@ -30,6 +30,11 @@ export interface WaterfallResult {
   investor_total: number;
   employee_total: number;
   liquidation_preferences_consumed: number;
+  /** Non-participating investors who do better converting to common at this
+   *  valuation than taking their preference. Named because it is the single
+   *  fact that decides how much of a large exit reaches the founders, and the
+   *  founder should be able to see who it applies to. */
+  converting_investors: string[];
 }
 
 export interface ExitScenario {
@@ -37,6 +42,7 @@ export interface ExitScenario {
   label: string;
   founder_proceeds: number;
   founder_pct: number;
+  converting_investors: string[];
 }
 
 export interface CapTableScenarioRow {
@@ -46,26 +52,65 @@ export interface CapTableScenarioRow {
   exit_valuation: number | null;
   stakeholders_json: string;
   founder_proceeds: number | null;
-  total_dilution_pct: number | null;
+  /** The investors' share of the exit PROCEEDS, which is not dilution: a
+   *  preference that bites pays an investor far more than their ownership. The
+   *  column was called `total_dilution_pct` and rendered under a column headed
+   *  "Dilution" (migration 208). */
+  investor_proceeds_pct: number | null;
   preference_waterfall_json: string | null;
   created_at: string;
 }
 
 // ─── computeWaterfall ────────────────────────────────────────────────────────
+//
+// A NON-PARTICIPATING PREFERENCE IS A FLOOR, AND THIS TREATED IT AS A CEILING.
+//
+// An investor holding 1x non-participating preferred took their money back here
+// and then stopped, so every dollar above the preference went to the common
+// holders. That is not what the term means. A non-participating investor takes
+// the GREATER of the preference and what their shares are worth converted to
+// common — the choice between the two is the entire reason the term is
+// negotiated — and the version this replaces never gave them the second option.
+//
+// The error ran in one direction, towards the founder, on the page where a
+// founder decides whether to sell. The placeholder cap table printed on the
+// form is a worked example of it: a founder with 3,000,000 shares and a seed
+// investor with 500,000 shares who put in $500,000 on 1x non-participating. At
+// the $250M exit this page models, the old code paid the investor their
+// $500,000 and told the founder they would take $249.50M — 99.8% of the exit.
+// The investor owns 14.29% of the company and would obviously convert: $35.71M
+// to them, $214.29M to the founder. The page overstated the founder's proceeds
+// by thirty-five million dollars, in its own example.
+//
+// WHOSE CONVERSION DEPENDS ON WHOSE. An investor who converts gives up their
+// preference, which leaves more in the pot and enlarges the common pool — and
+// that can flip another investor's decision. The choices are not independent,
+// so this runs them to a fixed point: each non-participating investor takes
+// whichever side of their own choice pays them more, given everyone else's
+// current choice, repeated until nobody wants to move. It is bounded by the
+// number of investors plus a margin, and if it has not settled by then it
+// stops and reports the last state rather than looping.
+//
+// WHAT THIS STILL DOES NOT MODEL, said plainly because a founder may carry
+// these numbers into a negotiation: participation caps, seniority stacks (this
+// pays higher multiples first, which is not the same as last-money-first),
+// accrued dividends or interest on preferred, and option-pool refresh at close.
 
 export async function computeWaterfall(
   stakeholders: Stakeholder[],
   exitValuation: number
 ): Promise<WaterfallResult> {
   // Total shares including vested options
-  const vestingAdjusted = stakeholders.map((s) => ({
+  const holders = stakeholders.map((s) => ({
     ...s,
     effectiveShares: s.shares + Math.round(s.options * (s.vested_pct / 100)),
   }));
 
-  const totalShares = vestingAdjusted.reduce((sum, s) => sum + s.effectiveShares, 0);
+  const totalShares = holders.reduce((sum, s) => sum + s.effectiveShares, 0);
 
-  if (totalShares === 0) {
+  // An exit of zero (or less) has nothing to divide, and it also has no
+  // denominator: `net_pct` used to divide by it and hand the page a NaN.
+  if (totalShares === 0 || exitValuation <= 0) {
     return {
       proceeds_by_stakeholder: stakeholders.map((s) => ({
         name: s.name,
@@ -77,89 +122,93 @@ export async function computeWaterfall(
       investor_total: 0,
       employee_total: 0,
       liquidation_preferences_consumed: 0,
+      converting_investors: [],
     };
   }
 
-  // Separate investors (with liquidation preferences) from common holders
-  const investors = vestingAdjusted.filter(
-    (s) => s.type === 'investor' && s.invested > 0
-  );
-  const commonHolders = vestingAdjusted.filter(
-    (s) => s.type !== 'investor' || s.invested === 0
-  );
+  // INDEXES, NOT NAMES. Proceeds accumulated into a record keyed by stakeholder
+  // name, so two employees both called "Alex" shared one entry, and the lookup
+  // that sorted proceeds into founder/investor/employee totals matched on name
+  // too — it returned whichever of them appeared first. Positions are unique;
+  // names are whatever the founder typed into a JSON textarea.
+  const isPreferred = (i: number) => holders[i].type === 'investor' && holders[i].invested > 0;
+  const investorIdx = holders.map((_, i) => i).filter(isPreferred);
 
-  // Step 1: Pay liquidation preferences to investors
-  let remaining = exitValuation;
-  let prefConsumed = 0;
-
-  const proceeds: Record<string, number> = {};
-
-  // Sort investors by preference priority (higher multiple = higher priority, simplified)
-  const sortedInvestors = [...investors].sort(
-    (a, b) => b.preference_multiple - a.preference_multiple
+  // Higher multiple first. A simplification, and named as one above.
+  const prefOrder = [...investorIdx].sort(
+    (a, b) => holders[b].preference_multiple - holders[a].preference_multiple
   );
 
-  for (const inv of sortedInvestors) {
-    const prefAmount = inv.invested * inv.preference_multiple;
-    const paid = Math.min(prefAmount, remaining);
-    proceeds[inv.name] = (proceeds[inv.name] ?? 0) + paid;
-    remaining -= paid;
-    prefConsumed += paid;
-  }
+  /** One pass of the waterfall, given who has chosen to convert to common. */
+  function runOnce(converted: Set<number>): { proceeds: number[]; prefConsumed: number } {
+    const proceeds = new Array<number>(holders.length).fill(0);
+    let remaining = exitValuation;
+    let prefConsumed = 0;
 
-  // Step 2: Distribute remainder pro-rata (participating preferred also participates)
-  if (remaining > 0) {
-    // Participating investors join common holders in the pro-rata pool
-    const participatingInvestors = investors.filter((s) => s.is_participating);
-    const proRataPool = [...commonHolders, ...participatingInvestors];
-    const proRataShares = proRataPool.reduce((sum, s) => sum + s.effectiveShares, 0);
+    // Step 1: preferences, to the investors who have not converted.
+    for (const i of prefOrder) {
+      if (converted.has(i)) continue;
+      const paid = Math.min(holders[i].invested * holders[i].preference_multiple, remaining);
+      proceeds[i] += paid;
+      remaining -= paid;
+      prefConsumed += paid;
+    }
 
-    if (proRataShares > 0) {
-      for (const s of proRataPool) {
-        const share = (s.effectiveShares / proRataShares) * remaining;
-        proceeds[s.name] = (proceeds[s.name] ?? 0) + share;
+    // Step 2: the remainder, pro-rata over common, participating preferred, and
+    // anyone who converted.
+    if (remaining > 0) {
+      const pool = holders
+        .map((_, i) => i)
+        .filter((i) => !isPreferred(i) || converted.has(i) || holders[i].is_participating);
+      const poolShares = pool.reduce((sum, i) => sum + holders[i].effectiveShares, 0);
+      if (poolShares > 0) {
+        for (const i of pool) {
+          proceeds[i] += (holders[i].effectiveShares / poolShares) * remaining;
+        }
       }
     }
+
+    return { proceeds, prefConsumed };
   }
 
-  // Build result
-  const proceedsList = vestingAdjusted.map((s) => {
-    const gross_proceeds = proceeds[s.name] ?? 0;
-    return {
-      name: s.name,
-      type: s.type,
-      gross_proceeds: Math.round(gross_proceeds),
-      net_pct: parseFloat(((gross_proceeds / exitValuation) * 100).toFixed(2)),
-    };
-  });
+  // Each non-participating investor takes the better of their two options,
+  // given everyone else's current choice, until nobody wants to move.
+  const converted = new Set<number>();
+  let run = runOnce(converted);
+  for (let round = 0; round < investorIdx.length + 2; round++) {
+    let changed = false;
+    for (const i of investorIdx) {
+      if (holders[i].is_participating) continue; // takes both; nothing to choose
+      const wasConverted = converted.has(i);
+      const trial = new Set(converted);
+      if (wasConverted) trial.delete(i); else trial.add(i);
+      const alt = runOnce(trial);
+      if (alt.proceeds[i] > run.proceeds[i] + 1e-6) {
+        if (wasConverted) converted.delete(i); else converted.add(i);
+        run = alt;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
 
-  const founderTotal = proceedsList
-    .filter((p) => {
-      const s = vestingAdjusted.find((st) => st.name === p.name);
-      return s?.type === 'founder';
-    })
-    .reduce((sum, p) => sum + p.gross_proceeds, 0);
+  const proceedsList = holders.map((s, i) => ({
+    name: s.name,
+    type: s.type,
+    gross_proceeds: Math.round(run.proceeds[i]),
+    net_pct: parseFloat(((run.proceeds[i] / exitValuation) * 100).toFixed(2)),
+  }));
 
-  const investorTotal = proceedsList
-    .filter((p) => {
-      const s = vestingAdjusted.find((st) => st.name === p.name);
-      return s?.type === 'investor';
-    })
-    .reduce((sum, p) => sum + p.gross_proceeds, 0);
-
-  const employeeTotal = proceedsList
-    .filter((p) => {
-      const s = vestingAdjusted.find((st) => st.name === p.name);
-      return s?.type === 'employee' || s?.type === 'advisor';
-    })
-    .reduce((sum, p) => sum + p.gross_proceeds, 0);
+  const totalFor = (types: string[]) => holders.reduce(
+    (sum, s, i) => (types.includes(s.type) ? sum + run.proceeds[i] : sum), 0);
 
   return {
     proceeds_by_stakeholder: proceedsList,
-    founder_total: Math.round(founderTotal),
-    investor_total: Math.round(investorTotal),
-    employee_total: Math.round(employeeTotal),
-    liquidation_preferences_consumed: Math.round(prefConsumed),
+    founder_total: Math.round(totalFor(['founder'])),
+    investor_total: Math.round(totalFor(['investor'])),
+    employee_total: Math.round(totalFor(['employee', 'advisor'])),
+    liquidation_preferences_consumed: Math.round(run.prefConsumed),
+    converting_investors: [...converted].sort((a, b) => a - b).map((i) => holders[i].name),
   };
 }
 
@@ -176,13 +225,13 @@ export async function saveCapTableScenario(
   const id = nanoid();
 
   let founderProceeds: number | null = null;
-  let totalDilutionPct: number | null = null;
+  let investorProceedsPct: number | null = null;
   let preferencewaterfallJson: string | null = null;
 
   if (scenario.exit_valuation && scenario.exit_valuation > 0) {
     const waterfall = await computeWaterfall(scenario.stakeholders, scenario.exit_valuation);
     founderProceeds = waterfall.founder_total;
-    totalDilutionPct = parseFloat(
+    investorProceedsPct = parseFloat(
       ((waterfall.investor_total / scenario.exit_valuation) * 100).toFixed(2)
     );
     preferencewaterfallJson = JSON.stringify(waterfall.proceeds_by_stakeholder);
@@ -191,7 +240,7 @@ export async function saveCapTableScenario(
   await query(
     `INSERT INTO cap_table_scenarios
        (id, product_id, scenario_name, exit_valuation, stakeholders_json,
-        founder_proceeds, total_dilution_pct, preference_waterfall_json)
+        founder_proceeds, investor_proceeds_pct, preference_waterfall_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
@@ -200,7 +249,7 @@ export async function saveCapTableScenario(
       scenario.exit_valuation ?? null,
       JSON.stringify(scenario.stakeholders),
       founderProceeds,
-      totalDilutionPct,
+      investorProceedsPct,
       preferencewaterfallJson,
     ]
   );
@@ -226,7 +275,7 @@ export async function getCapTableScenarios(productId: string): Promise<CapTableS
       exit_valuation: row.exit_valuation as number | null,
       stakeholders_json: row.stakeholders_json as string,
       founder_proceeds: row.founder_proceeds as number | null,
-      total_dilution_pct: row.total_dilution_pct as number | null,
+      investor_proceeds_pct: row.investor_proceeds_pct as number | null,
       preference_waterfall_json: row.preference_waterfall_json as string | null,
       created_at: row.created_at as string,
     };
@@ -259,6 +308,7 @@ export async function runMultipleExitScenarios(
       founder_pct: parseFloat(
         ((waterfall.founder_total / point.valuation) * 100).toFixed(1)
       ),
+      converting_investors: waterfall.converting_investors,
     });
   }
 

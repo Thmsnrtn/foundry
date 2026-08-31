@@ -1,0 +1,35 @@
+-- =============================================================================
+-- Migration 183: a settings table nobody can reach
+--
+-- `founder_focus_settings` holds six controls over how Foundry paces itself for
+-- a founder: a focus area with an expiry, a vacation mode, a daily decision
+-- cap, a briefing format and a timezone.
+--
+-- NOTHING WRITES A ROW. There is no settings page, no route, no API and no
+-- onboarding step that can create one. Nothing reads a column either. What
+-- exists is a nightly job, `scp_wellbeing_focus_cleanup`, that clears expired
+-- focus areas and vacation modes — values no founder can ever have set.
+--
+-- This is precisely the shape migration 157 removed, and its own reasoning is
+-- quoted in that job's remaining comment: the snooze sweep that used to sit
+-- beside these two "deleted from `decision_snooze_log`, which nothing ever
+-- wrote a row into: there was no snooze button, no route and no API. A nightly
+-- job clearing an always-empty table is a moving part that describes a feature
+-- nobody has." The sibling was removed and this one was not.
+--
+-- The owner decision recorded in 157 governs: "remove the consuming halves
+-- rather than build the producing ones. Anything genuinely wanted comes back as
+-- a whole feature, against a ledger that is actually populated." So this is
+-- applying a decision already on record to a case it covers, not a new one.
+--
+-- THE INTENT IS NOT LOST, WHICH IS WHY THIS IS DELETION RATHER THAN DEBT.
+-- Pacing Foundry to a founder's capacity is real and it is implemented:
+-- `ux/interruption.ts` reads the founder's measured strain from
+-- `wellbeing/pulse.ts` and quiets non-critical events one rung when they are
+-- strained and two when overloaded, under a ceiling they set. That is the same
+-- concern, done against a signal something actually produces. This table is the
+-- superseded design, and keeping it would leave two answers to one question
+-- with only one of them wired.
+-- =============================================================================
+
+DROP TABLE IF EXISTS founder_focus_settings;

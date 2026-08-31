@@ -18,10 +18,6 @@ export interface AgentMessage {
   subject: string;
   body: string;
   context: Record<string, unknown>;
-  requires_response: boolean;
-  response_deadline: string | null;
-  responded_at: string | null;
-  response_id: string | null;
   read_at: string | null;
   created_at: string;
 }
@@ -48,10 +44,6 @@ function rowToMessage(row: Record<string, unknown>): AgentMessage {
     subject: row.subject as string,
     body: row.body as string,
     context: parseJson<Record<string, unknown>>(row.context_json as string, {}),
-    requires_response: (row.requires_response as number) === 1,
-    response_deadline: (row.response_deadline as string) ?? null,
-    responded_at: (row.responded_at as string) ?? null,
-    response_id: (row.response_id as string) ?? null,
     read_at: (row.read_at as string) ?? null,
     created_at: row.created_at as string,
   };
@@ -68,8 +60,6 @@ export async function sendMessage(params: {
   subject: string;
   body: string;
   context?: Record<string, unknown>;
-  requiresResponse?: boolean;
-  responseDeadlineHours?: number;
 }): Promise<string> {
   const id = nanoid();
   const {
@@ -77,28 +67,44 @@ export async function sendMessage(params: {
     fromAgent,
     toAgent,
     type,
-    priority = 'medium',
+    priority: requestedPriority = 'medium',
     subject,
     body,
     context = {},
-    requiresResponse = false,
-    responseDeadlineHours,
   } = params;
 
-  const deadlineSql = responseDeadlineHours
-    ? `datetime('now', '+${responseDeadlineHours} hours')`
-    : null;
+  // THE TYPE SAYS FOUR WORDS; THE CALLER SAYS WHATEVER THE MODEL SAID.
+  //
+  // `priority` is declared as a union, and the one caller reaches it by casting
+  // a field straight out of a language model's JSON — so the compiler's
+  // guarantee stops exactly where the data starts. `agent_messages.priority`
+  // carries CHECK(priority IN ('low','medium','high','critical')), so a model
+  // answering 'urgent' or 'p1' aborted the INSERT and the entire message
+  // between two agents was lost to a logged error.
+  //
+  // The default already had the right answer for a priority nobody stated, and
+  // an unrecognised one is no better stated than a missing one. It is coerced
+  // rather than refused because the MESSAGE is the thing worth keeping; losing
+  // a handoff between two agents over the word attached to it is the larger
+  // failure.
+  const VALID_PRIORITIES = new Set(['low', 'medium', 'high', 'critical']);
+  const priority = VALID_PRIORITIES.has(requestedPriority) ? requestedPriority : 'medium';
 
+  // A REQUEST-FOR-RESPONSE PROTOCOL NOTHING USED. `requiresResponse` and
+  // `responseDeadlineHours` were parameters no caller ever passed, so
+  // `requires_response` was 0 on every message ever sent; `replyToMessage` was
+  // the only writer of `responded_at` and had no caller; and the dashboard drew
+  // an "Unanswered" card and a "Response requested" badge from the pair, which
+  // could therefore only ever show zero and never render. Migration 213 drops
+  // the four columns. If agents are to ask each other for answers, that is a
+  // loop with a sender, a replier and a deadline nobody has written yet.
   await query(
     `INSERT INTO agent_messages
        (id, product_id, from_agent, to_agent, type, priority, subject, body,
-        context_json, requires_response, response_deadline, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${deadlineSql ? deadlineSql : '?'}, datetime('now'))`,
-    deadlineSql
-      ? [id, productId, fromAgent, toAgent, type, priority, subject, body,
-         JSON.stringify(context), requiresResponse ? 1 : 0]
-      : [id, productId, fromAgent, toAgent, type, priority, subject, body,
-         JSON.stringify(context), requiresResponse ? 1 : 0, null]
+        context_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+    [id, productId, fromAgent, toAgent, type, priority, subject, body,
+     JSON.stringify(context)]
   );
 
   return id;
@@ -142,59 +148,21 @@ export async function getMessageInbox(
 
 // ─── markAsRead ───────────────────────────────────────────────────────────────
 
-export async function markAsRead(messageIds: string[]): Promise<void> {
+/**
+ * THE SCOPE TRAVELS WITH THE CALL. This took message ids alone, so the company
+ * whose messages were being marked was decided entirely by whoever assembled
+ * the list. Its one caller had fetched them for the company on screen, which is
+ * the only reason that was not a cross-tenant write — the same shape, and the
+ * same reason, as `experiments.updateResults` before it was scoped.
+ */
+export async function markAsRead(productId: string, messageIds: string[]): Promise<void> {
   if (messageIds.length === 0) return;
   const placeholders = messageIds.map(() => '?').join(', ');
   await query(
-    `UPDATE agent_messages SET read_at = datetime('now') WHERE id IN (${placeholders}) AND read_at IS NULL`,
-    messageIds
+    `UPDATE agent_messages SET read_at = datetime('now')
+      WHERE product_id = ? AND id IN (${placeholders}) AND read_at IS NULL`,
+    [productId, ...messageIds]
   );
-}
-
-// ─── replyToMessage ───────────────────────────────────────────────────────────
-
-export async function replyToMessage(
-  originalMessageId: string,
-  params: {
-    fromAgent: string;
-    body: string;
-    context?: Record<string, unknown>;
-  }
-): Promise<string> {
-  // Fetch original to get product_id, from_agent, subject
-  const originalResult = await query(
-    `SELECT * FROM agent_messages WHERE id = ?`,
-    [originalMessageId]
-  );
-  if (originalResult.rows.length === 0) {
-    throw new Error(`Message ${originalMessageId} not found`);
-  }
-
-  const original = originalResult.rows[0] as Record<string, unknown>;
-  const productId = original.product_id as string;
-  const toAgent = original.from_agent as string;
-  const subject = `Re: ${original.subject as string}`;
-
-  const replyId = await sendMessage({
-    productId,
-    fromAgent: params.fromAgent,
-    toAgent,
-    type: 'report',
-    priority: 'medium',
-    subject,
-    body: params.body,
-    context: params.context ?? {},
-  });
-
-  // Mark original as responded
-  await query(
-    `UPDATE agent_messages
-     SET responded_at = datetime('now'), response_id = ?
-     WHERE id = ?`,
-    [replyId, originalMessageId]
-  );
-
-  return replyId;
 }
 
 // ─── getMessageSummary ────────────────────────────────────────────────────────
@@ -205,7 +173,6 @@ export async function getMessageSummary(
 ): Promise<{
   total_messages: number;
   critical_count: number;
-  unresponded_count: number;
   most_active_agents: string[];
   recent_highlights: string[];
 }> {
@@ -213,8 +180,7 @@ export async function getMessageSummary(
     query(
       `SELECT
          COUNT(*) as total,
-         SUM(CASE WHEN priority = 'critical' THEN 1 ELSE 0 END) as critical,
-         SUM(CASE WHEN requires_response = 1 AND responded_at IS NULL THEN 1 ELSE 0 END) as unresponded
+         SUM(CASE WHEN priority = 'critical' THEN 1 ELSE 0 END) as critical
        FROM agent_messages
        WHERE product_id = ? AND created_at > datetime('now', ? || ' hours')`,
       [productId, `-${hours}`]
@@ -250,7 +216,6 @@ export async function getMessageSummary(
   return {
     total_messages: (totals.total as number) ?? 0,
     critical_count: (totals.critical as number) ?? 0,
-    unresponded_count: (totals.unresponded as number) ?? 0,
     most_active_agents: activeAgents,
     recent_highlights: highlights,
   };

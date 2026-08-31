@@ -20,7 +20,7 @@ import { nanoid } from 'nanoid';
 import { getEffectiveMode } from '../autopilot/policy.js';
 import { createExecution } from '../scp/actions/executor.js';
 import { checkAndConsume, weekStarting } from '../outbound/envelopes.js';
-import { checkAndIncrement } from '../outbound/budget.js';
+import { remainingFor } from '../outbound/budget.js';
 import { ensurePolicyVisible, recordShadowWork } from './shared.js';
 import { log } from '../../lib/logger.js';
 
@@ -37,25 +37,30 @@ export interface OutreachSweepResult {
   suppressed: number;
 }
 
-export async function addSuppression(productId: string, email: string, reason: string): Promise<void> {
-  await query(
-    `INSERT INTO outreach_suppressions (id, product_id, email, reason)
-     VALUES (?, ?, ?, ?) ON CONFLICT(product_id, email) DO NOTHING`,
-    [nanoid(), productId, email.toLowerCase().trim(), reason],
-  );
-}
-
+// SUPPRESSION MOVED TO `institution/contact-constraint.ts`.
+//
+// It lived here, and only this department read it — while the institution's
+// governed email path, which is what actually reaches a customer, never did.
+// `addSuppression` had no caller anywhere, so nobody could get onto the list
+// and this reader always found it empty: a rule with no way in and one way out.
+//
+// It is now consulted at the governed boundary, where every outward effect
+// converges, and this sweep keeps its own check as defence in depth — a
+// suppressed champion should not consume an envelope slot or a budget unit on
+// the way to being refused.
 export async function isSuppressed(productId: string, email: string): Promise<boolean> {
-  const r = await query(
-    'SELECT id FROM outreach_suppressions WHERE product_id = ? AND email = ?',
-    [productId, email.toLowerCase().trim()],
-  );
-  return r.rows.length > 0;
+  const { contactIsRefused } = await import('../institution/contact-constraint.js');
+  return (await contactIsRefused(productId, email)).refused;
 }
 
 /** A referral ask that earns its warmth: it names only what is true — the
  *  customer's actual standing — and asks one small, specific favor. */
-export function draftReferralAsk(c: Record<string, unknown>, productName: string): { subject: string; body: string } {
+export function draftReferralAsk(
+  // Named field rather than a bag, for the reason `draftCheckIn` states: a
+  // loose type is how a store migration goes quiet instead of failing.
+  c: { name?: string | null },
+  productName: string,
+): { subject: string; body: string } {
   const name = String(c.name ?? '').trim() || 'there';
   return {
     subject: `A small favor — and thank you`,
@@ -89,11 +94,14 @@ export async function runOutreachSweep(productId: string): Promise<OutreachSweep
     .rows[0] as Record<string, string> | undefined;
   const productName = productRow?.name ?? 'our product';
 
-  const champions = (await query(
-    `SELECT * FROM customers WHERE product_id = ? AND is_champion = 1
-       AND email LIKE '%@%' ORDER BY health_score DESC LIMIT ?`,
-    [productId, MAX_PER_SWEEP],
-  )).rows as unknown as Array<Record<string, unknown>>;
+  // ASKED THROUGH THE ACCESSOR, NOT ONE TABLE. `customers.is_champion` is a
+  // stored flag set by the daily health refresh, and only for rows in that
+  // store. A company that reported its customers through the documented
+  // external API had none of them considered here — the same defect as the
+  // at-risk sweep, one department over. See `institution/company-customers.ts`.
+  const { getChampions } = await import('../institution/company-customers.js');
+  const champions = (await getChampions(productId, MAX_PER_SWEEP))
+    .filter((c) => typeof c.email === 'string' && String(c.email).includes('@'));
 
   const result: OutreachSweepResult = { champions: champions.length, shadowed: 0, proposed: 0, skipped: 0, suppressed: 0 };
 
@@ -117,8 +125,13 @@ export async function runOutreachSweep(productId: string): Promise<OutreachSweep
 
     const envelope = await checkAndConsume(productId, ENVELOPE_SCOPE);
     if (!envelope.allowed) { result.skipped++; continue; }
-    const budget = await checkAndIncrement(productId, String(c.external_id ?? customerId), weekStarting());
-    if (!budget.allowed) { result.skipped++; continue; }
+    // A LOOK, NOT A SEND — and this path never sends: rail 2 keeps a human eye
+    // on every outreach message, so what follows is a DRAFT. Taking a hold here
+    // spent a customer's weekly allowance on a proposal nobody had approved,
+    // and three sweeps could exhaust the budget of somebody who had received
+    // nothing. Keyed on the address the gateway meters, not the CRM id.
+    const budget = await remainingFor(productId, email, weekStarting());
+    if (budget.remaining <= 0) { result.skipped++; continue; }
 
     const draft = draftReferralAsk(c, productName);
     await createExecution(productId, null, {

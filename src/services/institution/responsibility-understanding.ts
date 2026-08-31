@@ -1,3 +1,4 @@
+import { query } from '../../db/client.js';
 import { getReconstructionClaims,type EpistemicStatus,type ReconstructionEvidenceRef } from './reconstruction.js';
 import { getResponsibility,transitionResponsibility,type Responsibility } from './responsibility.js';
 
@@ -18,6 +19,10 @@ export function requiredUnderstandingFacts(capability:string):UnderstandingFact[
 export interface UnderstandingValue {
   predicate:UnderstandingFact; value:unknown; epistemicStatus:EpistemicStatus;
   evidenceRefs:ReconstructionEvidenceRef[]; claimId:string;
+  /** When the fact was true of the company, not when the row was written. The
+   *  founder-facing view of what Foundry believes needs to say how old each
+   *  belief is, and nothing else here carried that. */
+  observedAt:string;
 }
 export interface ResponsibilityUnderstanding {
   responsibility:Responsibility; facts:UnderstandingValue[]; missingCriticalFacts:UnderstandingFact[];
@@ -31,7 +36,7 @@ export async function projectResponsibilityUnderstanding(productId:string,respon
   const claims=(await getReconstructionClaims(productId,now)).filter((claim)=>claim.subject===subject);
   const facts:UnderstandingValue[]=claims.filter((claim)=>UNDERSTANDING_FACTS.includes(claim.predicate as UnderstandingFact)).map((claim)=>({
     predicate:claim.predicate as UnderstandingFact,value:claim.value,epistemicStatus:claim.epistemicStatus,
-    evidenceRefs:claim.evidenceRefs,claimId:claim.id,
+    evidenceRefs:claim.evidenceRefs,claimId:claim.id,observedAt:claim.observedAt,
   }));
   const current=new Map(facts.map((fact)=>[fact.predicate,fact]));
   const requiredFacts=requiredUnderstandingFacts(responsibility.capability);
@@ -39,8 +44,33 @@ export async function projectResponsibilityUnderstanding(productId:string,respon
   const unresolvedFacts=requiredFacts.filter((predicate)=>{
     const fact=current.get(predicate); return fact!=null && ['unknown','conflicting','stale'].includes(fact.epistemicStatus);
   });
+  // AUTHORITY IS REQUIRED UNTIL SOMETHING LIVE SAYS OTHERWISE.
+  //
+  // This was `responsibility.authorityRef===null`, and that column is not
+  // cleared when a founder withdraws permission — the consent it names gets a
+  // `revoked_at` and the pointer stays, because the transition ledger keeps the
+  // history and every execution path re-reads `revoked_at IS NULL` at the
+  // moment it acts. Correct behaviour, wrong reading here: the projection said
+  // authority was NO LONGER REQUIRED for a responsibility whose permission had
+  // just been taken away, which is the answer exactly inverted on the one
+  // question the founder had just acted on.
+  //
+  // It asks the ledger the same question the execution paths ask, so a
+  // withdrawal reads as a withdrawal everywhere.
+  // Deliberately NOT `liveActGrant()`: that fragment compares against the
+  // database's own clock, and this projection takes the caller's, which the
+  // benchmarks use to reconstruct a moment. Same three conditions, one of them
+  // against a supplied time. If authority grows a fourth axis this is the copy
+  // that has to be updated by hand — which is exactly why the other five
+  // stopped being copies.
+  const liveGrant=await query(
+    `SELECT 1 FROM autonomy_consents a
+      WHERE a.responsibility_id=? AND a.product_id=? AND a.capability=?
+        AND a.to_mode='act' AND a.revoked_at IS NULL AND datetime(a.expires_at)>datetime(?)
+      LIMIT 1`,
+    [responsibilityId,productId,responsibility.capability,now.toISOString()]);
   return {responsibility,facts,requiredFacts,missingCriticalFacts:[...missingCriticalFacts],unresolvedFacts:[...unresolvedFacts],
-    authorityRequired:responsibility.authorityRef===null};
+    authorityRequired:liveGrant.rows.length===0};
 }
 
 export async function earnResponsibilityUnderstanding(productId:string,responsibilityId:string,now:Date=new Date()):Promise<Responsibility> {
@@ -48,7 +78,12 @@ export async function earnResponsibilityUnderstanding(productId:string,responsib
   if (understanding.responsibility.state!=='visible' || understanding.missingCriticalFacts.length || understanding.unresolvedFacts.length) {
     throw new Error('responsibility understanding insufficient');
   }
-  const evidence=understanding.facts.find((fact)=>fact.predicate==='purpose')!;
+  // `facts` is the full appended history, oldest first, so a fact the founder
+  // later revised appears twice. The transition must cite the claim that
+  // establishes understanding NOW — taking the first would ground the rung in
+  // a superseded statement.
+  const purposeClaims=understanding.facts.filter((fact)=>fact.predicate==='purpose');
+  const evidence=purposeClaims[purposeClaims.length-1];
   return transitionResponsibility({productId,responsibilityId,from:'visible',to:'understood',
     evidenceRef:`reconstruction_claim:${evidence.claimId}`,reason:'Critical operating facts are current and canonically grounded',
     actorRef:'institution:responsibility_understanding_verifier'});

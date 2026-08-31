@@ -14,6 +14,7 @@
 // =============================================================================
 
 import { registerToolHandler, invoke, type GatewayRequest } from '../outbound/gateway.js';
+import { pathSegment } from '../outbound/path-segment.js';
 import { withRetry } from '../resilience.js';
 import { log } from '../../lib/logger.js';
 
@@ -65,7 +66,7 @@ async function updateSubscriptionHandler(
 
   const response = await withRetry(
     () =>
-      fetch(`${STRIPE_API}/subscriptions/${params.subscription_id}`, {
+      fetch(`${STRIPE_API}/subscriptions/${pathSegment(params.subscription_id, 'subscription_id')}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,

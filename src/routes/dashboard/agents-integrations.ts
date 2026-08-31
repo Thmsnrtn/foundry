@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { describePrincipal } from '../../services/outbound/acting-principal.js';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
@@ -24,6 +25,7 @@ import {
 import { handleStripeWebhook } from '../../services/integration/stripe.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentIntegrationRoutes = new Hono<AuthEnv>();
 
@@ -134,8 +136,13 @@ function statusBadge(status: string) {
 }
 
 function authorityBadge(level: number) {
+  // Level 1 read "1-hour window", which told the founder this action would go
+  // out by itself after an hour unless they stopped it. Nothing counted an hour
+  // and nothing executed: the proposal stamped a future approval timestamp and
+  // then sat there. A badge is a statement about what the system will do, so it
+  // now says the same thing the row does — this is waiting for you.
   if (level === 0) return html`<span class="badge badge-success">Auto-execute</span>`;
-  if (level === 1) return html`<span class="badge badge-warn">1-hour window</span>`;
+  if (level === 1) return html`<span class="badge badge-warn">Your approval</span>`;
   return html`<span class="badge badge-error">CEO approval</span>`;
 }
 
@@ -279,7 +286,20 @@ function pendingActionCard(action: OutboundActionRecord) {
   </div>`;
 }
 
-function actionHistoryRow(action: OutboundActionRecord) {
+/**
+ * Who authorised this, as a person reads it.
+ *
+ * MOVED, not rewritten. This was the only reader of the principal vocabulary,
+ * and it lived on the page for ONE of the two ledgers — so the other ledger's
+ * approvals were recorded and never rendered anywhere. It knew about
+ * `founder:`, `auto` and `institution:` and nothing about `voice:`,
+ * `autopilot:` or `system:`, which is what the other ledger writes.
+ *
+ * One vocabulary, one reader: `services/outbound/acting-principal.ts`.
+ */
+const approverText = describePrincipal;
+
+function actionHistoryRow(action: OutboundActionRecord, viewerId: string) {
   const statusMap: Record<string, string> = {
     executed: 'badge-success',
     failed: 'badge-error',
@@ -291,14 +311,27 @@ function actionHistoryRow(action: OutboundActionRecord) {
   };
   const cls = statusMap[action.status] ?? 'badge-muted';
 
+  // A RED BADGE THAT EXPLAINED NOTHING. The reason a failure happened is
+  // already written to `result_json` when the executor refuses — "No executor
+  // registered for atlas: action architecture_proposal was not carried out" —
+  // and this row showed the founder the word "failed" and nothing else. Every
+  // agent-originated action lands there today, so the one thing the page most
+  // needed to say was the one thing it withheld.
+  const reason = action.status === 'failed' && action.result !== null
+    ? String((action.result as Record<string, unknown>).error ?? '').slice(0, 160)
+    : '';
+
   return html`
   <tr>
     <td style="font-size:12px;">${action.created_at.slice(0, 16).replace('T', ' ')}</td>
     <td><span class="badge badge-muted" style="font-size:11px;">${action.agent_name}</span></td>
     <td>${action.integration_name} / ${action.action_type}</td>
     <td>${action.preview_text ?? action.rationale.slice(0, 60)}</td>
-    <td><span class="badge ${cls}">${action.status}</span></td>
-    <td style="font-size:12px;">${action.approved_by ?? '-'}</td>
+    <td>
+      <span class="badge ${cls}">${action.status}</span>
+      ${reason ? html`<div class="text-muted" style="font-size:11px;margin-top:4px;">${reason}</div>` : ''}
+    </td>
+    <td style="font-size:12px;">${approverText(action.approved_by, viewerId)}</td>
   </tr>`;
 }
 
@@ -382,7 +415,7 @@ agentIntegrationRoutes.get('/agents/integrations', async (c) => {
             </tr>
           </thead>
           <tbody>
-            ${history.map((a) => actionHistoryRow(a))}
+            ${history.map((a) => actionHistoryRow(a, String(founder.id)))}
           </tbody>
         </table>
       </div>
@@ -403,23 +436,40 @@ agentIntegrationRoutes.post('/agents/integrations/:name/connect', async (c) => {
 
   if (!productId) return c.redirect('/agents/integrations');
 
-  // Verify product ownership
-  const prodResult = await query(
-    'SELECT id FROM products WHERE id = ? AND owner_id = ?',
-    [productId, founder.id],
-  );
-  if (prodResult.rows.length === 0) return c.redirect('/agents/integrations');
-
-  // Collect all form fields as config
-  const configMap: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(body)) {
-    if (key !== 'product_id' && typeof value === 'string' && value.trim()) {
-      configMap[key] = value.trim();
-    }
+  // A THIRD DOOR ONTO "STORE A CREDENTIAL FOR THIS COMPANY". The other two —
+  // /integrations/:type/connect and /connections/add — now ask
+  // `can_manage_company`; this one asked whether you owned the company, which
+  // is a different question and refused every co-founder who had been invited
+  // to manage exactly this.
+  //
+  // Asked inline rather than in middleware because the company arrives in the
+  // REQUEST BODY here. A router guard resolves the company from the path or the
+  // selection, so it would have authorized one company while the handler wrote
+  // a credential into another. Same predicate, asked where the answer is known.
+  const { memberMay } = await import('../../services/team/members.js');
+  if (!(await memberMay(productId, founder.id, 'can_manage_company'))) {
+    return c.redirect('/agents/integrations');
   }
 
+  // Every submitted field used to go into `config_json` in the clear — api
+  // keys, bot tokens and auth tokens included — while the sibling form at
+  // /integrations encrypted the same fields into `credentials_json`. The
+  // adapters read config_json, so the plaintext path was the one that worked.
+  //
+  // One shared split now decides, and it is an allow-list of non-secret keys,
+  // so a field nobody has classified is encrypted rather than exposed.
+  const { splitIntegrationFields } = await import('../../services/integration/fabric.js');
+  const submitted: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (key !== 'product_id' && typeof value === 'string' && value.trim()) {
+      submitted[key] = value.trim();
+    }
+  }
+  const { config, credentials } = splitIntegrationFields(submitted);
+
   await connectIntegration(productId, integrationName, {
-    config_json: configMap,
+    config_json: config,
+    credentials_json: Object.keys(credentials).length ? JSON.stringify(credentials) : undefined,
     authorized_agents: ['all'],
   });
 
@@ -494,7 +544,7 @@ agentIntegrationRoutes.get('/agents/integrations/actions', async (c) => {
             </tr>
           </thead>
           <tbody>
-            ${history.filter((a) => a.status !== 'pending_approval').map((a) => actionHistoryRow(a))}
+            ${history.filter((a) => a.status !== 'pending_approval').map((a) => actionHistoryRow(a, String(founder.id)))}
           </tbody>
         </table>
       </div>`}
@@ -505,7 +555,11 @@ agentIntegrationRoutes.get('/agents/integrations/actions', async (c) => {
 
 // ─── POST /agents/integrations/actions/:id/approve ───────────────────────────
 
-agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve', async (c) => {
+// A second approval surface for outward integration actions. The actions
+// page asks can_trigger_actions; this one did not. Same consequence, same
+// question.
+agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const actionId = c.req.param('id');
 
@@ -519,7 +573,12 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve', async (c
   if (result.rows.length === 0) return c.redirect('/agents/integrations/actions');
 
   try {
-    await approveAction(actionId, 'ceo');
+    // WHO APPROVED IT IS A PERSON, NOT A ROLE. This passed the literal 'ceo',
+    // so every approval by every founder of every company recorded the same
+    // approver. Ownership is verified three lines above and then thrown away;
+    // `approved_by` is the field that makes an authorisation attributable, and
+    // a constant makes it merely attributed.
+    await approveAction(actionId, `founder:${String(founder.id)}`);
   } catch (err) {
     console.error('[Integration] Approve action failed:', err);
   }
@@ -529,7 +588,8 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/approve', async (c
 
 // ─── POST /agents/integrations/actions/:id/reject ────────────────────────────
 
-agentIntegrationRoutes.post('/agents/integrations/actions/:id/reject', async (c) => {
+agentIntegrationRoutes.post('/agents/integrations/actions/:id/reject',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const actionId = c.req.param('id');
 
@@ -544,7 +604,7 @@ agentIntegrationRoutes.post('/agents/integrations/actions/:id/reject', async (c)
   const body = await c.req.parseBody();
   const reason = body.reason as string | undefined;
 
-  await rejectAction(actionId, reason);
+  await rejectAction(actionId, `founder:${String(founder.id)}`, reason);
 
   return c.redirect('/agents/integrations/actions');
 });
@@ -584,3 +644,7 @@ agentIntegrationRoutes.post('/webhooks/integrations/stripe', async (c) => {
     return c.json({ error: 'Webhook processing failed' }, 400);
   }
 });
+
+/** Exposed for tests. The vocabulary is the load-bearing part: a principal this
+ *  does not recognise is shown as-is rather than guessed at. */
+export const __approverTextForTest = approverText;

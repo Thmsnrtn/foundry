@@ -4,38 +4,32 @@
 
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { getPeerSignal, PEER_SIGNAL_MIN_SAMPLE } from '../../src/services/decisions/patterns.js';
 import { nanoid } from 'nanoid';
 
 beforeAll(async () => {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS decision_patterns (
-      id TEXT PRIMARY KEY,
-      decision_type TEXT NOT NULL,
-      product_lifecycle_stage TEXT NOT NULL,
-      risk_state_at_decision TEXT NOT NULL DEFAULT 'green',
-      key_metrics_context TEXT NOT NULL DEFAULT '{}',
-      option_chosen_category TEXT NOT NULL,
-      outcome_direction TEXT,
-      outcome_magnitude TEXT,
-      outcome_timeframe_days INTEGER,
-      market_category TEXT,
-      contributing_factors TEXT,
-      scenario_accuracy_score REAL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
 });
 
 beforeEach(async () => {
   await executeRaw('DELETE FROM decision_patterns');
 });
 
-async function addPattern(type: string, stage: string, option: string, outcome: string, market: string | null = null): Promise<void> {
+/** Each call is a DIFFERENT company unless a contributor is named. The reader
+ * counts companies, so a helper that wrote every row as one company would test
+ * the opposite of what these cases mean. */
+async function addPattern(
+  type: string, stage: string, option: string, outcome: string,
+  market: string | null = null, contributor: string = nanoid(),
+): Promise<void> {
   await query(
-    `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage, risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction, market_category)
-     VALUES (?, ?, ?, 'green', '{}', ?, ?, ?)`,
-    [nanoid(), type, stage, option, outcome, market],
+    `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage, risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction, market_category, contributor_hash)
+     VALUES (?, ?, ?, 'green', '{}', ?, ?, ?, ?)`,
+    [nanoid(), type, stage, option, outcome, market, contributor],
   );
 }
 
@@ -48,21 +42,25 @@ describe('getPeerSignal', () => {
   });
 
   it('returns the dominant option and its positive rate at/above the threshold', async () => {
-    // 4 chose raise_price (3 positive, 1 negative); 2 chose hold (both neutral). n=6.
-    await addPattern('pricing_change', 'pre_launch', 'raise_price', 'positive');
-    await addPattern('pricing_change', 'pre_launch', 'raise_price', 'positive');
-    await addPattern('pricing_change', 'pre_launch', 'raise_price', 'positive');
+    // Five companies chose raise_price (4 positive, 1 negative); two chose
+    // hold. The threshold is on the CLAIM's population — the companies that
+    // chose the option being reported — because that is what the sentence
+    // asserts. Four backers used to be enough here, and the sentence it
+    // produced was about "founders" who might all have been one.
+    for (let i = 0; i < 4; i++) {
+      await addPattern('pricing_change', 'pre_launch', 'raise_price', 'positive');
+    }
     await addPattern('pricing_change', 'pre_launch', 'raise_price', 'negative');
     await addPattern('pricing_change', 'pre_launch', 'hold', 'neutral');
     await addPattern('pricing_change', 'pre_launch', 'hold', 'neutral');
 
     const signal = await getPeerSignal({ decisionType: 'pricing_change', lifecycleStage: 'pre_launch' });
     expect(signal).not.toBeNull();
-    expect(signal!.sampleSize).toBe(6);
+    expect(signal!.sampleSize).toBe(7);
     expect(signal!.dominantOption).toBe('raise_price');
-    expect(signal!.dominantOptionCount).toBe(4);
-    expect(signal!.positiveRate).toBeCloseTo(0.75, 5);
-    expect(signal!.summary).toContain('75%');
+    expect(signal!.dominantOptionCount).toBe(5);
+    expect(signal!.positiveRate).toBeCloseTo(0.8, 5);
+    expect(signal!.summary).toContain('80%');
   });
 
   it('scopes by market category when provided', async () => {

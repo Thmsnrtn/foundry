@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { query } from '../../db/client.js';
 import { computeSignal, getSignalHistory } from '../../services/signal.js';
+import { signalNumber } from '../../services/signal.js';
 
 export const shareRoutes = new Hono();
 
@@ -49,11 +50,16 @@ shareRoutes.get('/share/:token', async (c) => {
   const token = c.req.param('token');
   if (!token || !/^[\w-]{8,64}$/.test(token)) return c.notFound();
 
+  // Named columns, not `p.*`. This page is public and unauthenticated, and the
+  // products row carries two secrets — `ingest_token` and `share_token` itself.
+  // Nothing rendered them, but a `SELECT *` on a public surface means the next
+  // person to add a field is one line away from handing an investor the
+  // credential their tools post metrics with. The fix is to not have them here.
   const productResult = await query(
-    `SELECT p.*, f.name as founder_name
+    `SELECT p.id, p.name, f.name as founder_name
      FROM products p
      JOIN founders f ON p.owner_id = f.id
-     WHERE p.share_token = ?`,
+     WHERE p.share_token = ? AND COALESCE(p.status,'active') <> 'archived'`,
     [token],
   );
   if (productResult.rows.length === 0) return c.notFound();
@@ -345,8 +351,8 @@ shareRoutes.get('/share/:token', async (c) => {
     </div>
 
     <div class="share-signal">
-      <div class="share-number">${signal.score}</div>
-      <div class="share-label">Signal Score</div>
+      <div class="share-number">${signalNumber(signal)}</div>
+      <div class="share-label">${signal.hasData ? 'Signal Score' : 'Not enough data yet'}</div>
     </div>
 
     ${sparkline ? `

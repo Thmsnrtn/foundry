@@ -1,26 +1,43 @@
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+process.env.ENCRYPTION_KEY = '0'.repeat(64);
+
 // =============================================================================
 // Tests: Multi-Tenancy Isolation (Phase 7)
 // Static analysis tests that verify every DB query, middleware, and schema
 // enforces tenant scoping. A cross-tenant data leak is existential.
+//
+// SECTION 3 USED TO READ A FILE THAT DID NOT RUN. Ten assertions here and two
+// more in `tests/simulation/05-tenancy-integrity.test.ts` read the source text
+// of `src/middleware/tenant.ts` — that it calls `getProductByOwner`, that it
+// answers 404 and not 403, that it treats an archived company as absent — and
+// `tenantMiddleware` was mounted on no router anywhere in `src/`. Every route
+// scopes ownership inline instead. So a suite named for the control asserted
+// the good conduct of a file that never executed, which is worse than no test:
+// it reads as evidence that tenancy is enforced in one place, and the reason it
+// stayed green is that nothing could ever change its behaviour.
+//
+// The middleware is gone and these tests now REQUEST a product somebody else
+// owns and read the answer. `check-tenant-scope.mjs` remains the ratchet over
+// every route; `outbound/kill-switch.ts` is where archived and paused actually
+// stop the company acting, and it runs.
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { Hono } from 'hono';
 
 // ─── Source Code Loading ────────────────────────────────────────────────────
 // Read source files once for all tests. These are static analysis tests
 // that verify SQL strings and middleware logic without hitting the DB.
 
 let clientSource: string;
-let tenantSource: string;
 let authSource: string;
 let schemaSource: string;
 
 beforeAll(() => {
   const base = resolve(__dirname, '../../src');
   clientSource = readFileSync(resolve(base, 'db/client.ts'), 'utf-8');
-  tenantSource = readFileSync(resolve(base, 'middleware/tenant.ts'), 'utf-8');
   authSource = readFileSync(resolve(base, 'middleware/auth.ts'), 'utf-8');
   schemaSource = readFileSync(resolve(base, 'db/schema.sql'), 'utf-8');
 });
@@ -259,6 +276,29 @@ describe('Cross-company data anonymization (decision_patterns)', () => {
     expect(sql).not.toMatch(/\bfounder_id\s*=\s*\?/i);
   });
 
+  it('carries a keyed contributor hash, never a raw identifier', () => {
+    // Migration 144 gave `decision_patterns` a contributor_hash so the wisdom
+    // aggregation could require k DISTINCT companies — full anonymity had cost
+    // it the ability to tell three companies from one, and an insight derived
+    // from a single company was publishable to that company's competitors.
+    //
+    // The column must stay a KEYED hash. A plain hash of a product id is
+    // reversible by anyone who can enumerate ids, which is everyone who has the
+    // products table, and would turn this row back into an identified one.
+    const patterns = readFileSync(
+      resolve(__dirname, '../../src/services/wisdom/network.ts'), 'utf-8');
+    expect(patterns).toMatch(/createHmac\(/);
+    expect(patterns, 'the hash must be keyed with the application secret')
+      .toMatch(/process\.env\.ENCRYPTION_KEY/);
+    expect(patterns, 'an unkeyed digest of a product id is not anonymous')
+      .not.toMatch(/createHash\(['"]sha256['"]\)\.update\(productId/);
+
+    // And the row still names nobody.
+    expect(schemaSource.includes('contributor_hash')
+      || readFileSync(resolve(__dirname, '../../src/db/migrations/144_pattern_contributor_hash.sql'), 'utf-8')
+        .includes('contributor_hash')).toBe(true);
+  });
+
   it('getRelevantPatterns is documented as intentionally cross-tenant', () => {
     // The JSDoc comment above the function documents the design decision
     // Look for the comment block preceding the function
@@ -271,82 +311,115 @@ describe('Cross-company data anonymization (decision_patterns)', () => {
 });
 
 // =============================================================================
-// 3. TENANT MIDDLEWARE — Must enforce ownership and return 404 (not 403)
+// 3. OWNERSHIP — enforced on the live path, answering 404 and never 403
 // =============================================================================
 
-describe('Tenant middleware isolation', () => {
+describe('a company answers only to the founder who owns it', () => {
+  const MINE = 'p_ten_mine';
+  const OWNER = { id: 'f_ten_owner', email: 'owner@example.com' };
+  const STRANGER = { id: 'f_ten_stranger', email: 'stranger@example.com' };
 
-  it('tenant middleware calls getProductByOwner to verify ownership', () => {
-    expect(tenantSource).toMatch(/getProductByOwner/);
-  });
+  async function request(as: { id: string; email: string }, path: string): Promise<Response> {
+    const { platformApiRoutes } = await import('../../src/routes/api/platform.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { ...as, preferences: {} } as never);
+      await next();
+    });
+    app.route('/', platformApiRoutes as unknown as Hono);
+    return app.request(path);
+  }
 
-  it('tenant middleware imports getProductByOwner from db/client', () => {
-    expect(tenantSource).toMatch(/import\s*\{[^}]*getProductByOwner[^}]*\}\s*from\s*['"].*db\/client/);
-  });
-
-  it('tenant middleware passes both productId and founder.id to ownership check', () => {
-    expect(tenantSource).toMatch(/getProductByOwner\(\s*productId\s*,\s*founder\.id\s*\)/);
-  });
-
-  it('returns 404 (not 403) for non-owned products — no information leak', () => {
-    // Must return 404 when product is not found (prevents enumeration)
-    expect(tenantSource).toMatch(/404/);
-    // Capture from rows.length === 0 through the json response
-    const ownershipBlock = tenantSource.match(
-      /rows\.length\s*===\s*0[\s\S]*?c\.json\([^)]+\)/
+  beforeAll(async () => {
+    const { runMigrations } = await import('../../src/db/migrate.js');
+    const { query } = await import('../../src/db/client.js');
+    await runMigrations();
+    for (const f of [OWNER, STRANGER]) {
+      await query(
+        'INSERT OR IGNORE INTO founders (id, clerk_user_id, email) VALUES (?,?,?)',
+        [f.id, `c_${f.id}`, f.email],
+      );
+    }
+    await query(
+      "INSERT OR IGNORE INTO products (id, name, owner_id, status) VALUES (?,'Confidential',?,'active')",
+      [MINE, OWNER.id],
     );
-    expect(ownershipBlock).toBeTruthy();
-    expect(ownershipBlock![0]).toMatch(/404/);
-    expect(ownershipBlock![0]).not.toMatch(/403/);
-  });
-
-  it('returns "Not found" error message (not "Forbidden" or "Unauthorized")', () => {
-    const ownershipBlock = tenantSource.match(
-      /rows\.length\s*===\s*0[\s\S]*?c\.json\([^)]+\)/
+    await query(
+      `INSERT OR IGNORE INTO anomalies (id, product_id, metric_name, expected_value, actual_value,
+        deviation_sigma, description, status)
+       VALUES ('an_ten', ?, 'mrr', 1000, 400, 4.2, 'mrr collapsed to 400', 'active')`,
+      [MINE],
     );
-    expect(ownershipBlock).toBeTruthy();
-    expect(ownershipBlock![0]).toMatch(/Not found/);
-    expect(ownershipBlock![0]).not.toMatch(/Forbidden/i);
-    expect(ownershipBlock![0]).not.toMatch(/Unauthorized/i);
   });
 
-  it('blocks access to archived products', () => {
-    expect(tenantSource).toMatch(/archived/);
-    // Verify archived check results in 404
-    const archivedBlock = tenantSource.match(
-      /status\s*===\s*['"]archived['"][\s\S]*?c\.json\([^)]+\)/
+  it('the owner reads their own company', async () => {
+    const res = await request(OWNER, `/api/products/${MINE}/anomalies`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('mrr collapsed to 400');
+  });
+
+  it('a stranger is told the company is not found, and told nothing else', async () => {
+    const res = await request(STRANGER, `/api/products/${MINE}/anomalies`);
+    expect(res.status).toBe(404);
+    const body = await res.text();
+    expect(body).toMatch(/Not found/);
+    expect(body).not.toMatch(/Forbidden|Unauthorized/i);
+    expect(body).not.toContain('mrr collapsed to 400');
+    expect(body).not.toContain('Confidential');
+  });
+
+  it('404 and not 403 — a refusal that confirmed the company exists would enumerate it', async () => {
+    const real = await request(STRANGER, `/api/products/${MINE}/anomalies`);
+    const invented = await request(STRANGER, '/api/products/p_ten_no_such_company/anomalies');
+    expect(real.status).toBe(404);
+    expect(invented.status).toBe(404);
+    expect(await real.text()).toBe(await invented.text());
+  });
+});
+
+// =============================================================================
+// 3b. ARCHIVED AND PAUSED — where they are actually enforced
+// =============================================================================
+
+describe('an archived or paused company does not act', () => {
+  const P = 'p_ten_states';
+
+  beforeAll(async () => {
+    const { runMigrations } = await import('../../src/db/migrate.js');
+    const { query } = await import('../../src/db/client.js');
+    await runMigrations();
+    await query(
+      "INSERT OR IGNORE INTO founders (id, clerk_user_id, email) VALUES ('f_ten_st','c_ten_st','st@example.com')",
     );
-    expect(archivedBlock).toBeTruthy();
-    expect(archivedBlock![0]).toMatch(/404/);
+    await query(
+      "INSERT OR IGNORE INTO products (id, name, owner_id, status) VALUES (?,'States','f_ten_st','active')",
+      [P],
+    );
   });
 
-  it('requires authentication before tenant check', () => {
-    // The middleware should check for founder authentication before querying product ownership
-    // Find positions within the middleware function body (after export const)
-    const middlewareBody = tenantSource.slice(tenantSource.indexOf('createMiddleware'));
-    const founderAuthGuard = middlewareBody.indexOf('if (!founder)');
-    const ownershipQuery = middlewareBody.indexOf('getProductByOwner(');
-    expect(founderAuthGuard).toBeGreaterThan(-1);
-    expect(ownershipQuery).toBeGreaterThan(-1);
-    expect(founderAuthGuard).toBeLessThan(ownershipQuery);
+  it('an archived record is blocked, and the refusal says which state', async () => {
+    const { query } = await import('../../src/db/client.js');
+    const { checkKillSwitch } = await import('../../src/services/outbound/kill-switch.js');
+    await query("UPDATE products SET status='archived', scp_status='active' WHERE id=?", [P]);
+    const result = await checkKillSwitch(P, 'send_email');
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toMatch(/archived/);
   });
 
-  it('returns 401 when founder is missing (unauthenticated)', () => {
-    expect(tenantSource).toMatch(/401/);
-    expect(tenantSource).toMatch(/Authentication required/);
+  it('a paused company is blocked', async () => {
+    const { query } = await import('../../src/db/client.js');
+    const { checkKillSwitch } = await import('../../src/services/outbound/kill-switch.js');
+    await query("UPDATE products SET status='active', scp_status='paused' WHERE id=?", [P]);
+    const result = await checkKillSwitch(P, 'send_email');
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toMatch(/paused/);
   });
 
-  it('returns 400 when product ID is missing', () => {
-    expect(tenantSource).toMatch(/400/);
-    expect(tenantSource).toMatch(/Product ID required/);
-  });
-
-  it('loads lifecycle state after ownership verification', () => {
-    const ownershipCheck = tenantSource.indexOf('getProductByOwner');
-    const lifecycleLoad = tenantSource.indexOf('getLifecycleState');
-    expect(ownershipCheck).toBeGreaterThan(-1);
-    expect(lifecycleLoad).toBeGreaterThan(-1);
-    expect(lifecycleLoad).toBeGreaterThan(ownershipCheck);
+  it('an active company is not blocked, so the guard is measuring state and not always refusing', async () => {
+    const { query } = await import('../../src/db/client.js');
+    const { checkKillSwitch } = await import('../../src/services/outbound/kill-switch.js');
+    await query("UPDATE products SET status='active', scp_status='active' WHERE id=?", [P]);
+    expect((await checkKillSwitch(P, 'send_email')).blocked).toBe(false);
   });
 });
 
@@ -409,6 +482,25 @@ describe('All exported query functions are scoped', () => {
       if (INSERT_OPERATIONS.has(fnName)) continue;
 
       const fn = extractFunction(clientSource, fnName);
+
+      // A FUNCTION THAT TOUCHES NO DATABASE CANNOT LEAK A TENANT'S DATA.
+      //
+      // This required a WHERE clause of EVERY exported async function, so
+      // adding `closeDb` — which runs no SQL at all — failed a tenant-isolation
+      // gate. That is a false positive, and the damage a false positive does
+      // here is specific: the obvious way to make it green is to add a name to
+      // INTENTIONALLY_UNSCOPED, and an allowlist that grows for reasons that
+      // are not about tenancy stops meaning anything.
+      //
+      // Deliberately narrow, because this gate may only get stricter. It skips
+      // a function that makes no database call and contains no SQL keyword at
+      // all. Anything that calls `query`, `batch` or `execute`, or that holds a
+      // SELECT this extractor cannot parse, still fails loudly — an unreadable
+      // query is exactly when you want to be told.
+      const touchesDatabase = /\b(query|batch|execute|executeRaw)\s*\(/.test(fn)
+        || /\b(SELECT|INSERT|UPDATE|DELETE)\b/i.test(fn);
+      if (!touchesDatabase) continue;
+
       const sql = extractSQL(fn);
 
       // Every SELECT query must have a WHERE clause with a scoping parameter

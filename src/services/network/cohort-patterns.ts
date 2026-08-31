@@ -6,6 +6,7 @@
 
 import { query } from '../../db/client.js';
 import { getProductDNA } from '../wisdom/dna.js';
+import { benchmarkSegment } from '../benchmarking/pool.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,18 +27,23 @@ export interface CohortPatternRow {
   supporting_data_json: string | null;
   confidence: number;
   company_count: number;
+  /** 'observed' means companies were counted. 'reference' means somebody wrote
+   *  the pattern down; see migration 174. */
+  evidence_source: 'observed' | 'reference';
   computed_at: string;
 }
 
 export interface CohortBenchmarkRow {
   metric: string;
   your_value: number | null;
-  cohort_p25: number;
-  cohort_median: number;
-  cohort_p75: number;
+  /** Null when the cohort has published no percentiles — see `getCohortBenchmarks`. */
+  cohort_p25: number | null;
+  cohort_median: number | null;
+  cohort_p75: number | null;
   your_percentile: number | null;
   trend: 'improving' | 'declining' | 'stable';
-  cohort_insight: string;
+  /** Null when there is no percentile: the insight is a reading OF the rank. */
+  cohort_insight: string | null;
 }
 
 // ─── Cohort Profile Derivation ────────────────────────────────────────────────
@@ -152,7 +158,12 @@ export async function getCohortPatterns(productId: string): Promise<Array<{
     if (supportingData?.median_weeks_to_event) {
       insight += ` Typically occurs within ${supportingData.median_weeks_to_event} weeks.`;
     }
-    if (p.company_count > 0) {
+    // "Observed across N similar companies" is a claim that N companies were
+    // counted. For a seeded reference pattern none were, and this page renders
+    // to a paying founder. A prior is worth having and worth labelling.
+    if (p.evidence_source === 'reference') {
+      insight += ' A known pattern for this kind of company — a prior Foundry was given, not something it observed in its own network.';
+    } else if (p.company_count > 0) {
       insight += ` Observed across ${p.company_count} similar companies.`;
     }
 
@@ -257,24 +268,18 @@ function computePercentileRank(
 export async function getCohortBenchmarks(productId: string): Promise<CohortBenchmarkRow[]> {
   const profile = await getProductCohortProfile(productId);
 
-  // Map profile to benchmark_contributions bucket keys
-  const lcState =
-    profile.stage === 'pre_seed'
-      ? 'prompt_1'
-      : profile.stage === 'seed'
-        ? 'prompt_2'
-        : profile.stage === 'series_a'
-          ? 'prompt_3'
-          : 'prompt_4';
-
-  const categoryMap: Record<CohortProfile['business_model'], string> = {
-    b2b_saas: 'b2b_saas',
-    b2c: 'b2c_saas',
-    marketplace: 'marketplace',
-    api: 'developer_tools',
-    other: 'other',
-  };
-  const companyCategory = categoryMap[profile.business_model];
+  // ONE VOCABULARY FOR THE SEGMENT, OWNED BY THE MODULE THAT WRITES IT.
+  //
+  // This mapped the company's FUNDING stage to 'prompt_1'..'prompt_4' and
+  // queried `benchmark_percentiles.lifecycle_state` with it. The only writer of
+  // that table stores 'pre_revenue' | 'early' | 'growth' | 'scale', mapped from
+  // `current_prompt` — so the two vocabularies never intersected and the lookup
+  // MISSED FOR EVERY COMPANY, every time. Nothing failed; the code fell through
+  // to the invented bands below, which is why nobody noticed.
+  //
+  // The segment key now comes from `benchmarking/pool.ts`, which owns the
+  // vocabulary because it is the module that writes it.
+  const { lifecycleState: lcState, companyCategory } = await benchmarkSegment(productId);
 
   const [percentilesResult, recentSnapshotsResult] = await Promise.all([
     query(
@@ -338,11 +343,21 @@ export async function getCohortBenchmarks(productId: string): Promise<CohortBenc
   const results: CohortBenchmarkRow[] = [];
 
   for (const m of COHORT_BENCHMARK_METRICS) {
+    // NO PEERS, NO PERCENTILE.
+    //
+    // This substituted invented bands when the cohort had no published
+    // percentiles — 20/40/65 and 15/8/4, written in PERCENTAGE POINTS, ranked
+    // against metrics stored as 0–1 FRACTIONS. A company with 5% churn was
+    // compared against a "median" of 8 and told it was in the top quartile of
+    // its cohort. Because the lookup above could never match, this was the path
+    // EVERY founder took.
+    //
+    // It also walked around the owner's floor: a percentile is published only
+    // above five distinct contributing companies (`MIN_CONTRIBUTORS`), and an
+    // invented distribution has no contributors at all. A comparison to a
+    // cohort that does not exist is not a weaker comparison, it is a different
+    // claim.
     const bench = percentilesByMetric[m.key];
-    // Use fallback percentiles when no benchmark data exists yet
-    const p25 = bench?.p25 ?? (m.higherIsBetter ? 20 : 15);
-    const p50 = bench?.p50 ?? (m.higherIsBetter ? 40 : 8);
-    const p75 = bench?.p75 ?? (m.higherIsBetter ? 65 : 4);
 
     let yourValue: number | null = null;
     if (m.key === 'mrr_growth_rate') {
@@ -352,8 +367,8 @@ export async function getCohortBenchmarks(productId: string): Promise<CohortBenc
     }
 
     const your_percentile =
-      yourValue !== null
-        ? computePercentileRank(yourValue, p25, p50, p75, m.higherIsBetter)
+      yourValue !== null && bench
+        ? computePercentileRank(yourValue, bench.p25, bench.p50, bench.p75, m.higherIsBetter)
         : null;
 
     const trend =
@@ -363,14 +378,17 @@ export async function getCohortBenchmarks(productId: string): Promise<CohortBenc
           ? getTrend(m.snapshotField, m.higherIsBetter)
           : 'stable';
 
-    const cohort_insight = m.insight(your_percentile ?? 50);
+    // The insight is a sentence ABOUT the rank. With no rank it used to be
+    // handed 50 — so a company with no cohort was told its churn was "near
+    // cohort median", in a cohort that had published nothing.
+    const cohort_insight = your_percentile === null ? null : m.insight(your_percentile);
 
     results.push({
       metric: m.key,
       your_value: yourValue,
-      cohort_p25: p25,
-      cohort_median: p50,
-      cohort_p75: p75,
+      cohort_p25: bench?.p25 ?? null,
+      cohort_median: bench?.p50 ?? null,
+      cohort_p75: bench?.p75 ?? null,
       your_percentile,
       trend,
       cohort_insight,
@@ -459,8 +477,10 @@ export async function seedDefaultCohortPatterns(): Promise<void> {
     await query(
       `INSERT OR IGNORE INTO cohort_patterns
        (id, cohort_key, cohort_definition_json, pattern_type, pattern_name,
-        pattern_description, supporting_data_json, confidence, company_count, computed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        pattern_description, supporting_data_json, confidence, company_count, computed_at, evidence_source)
+       -- These five rows are priors somebody wrote down, not observations.
+       -- The count beside them is illustrative and the surface says so.
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reference')`,
       [id, cohort_key, cohort_definition_json, pattern_type, pattern_name, pattern_description, supporting_data_json, confidence, company_count, computed_at],
     );
   }

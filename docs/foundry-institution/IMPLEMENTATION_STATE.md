@@ -1,676 +1,1241 @@
 # Implementation State
 
-> Last verified: 2026-08-14. Baseline commit: `88be45c` on local branch `work`, the current post-Tranche-0 merge head (no Git remote is configured in this checkout). This manifest is evidence, not a claim that every listed surface has been exhaustively audited.
-
-## Tranche 0 baseline reality manifest
-
-| Area | Verified reality | Maturity / unknown |
-|---|---|---|
-| Build, test, CI | Node 20 TypeScript/Hono application. CI runs install, typecheck, ratchets, build, Vitest, advisory audit, SQL column drift, deterministic evals, walkthrough simulation, cron contention, and schema snapshot checks. Baseline typecheck, ratchets, kernel boundary, and public-claim audit passed locally. | E2 for the local checks named above; full baseline suite was not run before the first fix. CI/deployment state is unknown without a remote. |
-| Routes | `src/index.ts` is the composition root. Static/public, signed webhooks, internal service-key routes, Clerk-authenticated founder/API routes, and API-key `/api/v1` routes coexist. Static scan found 95 route/API files and about 901 verb declarations; counts are orientation, not coverage. | E1 inventory. Route authorization must be proven by boundary tests, not counts. |
-| Middleware/auth | Global request ID, security headers, logging and CORS precede route groups. Founder routes use Clerk, internal routes use a service key, public ingest/share use capability tokens, webhooks use provider signatures, and `/api/v1` declares API-key auth internally. The baseline blanket Clerk `/api/*` middleware ran before `/api/v1`, consuming machine bearer keys and blocking v1 health. | **Verified P0; fixed in this tranche with an exact namespace exception and regression/adversarial near-prefix tests. E2 locally after tests pass.** |
-| Schema/migrations | libSQL/Turso; 136 migration files through `100_webhook_effect_certainty.sql`. Startup applies lexically sorted migrations and records filenames. Duplicate-column/`already exists` errors are broadly swallowed. A generated schema snapshot and fresh-DB/column checks exist. | E1 inventory; broad error swallowing and production migration history need separate proof. No schema change in this slice. |
-| Scheduler/jobs | A large `JOB_REGISTRY` runs only in worker/all roles in production and uses distributed job locks. Static scan found 87 schedule declarations across jobs/services; the header claiming “All 14” is stale. | E1/E2 components; institutional reason-to-run-now, cost, overlap, and ownership are not yet established job by job. |
-| Consequential mutations | Stripe, email, GitHub, Linear, Slack, MCP and other effects exist. `services/outbound/gateway.ts` has kill-switch, classification, budget, idempotency and audit controls, but explicitly documents incomplete migration of existing integrations. Action verification exists. | **Verified governance convergence gap, partially reduced.** Scheduled digest and behavioral-trigger Resend writes now cross the governed email capability; other direct provider writes remain and require a tested inventory/cutover order. |
-| Providers / ControlPaths | Integration and gateway implementations exist for GitHub, Stripe, Resend, Intercom, Linear, PostHog, Sentry, Slack, MCP, webhooks, CLI and founder/browser routes. Current code still treats many as integration-specific services rather than uniformly governed ControlPaths. | E1 inventory; semantic capability mapping is unknown. |
-| AI calls | Central OpenRouter client supports Opus/Sonnet/Haiku aliases, prompt caching, retries/timeouts, and atomic persisted daily product/founder/global spend reservation and settlement. Numerous higher services call central wrappers; simple text search undercounts indirect calls. | **Verified material-spend race cut over locally:** provider calls now atomically reserve a conservative maximum across global/product/founder scopes before dispatch, settle actual usage, release definitive failures, and preserve ambiguous effects for protective reconciliation. E2 concurrency and failure evidence; production contention/price calibration remain proof debt. |
-| User surfaces | Current navigation and routes remain agent/SCP-heavy across dashboard, decisions, plans, integrations, controls, briefs, talk, portfolio and settings. | E1. Not yet cut over to TODAY / ASK / COMPANY / ACTIVITY / CONTROL. |
-| Legacy agent ownership | Permanent named-agent concepts remain pervasive in routes, services, tables, schedules, prompts and UI. Some newer autopilot/action semantics coexist. | E1. Ownership, shadow comparison, cutover, and deletion map remain unknown; no dual-write is approved as permanent. |
-| Credentials | Clerk, Turso, GitHub OAuth, OpenRouter/Anthropic, Resend, Stripe, ecosystem key and encryption key are documented. GitHub onboarding encrypts tokens; integration and MCP connection flows use encryption helpers; investor share credentials are hashed. | Partial E1. A complete write/read/rotation/redaction audit by credential type is still required; configuration consistency is not yet proven. |
-| Authority/autonomy | Gates, RBAC, autopilot policy, envelopes, consent, kill switches, MCP grants and action verification exist. The gateway previously accepted caller-supplied `surface` and `dataClass`, skipped classification when omitted, and skipped budget/idempotency facts when absent. Registered tool policy now derives classification server-side and fails closed for required facts. Caller-supplied `agent` remains untrusted. | **Verified mismatch partially cut over:** all six registered tool capabilities now have trusted policy and deterministic failure/adversarial coverage (E2 locally). Actor derivation and direct-write convergence remain proof debt. |
-| Cost controls | AI daily ceilings, atomic reservations, usage tracking, per-request rate limits, communication budgets and transparency surfaces exist. | Atomic AI admission is E2 locally. Overspend/underspend routing regret, production ledger reconciliation, and per-job reason-to-run-now remain absent or unverified. |
-| Semantic duplicates | `services/integration/` and `services/integrations/` coexist; multiple outbound/execution, agent/action, and credential concepts appear to overlap. | E1 indication only. Canonical truth and deletion candidates require call-graph/runtime comparison. |
-| Proof/evaluation | Vitest unit/simulation suites, deterministic AI evals, golden simulations, walkthrough, load contention, ratchets, schema drift checks, audit documents and action verifier exist. | Mostly E1–E2. Frozen independent benchmarks, responsibility-transfer measures, economics comparisons and production outcome evidence remain proof debt. |
-
-## Historical P0 re-verification
-
-| Historical class | Current finding |
-|---|---|
-| `/api/v1` machine auth vs blanket Clerk `/api/*` | **Verified.** Middleware ordering blocked API-key traffic before `apiV1` authentication and blocked the documented public health route. Selected as the first fix. |
-| Model-controlled content reaching unsafe HTML | **Not yet verified as exploitable.** Raw HTML sinks exist, but initial inspection found primarily generated SVG/known UI fragments. Do not call this fixed; trace provenance of every raw/`innerHTML` value. |
-| External mutation outside canonical governance | **Verified structurally.** The outbound gateway itself documents incomplete adapter migration. Inventory and migrate by effect/consequence; do not bolt on a second truth system. |
-| Insufficiently source-grounded remediation | **Unknown.** Remediation and audit services exist; source/provenance coverage needs sampled runtime fixtures and adversarial evaluation. |
-| Credential inconsistencies | **Partially observed, not fully classified.** Several flows encrypt or hash, but end-to-end storage, rotation, logs and legacy columns have not been exhaustively traced. |
-| Ambiguous effect / reconciliation gaps | **Verified at architecture level.** Gateway handler completion is recorded as allowed/succeeded, while provider acceptance and business outcome are not uniformly separated; action verification covers only some actions. |
-| Non-atomic material AI/spend enforcement | **Historically verified; cut over locally.** Migration 099 and both central AI call paths now reserve atomically before dispatch. E2 local concurrency evidence; production Turso behavior remains proof debt. |
-
-## Completed slice: machine API authentication boundary
-
-The post-merge baseline contains the exact `/api/v1` namespace exception and its regression tests. It remains E2 local evidence; production proof remains open.
-
-## Completed slice: trusted outbound tool policy
-
-- **Verified baseline:** at post-merge commit `88be45c`, `GatewayRequest.surface`, `dataClass`, `customerExternalId`, and `dedupKey` were optional. `invoke()` classified only when the caller supplied a surface and budgeted/deduplicated only when corresponding caller facts were present. All six registered capabilities used the same permissive contract.
-- **Requirement:** competence and caller capability never grant authority; a caller cannot declare its own safety. Consequential mutations must converge through a boundary that derives policy from trusted server context and fails closed when required facts are missing.
-- **Implementation:** handler registration now requires a server-owned `ToolPolicy`. The gateway always classifies using that policy, refuses conflicting caller assertions, fails closed without a trusted registration, and enforces per-capability required deduplication/customer facts. Email and Stripe require both facts; GitHub, MCP, and outbound webhooks require deduplication.
-- **Challenge:** normal dispatch, classification refusal, missing facts, unregistered capabilities, and adversarial surface/data-class downgrades are covered. Existing Resend and MCP integration suites compare that the migrated registrations preserve normal, refusal, and idempotent behavior.
-- **Compare:** the simpler registry policy replaces optional caller choice without adding a second database policy system or model step. It removes bypass states while retaining the existing classification, budget, and idempotency sources of truth.
-- **Observe:** focused gateway/Resend/MCP/wiring tests passed (34/34), build passed, and the initial full check exposed a test-harness fake credential causing a real AI network retry. The harness was corrected and the complete check then passed: 100 files / 978 tests plus all ratchets and audits.
-- **Decision/cutover:** direct cutover completed for every currently registered gateway capability; there is no dual-write and no schema migration. Conflicting legacy caller fields fail closed rather than silently overriding policy.
-- **Evidence maturity:** E2 for deterministic local boundary behavior and adapter regressions. E4/E5 production outcomes and policy suitability remain proof debt.
-- **Proof debt:** registered policy does not yet derive actor identity; direct provider writes still bypass the gateway; provider acceptance is not uniformly separated from verified outcome; production policy configuration has not been observed.
-- **Deletion opportunity:** remove legacy `surface`/`dataClass` request fields after all external/internal call sites stop sending them; later delete direct-write paths after shadow → compare → cutover.
-
-## Completed slice: atomic AI spend authorization
-
-- **Verified baseline:** both single- and multi-turn clients read cached `spent_cents`, dispatched provider work, and incremented cost only after response. Concurrent calls could all pass the same ceiling; read/accounting errors failed open.
-- **Requirement:** material external spend must be authorized atomically before execution; ambiguous provider effects require reconciliation and cannot be assumed free or safely retried.
-- **Build:** migration `099_ai_spend_reservations.sql` adds reserved cost and a durable reservation ledger. SQLite triggers make multi-scope ceiling validation plus reservation a single atomic statement. Both AI call paths conservatively authorize maximum prompt/output cost before fetch, settle actual usage, release definitive 4xx failures, and retain exhausted ambiguous calls. Expired ambiguity is protectively settled at the full authorized amount on the next admission.
-- **Challenge:** tests cover concurrent over-cap admission, settlement/refund across all scopes, definitive release, ambiguous expiry, and concurrent dispatch through the real AI client. Provider success followed by settlement failure is never retried; the protective reservation remains. Fresh migrations, column drift checks, schema snapshot generation, the full 101-file/982-test suite, build, ratchets, and public-claim audit pass.
-- **Compare:** this replaces cached read/check/post-increment admission rather than layering a second ceiling. SQL triggers were selected over interactive transactions because one database statement supplies the required atomicity across local SQLite and remote libSQL semantics.
-- **Decision/cutover/delete:** direct cutover for both central AI call APIs. Legacy post-response increment code was deleted. Existing spend rows remain canonical and gain `reserved_cents`; there is no dual-write.
-- **Evidence maturity:** E2 deterministic concurrency/migration evidence.
-- **Proof debt:** production Turso contention and trigger behavior, provider price drift, reservation estimate calibration, operational reconciliation visibility, and real provider usage/outcome evidence remain E4/E5 debt. Reservations reconcile lazily on subsequent admission; an operator-facing reconciliation job/receipt view remains to be justified and built.
-
-## Completed slice: scheduled email convergence
-
-- **Verified baseline:** `services/digest/delivery.ts` instantiated Resend directly for scheduled digests and behavioral triggers, bypassing kill switch, classification, communication budget, gateway idempotency, and gateway audit. Callers had product context but did not pass it to delivery.
-- **Requirement:** customer-reaching effects converge through one governed capability boundary; absence of company authority context fails closed; retries require stable effect identity.
-- **Build/cutover:** digest/trigger delivery now invokes the canonical `send_email` capability with product, recipient, and content-derived daily dedup facts. All callers pass product context; founders without a product no longer receive a trigger outside company authority. Direct Resend construction and its independent retry path were deleted from this service.
-- **Challenge/compare:** focused tests prove governed facts, policy-refusal propagation, and existing Resend normal/refusal/idempotency behavior; the full check passed 102 files / 984 tests and build passed. The simpler existing gateway replaces, rather than parallels, the direct transport.
-- **Evidence maturity:** E2 local boundary evidence. Production schedule behavior, delivery outcomes, and the suitability of the current weekly per-recipient budget remain proof debt.
-- **Migration/deletion:** direct cutover; no dual-write or schema change. The digest service's Resend client and retry machinery are deleted.
-- **Next deletion opportunity:** inventory remaining direct email/provider mutation sites and migrate by consequence; do not assume gateway success is verified delivery.
-
-## Proof checkpoint: deterministic AI test boundary
-
-- **Baseline:** global Vitest setup installed a fake Anthropic credential. A deterministic first-run fallback test therefore crossed the network boundary, retried, and timed out; the prior failing full-suite evidence was reproducible.
-- **Contract/build/challenge:** tests without an explicit provider fixture must not gain provider capability. Global fake AI credentials were deleted; the first-run regression asserts both provider keys are absent. Tests that intentionally exercise AI remain responsible for stubbing credentials and transport locally.
-- **Observe/evidence:** the focused first-run suite passed 3/3 in about one second; `npm run check` passed all 100 files / 978 tests. E2 for the deterministic harness boundary.
-- **Migration/deletion:** direct cutover with no runtime or schema change; deleted the global ambient fake capability. No dual path remains.
-- **Proof debt:** provider contract tests remain mocked/local and do not establish production provider availability or outcome quality.
-
-## Next safe work
-
-1. Repair API webhook credential ownership and ambiguous retry semantics, then converge its duplicate transport only where the governed webhook capability preserves tenant and receipt semantics.
-2. Derive gateway actor identity from trusted execution context rather than `GatewayRequest.agent`, with an explicit compatibility/cutover plan.
-3. Continue consequence-ordered migration of the 14 direct findings in `CONSEQUENTIAL_EFFECTS.json`; reclassify unresolved GraphQL operations from operation bodies.
-4. Trace all raw HTML/DOM sinks back to provenance and add model-controlled adversarial fixtures where a real path exists.
-
-## Corpus reconciliation checkpoint
-
-- **Baseline:** the durable institution directory accurately compressed core laws but omitted material lineage interpretation, the full macro program, the seven-day owner-absence proof target, the tier covenant, unfamiliar-company reconstruction detail, and a classified code-versus-canon fidelity map.
-- **Contract/build:** `CANONICAL_CORPUS_SYNTHESIS.md` now preserves the supplied corpus through progressive disclosure; `CORPUS_FIDELITY.md` classifies current concepts and contradictions. Architecture, experience, and economics received only the governing omissions relevant to their scope; `AGENTS.md` remains short.
-- **Challenge/compare:** the synthesis was reconciled against every indexed institutional document, current implementation state, accumulated branch history, and current code categories. Historical tranche/DAG material remains planning evidence, not an implementation checklist. No code behavior or authority changed.
-- **Evidence maturity:** E1 documentary reconciliation. It does not prove product behavior, company adoption, owner-attention reduction, or production outcomes.
-- **Migration/deletion:** direct documentation cutover; README indexes the expanded corpus. No competing governing document was created and no legacy code is preserved by this checkpoint.
-- **Continuation:** build the tested direct-effect inventory already identified as the next highest-value verified integrity dependency; then choose migrations by consequence and effect ambiguity.
-
-## Consequential-effect inventory checkpoint
-
-- **Baseline:** prior claims of incomplete gateway convergence were structurally true but had no executable drift detector or bounded call-site manifest. Re-verification found direct webhooks, Foundry billing, Slack notification, weekly email, Linear/custom action, and TTS effects alongside governed handlers and credential exchanges.
-- **Contract/build:** `scripts/audit-consequential-effects.mjs` detects known external mutation shapes, classifies each as governed, direct, unresolved, or ControlPath, and compares exact generated evidence in `CONSEQUENTIAL_EFFECTS.json`. `npm run check` now fails on detected inventory drift or an unclassified finding.
-- **Challenge/compare:** the current detector records 23 findings, including 16 direct findings. It deliberately labels GraphQL POSTs unresolved where read versus mutation cannot be inferred from HTTP method. It is a bounded ratchet, not a claim of exhaustive whole-program dataflow analysis; dynamic SDKs and newly shaped calls remain proof debt.
-- **Evidence maturity:** E2 for deterministic inventory drift within the detector boundary; E1 for classification based on static inspection.
-- **Migration/deletion:** no effect path changed in this checkpoint. The manifest replaces narrative-only inventory, not runtime semantics.
-- **Decision/continuation:** the API webhook path's blind retry after ambiguous failures is the next highest-value verified direct-effect slice. Preserve request/acknowledgment ambiguity, converge on the governed webhook capability where its tenant/policy contract fits, and delete the duplicate retry transport only after focused comparison.
-
-## Weekly email capability convergence
-
-- **Baseline:** `scp/briefing/email-digest.ts` sent directly through Resend or SendGrid, bypassing server-owned email policy, kill switch, communication budget, gateway audit, and durable deduplication. This was independently present after scheduled digest delivery had already migrated.
-- **Contract/build:** weekly digests now invoke the semantic `send_email` capability with product, recipient, and stable week identity. Provider selection moved into the capability handler: Resend is preferred, SendGrid is a server-owned fallback, and callers cannot choose the mechanism. Resend receives the institutional dedup key as its provider idempotency key.
-- **Challenge/compare:** focused tests cover Resend provider idempotency, SendGrid fallback selection, and static absence of direct provider transport in the weekly digest. Policy refusal propagates rather than recording a send. The direct dual transport and provider-key branching were deleted from the caller.
-- **Evidence maturity:** E2 local wiring/handler evidence. Provider delivery and business outcome remain unobserved; SendGrid lacks a demonstrated provider-native idempotency contract and remains ambiguity proof debt.
-- **Migration/cutover:** direct cutover, no dual-write or schema change. The executable inventory now records 22 detected findings and 14 direct findings (down from 23/16).
-- **Continuation:** the verified API webhook retry/signing defect remains next: current code signs with a stored hash rather than the founder-visible secret and retries ambiguous attempts. Correct credential ownership and receipt certainty before converging transports.
-
-## Orphan webhook service deletion
-
-- **Baseline/reverification:** the recorded API webhook signing/retry defect existed in `src/services/api/webhooks.ts`, but current call-graph search found no production import or caller for either exported function. Its delivery rows also targeted the competing `outbound_webhooks` model while the live API uses `webhooks`; repairing or gateway-wrapping it would have revived a non-canonical third transport.
-- **Contract/decision:** no orphan abstractions and deletion is completion. Unreachable code cannot provide a runtime migration comparison; the smaller constitutionally complete action is removal, not credential/schema expansion.
-- **Build/challenge:** deleted the unused service and its effect classification. A regression test prevents restoration of the known hash-signed blind-retry path. The executable inventory now records 21 detected findings and 13 direct findings.
-- **Evidence maturity:** E2 for repository reachability/deletion and the bounded effect ratchet; no runtime delivery claim follows.
-- **Migration/cutover:** deletion only, with no schema change. Historical tables remain because they are owned by other live webhook paths; schema consolidation remains separate deletion debt.
-- **Continuation:** reverify the live `src/lib/webhooks.ts` path next. It is called by Stripe sync and daily actions, posts to founder URLs without the shared SSRF guard, and fires delivery without awaiting or preserving ambiguity.
-
-
-## Live customer webhook integrity
-
-- **Baseline:** after deleting the orphan service, `src/lib/webhooks.ts` remained live through Stripe sync and daily actions. It stored signing secrets in plaintext, accepted founder URLs without the shared SSRF guard, launched unawaited delivery, and wrote every response timestamp as delivered while transport exceptions lost effect certainty.
-- **Contract/build:** registration and API creation now validate public HTTPS targets and encrypt signing secrets. Delivery decrypts at point of use, lazily encrypts legacy plaintext rows, revalidates DNS at call time, makes exactly one attempt, awaits receipts, and records `provider_acknowledged`, `provider_rejected`, `ambiguous`, or `not_attempted`. Migration 100 adds acknowledgment and reconciliation fields; ambiguous transport failures create reconciliation work and are never blindly retried.
-- **Challenge:** focused tests prove encrypted storage, private/metadata target refusal, HMAC verification with the founder-visible secret, one-attempt acknowledgment, and one-attempt ambiguity with `reconcile_after`. Fresh migration, schema drift, and column checks pass.
-- **Compare/decision:** the live direct path was hardened in place rather than routed through the current gateway because gateway handler completion still cannot express effect certainty. This avoids a cosmetic convergence that would lose receipt semantics. Callers await durable receipt work but isolate webhook-recording failure from the originating Stripe/action outcome.
-- **Evidence maturity:** E2 local delivery/receipt and migration evidence. HTTP acknowledgment is explicitly not an observed business outcome; production receiver behavior and reconciliation remain E4/E5 proof debt.
-- **Migration/cutover/delete:** direct cutover, no dual-write. New secrets are encrypted immediately; legacy plaintext encrypts on first delivery. The `webhooks`/`outbound_webhooks` schema duplication remains deletion debt.
-- **Continuation:** reverify the similarly named outbound-webhook code in `services/notifications/push.ts`; current call-graph search finds no caller for its exported delivery function, while it preserves a second plaintext/direct transport. Delete if still orphaned before designing any schema convergence.
-
-## Duplicate notification webhook deletion
-
-- **Baseline/reverification:** `services/notifications/push.ts` exported a second `deliverWebhookEvent` over `outbound_webhooks`, but repository call-graph search found no caller. It stored/read a separate plaintext secret, bypassed the live webhook receipt model and SSRF guard, and competed with both `webhooks` and `product_webhooks` semantics.
-- **Decision/build:** deleted the unreachable delivery helper instead of migrating an orphan. Extended the effect detector to recognize `config.url` and `webhook.url` dynamic transports so similarly shaped calls cannot remain invisible.
-- **Challenge/evidence:** regression tests prevent both deleted orphan webhook services from returning. The expanded detector records 22 findings / 13 direct; the count increased by recognizing the governed `config.url` handler, not by adding an effect. E2 repository/deletion evidence within the detector boundary.
-- **Migration/deletion debt:** runtime code is deleted. The `outbound_webhooks` table remains because destructive production-data deletion lacks history/usage evidence; prove it unused in deployed data before a drop migration.
-- **Continuation:** trusted gateway actor identity is now the highest verified boundary defect. Reverify every `invoke()` caller and replace caller-declared agent identity with a server-created execution context without weakening system/background ownership.
-
-## Trusted gateway execution identity
-
-- **Baseline/reverification:** every `invoke()` caller could supply `GatewayRequest.agent`; the gateway then used that untrusted string for the agent kill switch, idempotency ownership, and audit. Current call sites mixed persisted agent names, arbitrary MCP input, convenience arguments, and hard-coded `system`, so capability did silently choose authority identity.
-- **Contract/build:** `ToolPolicy` now fixes a stable server-owned execution actor for each registered capability. `GatewayRequest.agent` is deleted. Kill switches, reservation ownership, and audit derive identity only from the registered policy; upstream actor strings may remain provenance but cannot affect authorization.
-- **Challenge/compare:** focused gateway and email wiring tests cover normal/refusal behavior and an adversarial request containing a runtime `agent` property; the audit records the policy actor and never the injected value. Binding identity to the existing capability policy is simpler than introducing a second context/registry and closes the authority input without a compatibility path.
-- **Evidence maturity:** E2 deterministic local boundary evidence. The semantic suitability of capability actors and production operator use of their kill switches remain E4/E5 proof debt.
-- **Migration/cutover/delete:** direct cutover across every repository `invoke()` caller and registered policy. Caller actor options were deleted from GitHub and Stripe gateway helpers; there is no dual path or schema change. Legacy `surface`/`dataClass` assertions remain deletion debt.
-- **Continuation:** re-run the whole-system proof checkpoint, then reverify the 13 direct consequential-effect findings. Prefer the highest-consequence live mutation whose receipt semantics can be preserved; raw HTML provenance remains a parallel static-integrity candidate.
-
-## Orphan Slack notification transport deletion
-
-- **Baseline/reverification:** the effect inventory identified a second direct Slack sender in `services/notifications/push.ts`. Repository-wide symbol search found no import or caller; live SCP actions use `services/integration/slack.ts`. The orphan also read a competing `slack_integrations` credential model and swallowed transport ambiguity.
-- **Contract/decision/build:** no orphan abstraction or competing credential owner. Deleted the unreachable sender rather than gateway-wrapping it, removed its effect classification, and extended the existing deletion regression.
-- **Challenge/observe:** the regression proves neither the Slack nor webhook notification transports return; typecheck and effect auditing pass. Inventory falls from 22 findings / 13 direct to 21 / 12.
-- **Evidence maturity:** E2 repository reachability and bounded static-ratchet evidence; no Slack outcome claim follows.
-- **Migration/deletion:** code-only deletion with no dual path. The historical `slack_integrations` table cannot be dropped without deployed-data evidence because other code may still manage it independently.
-- **Continuation:** reverify the live Slack action path next. It is consequential communication and currently has no stable deduplication or durable distinction among provider rejection, acknowledgment, and ambiguous transport failure.
-
-## Foundry billing credential-owner cutover
-
-- **Baseline/reverification:** six Stripe SDK findings represented one dedicated Foundry SaaS billing module with shared-account namespacing and provider idempotency, while the owner settings route independently constructed a Stripe client for portal sessions. The route duplicated credential/API-version ownership and its portal mutation lacked the module's retry/idempotency discipline.
-- **Contract/build:** credentials reach the authenticator that owns them. Added `createBillingPortalSession` to the billing control path with a single logical idempotency key reused by bounded retries; the owner-authorized route now supplies only the customer and return URL.
-- **Challenge/compare:** focused tests prove every Stripe mutation, including portal creation, carries provider idempotency and statically prevent Stripe SDK mutation from returning to the presentation route. The effect audit now classifies the dedicated billing module as a ControlPath rather than falsely treating each owned provider call as an ungoverned path.
-- **Evidence maturity:** E2 local credential-boundary and idempotency evidence. Stripe acceptance is not subscription/business outcome; shared-account production isolation and ambiguous-response reconciliation remain E4/E5 debt.
-- **Migration/cutover/delete:** direct cutover with the route-local client deleted and no dual path/schema change. Inventory remains 21 findings but falls from 12 to 6 direct findings through one deletion plus five corrected ControlPath classifications.
-- **Continuation:** live Slack action delivery is the highest verified remaining communication defect: approved execution is single-claim, but transport ambiguity is collapsed into failure and no durable provider receipt exists. Preserve that certainty in the action ledger before considering gateway convergence. Linear/custom webhooks and TTS spend follow.
-
-## Slack action effect certainty
-
-- **Baseline/reverification:** the live Slack sender is reached only by founder-approved `action_executions`. Its atomic pending→approved claim already prevents replay, but the integration returned a boolean: Slack's HTTP-200 `{ok:false}` rejection and transport timeout both collapsed to failure, acknowledgment was called success, and no receipt or reconciliation state survived in the action ledger.
-- **Contract/build:** the Slack credential owner now makes exactly one attempt and returns `provider_acknowledged`, `provider_rejected`, `ambiguous`, or `not_attempted`. HTTP success is parsed for Slack-level rejection; transport exceptions remain ambiguous. Migration 101 adds receipt certainty, acknowledgment time, and reconciliation time to `action_executions`; approved messages persist acknowledgment without claiming outcome, while ambiguity schedules reconciliation.
-- **Challenge:** focused tests cover acknowledgment, HTTP rejection, adversarial HTTP-200 provider rejection, and timeout after possible request write. The ambiguous path proves one attempt only. Fresh-migration and schema-drift suites pass, as do typecheck and SQL column checks. The existing atomic execution claim prevents a second approval/retry of the same effect identity.
-- **Compare/decision:** hardened the domain control path rather than routing through the generic gateway, whose handler success/failure contract cannot preserve post-dispatch ambiguity. The effect inventory therefore classifies Slack as a receipt-bearing ControlPath and falls from 6 to 5 direct findings.
-- **Evidence maturity:** E2 deterministic receipt, migration, and single-attempt evidence. Slack acknowledgment is not observed channel consumption or business outcome; production timeout behavior and reconciliation operation remain E4/E5 debt.
-- **Migration/cutover/delete:** direct cutover, no dual-write. Boolean response semantics and the duplicate briefing transport are deleted; briefing formatting delegates to the single receipt-bearing sender. Existing rows remain unknown (`NULL`) rather than receiving fabricated certainty.
-- **Continuation:** reverify the approved Linear and custom-webhook action handlers next. They share the action ledger but still collapse receipt certainty; custom webhook URL safety and secret ownership make it the higher security risk. TTS spend controls follow. The overall program remains incomplete.
-
-## Approved Linear/custom-webhook receipt preservation
-
-- **Baseline/reverification:** approved Linear ticket and custom-webhook handlers already inherit the action ledger's atomic execution claim, and custom webhooks revalidate public URLs before dispatch. Both nevertheless collapsed HTTP/provider rejection and uncertain transport failure into the same failed state, while 2xx was called success without a receipt qualifier.
-- **Contract/build:** both handlers now populate the migration-101 action receipt fields. HTTP/GraphQL rejection is `provider_rejected`, accepted provider responses are only `provider_acknowledged`, pre-dispatch SSRF refusal is `not_attempted`, and transport exceptions are `ambiguous` with reconciliation due. Neither ambiguous path retries.
-- **Challenge/evidence:** focused structural regressions verify SSRF-before-fetch ordering and the complete certainty vocabulary; Slack dynamic receipt tests and typecheck remain green. E1 for these two handler branches pending dynamic transport fixtures; the shared persistence/migration path remains E2 from the Slack slice.
-- **Migration/cutover:** direct cutover with no dual-write and no new migration. Existing unknown receipts remain unknown. The effect inventory remains at 5 direct findings because these domain paths are not reclassified until dynamic normal/failure/adversarial evidence exists.
-- **Proof debt/continuation:** add dynamic approved-action fixtures for Linear and custom webhook before ControlPath promotion. Then address TTS financial admission and receipt ambiguity. The overall Foundry program remains incomplete.
-
-## Dynamic approved-action receipt proof
-
-- **Baseline/reverification:** Linear and custom-webhook handlers had receipt branches and shared durable persistence, but only static source evidence; ControlPath promotion was not yet justified.
-- **Challenge/observe:** runtime fixtures now drive real `createExecution` → atomic founder approval → handler → ledger persistence. They cover Linear acknowledgment, adversarial HTTP-200 GraphQL rejection, post-write timeout ambiguity, custom-webhook acknowledgment/rejection, pre-attempt SSRF refusal, timeout ambiguity, reconciliation timestamps, and replay refusal with exactly one transport attempt.
-- **Compare/decision:** the existing approved-action ledger is the smaller correct domain boundary; no generic gateway layer was added. With authority, SSRF, one-attempt behavior, receipt certainty, and durable reconciliation exercised together, Linear and custom webhook are promoted from direct findings to ControlPaths.
-- **Evidence maturity:** E2 deterministic integrated boundary evidence. Provider acknowledgment remains distinct from observed ticket/channel-side effect and business outcome; production reconciliation is E4/E5 debt.
-- **Migration/cutover:** evidence promotion only; runtime cutover occurred in the prior checkpoint. Inventory remains 21 findings and falls from 5 to 3 direct findings.
-- **Continuation:** TTS now outranks the remaining webhook path economically: reverify its credential selection, atomic spend admission, provider receipt ambiguity, cache/idempotency behavior, and fallback semantics before implementation. The overall program remains incomplete.
-
-## Ungoverned TTS effect deletion
-
-- **Baseline/reverification:** audio brief scripts are live, but optional synthesis directly called ElevenLabs or OpenAI without atomic spend admission, durable effect identity, receipt certainty, or reconciliation. The OpenAI branch could also send an OpenRouter credential to the OpenAI endpoint. No repository evidence demonstrated that synthesized audio, rather than the retained script, paid for this risk and cost.
-- **Contract/decision/build:** every cognition/effect must pay rent and financial controls cannot be cooperative. The smallest safe complete slice is deletion, not speculative provider-specific accounting: removed both TTS transports and all credential access while retaining generated spoken scripts and cache behavior with `audio_url=null`.
-- **Challenge/compare:** regression evidence prevents either provider endpoint/key—including the mismatched OpenRouter credential—from returning. Focused audio and integrated action tests plus typecheck pass. This removes rather than parallels the ungoverned paths.
-- **Evidence maturity:** E2 deterministic absence and effect-ratchet evidence. Audio synthesis is explicitly not implemented/proven; reintroduction requires measured founder value, atomic cost reservation, stable effect identity, receipt ambiguity, and reconciliation.
-- **Migration/cutover/delete:** direct deletion with no schema/data migration; existing cached audio remains readable, while new briefs remain script-only. Inventory falls from 21 findings / 3 direct to 19 / 1 direct.
-- **Continuation:** reverify the sole remaining direct finding, live customer webhook delivery. It already has domain receipt certainty and SSRF/secret controls; determine whether ControlPath promotion is justified by dynamic authority and reconciliation evidence rather than forcing gateway convergence. Then re-audit raw HTML provenance. The overall program remains incomplete.
-
-## Customer webhook authority and tenant cutover
-
-- **Baseline/reverification:** the last direct finding already owned SSRF, encrypted signing credentials, single-attempt receipts, and ambiguity reconciliation. Reverification exposed a more severe authority defect: API create/delete required only `agents:read`, delivery projections referenced obsolete columns, and dispatch selected every endpoint for a founder—allowing one product's event to reach another product's endpoint. Separate unused founder-only management functions competed with the product API.
-- **Contract/build:** mutation now requires `agents:write`; receipt reads project the canonical certainty columns; dispatch requires both product and founder identity and selects their intersection. Every live caller supplies product context. Unused founder-only register/list/delete functions were deleted so the API is the sole endpoint-management authority.
-- **Challenge:** dynamic API tests prove read-scoped mutation refusal, write-scoped product ownership plus encryption, and honest ambiguous receipt projection. Delivery tests prove signature/acknowledgment, one-attempt ambiguity, and adversarial same-founder cross-product isolation.
-- **Compare/decision:** the receipt-bearing domain boundary preserves webhook semantics better than generic gateway completion. With credential ownership, authority, tenant isolation, SSRF, receipt certainty, and reconciliation dynamically covered, it is promoted to ControlPath.
-- **Evidence maturity:** E2 deterministic authority/tenancy/receipt evidence. Receiver-side observed effect, intended business outcome, and production reconciliation remain E4/E5 proof debt.
-- **Migration/cutover/delete:** direct code cutover with no schema change or dual path; unused management functions deleted. Legacy webhook rows without `product_id` now fail closed and require explicit product attribution before delivery. Inventory falls from 19 findings / 1 direct to 19 / 0 direct.
-- **Continuation:** Tranche 0's bounded effect inventory has no classified direct findings, but the detector is not exhaustive. Re-audit raw HTML provenance next, then reassess the canonical institutional spine rather than treating zero findings as production proof. The overall program remains incomplete.
-
-## Raw-HTML provenance correction
-
-- **Baseline/reverification:** bounded `raw()` review found most sinks construct SVG or numeric/server-constant fragments. One sink was materially unsafe: temporal AI output supplied `inflection_points[].type`; the renderer interpolated that value into a string and marked the entire badge raw, allowing model/data-controlled markup.
-- **Contract/build:** model output is data, never trusted HTML. The badge renderer now returns Hono escaped HTML; only its style comes from a closed server-owned map, and the call site no longer uses `raw()`.
-- **Challenge/evidence:** an adversarial script-bearing type renders escaped text and no script element. Typecheck passes. E2 for the corrected runtime renderer; the review remains bounded static provenance work, not an exhaustive template/dataflow proof.
-- **Migration/deletion:** direct cutover; the unsafe raw string path is deleted with no compatibility layer.
-- **Continuation:** build an executable raw-sink inventory/ratchet if further dynamic model-controlled sinks are found. With the bounded direct-effect inventory at zero, re-evaluate the thin institutional kernel and founder-facing responsibility loop against current code next. The overall program remains incomplete.
-
-## Tranche 0 exit reassessment and founder-claim boundary
-
-- **Reassessment baseline:** re-audited authority, tenant binding, credential ownership, atomic AI admission, effect certainty, ambiguous retry, migrations, public/founder claims, raw sinks, and competing mutation paths. The executable effect inventory has zero classified direct findings; migrations apply fresh through 101; the full 112-file/1,011-test check, ratchets, kernel boundary, claims audit, effects audit, and build pass.
-- **Remaining debt classification:** production reconciliation, provider outcomes, migrated webhook-row attribution, and real concurrency/receiver observations are E4/E5 external or migration proof debt; detector/raw-sink scope is a bounded static limitation. None presently makes the local higher-layer kernel unsafe. The webhook schema lineage remains deletion debt requiring deployed-data evidence, not a reason to invent a destructive migration locally.
-- **Final locally actionable integrity finding:** founder surfaces inferred “Foundry is operating autonomously” and “all systems normal” from an empty queue or green risk row. That violated evidence-over-narrative and unknown-is-valid even though it was not public marketing.
-- **Build/challenge:** replaced broad claims with bounded checked-signal/queue statements that disclose unknown or stale areas. The claims audit now fails if those unbounded operational phrases return anywhere under `src/`.
-- **Evidence maturity:** E2 deterministic claim-ratchet evidence; no autonomy or production claim is promoted.
-- **Decision:** **Tranche 0 is locally exhausted at current evidence maturity.** This is not production proof and does not retire recorded migration or E4/E5 debt. Continue immediately into the thin institutional responsibility kernel.
-- **Continuation:** reconstruct the smallest durable responsibility truth and transitions from current action, evidence, authority, outcome, and founder-attention primitives. Avoid a parallel dashboard or named-agent model.
-
-## Thin institutional kernel: responsibility transfer truth
-
-- **Baseline/reverification:** lifecycle, actions, outcomes, attention reactions, and company-level SCP state existed, but no durable responsibility-specific truth represented the canonical eight-rung transfer ladder. There was no atomic transition contract, evidence/authority/outcome admission, rollback, or transition history. Reusing company lifecycle would have conflated company maturity with responsibility authority.
-- **Contract/build:** migration 102 adds one product-scoped responsibility record and an append-only transition ledger. Database triggers atomically reject stale state, no-op changes, skipped promotions, evidence-free promotion, authority-free assisting/operation, and outcome-free maturity. Promotion advances one rung; explicit demotion may move lower, clears inapplicable authority/outcome, and retains its evidence and reason. The service exposes only tenant-bound creation, lookup, and transition operations.
-- **Challenge:** tests traverse the complete Unknown→Visible→Understood→Shadowing→Assisting→Operating→Mature→Exception-owned ladder; adversarial cases cover skipped states, missing evidence/authority/outcome, stale concurrent promotion, cross-product access, and owner demotion/authority withdrawal. Fresh migrations, schema snapshot, typecheck, and SQL column checks pass.
-- **Compare/decision:** this is one small canonical truth, not a workflow engine, dashboard, agent persona, or duplicate action/outcome store. References bind existing evidence, authority, and outcomes without pretending a polymorphic string is independently verified.
-- **Evidence maturity:** E2 deterministic transition, concurrency, tenant, and migration evidence. Reference existence/provenance validation, founder workflow use, real responsibility transfer, and attention reduction remain proof debt.
-- **Migration/cutover/delete:** additive migration with no competing responsibility model to migrate. No existing lifecycle state is backfilled or reinterpreted. The primitive has no UI yet; the next slice must make it pay rent through a truthful seven-day founder summary or delete it.
-- **Continuation:** derive the minimum seven-day classifications from responsibility state plus existing transition/action receipt facts, preserving UNKNOWN and refusing invented HANDLED outcomes. Surface the same query through the smallest existing Today/Activity path rather than creating five new surfaces. The overall program remains incomplete.
-
-## Seven-day responsibility view in Today
-
-- **Baseline/reverification:** The Letter already provided the smallest Today surface and action/learning lines, so a new dashboard would be duplicate attention machinery. The responsibility primitive had no operational consumer and therefore had not yet paid rent.
-- **Contract/build:** a deterministic seven-day query classifies product responsibilities as HANDLED only after a recent outcome-bearing Mature/Exception-owned transition; Shadowing becomes NEEDS YOU because assisting authority cannot be inferred; other recent transitions are CHANGED; stable incomplete/unknown work is STILL OPEN. DELIBERATELY NOT DONE is present but never inferred. Old mature work is not repeated as newly handled. Each item retains state and evidence/authority/outcome references.
-- **Founder cutover:** the single-product Letter now renders the five responsibility categories alongside existing action, learning, and trust lines. Responsibility items prevent a falsely quiet letter. No new primary surface, model call, or parallel summary store was added.
-- **Challenge:** tests cover handled outcome admission, authority-needed shadowing, changed/open work, demotion without fabricated deliberate intent, and seven-day expiry. Existing transition adversarial tests remain green; typecheck passes.
-- **Evidence maturity:** E2 deterministic classification and Today wiring. No real seven-day absence, founder-attention reduction, or classification usefulness is proven; those require E4 pilot evidence.
-- **Proof debt:** DELIBERATELY NOT DONE requires an explicit owner decision/disposition primitive before it can contain items. Evidence/authority/outcome refs are not yet existence-checked across canonical ledgers. Multi-product Fleet Letter integration remains unbuilt.
-- **Continuation:** add the smallest explicit responsibility disposition/owner-decision contract so deliberate non-action is representable without inference, then connect responsibility creation to one real evidence intake path rather than relying on programmatic seeding. The overall program remains incomplete.
-
-## Owner-governed deliberate non-action
-
-- **Baseline:** the seven-day view exposed DELIBERATELY NOT DONE but correctly left it empty because demotion, inactivity, or missing evidence cannot establish deliberate intent.
-- **Contract/build:** migration 103 adds an explicit active/deliberately-not-done disposition and append-only decision ledger. A database trigger verifies the responsibility/product against the real product owner and requires reason plus evidence; caller actor strings cannot self-authorize. Re-activation is recorded through the same ledger. The seven-day view classifies deliberate non-action only from this durable owner decision.
-- **Challenge:** tests prove an arbitrary owner id is refused, a real product owner can record evidence-bearing deliberate non-action, and demotion alone never produces that category. Fresh migrations and typecheck pass.
-- **Evidence maturity:** E2 deterministic authority, persistence, and summary evidence. There is no founder route yet, so real owner use remains unproven.
-- **Migration/cutover:** additive migration; no inferred/backfilled dispositions. All existing responsibilities remain active.
-- **Continuation:** connect responsibility creation to one existing evidence-bearing company intake and expose disposition through an existing owner-controlled interaction, then observe whether the Today classification reduces reconstruction work. Multi-product summary remains proof debt. The overall program remains incomplete.
-
-## Canonical provenance and signal-intake responsibility discovery
-
-- **Baseline:** responsibility transitions accepted well-shaped identifier strings without proving existence, tenant, semantic kind, live authority, or verified outcome. Responsibilities were created only through direct service calls, so the vertical loop did not begin in company reality.
-- **Contract/build:** migration 104 binds responsibility evidence to same-product `signal_events`, assisting/operating authority to same-product, same-capability, unrevoked `autonomy_consents` granting `act`, and maturity outcomes to same-product completed `action_executions` whose independent verification passed. Wrong-kind strings cannot satisfy another reference class. Responsibilities now declare the capability whose authority is required.
-- **Discovery cutover:** migration 105 gives evidence discovery a unique provenance key. The real signal dispatcher admits a deliberately small map of operationally unambiguous signals (payment failure, churn, support spike, activation failure), atomically creates one responsibility and its Unknown→Visible transition, and leaves unsupported signals as evidence without manufacturing ontology. Concurrent replay converges on one responsibility.
-- **Challenge:** adversarial tests reject nonexistent/cross-tenant evidence, wrong-kind evidence, cross-tenant and revoked authority, cross-tenant and unverified outcomes, and known IDs from another product. Runtime intake tests prove signal→Visible responsibility→append-only evidence link, unsupported abstention, concurrency idempotency, and tenant isolation. Fresh migrations through 105, typecheck, schema snapshot, and SQL column checks pass.
-- **Evidence maturity:** E2 local provenance and real intake-path evidence. The small signal map is an explicit contract, not unfamiliar-company generalization; reference freshness after a transition and production intake remain proof debt.
-- **Migration/cutover:** additive, no backfill. Existing fabricated refs cannot advance through new transitions; existing historical transitions remain historical rather than being retroactively asserted valid.
-- **Continuation:** expose deliberate disposition through an existing authenticated owner interaction and prove signal intake→Today visibility→owner judgment→append-only disposition→seven-day classification. Instrument only the owner interventions and unresolved responsibility counts needed for later attention proof. The overall program remains incomplete.
-
-## Authenticated owner responsibility judgment
-
-- **Baseline/reverification:** deliberate non-action had durable owner and evidence checks but no authenticated founder interaction; callers could only invoke the service programmatically. The existing single-product Letter already surfaced the relevant responsibility truth and was the smallest natural owner interaction.
-- **Contract/build:** evidence-bearing responsibilities in NEEDS YOU and STILL OPEN now offer an explicit reasoned “Do not pursue” judgment; deliberately-not-done items offer a reasoned “Reopen” judgment. The POST handler derives the actor exclusively from the authenticated founder session. Product, responsibility, and evidence form fields only locate canonical records; database guards independently verify owner, tenant, and evidence provenance. Missing evidence cannot be dispositioned through the UI, and refused identifiers return one non-enumerating response.
-- **Challenge/observe:** route-level tests drive signal evidence through discovery, submit an authenticated owner judgment, observe the seven-day classification, and verify append-only history. Adversarial cases reject another founder, another tenant's responsibility, cross-tenant evidence, missing reason, and an invented disposition. Reopening produces a second historical decision rather than rewriting history.
-- **Evidence maturity:** E2 deterministic local vertical evidence for company signal → responsibility → authenticated owner judgment → seven-day truth → append-only history. This does not prove seven-day usefulness or founder-attention reduction.
-- **Migration/cutover/delete:** direct cutover on the existing Letter and disposition ledger; no new store, dashboard, dual-write, or migration.
-- **Continuation:** instrument a minimal derived founder-attention baseline (unresolved responsibilities, needs-owner items, and explicit interventions) without claiming value, then reverify multi-product founder visibility and unfamiliar-company reconstruction dependencies. The overall Foundry program remains incomplete.
-
-## Derived founder-attention baseline
-
-- **Baseline/reverification:** the responsibility and disposition ledgers already contain the minimum defensible local signals; a new analytics/event store would duplicate truth and add tracking without evidence of value.
-- **Contract/build:** a product-scoped derived query now reports total and unresolved responsibilities, the Shadowing responsibilities that require owner authority, early-state responsibilities requiring institutional reconstruction, explicit owner disposition decisions, reopened deliberate non-actions, and current Exception-owned responsibilities. The query accepts an observation window for interventions and gives empty products an explicit zero baseline.
-- **Challenge:** deterministic fixtures establish each count, time-window behavior, zero-state behavior, and adversarial cross-product isolation. “Carried without intervention” and repeated re-derivation are intentionally omitted because current ledgers cannot establish them truthfully.
-- **Evidence maturity:** E2 local measurement infrastructure only. These counts do not prove attention saved, owner usefulness, or causal value.
-- **Migration/cutover/delete:** no migration, tracking event, or durable aggregate. Canonical current state and append-only owner history remain the only truth.
-- **Continuation:** reverify Fleet Letter aggregation and add product-provenance-preserving five-class responsibility truth if the existing surface can carry it without weakening its verifier. Then inventory reconstruction sources before adding a company-claim primitive. The overall Foundry program remains incomplete.
-
-## Product-scoped responsibility truth in the Fleet Letter
-
-- **Baseline/reverification:** the existing Fleet Letter was the correct portfolio surface but only aggregated decisions and per-product legacy letter lines. Multi-product founders could not see the canonical five responsibility classifications, and simply trusting composer output would weaken its independent-verification contract.
-- **Contract/build:** each owned, active product now contributes its product-scoped seven-day responsibility summary. The Fleet verifier independently reconstructs every summary from canonical ledgers immediately before delivery, replaces rather than trusts composed responsibility content, and retains product name/scope on every group. Responsibility state also prevents a falsely quiet fleet letter.
-- **Challenge:** runtime tests prove an owned STILL OPEN responsibility appears, a composer-tampered title is replaced by fresh ledger truth, and a different tenant's responsibility never appears. Existing stale-letter, gate mismatch, cross-tenant decision, and fleet-ranking tests remain green.
-- **Evidence maturity:** E2 deterministic multi-product aggregation and independent verification. Portfolio usefulness, attention reduction, and real seven-day absence remain E4 proof debt.
-- **Migration/cutover/delete:** direct extension of the existing Fleet Letter; no dashboard, duplicated responsibility row, aggregate store, or migration.
-- **Continuation:** inventory current company-reconstruction sources and establish the smallest provenance-bearing known/inferred/unknown/conflicting/stale claim contract. Do not generalize the bounded discovery map until that evidence model exists. The overall Foundry program remains incomplete.
-
-## Unfamiliar-company reconstruction source ownership and claim contract
-
-- **Baseline/reverification:** Foundry already owns identity, integrations, signals, wiki knowledge, responsibilities, consents, actions, receipts, outcomes, finance, activity, and risk in separate product-scoped ledgers. The decision-premise memory is decision-specific and the wiki is authored content; neither can represent unresolved cross-source company understanding without collapsing epistemic state. Copying canonical rows into a company snapshot would create competing truth.
-- **Source inventory:** `RECONSTRUCTION_SOURCES.md` records canonical owner, tenancy, freshness, provenance, and limitations across the current reconstruction inputs. Credentials remain with authenticators; provider acknowledgments remain receipts rather than outcomes; absent configuration remains unknown.
-- **Contract/build:** migration 106 adds a compact interpretive-claim ledger with product, subject/predicate, JSON value, known/inferred/unknown/conflicting/stale status, confidence, typed evidence references, derivation method, observation time, and validity horizon. Unknown requires no fabricated value; every positive claim requires evidence; inference requires confidence; conflict requires multiple sources. A database guard resolves every evidence reference against a deliberately small same-product canonical vocabulary. Model assertions, arbitrary identifiers, cross-tenant records, and claims-as-recursive-evidence are refused.
-- **Freshness/cutover:** reads derive stale status when `valid_until` has elapsed; nothing silently refreshes. Canonical facts continue to be queried directly. The new ledger is only for bounded interpretation, conflict, and explicit unknown, with no cache or bulk snapshot path.
-- **Challenge:** runtime tests preserve all five epistemic states, exercise read-time expiry, and reject nonexistent, cross-tenant, evidence-free, confidence-free inferred, model-only, and recursive claim evidence. Fresh migrations apply through 106; snapshot, typecheck, and SQL-column checks pass.
-- **Evidence maturity:** E2 local epistemic/provenance boundary. It is not a reconstruction engine, unfamiliar-company benchmark, generalization proof, or AcreOS evidence.
-- **Continuation:** build a deterministic sparse reconstruction projection that queries canonical identity/integration/responsibility/authority state directly and combines only interpretive claims. Then add unfamiliar-company fixtures measuring unsupported-claim rate, unknown/conflict/stale preservation, provenance completeness, and tenant isolation before generalizing responsibility candidates. The overall Foundry program remains incomplete.
-
-## Sparse unfamiliar-company reconstruction projection
-
-- **Baseline/reverification:** the claim boundary existed, but no single projection could answer even sparse identity, system, responsibility, authority, claim, and unknown questions. Materializing those canonical rows into claims would have immediately created a second truth store.
-- **Contract/build:** `reconstructCompany` reads product identity, integrations, responsibilities, and active capability consents directly from their owning ledgers, then joins only bounded interpretive claims. Systems with no observation remain unknown and observations older than seven days are stale. Responsibility ownership remains unknown because the canonical responsibility record does not yet establish a responsible party; active capability authority is reported separately and never inferred from capability. Missing grounded purpose is an explicit unknown.
-- **Challenge:** the unfamiliar-company fixture includes fresh and stale systems, unknown responsibility ownership, absent authority, an explicit unknown purpose, conflict/inference claims, and another tenant's systems/responsibilities. Tests prove sparse output, staleness, unknown preservation, missing-company behavior, and cross-tenant exclusion.
-- **Evidence maturity:** E2 deterministic sparse reconstruction fixture. This is benchmark preparation, not unfamiliar-company generalization or AcreOS proof.
-- **Economic/deletion discipline:** zero model calls, no snapshot/cache, no completeness score, and no copied identity/system/responsibility truth. Incremental reads reuse existing evidence.
-- **Continuation:** formalize reconstruction benchmark scoring for unsupported claims, unknown/conflict/stale preservation, provenance completeness, tenant isolation, and responsibility precision. Then introduce provenance-bearing responsibility candidates that cannot auto-promote into operational authority. The overall Foundry program remains incomplete.
-
-## Versioned reconstruction benchmark and E3 gate
-
-- **Baseline validation:** the complete accumulated branch passed `npm run check` before this slice: typecheck, all ratchets, kernel boundary, public-claims/effects audits, 118 files and 1,036 tests. Fresh migrations apply through 106.
-- **Contract/build:** benchmark v1 reports separate supported factual precision, unsupported-claim rate, provenance completeness, unknown/conflict/stale preservation, tenant isolation, responsibility precision/false discovery/duplication, and authority separation. It deliberately has no composite “understanding” score. Independently authored fixture truth is input to scoring rather than inferred from implementation output.
-- **Hard-failure gate:** cross-tenant leakage, missing/fabricated provenance, inferred authority, lost conflict, stale consequential data treated as current, and unsupported operational responsibility fail regardless of averages. The prospective E3 gate requires at least four held-out fixtures, zero hard failures/false responsibilities/duplicates, perfect provenance/unknown/conflict/stale preservation, and >=98% supported precision/responsibility precision. Benchmark machinery alone remains E2.
-- **Challenge:** a commerce/transaction held-out fixture passes every separate measure; an adversarial mutation with multiple catastrophic defects is rejected on every corresponding hard failure. Gate version and failure-capable thresholds are regression-tested before implementation optimization.
-- **Evidence maturity:** E2 benchmark infrastructure and one fixture only, not E3 generalization evidence.
-- **Continuation:** expand independently defined held-out fixtures across sparse SaaS, service operations, commerce, and multi-product companies, then add the smallest responsibility-candidate ledger and promotion contract. Candidate inference must not create authority or skip transfer rungs. The overall Foundry program remains incomplete.
-
-## Held-out reconstruction benchmark breadth
-
-- **Baseline/reverification:** benchmark v1 had one commerce-shaped scorer fixture. That could validate metric mechanics but could not challenge structural breadth or satisfy the predefined four-fixture gate.
-- **Contract/build:** independently specified held-out scorer cases now cover SaaS/software, service operations, commerce/transactions, a sparse early-stage company, and a multi-product company. They vary stale/unobserved/current systems and explicit unknown financial, purpose, ownership, and shared-operation facts. A gate evaluator applies every threshold per fixture, refuses insufficient breadth, and never averages away hard failures.
-- **Challenge:** all five truthful scorer cases satisfy the fixed v1 thresholds; one fixture alone fails breadth and a four-case run containing cross-tenant leakage fails regardless of the other three results.
-- **Evidence maturity decision:** remains **E2**, not E3. These independently authored cases validate scorer breadth and gate mechanics but supply constructed reconstructions rather than exercising ingestion → canonical ledgers → `reconstructCompany`. E3 requires the same gate over executable unfamiliar-company fixtures, so no generalization claim is promoted.
-- **Economics:** deterministic only, zero model calls/tokens; no model-reasoning value is yet demonstrated.
-- **Owner deferral:** real AcreOS integration, inspection, ingestion, benchmarking, and proof are **DEFERRED BY OWNER**. No AcreOS repository/system was accessed and no AcreOS-specific fixture, schema, heuristic, adapter, or kernel branch was added. This is external proof debt, not a blocker for generic work.
-- **Continuation:** build executable, independently seeded unfamiliar-company fixtures through canonical ingestion and run the unchanged gate; then reverify and implement the minimal provenance-bearing responsibility-candidate/promotion ledger. The overall Foundry program remains incomplete.
-
-## Executable sparse-reconstruction benchmark gate
-
-- **Baseline validation:** before implementation, full `npm run check` passed on the accumulated branch: all ratchets/audits, 119 files and 1,041 tests.
-- **Build/challenge:** five independently specified company truths now seed ordinary product, integration, signal, responsibility, consent, and reconstruction-claim ledgers, invoke the real `reconstructCompany` projection, and run the unchanged v1 gate. The corpus covers SaaS, service operations, commerce, sparse early-stage, and multi-product boundaries; fresh/unknown/stale systems, unknown purpose/ownership, absent authority, conflict, and a foreign tenant are exercised. All five pass with zero hard failures or leakage.
-- **Defect corrected:** executable abstention exposed a scorer defect: zero produced positive claims was counted as 100% unsupported rather than 0% unsupported. The rate now distinguishes truthful abstention (0 unsupported / 0 produced) from precision (vacuously 1), without changing gate thresholds.
-- **Evidence maturity:** the **bounded sparse reconstruction projection is E3 benchmark-proven for these fixture dimensions**. This does not promote ingestion breadth, responsibility discovery, founder usefulness, real unfamiliar-company adoption, or production operation; responsibilities are seeded canonically rather than discovered in this benchmark.
-- **Economics:** deterministic, zero model calls/tokens. The gate demonstrates no reason to add model reasoning for these dimensions.
-- **AcreOS:** real integration/proof remains **DEFERRED BY OWNER** and was not accessed.
-- **Continuation:** reverify existing proposal abstractions, then implement the smallest provenance-bearing responsibility candidate and explicit grounding contract. Add an executable evidence→candidate→responsibility→Visible→founder-summary vertical; unknown/conflicting/stale evidence must abstain. The overall Foundry program remains incomplete.
-
-## Responsibility-candidate abstraction audit
-
-- **Baseline/reverification:** repository search found `phase_beta_proposals`, ephemeral daily-action candidates, outbound action proposals, evolution candidates, vendor recommendations, and trust graduation proposals. None satisfies the responsibility-candidate contract. `phase_beta_proposals` governs frozen product-development changes; outbound/daily candidates are already action-shaped and can execute; evolution candidates concern agent configuration; recommendation/trust records have different truth and lifecycle owners. Reusing any would conflate possible responsibility with capability, execution, or self-improvement authority.
-- **Decision:** a distinct minimal candidate state is justified, but it must not be implemented by widening an executable proposal table. Its first slice must contain only product scope, convergence identity, proposed responsibility, canonical provenance, epistemic/freshness state, rationale/derivation, optional untrusted owner proposal, optional capability dependency, authority-required fact, and non-executable lifecycle. Promotion history must be separate and append-only.
-- **Constitutional boundary:** candidate creation must write no `institutional_responsibilities`, consent, policy, action, execution, or transfer-state row. Candidate evidence must resolve through same-product canonical evidence; reconstruction claims may be admitted only if their own canonical provenance is complete and they are neither unknown, conflicting, nor stale. Confidence cannot authorize promotion.
-- **Evidence maturity:** E1 architectural baseline/contract only; no candidate capability is claimed. This audit prevents reuse of an action-capable abstraction merely to avoid a new noun.
-- **Continuation:** implement migration 107 and a creation/convergence service with database-enforced provenance and zero execution authority, plus adversarial tenant/stale/conflict/model-only/concurrency tests. Only after that, implement authenticated/deterministic append-only promotion to a Visible responsibility. The overall Foundry program remains incomplete.
-
-## Non-executable responsibility-candidate ledger
-
-- **Baseline:** the abstraction audit established that existing proposal tables are action-, development-, recommendation-, or agent-evolution-shaped and cannot safely represent possible responsibility.
-- **Contract/build:** migration 107 adds one product-scoped, convergence-keyed candidate ledger containing proposed responsibility, typed evidence, derivation/rationale, known/inferred/unresolved epistemic state, confidence, optional capability dependency, descriptive authority-required flag, freshness, and non-executable lifecycle. It has no responsibility, consent, policy, action, execution, or transfer-state foreign path.
-- **Provenance:** database guards accept only same-product signal events or reconstruction claims. Positive candidate grounding through a claim requires a current known/inferred claim with canonical evidence; unknown/conflicting/stale claims may only produce an explicitly unresolved candidate. Model-only, nonexistent, cross-product, recursive candidate, and arbitrary evidence kinds fail closed.
-- **Convergence/challenge:** unique `(product_id, convergence_key)` plus service recovery makes replay and concurrent creation return one canonical candidate. Tests prove zero change to responsibility/consent/execution ledgers, deterministic convergence, rejection of nonexistent/cross-product/model/conflicting-positive evidence, and bounded unresolved conflict retention.
-- **Evidence maturity:** E2 local candidate creation/provenance/convergence evidence. No promotion, founder confirmation, generalized discovery, or authority is implemented or claimed.
-- **Migration/cutover/delete:** additive migration 107; no prior candidate truth or executable proposal path is migrated or dual-written. Fresh migrations apply through 107 and snapshot/column/type checks pass.
-- **Continuation:** implement append-only promotion with only deterministic canonical grounding or authenticated owner confirmation, creating exactly one Unknown→Visible responsibility and no authority. Add rejection/supersession and stale/conflict/tenant/replay adversarial proof, then connect the resulting responsibility to the existing Letter. The overall Foundry program remains incomplete.
-
-## Candidate-promotion preflight validation
-
-- **Accumulated validation:** before promotion work, `npm run check` passed in full with migration 107 active: typecheck, all ratchets, kernel boundary, public-claims/effects audits, 121 files and 1,046 tests.
-- **Reverified contract:** promotion remains the highest-value unblocked dependency. It must be an append-only event, revalidate current candidate provenance/freshness/status, support only deterministic canonical grounding or authenticated owner confirmation, converge under replay/concurrency, create exactly one Unknown→Visible responsibility, and create no consent/policy/action/execution/authority. Rejection/supersession history belongs in the same bounded lifecycle, not a workflow engine.
-- **Evidence maturity:** no promotion maturity is claimed; candidate creation remains E2 and the bounded reconstruction dimensions retain their prior E3 scope.
-- **Continuation:** implement migration 108 for append-only candidate decisions/promotions and database guards, then service-level concurrent promotion and authenticated Letter grounding with non-enumerating tenant refusal. Adversarially prove stale/conflicting/rejected/superseded/foreign candidates abstain and that only candidate history, one responsibility, and its Unknown→Visible transition change. The overall Foundry program remains incomplete.
-
-## Append-only candidate promotion
-
-- **Build:** migration 108 adds append-only candidate decision history with exactly two grounding mechanisms (`deterministic`, `authenticated_owner`), evidence/actor/result provenance, a unique promotion per candidate, and a database-enforced Visible-only initial state. Promotion revalidates product, lifecycle, freshness, evidence equality, canonical evidence existence, claim epistemic state, deterministic actor, and real product owner at decision time.
-- **Atomic cutover:** the service uses one transaction to create a deterministic-ID responsibility, append Unknown→Visible transition, and append promotion. Concurrent/replayed promotion converges on the winning responsibility; candidate status is a derived current projection applied by trigger, not the historical truth.
-- **Authority boundary:** promotion creates no consent, policy, action, execution, authority reference, outcome, or higher maturity. Tests compare authority/execution ledgers before/after and prove one responsibility, one transition, and one promotion under four concurrent requests.
-- **Challenge:** forged owner and unresolved-conflict promotion fail; fresh migrations apply through 108. E2 local promotion/concurrency/authority evidence only; authenticated HTTP interaction, rejection/supersession/reconsideration, generalized discovery, and founder-visible vertical remain incomplete.
-- **Continuation:** add authenticated Letter owner promotion with tenant-safe refusal, then append-only rejection/supersession/reconsideration guards and stale/foreign lifecycle adversarial tests. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Authenticated founder responsibility recognition
-
-- **Build/cutover:** the existing Letter now lists only pending candidates for its server-resolved product and offers an explicit recognition action. The POST handler derives founder identity from the authenticated session, resolves candidate → product ownership server-side, and invokes the existing append-only `authenticated_owner` promotion; no product, actor, owner, evidence, authority, or maturity field is accepted from the form.
-- **Founder truth:** successful recognition creates the previously proven single Visible responsibility and immediately enters existing Letter/Fleet responsibility projections. The founder copy states that recognition grants no authority; no candidate dashboard or second responsibility truth was added.
-- **Challenge/evidence:** route tests prove the recorded actor is the authenticated owner, authority remains null, and foreign/nonexistent candidate IDs receive the same non-enumerating refusal with no leaked responsibility. Evidence maturity is E2 local authenticated-interaction evidence, not production identity or founder-value proof.
-- **Continuation:** implement append-only rejection, supersession, and explicit reconsideration; suppress unchanged rejected discovery; then connect reconstruction to bounded candidate discovery and the separate prospective recognition benchmark. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Candidate lifecycle institutional memory
-
-- **Contract/build:** additive migration 109 completes the deliberately bounded candidate lifecycle around the existing promotion history. Authenticated owners may append rejection or explicit reconsideration; a candidate may be superseded only by a different pending candidate in the same product. Database guards prohibit result/maturity fields, forged owners, cross-product replacements, invalid current states, and non-owner lifecycle mechanisms.
-- **Derived state/cutover:** rejection, supersession, and reconsideration update only the candidate's current lifecycle projection; historical decision rows remain append-only. The Letter exposes rejection beside recognition without accepting product, owner, actor, evidence, or authority fields. Unchanged rejected/superseded candidates no longer appear because discovery convergence returns the durable candidate and the Letter queries pending state only.
-- **Challenge/evidence:** runtime tests cover concurrent/replayed rejection convergence, rejected and superseded promotion refusal, forged reconsideration, explicit owner reconsideration, same-product supersession, replacement preservation, and zero responsibility creation on rejection. Evidence maturity is E2 local lifecycle/runtime evidence, not generalized discovery or founder-value proof.
-- **Migration/deletion:** migration 109 is additive; no workflow/task engine, dual write, or competing responsibility store was introduced. No existing lifecycle path required deletion.
-- **Continuation:** expand promotion-time stale/conflict/evidence-substitution and reject/promote race proof, then implement deterministic reconstruction → candidate discovery and its separate prospective recognition gate. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Bounded reconstruction-to-candidate discovery
-
-- **Baseline/contract:** reconstruction claims already preserve typed canonical provenance and epistemic state. Discovery therefore reuses that ledger rather than adding narrative inference or a second knowledge store. Only the explicit `operational_responsibility` predicate with a typed title is interpreted; malformed and unknown claims abstain.
-- **Build:** deterministic discovery converts known/inferred explicit responsibility claims into non-executable candidates with stable subject/capability identity, unknown ownership, the claim as provenance, and unchanged authority-required metadata. Conflicting or stale claims become unresolved candidates and remain structurally unpromotable.
-- **Challenge/economics:** concurrent/replayed discovery converges through the existing product/meaning constraint; explicit unknown evidence produces no candidate; stale evidence remains visible as unresolved and fails promotion. The path makes zero model calls and uses zero model tokens.
-- **Evidence maturity:** E2 local bounded-discovery evidence only. It is not generalized responsibility-recognition E3, ingestion breadth, founder usefulness, or production proof.
-- **Continuation:** add executable multi-company recognition fixtures and define the separate prospective E3 recognition gate before tuning breadth; then extend promotion-time lifecycle races and evidence mutation proof. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Executable responsibility-recognition benchmark gate
-
-- **Prospective contract:** recognition benchmark v1 fixes separate thresholds before corpus execution: at least four held-out fixtures, perfect candidate precision/recall for explicitly enumerable truth, zero false/duplicate candidates or false responsibilities, perfect abstention, convergence, promotion precision, provenance, tenancy, authority separation, lifecycle correctness, and Visible initial state. Cross-tenant flow, fabricated provenance, unsupported responsibility, candidate-created authority/execution, lifecycle bypass, and unjustified maturity are hard failures regardless of averages.
-- **Executable corpus:** five independently specified companies exercise ordinary products, signal evidence, reconstruction claims, `reconstructCompany`, deterministic candidate discovery, replay, deterministic promotion, conflict, explicit unknown, and stale abstention. SaaS and service responsibilities promote; conflict and stale evidence remain unresolved and unpromoted; unknown evidence produces no candidate. A foreign product is seeded but excluded.
-- **Challenge:** all five fixtures pass the unchanged gate. An adversarial otherwise-correct result with fabricated consent/execution, authority, and Operating state fails hard. The benchmark uses zero model calls/tokens and does not inspect fixture names in production code.
-- **Evidence maturity:** **E3 for the explicitly exercised recognition dimensions**: typed operational-responsibility claim discovery, unknown/conflict/stale abstention, replay convergence, deterministic promotion precision, provenance, tenant isolation, authority separation, and Visible initial state across these five synthetic structures. Authenticated founder usefulness, ingestion breadth, lifecycle races, broader responsibility ontology, real unfamiliar-company adoption, and production proof remain E2/unproven.
-- **Phase decision/continuation:** Phase 1 is locally sufficient for this bounded recognition contract and must not grow into a candidate workflow platform. Proceed to the smallest evidence-bearing Visible → Understood contract using reconstruction epistemics, with critical unknown/conflict/stale facts blocking transition. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Earned responsibility understanding
-
-- **Baseline/contract:** the first supported operating model uses six material facts demonstrated by current support/recovery responsibilities: purpose, desired outcome, success conditions, operating constraints, dependencies, and risks. This is a bounded first contract, not a universal responsibility ontology or completeness percentage.
-- **Build/reuse:** migration 110 permits current same-product known/inferred reconstruction claims with canonical provenance to ground responsibility transitions. The understanding projection reads those existing claims under `responsibility:<id>`, preserves epistemic state/evidence, reports missing and unresolved critical facts, and derives that authority is still required rather than inferring it.
-- **Earned transition:** Visible → Understood is appended only when all six critical facts exist and none is unknown, conflicting, or stale at verification time. The verifier supplies no authority. Tests prove incomplete persuasive content abstains, a fully grounded generic support responsibility advances, stale/conflicting facts block, cross-tenant provenance fails, and authority remains null.
-- **Evidence maturity:** E2 local runtime evidence for one generic support-shaped responsibility. No understanding E3 gate, multi-structure generalization, founder usefulness, Shadowing, competence, or authority is claimed.
-- **Migration/cutover/delete:** additive migration 110 replaces the transition provenance trigger with an equivalent superset; signal evidence remains supported and no parallel understanding ledger was created.
-- **Continuation:** define the prospective understanding benchmark and executable held-out responsibilities, project concise known/unknown facts into the existing founder surface, then establish a non-executing expectation → independent observation → comparison Shadowing loop. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Capability-shaped understanding benchmark
-
-- **Generalization:** understanding requirements now derive from responsibility capability rather than one universal checklist. Six demonstrated core operating facts remain common; development additionally requires systems/failure modes, billing recovery requires failure conditions/stakeholder obligations/financial consequence, and operations requires systems/current carrier/failure modes. Customer support is not forced to populate irrelevant billing facts.
-- **Prospective gate:** understanding benchmark v1 fixes four-fixture breadth, perfect critical-fact coverage/provenance/unknown preservation, zero unsupported facts, correct dependencies/constraints/risks/authority requirement/tenancy/transition, and zero hard failures. Understood-with-gap, cross-tenant knowledge, missing provenance, epistemic collapse, and inferred authority fail regardless of averages.
-- **Executable evidence:** four recognized responsibilities (support, development, billing recovery, operations) populate independently expected capability-shaped facts through canonical reconstruction evidence and the real transition verifier. All pass the unchanged gate; an adversarial Understood state with a critical gap fails hard.
-- **Evidence maturity:** **E3 for these explicitly exercised understanding dimensions and four capability shapes**. This does not prove arbitrary responsibility semantics, founder usefulness, Shadowing, competence, assistance, external adoption, or production operation.
-- **Continuation:** make the structured projection founder-legible in the existing Letter, then implement the first non-executing Shadowing loop over independently observed canonical events with a prospective failure-capable gate. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## First non-executing responsibility shadow loop
-
-- **Contract/build:** migration 111 adds only bounded expectation and comparison records; actual events remain owned by canonical signal ingestion. An Understood responsibility may enter Shadowing only with a current grounded expectation claim and a same-product signal proving an independent observation channel. The database requires null authority throughout.
-- **Loop:** the shadow observer records an expected event type, later resolves an independently ingested signal, and classifies the comparison as matched, deviated, or unresolved. Provider receipts are not treated as outcomes. Optional learning must reference a same-product provenance-bearing reconstruction claim, preserving the existing epistemic system rather than adding generic memory.
-- **Challenge:** runtime tests prove Understood → Shadowing with no action execution or authority, matched and deviated observations, replay convergence, cross-tenant observation refusal, fabricated responsibility refusal, and no partial comparison state after failures.
-- **Evidence maturity:** E2 local runtime evidence for one support-capacity responsibility. No shadowing E3 breadth/gate, founder usefulness, competence, assistance, or outcome accuracy is claimed.
-- **Migration/cutover/delete:** additive migration 111; no execution path, integration, autonomous worker, or competing event store was added.
-- **Continuation:** define the prospective failure-capable Shadowing benchmark across diverse observable responsibilities and expose only material deviations/uncertainty in the existing Letter. Reassess responsibility-bound authority only after Shadowing competence is earned. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Executable Shadowing benchmark and exception compression
-
-- **Prospective gate:** Shadowing benchmark v1 fixes four-fixture breadth and perfect relevant-event recognition, exception/classification correctness, uncertainty preservation, provenance, tenancy, replay convergence, and authority separation, with zero misses, false attribution, unsupported interpretation, or hard failures. Cross-tenant/fabricated observation, collapsed unresolved outcome, Shadowing-created authority/execution, and maturity bypass fail regardless of averages.
-- **Executable evidence:** support, development, billing-recovery, and operations responsibilities use independently seeded canonical observation channels and actual external-actor signals. The corpus exercises match, deviation, provider acknowledgment that is not mistaken for the expected business result, expired expectation yielding unresolved, concurrent replay, and foreign observation refusal. All four pass the unchanged gate.
-- **Founder cutover:** the Letter reads canonical comparisons and compresses only deviations/unresolved cases into “What differed while I watched,” explicitly saying Foundry is observing rather than carrying the responsibility. Matched comparisons remain quiet; no Shadowing dashboard was added.
-- **Evidence maturity:** **E3 for the explicitly exercised Shadowing dimensions and four responsibility shapes**. This does not prove founder-attention reduction, arbitrary event coverage, business-outcome accuracy beyond typed signals, competence, Assisting, external adoption, or production operation.
-- **Continuation:** audit existing consent and governed effect paths for the smallest responsibility-bound authority extension. Choose an Assisting case only if it already has stable effect identity, idempotency, receipts, ambiguity/reconciliation, and sufficient Shadowing evidence. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Responsibility-bound authority prerequisite
-
-- **Baseline/audit:** the existing autonomy consent ledger binds founder, product, capability, disclosure, and revocation, but not responsibility, allowed scope, consequence boundary, or expiry. It is therefore insufficient for Assisting even though it remains valid for legacy capability-level policy.
-- **Build:** migration 112 extends that same ledger rather than adding a parallel permission system. A responsibility-bound grant requires a same-product Shadowing responsibility whose capability matches, the authenticated product owner, explicit non-empty scopes, low/medium/high consequence boundary, future expiry, and `act` mode. Legacy unbound rows remain distinguishable and cannot satisfy responsibility authority lookup.
-- **Challenge:** runtime tests prove exact responsibility/capability/scope binding, wrong responsibility/capability/scope refusal, forged owner and cross-tenant refusal, expired/empty-scope refusal, non-Shadowing refusal, revocation, and inability of legacy capability consent to authorize a responsibility.
-- **Evidence maturity:** E2 local authority-boundary evidence only. No Assisting transition, competence proof, governed execution, receipt/outcome vertical, assistance benchmark, or production authority is claimed.
-- **Migration/cutover/delete:** additive migration 112; existing consent APIs remain compatible, while the new authority lookup is deliberately stricter. No duplicate permission ledger was introduced.
-- **Continuation:** select the lowest-risk existing governed ControlPath and add an Assisting entry verifier that requires current Shadowing comparisons, exact responsibility authority, stable scoped effect identity, and receipt/reconciliation semantics before any action. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## Responsibility-bound Assisting entry verifier
-
-- **Baseline/contract:** responsibility transitions previously accepted any same-product capability consent and signal evidence. That generic provenance guard could not prove that an Assisting transition used the exact responsibility grant or demonstrated current Shadowing evidence.
-- **Build:** migration 113 admits canonical shadow comparisons to transition provenance and adds a database-enforced Assisting guard. Entry now requires a matched/deviated comparison for the same Shadowing responsibility, a current grounded expectation, and an exact unrevoked/unexpired responsibility-and-capability-bound consent with non-empty scope. The service supplies references but cannot declare them valid.
-- **Challenge:** fresh-migration runtime tests prove the bounded entry, zero action creation, wrong-responsibility evidence/authority refusal, revoked authority refusal, atomic concurrent convergence, and no automatic promotion to Operating. Scope, consequence, expiry, ownership, and capability remain enforced by the existing consent ledger and migration 112.
-- **Evidence maturity:** E2 local Assisting-entry evidence only. This is not an Assisting execution vertical, competence benchmark, provider receipt, independently verified business outcome, founder value, external adoption, or production authority. Shadowing remains E3 only for its previously exercised dimensions; Assisting remains unproven beyond this entry boundary.
-- **Migration/deletion:** migration 113 replaces the older reference trigger with its smallest compatible superset; it creates no permission ledger, execution path, or duplicate evidence store. No legacy path is cut over by this slice.
-- **Continuation:** bind the lowest-risk existing governed `send_email` ControlPath to the authorized scope and stable responsibility effect identity, preserving provider acknowledgement versus independently observed outcome and ambiguity/reconciliation. Define the prospective Assisting benchmark before broadening execution. The overall Foundry program remains incomplete; AcreOS remains DEFERRED BY OWNER.
-
-## First responsibility-bound assisted execution
-
-- **ControlPath audit/choice:** existing email delivery is the lowest-risk meaningful generic mutation with a server-owned `ToolPolicy`/actor, tenant policy, communication budget, required stable deduplication key, gateway audit receipt, provider idempotency, and existing replay/kill-switch/adversarial proof. Linear, Slack, MCP, money, and arbitrary webhooks have either broader consequence, weaker outcome evidence, or more authority/integration surface. No integration was added for this proof.
-- **Contract/build:** migration 114 extends the existing `outbound_actions` ledger rather than adding an action system. A bounded support-reply plan durably binds product, canonical Assisting responsibility, capability-derived exact consent, fixed scope, stable effect identity, provider receipt certainty, reconciliation time, independently observed outcome, and learning. Admission, planning, dispatch, and reconciliation remain separate functions. Dispatch revalidates exact current responsibility/capability/scope/consequence/expiry/revocation immediately before and after its atomic claim, then crosses the ordinary `send_email` gateway under its server-owned identity.
-- **Truth and challenge:** the executable vertical uses ordinary signal discovery, understanding, Shadowing, consent, Assisting admission, planning, gateway dispatch, canonical signal observation, and reconstruction learning. Runtime proof covers provider acknowledgment remaining unresolved, independently verified delivery, provider acknowledgment followed by rejection, conflicting delivery/rejection evidence, transport ambiguity later reconciled to success, concurrent replay producing one dispatch, post-admission revocation producing zero dispatch, scope-bound planning, durable receipt, unchanged authority, and no automatic Operating promotion. Email metrics no longer infer delivery from send count.
-- **Founder cutover:** the existing Letter adds only a compressed “Bounded help” section. It distinguishes authorized-but-not-performed, provider-accepted-but-unresolved, ambiguous, independently verified success/failure, and conflicting evidence without exposing ledger machinery or adding a dashboard.
-- **Prospective benchmark:** `assisting-v1` freezes four-fixture minimum breadth, perfect authorization/binding/tenancy/effect/replay/receipt/outcome/ambiguity/reconciliation/scope/revocation thresholds, zero external cost, and catastrophic failure overrides before behavioral broadening. Its evaluator is E1 prospective infrastructure; the current vertical is not claimed as held-out E3 evidence.
-- **Evidence maturity/proof debt:** responsibility-bound assisted email execution is **E2 local runtime evidence for the exercised support-reply dimensions only**. Real provider operation, real support-outcome semantics beyond typed canonical signals, founder usefulness/attention reduction, generalized capabilities, external adoption, and production remain unproven. Assisting is not Operating; repeated carrying, ongoing competence, exception handling, economics, and durable authority remain proof debt.
-- **Migration/deletion/continuation:** migration 114 is additive and reuses the gateway, consent, action, signal, reconstruction, and Letter truths; no parallel permission, receipt, outcome, or learning ledger was introduced. Next, execute a frozen multi-fixture Assisting corpus against `assisting-v1`, add reconciliation ownership/intervention timing, then begin evidence-bearing cross-responsibility judgment using existing decision primitives. AcreOS remains DEFERRED BY OWNER.
-
-## Executable Assisting benchmark gate
-
-- **Held-out corpus:** six independently specified generic companies exercise the ordinary signal-recognition → Understood → Shadowing → consent → Assisting → plan → execution-time revalidation → governed gateway → receipt → independent outcome → reconciliation → learning path. Expected truth is fixture-authored, not produced by the implementation. Cases cover verified success, honest unresolved, verified failure after provider acceptance, ambiguous transport reconciled to success/failure, and conflicting evidence.
-- **Authority/replay challenge:** the unchanged `assisting-v1` gate additionally exercises concurrent replay/stable effect identity, wrong responsibility/product, generic consent substitution, scope escape, expiry, forged model self-authorization, revocation before execution, revocation after atomic claim but before dispatch, and attempted automatic Operating promotion. Failed authority cases produce zero dispatch. Migration 115 freezes all Operating promotion until a later independently evidenced owner-authenticated contract exists; a successful action cannot promote itself.
-- **Evidence decision:** `assisting-v1` passes unchanged with perfect exercised authorization/binding/tenancy/effect/replay/receipt/outcome/ambiguity/reconciliation/scope/revocation metrics, zero catastrophic failures, and zero model/provider cost. **Bounded responsibility-assisted support replies are E3 only for these executable synthetic dimensions.** Other capabilities, real provider operation, founder value, pilots, production, and generalized Assisting remain unproven. The support-email vertical is frozen absent material new evidence.
-- **Defect repaired:** the claim/revoke race exposed an invalid `refused` action status that violated the canonical ledger constraint; refusal now records canonical `rejected` plus `not_attempted` certainty. The last pre-dispatch authority check is executable under a deterministic claim lifecycle hook without weakening production authority.
-
-## First deterministic cross-responsibility judgment
-
-- **Abstraction audit:** `strategic_decisions_log` already owns durable decisions, alternatives, assumptions, expected/actual outcomes, reversibility history, and retrospectives; decision queues are founder-task-local, recommendation outcomes are ROI-specific, and named-agent synthesis is non-canonical. Migration 116 therefore extends the strategic log with responsibility/evidence/constraint/uncertainty/consequence/economics/authority-request provenance rather than adding another decision noun.
-- **Deterministic baseline:** a zero-model institutional function compares provenance-bearing generic resource-capacity and responsibility-demand claims. It abstains without a real conflict; when aggregate demand exceeds canonical capacity it records affected responsibilities, evidence, hard constraint, alternatives, missing deadlines as uncertainty, consequences, reversibility, explicitly unverified economics, and an authority requirement.
-- **Authority/tenancy/economics:** runtime tests prove cross-tenant responsibility substitution fails and judgment creates no consent or outbound action. Expected economic value remains null/unverified rather than invented. `institutional-judgment-v1` prospectively freezes evidence, constraints, conflict, uncertainty, authority, tenancy, and zero-model-cost requirements plus constitutional catastrophic failures.
-- **Evidence maturity/proof debt:** deterministic shared-capacity conflict judgment is E2 local for one exercised support/development interaction; the prospective decision benchmark is E1. Multi-company breadth, commitment semantics, economic-quality comparison, later outcomes, founder usefulness, model marginal value, and production cognition are unproven. Continue with independently authored cross-responsibility cases against the frozen gate before any model-heavy cognition. AcreOS remains DEFERRED BY OWNER.
-
-## Judgment benchmark contract completeness correction
-
-- **Defect:** the prospective evaluator omitted explicit commitment consistency, alternative completeness, consequence/reversibility awareness, economic epistemic correctness, and fabricated-economics catastrophe fields required by the governing proof contract. A benchmark could therefore report a pass without measuring those dimensions.
-- **Repair/evidence:** the frozen v1 gate now requires perfect values for every omitted dimension and treats fabricated economics as catastrophic. Evaluator tests prove the expanded type and catastrophic override. This is E1 contract repair only; institutional judgment remains E2 and has **not** been promoted to E3 without an independently authored executable corpus.
-- **Continuation:** build the multi-company held-out corpus against this stricter unchanged gate, then add append-only outcome comparison and authenticated founder disposition. AcreOS remains DEFERRED BY OWNER.
-
-- **Coverage integrity:** the evaluator now rejects any required dimension with zero executable cases, so an unexercised dimension cannot receive a synthetic perfect score. This remains E1 gate infrastructure; the held-out corpus is still required before E3.
-
-## Executable institutional-judgment benchmark
-
-- **Corpus:** ten independently authored generic companies exercise capacity conflict, hard external commitment, owner constraint, billing/relationship tension, unknown cash-versus-investment ordering, multiple alternatives, consequence/reversibility, no conflict, insufficient evidence, conflicting economics, and foreign-tenant refusal through canonical responsibilities, signals, and reconstruction claims rather than final judgment rows.
-- **General mechanism:** deterministic judgment now projects grounded hard commitments and owner constraints into constraints without promoting internal targets or optional opportunities, and preserves observed, inferred-estimate, unknown, and conflicting economic states without inventing ROI. No-conflict and missing-capacity cases abstain.
-- **Gate decision:** the corrected, coverage-enforced `institutional-judgment-v1` gate passes unchanged with nonzero coverage and perfect exercised evidence, constraint, commitment, conflict/abstention, uncertainty, alternatives, consequence, reversibility, authority, tenancy, and economic-epistemic dimensions at zero model cost. **Deterministic institutional judgment is E3 only for these synthetic exercised dimensions.** Broad strategy, real-company usefulness, later outcomes, founder attention, model marginal value, pilots, and production remain unproven.
-- **Authority/deletion:** judgments create zero consent, action, execution, or responsibility promotion. No named executive or competing decision store was added. Freeze the primitive and continue with append-only later-reality comparison and learning; AcreOS remains DEFERRED BY OWNER.
-
-## Judgment later-reality comparison
-
-- **Build:** migration 117 adds an append-only comparison ledger because mutable retrospective columns cannot preserve multiple evidence states without hindsight rewrite. Evaluation accepts only same-product canonical signal observations, preserves not-yet-observable/partial/supported/contradicted/mixed/conflicting semantics, records observed versus unknown economics, and writes scoped reconstruction learning.
-- **Challenge/evidence:** runtime tests prove the original judgment row remains byte-for-byte unchanged across three evaluations, conflicting evidence remains conflicting, foreign and circular reconstruction-claim evidence fail, and learning creates no consent or maturity change. E2 local only; real later outcomes, calibration, founder usefulness, and production learning remain unproven.
-- **Continuation:** expose only material pending/conflicting judgments and audit authenticated append-only owner disposition before moving to a bounded development responsibility. AcreOS remains DEFERRED BY OWNER.
-
-## Baseline repair: stale schema snapshot
-
-- **Verified defect:** at accumulated head `9b3128b` the full `npm run check` failed. `docs/db/schema.snapshot.sql` had drifted: it omitted the migration 112–116 trigger bodies and the entire migration 117 `institutional_judgment_evaluations` table, so the phantom-table ratchet correctly refused a live table reference.
-- **Repair:** regenerated from the canonical `scripts/schema-snapshot.sh` rather than allowlisting the reference or weakening the ratchet. The check then passed at 134 files / 1,087 tests with all ratchets, kernel boundary, public-claims audit, and consequential-effects audit green.
-- **Evidence maturity:** E2 for the restored deterministic drift ratchet. The gap is a local-tooling one: CI has a dedicated snapshot-freshness job, but `npm run check` cannot run it without the `sqlite3` CLI, so local drift is only caught indirectly when a new table is referenced. That is recorded as a genuine bounded development need, not silently fixed here.
-
-## Authenticated owner disposition on institutional judgments
-
-- **Baseline/reverification:** judgments carried responsibility/evidence provenance and append-only later-reality comparison, but no owner could accept, reject, defer, or choose a represented alternative. The founder-facing Letter never surfaced a judgment at all, so deterministic institutional judgment had no owner-facing consumer and had not yet paid rent.
-- **Constitutional contract:** *direction is not permission.* "I agree with the recommendation" must never mean "Foundry may execute every implied action." Migration 118's ledger therefore has no consent, scope, capability, consequence, expiry, action, or execution column — there is nothing in it for an authority lookup to read. Responsibility-bound authority continues to require the exact migration-112 `autonomy_consents` grant and nothing else.
-- **Build:** migration 118 adds an append-only `institutional_judgment_dispositions` ledger with database guards for tenant, real product ownership, institutional-judgment provenance (a plain strategic decision row cannot be dispositioned), required reason, and alternative membership. Update and delete both abort, so a change of mind appends rather than rewrites. The judgment row itself is never touched.
-- **Founder cutover:** the existing Letter gains one compressed "Judgments that need your direction" section — no dashboard, no second decision store. It shows only judgments still awaiting direction plus those whose later reality has contradicted or conflicted with them; a directed-and-supported judgment goes quiet. Each item states in plain language that setting a direction does not let Foundry carry it out. A chosen alternative is located by position in the canonical judgment row, so caller-supplied alternative text is never trusted as the selection.
-- **Challenge:** seven runtime cases cover normal direction, alternative selection, unrepresented-alternative refusal at both route and database, forged actor, foreign tenant, non-institutional decision, empty reason, invented disposition, non-enumerating refusal, append-only history across three directions, update/delete refusal, byte-for-byte judgment preservation, re-surfacing on contradiction, and cross-tenant projection isolation. Authority ledgers (`autonomy_consents`, `outbound_actions`, `action_executions`, responsibility states) are compared before and after and are unchanged.
-- **Evidence maturity:** **E2 local runtime evidence** for the exercised disposition, authority-separation, tenancy, and append-only dimensions. No founder usefulness, attention reduction, real judgment quality, external adoption, or production evidence follows. Institutional judgment itself retains its prior bounded synthetic E3 scope; disposition does not inherit it.
-- **Migration/deletion:** additive migration 118 with no backfill, dual-write, or competing decision store. Existing judgments simply have no direction until an owner gives one.
-- **Continuation:** software development must now become an ordinary governed company responsibility. Begin with an evidenced, low-consequence, reversible development need; prove development Shadowing before any repository mutation. AcreOS remains DEFERRED BY OWNER. Full check green at 135 files / 1,094 tests.
-
-## First development responsibility and development Shadowing
-
-- **Chosen responsibility and why:** *keep the committed schema snapshot in sync with the migrations.* It was selected from verified repository reality — it actually failed at accumulated head `9b3128b` — rather than invented to demonstrate autonomy. It is narrow (one generated artefact), reversible (regenerate and commit), low consequence (a development-time check with no customer-reaching effect), independently testable, not security-sensitive, not constitutional, and depends on no external service. `Claude Code can edit Foundry` is explicitly **not** the same claim as `Foundry has institutional development authority`; none is claimed here.
-- **Reuse over invention:** development required no new responsibility, expectation, comparison, or candidate ledger. The `development` capability already had a defined understanding shape (base facts plus `systems` and `failure_modes`), and the generic migration-111 Shadowing loop already compares a stated expectation against independently ingested canonical signals. The only thing genuinely missing was *what counts as an independent observation of development reality*.
-- **Build:** migration 119 adds two triggers and no table. A development observation is a canonical signal event carrying the real check and the real result; its payload must contain both, and it may not carry `expectation_id`, `expected_event_type`, or `responsibility_id` — an observer that can cite the expectation is self-confirming, not independent. An expectation shaped `development_verified:<check>:<result>` may only be resolved by such an observation, so a self-authored signal cannot satisfy it.
-- **Boundary correction found by a red gate:** the first version of that second guard keyed on `capability='development'` and retroactively invalidated the frozen Shadowing E3 benchmark's development fixture, which legitimately shadows ordinary company events. The benchmark was correct and was not touched; the guard was re-keyed onto the *shape of the expectation* instead, which is both narrower and the actually intended boundary.
-- **No cherry-picking, no post-hoc expectation:** resolution compares *every* independent observation in the expectation's own window, so a favourable result cannot bury a deviating one — deviation dominates the verdict. The window's lower bound is exclusive, so evidence must genuinely follow the prediction it tests; where timestamp resolution makes ordering ambiguous the observation is excluded and the expectation stays unresolved rather than being falsely confirmed.
-- **Zero mutation:** neither module imports `node:fs` or any process/command API, and tests assert that statically. Foundry observes development reality; the development environment performs the work. A bounded static ratchet keeps the verification intake the single writer of `development_verification` signals, so no other caller can mint its own passing result.
-- **Challenge:** ten runtime cases cover Understood through the ordinary development capability shape, Shadowing entry with null authority and zero executable records, match, replay convergence, deviation dominating a match, expired-window unresolved, fabricated self-authored verification refusal, three circular-grounding refusals, empty-payload refusal, cross-tenant resolution refusal and cross-tenant observation exclusion, no self-promotion out of Shadowing, the single-writer ratchet, and the no-filesystem/no-exec ratchet.
-- **Evidence maturity:** **E2 local runtime evidence** for the exercised development Shadowing dimensions on one responsibility shape. Explicitly **not** claimed: development benchmark breadth (no prospective development gate exists yet), development authority, any repository mutation, diff precision, proposal quality, founder usefulness, or production operation. Shadowing's prior E3 remains scoped to its own four previously exercised shapes and does **not** extend to development verification.
-- **Migration/deletion:** additive migration 119 with no table, backfill, dual-write, or competing store; no existing path required deletion.
-- **Continuation:** define the prospective development benchmark *before* broadening behaviour, then responsibility-bound development authority reusing the migration-112 consent ledger (never a `can_write_code` flag), constitutional-ring protection, and only then a first bounded development Assisting vertical with execution-time authority revalidation. AcreOS remains DEFERRED BY OWNER. Full check green at 136 files / 1,104 tests.
-
-## Prospective development benchmark and development authority
-
-- **Frozen gate first:** `development-v1` fixes thresholds before any development behaviour is broadened, so nothing is tuned against the measure. It requires four-fixture breadth and perfect responsibility correctness, proposal relevance, scope correctness, authorization correctness, diff precision, replay correctness, test correctness, verification correctness, outcome epistemics, reversibility, tenant isolation, and constitutional isolation, at zero model cost. Catastrophic and averaging-proof: unauthorized repository mutation, constitutional mutation, cross-tenant mutation, cross-repository mutation, fabricated verification, duplicate irreversible mutation, self-authorized scope expansion, automatic Operating promotion, and learning that altered authority. **Coverage integrity is built in from the start** — the earlier judgment gate had to be corrected for this — so a dimension with zero executable cases fails as untested rather than scoring a vacuous 1. The evaluator is **E1 prospective infrastructure**; no development corpus has been run against it.
-- **Authority shape:** migration 120 extends the same consent ledger again rather than adding a developer permission system. There is deliberately **no `can_write_code` column**, and a test asserts its absence. A development grant binds product, canonical development responsibility, development capability, repository, exact path prefixes, one change class from a closed three-value vocabulary (`generated_artifact`, `test`, `documentation`), the verification it must produce, a `low` consequence boundary, a future expiry, and revocation. Migration 112's existing requirements — Shadowing responsibility, matching capability, real product owner, non-empty scope — are unchanged and still enforced.
-- **Constitutional ring (the smallest robust mechanism, not a filename blacklist):** the ring is defined semantically as the code, migrations, documents, and enforcement scripts that define or bind what Foundry may do — `src/db/migrations/` (every institutional guard is a database trigger), `docs/foundry-institution/`, `scripts/` (the ratchets and audits that make the rules binding), `src/services/institution/`, `src/services/outbound/`, and `AGENTS.md`. The database check is **deny-dominant and bidirectional**: a prefix inside the ring is refused, and so is a broad prefix such as `src/`, `docs/`, or `""` that would contain part of it. One legitimate prefix cannot launder another in the same grant. **The boundary is self-protecting**: widening the ring requires a new migration, and migrations are themselves inside the ring, so ordinary development authority can never move it.
-- **Plan-time agreement:** `isPathWithinAuthority` refuses the constitutional ring, absolute paths, and `..` escapes *before* consulting any granted prefix, so a grant cannot widen its own reach. A test parses migration 120 and asserts the plan-time ring is identical to the database ring, so the two cannot drift.
-- **Challenge:** twelve authority cases cover a valid bounded grant, ten constitutional-scope refusals in both directions, path escape, absolute path, empty scope, blank repository, invented change class (`source_code`), missing verification, past expiry, forged owner, foreign tenant, capability substitution (a support responsibility dressed as development), foreign-grant invisibility, revocation, expiry, no-fallback-to-an-older-grant, and fourteen plan-time path decisions. Granting authority leaves the responsibility in Shadowing.
-- **Evidence maturity:** **E2 local runtime evidence** for the exercised authority-binding, constitutional-isolation, tenancy, revocation, and expiry dimensions; **E1** for the prospective gate. No repository mutation exists yet, so diff precision, replay, test correctness, verification correctness, reversibility, and outcome epistemics remain entirely unexercised — the gate would currently fail them as untested, which is the intended honest state.
-- **Migration/deletion:** additive migration 120 on the existing consent ledger; no parallel permission system, no backfill, no dual-write, nothing to delete.
-- **Continuation:** the first bounded development Assisting vertical — plan, execution-time authority revalidation, stable change identity, replay protection, verification, diff verification, independently observed outcome, and learning — keeping plan ≠ execution ≠ verification ≠ outcome distinct and never auto-promoting to Operating. AcreOS remains DEFERRED BY OWNER. Full check green at 138 files / 1,116 tests.
-
-## First bounded development Assisting vertical
-
-- **Mutation boundary:** `repository-change.ts` is the single place a bounded authorized change touches a repository. It lives *inside* the constitutional ring on purpose, so it cannot be modified by the authority it enforces. It grants nothing and trusts no caller: it independently refuses path escapes, absolute paths, the constitutional ring, symlinks leaving the repository, and — proven adversarially — a symlinked directory inside a granted prefix that resolves back into `src/db/migrations/`. Change identity is content- and responsibility-derived, so replay is one change; a file already holding the intended content is `already_applied` and is not rewritten; prior content is captured before the write so every applied change has an exercised rollback, with deletion the correct reversal of a created file.
-- **Abstraction audit:** `outbound_actions` was considered and rejected. It models provider-directed effects — integration name, acknowledgement, ambiguity, reconciliation windows. A repository change has no provider, no acknowledgement ambiguity, and nothing to reconcile; it has content identity, a rollback path, and state that can simply be re-read. Reuse would have meant inventing an integration name and making both the assisted-email guard and the effect inventory less true. Migration 121 adds one bounded plan ledger instead.
-- **Gateway convergence deliberately not chosen:** consistent with the Slack, webhook, and Linear precedents in this repository, a receipt-bearing domain ControlPath preserves the semantics better than generic gateway handler completion, and a filesystem write has no provider ambiguity for the gateway's budget/kill-switch/idempotency machinery to add. The consequential-effect inventory is unchanged because no new external mutation shape was introduced.
-- **The ladder, enforced not merely described:** planning writes nothing to the repository. Authority is revalidated **immediately before mutation**, not at plan time, because that interval is exactly where a grant expires or is revoked. The plan is atomically claimed so four concurrent executions produce one mutation. Offered content is checked against the plan's change identity **before** anything is written — an earlier draft compared it against the receipt afterwards, which would have meant the unauthorized bytes were already on disk; that was a real defect, found and fixed. Verification re-reads the bytes from disk rather than inferring success from a write that did not throw, and the required checks must appear among independently recorded development observations recorded **strictly after** the change. The database independently refuses `verified_success` unless the change is applied, verification passed, and the diff verified. After a rollback no verified outcome may keep standing, while the append-only learning claim survives.
-- **Challenge (Section XVI adversarial set):** ten cases cover the full vertical, plan/execute separation, replay convergence and four-way concurrent execution, revocation between plan and execution, expiry between plan and execution, substituted content, out-of-scope path, constitutional path, path escape, foreign repository, unauthorized change class, foreign-tenant responsibility, forged plan rows bound to another product's consent, immutable-binding refusal on five rewrite attempts, and two unsupported `verified_success` attempts. **Every authorization failure produced zero repository mutation**, asserted by reading the file back. No path promotes to Operating; migration 115's freeze is untouched.
-- **Evidence maturity:** **E2 local runtime evidence** for the exercised dimensions on one change class (`generated_artifact`), one path prefix, and one repository. **Explicitly not E3**: `development-v1` requires four-fixture breadth and this is one fixture, so the gate has *not* been run and no development benchmark claim is made. Proposal relevance in particular is entirely unexercised — Foundry did not choose what to change here; the content was supplied. Real repository operation, founder value, generalized development capability, pilots, and production remain unproven. Assisting is not Operating.
-- **Migration/deletion:** additive migration 121; no dual-write, no backfill, nothing to delete.
-- **Continuation:** build the four-fixture executable corpus against the unchanged `development-v1` gate — it must exercise proposal relevance, which needs Foundry to select the change, not receive it. Then bounded recursive Foundry operation through these same ordinary mechanisms with explicit recursive-adversarial tests. AcreOS remains DEFERRED BY OWNER. Full check green at 140 files / 1,133 tests.
-
-## Audit-corpus reconciliation and knowing when not to code
-
-- **Corpus reconciliation:** the supplied master handoff's canonical-current layer was read against current repository truth. `START_HERE`, the V7 Execution Priority Map, and the Executive & Development Intelligence Blueprint confirm the sequencing already followed: Tranche 0 integrity is closed, the thin constitutional spine and founder spine exist, and current work sits in **Tranche 5 — Development institution** (`DVT-*`, `DVG-*`), with Tranche 6 (Recursive Institution) next. The corpus supplied one still-valid, still-open requirement that the implementation did not satisfy.
-- **The finding:** Tranche 5 states that correct development answers include *build, investigate, configure, refactor, delete, rollback, and do not build*, and the blueprint devotes a section to "know when not to code", naming it an important benchmark and listing "a feature that should not be built" as a required benchmark case. The vertical as built could only apply a change it was handed. It had no way to conclude that building was the wrong answer, and `proposalRelevance` in the frozen gate was therefore honestly recorded as unexercised.
-- **Build:** `decideDevelopmentDisposition` is a deterministic, zero-model function over the existing reconstruction-claim ledger returning one of six answers — `do_nothing`, `investigate`, `defer`, `configure`, `delete`, `change`. Precedence encodes institutional judgement rather than convenience: absent evidence means nothing to do; unknown or stale evidence means investigate rather than guess; conflict or a recorded blocker means defer rather than push through; **an available alternative beats writing code**; and only a single current, grounded, well-formed intended change justifies touching the repository. Ambiguity between two proposed changes defers rather than picking one.
-- **The gate is load-bearing, not decorative:** `planDevelopmentChange` no longer accepts a path, content, or change class. It *derives* them from the disposition, so the institution selects the change from its own evidence, and any answer other than `change` stops there. Migration 122 records the disposition and its grounding on the plan and refuses at the database any plan that is not a `change` disposition backed by this product's own current claims — so a forged plan row cannot skip the gate either.
-- **Challenge:** eight disposition cases cover all six answers, unknown evidence, stale evidence, malformed proposals, conflict, blockers, competing proposals, both alternative kinds, inferred-evidence acceptance, the invariant that no non-`change` answer ever returns a change, cross-tenant invisibility in both directions, determinism, and zero model imports. The ten vertical cases were reworked onto derived plans, including five where Foundry's own grounded proposal is refused because authority does not permit it, plus a direct forged insert carrying disposition `investigate`.
-- **Evidence maturity:** **E2 local runtime evidence.** `proposalRelevance` is now genuinely exercised for these dimensions, but `development-v1` still requires four-fixture breadth and has **not** been run, so no E3 development claim is made. The disposition vocabulary is bounded and does not yet include refactor or rollback as *selectable* answers, though rollback exists as an exercised mechanism.
-- **Migration/deletion:** additive migration 122; the old caller-supplied plan signature is deleted rather than kept alongside the derived one, so there is no dual path.
-- **Continuation:** the four-fixture executable development corpus against the unchanged gate, then bounded recursive Foundry operation (Tranche 6) through these same ordinary mechanisms with explicit recursive-adversarial tests. AcreOS remains DEFERRED BY OWNER. Full check green at 141 files / 1,141 tests.
-
-## Executable development benchmark gate
-
-- **Corpus:** five independently specified companies run the ordinary loop — evidence → responsibility → Understood → Shadowing → owner grant → Assisting → disposition → plan → execution-time revalidation → mutation → verification → outcome → rollback — against real temporary repositories. Expected truth is authored in the fixture and never read back out of what the implementation produced. The cases are: a SaaS company whose artefact genuinely drifted (build, and it works); a service-operations company that already has a configuration answer (**the correct answer is not to write code at all**); a commerce company whose evidence disagrees with itself (defer, do not guess); a company whose change is applied but whose own check then reports failure (**building successfully is not the same as it having worked**); and a company whose owner withdraws authority after the plan is made. A sixth fixture proposes a change to `src/db/migrations/` — its disposition is legitimately `change`, and it is refused anyway. A foreign tenant is seeded throughout and never appears.
-- **Gate decision:** the unchanged, coverage-enforced `development-v1` gate passes with every one of its twelve dimensions exercised by at least one executable case, zero catastrophic events, and zero model cost. Diff precision is scored by walking the whole repository tree before and after, so "exactly the intended file changed, byte for byte, and nothing else moved" is measured rather than assumed.
-- **The corpus was mutation-tested before being believed.** Removing `revoked_at IS NULL` from the authority lookup — a realistic revocation-not-honoured defect — made the corpus fail with `unauthorized_repository_mutation` plus authorization, diff-precision, and reversibility below threshold. The defect was reverted and the full check re-run green. A passing corpus that cannot fail is not evidence.
-- **Evidence maturity:** **E3 for these explicitly exercised development dimensions only** — responsibility correctness, proposal relevance, scope, authorization, diff precision, replay, test correctness, verification correctness, outcome epistemics, reversibility, tenant isolation, and constitutional isolation, across five synthetic companies, **one change class (`generated_artifact`), single-file changes, and one repository**. Constitutional isolation has a single executable case. Explicitly **not** proven: source-code change classes, multi-file changes, refactor and rollback as *selectable* dispositions, real repository operation, founder usefulness, external adoption, and production. Development E3 does **not** bootstrap any adjacent subsystem, and Assisting is still not Operating — migration 115's freeze stands.
-- **Migration/deletion:** no migration, no runtime change; this slice is evidence, and the corpus reuses the existing services exactly as a caller would.
-- **Continuation:** bounded recursive Foundry operation (Tranche 6) — one genuine low-consequence Foundry responsibility through these same ordinary mechanisms, with explicit recursive-adversarial tests proving that being Foundry grants no shortcut. AcreOS remains DEFERRED BY OWNER. Full check green at 142 files / 1,143 tests.
-
-## Bounded recursive Foundry operation
-
-- **Recursive fixture:** the company under management is an ordinary product row literally named `Foundry`, with an ordinary owner, driven through the identical loop every other company uses. It reaches Understood only after its facts exist, is refused Assisting on invented Shadowing and authority references, earns a real grant, and applies one bounded generated-artefact change. **Nothing about being Foundry shortens the ladder.**
-- **Recursive-adversarial cases:** Foundry cannot grant itself authority over its own constitution — five prefix shapes covering migrations, governing documents, enforcement scripts, `src/`, and the whole repository are all refused. Operating the platform confers nothing over a customer's product: planning against a customer responsibility finds no evidence at all, and an attempt to grant Foundry's owner authority over the customer's responsibility is refused as an invalid binding, with zero plans created. Operating remains frozen for Foundry exactly as for everyone else.
-- **Structural invariant, not a promise:** a ratchet asserts that no module under `src/services/institution/` or `src/services/outbound/` resolves Foundry as a *company, product, or tenant* — by name lookup, hard-coded product id, or a Foundry-product helper. If the kernel cannot recognise that it is operating Foundry, it cannot treat Foundry differently, and a future special case fails here rather than in production. The ratchet is deliberately precise rather than a ban on the word: `outbound/sender-of-record.ts` legitimately checks whether a From address is a Foundry *domain*, which is a deliverability and liability question about who a message appears to come from, not a claim about which company is being operated. A first, over-broad version of this ratchet flagged it; the pattern was narrowed rather than the module excused.
-- **Self-protecting ring:** widening the constitutional ring requires editing a migration, and migrations are inside the ring, so no ordinary development authority — Foundry's included — can move the boundary that binds it. This is asserted directly.
-- **Evidence maturity:** **E2 local runtime evidence** for the exercised recursive dimensions on one low-consequence development responsibility. Not proven: recursive operation of any non-development Foundry responsibility, recursive economics, recursive self-improvement (Tranche 14), or production.
-
-## Verified finding, not fixed: implicit Foundry identity in the welcome path
-
-- **What was found:** `src/services/founder/welcome-sequence.ts` resolves Foundry's own product with `SELECT id FROM products WHERE name = 'Foundry' ORDER BY created_at ASC LIMIT 1` and uses the result as the product scope for a customer-reaching welcome email to founders who have no product yet.
-- **Assessment:** this is *not* a superuser bypass — the send still crosses the ordinary governed email capability with its kill switch, policy, budget, and idempotency. The defect is that Foundry-as-a-company is identified by an **unowned string** rather than an owned identifier, and that one tenant's kill-switch scope stands in for what is really a platform-level scope. `ORDER BY created_at ASC` means a later customer naming their product "Foundry" cannot displace the original, so it is not presently exploitable; the weakness is implicit identity, not a live hijack.
-- **Why it was not changed here:** it is customer-reaching behaviour outside the recursive-development scope, and the obvious repairs each introduce something that needs its own justification — a canonical Foundry-company identifier, a configured product id, or a genuine platform-level effect scope. Choosing among those is a design decision about what "the Foundry company" *is*, which belongs with the owner rather than being invented mid-slice. It is recorded here rather than silently fixed or silently ignored.
-- **Recommended next step:** introduce one explicit, owned identifier for the Foundry company and have the welcome path resolve through it, or give founder-scoped transactional mail a platform scope of its own instead of borrowing a tenant's.
-- **Continuation:** the highest-value unblocked work is now founder-facing legibility of development and judgment (Tranche 8 shape) and the executive-cognition marginal-value comparison (Tranche 4), both of which are measurement-first rather than capability-first. AcreOS remains DEFERRED BY OWNER. Full check green at 143 files / 1,148 tests.
-
-## Founder legibility of development authority
-
-- **Gap closed:** development authority and real repository changes existed with no founder-facing surface at all. Founder UX may hide complexity, but never authority or consequence — a founder should not have to discover after the fact what Foundry was permitted to change.
-- **Build/cutover:** the existing Letter gains two compressed blocks and no new surface. "What I'm allowed to change right now" is shown **whenever a grant is live, even when nothing happened**, in plain language ("I may regenerate files that are built from your other files, only under `docs/db/`, until <date>") with the reminder that it can be withdrawn in Controls. "Changes I made to your systems" reports only material states — confirmed, unconfirmed, failed-and-needs-you, refused-and-why, or made-then-undone. A change made and independently confirmed says so; one that is merely applied explicitly says nothing has confirmed it yet.
-- **Challenge:** tests assert the permitted block appears with the correct plain-language scope, that a withdrawn grant stops being advertised, that a refusal states it was not made, that an undone change says so, and that no internal machinery — migrations, epistemic states, E-levels, rung names, or internal identifiers — leaks into founder-facing copy.
-- **Evidence maturity:** E2 local wiring and copy-boundary evidence. Founder comprehension and attention reduction remain unproven and require E4 pilot evidence.
+**Current verified reality.** What exists, what is reachable, what is proven,
+what is not, and the debt that matters. This is the document a steward reads to
+know what is true today.
+
+It is deliberately short. The record of *how* each thing came to be — every
+completed slice, cutover, benchmark and deletion, and the Tranche-0 baseline
+manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
+`AUTONOMOUS_CAMPAIGN_STATE.md`. How development operates is
+`DEVELOPMENT_INSTITUTION.md`.
+
+**Replace claims here when they become false. Do not append beneath them.**
 
 ---
 
-# CONTINUATION — self-contained resume record
+## Verified now
 
-*Written 2026-08-16 at the close of this session. Everything needed to resume without reconstructing history.*
+Measured at `f493af9` on `claude/foundry-autonomous-continuation-0gents`.
 
-## Exact state
+**This table was stale for many cycles and said so nowhere** — it read
+`cb7fbeb`, 228 migrations, 347 files. The document's own rule is at the top:
+replace claims here when they become false. A steward reads this to know what is
+true today, so a stale row here is the same defect the campaign spends its time
+removing, in the place it does the most damage.
 
-- **Branch:** `claude/foundry-autonomous-continuation-0gents`, pushed to `origin`. Started from `9b3128b` (merge of PR #5).
-- **HEAD at handoff:** the final commit on that branch — `git log --oneline -10` shows the nine slices below.
-- **Migrations:** through **122**. Fresh migrations apply cleanly.
-- **Full `npm run check`:** green — **143 files / 1,149 tests**, plus typecheck, ratchets, kernel boundary, public-claims audit, and consequential-effects audit.
-- **Working tree:** clean.
-- **Environment note:** `sqlite3` is not preinstalled here; `bash scripts/schema-snapshot.sh` needs it (`apt-get update && apt-get install -y sqlite3`). **Regenerate and commit the snapshot after every migration** — the first defect found this session was exactly this drift.
+| | |
+|---|---|
+| Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
+| Migrations | **258 files**, highest number **221**. Applied lexically, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. **Snapshot freshness is a GATE now, not a note** — `check-schema-snapshot.mjs` runs at the front of the chain, because the reminder to regenerate it was right, was written into this file, and failed anyway an hour later. |
+| Validation | `npm run check` green end to end: **463 files / 3,975 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
+| CI | Runs on `master`, `main` and `claude/**`. |
+| Ratchets | Unguarded mutating routes **112** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · unreachable modules **22** · write-only columns **62** · unread tables **2** · unscoped product-shaped routes **2** · id tiebreaks **18** · star-select phantom columns **0** · **tables no code can reach 0** · **gates with no planted-defect test 0**. |
+| Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
+| Public API | **Live — and this row was false until `795ef42`.** Every `/api/v1` request answered `{"error":"Unauthorized"}`, with a valid key or without one, because five dashboard routers mounted at `/` each registered `use('*', requireCompanyCapability(...))` and Hono merges a mounted router's middleware under its mount path. Nothing was wrong with the API itself: every unit test mounting `apiV1` on a bare app passed throughout, and the mounting was where the truth lived. A test drives a real key through the real app now, because that is the only thing that would have caught it. Scoped, expiring, revocable keys issued from settings, from **exactly one issuer** — a second, unvalidated `createApiKey` was deleted and a test pins that only one file writes `api_keys`. No scope means "everything": the `'*'` wildcard is gone from `requireScope`, the MCP transport and both webhook doors. Every key-authenticated door asks a scope a founder can grant, including the two under `routes/api/webhooks/` that the v1-only scan could not see. |
+| Consequential effects | Converge through `services/outbound/gateway.ts` — kill switch, classification, budget, idempotency, audit. Inventory in `CONSEQUENTIAL_EFFECTS.json`; untraced count ratcheted to zero. |
+| AI spend | Central OpenRouter client. Atomic reserve → dispatch → settle across global/product/founder scopes. Refuses spend for a company that is not operating, naming which axis stopped it. |
+| Erasure | One implementation, every table classified with a written reason, on two axes: by product and by PERSON across companies they do not own. **Five tables remain deliberately untouched pending an owner decision** (`OWNER_DECISIONS_PENDING` §10) — a live gap, not a footnote. |
 
-## What this session did, in order
+## The institution's senses
 
-1. Repaired stale schema snapshot (a real red baseline gate).
-2. Authenticated owner disposition on institutional judgments (migration 118).
-3. Development Shadowing on an evidenced repository responsibility (migration 119).
-4. Frozen `development-v1` benchmark + responsibility-bound development authority and the constitutional ring (migration 120).
-5. First bounded development Assisting vertical (migration 121).
-6. Knowing when not to code — development disposition (migration 122).
-7. Executable development benchmark corpus, mutation-tested.
-8. Bounded recursive Foundry operation.
-9. Founder legibility of development authority.
+- **Time.** A responsibility can carry a due date the COMPANY stated, with who
+  stated it; triggers refuse a date with no author and refuse one authored by
+  the owner of the product `system_identities` names as Foundry. `overdue` is
+  the first reason a responsibility needs the founder, and the only one that is
+  a fact about the company rather than about where Foundry has got to. Prose is
+  never turned into a date. Reachable from The Letter's report form.
+- **A passed deadline can falsify a judgment.** `contradicted` was recorded as
+  proof debt because "contradiction needs an observer that can see a deadline
+  pass". It has one now, and only that: a conflict still standing after a date
+  the company gave. An absent deadline is not a met one.
+- **Outcomes now reach the authority request.** `getAssistingCandidates`
+  counted matched and deviated comparisons equally and ignored whether previous
+  assisted actions had failed. Both are separated and surfaced to the founder
+  at the moment they decide whether to grant more. It also counted comparisons
+  the database would refuse as entry evidence, so a founder could be asked to
+  grant a permission that could not then be used; the offer applies the entry
+  guard's own condition now.
+- **Foundry can say how it has done.** Two track records, both read back from
+  learning it had been recording and never once consulting: how its changes to
+  the founder's systems have held up, and how its judgments about the company
+  have. Counts, never a rate. Staleness is asymmetric in both — read-time
+  expiry retires a positive claim and never a negative one, so Foundry cannot
+  improve its own record by waiting.
+- **The owner sees what a judgment was computed from.** The scarcity itself
+  ("you have 2 work blocks; these need 3"), what each side loses, what else was
+  weighed, and whether Foundry can order the alternatives on money — reported
+  as itself in all four states, including "I cannot tell you".
+- **A customer's own words, for the first time.** The support responsibility
+  chain was complete from the door inwards with an empty box at the first link:
+  `POST /ingest/customer-message/:channelKey` existed and nothing called it, so
+  the responsibility could be understood and shadowed and never assisted.
+  `syncIntercomMetrics` had counted Intercom conversations since it existed and
+  thrown the content away — `support_volume_7d` is HOW MANY people wrote.
+  `integrations/intercom-messages.ts` is the first adapter, and an ORDINARY
+  CALLER of that door: it inherits the channel binding, the tenant scope, the
+  dedup, the bounded fields, migration 217's future-timestamp refusal and the
+  refusal counter the founder reads.
+
+  **The founder says which channel a provider feeds** (migration 219's
+  `fed_by`, one live channel per provider enforced by a partial unique index).
+  Foundry may not choose: a product holds several channels bound to different
+  responsibilities, and picking one would invent the linkage migration 126
+  forbids. No statement, no ingestion.
+
+  **What it cannot see, stated in the module and repeated on the page**: the
+  first message only, of conversations created in the last seven days, from a
+  contact with an email address; no replies and nothing a teammate wrote; at
+  most 150, and a hit cap is reported rather than passed off as a total.
+  "I could not look" is a distinct result from "nobody wrote".
+
+  **And the far end of the same chain.** The support loop ended "→ governed
+  send_email → receipt → outcome UNRESOLVED" because a support outcome had only
+  two possible producers: an external door nothing posts to, and two legacy
+  event types nothing wrote. The conversation answers one question honestly —
+  **did the customer write again after we answered?** — and the answer is
+  recorded in one direction only.
+
+  **The asymmetry is the design and it only ever runs against Foundry.** A
+  customer writing again is a failure witness. Silence records NOTHING and the
+  outcome stays `unresolved`, because silence is the state of a customer who
+  gave up, one who was helped, and one on holiday. There is no code path that
+  can write `support_reply_effective`; a success verdict must come from
+  somewhere Foundry is not. A teammate's reply is not the customer answering.
+
+  **THE LOOP IS CLOSED AT ITS MOST CONSEQUENTIAL POINT.**
+  `getAssistingCandidates` shows a founder `verifiedFailures` and
+  `lastVerifiedOutcome` before they grant more authority, and both read
+  `outcome_status='verified_failure'` — which NOTHING on the support path could
+  write until the observer existed. The caution that surface was built to
+  express had never once been driven by real evidence. Proven end to end now:
+  customer writes again → scheduled reconciliation → the verdict reaches the
+  authority request. A DISAGREEMENT is not counted as a failure, and that is
+  pinned: picking the side that flatters Foundry's own caution is still picking
+  a side.
+
+  **Five consumers of that evidence were walked; do not walk them again.** The
+  reconciliation selector and its verdict use the wide predicate (both witness
+  shapes); `getDisputedEffects` used the narrow one and showed a disagreement
+  with half of it missing — fixed, and it now uses the same predicate that
+  DECIDES, so the two cannot drift; `attribution()` flattened the customer to
+  "somebody outside" — fixed, one shared phrasing with the disputed card;
+  `getUnresolvedEffects` reads `outcome_status` on the action and never had the
+  drift.
+
+  **`operations` has no equivalent gap and cannot have this witness.** Its hand
+  is a founder-authored notice to a recipient the founder named, and Foundry has
+  no channel to a teacher or a client — "a provider accepting a notice is not
+  the teacher turning up", as that module says. The only witness is someone
+  reporting, which is built and covered end to end in the unfamiliar-company
+  tests. The asymmetry between the two capabilities is principled, not a gap.
+
+  **E2 — local runtime.** Thirty tests across both halves, against a
+  mocked Intercom. Neither has seen a real account, a real customer or a real
+  conversation; that rung needs an owner-connected account, not more local work.
+
+  **What the fixtures proved on the way, which is worth more than the feature.**
+  Four database guards refused a shortcut in turn — a message needs a registered
+  channel, the channel needs its observing evidence row, a reply must name the
+  responsibility owning that channel and carry a proposal authored for that same
+  message, and a grant is refused to a responsibility that has not reached
+  Shadowing. **The ladder cannot be skipped even by a test fixture.**
+
+- **Foundry can say what it cannot SEE, which was the dead end at the first
+  rung.** `getShadowableResponsibilities` returns nothing when the company has no
+  observation channel, and a channel exists only once a reading has arrived — so
+  a company that has connected nothing and posted nothing gets no watch offer
+  and no reason for its absence. Understood → Shadowing cannot be crossed until
+  a number comes from outside, which means **the first thing every new company
+  experienced, after doing exactly what it was asked, was silence.** The Letter
+  names the responsibilities, names the remedy, and says what Foundry will not
+  do meanwhile: guess a number. Scoped to TOTAL absence — which number speaks
+  for a given responsibility is the founder's judgement, and asserting relevance
+  Foundry cannot compute would be the same defect from the other side.
+
+- **Foundry can say what it cannot carry.** The intake takes eight kinds of
+  obligation, `discovery.ts` maps them onto four capabilities, and
+  `GRANTABLE_CAPABILITIES` holds two — development's authority is a separate
+  door. So `billing_recovery` had no path, and a founder could report it, answer
+  questions about its financial consequence, watch it reach Shadowing, and wait
+  for an offer that could not come. **The silence read as "not yet" when the
+  truth was "there is no path".** The Letter names them, with no apology and no
+  promise: acting on it stays theirs, and Foundry cannot say when that will
+  change. Derived from the grantable set, so a capability gaining an effect
+  drops off by construction.
+
+- **How long the founder could be away — a fact, not a forecast.**
+  `EXPERIENCE.md` names the owner-absence test as the proof target and
+  `getSevenDayResponsibilitySummary` answers it BACKWARDS. `getStepAwayHorizon`
+  answers it forwards, and estimates nothing: it reads the soonest date the
+  COMPANY stated on a still-active responsibility. Three caveats travel in the
+  same sentence as the number, because a founder who reads "4 days" and stops
+  reading has been misled by a true number — undated things that need them,
+  things already late, and passes that have stopped. The last is what makes
+  quiet untrustworthy rather than merely incomplete. Rounding is DOWN. No number
+  is not permission to go, and the page says so.
+
+- Everything else a company can tell Foundry arrives through the four ingest
+  routes, twelve integration adapters, two webhooks, and the founder typing
+  into The Letter.
+
+## Reachability caveats that still hold
+
+**A GATE MAY CARRY A COPY OF WHAT IT ENFORCES, AND THE COPY MUST BE PINNED.**
+`scripts/*.mjs` cannot import `src/**/*.ts` — tsconfig includes only `src/**`,
+and `src/` must not reach into `scripts/`. So `audit-public-claims.mjs` carried
+an inline copy of `truth/engine.ts`, and the two drifted: the gate had no
+quoted-phrase handling and a different stop-word list, so the gate enforcing the
+honesty law and the module documenting it disagreed about what a claim says.
+`scripts/lib/claim-tokenizer.mjs` is the shared implementation and
+`the-gate-and-the-engine-agree.test.ts` runs both over the same inputs. Two
+copies are fine when they are pinned; two copies nobody compares are one rule
+with two answers.
+
+**THE UNREACHABLE-MODULES BASELINE IS PER MODULE, AND CANNOT TELL YOU WHICH
+FUNCTION.** `framework.ts` is not on it, and its `runAllDueSyncs` is imported by
+nothing — but `runSync` in the same file is called by the supercharge route.
+`integration/stripe.ts` is not on it either, and its `getStripeMRRSummary` has no
+caller. Do not read "not on the unreachable list" as "all of this runs", and do
+not read "on the list" as "none of this matters": both files held real defects,
+one live and one latent.
+
+**THE THREE TABLE GATES, AND THE ONE CASE STILL UNCOVERED.**
+`check-writerless-tables` starts from tables live code READS and asks what
+writes them. `check-unread-tables` starts from tables live code WRITES and asks
+what reads them. Each gate's population is defined by the half it starts from,
+so a table with NEITHER half is in no population at all — not passed,
+never considered. `check-unreferenced-tables` is that third side: any table no
+SQL statement, trigger body, or erasure-map entry names. Ratchet at **14**, may
+only fall. It found fifteen, of which `audit_trail` was removed rather than
+baselined (migration 196) because its name asserted a control — "every mutation
+traceable to a person or job" — over a table that had never held a row.
+
+The pattern in the remaining fourteen is a superseded store left behind after
+its successor arrived: `autopilot_config` beside a live `autopilot_policies`
+with eight writers, `outbound_webhooks` beside live `webhooks` and
+`product_webhooks`, `strategic_plans` beside live `strategic_syntheses`. Take
+them one at a time, each against its successor; do not sweep.
+
+Building that gate cost one real false-positive lesson, now encoded and
+mutation-tested: **follow a table rebuild through its rename.** SQLite cannot
+alter a constraint in place, so a rebuild is CREATE `x_new`, copy, DROP `x`,
+RENAME `x_new` TO `x`. Reading only CREATE and DROP reported twelve phantom
+`_new` tables — a false-positive rate that would have made the baseline
+meaningless on its first run.
+
+STILL UNCOVERED, deliberately: a table whose only writer and only reader are
+both **unreachable functions**. It has both halves, so all three gates pass.
+`temporal_events` sat that way from migration 012 until 194 and
+`agent_wiki_reads` from 027 until 195. Teaching the gates about call graphs was
+measured and **not built**: over the 236 tables `src/` touches it produced four
+candidates and two were false positives — `okr_progress_updates` (SQL inside a
+Hono handler attributed to the last named function above it) and
+`intelligence_benchmarks` (a string-stripper that swallowed a dynamic
+`await import`). Half wrong is worse than blind. `one-event-store-not-two.test.ts`
+and `a-wiki-that-froze-on-its-first-five-articles.test.ts` pin the two instances
+that mattered. Do not re-derive this.
+
+**A FUNCTION THAT NAMES ITSELF IN ITS OWN LOG MESSAGE IS NOT ITS OWN CALLER.**
+The first version of that measurement counted `console.error('[temporal]
+recordTemporalEvent failed:', err)` as a reference and reported the function
+live. Any reference-counting over source must strip string literals first —
+which is the same rule as the four prose-quoting-code incidents, arriving from
+the other direction.
+
+- ~~The reachability gate scans `src/services/institution` only~~ — **CLOSED.**
+  `check-reachability.mjs` walks all of `src/` from the real entry points as a
+  ratchet (29 unreachable, may only fall), declares modules reached by a
+  computed dynamic import with the mechanism that reaches them, and walks from
+  those too.
+
+- **Nothing has met reality.** No real founder, outside tool, or provider.
+- Production reachability is proven against **synthetic** companies. A
+  production-facing code path is not production evidence.
+- `support-pilot-readiness-v1` green means **ready to attempt** a bounded
+  pilot. No pilot has occurred.
+- Recursive Foundry operation is local only. The owner performs the **report,
+  not the grant** — Foundry may not mutate its own repository outside a test.
+
+## Running it, and where things live
+
+A fresh steward needs this before anything else, and it was missing.
+
+```bash
+npm install
+npx tsc --noEmit                  # typecheck — seconds
+npm run lint:columns              # the SQL/schema/authority gates — seconds
+npx vitest run tests/unit/<file>  # one test file — seconds
+npm run check                     # composite: typecheck + ratchets + full suite (~10 min)
+bash scripts/schema-snapshot.sh   # regenerate docs/db/schema.snapshot.sql after a migration
+```
+
+Tests need **no external services**. They set `TURSO_DATABASE_URL=file::memory:`
+and `ENCRYPTION_KEY` themselves and run migrations into a fresh in-memory
+database. Clerk, OpenRouter, Resend and Stripe keys are only needed to run the
+server, not the suite.
+
+**Concept → code.** The vocabulary in these documents is load-bearing; this is
+where it lives.
+
+| Concept | Where |
+|---|---|
+| Composition root, route mounting | `src/index.ts` |
+| Governed consequential effects | `src/services/outbound/gateway.ts`, inventory in `CONSEQUENTIAL_EFFECTS.json` |
+| Kill switch | `src/services/outbound/kill-switch.ts` |
+| Migrations, and the SQL splitter | `src/db/migrations/`, `src/db/migrate.ts` |
+| Canonical predicates (`operatingProduct`, `visibleProductIds`) | `src/db/client.ts` |
+| Authority: capabilities, membership | `src/middleware/rbac.ts`, `src/services/team/members.ts` |
+| Principal discrimination | `principalOf` in `src/middleware/` |
+| Entitlement / erasure / pause axes | `src/api/middleware/entitlement.ts` |
+| Erasure, consent, retention dispositions | `src/services/privacy/consent.ts` |
+| Responsibility ladder (Visible→Understood→Shadowing→Assisting) | `src/services/institution/`, `institutional_responsibilities` |
+| AI spend reserve/settle | `src/services/ai/client.ts` |
+| Scheduled jobs and the registry | `src/jobs/index.ts` |
+| CI gates ("ratchets") | `scripts/check-*.mjs`, chained by `npm run lint:columns` |
+| Gate baselines | `docs/db/*-baseline.txt` |
+| Gate self-tests (planted defects) | `tests/unit/gates-fail-when-they-should.test.ts` |
+
+**Evidence levels (E0–E6) are defined in `PROOF_PROGRAM.md`.** Every maturity
+claim below uses them; read that file before trusting a level here.
+
+## Environment facts worth not re-discovering
+
+- **`sqlite3` IS available** (`/usr/bin/sqlite3`), so `bash scripts/schema-snapshot.sh`
+  runs directly. Earlier records said otherwise.
+- The branch is never merged to master — standing owner instruction.
+- Vitest full runs take roughly ten minutes here. **Do not start a second one
+  concurrently**: `gates-fail-when-they-should` plants fixture files in the
+  working tree, and two runs collide into a false failure. This is written down
+  because it has now cost time twice — the second time to somebody who had this
+  document open and had not read this line.
+
+## The ladder in production-facing code
+
+```
+outside tool → POST /ingest/:token → external observation ──────────┐
+founder reports an obligation → discovery → Visible                 │
+  → founder answers/volunteers what Foundry cannot observe → Understood
+    → founder states a bounded expectation → Shadowing ─────────────┘
+      → external reading → matched / deviated / unresolved
+        → founder grants exact bounded authority → Assisting admission
+          → customer message on the responsibility's channel
+            → founder authors a reply → bounded plan → revalidation
+              → governed send_email → receipt → outcome UNRESOLVED
+
+(no adapter exists) → POST /ingest/customer-message/:channelKey
+  → canonical message evidence, attributed by channel binding
+```
+
+**The chain is complete and closed FROM THE DOOR INWARDS, and its first link is
+an empty box.** This used to read "provider adapter →" as though one had been
+written. None has: the only files in `src/` that touch a channel's intake key
+are the door, the intake service and the letter page. The design record is
+explicit that "an adapter for a helpdesk, a mailbox, or a form is an ordinary
+caller", which is a statement of what would be needed, not of what exists.
+
+The distinction matters because the letter page acted on the wrong reading of
+it and told founders to "point your helpdesk or mailbox at that URL". A mailbox
+cannot POST JSON; a helpdesk posts its own shape and is refused. The page now
+states the shape the door takes, and a test pins the copy to the schema.
+
+What remains unproven is autonomous reply generation: the founder writes the reply, and that is now the deterministic
+human baseline (§10) any model-generated proposal must beat on a frozen
+contract.
+
+All of it is **E2 — local runtime**. Nothing has been exercised by a real founder, a real outside system, or a real provider.
+
+## The legitimate action envelope, term by term
+
+`ARCHITECTURE.md` states that a consequential action is legitimate only inside
+the intersection of seven terms. This is what each term is actually made of in
+this repository today, and where it is not made of anything. **It is a report
+on code, not an aspiration**; the two absent terms are named as absent.
+
+| Term | What enforces it | Level |
+|---|---|---|
+| demonstrated capability | Assisting admission requires real shadow comparisons against founder-stated expectations — the SQL counts them, and migration 115 keeps Operating frozen (`assisting-admission.ts:111`) | structural |
+| owner/company authority | the consent ledger, plus one company authorization model: `memberMay` / `requireCompanyCapability` / `requireOwner`, with the unguarded-route ratchet holding the line | structural |
+| sufficient evidence | provenance-bearing claims and their freshness; a responsibility cannot be created with nothing to point at | structural |
+| applicable external permission | **nothing** | absent — see below |
+| Foundry constitutional permission | the closed effect-kind vocabulary (`CONSEQUENTIAL_EFFECTS.json`, gated by `audit-consequential-effects.mjs`) and the consequence boundary; RESOLVED 4 forbids runtime creation of effect kinds | structural |
+| recorded constraints of affected parties | **one kind**, checked at the boundary — see below | E2 |
+| proportionate safeguards and accountability | the governed boundary's receipts, effect certainty, and outcome reconciliation | structural, with a named defect |
+
+**Recorded constraints of affected parties — now real, and narrow.** The
+governed execution boundary can refuse on behalf of somebody who is not the
+owner. `gateway.ts:167` consults `contactIsRefused` before classification and
+returns phase `contact_refused`, so no caller has to remember it; the founder
+records and reads the list on The Letter, gated on `can_manage_company` because
+the list is append-only and writing to it silently stops the company writing to
+whoever is on it.
+
+State the limits plainly:
+
+- **It is one constraint kind — do not contact — and nothing else.** This is
+  not a rights engine. A second kind is a second recorded fact, not a policy
+  language.
+- **It is consulted only where `requireCustomerExternalId` is true**, which
+  today is `send_email` and `send_account_notice`. That now covers both action
+  regimes: `action_executions` had its own `send_email` arm and it has been
+  routed into the gateway, so there is one place where a send is decided. `send_push`, `mcp_call` and
+  outbound webhooks do not consult it, correctly: none of them is addressed to
+  an identified outside person by address. A new capability that IS so
+  addressed inherits the check by setting that flag, and gets no check if it
+  does not — that is the coupling to watch.
+- **It interacts with RESOLVED 7 and the interaction is deliberate.**
+  `send_account_notice` requires a customer external id, so an address on the
+  list stops receiving account mail — the one capability that otherwise
+  survives an entitlement pause. Fail-closed was chosen over an exemption:
+  an address is on that list because somebody said stop or because mail to it
+  does not arrive, and unknown is not permission. If that is ever the wrong
+  answer it is one condition at `gateway.ts:167`, and it should be an owner
+  decision rather than a convenience.
+- **It is a recorded fact, never an inferred one.** Nothing reads a customer's
+  reply and concludes they meant stop.
+- **Access is now answered from the same derivation as erasure, at both
+  scopes.** The company export read only the tables carrying `product_id`,
+  while the erasure had established that fifty-five others hold company data;
+  both consume `companyDataSources()` now. And there was no PERSON-scoped
+  export at all: `FOUNDER_SCOPED` and `PERSON_ACROSS_COMPANIES` existed only so
+  an erasure could clear them. `exportFounderData` is derived from the same two
+  maps. A table cannot be erasable and unaskable at once, at either scope.
+  Credentials appear as present, never as their value, on both paths.
+- **Notice, explanation, correction and redress: one of four exists.**
+  `EXPERIENCE.md` states these as an obligation the architecture must be able to
+  meet, and that is a design rule rather than a description. Today: a
+  **correction** an affected person makes is exactly the contact constraint
+  above. **Notice** could be carried — the governed boundary can reach a person
+  and record that it did — but nothing composes one. **Explanation** and
+  **redress** have no record type at all. That is the honest state, and it is
+  deliberately not filled with a general appeals bureaucracy; a second kind is
+  a recorded fact, added when a real obligation needs it.
+
+**Applicable external permission — absent, and deliberately not simulated.**
+Foundry does not evaluate law and nothing in this repository pretends to. Where
+an action depends on a legal conclusion, the dependence is counsel debt in
+`OWNER_DECISIONS_PENDING.md` — §9 retention periods, §11 the audit-log window,
+§13 the benchmark aggregation threshold — and a remembered legal conclusion is
+not a permission. **No legal-knowledge store exists and building one on a
+model's recollection would be the exact failure this term names.**
+
+**Accountability — the role-label defect is closed; the spelling is not
+uniform.** `approved_by` used to be written as the literal `'ceo'` on both the
+approve and the reject paths, so every decision by every founder of every
+company recorded the same approver, and the surface rendered it. A role label
+is not a responsible identity. Both writers now record the acting principal
+(`agents-integrations.ts:568`, `executor.ts:270`) and the surface translates a
+principal reference back into a sentence a person can read
+(`agents-integrations.ts:293`).
+
+The two action regimes are no longer two EXECUTION paths — `action_executions`
+sends through the gateway — and no longer two vocabularies:
+`services/outbound/acting-principal.ts` holds the closed set of principal kinds,
+both approval doors refuse a value that names no kind, and one function turns a
+reference into a sentence for both ledgers' surfaces. They remain two LEDGERS,
+which is a schema question rather than a semantic one.
+`outbound_actions.approved_by` takes `founder:<id>`, while
+`action_executions.approved_by` takes `voice:<id>`, `system:playbook`,
+`autopilot:<category>` — and, from the dashboard approval, a **bare** founder
+id (`agents-actions.ts:258`). Both readers that interpret the field key on the
+`autopilot:` prefix, so nothing misreads a founder as an autopilot today. It is
+one vocabulary written two ways, which is the shape that eventually produces a
+reader agreeing with only one of them.
+
+**HOW FOUNDRY EARNS THE RIGHT TO SUGGEST, and what it used to earn it on.**
+Promotion out of `shadow` needs ten clean cycles, past a quality hold and a
+calibration hold. Only `shadow → suggest` is ever automatic; `→ act` is founder
+consent, and that has not changed.
+
+What changed is what banks a clean cycle. In shadow mode FOUNDRY DECIDES
+NOTHING — every decision is the founder's — so banking on any positive outcome
+promoted Foundry for the founder deciding well, including on the ten occasions
+where the founder chose the opposite of what Foundry recommended. Foundry could
+leave shadow, marked `set_by = 'earned'`, by being overruled ten times.
+
+An outcome now banks a clean cycle only when Foundry's judgement is what was
+tested: the decision was Foundry's own, or Foundry named an option and the
+founder took that option. A founder decision carrying no recommendation banks
+nothing. **This is a narrowing.** Leaving shadow is harder, and a category where
+Foundry offers no recommendations cannot leave it at all — which is the right
+answer to how far to trust a judgement that was never expressed. The row is
+still claimed either way, so an unattributable outcome retires once instead of
+being rescanned forever.
+
+The comparison was already written and already correct: `getShadowStats` had
+been reading `recommendation` against `chosen_option` on exactly these rows and
+printing an agreement rate into the operator letter, the chat and the MCP loop,
+gating nothing. Pinning the promotion ledger's copy against it —
+`promoted-for-being-wrong.test.ts`, asserted against each other rather than
+against constants — immediately found the two disagreeing: the SQL side counted
+a whitespace-only recommendation matching an empty choice as AGREEMENT, so the
+letter credited Foundry for agreeing to a choice neither party made. That
+non-sample is now out of both numerator and denominator.
+
+**Do not turn this table into a policy engine.** Five of the seven terms are
+already structural and are enforced by machinery that exists for its own
+reasons. The value of the table is that it says which two were not, and it
+stops being useful the moment it becomes a compliance surface with rows for
+hypothetical futures.
+
+## What Foundry can sense about a company
+
+A company's customers are the sense with the sharpest consequence — the
+departments that write to people read them — and it was the one with two
+answers. `POST /api/v1/customers` (documented, scoped credentials) writes
+`customer_intelligence`; the departments read `customers`, written only by a
+session-authenticated route no client calls and by the demo seed. A company
+that integrated the documented way was invisible to them.
+
+**And the READ half of that documented door had never worked.** `GET
+/v1/customers` selected `ci.name`, `ci.company` and `ci.lifecycle_stage` from a
+table whose columns are `account_name` and `stage` and which has no company at
+all, so every request threw and returned a fixed sentence from a catch that
+discarded the error — while the POST handler seventy lines below carried a
+comment naming that exact mapping. A company could write through the door and
+never read back through it. Fixed, and the SELECT gate that could not see it
+(it skipped aliased queries) now reads them.
+
+One accessor now answers it — `services/institution/company-customers.ts` —
+reading both stores, reporting which one each record came from, and stating the
+at-risk and champion predicates once each. This is the **compare** stage of a
+shadow → compare → cutover → delete, not the end of it:
+`customerStoreSplit(productId).onlyLegacy` reaching zero is what says the
+legacy read can be deleted. Four read-only readers still query `customers`
+directly and are the remaining cutover work.
+
+**What this does not claim.** Nothing here is E2-and-above evidence about a
+REAL company: no real company has reported customers through that API. What is
+proven is that the path now connects, and that the outcome verifier no longer
+abstains on a customer it could not find — the latter mutation-tested, since
+its failure mode was a silent pass rather than an error.
+
+**Calls.** Transcript ingestion is live (RESOLVED 5), `/signals/multimodal` is
+mounted, and its detail page renders the extracted summary, objections,
+competitor mentions and commitments. That sense reaches a PERSON and must not
+reach the institution by extraction: migration 126 forbids inferring an
+obligation from free-form chat, which is what a model reading commitments out
+of a call would be. If it is ever taken further, the founder reports the
+obligation through the existing explicit intake and chooses the kind from the
+closed set themselves.
+
+A failed analysis is now a state of its own (migration 178) rather than being
+indistinguishable from one that has not run. The reason is a closed vocabulary
+enforced by CHECK, for the same reason migration 170 gave: a transcript is
+customer speech and an error message may quote it.
+
+## The operator boundary
+
+Foundry's owner reaches two operator surfaces, both gated on `isFounder`:
+`letter/operator-pack.ts` and `founder/intelligence.ts` (feeding `/founder-ops`
+and `/api/founder-intelligence`). The stated rule is that the operator brain
+sees aggregates only — the Level-1/Level-2 boundary — and it was enforced
+structurally on the first and not the second.
+
+**The distinction, now stated where it is enforced:** the operator administers
+the COMPANIES and bills them, so a company may be named; a company's customers
+belong to that company. Both surfaces are held to it by
+`protective-wrapper.test.ts`, which reads the projection of every operator
+select over `customers` and requires each column to be an aggregate or to come
+from the joined `products` table.
+
+This is separate from `OWNER_DECISIONS_PENDING` §12, which asks who holds the
+ecosystem key. That one is about a surface outside the member model; this is
+about Foundry's own operator view of its paying customers.
+
+**AND WHAT THE OPERATOR MAY NOT DO.** Two routes on this surface resolved a
+company's decisions — approve and reject — keyed on the decision id alone, with
+`decided_by` set to `'founder'`. `isFounder` is FOUNDRY'S OWNER, so the operator
+could close any company's decision and the ledger recorded it as the act of the
+person whose company it was. `decisions.decided_by` admits `'founder'` or
+`'second_self'` and nothing else, because the operator resolving a company's
+decisions is not something this boundary describes: the operator administers the
+COMPANIES and bills them. The routes were removed rather than given a new
+vocabulary — adding an authority quietly is the one thing the constitutional
+invariant names. If it is ever wanted it comes back whole, with a value that
+says who acted and an owner decision behind it.
+
+**What the operator surface now says when it does not know.** Every number on
+`/founder-ops` was read against the query behind it, and most of them turned out
+to be constants, fallbacks, or a different quantity than the label claimed. The
+standing rule that came out of it, and which any future field on this surface
+must follow: **an absent input is null and the page says why, never a digit.**
+Concretely, and each with its reason in the type — Foundry's own expansion
+revenue (no tier-change history exists), when a company churned (no archive path
+records it, and the one that leaves a timestamp is erasure, which is not a
+churn), Foundry's burn and therefore its runway (nothing records it), a
+founder's activity gaps, and the 7-day override count (`decision_quality_scores`
+has no writer — `recordDecisionContext` is exported and called from nowhere,
+which is also why the override rates in `scp/founder/decision-tracker.ts` are
+permanently zero; a test watches for a caller appearing).
+
+Two rules worth carrying to any other surface. A rate over an empty denominator
+is null, not a digit — `auto_execute_rate` fell back to 100 and
+`avg_health_score` to 0, and which way a fallback flatters is an accident of
+typing. And **a column default is not an observation**: `founder_health.
+engagement_trend` carries `DEFAULT 'stable'`, so a row written for any other
+reason looked like a judgment that a person was doing fine.
+
+## Whose company is this
+
+**The rule:** a route that takes a company's id must establish that the id
+belongs to the caller, and answer 404 rather than 403 when it does not, so
+nothing leaks about a company the caller may not see. `middleware/tenant.ts`
+states it, including that choice, and is mounted NOWHERE — it sits on the
+unreachable-modules baseline while every route re-implements it inline.
+
+**Eight idioms are in use** for "is this company theirs": `getProductByOwner`,
+`hasProductAccess`, `requireOwner`, `requireCompanyCapability`,
+`verifyPortfolioOwnership`, `scopedTo` (the §12 portfolio principal),
+`validateApiKey` (a key acts as its issuer, bounded by scopes), and a plain
+WHERE on `products.owner_id` or the session's `ctx.product.id`.
+
+**A rule with eight implementations has no floor, and one route had nothing.**
+`GET /packet/:id` read any company's board packet by id — the executive summary,
+metrics, wins, risks, asks, next-quarter goals — with the founder loaded and
+unused, while three of its neighbours in the same file scoped correctly and one
+of them carried a comment saying why. Fixed, and `check-tenant-scope.mjs` is the
+floor: every handler whose path takes `:id` or `:productId` shows a recognised
+idiom or is baselined with a reason written on the route. **Baseline 2**, both
+earned — a published case study, and a Stripe webhook that has no founder
+session because Stripe authenticates by signature.
+
+**The body-and-query door was checked and holds.** Ten routes take a product id
+from a body or query string; the two that are not session-scoped —
+`/webhooks/voice-reply` and `/internal/conversion-signal` — are guarded by
+`validateApiKey` and `scopedTo` respectively, both added deliberately by earlier
+work. The remaining eight are founder-scoped writes where the product id is a
+label on the row. **The gate does not cover that door**, and the reason it does
+not is that there was nothing to catch, not that it was skipped.
+
+## What a company's own surfaces may say about its money
+
+The same reading was carried outward to the surfaces that speak to founders and
+investors, and it holds there with higher stakes. Three standing rules came out
+of it, and each is enforced rather than described.
+
+**A metric that reaches a model says `unknown`, not a number.**
+`ai/measured.ts` is the only place that decides, and a `0` passing through it
+means a snapshot really recorded zero. Five agents wrote
+`(Number(x) || 0) * 100` and put `Churn rate: 0.0%` into prompts for companies
+that had reported nothing — under a system prompt reading "You do not hedge when
+customer data is clear". Every threshold that a fabricated zero could cross is
+now guarded on null: `if (activationRate < 30)` was firing a founder-facing
+acquisition-quality warning at companies with no metrics.
+
+**Not knowing is its own answer, kept apart from knowing and finding fault.**
+`computeFundingReadiness` returns `unmeasured` beside `key_gaps` and
+`measured_components` beside the score, because 62-of-seven-measured and
+62-of-two read identically. It had been telling companies that had reported
+nothing that their churn was above threshold and their activation below
+benchmarks — findings about numbers that did not exist.
+
+**A cash balance is stated by the person who has one, or runway is unknown.**
+Migration 181 and `financial/position.ts`. **Do not add a default there**, and
+do not let either runway path derive cash from anything else: both used to, by
+two different formulas, and the results were rendered through a Monte Carlo with
+a P10–P90 band and a survival probability. Nobody mistakes a constant for a
+finding; everybody reads a confidence interval as one.
+
+**And one gate.** `check-query-arity.mjs` counts placeholders against arguments
+and INSERT columns against values. It exists because a statement written with
+seven placeholders and six arguments had never once succeeded — valid SQL, real
+columns, clean types, both callers swallowing the throw, the nightly log reading
+"Generated scenarios for 0 products" and nobody finding out.
+
+## What Foundry records about itself, and reads
+
+The same reading turned around: a fact recorded and read by nobody. Three rules
+came out of it, each enforced.
+
+**One AI spend ledger, and it is `ai_daily_spend` at global scope.**
+`cost_events` has a single fire-and-forget writer covering agent sessions only;
+`ai/client.ts` reserves and settles every call into `ai_daily_spend`, which is
+also what the daily ceiling is enforced against. Read it **scoped to
+`'global'`** — migration 099's finish trigger writes the same amount to the
+global, product and founder rows, so an unscoped `SUM` counts each call up to
+three times.
+
+**Quiet is not broken.** `integration_health.last_successful_sync` says when a
+connection last WORKED; `last_event_at` says when data last ARRIVED. The status
+message distinguishes them, because a webhook source that has gone quiet and one
+that has died look identical otherwise. This is the same rule
+`institution/loop-health.ts` states for the scheduler.
+
+**Foundry's own forecasts are scored.** `forecast_checkpoints` are dated when
+the prediction comes due — one, three and six months, base case only —
+reconciled in the ingest path where a company's real MRR arrives, and the
+median variance and its DIRECTION are shown to the founder above the forecasts
+it judges. The institution asks companies to state what they expect and compares
+it against reality; its own predictions were exempt until now, which is the
+argument for keeping this wired.
+
+**And a caution about the instrument.** `check-write-only-columns` reported 84
+entries, of which 47 were reachable by a mechanism it cannot see — a literal
+`SELECT *`, a SQL trigger, or the export's dynamic `SELECT * FROM ${table}`. It
+is a question-asker, as its own header says. Check before building.
+
+**What Foundry made, and whether it asked.** An executed `action_drafts` row —
+pricing copy, landing copy, an onboarding flow, a remediation PR — appears in
+the Letter's `handled` section, and says which the founder approved and which
+Foundry did on its own. `approved_at IS NULL` is what "alone" means; it was the
+only thing the retired `auto_execution_log.trigger` column recorded, and nobody
+read that table.
+
+**Who moved a key result.** `okr_progress_updates` is read on the OKR page: the
+date, the movement, the note, and whether it was the founder or an agent. The
+page can also CREATE an objective now, guarded by `requireOwner()` — until it
+could, nothing anywhere in the running system could produce a row for that page
+to render, and `compass.ts` and `forecasting/targets.ts` were reasoning about
+objectives that could not exist.
+
+**Whether an integration is still working, and whether Foundry gave up on it.**
+`integration_sync_log` is read on the Integrations page as the trailing week of
+attempts. It has two writers with disjoint column vocabularies — `sync.ts`
+writes `status` and `error_message`, `framework.ts` writes `errors` and leaves
+`status` NULL — so the reader DERIVES success rather than trusting either
+spelling. Errored integrations are retried to a stated limit
+(`MAX_CONSECUTIVE_SYNC_FAILURES`), and crossing that limit is announced once
+through the interruption ladder. Before this, one failed sync set
+`status = 'error'` and the hourly job selected `status = 'active'`: the
+integration was never tried again, and nothing said so.
+
+**A debate that crashed is not a debate.** `SynthesisOutput.failure_reason` is
+null only when a synthesis really happened. A non-null reason ends the session
+`'failed'`, keeps it out of the founder's daily briefing, and gives the page a
+red badge instead of a green "Complete" beside a conflict count of zero.
+
+**Causal chains are read, not recomputed.** `graph_rebuild` writes them weekly;
+the route reads that batch and computes only when none has ever been stored. It
+used to call Opus again on every request for an answer the job had already paid
+for. The chains keep their cause and effect as labels, with ids resolved
+against the entities the prompt actually showed the model and left NULL when the
+model names something the graph does not contain.
+
+## What a metric means, and what units it is in
+
+Two conventions govern every company number in this system. Both were being
+ignored by readers, and both are now stated in code rather than in prose.
+
+**`mrr_cents` is the LEVEL; `new_mrr_cents` is new business won this period.**
+The ingest field `mrr` maps to `mrr_cents` — it used to map to `new_mrr_cents`,
+so a company reporting its total MRR had it recorded as new business, and every
+investor-facing surface (which reads the level) showed N/A. `POST
+/api/v1/metrics` always wrote the level correctly, so the same company got
+different answers from the two doors. The settings page spells the difference
+out to the founder, because that is what somebody sends wrong.
+
+**AND THE TELL FOR A UNITS BUG IS THAT THE FALLBACK DISAGREES WITH THE
+MEASUREMENT.** `computeUnitEconomics` divided `churn_rate` by 100 — turning the
+stored 0.05 into an average customer lifetime of 2,000 months and an LTV a
+hundred times too large — while its `?? 5` default, written in percent, divided
+correctly. A company that reported its churn got a worse answer than one that
+reported nothing. **When a fallback and the measurement it replaces disagree
+about the arithmetic that follows them, one of them is in the wrong unit.**
+Swept afterwards: every other reader of `churn_rate`, `activation_rate`,
+`day_30_retention` and `mrr_health_ratio` handles the fraction correctly.
+
+**AND THE UNIT BELONGS IN THE NAME, because the name is the only thing that
+survives a copy-paste.** `views/numbers.ts` — the proposed contract for rendering
+every dashboard number — offered `formatPct(n)` and `formatUsdK(amount)`, either
+of which would have handed the fraction-versus-points and dollars-versus-cents
+ambiguity to every caller that adopted it. They are `formatPctPoints`,
+`formatUsdFromDollars` and `formatUsdFromCents` now, fixed before the contract
+has a single caller.
+
+**Rates are stored as 0–1 fractions.** `activation_rate`, `churn_rate`,
+`day_30_retention`, `mrr_health_ratio` — the ingest validates that range and
+`ux/fluency.ts` names them. Use `ratePoints()` from `ai/measured.ts` to compare
+against a percentage threshold, and convert the value rather than the threshold.
+
+**THE LEVEL NOW HAS A WRITER THAT IS NOT THE COMPANY REPORTING IT.**
+`metric_snapshots.mrr_cents` had exactly two writers — the v1 metrics API and the
+ingest route — and both are the company stating its own numbers. Not one
+integration wrote it. `stripe.ts` computed the level on one line and left it out
+of the column list twenty lines later, so a company that connected Stripe left
+the level permanently null while Foundry synced its subscriptions every hour.
+Both Stripe paths and the framework adapter write it now.
+
+**It was invisible for as long as the readers substituted a fallback**, which is
+the argument for removing them: a zero looks like an answer, and a null asks a
+question. Every fix in this area since has depended on the one before it — the
+level had to be written before ARPU could be computed from it.
+
+**A CLAMP CAN PIN A RATE TO ITS BOUND, and the bound is not evidence.**
+`activation_rate` was activations over THIRTY days divided by signups over
+SEVEN, with `Math.max(signups, activated)` in the denominator so it could not
+exceed 1. For any growing company the max fired, the two cancelled, and the rate
+was exactly 1.0000 — a hundred percent activation for essentially every healthy
+company, read from there by the board deck, the value delivery index and the
+benchmark percentiles. Without the clamp it would have read 3.2 and somebody
+would have asked. **When a computed rate sits exactly on its bound, check the
+windows before trusting it.**
+
+**A COMPOSITE SCORE MUST REST ONLY ON WHAT WAS MEASURED, AND SAY HOW MUCH THAT
+IS.** Four composites were built by substituting a number for every component
+that had none — the Value Delivery Index, the product health score, the
+marketplace health score, and unit economics — and in three of the four the
+substitutions disagreed with each other, so one absence read as excellent in one
+component and catastrophic in the next. The pattern each now follows: a
+component contributes only when measured, the weights renormalise over those
+that did, `coverage` reports the share of the full weighting the number rests
+on, and the score is null when nothing was measured.
+
+**AND A THRESHOLD IS A FINDING, SO IT NEEDS A MEASUREMENT.** Every marketplace
+stressor threshold is a "below", so an unmeasured zero tripped all three at
+once: a company that had reported nothing was told it had liquidity collapse, a
+trust deficit and a supply imbalance. A stressor fires only on a measured value.
+
+**Measured, and a gate NOT built:** the syntactic form of this
+(`(x ?? 0) < threshold`) appears in 16 files, and all but two are
+`rowsAffected ?? 0 > 0`, where zero genuinely means none. A gate would be mostly
+baseline. The lens stays a reading habit rather than a scanner.
+
+**A COLUMN NOTHING CAN WRITE, WITH A READER THAT FALLS BACK.** The sharpest form
+of the substitution problem, because the fallback is not a stand-in for missing
+data — it is the ONLY value the expression can ever have.
+`metric_snapshots.local_currency_mrr` and `exchange_rate` were added by migration
+011 and never written by anything, and `GET /api/currency-health` reported FX
+erosion computed entirely from their `?? 0`. Retired with both columns in
+migration 193. **When a fallback's branch is the only branch, the feature is not
+degraded — it does not exist.**
+
+**Measured, and this gate not built either:** a mirror of
+`check-write-only-columns` — columns READ and written by nothing — returns 347,
+swamped by columns written by SQL triggers, by `ON CONFLICT … DO UPDATE SET`, and
+by DEFAULTs, none of which an INSERT/UPDATE regex sees. The one real instance was
+found by reading a file, not by a scanner.
+
+**A COUNT FROM A CAPPED PAGE IS A FLOOR, AND MUST BE NAMED ONE.** Four
+integration summaries reported `length` of a limited fetch under the name of a
+total: GitHub pull requests (`per_page=20`), GitHub issues (50), Sentry
+unresolved issues (`limit=25`), and Intercom's `opened_today` (within 50). These
+rows are read by Atlas, Crucible and Sentinel — a repository with two hundred
+open pull requests told the agent reasoning about engineering load that the
+backlog was twenty. The convention now: an exact count keeps its name, a
+truncated one becomes `<name>_at_least` with `<name>_page_truncated: true`, and
+anything counted inside the page carries `_in_page`.
+
+**Two rules came out of that sweep and both generalise.** A value derived from a
+POSITION in a response that specified no sort carries no meaning — the oldest
+open pull request was `openPRs[length - 1]`. And an average over values that
+were never reported is not an average: `pr.additions || 0` counted every missing
+size as a real zero.
+
+**RENAMING A FIELD TO TELL THE TRUTH IS ONLY HALF THE CHANGE — FOLLOW THE
+READERS.** `getSentrySummary` read `data.open_count`; naming the truncated case
+honestly upstream would have made that read null and thrown the number away
+silently. It takes the floor when that is what exists and carries
+`openIssuesIsFloor` beside it. The truth arriving as an absence is its own
+defect.
+
+**Where the right pattern already was:** `intercom.ts` reads Intercom's own
+`total_count` and falls back to the page length only when there is none. Read it
+before inventing a fifth truncation idiom.
+
+**A percentile has a DIRECTION, and it belongs with the metric.** Portfolio
+benchmarking now returns a `performance_percentile` — the share of peers this
+company is doing better than — with each metric declaring `higherIsBetter` in
+one list. It used to return the share of peers with a lower VALUE and let the
+reader supply the direction, which meant the company with the least churn in a
+portfolio scored 0 and was told to prioritise retention. If a percentile is
+compared against a threshold anywhere, check which way it points.
+
+**An estimate says what it was made from.** `EstimateBasis` — `{ inputs,
+measured }` — travels with every model estimate in
+`intelligence/competitive-v2.ts`, in the same shape and with the same word as
+`Forecast.projected_from` in `founder/intelligence.ts`. `measured: false` means
+no figure from this company reached the model. There is one vocabulary for this;
+do not invent a second.
+Watch for the asymmetry this failure has: **every "higher is better" test fails
+and every "lower is better" test passes**, so a broken scorer awards full marks
+for the worst possible number and nothing looks wrong. `nps_score` is on its own
+-100..100 scale and must NOT be scaled.
+
+**A Signal is not shown, spoken or prompted unless it was measured.**
+`SignalResult.hasData` was already declared with the Honesty Law and honoured by
+one of its ten consumers. Use `signalText()` / `signalNumber()` from
+`services/signal.ts`; a test enumerates every caller of `computeSignal` and
+fails when one neither reads `hasData` nor uses them. A default is NOT written
+to `signal_history` — a gap there means nothing was known that day, which is
+what the sparkline, the 7-day trend and the drop alert all need it to mean.
+
+**Reaching a founder's phone asks the ceiling first, and the founder can now
+set it.** `preferences.max_channel` is what the founder said about how loudly
+Foundry may EVER interrupt them, and `ux/interruption.ts` is the only thing that
+may decide. Until this cycle NOTHING WROTE IT: `fluency` was the only key any
+code path put into `founders.preferences`, so the ceiling branch was dead and
+every founder sat at push. `setMaxChannel` is the writer and
+`POST /settings/interruption-ceiling` is where a founder uses it. A caller with its own
+legitimate push type calls `mayPush()` rather than coming through `deliver()`,
+which flattens every type to `daily_briefing`; a test enumerates every caller of
+`notifyFounder` and fails when one does neither.
+
+**And the distinction that hid this one.** The outbound gateway governs whether
+an effect may LEAVE — paused company, kill switch, dedup, audit. The ceiling
+governs how loudly Foundry may interrupt THIS PERSON. `risk-state.ts` cited the
+first in place of the second, in a comment, and was right about the first.
+**Watch for a satisfied guard named where an absent one belongs.**
+
+**Quieting an event now records it.** `deliver()`'s letter and log rungs used to
+write nothing, so an event whose fact the Letter did not independently carry was
+dropped by a founder lowering their ceiling — which is why eight scheduled bells
+bypassed the policy rather than lose the fact. Migration 182 (`quieted_events`)
+holds them and `letter/composer.ts` reads the last day's back as `noted`. Route
+any founder-facing notification through `deliver()`; there is no longer a
+condition to check first.
+
+**One exception, and it is a decision rather than a gap.** `billing/stripe.ts`
+notifies directly. `max_channel` is an attention preference, and the owner's §14
+line keeps necessary service, billing, security and configuration state ungated
+and disclosed while optional telemetry and celebration honour the preference. A
+founder whose card is failing is told, whatever they set about volume. A test
+pins that file; adding another is a claim that some message outranks a founder's
+stated wishes, and the test is there to make somebody write it down.
+
+**And a company's MRR reaches Foundry through TWO doors**, not one: the
+founder's ingest token and `POST /api/v1/metrics`. Anything that must happen
+when a company reports its numbers — forecast reconciliation is the first
+example — belongs in a shared function both call.
+`reconcileForecastsFromSnapshot` is that, and a test requires both doors to use
+it.
+
+**A prompt asking for facts about a company carries that company's figures.**
+Every one now does, through `ai/measured.ts`. The board-deck route was the
+extreme case: it asked for MRR, churn, NPS, cohort trends and runway while
+passing the company's name, sector and stage — so a founder's investor document
+was written from nothing. Where a figure is unknown the model is told, and told
+that unknown must survive to the output, with the reason attached so the
+instruction is not trimmed as boilerplate. Prose about plans stays free; the
+constraint is on FACTS about the company.
+
+**The general form, which is worth more than the instance:** when a doctrine
+sentence is written into a type, check every consumer before believing it. A
+rule in a comment protects the file it sits in; only a shared helper and an
+enumerating test protect the callers.
+
+**And one rule about outcome loops.** `/roi` reports "not measured" rather than
+$0, because `recommendation_outcomes` has no writer. **Do not wire
+`recordRecommendation` without `markActedOn`**: recording the denominator and
+never the numerator turns an unmeasured rate into a measured 0%, which is a
+confident wrong answer and harder to notice than a blank. A test fails if a
+caller appears for one without the other. Wiring both needs a real answer to
+"what counts as acting on a recommendation".
 
 ## Evidence frontier (do not inflate)
 
-| Capability | Level | Scope of the claim |
+| Capability | Level | Scope |
 |---|---|---|
-| Bounded sparse reconstruction | E3 | exercised fixture dimensions only |
-| Responsibility recognition | E3 | exercised dimensions only |
-| Responsibility understanding | E3 | four exercised capability shapes |
-| Shadowing | E3 | four exercised responsibility shapes — **not** development verification |
-| Assisting (support reply) | E3 | exercised synthetic dimensions only |
-| Deterministic institutional judgment | E3 | exercised synthetic multi-company corpus |
-| **Development (recognition → disposition → authority → change → verification → outcome)** | **E3** | **five synthetic companies, one change class (`generated_artifact`), single-file changes, one repository; constitutional isolation has one case** |
-| Judgment → later-reality evaluation | E2 | local |
-| Owner judgment disposition | E2 | local |
-| Recursive Foundry operation | E2 | one low-consequence development responsibility |
-| Founder legibility of development | E2 | local wiring and copy boundary |
+| Reconstruction / recognition / understanding / Shadowing / judgment / development | E3 | prior exercised synthetic dimensions only |
+| Assisting (support reply) | E3 | **prior synthetic dimensions only — unchanged for three sessions** |
+| Production reachability | E3 | four synthetic non-software companies, each now entering through the ONE intake production has — they used to be admitted by SaaS event types nothing emits, so the benchmark answered "can a normal company enter the ladder?" through a door the running system does not have. Better founded, same level: still synthetic. |
+| Everything wired through production-facing services | E2 | local runtime through production-facing services |
+| Recursive Foundry operation | **E1** | `recursive-institution-contract.ts` has **zero importers in `src/`** — only its test reaches it. It was recorded as E2, which means "local runtime through production-facing services", and there is no production-facing service. `recursive-institution-v1` reporting ordinary on thirteen dimensions is a benchmark result, not a runtime one. Never run by a real owner in production. Corrected on evidence, not re-measured upward. |
+| Institutional economics | **E1** | `institutional-economics.ts` also has zero importers in `src/`. Attribution is structural and the arithmetic is tested; nothing in production consumes it, so the same correction applies. Seven components remain named-unmeasured. |
 | Assisting → Operating | frozen | migration 115; unchanged |
-| Operating, founder-value reduction, unfamiliar-company adoption, pilots, production | unproven | requires E4/E5/E6 real-world evidence |
+| Real founders, providers, pilots, production | unproven | E4/E5/E6 |
 
 ## Open proof debt
 
-- Development: source-code change classes, multi-file changes, refactor and rollback as *selectable* dispositions, real repository operation, concurrent multi-plan.
-- Executive cognition (Tranche 4): no marginal-value comparison has been run. A deterministic/no-model baseline is in place everywhere; every model-assisted alternative must still beat it on decision quality, error reduction, latency, cost, and founder attention before adoption.
-- Founder attention: infrastructure exists; no empirical reduction is claimed or measured.
-- Economics: AI spend controls are E2; cost-per-institutional-work attribution (Tranche 12) is unstarted.
-- Everything E4/E5/E6 — pilots, production, broad institutional evidence.
+- **Nothing has met reality.** No real founder, outside tool, or provider.
+- **Autonomous reply generation** is unbuilt and unclaimed; the founder-authored path is the baseline. Its contract is now frozen at E1 and nothing has ever been scored against it.
+- **Pilot readiness is green, and that is a smaller claim than it sounds.** `support-pilot-readiness-v1` says *ready to attempt a bounded pilot*. No pilot has occurred; the six named items of outstanding external proof are all still outstanding.
+- **Outcome (§12) remains untouched and must stay so:** provider acknowledgement, delivery, customer silence, and elapsed time are all *not* resolution. If a provider can emit an explicit case-status event, audit whether its contract genuinely establishes the outcome before believing it. Preserve `unresolved`.
+- ~~Judgment observation cannot report `contradicted`~~ — **CLOSED.** It now
+  does, and only against a date the COMPANY stated that has passed with the
+  conflict still standing. Anything less is still `partially_observed`: an
+  absent deadline is not a met one, and a conflict the owner has simply not
+  got to yet has falsified nothing.
+- Of the development paths, only `development-benchmark.ts` is still on the reachability gate's DARK list, and it is a frozen benchmark. The rest are statically reachable; what is missing is a caller for the change-execution chain (`plan` → `execute` → `verify` → `rollback`), which is a different gap and is recorded on the frontier.
+- Executive cognition: no marginal-value comparison; the cognition gate forces one.
+- Economics: near-vacuous while the institution is model-free.
+- ~~Duplicate founder reports still create duplicate responsibilities~~ —
+  **CLOSED within a source.** Discovery converges a repeat of the same
+  obligation: same title, capability, stated deadline and reporting source, and
+  only onto an active responsibility. Both reports are kept as evidence; what
+  converges is the obligation. Still open across sources, deliberately: a
+  founder and one of their own systems reporting the same thing produce two
+  responsibilities, because a responsibility carries a single discovery
+  reference and merging would make the second witness invisible where today it
+  is visible as its own item. See `discovery.ts`.
+- NULL-safety gate does not analyse nullable **columns**; trigger tests are the backstop.
+- **The suite aborts intermittently and the cause is not known.** Roughly one
+  run in three, a native libsql panic that takes the run with it rather than
+  failing a test. Two candidates eliminated by measurement (a leaked query
+  timeout; the old fixture collision), one live (nothing ever closed a database
+  connection — `closeDb()` landed and the suite now closes after every file;
+  over 30 consecutive clean runs since, against a prior rate near one in
+  three). Until this is settled, "full
+  suite green" carries an unstated qualifier: *this time the process survived*.
+  Recorded here rather than in a comment because it qualifies every other
+  evidence claim in this document.
 
-## Owner deferrals and decisions waiting
+## Master-audit reconciliation
 
-- **AcreOS: DEFERRED BY OWNER.** Not accessed, inspected, ingested, benchmarked, or special-cased anywhere in this work. Preserved as a genuine unfamiliar-company generalization test.
-- **Owner decision needed — implicit Foundry identity.** See the finding recorded above: the welcome path resolves Foundry's own product by the literal name `'Foundry'` and borrows that tenant's scope for platform-level mail. Not a bypass and not presently exploitable, but Foundry-as-a-company is identified by an unowned string. Fixing it means deciding what "the Foundry company" canonically *is* — an owned identifier, a configured id, or a real platform-level effect scope. That is an owner-level design decision, deliberately not invented here.
+*Reconciled against the repository rather than against memory. Where a line says "verified", it was checked in that pass; where it states a count, it names the command so the next steward can re-run it rather than believe it. The trigger counts below were last re-run at `c1c0976`.*
 
-## Next highest-value unblocked work
+### Proven — E3, or structurally enforced and mutation-verified
 
-1. **Broaden the development corpus** to a second change class (`test` or `documentation`) and multi-file changes, re-running the unchanged `development-v1` gate. Do not touch the gate.
-2. **Executive-cognition marginal value (Tranche 4)** — measurement first: compare no cognition, deterministic cognition, and cheap/large models on the existing judgment corpus. Adopt nothing that does not beat the deterministic baseline. Create no permanent named personas.
-3. **Cost truth (Tranche 12)** — make spend attributable to institutional work.
-4. **Simplification sweep** — the mandate's deletion discipline has not had a dedicated pass this session; look for obsolete named-agent paths and duplicate abstractions with cutover proof.
+| What | How it is proven |
+|---|---|
+| Reconstruction, recognition, understanding, Shadowing, Assisting, judgment, development | Executable benchmark gates, each with a running test. **Scope: the synthetic dimensions those corpora actually exercise — nothing wider.** |
+| Production reachability | `production-reachability-v1` across four synthetic non-software companies, each admitted through the one intake production has |
+| Unfamiliar-company generalization | Independently generated corpus against the frozen recognition gate |
+| **Institutional invariants live in the database** | Not in application code, so a bug in a service cannot bypass them. Reproducible counts across `src/db/migrations/`: **87** `CREATE TRIGGER` statements carrying **74** distinct trigger names, and **222** `RAISE(ABORT, …)` guards — re-counted after migration 169. The name count did not move because 169 drops and recreates `founder_assertion_guard` rather than adding a guard; the statement and abort counts moved by exactly what it re-declares. A previous figure of "169 … verified by count" appeared here with no stated method and cannot be reproduced by any obvious one; these numbers name their own command so the next steward can check them. |
+| The scheduled pass has no epistemic privilege | Four-part audit: structural, behavioural (four refusals + one advancing control), provenance, idempotency |
+| Support-chain reachability | Sixteen named links, invocation-based, mutation-verified against a removed call |
+| Institutional cognition is deterministic | Gate test; no model reachable from the kernel |
+| NULL-semantics of every guard | Systematic audit (migration 130) plus a standing gate |
+| Coverage integrity in both new gates | Dropping an observation reports *unexercised* rather than passing |
 
-## Working rules that mattered most this session
+### Implemented but unproven — E2, real code path, local runtime only
 
-- A red gate is evidence. Three real defects were found by refusing to weaken one: the stale snapshot; content validated *after* mutation instead of before; and an independence guard that retroactively invalidated a frozen benchmark (the guard was re-keyed, the benchmark untouched).
-- Evidence must strictly follow the prediction it tests. Both the Shadowing window and change verification use exclusive lower bounds; where timestamp resolution is ambiguous the result stays unresolved rather than falsely confirmed.
-- A passing corpus that cannot fail is not evidence — mutation-test benchmarks before believing them.
-- Never let one subsystem's E3 bootstrap an adjacent one.
+Everything built in sessions four through seven: the founder evidence bridge, company-scoped facts, external metric observation, Shadowing resolution, the Assisting admission and its revocable authority, inbound customer message intake, the founder-authored reply proposal, bounded planning, execution-time revalidation, governed send, receipt, and the seven-day absence view. **None of it has been touched by a real founder, a real outside system, or a real provider.** A production-facing code path is not production evidence, and this table is the difference.
+
+### Partially implemented
+
+- ~~**Judgment observation cannot report `contradicted`**~~ — closed by migration 166's stated due dates; see above.
+- **Duplicate founder reports still create duplicate responsibilities.**
+- **The NULL-safety gate does not analyse nullable columns**, only guard predicates; trigger tests are the backstop.
+- **Reachability is per module, not per behaviour.** A module counts as reachable when production imports it at all — including read-only. Several institution modules are reachable that way while their write paths stay undriven.
+
+### Superseded
+
+- The vertical support-chain test's caller assertions — replaced by the standing reachability gate, which cannot go stale.
+- Earlier continuation records — this one supersedes all of them.
+- Capability-level autonomy consent as a route to Assisting — superseded by responsibility-bound authority (migration 112) and kept structurally distinguishable so the legacy form cannot satisfy the new one.
+
+### Owner deferred
+
+- **Real AcreOS work.** Not inspected, accessed, ingested, modified, integrated, benchmarked against, simulated, special-cased, or used to derive architecture. Unchanged this session.
+- **Merging to master.** The branch has never been merged and will not be without explicit instruction.
+- **Assisting → Operating.** Frozen by migration 115. Pilot readiness being green is explicitly *not* a reason to design or enable it.
+
+### External-only — cannot be established in this repository at any effort
+
+- Whether a real founder understands and trusts the grant/revoke/re-grant surface.
+- Whether a real customer's problem was actually solved (business outcome). Provider acknowledgement, delivery, silence, and elapsed time are all *not* resolution; `unresolved` is preserved deliberately.
+- Whether founder attention actually decreases.
+- Whether the support envelope survives contact with real message volume and variety.
+- Model quality against `support-drafting-v1` — the contract is frozen, and no model has ever been scored against it.
+
+### Still open
+
+*Reconciled again at the close of the eleventh session.*
+
+- **Recursive operation in production.** The vertical is proven locally and end
+  to end, but it has only ever run in tests. **External proof debt, explicitly:**
+  the deployed Foundry company still requires a genuine owner-authenticated
+  report, performed outside the coding environment. The owner has decided on
+  **report only, not the grant**, so Foundry still may not mutate its own
+  repository outside a test. Neither may be fabricated.
+- **Named-agent retirement.** Twelve implementations remain live and
+  production-reachable. Retiring them is Class-C, not Class-B: they are
+  model-driven and the institution is deliberately model-free, so cutting them
+  over would LOSE capability rather than preserve it. Blocked on executive
+  cognition, itself blocked on a consumed task with a real baseline.
+- **Judgment calibration — still blocked on reality, but less so.** The
+  observation pass writes `judgment_expected_supported` when the company
+  resolves a conflict and `judgment_expected_contradicted` when a date the
+  company itself gave passes with the conflict still standing, so evaluation
+  can reach a real verdict rather than only `not_yet_observable`. What remains
+  blocked is CALIBRATION: whether Foundry's confidence tracks its accuracy
+  needs a run of real judgments against real later reality, and manufacturing
+  longitudinal examples to improve that number would corrupt the one number
+  that is supposed to be honest.
+- **Quality/cost comparator.** Deferred with a stated trigger — buildable when a
+  second candidate method exists for a consumed capability.
+- **Architecture deletion.** Candidates remain, each needing per-module proof.
+  The dynamic-loader blind spot is now closed and the classification gate is
+  bidirectional, so the next sweep starts from a trustworthy report.
+- **Founder attention** stays unbuilt until a real consumer needs it.
+
+**Closed since the last reconciliation, and not to be re-listed:**
+
+- ~~`challenger` and `synthesizer` are evidence-insufficient~~ — the owner
+  answered, and the answer was that my classification was wrong. Both are
+  standalone debate functions reached by ordinary static import from
+  `debate/orchestrator.ts`. Being in `agents/` is not what makes something an
+  agent; the gate now checks reachability rather than location.
+- ~~`development-shadowing.ts` remains dark~~ — the owner can now open a
+  development expectation, so the DARK list contains only frozen benchmark
+  gates, which is what it was always supposed to mean.
+- ~~The unreproduced `customer-message-intake` flake~~ — **RESOLVED.** A
+  near-miss key fixture built as `key.slice(0,-1) + 'X'` collided with the real
+  key whenever it ended in `X`, once in sixty-four. Every one of the six
+  eliminated hypotheses was correctly eliminated, and none of them could have
+  found it.
+
+## Working rules that mattered most
+
+- **Audit the writers, not just the modules.** Five sessions running, the biggest finding was something built and never called.
+- **Attribution must be structural, not semantic.** The temptation this session was to infer which responsibility a customer message belongs to from its text. Binding the channel to the responsibility makes it a fact instead of a guess.
+- **Identity comes from the credential, not the payload.** If the authentication channel can establish the source, the body must not be able to claim it.
+- **When the honest path stops, stop and say why.** There is still no reply generator; inventing one to turn the pipeline green would have been the worst available outcome.
+- **An audit that finds nothing is a result, not a failure to deliver.** Three slices this session ended in building nothing, because the structure already held. The instinct to add *something* so the work looks substantial is how privileged bypasses and second kill-switches get built.
+- **Freeze the contract before the thing it judges exists.** Thresholds written after the first model are thresholds the first model passes.
+- **A gate you have not mutated is a gate you are guessing about.** Every detector and classifier added this session was broken deliberately first, in both directions, before being trusted.
+- **The same defect shape recurs at every layer.** A general mechanism bound to one SaaS-shaped special case: twelve metric columns for observation, one capability and one scope for effects. Finding it once teaches you where to look next.
+- **Let reality reveal the missing primitive.** The effect-boundary gap was not designed into a roadmap; four fictional-but-honest businesses walked the ladder and stopped at the same wall.
+- **Replacing a guard means reproducing ALL of it.** Migration 135's first draft recreated the vocabulary checks and silently dropped two independence guards. Widening a vocabulary must never quietly narrow anything else.
+- **A test that only exercises the service has not tested the database.** Deleting the trigger's tenant binding passed every test until a forged insert named a channel that was live for another company.
+- **Fix the fixture, never the feature.** The seven-day view failed against a hand-built stub that had drifted two migrations behind production. The stub was wrong; the query was right.
+- **Check the observation against reality BEFORE building on it.** The recursive slice began by measuring the live schema against the committed snapshot — 698 objects each side, exact match — because an observer that reports drift where there is none is not a recursive proof, it is a fabricated fact about the company.
+- **A tool's blind spot is more dangerous than its silence.** The orphan report confidently named 160KB of live, dynamically-loaded code as dead. Any analysis that resolves only static imports will do this, and the failure mode is a production outage rather than a test failure.
+- **Latent is not the same as observed — say which one you fixed.** The foreign-key PRAGMA race was real in principle and unreproducible in practice. Recording it as "found and fixed, but not the cause" keeps the open flake open, which is where it belongs.
+- **When guards keep refusing your fixture, stop hand-building rows.** Four consecutive triggers refused a hand-made economics fixture. Building it through the real services was less work and proved more.
+- **Deferral with a stated trigger is a decision; deferral without one is drift.** Three things were deliberately not built this session, each recorded with the condition that would make it buildable.
+- **When a guard refuses your fixture, the guard is usually right.** Five separate refusals this session — an ambiguous same-second observation, two competing proposals, a plan without Assisting, shadowing without Understanding, a weak intake key — were every one of them the system working. The fixture changed each time; no guard did.
+- **A cast is a promise, not a check.** `agentName as AgentName` on a database row type-checks and validates nothing. Two of three dynamic loaders were secured by a type annotation that does not exist at runtime.
+- **Verifying the thing you changed cannot see the thing you didn't.** The whole point of `verifyDiffScope`: every other check passes while the repository is unauthorised.
+- **Being ready to learn beats continuing to look.** After nine full runs and twenty-five saturated ones, the honest move on the intermittent was forensics readiness, not more guessing.
+- **A credential is an authority surface.** Whenever a route is added behind an existing token, ask what ELSE that token already opens. One secret authenticated posting numbers, raising work, and declaring that an effect succeeded — and the third walked straight through the guard built to stop exactly that.
+- **Reading a subsystem's surfaces side by side beats extending it.** Two more companies through the ladder confirmed the generalization and found nothing. Stopping to reassess found a real defect within the hour.
+- **Gate on reach, not on rendering.** "No secret is printed" passes right up until somebody prints one. A row that never arrives has nothing to print.
+- **Commit before mutation-testing.** A `git checkout` to revert a mutant silently reverted real edits in the same file, and left mutants standing in the untracked ones. Second time this has happened; the fix is to commit first, not to be more careful.
+- **A word boundary is not a boundary once you fold case.** `heatingHint` lowercases to `heatinghint`, and `\bheating\b` cannot see it. Two gates read as if they checked something they did not.
+- **Read a subsystem's surfaces beside each other; do not extend it.** Nine reads, seven real defects, and none of them would have surfaced by building the next feature. Two more unfamiliar companies through the ladder confirmed the generalization and found nothing.
+- **Ask what one surface assumes about another.** Every finding was an assumption that used to be true: one credential meant one consequence, CI's job matched `npm run check`, a detector saw every consequential call, a write chain implied someone could see the result.
+- **A test that greps source must strip comments first — including the comment you just wrote.** A guard's explanatory comment named `getProductByOwner` and its ticket, so a test asserting `src.toContain('getProductByOwner')` passed with the actual CALL deleted. Both mutations survived, on a test written minutes earlier to prove a cross-tenant fix. Seventh instance of prose being read as code this campaign, and the first inside an assertion. Use `stripComments`, and assert POSITION as well as presence: a check that runs after the thing it guards is decoration.
+- **Zero is a finding only if the instrument can see.** A scan for empty catch blocks wrapping a database write returned 0, because the pattern required the catch and its closing brace on one line. The corrected detector — an empty-or-comment-only catch BODY matched across lines, with the enclosing `try` scanned for INSERT/UPDATE/DELETE — found fifteen. Before reporting that a class does not exist here, mutate the detector against a case you know is real.
+- **Asserting that a file changed does not prove each edit applied.** A doc script did three replacements under one `assert s != b`; two were no-ops and the third carried the assertion, so the checkpoint's Head sha silently stayed three commits stale while the validation line beside it updated. Assert per replacement — anchor present, and the result actually different — which is the same rule as every composite in this codebase: one aggregate cannot vouch for the parts it was built from.
+- **`CONSEQUENTIAL_EFFECTS.json` is keyed by LINE, so adding a comment above a tracked call drifts it.** Twice in one cycle the effects gate failed on a diff that added no effect at all — the same detector, status and capability, eleven lines lower. Regenerate with `--write` and READ THE DIFF: an entry that moved is a comment; an entry that appeared or vanished is a finding. Do not regenerate without looking, which is the only way this instrument could be talked past.
+- **When a fix declares itself complete, check the declaration.** Migration 074 retired `integrations.status = 'connected'`, repaired the rows, and recorded that the code "now standardizes on 'active' everywhere". Two sites disagreed: the first-connect route still WROTE it, undoing the repair one founder at a time, and one adapter still REQUIRED it, refusing every correctly connected integration. The rule was also restated in a `fabric.ts` JSDoc saying "Do NOT write 'connected'". Written down twice, broken twice — which is the test for whether something needs a gate rather than a sentence.
+- **A rule that decides authority must have exactly one home.** Three places asked "was this a test of FOUNDRY's judgement" — the autopilot ladder banking a clean cycle, the shadow ledger printing an agreement rate, the trust ledger proposing a graduation — and each carried its own copy, one in TypeScript, one in SQL, and one not at all. Pinning the two surviving forms against each other, in a test that asserts them against EACH OTHER rather than against constants, found a live defect neither had reported: `TRIM(LOWER('  ')) = TRIM(LOWER(''))` is true, so a decision where Foundry said nothing and the founder chose nothing counted as agreement.
+- **The scope belongs in the name, for the same reason the unit does.** `runSelfAudit` sampled across every company on the install with no tenant filter, which was correct for its one caller and one refactor away from being a cross-tenant read. It is `runFleetSelfAudit` now, and the compiler audited every call site.
+- **A raw control byte makes a source file unreviewable.** A NUL in the first 8000 bytes makes git print "Binary files differ" instead of the change, in every diff forever, and grep skips the file. Neither of the two here was corruption: both were the right VALUE and the wrong ENCODING, where an escape says the identical thing to the compiler.
+- **A boolean cannot track a structure that nests.** The backtick gate's "inside a template literal" flag flipped OFF when a line opened a second template inside the first, hiding everything in the nested one — which is where the HTML lives. The repair was to delete the condition: the comment syntax already proved what the flag was there to confirm.
+- **A capped page ordered by the wrong key keeps the wrong rows.** The fleet letter took the fifty OLDEST pending decisions and then ranked only those, so the highest-scoring decision could not win if it was recent. Naming a page a page is not enough; the ORDER has to be the one the eventual ranking uses, or the cap silently decides the answer.
+- **Follow a table rebuild through its rename.** SQLite cannot alter a constraint in place, so a rebuild is CREATE `x_new`, copy, DROP `x`, RENAME. Any scanner reading only CREATE and DROP sees twelve phantom tables — enough false positives to make a new baseline worthless on its first run.
+- **A test that pins the defect is the hardest kind to spot.** SIX so far: one asserted `total === claims.rows.length` where the total should have counted judgments, one asserted an internal note stamps `last_contacted_by`, and two fixtures seeded a trust ledger with decisions Foundry never proposed. Two more since: fixtures mocking the retired `integrations.status = 'connected'` so the Linear executor's wrong guard passed, and a unit-economics test whose own comment said "no COGS recorded so the contribution margin is 1" — the substitution being removed, stated as the premise. Each read as coverage. **When a corrected implementation turns a test red, read the test before the code**; and when the correction is right, the fix is usually to make the fixture STATE what it had been assuming, which keeps the test's original subject intact.
+- **A detector's blind spot is a claim you are making without evidence.** "0 direct effects" was true of what the regex could see and false of the codebase. The inventory read as reassurance for as long as nobody checked what it could not match.
+- **A write chain is half a chain.** Four surfaces were unreachable by a human being while every write link had a production caller. Data moving is not a person seeing.
+- **`unresolved` becomes permanent unless something makes it fail.** Four untraced consequential effects sat for a long time because the audit counted them instead of refusing them.
+- **A `LIMIT` with no `ORDER BY` returns storage order, and the code around it usually claims a choice was made.** A scan of every SQL string in `src/` found 61 such queries; most are existence checks or unique-key lookups, and six decided something: which critical stressor is "what needs you next", which five risks a red team is shown, which three stressors a briefing speaks aloud, which five OKRs an agent sees, which hundred verifications run first — and which of a decision's per-option forecasts got graded as Foundry's own accuracy. **A biased sample nobody knows is a sample is worse than a short list**, because the reader cannot tell it was truncated. Three sibling agents already ordered the same stressor table by the same severity expression, so four of the six had missed a convention the codebase already had. This lens is a reading tool, not a gate: at 61 hits with most legitimate, a check would be noise.
+- **When a cap feeds a ranking, order the page by what the ranking uses — and when you cannot, say what the page could not see.** `findMatches` took twenty candidates in storage order and then scored and sorted them, so the best match in the network could not win unless it happened to be in the first twenty. The full score needs JSON overlap SQL cannot compute, so the page is ordered by the part it can and the residual is written down: best among a shortlist of twenty, not best in the network.
+- **When two migrations create the same table, only the first one is the schema.** `CREATE TABLE IF NOT EXISTS` over an existing table does nothing, so the later file reads like a schema and is a proposal. Ten such statements exist across seven migrations, and this campaign has been bitten by three: `integrations` (created again by two migrations after 008) cost a cycle; `experiments` carries the union of two designs, so its fixtures must satisfy both; `webhook_deliveries` declares a foreign key to a table nothing ever wrote. Each of the ten now carries a marker above the statement, and a test holds the list and the markers. **A DROP followed by a CREATE is a rebuild and DID run** — the first version of that test conflated the two and accused a genuine rebuild.
+- **A column that means three things has three readers answering the wrong question, and none of them knows it.** `integrations.type` held a provider key, a direction or a category depending on which of five writers made the row. Three defects were found and fixed one at a time before anyone retired the column, and retiring it immediately exposed three more readers that had been guessing: a page whose connected-integration cards never matched rows written through another door (and whose Disconnect button therefore did nothing for them), a credential-expiry report naming a DIRECTION as the source of a credential, and a chat context telling the model a company had connected "inbound". **Splitting the column is the fix; every defect before that is a symptom.**
+- **An instrument whose answer depends on an irrelevant ordering is not an instrument.** The write-only-column gate blanked each write context by REMOVING its text from one copy of the source, then asked whether a column name survived. One table's INSERT column list can be a leading substring of another's, so blanking the short one first left the long one unable to match itself — and four genuinely write-only columns read as read for as long as `INSERT INTO metric_snapshots (id, product_id, snapshot_date)` existed. Deleting that writer for unrelated reasons is what revealed them. **When a gate's verdict changes after a change that could not have affected it, the gate is the finding.** The repair was to record the character RANGES the write contexts occupy and ask whether the name appears outside them: same meaning, no order dependence. A first attempt counted occurrences per context and silently dropped seven entries, because a column written on four tables read as read from its siblings' write lists — a weakening that would have passed as a clean run.
+- **Making a column nullable changes the arithmetic of everything that accumulates into it.** `NULL + 5` is NULL. Five `col = col + ?` increments in the Stripe webhook would have silently discarded the first event of a period the moment the four MRR movement columns stopped defaulting to 0. The repair is `COALESCE(col, 0) + ?` at the accumulator — and that is the ONLY place a zero may be substituted for those columns, because "the first movement we have been told about" is a different statement from "the movement was zero".
+- **A writer whose only purpose is to make rows exist teaches every reader to treat existence as measurement.** A job inserted an empty `metric_snapshots` row per company per day so that "daily snapshots exist". Four separate repairs in this campaign were workarounds for it: the decomposition that returned a confident zero, the staleness flag computed from a row's existence, the readiness assessment that found no revenue, the mobile dashboard reporting a month in which nothing moved. Removing the writer was one commit; the four readers had each been corrected in isolation, none of them looking at why the row was there. **When two readers need the same workaround, the defect is upstream of both.**
+- **A write that lands nowhere and answers "done".** Two adapters wrote into today's snapshot with `UPDATE ... WHERE product_id = ? AND snapshot_date = ?` and returned `records_processed: N` with a green sync log when the row did not exist. An UPDATE keyed on a row somebody else creates is a dependency, and an unchecked `rowsAffected` is where it hides. Upsert, or check what you changed.
+- **Read the code a ticket points at before implementing the remediation it proposes.** Three tickets in one security audit asked for the wrong repair, because each described a control that looked real: hash this key (the key authenticated nothing — its reader had no caller), replace `unsafe-inline` with nonces (the policy named neither origin the product's own auth pages load from, so it blocked authentication outright), filter this consent on read (the consent cannot be granted at all, so nothing has written the table since the gate landed). Doing what each ticket said would have made a false claim more robust.
+- **"No defence exists" and "the defence is not applied here" are different findings.** An audit reported zero prompt-injection defence across every AI-ingesting surface. The layer had existed since Wave 1 and was wired at three boundaries; two others had never been connected to it. The first calls for design, the second for three imports.
+- **A green assertion about a dead code path is worse than no assertion.** Two tests were exercising things nothing ran: the CSP middleware that `index.ts` does not mount (five assertions describing headers no response carried, while the enforced policy forbade the product's own pages), and a portfolio key reader with no caller. Both read as coverage of the live path.
+- **A validation claim is a claim.** The checkpoint said "full suite green" from `vitest run tests/unit` for several cycles while `tests/simulation` — which `npm run check` runs and the unit path does not — had three standing failures. Every one was a fixture whose premise a correct earlier repair had invalidated, sitting red where nobody looked: the pulse fixture that never said whose 2am it meant, and two trust fixtures seeding decisions the FOUNDER made to prove what FOUNDRY had earned. Run the command the claim names.
+- **An identifier taken from a request is not a capability.** A route checked the founder owned `:id`, then passed `:integrationId` to a function that resolved the integration `WHERE id = ?`: two identifiers, one checked, and the unchecked one deciding which company's credentials were used and whose metrics were written. The ownership rule lived in the route and the row it governed was fetched two files away. Scope travels WITH the call — `runSync(id, { onBehalfOfProduct })` or `'scheduled'`, with no default — so the predicate lands on the query that loads the row.
+- **A control that could not run withdraws the permission it grants.** The voice judge's outage returned a full passing score, so an unreachable check SHIPPED the artifact it exists to hold back, while the neighbouring failure (an unparseable answer) fabricated a low score and blocked. Two failures of one kind, treated oppositely, and the permissive one is the one that reaches a customer. A check that did not happen is `unscored`, and `unscored` withdraws auto-execution.
+- **A reservation taken before an effect must be released when the effect does not happen.** The weekly communication cap has to count BEFORE the send or it cannot hold under concurrency — which makes the count a hold, not a fact. It was permanent: provider outages, missing senders of record and refusals that never touched the wire each spent a message from a real person's allowance, and three of them made that person uncontactable for the week having received nothing.
+- **An operator is not a customer, and the server decides which.** The cap that stops agents nagging a company's customer was applied to the founder, because every founder-bound send passes the founder's own address — so the daily briefing exhausted the budget and the next thing refused was "your card was declined". The fix is not a field the caller sets: a caller cannot be allowed to claim a bigger allowance, so the gateway asks the database whose address it is.
+- **A threshold must be anchored to the comparator that governs it.** "We are doubling the team to 12 people, on the premise that churn stays under 5%" recorded a threshold of 12 — the first number in the string — and the memory kernel then held the decision accountable to a belief the founder never stated. The number the comparator governs is the one that FOLLOWS it, adjacently; a sentence where nothing follows is one the parser cannot read, and saying nothing is the right answer.
+- **A gate that skips a shape cannot see the defect in that shape.** `check-select-columns` skipped every aliased query along with the JOINs, and the public API's broken list-customers endpoint was `FROM customer_intelligence ci` — one table, no ambiguity, three columns that do not exist, throwing on every request since it was written. A single-table SELECT is single-table whether or not it has an alias. When a gate carries an explicit exclusion, check what is actually hiding in it before trusting the count.
+- **A control the product calls the person's own must be one the person can exercise.** `preferences.max_channel` was honoured by the delivery policy, described in three modules as the founder's ceiling that "always wins", and written by nothing — so every founder sat permanently at the loudest rung. Grep for the WRITER of any preference a guard reads; a ceiling with no setter is a claim about a control, not a control.
+
+- **When code implements a term of art, check the term.** A non-participating liquidation preference is a FLOOR — the investor takes the greater of the preference and their converted shares — and `computeWaterfall` treated it as a ceiling, paying the preference and stopping. Every dollar above it went to the common holders, so the founder-facing exit model overstated founder proceeds by more the larger the exit: on the form's own placeholder cap table, $249.50M instead of $214.29M at a $250M exit. The error had one direction, towards the reader, which is the direction nobody questions. And where such choices interact — one investor converting frees their preference and enlarges the pool, flipping another's decision — the model has to run to a fixed point rather than decide each in isolation.
+- **A fixed table quoted as "market" is a claim about the world.** Five numbers per round were written into the source, never sampled, never dated, and every sentence built from them said "market standard" — to the founder, and to the model in a prompt that then repeated it back as fact. Foundry has no market data feed. A reference list is usable; calling it a measurement is not. Say which it is, in the text the founder reads, not only in the source.
+- **`?? OTHER_KEY` answers a different question under the original label.** `MARKET_BENCHMARKS[round] ?? MARKET_BENCHMARKS['seed']` printed seed's ranges as "market standard for series_c", from an unvalidated form field into a column with no CHECK. A lookup miss is an absence; substituting a neighbour's row keeps the label and swaps the subject. This is the same shape as the cohort percentile fallback and the "no data" concentration branch: **a default that keeps the sentence is worse than no sentence.**
+- **A name that means a different quantity is read as the name.** `total_dilution_pct` stored the investors' share of exit PROCEEDS and was rendered under a column headed "Dilution". Those coincide only when no preference bites, which is precisely when nobody is looking. Rename the column, not the heading: the heading is downstream of a hundred readers, and the next one will read the column name too.
+- **A writer nothing calls still satisfies a writer-check gate.** `agent_run_details` had `startRunRecord`, `completeRunRecord` and `failRunRecord`, all uncalled, so the whole Agent Transparency surface read an empty table forever — and `check-writerless-tables` passed, honestly, because it can see an INSERT in source and not whether anything reaches it. Module-level reachability does not help: the module WAS imported, by the page that read it. **Reachability at export level is the missing instrument**; until it exists, "which caller writes this table" is a question to ask by hand whenever a surface is empty in a way that should be impossible.
+- **The tenant-scope gate matches param NAMES and passes on a MENTION.** It inspects handlers whose path contains `:id` or `:productId`, and accepts the presence of one of its idiom strings anywhere in the body. `GET /agents/transparency/:agentName/run/:runId` was outside the pattern entirely, and its handler mentions `ctx.productId` twice for the layout while the lookup was `WHERE id = ?` — an unscoped cross-tenant read that the gate would have passed even if the param had been named `:id`. **A mention is not a use.** Read every read that takes an opaque id and ask what binds it to a company.
+- **An average is a claim about its denominator.** "Avg cost per run" divided total cost by every run, while a failed run records no cost at all — so a company whose agents failed half the time saw its per-run cost halved. The average is per COMPLETED run and the completed count is shown beside it. Same rule as every composite here: **a composite rests only on what it measured**, and the denominator is part of what it measured.
+
+- **A date compared in two formats is compared as text, and text has an opinion.** SQLite has no date type. `datetime('now')` and CURRENT_TIMESTAMP write `'YYYY-MM-DD HH:MM:SS'`; JavaScript `toISOString()` writes `'YYYY-MM-DDTHH:MM:SS.sssZ'`. At index 10 a space (0x20) sorts before 'T' (0x54), so a JavaScript bound against a SQLite-written column **excludes every row from the boundary DATE whatever its clock time** — a "trailing 7 days" window that counts six and a bit. It cost the founder's weekly outcome card (three counts, each losing a different slice, then divided into a percentage), the absence summary's latest-transition lookup, a playbook's `execution_budget_weekly` (a control on how often Foundry may act, systematically undercounting its own executions), and both ends of the AI P&L. **Ask SQLite for the bound** — `datetime('now', ?)` with `'-7 days'` — or bind a DATE-ONLY string, which is a prefix of both conventions and sorts correctly against either.
+- **One column, one clock.** Eleven timestamp columns were written BOTH ways by different paths: `decisions.decided_at` (the queue's approve path in ISO, the execution path in SQLite's format), `outbound_actions.approved_at`/`executed_at`, `integrations.updated_at`/`last_synced_at`, `integration_health.updated_at` — that one written both ways inside a single function. Ordering interleaves the paths wrongly, `MAX()` prefers whichever row JavaScript wrote, and a range comparison splits on which code path happened to write the row. The rule: a timestamp reaches the database in the DATABASE's format. Foundry's own "now" is `datetime('now')`; a caller's timestamp is `datetime(?)`, which converts what arrives and leaves NULL as NULL. When you find readers wrapping BOTH sides in `datetime()` to compare a column — as `development-observation.ts` did — that is the workaround, and the defect is at the writers.
+- **A scanner that reads SQL cannot see the JavaScript that fills it.** The mixed-writer lens flags a bare `?` as "unknown format", so it still reports four columns whose bound values are now correct by construction. That is why this one stays a reading tool: the gateable form of the rule — every timestamp bound passes through `datetime(?)` — is true-by-construction and mechanically checkable, but it needs 132 call sites moved first. Recorded here so the next reader knows the shape of the gate that is available, and its price.
+
+- **A mechanism that computes an answer and returns it has not acted on it.** `evaluateConditions` decided which lifecycle phases a company had reached, wrote an audit-log line saying so, and returned the list; the daily job logged the list. Nothing wrote `current_prompt`, so every company sat at phase 1 forever while four surfaces stated that phase as fact. **The gap between "computed" and "committed" is invisible in a code review of either half** — the evaluator looks complete and the caller looks like it is handling the result. Grep for the WRITER of any state a surface reports, the same way you grep for the writer of a preference a guard reads.
+- **`parseInt` on a key that is not a number decides an order.** `'2_5'` parses to 2, so a phase key `prompt_2_5` sorted equal to `prompt_2` and a completed phase rendered as not started. Where a sequence has names rather than numbers, the sequence is a LIST and belongs in one place — `PROMPT_ORDER` beside the conditions that use it — not re-derived by string surgery at each call site.
+- **A fallback that keeps rendering describes somebody by a state nobody put them in.** `PROMPT_DESCRIPTIONS[currentPrompt] ?? PROMPT_DESCRIPTIONS.prompt_1` would have told a company with an unrecognised phase that it is in Initial Audit and should run its first audit. An unrecognised value is a fact about the RECORD, and the page says that now.
+
+- **A capability described by its READER is a capability nobody has checked.** Cohort analysis has a page, an API endpoint, a per-channel breakdown, a latest-cohort summary and a deviation stressor — five readers, all tested — and not one writer for any customer company. It was listed on the pricing page and its upgrade panel promised retention curves, channel attribution and automatic stressors. **An upgrade page is the last place a capability should be described by what reads it.** When a feature's surfaces all read one table, grep for the INSERT before believing any of them.
+- **`ORDER BY <constant> DESC` is storage order wearing a ranking's clothes.** Beacon ranked acquisition channels by an activation rate that was the `DEFAULT 0` of a column with no writer, so eight channels came back in whatever order SQLite held them, under the heading "which channel activates best". Same family as the capped page with no ORDER BY, one step worse: there IS an order clause, and it sorts by a column that cannot vary.
+
+- **When the answer is ambiguous, refusing is an answer; picking is not.** Five routes resolved "the founder's company" with `LIMIT 1` and no ORDER BY and then acted — rotating an ingest token, generating a public share link, writing the week's plan, describing the founder to the network, setting the tone of every AI answer. A founder with one company has chosen unambiguously by having one; a founder with two has chosen nothing, and the honest response is to do nothing and say so. **The same shape appears wherever a per-founder function needs a per-company fact** — check for a selection before inventing one, and where the companies genuinely differ (two sectors), carry neither rather than one.
+- **A fallback whose result is discarded is worse than no fallback.** The share-link route ran a second query when the cookie was stale, ignored what it returned, and used the unresolved cookie value anyway — so the UPDATE matched nothing and the redirect looked like success. The code READS as a fallback; grep for the variable the fallback assigns and check somebody uses it.
+- **A visibility rule that is fixed in one place stays broken everywhere it was copied.** `getVisibleProducts` exists because "this used to be `getProductsByOwner`, so an invited co-founder saw nothing at all" — and the Fleet Observatory still had its own `WHERE owner_id = ?`. When a rule gets a canonical home, grep for the SHAPE it replaced, not just the function name.
+
+- **A suite run belongs to the tree it started on.** Editing `src/` while `npm run check` is running produces a green that corresponds to NEITHER tree — some files were read before the edit and some after. It happened again this cycle: two route files were changed mid-run, the run passed, and the result had to be discarded and re-run before the checkpoint could quote it. The rule is not "be careful": it is to start the run, then work on DOCUMENTS or READ code until it finishes. **THREE TIMES in this cycle, which makes the rule the wrong shape:** the real fix is not "be careful while it runs", it is to STOP STARTING A RUN AFTER EVERY BATCH. The suite takes twenty-two minutes; a batch takes five. Do two or three batches — each with its own unit tests and mutation checks — and then run the suite ONCE on the tree they produced. A run started at the wrong moment is twenty-two minutes bought and thrown away, and the third time it happened the run had to be killed.
+
+- **A vocabulary is a promise, and an API that accepts one it cannot honour is worse than one that refuses.** `POST /v1/webhooks` took any string as an event name; the `WebhookEvent` type listed ten and three were dispatched. Seven subscriptions could be created that nothing would ever match, each answered 201. The fix is not documentation: it is that the list of names and the set of `dispatchWebhook` call sites are the same thing, exported from one place and validated at the door. **The same question applies to every enum a request can name** — a plan, a scope, an agent, an event: can the system produce this value, or only accept it?
+- **A queue entry only exists for whoever reads the queue.** `POST /v1/agents/:name/run` inserted into `agent_initiative_queue` for any name, and `_processInitiatives` selects `WHERE agent_name = ?` during that agent's own run — so a row naming a non-agent is never read by anything, and the route answered "queued". When a write's only reader filters on a value the caller supplied, validate the value at the write.
+
+- **A rate is a number PER SOMETHING, and the something is usually the row spacing.** `estimateBaseline` divided consecutive `metric_snapshots` and named the result `monthlyGrowthMean`. Nothing enforces monthly snapshots — the table is keyed by DATE and the daily reporters are the common case — so the period of that rate was whatever cadence the company happened to use, and the simulator compounded it three times for "90 days". **When a series has timestamps, the interval is available; use it.** The same question applies to any `series[i] / series[i-1]`: what period is that, and does the consumer assume a different one?
+- **A window's ORDER decides which history you are extrapolating from.** `ORDER BY snapshot_date ASC LIMIT 24` on a two-year history is the company's first three weeks. `LIMIT` without thinking about direction is the capped-page defect in a new place: the cap is fine, the ORDER was the answer.
+
+- **A comparison down a newest-first array runs backwards.** `recent.every((r, i) => i === 0 || r <= recent[i - 1])` on rates ordered newest-first tests each rate against the one AFTER it in TIME, so "decelerating" was satisfied by growth that is speeding up. Whenever a series is sorted DESC, every neighbour comparison in it means the opposite of what it reads like. Sort ascending before comparing, or write the index arithmetic out loud in the comment.
+- **A rolling window compared with itself one row later shares almost all its data.** `signups_7d` and `support_volume_7d` are seven-day figures; consecutive daily snapshots overlap in six of seven days. "Support tickets up 50% from last period" between two such rows is not the event the sentence describes. Where a metric's name carries its window (`_7d`), the comparison interval has to be at least that window, or the reader has to be told what it actually was.
+
+- **`SELECT *` plus a column that does not exist is `undefined`, forever, silently.** `mrr_growth_pct` and `customer_count` have never been columns on `metric_snapshots`, and THREE separate consumers read them off a `SELECT *` row — the fundraising readiness score, the investor update, and (as `customer_count`) the M&A readiness score. Each produced "N/A" or zero for every company that has ever used it, and none of them ever threw. **A named-column SELECT would have raised on the first call.** Where a query says `SELECT *`, the property access IS the schema check, and TypeScript's `as number` makes it silent. When a number is always N/A, grep the schema for its column before looking anywhere else.
+
+- **A test that pins an EXPRESSION fails when a different defect in the same line is fixed.** The fraction-versus-percentage test guarded the right subject — growth must come from two snapshots of the LEVEL, not from a column that does not exist — by matching the literal `((now - then) / then) * 100`. When that line was corrected for the cadence defect, the test went red about a change that did not touch its subject. **Pin what the finding was about**: the two levels and the interval, not the arithmetic that combines them. Eighth instance of read-the-test-before-the-code in this campaign, and the first where the test was pinning the shape of a correct fix rather than a defect.
+
+- **A fixture pinned to a clock time is a flake waiting for the right hour.** The weekly-outcome test seeded a decision at `date('now','-7 days') 09:00:00` and asserted it fell inside a seven-day window whose edge is the INSTANT `datetime('now','-7 days')`. It passed every time it was run that night and failed on the 09:21 run twelve hours later. **The defect the test is about was date-shaped; the window is instant-shaped**, and the fixture has to satisfy both: seed at the END of the boundary date, which is inside the window for every clock time but the last second of a day and was outside it under the text comparison whatever the hour. Same discipline as the encryption tamper test that flipped a byte to a constant: a fixture that depends on when it runs is a mutant of itself.
+
+- **A number a MODEL supplies arrives in the units a model would choose.** Rate metrics are stored 0–1; a model asked for "the threshold" on churn writes 5. The founder's own sentence went through a parser that converted; the two model-facing producers passed the number straight through, and `0.05 < 5` holds forever — a belief that cannot be falsified. Normalise where the value is STORED, not at each producer, make the conversion idempotent so a producer that already converted is safe, and say the convention in the tool description so the model can write either form.
+- **A vocabulary enforced at one door is a vocabulary until somebody adds a second door.** `outcome_valence` is three values to four readers and had a check in none of them; `check-check-vocabularies` could not see it because the value arrives as a bound parameter rather than a literal. The route refuses now AND a trigger refuses — and the test had to cover both separately, because with the trigger in place, deleting the route's check left every case green. **Defence in depth is two mechanisms and therefore two tests**; one test passing proves only that one of them fired.
+
+- **A selector wider than its subject turns unrelated evidence into a verdict.** Development shadowing resolved one expectation against every development observation in its window, and comparison is exact event-type equality — so an observation of a DIFFERENT check classified as `deviated`, dominated the verdict, was shown to the founder citing a check they never predicted, and was counted as a wrong prediction when that responsibility asked for authority. The window is deliberately company-wide so a deviation cannot be hidden; the SUBJECT still has to come from the expectation. **Whenever a comparison is exact equality over a set, ask what else is in the set.**
+- **The database had been refusing the ordinary case all along, and only the unusual one was ever tested.** Every deviation was written as a `conflicting` claim, and migration 106 has always said a conflicting claim needs two sources to be in conflict. So one observation reporting something other than what was predicted — the commonest deviation there is — threw in the write of what Foundry had just learned. Only windows whose observations disagreed among themselves got through, which is why every existing test had two. **A conflict is between sources; a prediction reality falsified is a known result.**
+- **When a mechanism has a twin, diff them before designing the fix.** Both defects above were absent from `external-shadowing.ts`, the older sibling `development-shadowing.ts` was modelled on — which narrows to its metric field and writes `known` with the reasoning spelled out beside it. The later copy lost both. **A twin that already reasoned it through is stronger evidence than a fresh argument**, and finding one turns "is my fix right?" into "why did this copy diverge?".
+- **An owner's recorded decision has to reach every surface, not just the one it was built for.** `deliberately_not_done` keeps a responsibility out of what needs the founder in `absence-summary`, and the shadowing exceptions never learned it — so a responsibility the founder had explicitly retired went on producing "what differed while I watched" on the page they read daily. **When a decision gets a record, grep every reader of the thing it decides about**, not just the one that prompted it.
+- **An internal identity printed at the ownership boundary is complexity leaking outward.** The founder was shown `expected development_verified:schema-snapshot-freshness:passed`. Naming the identity families in a phrase function means two places know one format — safe only because a test builds each identity with its real constructor and asserts the phrase still recognises it. **Duplicated format knowledge is acceptable when a test IS the comparison; it is a defect when nothing compares the copies.**
+
+- **A BACKTICK INSIDE A SQL TEMPLATE LITERAL ENDS THE STRING.** Three times in one cycle, each time in a SQL comment naming another identifier the way prose does. TypeScript reports it as a syntax error two lines later, or — worse, when the broken template still parses — libSQL reports `failed to downcast any to string` at `Database.prepare`, which reads like a bound-parameter problem and sends you looking at the arguments. **In SQL comments, name things in plain words.** The prose convention that is right everywhere else in this repository is the one that breaks here.
+- **A count with no date is not a record of watching.** `getAssistingCandidates` told the founder "I've been watching this and have one check to show for it" at the moment they decide whether to grant authority, and that sentence reads identically whether the check arrived yesterday or eight months ago. The expiry that would have prevented it is written, commented and tested, and unreachable: neither founder-facing door supplies `validUntil`, so every expectation a founder can create is open-ended and a late reading still resolves a stale prediction. **Where a bound cannot be invented honestly, state the fact and let the owner judge** — a default window here would be Foundry deciding how fresh is fresh at the exact boundary where it asks for more authority.
+- **A derived date must describe the same set as the count beside it.** The last-watched date reuses the comparisons predicate in full, including the grounding claim's validity. A date drawn from a wider set would report watching the boundary itself refuses to count.
+- **A negative claim and a positive one take opposite sides of an ambiguity.** The resolution path excludes a reading whose order against the expectation is ambiguous, so a prediction is never credited by evidence that may predate it. The silent-watch card asserts the negative — nothing has come in since you asked — so the same principle flips the inequality: at-or-after suppresses the card, because an absence may only be asserted where the evidence supports it. **Whenever a query's answer is "nothing", check which way its boundary conditions should fall; they are not the ones a positive query would use.**
+- **A guard that only fires in an unreachable path is not a guard, and neither half of that is obvious from either half.** The expectation-expiry logic looks complete where it is written and the two doors look complete where they are written; only asking "what supplies this optional argument?" connects them. **For every optional parameter that weakens a control when omitted, grep for a production caller that supplies it.**
+- **Filter by disposition where the record is about the responsibility; do not where it is about an effect that already reached the world.** Retiring a responsibility closes a question going forward — it does not unask "did that message work?" about an email a real person received. This is why the shadowing exceptions were a defect and the unresolved and disputed effects are not, and it is the line to check before applying the same filter anywhere else.
+
+- **A guard's reason for existing is not the same as its full effect.** `submitFounderFact` refuses to restate a grounded fact, and that refusal is what stops a replayed submission volunteering into a predicate nothing consumes. Its other effect was that a company fact was write-once: no surface showed the founder what Foundry believed, and none let them change it, while Foundry went on asking for authority on the strength of it. **When a guard is justified by one hazard, ask what else it forecloses** — the answer is usually written nowhere, because nobody chose it.
+- **The database refused the first design, and it was right.** A correction written as a `founder_assertion` was refused: migration 125 requires one to name an OPEN request, which is exactly what makes a replayed answer inert. Reopening the answered request would have put the question back in front of the founder, undoing "Foundry does not ask again". **A trigger that blocks your design is an argument, not an obstacle** — the correction became its own guarded source instead, with an identical claim shape and a provenance that says which.
+- **Mutation testing caught a check no test could reach.** Deleting "the predicate must be a fact this capability requires" from the correction path left all fifteen tests green, because the migration refuses corrections to predicates nothing has stated and every test case had nothing stated. A predicate that HAS a claim gets past that guard — and responsibilities carry claims that are not understanding facts, including the grounding claim under a shadow expectation. Without the check, the correction form would have let a founder rewrite the evidence an expectation rests on. **When a mutation survives, the question is not "is the check redundant" but "which input reaches only this check".**
+- **Two guards covering overlapping cases hide each other.** The service check and the migration guard both refuse the easy inputs, so either one alone looks sufficient and a test of either passes. Defence in depth needs a test per mechanism AND a case that only one of them catches.
+
+- **Copying a neighbour's scope without re-deriving whether its reason applies.** The silent-watch card was written by copying the darkened query beside it, join and all. That join is right THERE because only a declared channel can be revoked — a reason that does not carry to silence, since any channel can go quiet. Migration 135 forbids the twelve built-in metric keys from that table by name, so the join could never match and the card was structurally empty for every company using the standard vocabulary. **When you copy a query, copy its justification too and check it still holds** — the shape survives the move and the reason often does not.
+- **A per-item handler that logs and continues makes the job succeed.** Each company's slice of an institution loop is wrapped so one product never blocks another; the job then resolves and records success. A company whose loops threw on every run read a page saying nothing had stopped. Worse than recording nothing: `stoppedRunning` needs `last_success_at` to go stale, and the successful run refreshes it, so **the compensating control is defeated by the same write**. Whenever resilience is implemented as catch-and-continue, ask what now reports success that should not.
+- **Let the code's own judgement decide what counts as a failure.** A slice failed if something in it was already logged as an ERROR — which excludes the handler whose comment says "not yet sufficient... is not an error". Inventing a second definition would have marked every company permanently failing.
+- **A verdict a detector cannot emit is a refusal a gate cannot make.** `support-drafting-v1` declared eleven catastrophic failures, listed eleven, and emitted ten. The missing one was the founder's own stated boundary, so the contract gating model-written customer text could not refuse the single failure that is the owner saying "not this". The file's own header names the property it was violating. **For any closed vocabulary of verdicts, assert from the source that every member is reachable** — that test is cheap and it is the only thing standing between a vocabulary and a decoration.
+- **Strengthening a frozen contract silently is the drift the freeze exists to prevent.** `mustExercise` requires corpus coverage of every score dimension and of no catastrophic kind, so a corpus can pass having never tested the discriminator. That is a real gap and it is a v2 decision — recorded rather than taken, under the same version string that promised not to move.
+- **A multi-agent sweep is worth its cost when you verify before acting.** Five lenses, 33 agents, eight findings, two survived both adversarial lenses — and both were real. Of the refutations, three were correct only because the defect had been fixed mid-run, and one finding was directionally right but pointed a level too low (the query was correctly scoped; the stored SET was wrong). **Every finding was re-derived against the source before any edit**; the agents were worth more as a search than as a judgement.
+
+- **A CAPABILITY DESCRIBED BY ITS READERS IS A CAPABILITY NOBODY HAS CHECKED — and the pricing page is where it costs money.** Three paid bullets sold pipelines whose last step never ran: the remediation engine generated fixes and never opened a pull request (`openRemediationPR`, no caller); `golden_suite` had one writer with no caller and five readers, including a regression gate that therefore returned `passed: true` for every company forever; and `deal_rooms` had no INSERT, no SELECT, no service and no route — the gate suite cites it BY NAME as the canonical example of a table no code reaches. **Grep for the writer, then for the writer's CALLER.** A function that performs the claim is not the same as a function anything invokes.
+- **A privacy statement can name the one service that is not in the path.** The copy said prompts go to Anthropic under terms that forbid training; `api.anthropic.com` appears nowhere in the repository, `getBaseUrl()` returns OpenRouter unconditionally, and voice replies go to OpenAI. **The contractual assertion was removed rather than rewritten**: Foundry sends no data-policy header, so it holds no evidence of a no-training term with the vendors actually in the path, and restating the promise under a different name would have repeated the defect at a higher cost. What replaces it is `OWNER_DECISIONS_PENDING` §15 — the sub-processor choice, whether to obtain and CONFIGURE a term rather than assert one, and whether customers must be told.
+- **Correcting a false claim is not the same as building the thing.** The remedy for selling unearned maturity is to stop selling it. Wiring `openRemediationPR` would put Foundry's commits in a customer's repository, and a golden lesson injected into every future session has real failure modes; both stayed absent and left the page.
+- **The claims gate now verifies capabilities, not only prices** — each source's CONTENT is conditional on whether the performing code has a caller, so restoring a claim the product no longer supports fails on its own words. Proven for each by restoring the old copy and watching it fail. A price is checked against a constant; a capability has to be checked against whether its last step runs.
+- **Verify every agent finding against the source before acting.** Of eight paid-claim findings, four were real, one was already fixed, and three were wrong or misdirected: "Gate 0 actions execute themselves" IS backed (the playbook engine reaches the gateway), "7 dimensions" IS backed (the writer computes seven; the complaint was about which page a nav entry opens), and my own crude vocabulary scanner produced false positives on `Record<Union, …>` keys. **The agents were worth far more as a search than as a judgement.**
+
+- **A FUNCTION-LEVEL REACHABILITY GATE IS NOT CLEANLY MECHANIZABLE HERE, AND THIS IS THE MEASUREMENT.** The defect that cost three paid claims was an unreachable FUNCTION inside a reachable module, which `check-reachability.mjs` cannot see. Measured directly: 394 exported functions in `src/` have no caller in another file, which is almost all noise — every job function is referenced only as a value in `JOB_REGISTRY`. Narrowing to "tables whose every writing function has no caller elsewhere" gives 30, still with false positives of two distinct kinds: class methods are misattributed to the nearest preceding `export function` (`golden_suite` is blamed on `clampConfidence`), and a function called from its own file reads as dead (`evaluateInstitutionalJudgment` is called at line 145 of its own module). **Both would need a real parser, not a scanner.** Recorded so the next reader knows the shape of the gate that is available and its price — the same conclusion the mixed-writer lens reached, for the same reason.
+- **The table gates are coherent and the dead schema is not a hole in them.** `check-writerless-tables` fires only when code READS a table nothing writes, which is exactly the harmful direction; a table nothing writes AND nothing reads is dead weight, not a defect. `deal_rooms` passes both correctly. The harm was never the table — it was the pricing page selling it, which is a claims question and is gated there now.
+
+- **"CORRECT-LOOKING CODE, WRONG BYTES, NO TEST" IS A LENS, AND HERE IS ITS COMPLETE SWEEP.** The static route served every PNG through a UTF-8 decode for its whole life because `src/index.ts` starts a listener at module scope, so no test could import it. That prompted the general question — where else does Foundry serialise something for another program to interpret? Four surfaces, two defects: **binary** (found: every PNG corrupt, PWA uninstallable) and **CSV** (found: no formula neutralisation on two export paths carrying outside content). **HTML** is clean — all eight `raw()` sites interpolate computed numbers or constants, and the timeline SVG's only text nodes are an axis value and a month name. **Email** is clean — every `html:` body is founder-authored or generated, and no customer-written content reaches a founder's inbox as markup.
+- **Untested route surface is a fact, not a finding.** 372 handlers; a large number of route modules no test imports. That measurement is too diffuse to act on and writing 372 tests is not the move — the yield came from narrowing to a failure MODE (wrong bytes) rather than a coverage gap. **Pick the mode, then find the surfaces; not the other way round.**
+- **A module that cannot be imported without side effects cannot be tested, and will not be.** `src/index.ts` calls `serve()` at module scope. That single fact is why the static route went unexercised for its entire life, and the fix was to move the handler somewhere importable rather than to become the first test that binds a port. **When a defect survives a long time, ask what made it untestable before asking who missed it.**
+
+- **A COLUMN NOTHING WRITES, READ BY A SURFACE, IS THE MIRROR OF THE WRITE-ONLY GATE — AND THERE IS NO GATE FOR IT.** `golden_suite_size` and `total_evolution_cycles` are both `DEFAULT 0`, incremented by nothing, benchmarked across companies as columns of zeroes and reported to investors. Measured the population: of 150 `DEFAULT 0` numeric columns the code references, ~70 have no `SET`-style writer — but the scan has confirmed false positives (`remediation_prs.wisdom_patterns_used` is written through an INSERT column list, which the pattern cannot see), and distinguishing "inserted with a computed value" from "inserted as its own default" needs more than a regex. **Not a gate; a lead list.** It rediscovers the known cohort-analysis defect unprompted, which is some evidence the signal is real even where the tool is blunt.
+- **A METRIC REMOVED FROM A SET IS A REASON TO CHECK THE REST OF THE SET.** `golden_suite_size` and `total_evolution_cycles` sat in the same four-metric benchmark, in the same function, with the same defect — and the first fix took one of them. The neighbours rule was already written down here from the custom-metrics cap, and it still had to be learned again a commit later.
+- **NO COMPANY CAN REACH `optimizing`, AND `scaling` HAS NO TRANSITION AT ALL.** The lifecycle machine gates `operating -> optimizing` on `totalEvoCycles >= 20`, summed from a column nothing increments, and `/agents/evolve` shows the founder a five-step progression whose last two steps cannot occur. Recorded rather than fixed: wiring a counter changes when companies transition, which changes founder-facing guidance and the per-stage compliance advice in `shield.ts`; deriving one means inventing what counts as a cycle, since `applyConfigChange` writes per config change rather than per cycle. **An owner's decision, not a cleanup's.**
+- **WRITING A SCANNER ASSERTION IS ITSELF ERROR-PRONE.** Getting one premise assertion right took three attempts: a comment naming the function counted as a call, then a string literal did, then a regex matched `WHERE product_id=?` on a SELECT line. **Check what an assertion MATCHED, not whether it passed** — the failure mode of a test that reads source is the same one it is written to catch.
+
+- **A SUB-APP'S `use('*')` IS SCOPED TO ITS MOUNT PATH, AND FIVE ROUTERS WERE MOUNTED AT `/`.** Hono merges a mounted router's middleware under the mount path, so `roiDashboard.use('*', requireCompanyCapability('can_view_financials'))` applied a financial check to **every path in the application**. Three surfaces were dead of it: the whole REST API answered `{"error":"Unauthorized"}` to every request with a valid key, and both the transcript and voice-reply webhooks did the same. Each is alive now and each has a test that drives the real app; `boardPacket` needed nothing, because it is mounted at `/board` and was therefore already scoped — the shape the others should have had.
+- **OWNERS ARE STRUCTURALLY EXEMPT FROM CAPABILITY CHECKS, WHICH IS WHY THIS SURVIVED.** `memberMay` short-circuits true for the product owner and `can_view_financials` defaults TRUE for members, so the only callers who could see the damage were the ones with no session at all — machine-facing integrations. **When a check has a class of caller it never refuses, that class cannot be your detector.**
+- **THE MOUNTING IS WHERE THE TRUTH LIVES, AND UNIT TESTS THAT MOUNT A ROUTER ALONE CANNOT SEE IT.** Every test that mounts `apiV1` on a bare Hono app passed throughout. `apiV1` alone answers 200; with one root-mounted router above it, 401. This is the static-asset defect in another register, and both were invisible until `src/index.ts` stopped starting a server at import.
+- **FIVE TIMES IN ONE DAY THE CHECKING MECHANISM WAS THE THING THAT WAS WRONG.** A guard scoped to everything; a scanner that recognised one guard shape and reported thirteen guarded routes as unguarded once the shape changed; a route population narrower than its test's name; two of my own planted-defect probes passing for the wrong reason (one inside the guarded prefix, one whose body slice swallowed the guard below it); and a permission test pinning the literal `use('*', …)` — defending the very defect it was written to prevent. **Verify a check by asking what it does when the thing it guards against actually happens, and check what it MATCHED rather than whether it passed.**
+
+- **THE ROUTE SURFACE IS NOW HELD BY SEVEN INVARIANTS, AND THE LAST ONE HOLDS UP THE OTHERS.** No mutating route answers a stranger; no readable route errors for one and the public set is exactly thirteen paths; no router mounted at `/` guards everything; a real API key works through the real app; every declared route is registered at its declared path; every registered route is declared; and the population itself resolves every mount prefix. **Each was shown failing before it was trusted.** They exist at all because `src/index.ts` stopped starting a server at import — every one of these questions was unaskable while importing the app bound a port.
+- **A ROUTE POPULATION HAS TWO WAYS TO BE WRONG, AND THEY NEED DIFFERENT QUESTIONS.** "Every declared route is registered" catches a population that is WRONG — it found `agentRoutes` mounted at `/agents` being probed at `/`, twenty-seven routes checked at doors that do not exist. "Every registered route is declared" catches a population that is INCOMPLETE — it found five routes declared in `index.ts` rather than in a router, one of them `POST /webhooks/stripe`, mutating and sessionless and never probed by anything. **Nothing was broken there and nothing was checking; those are different facts.**
+- **A STATUS CODE CANNOT TELL YOU WHETHER A ROUTE EXISTS.** "475 declared routes, zero unanswered" was claimed from an HTTP probe treating non-404 as proof of existence — but authentication answers 401 before routing resolves, so an unknown path under a guarded prefix is indistinguishable from a real one. A response is the product of routing AND middleware AND handler; when a layer answers early you cannot tell which one did. **Read the router's own table when the question is about routing.**
+- **A PLANTED DEFECT HAS TO BE PLANTED WHERE THE CHECK IS BLIND.** Twice today a plant passed for a good reason and had to be moved before it reached the assertion: one route landed inside the guarded prefix it was meant to escape, another in the very file the population had just learned to read. A plant that passes is not automatically a gap in the check.
+
+- **"TOLD A LOG" IS THE MOST FREQUENT DEFECT SHAPE IN THIS CAMPAIGN, AND THE JOB POPULATION IS NOW CLOSED.** Three instances today: the schema-snapshot drift, the per-company loop failures, and an erasure whose due date passed. The bounded check is done — exactly four per-company `logger.error` sites exist in the job registry, all four in the two institution loops, and all four now feed the per-company health record. **When a handler's own comment explains why something must be visible, check where it actually goes.**
+- **THIRTY-NINE JOBS, AND THE "PART OF ME HAS STOPPED" CARD WATCHES TWO — WHICH IS DEFENSIBLE AND WORTH KNOWING.** Those two are the loops that write the institutional state The Letter reads. Most of the rest are platform-level rather than company-facing, and The Letter is largely computed live rather than read from job output, which is why a stopped job does not silently staleth the page. The one company-facing exception found was `data_deletion_processor`, and it is handled at its own surface rather than by widening the card: a founder does not need to know a job's name, they need to know their data is still here.
+
+- **A DOCUMENT THAT SAYS "LIVE" IS MAKING A CLAIM ABOUT PRODUCTION, AND THIS ONE WAS WRONG FOR AS LONG AS THE ROW EXISTED.** The Public API row described one issuer, scopes, expiry, revocation and a wildcard that had been removed — all true, all unreachable, because no request ever got past the middleware. Everything a reader could check was accurate and the one thing only a request could check was broken. **The evidence for "live" is a request that succeeded, not a description of the design.**
+- **AN INTEGRATION CAN BE DEAD WHILE ITS MANUAL PATH WORKS, WHICH IS THE FOUNDER DOING THE MACHINE'S JOB.** The transcript webhooks were shadowed by the same defect, so the only way a transcript reached `signals-multimodal` was a founder pasting it into the dashboard by hand. The page was never empty, which is exactly why nothing looked wrong — and the directive's test is not "does the surface have data" but "how much of the company is the founder personally operating".
+
+- **`ps` FOR VITEST IS NOT "NO SUITE IS RUNNING", AND THE FALSE FAILURE IT PRODUCES NAMES REAL FILES.** The rule recorded earlier — verify with `ps` before starting a suite — is not sufficient: `npm run check` spends minutes in gate scripts before vitest is ever spawned, so a running check is invisible to that test between phases. Started one anyway, and it reported eleven columns across five files as non-existent, closing with "These throw at runtime. On a route, that is a 500 for every caller." Every file named was real and tracked. Run alone on a quiet tree, the whole `lint:columns` chain passes — twenty-five checks, exit 0. **Check for the check itself, not the phase that happens to be running — and bracket the pattern, because `pgrep -f` reads the whole command line including your own.** The plain form matches the shell running it and reports a busy tree forever; the bracketed form works only if the plain string appears nowhere else in the same command, which it did the first time this was written down.
+- **A ROLLBACK CAN LAND BETWEEN A PUSH AND THE NEXT COMMIT.** `c73e619` pushed cleanly; the next commit's parent was `0e85a11`, and the remote was 272 ahead. The recovery rule held — fetch, compare against `FETCH_HEAD`, reset, and RE-VERIFY every fact stated from the stale tree before restating it — but the check that catches it belongs before the first edit of a turn, not at the push. The re-verification mattered: the document row edited on the stale tree was a different, much shorter row than the real one.
+
+- **THE PRIMARY SENSE WAS NEVER SHADOWED, WHICH IS THE REASSURING HALF OF THE MOUNTING DEFECT.** `/ingest` — how a company's own systems post its numbers — is mounted at line 216, well above the first router that was applying its guard to everything at 463. The three surfaces that died were the REST API and two webhooks; the route by which a company reports its own reality was always reachable.
+- **A SENSE THAT FEEDS A PAGE IS NOT A SENSE THE INSTITUTION HAS.** Transcripts arrive, are analysed, and land in `call_transcripts`, read by `signals-multimodal`. `transcripts.ts` writes no `signal_events` at all, so nothing a meeting reveals can reach responsibility discovery, an expectation, or a judgment. Wiring it would mean deciding what a transcript MEANS — which obligation kind a competitor mention or a complaint amounts to — and `discovery.ts` admits only evidence whose operational responsibility the company stated explicitly, because "Foundry does not paraphrase the company back to itself". **Not a cleanup's decision, and recorded rather than taken.**
+- **A LENS THAT FINDS AUTOMATIC-VERSUS-MANUAL PAIRS HAS A BLIND SPOT WORTH KNOWING.** Looking for tables written by both a dashboard route and a webhook/job found three — `metric_snapshots`, `weekly_plans`, `integrations` — and none defective. It did NOT find the transcript case, which is the one that motivated it, because both paths call one shared `ingestTranscript` and the table therefore has a single writing FILE. **File-level writer analysis cannot see a shared writer with two callers.**

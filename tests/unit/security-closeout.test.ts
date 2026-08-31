@@ -13,7 +13,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { createApiKey } from '../../src/services/rbac/permissions.js';
+import { issueApiKey } from '../../src/services/api/api-key-issuance.js';
 
 let app: Hono;
 let rawApiKey: string;
@@ -32,7 +32,17 @@ beforeAll(async () => {
   await query(
     "INSERT INTO products (id, name, owner_id, status, ingest_token) VALUES ('sc_p','SecCo','sc_f','active','ingtok_secco_12345')", [],
   );
-  ({ key: rawApiKey } = await createApiKey('sc_p', 'sc_f', 'test', ['transcripts']));
+  // MINTED THROUGH THE DOOR THE PRODUCT USES, with a scope the routes enforce.
+  // This used to call `rbac/permissions.ts`'s own `createApiKey` with the scope
+  // `'transcripts'` — a string in no closed set, demanded by no route, and
+  // therefore never checked by anything. It "worked" because the transcript
+  // webhook checked no scope at all, which is the defect this fixture was
+  // quietly resting on.
+  const issued = await issueApiKey({
+    productId: 'sc_p', founderId: 'sc_f', label: 'test', scopes: ['agents:write'],
+  });
+  if ('refused' in issued) throw new Error(`key not issued: ${issued.refused}`);
+  rawApiKey = issued.key;
 
   const { transcriptWebhooks } = await import('../../src/routes/api/webhooks/transcripts.js');
   const { voiceReplyWebhook } = await import('../../src/routes/api/webhooks/voice-reply.js');
@@ -90,10 +100,14 @@ describe('public ingest refuses poison', () => {
   it('accepts a sane payload', async () => {
     const res = await json(T, { mrr: 1200, churn_rate: 0.04, signups_7d: 12, nps: 40 });
     expect(res.status).toBe(200);
-    const snap = (await query("SELECT churn_rate, new_mrr_cents FROM metric_snapshots WHERE product_id='sc_p'", []))
+    const snap = (await query("SELECT churn_rate, mrr_cents FROM metric_snapshots WHERE product_id='sc_p'", []))
       .rows[0] as Record<string, number>;
     expect(Number(snap.churn_rate)).toBe(0.04);
-    expect(Number(snap.new_mrr_cents)).toBe(120000);
+    // `mrr` means the level and lands in `mrr_cents`. It used to land in
+    // `new_mrr_cents`, which means new business won this period — see
+    // `mrr-the-level-and-mrr-the-movement.test.ts`. What this test is for is
+    // unchanged: a sane payload is accepted and stored as sent.
+    expect(Number(snap.mrr_cents)).toBe(120000);
   });
 
   it('refuses Infinity, out-of-range rates, negative counts, absurd NPS', async () => {
@@ -125,6 +139,10 @@ describe('P2: investor tokens hashed at rest, dead links removed', () => {
     dash.use('*', async (c, next) => {
       c.set('founder' as never, { id: 'sc_f', email: 'sc@t.co', tier: 'investor_ready' } as never);
       c.set('csrfToken' as never, 't' as never);
+      // Investor material is financial, so the router asks
+      // `can_view_financials` — which needs to know WHICH company. sc_f owns
+      // sc_p, and an owner holds every company capability.
+      c.set('product' as never, { id: 'sc_p' } as never);
       await next();
     });
     dash.route('/', investorRoutes);

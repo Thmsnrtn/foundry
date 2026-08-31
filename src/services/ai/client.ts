@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
 import { log } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
-import { query } from '../../db/client.js';
+import { operatingProduct, query } from '../../db/client.js';
 import { finishReservation, reserveSpend, type SpendReservation } from './spend-ledger.js';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -115,6 +115,99 @@ export function computeCostCents(model: AIModel | string, inputTokens: number, o
   return inputCostCents + outputCostCents;
 }
 
+/**
+ * WHO IS THIS CALL FOR?
+ *
+ * A model call is either work for one company or work for the institution
+ * itself. There is no third case, and there is no "we did not say".
+ *
+ * `productId` used to be the fourth, optional argument, so omitting it meant
+ * BOTH "this is institutional" and "somebody forgot" — fifty-five of a hundred
+ * and four call sites had forgotten, and the resulting spend was bounded only
+ * by the global ceiling. Omission cannot be allowed to carry meaning when the
+ * two meanings differ by an unbounded amount of money.
+ *
+ * The subject is now required at the type boundary, and institutional calls say
+ * so out loud with a reason a reader can check.
+ */
+export interface InstitutionSpend {
+  readonly institutionReason: string;
+}
+
+/** Declare a model call as the institution's own, with the reason it has no
+ * company to charge. The reason is not decoration: it is what a reviewer reads
+ * to decide whether this really is institutional or just unattributed. */
+export function institutionSpend(reason: string): InstitutionSpend {
+  return { institutionReason: reason };
+}
+
+/** A company id, or an explicit institutional declaration. Never undefined. */
+export type SpendSubject = string | InstitutionSpend;
+
+function subjectProductId(subject: SpendSubject): string | undefined {
+  return typeof subject === 'string' ? subject : undefined;
+}
+
+/** Refuse before anything is reserved or dispatched. */
+async function refuseIfNotEntitled(productId: string | undefined): Promise<void> {
+  if (!productId) return;
+  const notActing = await companyMayIncurCost(productId);
+  if (notActing) throw new NotEntitledError(productId, notActing);
+}
+
+/** Raised when the company is not entitled to have money spent on it. Named,
+ * so a caller can tell "we are not doing this" from "the provider failed". */
+export class NotEntitledError extends Error {
+  constructor(productId: string, state: string) {
+    super(`AI spend refused: company ${productId} is ${state}`);
+    this.name = 'NotEntitledError';
+  }
+}
+
+/**
+ * Is this company one Foundry is currently operating?
+ *
+ * The owner's decision is that an unpaid account is read-only: no spend, no
+ * outward effects. The outbound gateway enforces the second half and the job
+ * work-lists enforce most of the first, but an interactive dashboard request
+ * reaches a model directly — so the rule is checked here too, at the one place
+ * every model call passes through.
+ *
+ * An UNKNOWN product does not refuse. This is an entitlement check, not an
+ * authorization check: refusing an id that names no company would turn a
+ * missing row into a silent outage, and `authorizeSpend` already fails on one
+ * whose owner cannot be resolved.
+ */
+async function companyMayIncurCost(productId: string): Promise<string | null> {
+  try {
+    // THE DECISION COMES FROM THE CANONICAL PREDICATE; the columns are read
+    // only to say WHY. This used to test status and scp_status directly, which
+    // was complete until migration 145 gave commercial entitlement its own
+    // field — and then the one check enforcing "an unpaid account spends
+    // nothing" stopped seeing a cancelled subscription. A hand-copied fragment
+    // of a rule goes stale the moment the rule grows another axis.
+    const res = await query(
+      `SELECT COALESCE(status,'active') AS s,
+              COALESCE(scp_status,'active') AS scp,
+              entitlement_paused_at AS billing_paused,
+              erasure_scheduled_at AS erasing,
+              CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating
+         FROM products WHERE id = ?`, [productId]);
+    const row = res.rows[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    if (Number(row.operating) === 1) return null;
+    if (String(row.s) !== 'active') return `archived (${String(row.s)})`;
+    if (row.erasing != null) return 'scheduled for deletion';
+    if (row.billing_paused != null) return 'unentitled';
+    return String(row.scp);
+  } catch (err) {
+    // A ceiling that fails open on a DB error is the existing posture in this
+    // file, and an entitlement check is not a safety boundary — the gateway is.
+    log.warn('ai_spend.entitlement_lookup_failed', { productId, error: (err as Error).message });
+    return null;
+  }
+}
+
 async function authorizeSpend(
   productId: string | undefined,
   model: AIModel | string,
@@ -213,7 +306,10 @@ interface OpenRouterResponse {
 // events, messages, scratchpad, date). The client marks everything up to the
 // sentinel with Anthropic prompt caching (cache_control: ephemeral), which
 // OpenRouter passes through — a 60–90% input-cost cut on repeated agent runs.
-export const CACHE_BREAKPOINT = ' __FOUNDRY_CACHE_BREAKPOINT__ ';
+// The delimiters are NUL, escaped rather than written as raw bytes: a raw
+// NUL in the first 8000 bytes of a file makes git call the whole file binary
+// and print "Binary files differ" instead of a diff, and makes grep skip it.
+export const CACHE_BREAKPOINT = '\u0000__FOUNDRY_CACHE_BREAKPOINT__\u0000';
 
 /**
  * Build the system message content. When the prompt contains a cache
@@ -240,11 +336,19 @@ function buildSystemMessageContent(
 /**
  * Make an LLM call via OpenRouter with cost ceiling, timeout, and retry.
  */
-export async function callClaude(config: AICallConfig & { productId?: string }): Promise<AIResponse> {
+export async function callClaude(
+  config: AICallConfig & { subject: SpendSubject },
+): Promise<AIResponse> {
+  const productId = subjectProductId(config.subject);
+  // BEFORE the key and before the reservation. Refusing to spend must not
+  // depend on whether a provider is configured, and a reservation taken and
+  // then abandoned by a later throw sits as 'reserved' until it expires at the
+  // full authorized amount.
+  await refuseIfNotEntitled(productId);
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const reservation = await authorizeSpend(
-    config.productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
+    productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
   );
   const startedAt = Date.now();
   let lastError: Error | null = null;
@@ -296,7 +400,7 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
 
       log.info('ai_call.complete', {
         model: config.model,
-        productId: config.productId,
+        productId,
         attempt,
         durationMs: Date.now() - startedAt,
         inputTokens: data.usage?.prompt_tokens ?? 0,
@@ -321,10 +425,10 @@ export async function callClaude(config: AICallConfig & { productId?: string }):
         await finishReservation(reservation, { kind: 'released' });
         log.error('ai_call.failed_non_retryable', lastError, {
           model: config.model,
-          productId: config.productId,
+          productId,
           status,
         });
-        reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { status } });
+        reportError(lastError, { source: 'ai_client', productId, meta: { status } });
         throw lastError;
       }
 
@@ -360,9 +464,9 @@ export async function callOpus(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 8192,
-  productId?: string,
+  subject: SpendSubject,
 ): Promise<AIResponse> {
-  return callClaude({ model: MODELS.OPUS, maxTokens, systemPrompt, userPrompt, productId });
+  return callClaude({ model: MODELS.OPUS, maxTokens, systemPrompt, userPrompt, subject });
 }
 
 /**
@@ -372,9 +476,9 @@ export async function callSonnet(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 4096,
-  productId?: string,
+  subject: SpendSubject,
 ): Promise<AIResponse> {
-  return callClaude({ model: MODELS.SONNET, maxTokens, systemPrompt, userPrompt, productId });
+  return callClaude({ model: MODELS.SONNET, maxTokens, systemPrompt, userPrompt, subject });
 }
 
 /**
@@ -385,9 +489,9 @@ export async function callHaiku(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number = 1024,
-  productId?: string,
+  subject: SpendSubject,
 ): Promise<AIResponse> {
-  return callClaude({ model: MODELS.HAIKU, maxTokens, systemPrompt, userPrompt, productId });
+  return callClaude({ model: MODELS.HAIKU, maxTokens, systemPrompt, userPrompt, subject });
 }
 
 /**
@@ -400,6 +504,7 @@ export async function callClaudeMultiTurn(
   useOpus: boolean = false,
   productId?: string,
 ): Promise<AIResponse> {
+  await refuseIfNotEntitled(productId);
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const model = useOpus ? MODELS.OPUS : MODELS.SONNET;

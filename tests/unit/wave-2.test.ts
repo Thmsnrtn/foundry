@@ -24,6 +24,7 @@ vi.mock('../../src/services/ai/client.js', () => ({
 }));
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import {
   submitNps,
   submitRejectionReason,
@@ -41,59 +42,11 @@ import { extractDNAFromAssets } from '../../src/services/wisdom/dna-autofill.js'
 let founderId: string;
 let productId: string;
 
-async function setupSchema(): Promise<void> {
-  await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      growth_stage TEXT,
-      market_category TEXT,
-      sector_profile TEXT,
-      github_repo_url TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS product_dna (
-      product_id TEXT PRIMARY KEY,
-      icp_description TEXT,
-      positioning_statement TEXT,
-      primary_objection TEXT
-    );
-    CREATE TABLE IF NOT EXISTS audit_scores (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      composite REAL,
-      verdict TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS integrations (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      status TEXT
-    );
-    CREATE TABLE IF NOT EXISTS competitors (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL
-    );
-  `);
-  await executeRaw(
-    readFileSync(
-      resolve(__dirname, '../../src/db/migrations/070_weekend_mode_and_feedback.sql'),
-      'utf-8'
-    )
-  );
-}
-
 beforeAll(async () => {
-  await setupSchema();
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
 });
 
 beforeEach(async () => {
@@ -245,11 +198,11 @@ describe('shippability', () => {
       [nanoid(), productId]
     );
     await query(
-      `INSERT INTO competitors (id, product_id) VALUES (?, ?), (?, ?)`,
+      `INSERT INTO competitors (id, product_id, name) VALUES (?, ?, 'Rival A'), (?, ?, 'Rival B')`,
       [nanoid(), productId, nanoid(), productId]
     );
     await query(
-      `INSERT INTO integrations (id, product_id, status) VALUES (?, ?, 'active')`,
+      `INSERT INTO integrations (id, product_id, provider, direction, status) VALUES (?, ?, 'github', 'bidirectional', 'active')`,
       [nanoid(), productId]
     );
 

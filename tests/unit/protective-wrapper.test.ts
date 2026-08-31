@@ -35,9 +35,18 @@ describe('primitive 1 — autonomy is a lattice: min(setting, platform cap)', ()
     expect(effectiveMode('act', 'refunds')).toBe('shadow');
     expect(effectiveMode('act', 'billing')).toBe('shadow');
 
-    // uncapped capability: the ladder alone governs.
-    expect(effectiveMode('act', 'customer_success')).toBe('act');
-    expect(platformCap('customer_success')).toBe('act');
+    // customer success reaches third parties by the same post as outreach, and
+    // was absent from the table — so it defaulted to 'act' and a churn score
+    // chose which named customers got mail. It is capped now, and this asserts
+    // the cap rather than the old default.
+    expect(platformCap('customer_success')).toBe('suggest');
+    expect(effectiveMode('act', 'customer_success')).toBe('suggest');
+
+    // A capability with no ceiling: the ladder alone governs. ABSENCE MEANS
+    // MAXIMUM AUTONOMY, which is the whole reason the omission above mattered,
+    // so the default is asserted deliberately rather than left implicit.
+    expect(platformCap('an_unlisted_capability')).toBe('act');
+    expect(effectiveMode('act', 'an_unlisted_capability')).toBe('act');
   });
 
   it('getEffectiveMode enforces the cap end-to-end, whatever the founder set', async () => {
@@ -89,7 +98,16 @@ describe('primitive 3 — no autonomous act without live consent (+ attribution)
     expect(res.proposed).toBe(1);      // downgraded to a proposal
   });
 
-  it('act WITH live consent executes and writes an attribution trail', async () => {
+  it('live consent is still not enough, because the ceiling is above it', async () => {
+    // THIS USED TO ASSERT THAT IT SENT, and it was the last line of defence in
+    // the wrong order: consent was the only thing between a model's churn score
+    // and a named customer's inbox, because the platform had no ceiling for
+    // this capability at all. The lattice is min(setting, CAP, consent), and a
+    // founder's live consent cannot climb above the cap.
+    //
+    // What the attribution trail contains WHEN it is reachable is asserted in
+    // `attribution-under-a-lifted-ceiling.test.ts`, which is explicit about
+    // hypothesising a ceiling this one pins to 'suggest'.
     await query("DELETE FROM action_executions WHERE product_id='pw_p'", []); // clear dedup
     // Realistic transition INTO act from below records fresh consent.
     await setPolicy('pw_p', 'customer_success', 'suggest', 'pw_f');
@@ -98,13 +116,13 @@ describe('primitive 3 — no autonomous act without live consent (+ attribution)
 
     const { runSuccessSweep } = await import('../../src/services/departments/success.js');
     const res = await runSuccessSweep('pw_p');
-    expect(res.sent).toBe(1);
+    expect(res.sent, 'consent does not lift a platform ceiling').toBe(0);
+    expect(res.proposed).toBe(1);
 
     const attribution = await query(
       "SELECT reasoning FROM audit_log WHERE action_type='attribution:customer_success'", [],
     );
-    expect(attribution.rows.length).toBe(1);
-    expect(String((attribution.rows[0] as Record<string, string>).reasoning)).toMatch(/on the founder's behalf under consent/);
+    expect(attribution.rows.length, 'nothing acted, so nothing is attributed').toBe(0);
   });
 });
 
@@ -123,5 +141,30 @@ describe('primitive 4 — the operator brain sees aggregates only (Level-1/2 bou
     // Every query is an aggregate.
     const selects = src.match(/SELECT[\s\S]*?FROM/gi) ?? [];
     for (const s of selects) expect(s).toMatch(/COUNT\(|SUM\(/i);
+  });
+
+  it('holds the OTHER operator surface to the same rule', () => {
+    // ONE RULE, TWO IMPLEMENTATIONS, ONE ENFORCED. `founder/intelligence.ts`
+    // feeds `/founder-ops` and `/api/founder-intelligence` — both gated on
+    // `isFounder`, so operator-only and not a leak between founders — and it
+    // selected the ten most at-risk CUSTOMERS across every company on the
+    // platform by name, with no product scope, plus each company's audit
+    // `reasoning`.
+    //
+    // The operator administers the COMPANIES and bills them, so a company may
+    // be named; a company's customers belong to that company.
+    //
+    // THE RULE GOT STRONGER THAN THIS TEST FIRST ASSERTED. It began as "any
+    // customer select here must be an aggregate", with a guard requiring at
+    // least one such select so it could not pass vacuously. The surface now has
+    // NO customer SQL: it asks `institution/company-customers.ts`, the same
+    // accessor the departments use, so the guard was asserting the old shape.
+    // A department — or an operator view — that names a store has picked one.
+    const src = readFileSync('src/services/founder/intelligence.ts', 'utf8');
+    expect(src, 'the operator asks the accessor, not a store')
+      .not.toMatch(/\b(FROM|INTO|UPDATE|JOIN)\s+customers?\b/i);
+    expect(src).not.toMatch(/customer_intelligence/);
+    expect(src, 'a company\'s account of why belongs to that company')
+      .not.toMatch(/SELECT[^;]*\breasoning\b[^;]*FROM\s+audit_log/i);
   });
 });

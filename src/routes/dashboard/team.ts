@@ -19,7 +19,7 @@ import {
 } from '../../services/team/members.js';
 import { query } from '../../db/client.js';
 import { requireTier } from '../../middleware/tier-gate.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
 
 export const teamRoutes = new Hono<AuthEnv>();
 
@@ -138,7 +138,7 @@ teamRoutes.get('/team', requireTier('team_mode'), async (c) => {
 
 // ─── POST /team/invite ────────────────────────────────────────────────────────
 
-teamRoutes.post('/team/invite', requireRole('admin'), async (c) => {
+teamRoutes.post('/team/invite', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
@@ -180,7 +180,7 @@ teamRoutes.get('/team/accept/:token', async (c) => {
 
 // ─── POST /team/remove/:id ────────────────────────────────────────────────────
 
-teamRoutes.post('/team/remove/:id', requireRole('admin'), async (c) => {
+teamRoutes.post('/team/remove/:id', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const memberId = c.req.param('id');
   const ctx = await buildSharedContext(c);
@@ -198,7 +198,7 @@ teamRoutes.post('/team/remove/:id', requireRole('admin'), async (c) => {
 
 // ─── POST /team/revoke-invitation/:id ────────────────────────────────────────
 
-teamRoutes.post('/team/revoke-invitation/:id', requireRole('admin'), async (c) => {
+teamRoutes.post('/team/revoke-invitation/:id', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const invId = c.req.param('id');
   const ctx = await buildSharedContext(c);
@@ -232,10 +232,13 @@ teamRoutes.post('/api/decisions/:id/vote', async (c) => {
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const productId = (result.rows[0] as Record<string, string>).product_id;
 
-  // Verify access (owner or team member)
-  const { hasProductAccess } = await import('../../services/team/members.js');
-  const hasAccess = await hasProductAccess(productId, founder.id);
-  if (!hasAccess) return c.json({ error: 'Not found' }, 404);
+  // MAY THIS PERSON VOTE, not merely are they on the team. `can_vote_decisions`
+  // has existed on `team_members` since migration 010 and nothing asked it, so
+  // an investor_observer could cast a vote that feeds the alignment score.
+  const { memberMay } = await import('../../services/team/members.js');
+  if (!(await memberMay(productId, founder.id, 'can_vote_decisions'))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
 
   await submitDecisionVote(
     decisionId,
@@ -260,8 +263,10 @@ teamRoutes.get('/api/decisions/:id/votes', async (c) => {
   if (result.rows.length === 0) return c.json({ error: 'Not found' }, 404);
   const productId = (result.rows[0] as Record<string, string>).product_id;
 
-  const { hasProductAccess } = await import('../../services/team/members.js');
-  if (!(await hasProductAccess(productId, founder.id))) return c.json({ error: 'Not found' }, 404);
+  const { memberMay } = await import('../../services/team/members.js');
+  if (!(await memberMay(productId, founder.id, 'can_view_decisions'))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
 
   const votes = await getDecisionVotes(decisionId);
   return c.json({ votes });

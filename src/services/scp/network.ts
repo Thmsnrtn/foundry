@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { operatingProduct, query } from '../../db/client.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,8 +35,6 @@ export async function computeAndStoreBenchmarks(): Promise<void> {
     `SELECT
        p.id,
        p.health_score,
-       p.golden_suite_size,
-       p.total_evolution_cycles,
        COALESCE(ai.total_decisions_approved, 0) as total_approved,
        COALESCE(ai.total_decisions_proposed, 0) as total_proposed
      FROM products p
@@ -48,7 +46,7 @@ export async function computeAndStoreBenchmarks(): Promise<void> {
        FROM agent_instances
        GROUP BY product_id
      ) ai ON ai.product_id = p.id
-     WHERE p.scp_status = 'active'`,
+     WHERE ${operatingProduct('p')}`,
     []
   );
 
@@ -71,16 +69,6 @@ export async function computeAndStoreBenchmarks(): Promise<void> {
     .filter((v) => v >= 0)
     .sort((a, b) => a - b);
 
-  const goldSuiteSizes = rows
-    .map((r) => r.golden_suite_size ?? 0)
-    .filter((v) => v >= 0)
-    .sort((a, b) => a - b);
-
-  const evolutionCycles = rows
-    .map((r) => r.total_evolution_cycles ?? 0)
-    .filter((v) => v >= 0)
-    .sort((a, b) => a - b);
-
   const approvalRates = rows
     .map((r) => {
       const proposed = r.total_proposed ?? 0;
@@ -96,10 +84,31 @@ export async function computeAndStoreBenchmarks(): Promise<void> {
     values: number[];
   };
 
+  // TWO COLUMNS BENCHMARKED HERE WERE ALWAYS ZERO.
+  //
+  // `golden_suite_size`: `addGoldenLesson` is the only thing that writes it and
+  // nothing calls it. `total_evolution_cycles`: created `DEFAULT 0` by migration
+  // 017 on both `products` and `agent_instances`, and never incremented by any
+  // TypeScript or any SQL in the repository.
+  //
+  // `addGoldenLesson` is the only thing that writes `golden_suite` or increments
+  // this counter, and nothing calls it — so every company scores 0, and the
+  // p25/p50/p75/p90 computed across them were four zeroes published as a peer
+  // comparison. A benchmark over a constant is not a weak signal; it is the
+  // shape of a signal with nothing in it, and a founder reading their percentile
+  // against it learns something false about where they stand.
+  //
+  // So p25/p50/p75/p90 across every company were four zeroes, published as a
+  // comparison a founder could read their standing from. A benchmark over a
+  // constant is not a weak signal; it is the shape of a signal with nothing in
+  // it, and a percentile against it is false precision.
+  //
+  // Removed rather than fixed, for the same reason the pricing claim was: the
+  // remedy for reporting something that is not there is to stop reporting it.
+  // If a writer is ever wired, these belong back — with the rows recomputed
+  // rather than inherited, since the stored ones describe a world of zeroes.
   const metrics: MetricSet[] = [
     { name: 'health_score', values: healthScores },
-    { name: 'golden_suite_size', values: goldSuiteSizes },
-    { name: 'total_evolution_cycles', values: evolutionCycles },
     { name: 'agent_approval_rate', values: approvalRates },
   ];
 
@@ -142,8 +151,6 @@ export async function computeAndStoreBenchmarks(): Promise<void> {
 export async function getProductBenchmarkPosition(productId: string): Promise<{
   health_score: { value: number; percentile: number; label: string };
   approval_rate: { value: number; percentile: number; label: string };
-  evolution_cycles: { value: number; percentile: number; label: string };
-  golden_suite_size: { value: number; percentile: number; label: string };
 } | null> {
   // Get this product's values
   const productResult = await query(
@@ -170,8 +177,6 @@ export async function getProductBenchmarkPosition(productId: string): Promise<{
 
   const p = productResult.rows[0] as Record<string, number | null>;
   const healthScore = p.health_score ?? 0;
-  const goldSuiteSize = p.golden_suite_size ?? 0;
-  const evolutionCycles = p.total_evolution_cycles ?? 0;
   const totalProposed = p.total_proposed ?? 0;
   const approvalRate = totalProposed > 0 ? (p.total_approved ?? 0) / totalProposed : 0;
 
@@ -180,7 +185,7 @@ export async function getProductBenchmarkPosition(productId: string): Promise<{
     `SELECT metric_name, p25, p50, p75, p90
      FROM intelligence_benchmarks
      WHERE cohort = 'all'
-       AND metric_name IN ('health_score', 'golden_suite_size', 'total_evolution_cycles', 'agent_approval_rate')`,
+       AND metric_name IN ('health_score', 'agent_approval_rate')`,
     []
   );
 
@@ -200,6 +205,12 @@ export async function getProductBenchmarkPosition(productId: string): Promise<{
   function positionFromBenchmark(value: number, metricName: string): { value: number; percentile: number; label: string } {
     const b = benchmarks[metricName];
     if (!b) {
+      // ABSENCE REPORTED AS EXACTLY MEDIAN. The label says there is no data and
+      // the number says the company is at the 50th percentile, so a caller
+      // reading `percentile` without reading `label` shows a founder a
+      // fabricated standing. Left as it is because this function has no caller
+      // anywhere — and written down because the first caller is the moment it
+      // starts lying. `null` is the honest value here.
       return { value, percentile: 50, label: 'No benchmark data' };
     }
 
@@ -221,7 +232,5 @@ export async function getProductBenchmarkPosition(productId: string): Promise<{
   return {
     health_score: positionFromBenchmark(healthScore, 'health_score'),
     approval_rate: positionFromBenchmark(approvalRate, 'agent_approval_rate'),
-    evolution_cycles: positionFromBenchmark(evolutionCycles, 'total_evolution_cycles'),
-    golden_suite_size: positionFromBenchmark(goldSuiteSize, 'golden_suite_size'),
   };
 }

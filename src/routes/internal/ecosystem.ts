@@ -22,9 +22,46 @@ ecosystemRoutes.get('/internal/icp', (c) => {
   });
 });
 
+/**
+ * WHO IS CALLING, AND MAY THEY REACH THIS COMPANY.
+ *
+ * The `/internal` surface is guarded by one process-wide `ECOSYSTEM_SERVICE_KEY`
+ * compared timing-safely, and that is all it was. The key is issued to nobody,
+ * so holding it was indistinguishable from being every company at once — and
+ * the company id arrives as a parameter, so a holder read or wrote any company.
+ *
+ * The owner's §12 instruction is that portfolio access must be an explicit
+ * principal with scoped company membership rather than possession of a global
+ * secret. So the two routes that touch a company's data resolve the presented
+ * credential to a PRINCIPAL and check that this company is in its scope.
+ *
+ * FAILS CLOSED, INCLUDING TODAY. Until the owner issues a principal, these two
+ * routes serve nobody — which is the correct state for a surface whose key
+ * distribution the owner has instructed us to treat as unknown. The same answer
+ * is given for "no principal", "not scoped to this company" and "no such
+ * company": telling them apart tells a caller which companies exist.
+ */
+async function scopedTo(
+  headers: { header(name: string): string | undefined },
+  productId: string,
+): Promise<boolean> {
+  const presented = headers.header('X-Ecosystem-Key')
+    ?? headers.header('Authorization')?.replace('Bearer ', '');
+  const { resolveEcosystemPrincipal, principalMayRead } = await import(
+    '../../services/institution/ecosystem-principal.js');
+  const principal = await resolveEcosystemPrincipal(presented);
+  if (!principal) return false;
+  return principalMayRead(principal.id, productId);
+}
+
 // Conversion signal from Koldly
 ecosystemRoutes.post('/internal/conversion-signal', async (c) => {
   const body = await c.req.json() as { product_id: string; event_type: string; event_data: Record<string, unknown> };
+  // A WRITE INTO A NAMED COMPANY'S AUDIT TRAIL. The company arrives in the
+  // body, so it is exactly the shape the scope check exists for.
+  if (!body.product_id || !(await scopedTo(c.req, body.product_id))) {
+    return c.json({ error: 'Not found' }, 404);
+  }
   await query(
     `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning) VALUES (?, ?, ?, 0, 'ecosystem', ?)`,
     [nanoid(), body.product_id, `conversion_signal_${body.event_type}`, JSON.stringify(body.event_data)]
@@ -42,6 +79,12 @@ ecosystemRoutes.post('/internal/campaign/receive', async (c) => {
 ecosystemRoutes.get('/internal/operator/dashboard-data', async (c) => {
   const productId = c.req.query('product_id');
   if (!productId) return c.json({ error: 'product_id required' }, 400);
+
+  // THE WHOLE OPERATING PICTURE OF A NAMED COMPANY. Risk state and its reason,
+  // stressors, MRR by new/expansion/contraction/churn, signups, activation,
+  // retention, support volume, NPS, churn, cohort summary. Possession of one
+  // shared secret is not an answer to "may you see this company".
+  if (!(await scopedTo(c.req, productId))) return c.json({ error: 'Not found' }, 404);
 
   const product = await query('SELECT * FROM products WHERE id = ?', [productId]);
   if (product.rows.length === 0) return c.json({ error: 'Not found' }, 404);

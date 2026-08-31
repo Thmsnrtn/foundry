@@ -236,11 +236,34 @@ export async function shouldTriggerRule(ruleId: string, customerId: string): Pro
 
 // ─── recordTrigger ────────────────────────────────────────────────────────────
 
+/**
+ * WHAT A RULE TRIGGER'S OUTCOME MEANS.
+ *
+ * `success` used to cover three different things, and one of them was nothing
+ * happening at all: an action type Foundry does not implement wrote a note
+ * saying it had been triggered and returned true, so `success_count` — the
+ * number a founder reads as "this rule worked" — counted rules that had never
+ * done anything.
+ *
+ * These say what actually occurred. None of them claims a business outcome:
+ * carrying out an action is not the same as the action having worked, and this
+ * table has never observed the latter.
+ */
+export type RuleTriggerOutcome =
+  /** The configured action was carried out. Not "it helped". */
+  | 'carried_out'
+  /** Foundry has no implementation for this action type — nothing was done. */
+  | 'unsupported_action'
+  /** The action was attempted and threw. */
+  | 'failed'
+  /** Queued, not yet attempted. */
+  | 'pending';
+
 async function recordTrigger(
   ruleId: string,
   productId: string,
   customerId: string,
-  outcome: 'success' | 'failure' | 'pending'
+  outcome: RuleTriggerOutcome
 ): Promise<void> {
   await query(
     `INSERT INTO lifecycle_rule_triggers (id, rule_id, product_id, customer_id, triggered_at, outcome)
@@ -248,11 +271,14 @@ async function recordTrigger(
     [nanoid(), ruleId, productId, customerId, outcome]
   );
 
+  // `success_count` counts actions CARRIED OUT. An unsupported action type is
+  // neither: nothing was attempted, so counting it as either a success or a
+  // failure would describe work that did not happen.
   await query(
     `UPDATE lifecycle_rules
      SET times_triggered = times_triggered + 1,
-         success_count = success_count + CASE WHEN ? = 'success' THEN 1 ELSE 0 END,
-         failure_count = failure_count + CASE WHEN ? = 'failure' THEN 1 ELSE 0 END
+         success_count = success_count + CASE WHEN ? = 'carried_out' THEN 1 ELSE 0 END,
+         failure_count = failure_count + CASE WHEN ? = 'failed' THEN 1 ELSE 0 END
      WHERE id = ?`,
     [outcome, outcome, ruleId]
   );
@@ -263,14 +289,14 @@ async function recordTrigger(
 async function executeRuleAction(
   rule: LifecycleRule,
   customer: CustomerRecord
-): Promise<boolean> {
+): Promise<RuleTriggerOutcome> {
   try {
     const params = rule.action_parameters;
 
     if (rule.action_type === 'add_note') {
       const noteTemplate = (params.note_template as string) ?? 'Lifecycle rule triggered.';
       await addAgentNote(customer.id, rule.action_agent, noteTemplate);
-      return true;
+      return 'carried_out';
     }
 
     if (rule.action_type === 'escalate_to_ceo') {
@@ -280,7 +306,7 @@ async function executeRuleAction(
         rule.action_agent,
         `[ESCALATION] ${message}`
       );
-      return true;
+      return 'carried_out';
     }
 
     if (rule.action_type === 'create_remediation') {
@@ -289,18 +315,20 @@ async function executeRuleAction(
         rule.action_agent,
         `[REMEDIATION NEEDED] ${(params.note_template as string) ?? 'Customer requires remediation.'}`
       );
-      return true;
+      return 'carried_out';
     }
 
-    // Unknown action type — log it
+    // An action type with no implementation. Writing a note saying it was
+    // triggered and reporting success is the version of this that tells a
+    // founder their rule is working while it does nothing at all.
     await addAgentNote(
       customer.id,
       rule.action_agent,
-      `[RULE: ${rule.name}] Action type '${rule.action_type}' triggered.`
+      `[RULE: ${rule.name}] Action type '${rule.action_type}' is not implemented — nothing was done.`
     );
-    return true;
+    return 'unsupported_action';
   } catch {
-    return false;
+    return 'failed';
   }
 }
 
@@ -388,12 +416,13 @@ export async function evaluateLifecycleRules(productId: string): Promise<{
       const canTrigger = await shouldTriggerRule(rule.id, customer.id);
       if (!canTrigger) continue;
 
-      const success = await executeRuleAction(rule, customer);
-      const outcome = success ? 'success' : 'failure';
+      const outcome = await executeRuleAction(rule, customer);
       await recordTrigger(rule.id, productId, customer.id, outcome);
 
       rulesTriggered++;
-      if (success) actionsCreated++;
+      // `actions_created` counts actions. An action type with no
+      // implementation created none, however many notes were written about it.
+      if (outcome === 'carried_out') actionsCreated++;
     }
   }
 

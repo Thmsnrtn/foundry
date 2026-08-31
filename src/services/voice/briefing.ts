@@ -10,6 +10,7 @@ import { getMRRDecomposition } from '../intelligence/revenue.js';
 import { callOpus, callSonnet } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import type { VoiceSession, VoiceUpdate } from '../../types/index.js';
+import { signalText } from '../signal.js';
 
 // ─── Generate Morning Briefing ────────────────────────────────────────────────
 
@@ -58,13 +59,27 @@ export async function generateMorningBriefing(
 
   // Build context for Claude
   const contextParts = [
-    `Signal: ${signal.score}/100 (${signal.riskState.toUpperCase()})`,
+    // Spoken aloud to the founder. An unmeasured default read as a confident
+    // score is worse in speech than on a page — there is no colour, no
+    // asterisk and no second glance.
+    `Signal: ${signalText(signal)} (${signal.riskState.toUpperCase()})`,
     signal.prose,
     '',
   ];
 
   if (mrr) {
-    contextParts.push(`MRR: $${Math.round(mrr.total_cents / 100).toLocaleString()}`);
+    // This said `MRR: $X` and X was `net_new_cents` — one period's net change.
+    // A company at $50k MRR with a flat month heard "MRR: $0" spoken aloud.
+    contextParts.push(mrr.level_cents === null
+      ? 'MRR: not reported — no integration or report has supplied a level'
+      : `MRR: $${Math.round(mrr.level_cents / 100).toLocaleString()}`);
+    // "Flat" is a statement about the month. It is only true of a reported
+    // zero, and until migration 202 the column could not tell one from silence.
+    contextParts.push(mrr.net_new_cents === null
+      ? 'Net new MRR this period: not reported'
+      : mrr.net_new_cents === 0
+        ? 'Net new MRR this period: flat'
+        : `Net new MRR this period: $${Math.round(mrr.net_new_cents / 100).toLocaleString()}`);
     if (mrr.health_ratio !== null) {
       contextParts.push(`Health ratio: ${mrr.health_ratio.toFixed(2)}`);
     }
@@ -101,7 +116,7 @@ Rules:
   let headline = '';
 
   try {
-    const r = await callSonnet(systemPrompt, userPrompt, 512);
+    const r = await callSonnet(systemPrompt, userPrompt, 512, productId);
     briefingText = r.content.trim();
     // Extract the headline (first sentence)
     const firstSentence = briefingText.split('.')[0];
@@ -166,7 +181,7 @@ Return JSON:
   let summary = '';
 
   try {
-    const r = await callSonnet(systemPrompt, `Transcript: "${transcript}"`, 512);
+    const r = await callSonnet(systemPrompt, `Transcript: "${transcript}"`, 512, productId);
     const parsed = JSON.parse(r.content) as { updates: VoiceUpdate[]; summary: string };
     updates.push(...(parsed.updates ?? []));
     summary = parsed.summary ?? '';
@@ -190,7 +205,7 @@ function buildFallbackBriefing(
   riskState: string,
   stressors: Array<Record<string, string>>,
   decisions: Array<Record<string, unknown>>,
-  mrr: { total_cents: number; health_ratio: number | null } | null,
+  mrr: { level_cents: number | null; net_new_cents: number | null; health_ratio: number | null } | null,
 ): string {
   const lines: string[] = [];
 

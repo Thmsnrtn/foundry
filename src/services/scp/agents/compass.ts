@@ -35,8 +35,8 @@ interface CompassClaudeResponse {
     directive: string;
     priority: 'high' | 'normal';
   }>;
-  company_health_score: number;
-  domain_health_score: number;
+  company_health_score?: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -79,13 +79,33 @@ export class CompassAgent extends BaseAgent {
 
     // ── 4. Query active company OKRs ──────────────────────────────────────────
     const okrResult = await db(
-      `SELECT objective, status FROM company_okrs WHERE product_id=? AND status='active' LIMIT 5`,
+      // `company_okrs.status` is on_track / at_risk / off_track / completed /
+      // cancelled — there is no 'active'. Compass's view of the company's
+      // objectives has always been empty, and an agent with no OKRs in context
+      // reasons as though the company has none.
+      //
+      // FIXING THE STATUS FILTER DID NOT MAKE IT NON-EMPTY, and the reason is
+      // larger: `createOKR` has no caller anywhere in `src/`, so no company can
+      // have an OKR at all. This query is correct and will return nothing until
+      // something creates one. The founder-facing page said "Agents will create
+      // objectives as your strategy evolves"; nothing does, and it no longer
+      // says so.
+      // Ordered, so the five an agent sees are the five most at risk rather
+      // than five arbitrary ones. (The table has no writer — see above — so
+      // this returns nothing today; the order is here for when it does.)
+      `SELECT objective_text AS objective, status FROM company_okrs
+        WHERE product_id=? AND status IN ('on_track','at_risk','off_track')
+        ORDER BY CASE status WHEN 'off_track' THEN 1 WHEN 'at_risk' THEN 2 ELSE 3 END,
+                 created_at ASC
+        LIMIT 5`,
       [productId]
     );
 
     // ── 5. Query recent strategic decisions log ───────────────────────────────
     const decisionsLogResult = await db(
-      `SELECT title, decision_made, outcome_rating FROM strategic_decisions_log WHERE product_id=? ORDER BY created_at DESC LIMIT 3`,
+      `SELECT decision_title AS title, decision_description AS decision_made,
+              retrospective_score AS outcome_rating
+         FROM strategic_decisions_log WHERE product_id=? ORDER BY made_at DESC LIMIT 3`,
       [productId]
     );
 
@@ -109,7 +129,6 @@ export class CompassAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -203,8 +222,11 @@ Return JSON only (no markdown fences):
       "priority": "high" | "normal"
     }
   ],
-  "company_health_score": number (0-100),
-  "domain_health_score": number (0-100),
+  "company_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have
+    no evidence to score the company on,
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -226,7 +248,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -293,7 +314,8 @@ Return JSON only (no markdown fences):
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed strategic analysis: ${currentPrompt}, ${decisionCount} pending decisions, health=${parsed.company_health_score ?? 50}`,
+      description: `Completed strategic analysis: ${currentPrompt}, ${decisionCount} pending decisions, `
+        + `health=${parsed.company_health_score ?? 'not scored'}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -309,7 +331,13 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.company_health_score ?? parsed.domain_health_score ?? 50,
+      // No `?? 50`. The type says `domainHealthScore?: number` — "if provided" —
+      // and a model that did not return a score has not scored the domain. 50 is
+      // the middle of the bar the dashboard draws, so an unscored agent used to
+      // render as exactly average, in amber, next to agents that were measured.
+      // Migration-free fix: the column is already nullable and run-recorder
+      // already writes null.
+      domainHealthScore: parsed.company_health_score ?? parsed.domain_health_score,
       outboundActions,
       agentMessages,
       hypotheses,

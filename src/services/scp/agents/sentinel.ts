@@ -14,6 +14,7 @@ import type {
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
+import { measured } from '../../ai/measured.js';
 
 interface SentinelClaudeResponse {
   observations: string[];
@@ -38,7 +39,7 @@ interface SentinelClaudeResponse {
     success_threshold: number;
     test_duration_days: number;
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -108,7 +109,6 @@ export class SentinelAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -121,7 +121,10 @@ export class SentinelAgent extends BaseAgent {
     const metricsRow = metricsResult.rows.length > 0
       ? (metricsResult.rows[0] as Record<string, unknown>)
       : null;
-    const supportVolume = metricsRow ? Number(metricsRow.support_volume_7d) || 0 : 0;
+    // `support_volume_7d` is nullable and carries no default, so `|| 0` told an
+    // agent judging operational health that a company which has never reported
+    // support volume had none. See `ai/measured.ts`.
+    const supportVolume = measured(metricsRow?.support_volume_7d);
 
     const githubContext = githubEvents.length > 0
       ? `GitHub deployment/PR events: ${githubEvents.map(e => `[${e.event_type}] ${e.summary}`).join(' | ')}`
@@ -142,7 +145,7 @@ You push back when engineering is moving too fast without adequate testing or wh
     );
 
     const userPrompt = `Infrastructure stressors: ${stressorList}.
-Support volume (7d, incident proxy): ${supportVolume}.
+Support volume (7d, incident proxy): ${supportVolume}${supportVolume === 'unknown' ? ' — never reported, which is not the same as none' : ''}.
 ${githubContext}.
 
 Assess infrastructure and deployment health. Return JSON only (no markdown fences):
@@ -173,7 +176,9 @@ Assess infrastructure and deployment health. Return JSON only (no markdown fence
       "test_duration_days": number
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -195,7 +200,6 @@ Assess infrastructure and deployment health. Return JSON only (no markdown fence
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -268,7 +272,10 @@ Assess infrastructure and deployment health. Return JSON only (no markdown fence
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed infra analysis: status=${infra?.deployment_status ?? 'unknown'}, risk=${infra?.risk_level ?? 'unknown'}, incidents=${infra?.open_incidents ?? 0}`,
+      description: `Completed infra analysis: status=${infra?.deployment_status ?? 'unknown'}, `
+        + `risk=${infra?.risk_level ?? 'unknown'}, `
+        // Zero open incidents is a finding. Not knowing is not that finding.
+        + `incidents=${infra?.open_incidents ?? 'unknown'}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -284,7 +291,13 @@ Assess infrastructure and deployment health. Return JSON only (no markdown fence
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      // No `?? 50`. The type says `domainHealthScore?: number` — "if provided" —
+      // and a model that did not return a score has not scored the domain. 50 is
+      // the middle of the bar the dashboard draws, so an unscored agent used to
+      // render as exactly average, in amber, next to agents that were measured.
+      // Migration-free fix: the column is already nullable and run-recorder
+      // already writes null.
+      domainHealthScore: parsed.domain_health_score,
       outboundActions,
       agentMessages,
       hypotheses,

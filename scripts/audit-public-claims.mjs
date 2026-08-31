@@ -9,6 +9,7 @@
 // =============================================================================
 import { readFileSync, readdirSync } from 'fs';
 import { globSync } from 'glob';
+import { tokenizeClaim } from './lib/claim-tokenizer.mjs';
 
 // The claims currently made on public surfaces (landing.ts / legal.ts).
 const CLAIMS = [
@@ -18,6 +19,17 @@ const CLAIMS = [
   'All plans include 12 AI agents',
   '14-day trial',
   '30 founding-rate slots locked at $79/mo for life',
+  // CAPABILITY CLAIMS, not only prices. A wrong number is embarrassing; a
+  // capability a customer pays for and does not get is selling maturity the
+  // product has not earned. Both of these were overclaims found by tracing the
+  // pipeline to its last step: the remediation engine generated fixes and
+  // never opened a pull request, and nothing anywhere wrote a golden lesson.
+  'Remediation Engine — AI-drafted fixes for blocking audit issues',
+  'Agent evolution — versioned configs and change history',
+  // The processors that actually receive prompt content. Named in the privacy
+  // copy and pinned to the endpoints the code calls.
+  'Prompts are sent to language models through OpenRouter and OpenAI',
+  'Live Signal share — a rotatable link to your Signal, history and decisions',
 ];
 
 // ── Sources derived from code (single source of truth) ───────────────────────
@@ -43,14 +55,104 @@ const landing = readFileSync('src/routes/public/landing.ts', 'utf8');
 const slotsLine = landing.match(/Math\.max\(0,\s*30[^\n]*/)?.[0] ?? '';
 sources.push({ name: 'src/routes/public/landing.ts founding slots', content: `${slotsLine} founding-rate slots locked life month cost` });
 
-// ── Verify (inline port of src/services/truth/engine.ts, kept dependency-free) ─
+// ── Capability sources: does the code that performs the claim have a caller ──
+//
+// A price is verified against a constant. A CAPABILITY has to be verified
+// against whether the last step of its pipeline actually runs, because the
+// failure mode is a feature that is fully built except for the part that makes
+// it happen — described everywhere by its readers, called by nothing.
+//
+// So the source's CONTENT depends on reality: restore a claim the code no
+// longer supports and its words stop matching anything here. Proven by doing
+// exactly that — "automated GitHub PRs" fails on `automated, github`.
+const srcFiles = globSync('src/**/*.ts', { nodir: true });
+const hasCallerOutside = (fnName, definedInSuffix) => srcFiles
+  .filter((f) => !f.endsWith(definedInSuffix))
+  .some((f) => readFileSync(f, 'utf8').includes(fnName));
+
+// `openRemediationPR` is the only code that creates a branch, commits files and
+// calls the GitHub PR API. `generateFix` runs, records the fix, and returns.
+sources.push({
+  name: 'remediation: does anything open a pull request',
+  content: hasCallerOutside('openRemediationPR', 'audit/remediation.ts')
+    ? 'remediation engine automated github pull requests prs ai-drafted ai drafted fixes for blocking audit issues'
+    : 'remediation engine ai-drafted ai drafted fixes for blocking audit issues; no pull request is opened',
+});
+
+// `addGoldenLesson` is the only writer of `golden_suite`, and the only thing
+// that increments `products.golden_suite_size`.
+sources.push({
+  name: 'agent evolution: does anything write a golden lesson',
+  content: hasCallerOutside('addGoldenLesson', 'agents/base.ts')
+    ? 'agent evolution golden lessons versioned configs and change history'
+    : 'agent evolution versioned configs and change history',
+});
+
+// WHO RECEIVES A PROMPT, from the code that sends it.
+//
+// The privacy copy named Anthropic as the processor of every prompt and listed
+// it as the sole AI sub-processor. `api.anthropic.com` appears nowhere in the
+// repository: `client.ts` pins OpenRouter and `getBaseUrl()` returns it
+// unconditionally — its own comment says a direct Anthropic key "still routes
+// through OpenRouter" — and voice replies go to OpenAI. A privacy statement
+// naming the wrong recipient is the one kind of copy where being wrong is not
+// merely embarrassing.
+//
+// Pinned to the endpoints in the code, so the disclosure cannot name a vendor
+// the product does not call.
+const aiClient = readFileSync('src/services/ai/client.ts', 'utf8');
+const voiceReply = readFileSync('src/services/scp/briefing/voice-reply.ts', 'utf8');
+const endpoints = [];
+if (aiClient.includes('openrouter.ai') || voiceReply.includes('openrouter.ai')) endpoints.push('openrouter');
+if (voiceReply.includes('api.openai.com')) endpoints.push('openai');
+if (aiClient.includes('api.anthropic.com') || voiceReply.includes('api.anthropic.com')) endpoints.push('anthropic');
+sources.push({
+  name: 'src/services/ai model endpoints actually called',
+  content: `prompts are sent to language models through ${endpoints.join(' and ')} `
+    + 'receives every prompt foundry sends to a language model voice replies',
+});
+
+// THE INVESTOR SHARE, and the feature beside it that does not exist.
+//
+// "Secure investor deal rooms with live Signal share" was a $399/month bullet.
+// `deal_rooms` is created by migration 011 and touched by nothing: no INSERT, no
+// SELECT, no service, no route. Its only mention in `src/` is the erasure
+// classifier, and the gate suite cites it BY NAME as the canonical example of a
+// table no code reaches — the repository knew, and the pricing page sold it.
+//
+// The other half was real, so the bullet now claims only that half. Pinned to
+// the route that serves it and the door that mints the token.
+const shareRoute = readFileSync('src/routes/share/index.ts', 'utf8');
+const settings = readFileSync('src/routes/dashboard/settings.ts', 'utf8');
+const dealRoomCode = srcFiles
+  .filter((f) => !f.endsWith('privacy/consent.ts'))
+  .some((f) => readFileSync(f, 'utf8').includes('deal_rooms'));
+sources.push({
+  name: 'investor share: what is actually served',
+  content: [
+    shareRoute.includes("'/share/:token'") ? 'live signal share a rotatable link to your signal history and decisions' : '',
+    settings.includes('share_token = ?') ? 'rotatable link token' : '',
+    dealRoomCode ? 'secure investor deal rooms' : '',
+  ].join(' '),
+});
+
+// ── Verify ───────────────────────────────────────────────────────────────────
+//
+// The algorithm used to be inlined here as a copy of
+// `src/services/truth/engine.ts`, and the two had drifted: this copy had no
+// quoted-phrase handling and a different stop-word list, so the gate enforcing
+// the honesty law and the module documenting it disagreed about what a claim
+// says. `scripts/lib/claim-tokenizer.mjs` is now the one implementation, and
+// `the-gate-and-the-engine-agree.test.ts` runs it against the TypeScript engine
+// over the same inputs. Two copies are acceptable when they are pinned; tsconfig
+// includes only `src/**`, so a .ts module cannot be imported from here and `src/`
+// must not reach into `scripts/`.
+//
+// The stop list stays specific to pricing copy — 'plan', 'costs' and 'month' are
+// connective words in these claims — and is PASSED IN rather than copied, so the
+// difference is a decision rather than an accident.
 const STOP = new Set(['the','a','an','and','or','for','with','that','this','all','plan','plans','costs','cost','month','monthly','include','includes']);
-function tokenize(claim) {
-  const tokens = [];
-  let rest = claim.replace(/\$?\d[\d,]*(?:\.\d+)?%?/g, (n) => { tokens.push(n.replace(/[$,%]/g, '')); return ' '; });
-  for (const w of rest.toLowerCase().split(/[^a-z0-9]+/)) if (w.length >= 4 && !STOP.has(w)) tokens.push(w);
-  return [...new Set(tokens)];
-}
+const tokenize = (claim) => tokenizeClaim(claim, STOP);
 let failures = 0;
 
 // Founder-facing claims are subject to the same honesty law as marketing.

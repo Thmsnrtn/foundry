@@ -150,21 +150,28 @@ landingRoutes.get('/', async (c) => {
       <div class="card" style="padding:2rem;margin-bottom:2.5rem;border-left:3px solid var(--accent);">
         <h3 style="margin:0 0 0.75rem;">Agents that learn</h3>
         <p style="margin:0 0 0.75rem;color:var(--text-dim);line-height:1.6;font-size:0.9rem;">
-          Every time you correct an agent, that correction becomes a <strong style="color:var(--text-primary);">golden lesson</strong>
-          injected into every future session. Agents track their own version history. Day 1 agents operate at
-          maximum oversight. Agents that prove themselves earn autonomy.
+          Every time you correct an agent, that correction is written into its
+          <strong style="color:var(--text-primary);">versioned config</strong> and carried into every future
+          session. Agents track their own version history. Day 1 agents operate at maximum oversight.
         </p>
         <p style="margin:0;color:var(--text-dim);line-height:1.6;font-size:0.9rem;">
-          After 50 sessions with a 91% success rate, an agent transitions from Gate 2 (approval required) to Gate 0
-          (fully autonomous). <strong style="color:var(--text-primary);">You set the pace. They earn the trust.</strong>
+          Raising an agent from Gate 2 (approval required) to Gate 0 is your decision, made from its record —
+          nothing promotes itself. <strong style="color:var(--text-primary);">You set the pace. They earn the trust.</strong>
         </p>
       </div>
 
       <!-- Daily briefing example -->
       <div style="margin-bottom:2.5rem;">
-        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">A Real Briefing</div>
+        <!-- This block used to be labelled as though it were a genuine
+             briefing from a genuine customer. It never was: the company, its
+             revenue, its experiment result and its cost are all numbers
+             somebody typed. Presentation is legitimate; presenting invented
+             traction as something that happened is not. The label now says what
+             the block is, and the numbers stay, because an example is allowed
+             to be an example. -->
+        <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:1.25rem;text-align:center;">What a briefing looks like — an illustration, not a customer</div>
         <div class="card" style="padding:1.75rem;font-family:monospace;font-size:0.82rem;line-height:1.7;color:var(--text-primary);">
-          <div style="color:var(--accent);font-weight:700;margin-bottom:0.5rem;">DAILY BRIEFING · MailDeck · March 30, 2026</div>
+          <div style="color:var(--accent);font-weight:700;margin-bottom:0.5rem;">DAILY BRIEFING · Example Co · illustration</div>
           <div style="color:var(--text-dim);margin-bottom:1rem;">Signal: 84/100 (GREEN) · MRR: $6,430 ↑$310 · 2 decisions waiting</div>
           <div style="margin-bottom:0.75rem;"><strong>What happened</strong></div>
           <div style="color:var(--text-dim);margin-bottom:0.25rem;">→ Atlas: Closed a security gap in the auth flow (Gate 0, autonomous).</div>
@@ -182,8 +189,8 @@ landingRoutes.get('/', async (c) => {
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:0.5rem;">Your data, your data</div>
         <p style="margin:0;font-size:0.85rem;color:var(--text-dim);line-height:1.6;">
           GitHub access tokens and integration credentials are encrypted at rest.
-          <strong style="color:var(--text-primary);">Your business data is never used to train AI models</strong> — Foundry calls Anthropic with the standard no-training API terms.
-          A DPA is available on request.
+          <strong style="color:var(--text-primary);">Foundry runs no training pipelines on your data.</strong>
+          Prompts are sent to models through OpenRouter, and voice replies through OpenAI. A DPA is available on request.
         </p>
       </div>
 
@@ -266,7 +273,7 @@ pricingRoutes.get('/pricing', async (c) => {
           <ul class="pricing-features">
             <li>1 company · 12 AI agents</li>
             <li>Daily CEO briefing</li>
-            <li>Agent evolution — golden lessons, versioned configs</li>
+            <li>Agent evolution — versioned configs and change history</li>
             <li>Signal score + risk state monitoring</li>
             <li>AI Ask — conversational business advisor</li>
             <li>Decision queue (Gate 0–4)</li>
@@ -285,7 +292,7 @@ pricingRoutes.get('/pricing', async (c) => {
             <li>Co-founder mode — alignment scores, decision voting</li>
             <li>Intelligence Network — anonymized peer benchmarks</li>
             <li>Wisdom Layer — DNA accumulation, failure log, patterns</li>
-            <li>Remediation Engine — automated GitHub PRs</li>
+            <li>Remediation Engine — AI-drafted fixes for blocking audit issues</li>
             <li>Up to 3 team members</li>
           </ul>
           <a href="/auth/signup" class="btn btn-primary" style="width:100%;margin-top:1rem;text-align:center;">Get Started</a>
@@ -299,10 +306,10 @@ pricingRoutes.get('/pricing', async (c) => {
             <li>Up to 5 companies (agent teams per company)</li>
             <li>Board packets — AI-drafted quarterly narratives</li>
             <li>Funding readiness score across 7 dimensions</li>
-            <li>Secure investor deal rooms with live Signal share</li>
+            <li>Live Signal share — a rotatable link to your Signal, history and decisions</li>
             <li>Playbook crystallization — 8 operating playbook types</li>
             <li>Temporal Intelligence — Signal replay + prediction accuracy</li>
-            <li>Cohort analysis + competitive intelligence</li>
+            <li>Competitive intelligence — weekly competitor scans</li>
             <li>Founding Story Engine with timestamped case studies</li>
             <li>Unlimited team members</li>
           </ul>
@@ -323,7 +330,12 @@ caseStudyRoutes.get('/case-studies', async (c) => {
   const artifacts = result.rows as unknown as Array<Record<string, unknown>>;
   return c.html(publicLayout('Case Studies', html`
     <h1>Case Studies</h1>
-    <p>Documented evidence from real products, timestamped and verifiable.</p>
+    <!-- This line used to assert that the artifacts below were verified
+         evidence from real products. They are composed by Foundry from a
+         company's own recorded events and published when its founder chooses
+         to; nothing verifies them, and the date on them is the row's creation
+         time. What is true is who published, and when. -->
+    <p>Written by Foundry from each company's own record, and published by its founder.</p>
     ${artifacts.length === 0
       ? html`<div class="empty-state"><p>No published case studies yet. Check back soon.</p></div>`
       : html`<div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:1rem;">
@@ -338,6 +350,9 @@ caseStudyRoutes.get('/case-studies', async (c) => {
   `));
 });
 
+// Public by design: a case study is published marketing, and the id in the
+// path is a case-study id rather than a company's. On the tenant-scope
+// baseline for that reason, not by oversight.
 caseStudyRoutes.get('/case-studies/:id', async (c) => {
   const id = c.req.param('id');
   const result = await query('SELECT * FROM founding_story_artifacts WHERE id = ? AND published = 1', [id]);
@@ -508,13 +523,14 @@ legalRoutes.get('/privacy-policy', (c) => {
         <li>To send you operational digests and alerts (which you can configure in Settings)</li>
       </ul>
 
-      <h2>AI Model Training — We Don't Do It</h2>
-      <p>Your business data is never used to train AI models. Foundry sends prompts to
-        Anthropic (Claude) under the standard API terms, which contractually forbid using
-        prompt content for model training. We do not run our own training pipelines on your
-        data, do not share it with third-party AI vendors for training purposes, and do not
-        sell or license it. If Anthropic's API terms change in a way that affects this, we
-        will notify you 30 days before any change takes effect.</p>
+      <h2>AI Models — Who Processes Your Prompts</h2>
+      <p>Foundry sends prompts to language models through <strong>OpenRouter</strong>
+        (https://openrouter.ai), and voice replies through <strong>OpenAI</strong>. Those are the
+        services that receive prompt content; their own terms govern what they do with it, and we
+        state no term here on their behalf. We do not run our own training pipelines on your
+        data, and do not sell or license it. If the services that process prompts change, or
+        their terms change in a way that affects you, we will notify you 30 days before any
+        change takes effect.</p>
 
       <h2>Encryption at Rest</h2>
       <p>Sensitive credentials — GitHub access tokens, Stripe API keys, integration
@@ -535,7 +551,8 @@ legalRoutes.get('/privacy-policy', (c) => {
 
       <h2>Third-Party Processors</h2>
       <ul style="margin:0.5rem 0 1rem 1.5rem;color:var(--text);line-height:1.8;">
-        <li><strong>Anthropic (Claude AI):</strong> Processes your business context to generate agent analyses. Subject to Anthropic's data retention policy.</li>
+        <li><strong>OpenRouter:</strong> Receives every prompt Foundry sends to a language model, and routes it to the model that answers it. Your business context is in those prompts.</li>
+        <li><strong>OpenAI:</strong> Receives the prompts behind voice replies.</li>
         <li><strong>Clerk:</strong> Authentication and user management</li>
         <li><strong>Stripe:</strong> Payment processing</li>
         <li><strong>Turso:</strong> Database hosting</li>

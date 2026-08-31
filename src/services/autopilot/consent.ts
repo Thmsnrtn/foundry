@@ -55,6 +55,16 @@ export async function activeConsent(productId: string, capability: string): Prom
   const r = await query(
     `SELECT id, disclosure_version FROM autonomy_consents
       WHERE product_id = ? AND capability = ? AND to_mode = 'act' AND revoked_at IS NULL
+        -- An expiry that only one reader honours is not an expiry.
+        -- activeResponsibilityAuthority has always checked this; the gate the
+        -- autopilot actually calls did not, so a time-boxed grant kept
+        -- licensing autonomous action after the hour it was given for.
+        --
+        -- NULL means "until revoked", and in SQLite datetime(NULL) compared to
+        -- anything is NULL rather than false — so the IS NULL branch is what
+        -- keeps every standing grant alive. Without it this fix would have
+        -- disarmed the product instead of tightening it.
+        AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))
       ORDER BY accepted_at DESC LIMIT 1`,
     [productId, capability],
   );

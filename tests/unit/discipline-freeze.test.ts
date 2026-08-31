@@ -10,6 +10,7 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 
 import {
   startFreeze,
@@ -48,38 +49,12 @@ async function createFounderAndProduct(): Promise<{ founderId: string; productId
   return { founderId: fId, productId: pId };
 }
 
-async function setupSchema(): Promise<void> {
-  const TEST_SCHEMA = `
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS decisions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      what TEXT NOT NULL,
-      why_now TEXT NOT NULL,
-      status TEXT DEFAULT 'pending'
-    );
-  `;
-  await executeRaw(TEST_SCHEMA);
-  const m = resolve(__dirname, '../../src/db/migrations/061_freeze_periods.sql');
-  await executeRaw(readFileSync(m, 'utf-8'));
-}
 
 beforeAll(async () => {
-  await setupSchema();
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
 });
 
 beforeEach(async () => {

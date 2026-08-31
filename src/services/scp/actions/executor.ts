@@ -7,6 +7,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
+import { isPrincipalRef } from '../../outbound/acting-principal.js';
 import { sendSlackNotification } from '../../integration/slack.js';
 import { getIntegration } from '../../integration/fabric.js';
 
@@ -109,17 +110,24 @@ export async function createExecution(
 export async function approveAndExecute(
   executionId: string,
   approverId: string,
-  opts: { ownerId?: string } = {}
+  opts: { scopeProductId?: string } = {}
 ): Promise<ExecutionResult> {
   const now = new Date().toISOString();
 
-  // Fetch the execution record. When an ownerId is supplied (any human-driven
-  // path), the row must belong to a product that founder owns.
-  const execResult = opts.ownerId
+  // Fetch the execution record, scoped to the company the caller has already
+  // been authorized on.
+  //
+  // THIS USED TO SCOPE ON OWNERSHIP: `product_id IN (SELECT id FROM products
+  // WHERE owner_id = ?)`. That was the only thing keeping a non-owner out,
+  // which made approving an action an owner-only act by accident rather than
+  // by decision — `team_members.can_trigger_actions` exists to say who may do
+  // it, and nothing asked. The route asks now, and passes the company it asked
+  // about, so this scope means "the company the caller was authorized for"
+  // rather than "a company the caller owns".
+  const execResult = opts.scopeProductId
     ? await query(
-        `SELECT * FROM action_executions
-         WHERE id = ? AND product_id IN (SELECT id FROM products WHERE owner_id = ?)`,
-        [executionId, opts.ownerId]
+        `SELECT * FROM action_executions WHERE id = ? AND product_id = ?`,
+        [executionId, opts.scopeProductId]
       )
     : await query(`SELECT * FROM action_executions WHERE id = ?`, [executionId]);
   if (execResult.rows.length === 0) {
@@ -132,6 +140,50 @@ export async function approveAndExecute(
     payload = JSON.parse(row.payload_json as string || '{}') as ActionPayload;
   } catch {
     return { success: false, error: 'Invalid payload JSON' };
+  }
+
+  // THE COMPANY MUST STILL BE ONE FOUNDRY ACTS FOR.
+  //
+  // This path posts to Slack, files Linear tickets and calls customer
+  // webhooks, and it reached none of the checks that stop the OTHER outward
+  // path — `checkKillSwitch` had exactly one caller in the whole system, the
+  // outbound gateway. So an approval here dispatched an outward effect for a
+  // company whose subscription had lapsed, whose founder had paused it, or
+  // whose data had just been erased. The owner's decision is that an unpaid
+  // account is read-only: no spend, no outward effects. Two doors, one rule,
+  // and only one door was checking it.
+  //
+  // Checked before the claim, so a refused execution stays pending rather than
+  // being consumed.
+  const { checkKillSwitch } = await import('../../outbound/kill-switch.js');
+  const gate = await checkKillSwitch(
+    row.product_id as string,
+    payload.action_type ?? String(row.action_type ?? 'unknown'),
+  );
+  if (gate.blocked) {
+    await query(
+      `UPDATE action_executions
+          SET status='cancelled', error_message=?
+        WHERE id=? AND status='pending'`,
+      [`refused before dispatch: ${gate.reason}`, executionId]);
+    return { success: false, error: `refused: ${gate.reason}`, effect_certainty: 'not_attempted' };
+  }
+
+  // WHO AUTHORISED THIS, IN THE ONE VOCABULARY. The dashboard passed a BARE
+  // founder id here while every other caller passed `kind:id`, so this column
+  // held four spellings of one idea. Nothing misread a founder as an autopilot
+  // — both readers that interpret the field key on the `autopilot:` prefix —
+  // but that is a property of which two readers exist, not of the data.
+  //
+  // Fails closed: a value this does not recognise is not another sort of
+  // approver, it is "I do not know who authorised this", and the safe answer to
+  // that at an approval door is no.
+  if (!isPrincipalRef(approverId)) {
+    return {
+      success: false,
+      error: `approver is not a principal reference: ${approverId}`,
+      effect_certainty: 'not_attempted',
+    };
   }
 
   // Atomically claim the row: only a 'pending' execution can be approved.
@@ -182,15 +234,19 @@ export async function approveAndExecute(
 /**
  * Cancel a pending execution.
  */
-export async function cancelExecution(executionId: string, ownerId?: string): Promise<void> {
-  // Only not-yet-run executions can be cancelled, and (when ownerId is given)
-  // only by the founder who owns the product — a completed or foreign row is
-  // left untouched.
+export async function cancelExecution(
+  executionId: string, scopeProductId?: string,
+): Promise<void> {
+  // Only not-yet-run executions can be cancelled, and (when a scope is given)
+  // only within the company the caller was authorized on — a completed or
+  // foreign row is left untouched. The scope used to be ownership, which made
+  // cancelling owner-only by accident; who may is `can_trigger_actions`, asked
+  // by the route.
   await query(
     `UPDATE action_executions SET status='cancelled'
      WHERE id=? AND status IN ('pending','approved')
-       ${ownerId ? `AND product_id IN (SELECT id FROM products WHERE owner_id=?)` : ''}`,
-    ownerId ? [executionId, ownerId] : [executionId]
+       ${scopeProductId ? 'AND product_id = ?' : ''}`,
+    scopeProductId ? [executionId, scopeProductId] : [executionId]
   );
 }
 
@@ -282,6 +338,58 @@ export async function listPendingExecutions(productId: string): Promise<Array<{
 
 // ─── Internal Execution Router ────────────────────────────────────────────────
 
+/**
+ * Send through the one governed execution boundary.
+ *
+ * The dedup key is the execution id: this row is the at-most-once unit, and a
+ * retry of the same execution is the same send rather than a second one.
+ */
+async function executeGovernedEmail(
+  executionId: string,
+  productId: string,
+  payload: ActionPayload,
+): Promise<ExecutionResult> {
+  const to = String(payload.to_email ?? '').trim();
+  if (!to) return { success: false, error: 'no recipient', effect_certainty: 'not_attempted' };
+
+  // Importing the integration is what registers the capability on the gateway's
+  // process-global registry. Without it the gateway answers 'no_handler', which
+  // would look like a missing provider rather than a missing import.
+  await import('../../integration/resend.js');
+  const { invoke } = await import('../../outbound/gateway.js');
+
+  const res = await invoke({
+    productId,
+    tool: 'send_email',
+    action: `customer email: ${String(payload.subject ?? '').slice(0, 120)}`,
+    params: { to: [to], subject: payload.subject ?? '', html: payload.body ?? '' },
+    dedupKey: `action_execution:${executionId}`,
+    customerExternalId: to,
+    surface: 'email_outbound',
+    dataClass: 'customer',
+  });
+
+  if (res.ok) {
+    return {
+      success: true,
+      integration_response: res.result,
+      effect_certainty: 'provider_acknowledged',
+    };
+  }
+  // 'execution' is the only phase where something may have reached the outside
+  // world. Every other refusal is definitively nothing attempted, and booking
+  // reconciliation work for it would invent an effect to chase.
+  const ambiguous = res.phase === 'execution';
+  return {
+    success: false,
+    error: `${res.phase}: ${res.reason}`,
+    effect_certainty: ambiguous ? 'ambiguous' : 'not_attempted',
+    reconcile_after: ambiguous
+      ? new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      : null,
+  };
+}
+
 async function executeAction(
   executionId: string,
   payload: ActionPayload
@@ -307,36 +415,53 @@ async function executeAction(
       return executeWebhook(payload);
 
     case 'send_email':
-      // Draft-only today (no live third-party send path exists). When live
-      // sending is wired, the send boundary MUST call assertSenderOfRecord
-      // (services/outbound/sender-of-record.ts): a third-party recipient
-      // requires the founder's own connected sender, never a Foundry domain.
-      return {
-        success: true,
-        integration_response: {
-          note: 'Email draft stored. Email provider integration pending.',
-          to: payload.to_email,
-          subject: payload.subject,
-          body_preview: (payload.body ?? '').slice(0, 200),
-        },
-      };
+      // ONE GOVERNED BOUNDARY, NOT TWO — AND THIS ONE USED TO CLAIM A SEND IT
+      // HAD NOT MADE.
+      //
+      // This returned `success: true` with the note "Email draft stored. Email
+      // provider integration pending." Nothing was sent. The caller then marked
+      // the execution 'completed', and the customer-success department counted
+      // it as `sent` and wrote an attribution entry reading "Foundry sent a
+      // check-in on the founder's behalf under consent <id>". A live third-party
+      // send path DID exist the whole time — `integration/resend.ts`, registered
+      // on the outbound gateway, with the sender-of-record rule, the kill
+      // switch, the entitlement pause, classification, idempotency, receipts and
+      // effect certainty.
+      //
+      // So the second regime is routed into the first rather than given its own
+      // provider call. Nothing here decides safety: the registered capability
+      // policy does, which is the point of having one boundary.
+      //
+      // A REFUSAL IS NOT A FAILURE TO RECONCILE. The gateway distinguishes
+      // 'refused' — the handler declined before touching a provider, so
+      // definitively nothing left the building — from 'execution', where the
+      // outcome is unknown. That distinction is carried through as effect
+      // certainty rather than flattened into `success: false`.
+      return executeGovernedEmail(executionId, productId, payload);
 
+    // THE SAME FABRICATION AS THE OLD `send_email` ARM, TWICE MORE. Both
+    // returned `success: true` with a note saying the integration was pending,
+    // so the caller marked the execution 'completed'. A founder could build an
+    // action template of either type on a live page, approve one, and read
+    // "Call" or "CRM" as done while nothing anywhere had happened.
+    //
+    // Unlike email there is no real path to route into — no Calendly, no CRM.
+    // So the honest answer is a refusal. `not_attempted` is the accurate effect
+    // certainty and it books no reconciliation, because there is definitively
+    // no effect to chase. The template picker no longer offers either type;
+    // existing rows still render, and now say what they are.
     case 'schedule_call':
       return {
-        success: true,
-        integration_response: {
-          note: 'Calendly integration pending. Call scheduling request recorded.',
-          details: payload,
-        },
+        success: false,
+        error: 'no call-scheduling integration exists; nothing was scheduled',
+        effect_certainty: 'not_attempted',
       };
 
     case 'update_crm':
       return {
-        success: true,
-        integration_response: {
-          note: 'CRM update recorded. CRM integration pending.',
-          details: payload,
-        },
+        success: false,
+        error: 'no CRM integration exists; nothing was updated',
+        effect_certainty: 'not_attempted',
       };
 
     case 'mcp_tool': {
@@ -398,7 +523,18 @@ async function executeSlack(productId: string, payload: ActionPayload): Promise<
 
 async function executeLinearTicket(productId: string, payload: ActionPayload): Promise<ExecutionResult> {
   const integration = await getIntegration(productId, 'linear');
-  if (!integration || integration.status !== 'connected') {
+  // THE LAST ADAPTER STILL GUARDING ON THE VALUE MIGRATION 074 RETIRED.
+  //
+  // 074 says the original bug was that adapters checked 'connected' — a value
+  // nothing writes and no schema's CHECK permits — "so the hourly fabric sync
+  // silently no-op'd and agents reasoned over zero telemetry", and that the
+  // code "now standardizes on 'active' everywhere". Everywhere but here.
+  //
+  // Which inverted this action: a correctly connected Linear integration is
+  // 'active', so every ticket Foundry tried to file came back "Linear
+  // integration not connected", and the only state that would have satisfied
+  // this guard is the broken one that cannot sync.
+  if (!integration || integration.status !== 'active') {
     return { success: false, error: 'Linear integration not connected' };
   }
 

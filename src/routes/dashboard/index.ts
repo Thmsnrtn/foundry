@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import { setCookie, getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { query, getProductsByOwner, getProductByOwner, getActiveStressors } from '../../db/client.js';
+import { query, getProductsByOwner, getVisibleProducts, getProductByOwner, getActiveStressors } from '../../db/client.js';
 import { computeSignal, getSignalHistory, getDailyInsight, getPreviousSignalScore } from '../../services/signal.js';
 import { computeWeeklyOutcome } from '../../services/intelligence/weekly-outcome.js';
 import { recordBriefingView, getBriefingOutcome } from '../../services/intelligence/briefing-telemetry.js';
@@ -128,7 +128,9 @@ dashboardRoutes.post('/switch-product', async (c) => {
 
 dashboardRoutes.get('/dashboard', async (c) => {
   const founder = c.get('founder');
-  const products = await getProductsByOwner(founder.id);
+  // Owned or accepted into. An invited co-founder used to land here and see
+  // an empty dashboard.
+  const products = await getVisibleProducts(founder.id);
 
   if (products.rows.length === 0) {
     return c.redirect('/onboarding');
@@ -191,6 +193,24 @@ dashboardRoutes.get('/dashboard', async (c) => {
     recordBriefingView(founder.id, productId, latestBriefing.id).catch(() => {});
   }
 
+  // A LIFETIME COUNTER STATED AS A CLAIM ABOUT THIS WEEK.
+  //
+  // `rejection_streaks.consecutive_rejections` has no date predicate anywhere:
+  // it is incremented on every rejection and reset only by an approval, never
+  // by time. The card said "Your agents have been off-target this week" — so
+  // three rejections spread across eight months, with no approval since,
+  // produced that sentence today, every day, forever.
+  //
+  // The streak is a real fact and keeps its sentence; what it cannot support is
+  // the window. `last_rejected_at` is the one date the table does hold, so the
+  // card says when, and stops nagging about a streak whose most recent
+  // rejection is more than a month old — an old streak is a fact, not a signal.
+  const streakDays = streak.last_rejected_at === null
+    ? null
+    : Math.max(0, Math.floor(
+      (Date.now() - new Date(String(streak.last_rejected_at).replace(' ', 'T') + 'Z').getTime())
+      / 86_400_000));
+
   const stressorRows = stressors.rows as unknown as StressorData[];
   const criticalCount = stressorRows.filter((s) => s.severity === 'critical').length;
   const pendingDecisions = ctx.ux.navBadges.decisions_count;
@@ -228,7 +248,7 @@ dashboardRoutes.get('/dashboard', async (c) => {
         ),
         query(
           `SELECT COUNT(*) as cnt FROM stressor_history
-           WHERE product_id = ? AND created_at >= ?`,
+           WHERE product_id = ? AND identified_at >= ?`,
           [productId, lastSeenAt]
         ),
         query(
@@ -352,13 +372,15 @@ dashboardRoutes.get('/dashboard', async (c) => {
         </div>
       </div>` : ''}
 
-      ${streak.consecutive >= 3 ? html`
+      ${streak.consecutive >= 3 && streakDays !== null && streakDays <= 30 ? html`
       <div class="card" style="margin-bottom:1.5rem;padding:1rem 1.25rem;border-left:3px solid var(--warning, #ffb347);background:rgba(255,179,71,0.04);">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--warning, #ffb347);margin-bottom:0.5rem;">
           ${streak.consecutive} rejections in a row
         </div>
         <p style="margin:0 0 0.5rem;font-size:0.88rem;color:var(--text-primary);line-height:1.55;">
-          Your agents have been off-target this week. Two minutes of calibration would help.
+          Your agents have been off-target — the most recent was
+          ${streakDays === 0 ? 'today' : streakDays === 1 ? 'yesterday' : `${streakDays} days ago`}.
+          Two minutes of calibration would help.
         </p>
         <a href="/agents/wisdom" style="font-size:0.8rem;color:var(--accent);font-weight:600;">Open the taste journal →</a>
       </div>` : ''}

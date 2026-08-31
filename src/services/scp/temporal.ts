@@ -56,13 +56,13 @@ export async function getSignalTimeline(
 ): Promise<SignalTimelineEntry[]> {
   // 1. Signal history for last N days
   const signalResult = await query(
-    `SELECT DATE(computed_at) as day,
-            AVG(signal_score) as signal_score,
+    `SELECT DATE(recorded_at) as day,
+            AVG(score) as signal_score,
             MAX(risk_state) as risk_state
      FROM signal_history
      WHERE product_id = ?
-       AND computed_at >= datetime('now', ? )
-     GROUP BY DATE(computed_at)
+       AND recorded_at >= datetime('now', ? )
+     GROUP BY DATE(recorded_at)
      ORDER BY day ASC`,
     [productId, `-${days} days`]
   );
@@ -351,7 +351,9 @@ export async function getAgentPerformanceOverTime(
   date: string;
   sessions_count: number;
   success_rate: number;
-  avg_health_score: number;
+  /** Null: no per-session health score is recorded, so there is no daily
+   * average. Distinct from a score of zero. */
+  avg_health_score: number | null;
   decisions_proposed: number;
   evolution_events: number;
 }>> {
@@ -361,7 +363,11 @@ export async function getAgentPerformanceOverTime(
        DATE(started_at) as day,
        COUNT(*) as sessions_count,
        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as success_count,
-       AVG(domain_health_score) as avg_health,
+       -- agent_sessions has never carried domain_health_score; the column is
+       -- on agent_instances, one current value per agent, with no history to
+       -- average. This raised on every call, so the whole activity timeline
+       -- came back empty rather than missing one field.
+       NULL as avg_health,
        SUM(
          CASE
            WHEN pending_decisions IS NOT NULL AND pending_decisions != '[]'
@@ -405,7 +411,10 @@ export async function getAgentPerformanceOverTime(
       date,
       sessions_count: sessionsCount,
       success_rate: sessionsCount > 0 ? Math.round((successCount / sessionsCount) * 100) : 0,
-      avg_health_score: Math.round((r.avg_health as number) ?? 0),
+      // Not recorded per session, so there is nothing to average. Zero would
+      // read as "the agent scored zero"; this reads as "no score", which is
+      // what it is.
+      avg_health_score: r.avg_health == null ? null : Math.round(r.avg_health as number),
       decisions_proposed: (r.decisions_proposed as number) ?? 0,
       evolution_events: evolutionMap.get(date) ?? 0,
     };

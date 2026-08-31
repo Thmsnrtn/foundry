@@ -15,6 +15,7 @@ import type {
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 import { createRemediation } from '../remediation.js';
+import { measured } from '../../ai/measured.js';
 
 interface CrucibleClaudeResponse {
   observations: string[];
@@ -43,7 +44,7 @@ interface CrucibleClaudeResponse {
     description: string;
     authority_level: 0 | 1 | 2;
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -117,7 +118,6 @@ export class CrucibleAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
@@ -125,9 +125,15 @@ export class CrucibleAgent extends BaseAgent {
     const audit = auditResult.rows.length > 0
       ? (auditResult.rows[0] as Record<string, unknown>)
       : null;
-    const d1 = audit ? Number(audit.d1_score) || 0 : 0;
-    const d5 = audit ? Number(audit.d5_score) || 0 : 0;
-    const d9 = audit ? Number(audit.d9_score) || 0 : 0;
+    // 0/10 IS THE WORST POSSIBLE AUDIT SCORE. Never audited is not that, and
+    // `|| 0` told this agent a company that has never been through an audit had
+    // failed all three readiness dimensions. Same defect as the five agents
+    // reading `metric_snapshots`; this one reads `audit_scores`, which is why
+    // it survived that sweep. See `ai/measured.ts`.
+    const d1 = measured(audit?.d1_score);
+    const d5 = measured(audit?.d5_score);
+    const d9 = measured(audit?.d9_score);
+    const outOfTen = (v: string) => v === 'unknown' ? 'not audited' : `${v}/10`;
 
     let blockingIssueCount = 0;
     if (audit?.blocking_issues) {
@@ -200,7 +206,7 @@ You are direct when test coverage is creating false confidence. When there are n
 You push back when shipping velocity is being traded for quality in ways that will cost more later.`
     );
 
-    const userPrompt = `Functional Completeness: ${d1}/10. Operational Readiness: ${d5}/10. Launch Readiness: ${d9}/10.
+    const userPrompt = `Functional Completeness: ${outOfTen(d1)}. Operational Readiness: ${outOfTen(d5)}. Launch Readiness: ${outOfTen(d9)}.
 Blocking issues in latest audit: ${blockingIssueCount}.
 ${qualityFindings.length > 0 ? `Quality-related findings: ${qualityFindings.join('; ')}` : ''}
 Remediation PRs status: ${prBreakdown} (${totalOpenPrs} open, ${mergedPrs} merged, ${failedPrs} failed).
@@ -242,7 +248,9 @@ Return JSON only (no markdown fences):
       "authority_level": 0 | 1 | 2
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -264,7 +272,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -354,8 +361,13 @@ Return JSON only (no markdown fences):
       });
     }
 
-    const qualityScore = parsed.domain_health_score ?? 50;
-    if (qualityScore < 60) {
+    // A MESSAGE THAT STATES A SCORE MUST HAVE ONE. This read
+    // `parsed.domain_health_score ?? 50`, so a model that answered without a
+    // score sent Compass an alert reading "Quality score dropped to 50/100 —
+    // strategic attention needed", naming a number nothing produced and asking
+    // another agent to reprioritise engineering capacity because of it.
+    const qualityScore = parsed.domain_health_score;
+    if (qualityScore != null && qualityScore < 60) {
       agentMessages.push({
         to_agent: 'compass',
         message_type: 'insight',
@@ -380,7 +392,7 @@ Return JSON only (no markdown fences):
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed QA analysis: d1=${d1}/10, d5=${d5}/10, d9=${d9}/10, ${totalOpenPrs} open PRs, ${highAlerts} high-severity quality alerts, ${highRegressionRisks.length} high regression risks`,
+      description: `Completed QA analysis: d1=${outOfTen(d1)}, d5=${outOfTen(d5)}, d9=${outOfTen(d9)}, ${totalOpenPrs} open PRs, ${highAlerts} high-severity quality alerts, ${highRegressionRisks.length} high regression risks`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -396,7 +408,7 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      domainHealthScore: parsed.domain_health_score,
       outboundActions,
       agentMessages,
       hypotheses,

@@ -1,12 +1,29 @@
 // =============================================================================
 // FOUNDRY — Predictive Intelligence Engine
-// Leading indicators, pre-stressor detection, probability forecasts.
+//
+// Pre-stressor detection and probability forecasts, from this company's own
+// trajectory and from the cross-company pattern signal.
+//
+// THIS HEADER SAID "LEADING INDICATORS" AND NOTHING HERE HAS ONE. Migration 023
+// created a `leading_indicators` table beside `predictions` — sector, indicator,
+// what it predicts, lead time, confidence, sample size — and nothing ever wrote
+// a row or read one. Those columns describe an empirical body of knowledge, and
+// Foundry has never had a way to establish any of the numbers in them; filling
+// them would have meant writing them down. Migration 205 removed the table, and
+// this header no longer claims it.
+//
+// The honest version of that idea is live under another name:
+// `network/failure-library.ts` holds named shapes with match criteria the
+// engine evaluates against a company's real metrics, and a lead time it labels
+// as a rule of thumb rather than a measurement.
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { ratePoints } from '../ai/measured.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 import type { GrowthStage, RiskStateValue } from '../../types/index.js';
+import { PEER_SIGNAL_MIN_SAMPLE } from '../decisions/patterns.js';
 
 export interface Prediction {
   id: string;
@@ -65,8 +82,17 @@ async function predictChurnSpike(productId: string): Promise<Prediction | null> 
   );
   if (metrics.rows.length < 4) return null;
 
-  const rows = metrics.rows as unknown as Array<Record<string, number>>;
-  const churnRates = rows.map((r) => r.churn_rate ?? 0).filter((r) => r > 0);
+  // POINTS, NOT FRACTIONS. `churn_rate` is stored 0–1 in this system, and the
+  // threshold below is written in PERCENTAGE POINTS — so a delta of 0.5 meant a
+  // fifty-point jump in churn, which is not a thing that happens, and this
+  // prediction could never fire for anyone. The evidence lines had the mirror
+  // of the same error: `+${delta.toFixed(2)}%` printed a three-point rise as
+  // "+0.03%". `ratePoints` is the one place that converts, and the rule is to
+  // convert the VALUE, never the threshold.
+  const rows = metrics.rows as unknown as Array<Record<string, number | null>>;
+  const churnRates = rows
+    .map((r) => ratePoints(r.churn_rate))
+    .filter((r): r is number => r !== null && r > 0);
   if (churnRates.length < 3) return null;
 
   // Detect acceleration: is the rate of change of churn increasing?
@@ -88,8 +114,8 @@ async function predictChurnSpike(productId: string): Promise<Prediction | null> 
       probability,
       time_horizon_days: 45,
       evidence: [
-        `Recent churn acceleration: +${recentDelta.toFixed(2)}%/period`,
-        `Historical baseline: +${olderDelta.toFixed(2)}%/period`,
+        `Recent churn acceleration: +${recentDelta.toFixed(2)} points per snapshot`,
+        `Historical baseline: +${olderDelta.toFixed(2)} points per snapshot`,
         `Latest churn rate: ${churnRates[0]!.toFixed(1)}%`,
       ],
       recommended_action: 'Investigate the root cause immediately. Check recent cohort quality, onboarding changes, or competitive moves. Act before the spike materializes.',
@@ -103,27 +129,43 @@ async function predictChurnSpike(productId: string): Promise<Prediction | null> 
  * Predict revenue plateau from growth deceleration.
  */
 async function predictRevenuePlateau(productId: string): Promise<Prediction | null> {
+  // THE LEVEL, AND ONE RATE PER MONTH OF IT. This read `new + expansion` — the
+  // revenue ACQUIRED in a period, not the company's revenue — and divided
+  // consecutive rows, so the "growth rate" was per snapshot interval and the
+  // thresholds below (5% and −2%) are monthly figures. `metric_snapshots` is
+  // keyed by DATE and most companies report daily, so both halves were wrong at
+  // once for the same company, and the sentence it produces is about MRR
+  // plateauing.
   const metrics = await query(
-    'SELECT new_mrr_cents, expansion_mrr_cents, snapshot_date FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 12',
+    `SELECT mrr_cents, snapshot_date FROM metric_snapshots
+      WHERE product_id = ? AND mrr_cents IS NOT NULL
+      ORDER BY snapshot_date DESC LIMIT 12`,
     [productId]
   );
   if (metrics.rows.length < 6) return null;
 
-  const rows = metrics.rows as unknown as Array<Record<string, number>>;
-  const revenues = rows.map((r) => (r.new_mrr_cents ?? 0) + (r.expansion_mrr_cents ?? 0));
+  const rows = metrics.rows as unknown as Array<Record<string, string | number>>;
 
-  // Calculate growth rates
-  const growthRates = [];
-  for (let i = 0; i < revenues.length - 1; i++) {
-    const prev = revenues[i + 1]!;
-    if (prev > 0) growthRates.push((revenues[i]! - prev) / prev);
+  // Monthly-equivalent growth between consecutive snapshots, newest first.
+  const DAYS_PER_MONTH = 30.44;
+  const growthRates: number[] = [];
+  for (let i = 0; i < rows.length - 1; i++) {
+    const curr = Number(rows[i]!.mrr_cents);
+    const prev = Number(rows[i + 1]!.mrr_cents);
+    if (!(prev > 0) || !(curr > 0)) continue;
+    const gapDays = (Date.parse(`${String(rows[i]!.snapshot_date)}T00:00:00Z`)
+      - Date.parse(`${String(rows[i + 1]!.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+    if (!Number.isFinite(gapDays) || gapDays <= 0) continue;
+    growthRates.push((curr / prev) ** (DAYS_PER_MONTH / gapDays) - 1);
   }
 
   if (growthRates.length < 4) return null;
 
-  // Consistent deceleration = each recent period slower than the last
+  // Consistent deceleration = each recent period slower than the last. The rates
+  // are newest-first, so "decelerating" means each one is SMALLER than the one
+  // after it in the array — which is the one BEFORE it in time.
   const recent = growthRates.slice(0, 3);
-  const isDecelerating = recent.every((r, i) => i === 0 || r <= recent[i - 1]!);
+  const isDecelerating = recent.every((r, i) => i === recent.length - 1 || r <= recent[i + 1]!);
   const avgRecentGrowth = recent.reduce((a, b) => a + b, 0) / recent.length;
 
   if (isDecelerating && avgRecentGrowth < 0.05 && avgRecentGrowth > -0.02) {
@@ -134,8 +176,8 @@ async function predictRevenuePlateau(productId: string): Promise<Prediction | nu
       probability: 0.65,
       time_horizon_days: 75,
       evidence: [
-        `Recent growth rates: ${recent.map((r) => (r * 100).toFixed(1) + '%').join(' → ')}`,
-        `Average recent growth: ${(avgRecentGrowth * 100).toFixed(1)}%/period`,
+        `Recent monthly growth, oldest first: ${[...recent].reverse().map((r) => (r * 100).toFixed(1) + '%').join(' → ')}`,
+        `Average of those three: ${(avgRecentGrowth * 100).toFixed(1)}%/month`,
       ],
       recommended_action: 'This is the inflection point. Either expand TAM (new segments, geographies) or deepen (upsell, pricing increase, new value-adds). Status quo leads to plateau.',
     };
@@ -153,14 +195,20 @@ async function predictFromPatterns(productId: string): Promise<Prediction[]> {
   if (!p) return [];
 
   // Find patterns from similar products that had negative outcomes
+  // "${cnt} similar products saw negative outcomes" is a claim about a
+  // POPULATION, and cnt was a row count: three rows from one company said three
+  // products. Counted by distinct contributor now, and floored at the same
+  // number as every other peer reader rather than a third one invented here.
   const patterns = await query(
-    `SELECT decision_type, option_chosen_category, outcome_direction, outcome_timeframe_days, COUNT(*) as cnt
+    `SELECT decision_type, option_chosen_category, outcome_direction, outcome_timeframe_days,
+            COUNT(DISTINCT contributor_hash) as cnt
      FROM decision_patterns
      WHERE market_category = ? AND product_lifecycle_stage = ? AND outcome_direction = 'negative'
+       AND contributor_hash IS NOT NULL
      GROUP BY decision_type, option_chosen_category
-     HAVING cnt >= 3
+     HAVING cnt >= ?
      LIMIT 5`,
-    [p.sector_profile ?? 'b2b_saas', p.growth_stage ?? 'growth']
+    [p.sector_profile ?? 'b2b_saas', p.growth_stage ?? 'growth', PEER_SIGNAL_MIN_SAMPLE]
   );
 
   if (patterns.rows.length === 0) return [];
@@ -201,12 +249,20 @@ async function predictFounderBurnout(founderId: string): Promise<Prediction | nu
   );
   if (snapshots.rows.length < 3) return null;
 
-  const scores = (snapshots.rows as unknown as Array<Record<string, number>>).map((s) => s.motivation_score ?? 50);
+  // Same substitution as `founder-health.ts` carried: a snapshot with no
+  // motivation score counted as 50 in a prediction about a person.
+  const scores = (snapshots.rows as unknown as Array<Record<string, unknown>>)
+    .map((s) => s.motivation_score)
+    .filter((v): v is number => v !== null && v !== undefined)
+    .map(Number);
 
-  // Is motivation consistently declining?
+  // A burnout prediction about a person needs snapshots of that person. Three
+  // rows of which two had no score used to become three scores of 50.
+  if (scores.length < 3) return null;
+
   const isConsistentDecline = scores.every((s, i) => i === 0 || s <= scores[i - 1]!);
-  const latest = scores[0] ?? 50;
-  const oldest = scores[scores.length - 1] ?? 50;
+  const latest = scores[0]!;
+  const oldest = scores[scores.length - 1]!;
   const totalDrop = oldest - latest;
 
   if (isConsistentDecline && totalDrop > 15 && latest < 50) {

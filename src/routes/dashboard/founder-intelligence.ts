@@ -15,6 +15,7 @@ import {
   shouldWarnBeforeDecision,
 } from '../../services/scp/founder/decision-quality.js';
 import { getDecisionQualityTrends } from '../../services/scp/founder/decision-tracker.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const founderIntelligence = new Hono<AuthEnv>();
 
@@ -66,8 +67,26 @@ function severityColor(severity: string): string {
   return '#ffdd57';
 }
 
-function pct(val: number): string {
-  return `${Math.round(val * 100)}%`;
+function pct(val: number | null): string {
+  return val === null ? '—' : `${Math.round(val * 100)}%`;
+}
+
+/**
+ * The colour a rate tile is painted, or muted when there is no rate.
+ *
+ * A THRESHOLD IS A FINDING, so it can only fire on a measured value. The three
+ * tiles below read `decision_quality_scores`, which has no writer, so all three
+ * were permanently the substituted 0 — and the SAME 0 was painted red on "Full
+ * Context" (a criticism of how carelessly the founder decides) and green on the
+ * two "Override Rate" tiles (a compliment about how rarely they overrule their
+ * agents), side by side on one page.
+ */
+function rateColor(
+  val: number | null, bands: Array<[number, string]>, fallback: string,
+): string {
+  if (val === null) return 'var(--text-muted)';
+  for (const [threshold, colour] of bands) if (val >= threshold) return colour;
+  return fallback;
 }
 
 function trendBadge(trend: 'improving' | 'declining' | 'stable'): string {
@@ -220,7 +239,7 @@ founderIntelligence.get('/founder/state', async (c) => {
           </div>
           <div>
             <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">Full Context %</div>
-            <div style="font-size:1.5rem;font-weight:700;color:${trends.decisions_with_full_context_pct >= 0.7 ? '#4ecca3' : trends.decisions_with_full_context_pct >= 0.4 ? '#ffb347' : '#ff6b6b'};">
+            <div style="font-size:1.5rem;font-weight:700;color:${rateColor(trends.decisions_with_full_context_pct, [[0.7, '#4ecca3'], [0.4, '#ffb347']], '#ff6b6b')};">
               ${pct(trends.decisions_with_full_context_pct)}
             </div>
           </div>
@@ -234,13 +253,13 @@ founderIntelligence.get('/founder/state', async (c) => {
           </div>
           <div>
             <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">Override Rate 30d</div>
-            <div style="font-size:1.5rem;font-weight:700;color:${trends.override_rate_30d > 0.4 ? '#ff6b6b' : trends.override_rate_30d > 0.2 ? '#ffb347' : '#4ecca3'};">
+            <div style="font-size:1.5rem;font-weight:700;color:${rateColor(trends.override_rate_30d, [[0.4, '#ff6b6b'], [0.2, '#ffb347']], '#4ecca3')};">
               ${pct(trends.override_rate_30d)}
             </div>
           </div>
           <div>
             <div style="font-size:0.65rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.25rem;">Override Rate 90d</div>
-            <div style="font-size:1.5rem;font-weight:700;color:${trends.override_rate_90d > 0.4 ? '#ff6b6b' : trends.override_rate_90d > 0.2 ? '#ffb347' : '#4ecca3'};">
+            <div style="font-size:1.5rem;font-weight:700;color:${rateColor(trends.override_rate_90d, [[0.4, '#ff6b6b'], [0.2, '#ffb347']], '#4ecca3')};">
               ${pct(trends.override_rate_90d)}
             </div>
           </div>
@@ -290,7 +309,8 @@ founderIntelligence.get('/founder/state', async (c) => {
 
 // ─── POST /founder/state/assess ───────────────────────────────────────────────
 
-founderIntelligence.post('/founder/state/assess', async (c) => {
+founderIntelligence.post('/founder/state/assess',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'founder', 'Founder Decision Intelligence', undefined, c);
 

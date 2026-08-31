@@ -4,7 +4,9 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { encryptToken, getPlaintextToken } from '../../lib/crypto.js';
 import { nanoid } from 'nanoid';
+import { directionOf } from '../integration/direction.js';
 
 export type ProviderType = 'stripe' | 'github' | 'posthog' | 'mixpanel' | 'intercom' | 'plausible' | 'google_analytics';
 
@@ -25,6 +27,19 @@ export interface SyncResult {
 /**
  * Register a new integration for a product.
  */
+
+/** Which direction a provider moves data. Mirrors the fabric's map rather than
+ * inventing a second answer; anything unrecognised is inbound, which is the
+ * bounded default — reading is the lesser capability. */
+function providerType(provider: string): string {
+  const map: Record<string, string> = {
+    stripe: 'inbound', posthog: 'inbound', plausible: 'inbound',
+    resend: 'outbound', github: 'bidirectional', sentry: 'inbound',
+    linear: 'bidirectional', mcp: 'outbound',
+  };
+  return map[provider] ?? 'inbound';
+}
+
 export async function registerIntegration(
   productId: string,
   ownerId: string,
@@ -32,15 +47,26 @@ export async function registerIntegration(
 ): Promise<string> {
   const id = nanoid();
   await query(
-    `INSERT INTO integrations (id, product_id, owner_id, provider, status, credentials, config, sync_frequency_minutes)
-     VALUES (?, ?, ?, ?, 'active', ?, ?, ?)
+    // `type` is NOT NULL and was never supplied — the second of two
+    // independent reasons this mounted route had never once succeeded. The
+    // first was an `ON CONFLICT` target with no matching unique index
+    // (migration 141). A route with two unrelated fatal defects is a route
+    // nobody has ever called.
+    `INSERT INTO integrations (id, product_id, owner_id, provider, direction, status, credentials, config, sync_frequency_minutes)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
      ON CONFLICT (product_id, provider) DO UPDATE SET
        credentials = excluded.credentials, config = excluded.config,
        status = 'active', sync_frequency_minutes = excluded.sync_frequency_minutes,
        updated_at = datetime('now')`,
     [
-      id, productId, ownerId, config.provider,
-      JSON.stringify(config.credentials),
+      id, productId, ownerId, config.provider, directionOf(config.provider),
+      // Encrypted, like every other writer of this column. `connections.ts`
+      // has always written it through `encryptToken` and `mcp-client.ts` reads
+      // it back through `getPlaintextToken`; this writer stored the JSON in the
+      // clear, so the SAME COLUMN carried two encodings depending on which
+      // route the founder happened to use — and this one is mounted at
+      // POST /api/products/:id/integrations.
+      encryptToken(JSON.stringify(config.credentials)),
       config.config ? JSON.stringify(config.config) : null,
       config.sync_frequency_minutes ?? 60,
     ]
@@ -83,17 +109,53 @@ export async function getIntegrations(productId: string): Promise<Array<{
 }
 
 /**
- * Run sync for a specific integration.
+ * On whose behalf a sync is being run.
+ *
+ * AN INTEGRATION ID IS NOT A CAPABILITY. This function used to resolve the
+ * integration by id alone — `WHERE id = ?` — and then sync whatever product and
+ * credentials that row named. The route above it,
+ * `POST /api/products/:id/integrations/:integrationId/sync`, checked that the
+ * founder owned `:id` and then passed `:integrationId` straight through: two
+ * identifiers, one checked, and the unchecked one deciding everything. A
+ * founder who owned any product at all could name another company's
+ * integration and make Foundry call a third-party provider with that company's
+ * credentials, write the results into that company's metrics, and return the
+ * record count and provider error text in the response body.
+ *
+ * The ownership check was in the route, and the row it governed was fetched
+ * here. A RULE THAT DECIDES AUTHORITY MUST HAVE EXACTLY ONE HOME: so the scope
+ * travels with the call and is applied to the query that loads the row. There
+ * is no default — a caller has to say which it is.
  */
-export async function runSync(integrationId: string): Promise<SyncResult> {
+export type SyncCaller =
+  /** A request made for a founder who has been shown to own this product. */
+  | { onBehalfOfProduct: string }
+  /** The cron path, which acts for no caller and sweeps every due row. */
+  | 'scheduled';
+
+/**
+ * Run sync for a specific integration.
+ *
+ * Returns null when no integration with this id is visible to this caller —
+ * which is both "no such integration" and "not yours", deliberately
+ * indistinguishable to the caller.
+ */
+export async function runSync(integrationId: string, caller: SyncCaller): Promise<SyncResult | null> {
   const start = Date.now();
-  const integration = await query('SELECT * FROM integrations WHERE id = ?', [integrationId]);
+  const integration = caller === 'scheduled'
+    ? await query('SELECT * FROM integrations WHERE id = ?', [integrationId])
+    : await query('SELECT * FROM integrations WHERE id = ? AND product_id = ?',
+        [integrationId, caller.onBehalfOfProduct]);
   const row = integration.rows[0] as Record<string, unknown> | undefined;
-  if (!row) return { records_processed: 0, metrics_updated: [], errors: ['Integration not found'], duration_ms: 0 };
+  if (!row) return null;
 
   const provider = row.provider as ProviderType;
   const productId = row.product_id as string;
-  const credentials = row.credentials ? JSON.parse(row.credentials as string) : {};
+  // Decrypted through the migration-safe reader, so a row written before this
+  // was fixed still syncs rather than failing to parse — and a row written
+  // since is never in the clear to begin with.
+  const storedCredentials = getPlaintextToken((row.credentials as string | null) ?? null);
+  const credentials = storedCredentials ? JSON.parse(storedCredentials) as Record<string, string> : {};
 
   let result: SyncResult;
   try {
@@ -112,14 +174,19 @@ export async function runSync(integrationId: string): Promise<SyncResult> {
 
   // Log sync
   await query(
-    `INSERT INTO integration_sync_log (id, integration_id, product_id, provider, sync_type, records_processed, metrics_updated, errors, duration_ms, completed_at)
-     VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, datetime('now'))`,
+    // `started_at` is NOT NULL with no default and was never supplied, so every
+    // sync log write raised — inside a path whose failures are treated as
+    // unremarkable, which is why a log that has never recorded anything looked
+    // like a quiet system. The value was already in hand: `start`.
+    `INSERT INTO integration_sync_log (id, integration_id, product_id, provider, sync_type, records_processed, metrics_updated, errors, duration_ms, started_at, completed_at)
+     VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, datetime(?), datetime('now'))`,
     [
       nanoid(), integrationId, productId, provider,
       result.records_processed,
       JSON.stringify(result.metrics_updated),
       result.errors.length > 0 ? JSON.stringify(result.errors) : null,
       result.duration_ms,
+      new Date(start).toISOString(),
     ]
   );
 
@@ -146,8 +213,9 @@ export async function runAllDueSyncs(): Promise<number> {
 
   let synced = 0;
   for (const row of due.rows as unknown as Array<Record<string, string>>) {
-    await runSync(row.id);
-    synced++;
+    // A row that vanished between the query and the sync is not a sync.
+    const result = await runSync(row.id, 'scheduled');
+    if (result !== null) synced++;
   }
   return synced;
 }
@@ -189,7 +257,6 @@ const stripeAdapter: ProviderAdapter = {
       const subs = await subsResponse.json() as { data: Array<Record<string, unknown>> };
 
       let totalMRRCents = 0;
-      let customerCount = 0;
       for (const sub of subs.data ?? []) {
         const items = (sub.items as Record<string, unknown>)?.data as Array<Record<string, unknown>> ?? [];
         for (const item of items) {
@@ -198,31 +265,40 @@ const stripeAdapter: ProviderAdapter = {
           const interval = (price?.recurring as Record<string, string>)?.interval;
           totalMRRCents += interval === 'year' ? Math.round(amount / 12) : amount;
         }
-        customerCount++;
       }
 
-      // Fetch recent charges for churn calculation
-      const chargesResponse = await fetch('https://api.stripe.com/v1/charges?limit=100&created[gte]=' + Math.floor((Date.now() - 30 * 86400000) / 1000), {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      const charges = await chargesResponse.json() as { data: Array<Record<string, unknown>> };
-      const refundedCents = (charges.data ?? [])
-        .filter((c) => c.refunded === true)
-        .reduce((sum, c) => sum + ((c.amount as number) ?? 0), 0);
-
-      // Update metric snapshot
+      // THREE QUANTITIES, THREE WRONG COLUMNS.
+      //
+      // `totalMRRCents` is the sum over every ACTIVE subscription — the MRR
+      // LEVEL — and it was written into `new_mrr_cents`, which means the new
+      // business won this period. A company at $50k MRR with a flat month was
+      // recorded as having won $50k of new business, every sync.
+      //
+      // `refundedCents` — refunded charges over thirty days — was written into
+      // `churned_mrr_cents`. A refund is money returned; churned MRR is
+      // recurring revenue lost. One annual invoice refunded would have been
+      // reported as that much recurring revenue gone. The comment above it said
+      // "for churn calculation", naming a thing it did not compute.
+      //
+      // `customerCount` is a count of SUBSCRIPTIONS and was written into
+      // `active_users`, which means people using the product. One subscription
+      // can cover a team of two hundred.
+      //
+      // This adapter knows one thing for certain, so it now writes one thing.
+      // `metric_snapshots` has no column for a paying-customer level
+      // (`new_customers` and `churned_customers` are movements), so the count is
+      // not stored anywhere rather than stored somewhere close.
       const today = new Date().toISOString().split('T')[0];
       await query(
-        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, active_users, churned_mrr_cents)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents)
+         VALUES (?, ?, ?, ?)
          ON CONFLICT (product_id, snapshot_date) DO UPDATE SET
-           new_mrr_cents = excluded.new_mrr_cents, active_users = excluded.active_users,
-           churned_mrr_cents = excluded.churned_mrr_cents`,
-        [nanoid(), productId, today, totalMRRCents, customerCount, refundedCents]
+           mrr_cents = excluded.mrr_cents`,
+        [nanoid(), productId, today, totalMRRCents]
       );
 
-      records = (subs.data ?? []).length + (charges.data ?? []).length;
-      metrics.push('new_mrr_cents', 'active_users', 'churned_mrr_cents');
+      records = (subs.data ?? []).length;
+      metrics.push('mrr_cents');
     } catch (err) {
       return { records_processed: 0, metrics_updated: [], errors: [(err as Error).message], duration_ms: 0 };
     }
@@ -258,16 +334,45 @@ const githubAdapter: ProviderAdapter = {
       );
       const deploys = await deploysResponse.json() as Array<Record<string, unknown>>;
 
-      // Store as custom metrics
-      const today = new Date().toISOString().split('T')[0];
-      const customMetrics = JSON.stringify({
+      // Store as custom metrics. THIS WROTE THE WHOLE COLUMN. `custom_metrics`
+      // has three writers and this one replaced it, so a company with a Linear
+      // integration lost `linear_velocity_7d` within the hour, every hour —
+      // while the Linear sync reported having updated it. The merge is shared
+      // now; the two keys below are a patch, not the object.
+      const today = new Date().toISOString().split('T')[0]!;
+      const { mergeCustomMetrics } = await import('../metrics/custom-metrics.js');
+      const merge = await mergeCustomMetrics(productId, today, {
         commits_7d: Array.isArray(commits) ? commits.length : 0,
         deploys_recent: Array.isArray(deploys) ? deploys.length : 0,
       });
+      if ('refused' in merge) {
+        return {
+          records_processed: 0,
+          metrics_updated: [],
+          errors: [`custom metrics not stored: ${merge.refused}`],
+          duration_ms: 0,
+        };
+      }
+      const customMetrics = merge.json;
 
+      // AN UPDATE THAT MATCHED NOTHING AND REPORTED SUCCESS.
+      //
+      // This wrote into TODAY'S snapshot row and assumed one existed. The row
+      // is created by a daily job at midnight UTC — so before that job's first
+      // run for a company (a company created today), or on any day it failed,
+      // this UPDATE affected zero rows. The function then returned
+      // `records_processed: N` and `metrics_updated: [...]`, the sync log
+      // recorded a success, and the integration's health stayed green. Nothing
+      // was written.
+      //
+      // Upserting on `(product_id, snapshot_date)` is what the Stripe and
+      // PostHog adapters already do, and it removes the dependency on the
+      // placeholder writer rather than documenting it.
       await query(
-        `UPDATE metric_snapshots SET custom_metrics = ? WHERE product_id = ? AND snapshot_date = ?`,
-        [customMetrics, productId, today]
+        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, custom_metrics)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(product_id, snapshot_date) DO UPDATE SET custom_metrics = ?`,
+        [nanoid(), productId, today, customMetrics, customMetrics]
       );
 
       return {
@@ -308,10 +413,15 @@ const intercomAdapter: ProviderAdapter = {
       const supportVolume = convos.total_count ?? 0;
 
       // Update metric snapshot
+      // Upsert, not update: see the GitHub adapter above. An UPDATE against a
+      // row the daily job has not created yet writes nothing and says it
+      // processed everything.
       const today = new Date().toISOString().split('T')[0];
       await query(
-        `UPDATE metric_snapshots SET support_volume_7d = ? WHERE product_id = ? AND snapshot_date = ?`,
-        [supportVolume, productId, today]
+        `INSERT INTO metric_snapshots (id, product_id, snapshot_date, support_volume_7d)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(product_id, snapshot_date) DO UPDATE SET support_volume_7d = ?`,
+        [nanoid(), productId, today, supportVolume, supportVolume]
       );
 
       return {
@@ -329,15 +439,47 @@ const intercomAdapter: ProviderAdapter = {
 /**
  * Process a Stripe webhook event and auto-update metrics.
  */
+/**
+ * Record one Stripe event against a product, once.
+ *
+ * RETURNS WHETHER IT WAS NEW, and that return is the point. The dedupe below
+ * is global on `stripe_event_id` — it has no product predicate — so it already
+ * knows when an event has been seen before, for ANY product. It returned void,
+ * so `processStripeEventChain` could not tell, and ran the whole intelligence
+ * chain regardless: metric mutation, stressor insert, risk-state transition, a
+ * COO message to the founder, a gate-1 decision and an AI action draft.
+ *
+ * That is RT02-09's amplification. A captured genuine delivery replayed N times
+ * drove those N times over; replayed at a DIFFERENT product id it drove them
+ * against a company the event had nothing to do with. The row that would have
+ * stopped it was already in the table.
+ */
 export async function processStripeWebhookEvent(
   productId: string,
   eventId: string,
   eventType: string,
   data: Record<string, unknown>
-): Promise<void> {
+): Promise<{ recorded: boolean }> {
+  // THE COMPANY IS CHECKED HERE, NOT ONLY AT THE DOOR.
+  //
+  // This trusted `productId` outright: it inserted an event row for any
+  // company and could trigger `runSync` on that company's Stripe integration.
+  // It is safe today only because its single caller verifies a Stripe HMAC
+  // first — which means the guard is beside the door rather than in it, and
+  // the day a second caller appears without that signature check this becomes
+  // a cross-tenant write plus an outbound sync. An adversarial review named it
+  // as the one genuinely id-trusting service on this surface.
+  //
+  // A product that does not exist is not a tenant, and refusing is cheaper
+  // than trusting every future caller to remember.
+  const company = await query('SELECT id FROM products WHERE id = ?', [productId]);
+  if (company.rows.length === 0) {
+    throw new Error(`stripe_webhook: unknown product ${productId}`);
+  }
+
   // Deduplicate
   const existing = await query('SELECT id FROM stripe_events WHERE stripe_event_id = ?', [eventId]);
-  if (existing.rows.length > 0) return;
+  if (existing.rows.length > 0) return { recorded: false };
 
   await query(
     `INSERT INTO stripe_events (id, product_id, stripe_event_id, event_type, data) VALUES (?, ?, ?, ?, ?)`,
@@ -352,9 +494,13 @@ export async function processStripeWebhookEvent(
       [productId]
     );
     if (integration.rows.length > 0) {
-      await runSync((integration.rows[0] as Record<string, string>).id);
+      // The integration was just selected by `product_id`, and the product id
+      // came from the verified webhook — so the scope is the one already known.
+      await runSync((integration.rows[0] as Record<string, string>).id,
+        { onBehalfOfProduct: productId });
     }
   }
 
   await query('UPDATE stripe_events SET processed = 1 WHERE stripe_event_id = ?', [eventId]);
+  return { recorded: true };
 }

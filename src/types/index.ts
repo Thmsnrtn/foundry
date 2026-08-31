@@ -74,7 +74,17 @@ export interface GrowthStageConfig {
 
 // ─── Founder Health ─────────────────────────────────────────────────────────
 
-export type EngagementTrend = 'rising' | 'stable' | 'declining' | 'critical';
+/**
+ * `'unknown'` exists because it did not. `detectEngagementTrend` returned
+ * `'stable'` when it had fewer than three snapshots to look at, so a founder
+ * about whom Foundry knew nothing was reported as engagement-stable — a claim
+ * about a person, from no observation of that person.
+ *
+ * Nothing acts on 'unknown', so the behavioural change is nil: the two
+ * consumers (`ai/calibration.ts` and `intelligence/psychology.ts`) only branch
+ * on 'declining' and 'critical'. The change is to what the system SAYS.
+ */
+export type EngagementTrend = 'rising' | 'stable' | 'declining' | 'critical' | 'unknown';
 
 export interface FounderHealth {
   id: string;
@@ -485,10 +495,16 @@ export interface Cohort {
 export interface CohortSummary {
   period: string;
   channel: string | null;
-  retention_day_14: number;
-  retention_day_30: number;
-  vs_historical_average_14: number;
-  vs_historical_average_30: number;
+  /** Null when the cohort has no founders in it. A cohort of nobody has no
+   *  retention; 0% is a measurement, and a bad one. */
+  retention_day_14: number | null;
+  retention_day_30: number | null;
+  /** Points above or below the historical average, or NULL when there is no
+   *  average to compare against — which needs at least two cohorts. Zero here
+   *  is the specific claim "exactly at the average", and it was what a company
+   *  with a single cohort was told. */
+  vs_historical_average_14: number | null;
+  vs_historical_average_30: number | null;
 }
 
 export interface Competitor {
@@ -518,18 +534,47 @@ export interface CompetitiveSignal {
   linked_stressor_id: string | null;
 }
 
+/**
+ * THE FIELD CALLED `total_cents` WAS ONE PERIOD'S NET CHANGE.
+ *
+ * It was `new + expansion - contraction - churned` — the MOVEMENT — and it was
+ * displayed as "MRR" in the voice briefing, the weekly digest, the COO chat
+ * context, the conversation context and a dashboard component. A company at
+ * $50k MRR with a flat month was told its MRR was $0.
+ *
+ * It is `net_new_cents` now, which is what it is, and `level_cents` carries the
+ * actual MRR from `metric_snapshots.mrr_cents`. Renamed rather than fixed in
+ * place so that no reader can keep treating the movement as the level by
+ * accident: every call site had to be looked at.
+ */
 export interface MRRDecomposition {
-  new_cents: number;
-  expansion_cents: number;
-  contraction_cents: number;
-  churned_cents: number;
-  total_cents: number;
+  /**
+   * The four movements, in cents, or NULL for one nobody reported.
+   *
+   * They were `number`, over columns that were `INTEGER DEFAULT 0`, so a
+   * company that reported a genuine zero and one that reported nothing gave the
+   * same answer — and ten importers stated it as fact. Migration 202 made the
+   * columns nullable; these follow, so a reader has to decide what to say about
+   * an absence instead of being handed a zero.
+   */
+  new_cents: number | null;
+  expansion_cents: number | null;
+  contraction_cents: number | null;
+  churned_cents: number | null;
+  /**
+   * New + expansion - contraction - churned. One period's net change, and NULL
+   * unless all four parts are known: a sum missing a term is not a smaller sum.
+   */
+  net_new_cents: number | null;
+  /** The MRR LEVEL. Null when no integration or report has supplied one. */
+  level_cents: number | null;
   health_ratio: number | null;
 }
 
 export interface MRRHealthRatio {
-  value: number;
-  indicator: 'green' | 'yellow' | 'red';
+  /** Null when there was no new MRR to divide by. `?? 0` made that GREEN. */
+  value: number | null;
+  indicator: 'green' | 'yellow' | 'red' | 'unknown';
 }
 
 // ─── AI Interfaces ───────────────────────────────────────────────────────────
@@ -672,14 +717,23 @@ export interface Digest {
   digest_type: 'weekly' | 'yellow_pulse' | 'red_daily';
 }
 
+/**
+ * A company's latest reported metrics, WHERE NULL MEANS NOT REPORTED.
+ *
+ * Every field was non-nullable, so the digest generator's `?? 0` had nowhere
+ * else to put an absence — and the four columns behind them are nullable REAL
+ * with no default, filled in by a placeholder snapshot the daily job writes
+ * with nothing but a date. The same NULL became the BEST possible value for
+ * churn and the WORST for activation and retention, inside one object literal.
+ */
 export interface DashboardMetrics {
-  signups_7d: number;
-  active_users: number;
-  activation_rate: number;
-  day_30_retention: number;
-  support_volume_7d: number;
-  nps_score: number;
-  churn_rate: number;
+  signups_7d: number | null;
+  active_users: number | null;
+  activation_rate: number | null;
+  day_30_retention: number | null;
+  support_volume_7d: number | null;
+  nps_score: number | null;
+  churn_rate: number | null;
 }
 
 // ─── Dashboard Data (API) ────────────────────────────────────────────────────
@@ -1043,13 +1097,23 @@ export interface AppNotification {
   created_at: string;
 }
 
+/**
+ * FIVE OF THESE SIX WERE NEVER DRAWN.
+ *
+ * `groupedSidebar` renders exactly one badge — the count beside "Decide" — and
+ * has done since the nav was cut to five doors. The other five fields were
+ * computed on every dashboard page load, cached into `lifecycle_state` by a
+ * scheduled job that swept every product, and read back by `getLayoutContext`
+ * into a struct that the layout then ignored. An overdue audit, unread
+ * competitive signals, unseen milestones and open remediation PRs were all
+ * being counted for a badge that does not exist.
+ *
+ * They are gone rather than drawn: a nav that deliberately stopped shouting is
+ * a decision, and reviving four badges to justify the arithmetic behind them
+ * would be the arithmetic deciding the design.
+ */
 export interface NavBadges {
   decisions_count: number;
-  has_overdue_audit: boolean;
-  unread_signals: boolean;
-  unseen_milestones: boolean;
-  open_prs_count: number;
-  dna_completion: number;
 }
 
 export interface FeatureGateConfig {
@@ -1340,32 +1404,6 @@ export interface PlaybookEvidence {
   decision_id?: string;
   stressor_id?: string;
   date: string;
-}
-
-// ─── Temporal Intelligence ────────────────────────────────────────────────────
-
-export type TemporalEventType =
-  | 'stressor_created' | 'stressor_resolved'
-  | 'decision_made' | 'decision_outcome'
-  | 'risk_state_change' | 'lifecycle_gate'
-  | 'audit_completed' | 'remediation_merged'
-  | 'signal_spike' | 'signal_drop'
-  | 'milestone' | 'integration_connected'
-  | 'cohort_anomaly' | 'competitive_signal';
-
-export interface TemporalEvent {
-  id: string;
-  product_id: string;
-  event_date: string;
-  event_type: TemporalEventType;
-  title: string;
-  description: string | null;
-  entity_type: string | null;
-  entity_id: string | null;
-  signal_at_event: number | null;
-  signal_delta: number | null;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
 }
 
 export interface PredictionAccuracy {

@@ -26,7 +26,8 @@ describe('non-executing responsibility shadowing',()=>{
   it('requires an independent observation channel and advances with zero authority or execution',async()=>{
     const before=await query("SELECT COUNT(*) n FROM action_executions WHERE product_id='shadow_product'",[]);
     const responsibility=await beginResponsibilityShadowing({productId:'shadow_product',responsibilityId:'shadow_resp',
-      expectedEventType:'support_capacity_restored',expectationClaimId:expectationClaim,observationSourceSignalId:'shadow_channel'});
+      expectedEventType:'support_capacity_restored',expectationClaimId:expectationClaim,observationSourceSignalId:'shadow_channel',
+      observationSourceKind:'support'});
     expect(responsibility).toMatchObject({state:'shadowing',authorityRef:null});
     const after=await query("SELECT COUNT(*) n FROM action_executions WHERE product_id='shadow_product'",[]);
     expect(after.rows[0]).toEqual(before.rows[0]);

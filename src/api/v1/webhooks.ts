@@ -8,6 +8,7 @@ import { query } from '../../db/client.js';
 import { requireScope } from '../middleware/auth.js';
 import type { ApiAuthEnv } from '../middleware/auth.js';
 import { assertUrlSafe } from '../../services/outbound/ssrf.js';
+import { WEBHOOK_EVENTS } from '../../lib/webhooks.js';
 import { encrypt } from '../../services/encryption.js';
 
 export const webhooksApi = new Hono<ApiAuthEnv>();
@@ -49,6 +50,19 @@ webhooksApi.post('/', requireScope('agents:write'), async (c) => {
   }
   if (!Array.isArray(events) || events.length === 0) {
     return c.json({ error: 'events array is required and must not be empty' }, 400);
+  }
+
+  // A SUBSCRIPTION TO AN EVENT NOBODY SENDS IS SILENCE WITH A 201 ON IT. Any
+  // string was accepted here, and seven of the ten names the type advertised
+  // were dispatched by nothing at all. `'*'` stays: the dispatcher honours it,
+  // and it means "whatever Foundry sends", which is true by construction.
+  const known = new Set<string>([...WEBHOOK_EVENTS, '*']);
+  const unknown = events.filter((e) => typeof e !== 'string' || !known.has(e));
+  if (unknown.length > 0) {
+    return c.json({
+      error: `Unknown event(s): ${unknown.join(', ')}`,
+      supported_events: [...WEBHOOK_EVENTS, '*'],
+    }, 400);
   }
 
   try {

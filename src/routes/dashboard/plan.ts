@@ -9,7 +9,8 @@ import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
-import { getLayoutContext } from './_shared.js';
+import { getLayoutContext, selectedProductId } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const planRoutes = new Hono<AuthEnv>();
 
@@ -158,10 +159,17 @@ import { nanoid } from 'nanoid';
 import { callOpus, parseJSONResponse } from '../../services/ai/client.js';
 import { computeSignal } from '../../services/signal.js';
 import { getActiveStressors, getLatestMetrics } from '../../db/client.js';
+import { signalText } from '../../services/signal.js';
 
-planRoutes.post('/plan/generate', async (c) => {
+planRoutes.post('/plan/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
-  const products = await query('SELECT id, name FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
+  // The week's plan is written FOR a company. This took whichever one sorted
+  // first, so a founder with two got one company's plan and no way to ask for
+  // the other's.
+  const selectedId = await selectedProductId(c, founder.id);
+  if (!selectedId) return c.redirect('/plan');
+  const products = await query('SELECT id, name FROM products WHERE id = ?', [selectedId]);
   if (products.rows.length === 0) return c.redirect('/plan');
 
   const p = products.rows[0] as Record<string, string>;
@@ -186,7 +194,7 @@ planRoutes.post('/plan/generate', async (c) => {
       .map((s) => `${s.title} (${s.severity})`).slice(0, 5).join('; ') || 'none';
     const pendingCount = (pendingResult.rows[0] as Record<string, number>)?.c ?? 0;
 
-    const prompt = `Signal score: ${signal.score} (${signal.tier} tier)
+    const prompt = `Signal score: ${signalText(signal)}
 Risk state: ${signal.riskState}
 Stage: ${ls.current_prompt ?? 'unknown'}
 Active stressors: ${stressorList}
@@ -207,7 +215,7 @@ Return JSON only:
   ]
 }`;
 
-    const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600);
+    const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, p.id);
     const plan = parseJSONResponse<{ synthesis: string; items: Array<{ id: string; text: string; category: string; impact: string }> }>(raw.content);
 
     if (plan?.items) {

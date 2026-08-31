@@ -10,12 +10,27 @@
 //
 // It grants nothing and checks nothing about who asked. Callers must already
 // hold current, revalidated authority; this module independently refuses what
-// no authority could ever permit — escaping the repository, following a
-// symlink out of it, or touching the constitutional ring.
+// no authority could ever permit — escaping the repository, writing through a
+// symlink, or touching the constitutional ring.
+//
+// IT DID NOT REFUSE THE LAST ONE OF THOSE. `confine` resolved only the PARENT
+// chain: it started at `dirname(absolute)` and re-appended the basename
+// unresolved, so the final component was never realpath'd. A symlink at
+// `docs/db/artifact.sql` pointing at `../../src/db/migrations/999.sql` passed
+// every check — `isConstitutionalPath` saw the requested path, not the target —
+// and the write followed the link into the constitutional ring. One pointing
+// outside the repository was written through just as happily. The claim above
+// was made in a comment by the module whose whole job is to be the thing that
+// cannot be talked around.
+//
+// The rule is now a bright line rather than a resolution: a final component
+// that IS a symlink is refused outright, whatever it points at. Nothing here
+// creates symlinks, no bounded development change needs to write through one,
+// and a kernel is worth more when its rule fits in a sentence.
 // =============================================================================
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve, sep } from 'node:path';
 import { isConstitutionalPath } from './development-authority.js';
 
@@ -59,7 +74,8 @@ export function repositoryChangeId(input: {
   return `chg_${digest([input.productId, input.responsibilityId, input.path, digest(input.content)].join(' ')).slice(0, 32)}`;
 }
 
-/** Confines a repository-relative path to the repository, symlinks included. */
+/** Confines a repository-relative path to the repository, symlinks included —
+ *  parent components resolved, and a symlinked final component refused. */
 function confine(repositoryRoot: string, path: string): { absolute: string } | { reason: string } {
   const normalized = path.replace(/^\.\//, '');
   if (!normalized || normalized.startsWith('/') || normalized.includes('..')) return { reason: 'path_invalid' };
@@ -85,6 +101,17 @@ function confine(repositoryRoot: string, path: string): { absolute: string } | {
       existing = parent;
     }
   }
+
+  // THE LAST COMPONENT IS A PATH TOO. The loop above deliberately stops at the
+  // parent, so without this the one segment the write actually opens is the one
+  // segment nothing checked. `lstat` rather than `stat`: a DANGLING symlink
+  // must be refused as well, and that is the case where the damage does not
+  // even roll back — `priorExisted` is false, the write CREATES the target, and
+  // rollback removes the link while the created file stays.
+  try {
+    if (lstatSync(absolute).isSymbolicLink()) return { reason: 'path_is_symlink' };
+  } catch { /* nothing there yet: there is no link to follow. */ }
+
   return { absolute };
 }
 

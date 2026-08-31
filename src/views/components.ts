@@ -80,12 +80,29 @@ export function stressorReport(stressors: StressorData[]): HtmlContent {
 // ─── MRR Decomposition ──────────────────────────────────────────────────────
 
 export interface MRRData {
-  new_cents: number;
-  expansion_cents: number;
-  contraction_cents: number;
-  churned_cents: number;
-  total_cents: number;
+  /** Null for a movement nobody reported — see `MRRDecomposition`. */
+  new_cents: number | null;
+  expansion_cents: number | null;
+  contraction_cents: number | null;
+  churned_cents: number | null;
+  /** One period's net change. This was called `total_cents` and shown as
+   *  "Total MRR" — the headline number on this card. Null unless all four
+   *  movements are known: a sum missing a term is not a smaller sum. */
+  net_new_cents: number | null;
+  /** The MRR LEVEL, or null when nobody has supplied one. */
+  level_cents: number | null;
   health_ratio: number | null;
+}
+
+/**
+ * Dollars, or the words for not having been told.
+ *
+ * Every one of these cells printed `$0` for a movement nobody reported, on the
+ * same card whose headline already said "Not reported" for the level. The
+ * columns can say it since migration 202; this is the card saying it.
+ */
+function dollarsOrNotReported(cents: number | null): string {
+  return cents === null ? 'Not reported' : `$${formatCents(cents)}`;
 }
 
 export function mrrDecomposition(
@@ -96,25 +113,29 @@ export function mrrDecomposition(
   <div class="card">
     <h3>MRR Decomposition</h3>
     <div class="mrr-total">
-      <span class="mrr-amount">$${formatCents(mrr.total_cents)}</span>
-      <span class="mrr-label">Total MRR</span>
+      <span class="mrr-amount">${mrr.level_cents === null ? 'Not reported' : `$${formatCents(mrr.level_cents)}`}</span>
+      <span class="mrr-label">MRR</span>
+    </div>
+    <div class="mrr-total" style="margin-top:0.25rem;">
+      <span class="mrr-amount" style="font-size:0.9em;">${dollarsOrNotReported(mrr.net_new_cents)}</span>
+      <span class="mrr-label">Net new this period</span>
     </div>
     <div class="mrr-grid">
       <div class="mrr-component mrr-new">
         <span class="mrr-comp-label">New</span>
-        <span class="mrr-comp-value">$${formatCents(mrr.new_cents)}</span>
+        <span class="mrr-comp-value">${dollarsOrNotReported(mrr.new_cents)}</span>
       </div>
       <div class="mrr-component mrr-expansion">
         <span class="mrr-comp-label">Expansion</span>
-        <span class="mrr-comp-value">$${formatCents(mrr.expansion_cents)}</span>
+        <span class="mrr-comp-value">${dollarsOrNotReported(mrr.expansion_cents)}</span>
       </div>
       <div class="mrr-component mrr-contraction">
         <span class="mrr-comp-label">Contraction</span>
-        <span class="mrr-comp-value">$${formatCents(mrr.contraction_cents)}</span>
+        <span class="mrr-comp-value">${dollarsOrNotReported(mrr.contraction_cents)}</span>
       </div>
       <div class="mrr-component mrr-churned">
         <span class="mrr-comp-label">Churned</span>
-        <span class="mrr-comp-value">$${formatCents(mrr.churned_cents)}</span>
+        <span class="mrr-comp-value">${dollarsOrNotReported(mrr.churned_cents)}</span>
       </div>
     </div>
     <div class="mrr-health">
@@ -456,10 +477,18 @@ export interface CohortData {
 export function cohortTable(
   cohorts: CohortData[],
   historicalAvg: { retention_day_7: number | null; retention_day_14: number | null; retention_day_30: number | null } | null,
-  byChannel: Record<string, { count: number; avgRetention14: number }> | null,
+  byChannel: Record<string, { count: number; avgRetention14: number | null }> | null,
 ): HtmlContent {
   if (cohorts.length === 0) {
-    return emptyState('No cohort data yet. Cohorts are created as users sign up.');
+    // "Cohorts are created as users sign up" was a statement about this
+    // company. The only writer of the `cohorts` table is Foundry's own signup
+    // webhook, writing Foundry's own product — nothing creates a cohort for a
+    // customer company, so this page is empty for reasons that have nothing to
+    // do with the company's users.
+    return emptyState(
+      'No cohort data for this company. Foundry has no path yet for reporting '
+      + 'acquisition cohorts or retention, so nothing has been recorded here — '
+      + 'this is a gap in Foundry, not a finding about your users.');
   }
   return html`
   <div class="card">
@@ -470,7 +499,7 @@ export function cohortTable(
       </div>
       ${historicalAvg ? html`
       <div class="comp-row" style="background:var(--surface-2);">
-        <span><em>Historical Avg</em></span>
+        <span><em>Avg across cohorts</em></span>
         <span>—</span>
         <span>${historicalAvg.retention_day_7 !== null ? historicalAvg.retention_day_7.toFixed(0) + '%' : '—'}</span>
         <span>${historicalAvg.retention_day_14 !== null ? historicalAvg.retention_day_14.toFixed(0) + '%' : '—'}</span>
@@ -494,7 +523,7 @@ export function cohortTable(
   ${byChannel ? channelBreakdown(byChannel) : ''}`;
 }
 
-function channelBreakdown(byChannel: Record<string, { count: number; avgRetention14: number }>): HtmlContent {
+function channelBreakdown(byChannel: Record<string, { count: number; avgRetention14: number | null }>): HtmlContent {
   const entries = Object.entries(byChannel);
   if (entries.length === 0) return html``;
   return html`
@@ -503,7 +532,9 @@ function channelBreakdown(byChannel: Record<string, { count: number; avgRetentio
     <div class="metrics-grid">
       ${entries.map(([ch, data]) => html`
       <div class="metric-card">
-        <span class="metric-value">${data.avgRetention14.toFixed(0)}%</span>
+        <!-- Null when no cohort on this channel had anyone in it. "0%" there
+             is a verdict on the channel rather than an absence of one. -->
+        <span class="metric-value">${data.avgRetention14 === null ? '—' : `${data.avgRetention14.toFixed(0)}%`}</span>
         <span class="metric-label">${ch} (${data.count} users)</span>
       </div>`)}
     </div>
@@ -603,7 +634,7 @@ export function digestView(digests: Array<{
   product_name: string;
   risk_state: { state: string; reason: string; changed_at: string | null };
   stressors: Array<{ name: string; signal: string; timeframe_days: number; neutralizing_action: string; severity: string }>;
-  mrr: { new_cents: number; expansion_cents: number; contraction_cents: number; churned_cents: number; total_cents: number; health_ratio: number | null };
+  mrr: { new_cents: number; expansion_cents: number; contraction_cents: number; churned_cents: number; net_new_cents: number; level_cents: number | null; health_ratio: number | null };
   mrr_health: { value: number; indicator: string };
   metrics: Record<string, unknown> | null;
   cohort_snapshot: Record<string, unknown> | null;

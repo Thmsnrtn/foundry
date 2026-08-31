@@ -20,7 +20,9 @@ import { getSignalHistory } from '../signal.js';
 
 export interface FullConversationContext {
   // Core state
-  signal: number;
+  /** NULL when nothing was measured. See `services/signal.ts`: a first-run
+   *  default must not reach a model as a Signal. */
+  signal: number | null;
   riskState: string;
   currentPrompt: string;
   productName: string;
@@ -31,7 +33,16 @@ export interface FullConversationContext {
   pendingDecisions: Array<{ what: string; category: string; gate: number; created_at: string }>;
 
   // Metrics
-  mrr: { total: number; new: number; churned: number; expansion: number; contraction: number } | null;
+  mrr: {
+    /** The MRR LEVEL. Null when nobody has supplied one. It used to be the
+     *  period's net change, under this same name. */
+    total: number | null;
+    /** Null for a movement nobody reported; the four columns can say so since
+     *  migration 202, and a zero here was read as a month in which nothing
+     *  happened. */
+    net_new: number | null;
+    new: number | null; churned: number | null; expansion: number | null; contraction: number | null;
+  } | null;
   metrics: {
     activationRate: number | null;
     day30Retention: number | null;
@@ -96,7 +107,7 @@ export async function buildConversationContext(
       [productId],
     ),
     query(
-      `SELECT type FROM integrations WHERE product_id = ? AND status = 'active'`,
+      `SELECT provider FROM integrations WHERE product_id = ? AND status = 'active'`,
       [productId],
     ),
   ]);
@@ -116,7 +127,10 @@ export async function buildConversationContext(
   }
 
   return {
-    signal: signal.score,
+    // NULL WHEN NOTHING WAS MEASURED. This object becomes a model's context for
+    // talking to the founder about their company; a default handed over as a
+    // Signal is a fact the model will reason from and repeat back.
+    signal: signal.hasData ? signal.score : null,
     riskState: signal.riskState,
     currentPrompt: (lifecycle.current_prompt as string) ?? 'prompt_1',
     productName,
@@ -133,11 +147,16 @@ export async function buildConversationContext(
     }),
 
     mrr: mrrResult ? {
-      total: Math.round(mrrResult.total_cents / 100),
-      new: Math.round(mrrResult.new_cents / 100),
-      churned: Math.round(mrrResult.churned_cents / 100),
-      expansion: Math.round(mrrResult.expansion_cents / 100),
-      contraction: Math.round(mrrResult.contraction_cents / 100),
+      // The LEVEL, not the period's net change, which is what `total` said.
+      total: mrrResult.level_cents === null ? null : Math.round(mrrResult.level_cents / 100),
+      // Null for a movement nobody reported — the same rule the level has
+      // followed since it was corrected. A zero here was read as a month in
+      // which nothing happened.
+      net_new: mrrResult.net_new_cents === null ? null : Math.round(mrrResult.net_new_cents / 100),
+      new: mrrResult.new_cents === null ? null : Math.round(mrrResult.new_cents / 100),
+      churned: mrrResult.churned_cents === null ? null : Math.round(mrrResult.churned_cents / 100),
+      expansion: mrrResult.expansion_cents === null ? null : Math.round(mrrResult.expansion_cents / 100),
+      contraction: mrrResult.contraction_cents === null ? null : Math.round(mrrResult.contraction_cents / 100),
     } : null,
 
     metrics: {
@@ -162,18 +181,25 @@ export async function buildConversationContext(
       what: string; chosen_option: string | null; outcome: string | null; decided_at: string | null
     }),
 
-    connectedIntegrations: integrationsResult.rows.map((r) => (r as Record<string, string>).type),
+    connectedIntegrations: integrationsResult.rows.map((r) => (r as Record<string, string>).provider),
   };
 }
 
 /**
  * Format the context into a system prompt string for injection into Claude.
  */
+/** Dollars, or the words for not having been told. */
+function dollars(amount: number | null): string {
+  return amount === null ? 'not reported' : `$${amount.toLocaleString()}`;
+}
+
 export function formatContextForPrompt(ctx: FullConversationContext): string {
   const lines: string[] = [
     `=== BUSINESS CONTEXT ===`,
     `Product: ${ctx.productName}${ctx.marketCategory ? ` (${ctx.marketCategory})` : ''}`,
-    `Signal: ${ctx.signal}/100 (${ctx.riskState.toUpperCase()}) — ${ctx.signalTrend}${ctx.signalDelta7d !== null ? `, ${ctx.signalDelta7d > 0 ? '+' : ''}${ctx.signalDelta7d} pts in 7d` : ''}`,
+    ctx.signal === null
+      ? `Signal: not enough data yet (${ctx.riskState.toUpperCase()})`
+      : `Signal: ${ctx.signal}/100 (${ctx.riskState.toUpperCase()}) — ${ctx.signalTrend}${ctx.signalDelta7d !== null ? `, ${ctx.signalDelta7d > 0 ? '+' : ''}${ctx.signalDelta7d} pts in 7d` : ''}`,
     `Stage: ${ctx.currentPrompt.replace('_', ' ')} of 9`,
     '',
   ];
@@ -181,8 +207,11 @@ export function formatContextForPrompt(ctx: FullConversationContext): string {
   if (ctx.mrr) {
     lines.push(
       'REVENUE:',
-      `  Total MRR: $${ctx.mrr.total.toLocaleString()}`,
-      `  New: $${ctx.mrr.new.toLocaleString()} | Churned: $${ctx.mrr.churned.toLocaleString()} | Expansion: $${ctx.mrr.expansion.toLocaleString()}`,
+      ctx.mrr.total === null
+        ? '  MRR: not reported — no integration or report has supplied a level'
+        : `  MRR: $${ctx.mrr.total.toLocaleString()}`,
+      `  Net new this period: ${ctx.mrr.net_new === null ? 'not reported' : `$${ctx.mrr.net_new.toLocaleString()}`}`,
+      `  New: ${dollars(ctx.mrr.new)} | Churned: ${dollars(ctx.mrr.churned)} | Expansion: ${dollars(ctx.mrr.expansion)}`,
     );
     if (ctx.metrics.healthRatio !== null) {
       lines.push(`  Health Ratio: ${ctx.metrics.healthRatio.toFixed(2)} (${ctx.metrics.healthRatio > 1 ? 'churning faster than growing' : 'growing faster than churning'})`);

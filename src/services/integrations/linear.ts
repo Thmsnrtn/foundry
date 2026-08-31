@@ -1,7 +1,21 @@
 // =============================================================================
-// FOUNDRY — Linear Integration
-// Bi-directional: pull ship cadence as execution health metric.
-// Push: create Linear issues from audit blocking issues automatically.
+// FOUNDRY — Linear Integration (READ ONLY)
+//
+// Pulls ship cadence as an execution health metric. Nothing here writes to a
+// customer's Linear workspace.
+//
+// It used to. `createLinearIssueFromBlockingIssue` posted an `issueCreate`
+// mutation straight to the Linear API — an irreversible write into somebody
+// else's workspace, outside the outbound gateway, so with no kill-switch, no
+// classification, no budget, no idempotency key and no receipt. The repo's own
+// consequential-effects audit had flagged it for years as `unresolved`,
+// meaning nobody had yet traced whether it read or wrote.
+//
+// Tracing it settled two things: it wrote, and it had no callers. The live path
+// for creating a Linear issue is the approved action in
+// `services/scp/actions/executor.ts`, which carries a durable receipt. So this
+// was a second, ungoverned writer for an effect that already had a governed
+// one — deleted rather than classified.
 // =============================================================================
 
 import { query } from '../../db/client.js';
@@ -21,12 +35,6 @@ interface LinearIssue {
   createdAt: string;
   priority: number;
   labels: { nodes: Array<{ name: string }> };
-}
-
-interface LinearTeam {
-  id: string;
-  name: string;
-  key: string;
 }
 
 // ─── Core Sync Function ───────────────────────────────────────────────────────
@@ -53,25 +61,31 @@ export async function syncLinearMetrics(
     return { metricsUpdated: [], recordsProcessed: 0 };
   }
 
-  // Store ship velocity in custom_metrics
-  const existingResult = await query(
-    `SELECT custom_metrics FROM metric_snapshots WHERE product_id = ? AND snapshot_date = ?`,
-    [productId, today],
-  );
-
-  const existing = existingResult.rows[0] as Record<string, unknown> | undefined;
-  const customMetrics = existing?.custom_metrics
-    ? JSON.parse(existing.custom_metrics as string) as Record<string, unknown>
-    : {};
-
-  customMetrics.linear_velocity_7d = completedIssues.length;
-  customMetrics.linear_last_sync = new Date().toISOString();
+  // Store ship velocity in custom_metrics. This module already read the day's
+  // value before writing it; the other two writers of the same column did not,
+  // so the merge now lives in one place and all three use it.
+  const { mergeCustomMetrics } = await import('../metrics/custom-metrics.js');
+  const merge = await mergeCustomMetrics(productId, today, {
+    linear_velocity_7d: completedIssues.length,
+    linear_last_sync: new Date().toISOString(),
+  });
+  if ('refused' in merge) {
+    // Recorded where this integration's failures are already visible, rather
+    // than as a log line: `last_error` is what the integrations page reads and
+    // what the consecutive-failure counter escalates on. A sync that cannot
+    // store its result has not succeeded, and saying so is the whole point.
+    await query(
+      `UPDATE integrations SET last_error = ? WHERE id = ?`,
+      [`custom metrics not stored: ${merge.refused}`, integrationId],
+    );
+    return { metricsUpdated: [], recordsProcessed: 0 };
+  }
 
   await query(
     `INSERT INTO metric_snapshots (id, product_id, snapshot_date, custom_metrics)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(product_id, snapshot_date) DO UPDATE SET custom_metrics = ?`,
-    [nanoid(), productId, today, JSON.stringify(customMetrics), JSON.stringify(customMetrics)],
+    [nanoid(), productId, today, merge.json, merge.json],
   );
 
   await query(
@@ -85,87 +99,6 @@ export async function syncLinearMetrics(
 
 // ─── Push: Create Linear Issue from Blocking Issue ───────────────────────────
 
-/**
- * Create a Linear issue from a Foundry audit blocking issue.
- * Returns the Linear issue URL for storing in the blocking issue evidence.
- */
-export async function createLinearIssueFromBlockingIssue(
-  credentials: LinearCredentials,
-  blockingIssue: {
-    id: string;
-    dimension: string;
-    issue: string;
-    definition_of_done: string;
-    evidence: string;
-  },
-  productName: string,
-): Promise<{ url: string; identifier: string } | null> {
-  const teamId = credentials.team_id ?? await getFirstTeamId(credentials);
-  if (!teamId) return null;
-
-  const mutation = `
-    mutation CreateIssue($input: IssueCreateInput!) {
-      issueCreate(input: $input) {
-        issue {
-          id
-          identifier
-          url
-        }
-      }
-    }
-  `;
-
-  const variables = {
-    input: {
-      teamId,
-      title: `[Foundry] ${blockingIssue.dimension}: ${blockingIssue.issue}`,
-      description: `**Source:** Foundry Audit — ${blockingIssue.dimension}\n\n**Issue:** ${blockingIssue.issue}\n\n**Evidence:** ${blockingIssue.evidence}\n\n**Definition of Done:** ${blockingIssue.definition_of_done}\n\n*This issue was automatically created by Foundry for ${productName}.*`,
-      priority: 2,  // Medium
-      labelIds: [],
-    },
-  };
-
-  try {
-    const response = await fetch('https://api.linear.app/graphql', {
-      method: 'POST',
-      headers: {
-        'Authorization': credentials.api_key,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query: mutation, variables }),
-    });
-
-    if (!response.ok) return null;
-
-    const data = await response.json() as {
-      data: { issueCreate: { issue: { id: string; identifier: string; url: string } } }
-    };
-
-    const issue = data.data?.issueCreate?.issue;
-    if (!issue) return null;
-    return { url: issue.url, identifier: issue.identifier };
-  } catch {
-    return null;
-  }
-}
-
-// ─── List Teams ───────────────────────────────────────────────────────────────
-
-export async function getLinearTeams(credentials: LinearCredentials): Promise<LinearTeam[]> {
-  const q = `query { teams { nodes { id name key } } }`;
-  try {
-    const response = await fetch('https://api.linear.app/graphql', {
-      method: 'POST',
-      headers: { 'Authorization': credentials.api_key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: q }),
-    });
-    if (!response.ok) return [];
-    const data = await response.json() as { data: { teams: { nodes: LinearTeam[] } } };
-    return data.data?.teams?.nodes ?? [];
-  } catch {
-    return [];
-  }
-}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -206,7 +139,3 @@ async function fetchCompletedIssues(
   }
 }
 
-async function getFirstTeamId(credentials: LinearCredentials): Promise<string | null> {
-  const teams = await getLinearTeams(credentials);
-  return teams[0]?.id ?? null;
-}

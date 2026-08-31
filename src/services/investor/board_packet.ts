@@ -14,13 +14,20 @@ import type { BoardPacket, BoardPacketStatus } from '../../types/index.js';
 // ─── SCP Board Section ────────────────────────────────────────────────────────
 
 export interface SCPBoardSection {
-  health_score: number;
+  /** Null when nothing has scored the company. Not 0, which is the worst score. */
+  health_score: number | null;
   lifecycle_state: string;
   total_evolution_cycles: number;
   golden_suite_size: number;
   ai_cost_30d_usd: number;
   attributed_revenue_30d_usd: number;
-  roi: number | null;
+  /** Attributed revenue over measured AI cost. THE NUMERATOR IS AN ESTIMATE:
+   *  `attributed_revenue_trailing_30d_usd` is written from the Ledger agent's
+   *  model-generated guesses at how much revenue each agent action produced,
+   *  weighted by the confidence that same model assigned, and reconciled
+   *  against no invoice. This renders in an investor packet, so the field is
+   *  named for the half it inherits rather than as "roi". */
+  attributed_roi: number | null;
   top_agents: Array<{ name: string; role: string; health: number; version: number }>;
   latest_briefing_headline: string | null;
 }
@@ -38,13 +45,21 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
   const prod = (productResult.rows[0] ?? {}) as Record<string, unknown>;
   const aiCost = (prod.ai_cost_trailing_30d_usd as number) ?? 0;
   const attributedRevenue = (prod.attributed_revenue_trailing_30d_usd as number) ?? 0;
-  const roi = aiCost > 0 ? attributedRevenue / aiCost : null;
+  const attributedRoi = aiCost > 0 ? attributedRevenue / aiCost : null;
 
-  // Top 3 agents by domain_health_score
+  // Top 3 agents by domain_health_score.
+  //
+  // `IS NOT NULL` because this renders in an investor packet under the heading
+  // "Top Performing Agents", and an agent nothing has scored is not a top
+  // performer — it is unmeasured. The old query took whatever three rows came
+  // back and `?? 0` turned an unscored one into "Health: 0" in red, which is a
+  // worse claim than leaving it out: it says the agent was measured and found
+  // to be failing. If fewer than three have been scored, fewer than three are
+  // shown, and if none have been the section does not render at all.
   const agentsResult = await query(
     `SELECT display_name, agent_name, domain_health_score, version
      FROM agent_instances
-     WHERE product_id = ? AND status = 'active'
+     WHERE product_id = ? AND status = 'active' AND domain_health_score IS NOT NULL
      ORDER BY domain_health_score DESC LIMIT 3`,
     [productId]
   );
@@ -58,7 +73,7 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
     return {
       name: (r.display_name as string) ?? agentName,
       role: AGENT_ROLES[agentName as keyof typeof AGENT_ROLES] ?? agentName,
-      health: Math.round((r.domain_health_score as number) ?? 0),
+      health: Math.round(Number(r.domain_health_score)),
       version: (r.version as number) ?? 1,
     };
   });
@@ -79,13 +94,13 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
   }
 
   return {
-    health_score: Math.round((prod.health_score as number) ?? 0),
+    health_score: prod.health_score == null ? null : Math.round(Number(prod.health_score)),
     lifecycle_state: (prod.company_lifecycle_state as string) ?? 'setup',
     total_evolution_cycles: (prod.total_evolution_cycles as number) ?? 0,
     golden_suite_size: (prod.golden_suite_size as number) ?? 0,
     ai_cost_30d_usd: aiCost,
     attributed_revenue_30d_usd: attributedRevenue,
-    roi,
+    attributed_roi: attributedRoi,
     top_agents,
     latest_briefing_headline,
   };
@@ -93,251 +108,52 @@ export async function getSCPBoardSection(productId: string): Promise<SCPBoardSec
 
 // ─── Generate Board Packet ────────────────────────────────────────────────────
 
+// `generateBoardPacket` was here, and it was the second writer into
+// `board_packets`. It filled `executive_summary`, `signal_narrative`,
+// `mrr_narrative`, `cohort_narrative` and `competitive_narrative`; the
+// canonical generator in services/scp/investor/ fills `narrative_json`. Both
+// routes were mounted and both listed the same table, so a packet generated on
+// one surface rendered on the other as a document with a title, a quarter, and
+// every section empty.
+//
+// The navigation points at `/board` — "Investor Board" in the sidebar,
+// "Investor Hub" in the tab bar — and at `/investors` from nowhere. So the SCP
+// generator is the product and this was the projection left behind. Retired in
+// migration 164, which also carries the rows it wrote into the canonical shape.
+
 /**
- * Generate a quarterly board packet for a product.
- * Assembles all relevant data and calls Claude Opus for narrative sections.
+ * A FUNDING READINESS VERDICT, AND WHAT IT KNEW WHEN IT GAVE ONE.
+ *
+ * Each component scores 50 when its input is null — a defensible neutral, and
+ * better than the extremes found elsewhere. The defect was downstream. The gap
+ * list tested those scores against thresholds of 60, so 50 tripped every one of
+ * them, and a company that had reported NOTHING was told, in a document it
+ * would fundraise on:
+ *
+ *   "Churn rate above acceptable threshold for this stage"
+ *   "Activation rate below benchmarks for fundraising"
+ *   "MRR health ratio indicates churn exceeds new revenue"
+ *   "Technical audit score below threshold — product readiness concerns"
+ *
+ * Four specific negative findings about a company nobody had measured. Note the
+ * direction: the agent prompts fabricated favourable numbers, this fabricated
+ * damning ones. Both come from answering "unknown" with a digit; which way it
+ * lands is an accident of where the threshold sits.
+ *
+ * A missing input is now its own gap, in its own words, and the narrative model
+ * is told which components are unmeasured rather than being handed "50/100" and
+ * asked what is strongest. `measured_components` says how much of the score is
+ * real, because a reader cannot tell 62-out-of-seven-measured from
+ * 62-out-of-two.
  */
-export async function generateBoardPacket(
-  productId: string,
-  quarter: string,  // e.g. "2026-Q1"
-): Promise<BoardPacket> {
-  // Determine period dates from quarter string
-  const [year, q] = quarter.split('-Q');
-  const qNum = parseInt(q);
-  const periodStart = new Date(parseInt(year), (qNum - 1) * 3, 1).toISOString().slice(0, 10);
-  const periodEnd = new Date(parseInt(year), qNum * 3, 0).toISOString().slice(0, 10);
-
-  // ── Load data in parallel ─────────────────────────────────────────────────
-  const [
-    signalHistory,
-    resolvedDecisions,
-    activeStressors,
-    resolvedStressors,
-    milestones,
-    cohortResult,
-    mrrResult,
-    competitiveSignals,
-    auditResult,
-    scpSection,
-  ] = await Promise.all([
-    getSignalHistory(productId, 90),
-    query(
-      `SELECT what, chosen_option, outcome, outcome_valence, decided_at, category
-       FROM decisions WHERE product_id = ? AND status IN ('approved','executed','rejected')
-         AND decided_at BETWEEN ? AND ? ORDER BY decided_at DESC`,
-      [productId, periodStart, periodEnd],
-    ),
-    getActiveStressors(productId),
-    query(
-      `SELECT stressor_name, severity, resolved_at, resolution_notes
-       FROM stressor_history WHERE product_id = ? AND status = 'resolved'
-         AND resolved_at BETWEEN ? AND ? ORDER BY resolved_at DESC`,
-      [productId, periodStart, periodEnd],
-    ),
-    query(
-      `SELECT title, artifact_type, created_at FROM founding_story_artifacts
-       WHERE product_id = ? AND created_at BETWEEN ? AND ? ORDER BY created_at ASC`,
-      [productId, periodStart, periodEnd],
-    ),
-    query(
-      `SELECT acquisition_period, founder_count, activated_count, retained_day_30,
-              converted_to_paid, mrr_contribution_cents
-       FROM cohorts WHERE product_id = ? AND acquisition_period BETWEEN ? AND ?
-       ORDER BY acquisition_period DESC LIMIT 3`,
-      [productId, periodStart, periodEnd],
-    ),
-    getMRRDecomposition(productId).catch(() => null),
-    query(
-      `SELECT signal_summary, significance, competitor_name, signal_type
-       FROM competitive_signals WHERE product_id = ? AND detected_at BETWEEN ? AND ?
-         AND significance != 'low' ORDER BY detected_at DESC LIMIT 5`,
-      [productId, periodStart, periodEnd],
-    ),
-    query(
-      `SELECT composite, verdict, created_at FROM audit_scores
-       WHERE product_id = ? ORDER BY created_at DESC LIMIT 2`,
-      [productId],
-    ),
-    getSCPBoardSection(productId).catch(() => null),
-  ]);
-
-  // ── Compute Signal trajectory ─────────────────────────────────────────────
-  const signalAtStart = signalHistory[0]?.score ?? null;
-  const signalAtEnd = signalHistory[signalHistory.length - 1]?.score ?? null;
-  const signalDelta = (signalAtStart !== null && signalAtEnd !== null) ? signalAtEnd - signalAtStart : null;
-
-  // ── Build context for AI ───────────────────────────────────────────────────
-  const contextParts: string[] = [
-    `Quarter: ${quarter}`,
-    `Signal: ${signalAtStart ?? 'N/A'} → ${signalAtEnd ?? 'N/A'}${signalDelta !== null ? ` (${signalDelta >= 0 ? '+' : ''}${signalDelta})` : ''}`,
-  ];
-
-  if (mrrResult) {
-    contextParts.push(`MRR: $${Math.round(mrrResult.total_cents / 100).toLocaleString()} total`);
-    contextParts.push(`  New: $${Math.round(mrrResult.new_cents / 100).toLocaleString()} | Churned: $${Math.round(mrrResult.churned_cents / 100).toLocaleString()}`);
-  }
-
-  const resolvedDecs = resolvedDecisions.rows as Array<Record<string, unknown>>;
-  if (resolvedDecs.length > 0) {
-    contextParts.push(`\nKey decisions (${resolvedDecs.length}):`);
-    for (const d of resolvedDecs.slice(0, 5)) {
-      const valence = d.outcome_valence === 1 ? '✓' : d.outcome_valence === -1 ? '✗' : '?';
-      contextParts.push(`  [${valence}] ${d.what} → ${d.chosen_option ?? 'undecided'}`);
-      if (d.outcome) contextParts.push(`    Outcome: ${d.outcome}`);
-    }
-  }
-
-  const resolvedRows = resolvedStressors.rows as Array<Record<string, string>>;
-  if (resolvedRows.length > 0) {
-    contextParts.push(`\nStressors resolved (${resolvedRows.length}):`);
-    for (const s of resolvedRows.slice(0, 3)) {
-      contextParts.push(`  ${s.stressor_name} [${s.severity}]`);
-      if (s.resolution_notes) contextParts.push(`    ${s.resolution_notes}`);
-    }
-  }
-
-  const activeRows = activeStressors.rows as Array<Record<string, string>>;
-  if (activeRows.length > 0) {
-    contextParts.push(`\nActive stressors (${activeRows.length}):`);
-    for (const s of activeRows.slice(0, 3)) {
-      contextParts.push(`  [${s.severity}] ${s.stressor_name}: ${s.signal}`);
-    }
-  }
-
-  const milestoneRows = milestones.rows as Array<Record<string, string>>;
-  if (milestoneRows.length > 0) {
-    contextParts.push(`\nMilestones: ${milestoneRows.map((m) => m.title).join('; ')}`);
-  }
-
-  const compRows = competitiveSignals.rows as Array<Record<string, string>>;
-  if (compRows.length > 0) {
-    contextParts.push(`\nCompetitive signals: ${compRows.map((s) => `${s.competitor_name}: ${s.signal_summary}`).join('; ')}`);
-  }
-
-  // SCP / AI Operations context
-  if (scpSection) {
-    contextParts.push(`\nAI Operations (SCP):`);
-    contextParts.push(`  Company Health Score: ${scpSection.health_score}/100`);
-    contextParts.push(`  Lifecycle State: ${scpSection.lifecycle_state}`);
-    contextParts.push(`  Total Agent Evolution Cycles: ${scpSection.total_evolution_cycles}`);
-    contextParts.push(`  Golden Suite Lessons: ${scpSection.golden_suite_size}`);
-    contextParts.push(`  AI Cost (30d): $${scpSection.ai_cost_30d_usd.toFixed(2)}`);
-    contextParts.push(`  Attributed Revenue (30d): $${scpSection.attributed_revenue_30d_usd.toFixed(2)}`);
-    if (scpSection.roi !== null) {
-      contextParts.push(`  AI ROI: ${scpSection.roi.toFixed(2)}x`);
-    }
-    if (scpSection.top_agents.length > 0) {
-      contextParts.push(`  Top Agents: ${scpSection.top_agents.map((a) => `${a.name} (${a.role}, health ${a.health}, v${a.version})`).join('; ')}`);
-    }
-    if (scpSection.latest_briefing_headline) {
-      contextParts.push(`  Latest CEO Briefing: "${scpSection.latest_briefing_headline}"`);
-    }
-  }
-
-  const context = contextParts.join('\n');
-
-  // ── Generate narrative sections ───────────────────────────────────────────
-  const systemPrompt = `You are writing board packet sections for a SaaS company's quarterly investor update.
-Be direct, precise, and honest. Use specific numbers. No hedging. Write as an informed CFO/CEO would.
-Each section should be 3-5 sentences. Professional but not corporate.`;
-
-  const [
-    execSummary,
-    signalNarrative,
-    mrrNarrative,
-    cohortNarrative,
-    competitiveNarrative,
-    nextQuarterFocus,
-    aiOperationsNarrative,
-  ] = await Promise.all([
-    generateNarrativeSection(systemPrompt, context, 'executive_summary',
-      'Write a 3-4 sentence executive summary of the quarter. Lead with the most important truth.', productId),
-    generateNarrativeSection(systemPrompt, context, 'signal_narrative',
-      'Write 3 sentences describing the Signal trajectory this quarter and what drove the change.', productId),
-    generateNarrativeSection(systemPrompt, context, 'mrr_narrative',
-      'Write 3-4 sentences about revenue: trajectory, health ratio, notable changes, and what it means.', productId),
-    generateNarrativeSection(systemPrompt, context, 'cohort_narrative',
-      'Write 3 sentences about cohort performance: activation, retention trends, and implications.', productId),
-    generateNarrativeSection(systemPrompt, context, 'competitive_narrative',
-      'Write 2-3 sentences about the competitive landscape this quarter. Only include if there were notable signals.', productId),
-    generateNarrativeSection(systemPrompt, context, 'next_quarter_focus',
-      'Write 3 clear sentences about the top 2-3 priorities for the coming quarter based on current Signal and stressors.', productId),
-    scpSection
-      ? generateNarrativeSection(systemPrompt, context, 'ai_operations',
-          'Write 3-4 sentences about AI operations performance this quarter: agent health, ROI on AI investment, evolution cycles, and what it means for operational leverage going forward.', productId)
-      : Promise.resolve(''),
-  ]);
-
-  // ── Persist ───────────────────────────────────────────────────────────────
-  const packetId = nanoid();
-
-  await query(
-    `INSERT INTO board_packets
-     (id, product_id, quarter, period_start, period_end,
-      executive_summary, signal_narrative, mrr_narrative,
-      cohort_narrative, competitive_narrative, next_quarter_focus,
-      key_decisions_made, stressors_resolved, stressors_active, milestones_crossed,
-      signal_start, signal_end, signal_delta, generated_at, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'draft')
-     ON CONFLICT(product_id, quarter) DO UPDATE SET
-       executive_summary = excluded.executive_summary,
-       signal_narrative = excluded.signal_narrative,
-       mrr_narrative = excluded.mrr_narrative,
-       cohort_narrative = excluded.cohort_narrative,
-       competitive_narrative = excluded.competitive_narrative,
-       next_quarter_focus = excluded.next_quarter_focus,
-       key_decisions_made = excluded.key_decisions_made,
-       stressors_resolved = excluded.stressors_resolved,
-       stressors_active = excluded.stressors_active,
-       milestones_crossed = excluded.milestones_crossed,
-       signal_start = excluded.signal_start,
-       signal_end = excluded.signal_end,
-       signal_delta = excluded.signal_delta,
-       generated_at = excluded.generated_at`,
-    [
-      packetId, productId, quarter, periodStart, periodEnd,
-      execSummary, signalNarrative, mrrNarrative, cohortNarrative, competitiveNarrative, nextQuarterFocus,
-      JSON.stringify(resolvedDecs.slice(0, 10)),
-      JSON.stringify(resolvedRows.slice(0, 5)),
-      JSON.stringify(activeRows.slice(0, 5)),
-      JSON.stringify(milestoneRows),
-      signalAtStart, signalAtEnd, signalDelta,
-    ],
-  );
-
-  return {
-    id: packetId,
-    product_id: productId,
-    quarter,
-    period_start: periodStart,
-    period_end: periodEnd,
-    executive_summary: execSummary,
-    signal_narrative: signalNarrative,
-    key_decisions_made: resolvedDecs.slice(0, 10) as unknown as BoardPacket['key_decisions_made'],
-    milestones_crossed: milestoneRows as unknown as BoardPacket['milestones_crossed'],
-    stressors_resolved: resolvedRows.slice(0, 5) as unknown as BoardPacket['stressors_resolved'],
-    stressors_active: activeRows as unknown as BoardPacket['stressors_active'],
-    mrr_narrative: mrrNarrative,
-    cohort_narrative: cohortNarrative,
-    competitive_narrative: competitiveNarrative,
-    next_quarter_focus: nextQuarterFocus,
-    signal_start: signalAtStart,
-    signal_end: signalAtEnd,
-    signal_delta: signalDelta,
-    generated_at: new Date().toISOString(),
-    finalized_at: null,
-    shared_with: null,
-    status: 'draft' as BoardPacketStatus,
-    ai_operations: scpSection ? { ...scpSection, narrative: aiOperationsNarrative } : null,
-  } as BoardPacket & { ai_operations: (SCPBoardSection & { narrative: string }) | null };
-}
-
-// ─── Funding Readiness Score ──────────────────────────────────────────────────
-
 export async function computeFundingReadiness(productId: string): Promise<{
   score: number;
   verdict: 'raise_ready' | 'almost_ready' | 'not_ready';
   key_gaps: string[];
+  /** What is not known, kept apart from what is known and poor. */
+  unmeasured: string[];
+  /** How many of the seven components had a real input behind them. */
+  measured_components: { measured: number; total: number };
   narrative: string;
   component_scores: Record<string, number | null>;
 }> {
@@ -355,7 +171,8 @@ export async function computeFundingReadiness(productId: string): Promise<{
       [productId],
     ),
     query(
-      `SELECT AVG(CASE WHEN outcome_valence IS NOT NULL THEN outcome_valence ELSE 0 END) as avg_valence,
+      `SELECT AVG(outcome_valence) as avg_valence,
+              COUNT(outcome_valence) as measured_outcomes,
               COUNT(*) as total
        FROM decisions WHERE product_id = ? AND status IN ('approved','executed')`,
       [productId],
@@ -386,8 +203,18 @@ export async function computeFundingReadiness(productId: string): Promise<{
   const dna = (dnaResult.rows[0] ?? {}) as Record<string, number | null>;
   const criticalStressors = ((stressorsResult.rows[0] ?? {}) as Record<string, number>).count ?? 0;
 
+  // `?? null`, BECAUSE `rows[0] ?? {}` YIELDS UNDEFINED, NOT NULL. Every check
+  // below is written `=== null`, and for a company with no snapshot row at all
+  // the value was `undefined` — so the neutral branch never ran and every
+  // numeric comparison fell through to the final `: 10` / `: 20`. A company
+  // that had reported nothing scored 10, 20 and 20 on its three revenue
+  // components: not a neutral placeholder, very nearly the worst score
+  // available, in a fundraising document.
+  const asNullable = (v: unknown): number | null =>
+    v === null || v === undefined ? null : Number(v);
+
   // Score each component 0-100
-  const healthRatio = metrics.mrr_health_ratio;
+  const healthRatio = asNullable(metrics.mrr_health_ratio);
   const mrrScore = healthRatio === null ? 50 :
     healthRatio < 0.3 ? 100 :
     healthRatio < 0.5 ? 85 :
@@ -395,25 +222,31 @@ export async function computeFundingReadiness(productId: string): Promise<{
     healthRatio < 1.0 ? 55 :
     healthRatio < 1.5 ? 30 : 10;
 
-  const churn = metrics.churn_rate;
+  const churn = asNullable(metrics.churn_rate);
   const churnScore = churn === null ? 50 :
     churn < 0.02 ? 100 :
     churn < 0.05 ? 80 :
     churn < 0.08 ? 60 :
     churn < 0.12 ? 40 : 20;
 
-  const activation = metrics.activation_rate;
+  const activation = asNullable(metrics.activation_rate);
   const activationScore = activation === null ? 50 :
     activation > 0.6 ? 100 :
     activation > 0.4 ? 80 :
     activation > 0.25 ? 60 :
     activation > 0.15 ? 40 : 20;
 
-  const auditComposite = audit.composite;
+  const auditComposite = asNullable(audit.composite);
   const auditScore = auditComposite === null ? 50 : Math.round(auditComposite);
 
-  const avgValence = decisions.avg_valence ?? 0;
-  const decisionScore = Math.round(((avgValence + 1) / 2) * 100);
+  // COUNTED, NOT AVERAGED WITH ZEROS. The query said
+  // `AVG(CASE WHEN outcome_valence IS NOT NULL THEN outcome_valence ELSE 0 END)`
+  // — AVG already skips nulls, so that CASE existed only to fold unmeasured
+  // outcomes in as neutral ones. A company with two good outcomes and ninety-
+  // eight unmeasured ones scored the same as one that had gone nowhere.
+  const measuredDecisions = Number(decisions.measured_outcomes ?? 0);
+  const avgValence = measuredDecisions > 0 ? Number(decisions.avg_valence ?? 0) : null;
+  const decisionScore = avgValence === null ? 50 : Math.round(((avgValence + 1) / 2) * 100);
 
   const teamCount = team.count ?? 0;
   const teamScore = teamCount >= 2 ? 100 : teamCount === 1 ? 65 : 40;
@@ -432,26 +265,55 @@ export async function computeFundingReadiness(productId: string): Promise<{
     marketScore * 0.05
   );
 
-  // Identify gaps
+  // A GAP IS SOMETHING WE MEASURED AND FOUND WANTING. Not knowing is its own
+  // line, in its own words — a founder can act on "nobody has measured this",
+  // and cannot act on a finding about a number that does not exist.
   const key_gaps: string[] = [];
+  const unmeasured: string[] = [];
   if (criticalStressors > 0) key_gaps.push(`${criticalStressors} critical stressor(s) unresolved`);
-  if (mrrScore < 60) key_gaps.push('MRR health ratio indicates churn exceeds new revenue');
-  if (churnScore < 60) key_gaps.push('Churn rate above acceptable threshold for this stage');
-  if (activationScore < 60) key_gaps.push('Activation rate below benchmarks for fundraising');
-  if (auditScore < 60) key_gaps.push('Technical audit score below threshold — product readiness concerns');
+
+  if (healthRatio === null) unmeasured.push('MRR health ratio — no revenue snapshot reported');
+  else if (mrrScore < 60) key_gaps.push('MRR health ratio indicates churn exceeds new revenue');
+
+  if (churn === null) unmeasured.push('Churn rate — no churn figure reported');
+  else if (churnScore < 60) key_gaps.push('Churn rate above acceptable threshold for this stage');
+
+  if (activation === null) unmeasured.push('Activation rate — no activation figure reported');
+  else if (activationScore < 60) key_gaps.push('Activation rate below benchmarks for fundraising');
+
+  if (auditComposite === null) unmeasured.push('Technical audit — no audit has been run');
+  else if (auditScore < 60) key_gaps.push('Technical audit score below threshold — product readiness concerns');
+
+  if (avgValence === null) unmeasured.push('Decision track record — no decision outcome has been measured');
+
+  // Team size and DNA completion are counts, not measurements: zero of either
+  // is a real answer about the company, so they stay gaps.
   if (teamScore < 70) key_gaps.push('Solo founder risk — co-founder or key hire recommended');
   if (marketScore < 60) key_gaps.push('Product DNA incomplete — market story not fully articulated');
 
+  const measuredComponents = [healthRatio, churn, activation, auditComposite, avgValence]
+    .filter((v) => v !== null).length + 2;
+
+  // AN UNMEASURED COMPANY IS NOT A READY ONE. `key_gaps` no longer collects the
+  // fabricated findings, so without this a company that reported nothing would
+  // reach `raise_ready` on an empty gap list — the old bug's mirror image, and
+  // the more dangerous of the two in a fundraising document.
   const verdict: 'raise_ready' | 'almost_ready' | 'not_ready' =
-    score >= 75 && key_gaps.length === 0 ? 'raise_ready' :
-    score >= 60 && key_gaps.length <= 2 ? 'almost_ready' : 'not_ready';
+    score >= 75 && key_gaps.length === 0 && unmeasured.length === 0 ? 'raise_ready' :
+    score >= 60 && key_gaps.length <= 2 && unmeasured.length <= 1 ? 'almost_ready' : 'not_ready';
 
   // Generate narrative
   const systemPrompt = `You write concise funding readiness assessments for SaaS founders. Be direct and honest.`;
-  const userPrompt = `Score: ${score}/100. Verdict: ${verdict.replace('_', ' ')}.
-Key gaps: ${key_gaps.length > 0 ? key_gaps.join('; ') : 'None'}.
-MRR health: ${mrrScore}/100. Churn: ${churnScore}/100. Activation: ${activationScore}/100.
-Write exactly 3 sentences: what the score means, what's strongest, what's most critical to fix before raising.`;
+  // The model is told which components are unmeasured. Handed "Churn: 50/100"
+  // with no such note, a model asked what is strongest reads it as a middling
+  // measurement, and says so to a founder about to raise money.
+  const scoreLine = (label: string, value: number, known: boolean) =>
+    known ? `${label}: ${value}/100` : `${label}: not measured`;
+  const userPrompt = `Score: ${score}/100, from ${measuredComponents} of 7 components with real inputs behind them. Verdict: ${verdict.replace('_', ' ')}.
+Key gaps (measured and found wanting): ${key_gaps.length > 0 ? key_gaps.join('; ') : 'None'}.
+Not measured at all: ${unmeasured.length > 0 ? unmeasured.join('; ') : 'None'}.
+${scoreLine('MRR health', mrrScore, healthRatio !== null)}. ${scoreLine('Churn', churnScore, churn !== null)}. ${scoreLine('Activation', activationScore, activation !== null)}.
+Write exactly 3 sentences: what the score means, what's strongest, what's most critical to fix before raising. Do not describe an unmeasured component as good or bad — say it is unmeasured.`;
 
   let narrative = '';
   try {
@@ -465,6 +327,8 @@ Write exactly 3 sentences: what the score means, what's strongest, what's most c
     score,
     verdict,
     key_gaps,
+    unmeasured,
+    measured_components: { measured: measuredComponents, total: 7 },
     narrative,
     component_scores: {
       mrr_trajectory_score: mrrScore,
@@ -485,7 +349,7 @@ async function generateNarrativeSection(
   context: string,
   _section: string,
   instruction: string,
-  productId?: string,
+  productId: string,
 ): Promise<string> {
   try {
     const r = await callOpus(systemPrompt, `Business data:\n${context}\n\nInstruction: ${instruction}`, 512, productId);

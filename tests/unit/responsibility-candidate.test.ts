@@ -12,9 +12,9 @@ beforeAll(async()=>{
   await query("INSERT INTO founders (id,clerk_user_id,email) VALUES ('cand_owner','cand_clerk','candidate@example.com')",[]);
   await query("INSERT INTO products (id,name,owner_id) VALUES ('cand_a','Candidate A','cand_owner'),('cand_b','Candidate B','cand_owner')",[]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    ('cand_signal','cand_a','manual','support_spike','medium','{}','Support queues rising'),
-    ('cand_signal_2','cand_a','manual','support_spike','medium','{}','Team reports normal'),
-    ('cand_foreign','cand_b','manual','support_spike','medium','{}','Other product')`,[]);
+    ('cand_signal','cand_a','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Support queues rising'),
+    ('cand_signal_2','cand_a','company_observation_baseline','company_observation_baseline:support_capacity','low','{}','Team reports normal'),
+    ('cand_foreign','cand_b','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Other product')`,[]);
   groundedClaim=await recordReconstructionClaim({productId:'cand_a',subject:'support',predicate:'capacity',value:'strained',
     epistemicStatus:'inferred',confidence:.8,evidenceRefs:[{kind:'signal_event',id:'cand_signal'}],derivationMethod:'bounded rule',observedAt:new Date()});
   conflictingClaim=await recordReconstructionClaim({productId:'cand_a',subject:'support',predicate:'health',value:['strained','normal'],

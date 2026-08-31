@@ -2,7 +2,28 @@
 // FOUNDRY — Number Rendering (Wave 2, action 18)
 // One helper for every number on the dashboard so deltas, sparklines, and
 // up/down indicators are consistent. Council 3 (information designers):
-// "no deliberate visual hierarchy" was the finding; this is the contract.
+// "no deliberate visual hierarchy" was the finding.
+//
+// A PROPOSED CONTRACT, NOT ONE IN FORCE. Nothing imports this module — it is on
+// the unreachable-modules baseline — so every dashboard still renders numbers
+// its own way. The header used to say "this is the contract", which a reader
+// could only take to mean the dashboards go through it.
+//
+// WHAT WAS CORRECTED BEFORE IT HAS A CALLER, because a contract that encodes a
+// unit ambiguity hands that ambiguity to everyone who later adopts it:
+//
+//   `formatPct(n)` took "a number" and appended '%'. Every rate in this system
+//   is stored as a 0–1 FRACTION — `churn_rate`, `activation_rate`,
+//   `day_30_retention` — so the first caller passing one straight in would have
+//   rendered 5% churn as "0.05%". That is the exact defect found in
+//   `business-model.ts` this cycle, waiting here for its first adopter.
+//
+//   `formatUsdK(amount)` took "an amount". Every money column in this system is
+//   `_cents`, so a caller passing `mrr_cents` would have rendered $50,000 as
+//   "$5000K".
+//
+//   `renderMetric` had no way to say a number is not known, while the rest of
+//   the system had just been taught to say exactly that.
 //
 // Use in views as raw HTML (the helpers return strings).
 // =============================================================================
@@ -18,7 +39,8 @@ export type Direction = 'up' | 'down' | 'flat' | null;
  * Used for Signal score, weekly outcome counts, MRR, etc.
  */
 export function renderMetric(opts: {
-  value: string | number;
+  /** Null renders as "not measured" rather than as a digit. */
+  value: string | number | null;
   label: string;
   delta?: { value: string | number; direction: Direction; goodDirection?: 'up' | 'down' };
 }) {
@@ -35,8 +57,8 @@ export function renderMetric(opts: {
   const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : dir === 'flat' ? '→' : '';
   return html`
     <div>
-      <div style="font-size:1.5rem;font-weight:700;color:var(--text-primary);line-height:1.1;">
-        ${String(opts.value)}
+      <div style="font-size:${opts.value === null ? '0.95rem' : '1.5rem'};font-weight:700;color:${opts.value === null ? 'var(--text-dim)' : 'var(--text-primary)'};line-height:1.1;">
+        ${opts.value === null ? 'not measured' : String(opts.value)}
       </div>
       <div style="font-size:0.78rem;color:var(--text-dim);margin-top:0.15rem;">
         ${opts.label}
@@ -72,14 +94,32 @@ export function renderInlineDelta(opts: {
 
 // ─── Number formatters ───────────────────────────────────────────────────────
 
-export function formatUsdK(amount: number): string {
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1000) return `$${Math.round(amount / 1000)}K`;
-  return `$${Math.round(amount)}`;
+/**
+ * Format WHOLE DOLLARS. Named for the unit because every money column in this
+ * system is `_cents`, and "amount" was an invitation to pass one.
+ * Null renders as "not measured", the house convention.
+ */
+export function formatUsdFromDollars(dollars: number | null): string {
+  if (dollars === null) return 'not measured';
+  if (dollars >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(1)}M`;
+  if (dollars >= 1000) return `$${Math.round(dollars / 1000)}K`;
+  return `$${Math.round(dollars)}`;
 }
 
-export function formatPct(n: number, fractionDigits = 0): string {
-  return `${n.toFixed(fractionDigits)}%`;
+/** The same, from cents, which is what the database holds. */
+export function formatUsdFromCents(cents: number | null): string {
+  return cents === null ? 'not measured' : formatUsdFromDollars(cents / 100);
+}
+
+/**
+ * Format PERCENTAGE POINTS — 12.5 renders as "12.5%".
+ *
+ * If you are holding a rate from `metric_snapshots` it is a 0–1 FRACTION, and
+ * `ratePoints()` in `services/ai/measured.ts` is the one place that converts.
+ * Convert the value, never the threshold.
+ */
+export function formatPctPoints(points: number | null, fractionDigits = 0): string {
+  return points === null ? 'not measured' : `${points.toFixed(fractionDigits)}%`;
 }
 
 export function formatLatencyMs(ms: number | null | undefined): string {

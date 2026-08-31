@@ -3,6 +3,7 @@
 // Server-rendered pages using Hono's html tagged template literal.
 // =============================================================================
 
+import { isFounder } from '../services/founder/intelligence.js';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { NextAction, AppNotification, MilestoneEvent, NavBadges } from '../types/index.js';
@@ -31,7 +32,6 @@ export interface LayoutOptions {
   navBadges?: NavBadges;
   canAccess?: (featureKey: string) => boolean;
   dnaCompletionPct?: number;
-  openPRCount?: number;
   founderEmail?: string | null;
   /** Trial state for the header badge / expiry banner (Phase 1.3). */
   trialStatus?: TrialStatus | null;
@@ -61,7 +61,6 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
     navBadges,
     canAccess,
     dnaCompletionPct = 0,
-    openPRCount = 0,
   } = opts;
 
   const sidebarRiskClass = riskState === 'red' ? 'sidebar-risk-red' : riskState === 'yellow' ? 'sidebar-risk-yellow' : '';
@@ -116,7 +115,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
 
   ${!chamberMode && showNav && nextAction ? nextActionBanner(nextAction) : ''}
 
-  ${!chamberMode && showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, dnaCompletionPct, openPRCount, opts.founderEmail) : ''}
+  ${!chamberMode && showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, opts.founderEmail) : ''}
 
   <main id="main-content" class="${showNav && !chamberMode ? 'main-with-sidebar' : 'main-full'}">
     ${showNav && !chamberMode ? html`<div id="one-thing-banner"
@@ -280,11 +279,9 @@ function groupedSidebar(
   riskClass: string,
   badges: NavBadges | null,
   canAccess: ((key: string) => boolean) | null,
-  dnaCompletionPct: number,
-  openPRCount: number,
   founderEmail?: string | null,
 ): HtmlContent {
-  const b = badges ?? { decisions_count: 0, has_overdue_audit: false, unread_signals: false, unseen_milestones: false, open_prs_count: 0, dna_completion: 0 };
+  const b = badges ?? { decisions_count: 0 };
 
   // Five doors (Hands Law layer 5 / Attention Law): what a founder actually
   // DOES — read the letter, check the signal, decide, talk, act. Everything
@@ -363,7 +360,7 @@ function groupedSidebar(
     </details>`)}
 
     <ul class="sidebar-nav" style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.08);padding-top:0.5rem;">
-      ${founderEmail?.toLowerCase() === 'thmsnrtn@gmail.com' ? html`<li><a href="/founder-ops" class="${active === 'founder-ops' ? 'active' : ''}" style="color:#f59e0b;">Founder Ops</a></li>` : ''}
+      ${founderEmail && isFounder(founderEmail) ? html`<li><a href="/founder-ops" class="${active === 'founder-ops' ? 'active' : ''}" style="color:#f59e0b;">Founder Ops</a></li>` : ''}
       <li><a href="/settings" class="${active === 'settings' ? 'active' : ''}">Settings</a></li>
       <li><a href="/auth/logout" style="color:var(--text-muted);">Sign out</a></li>
     </ul>

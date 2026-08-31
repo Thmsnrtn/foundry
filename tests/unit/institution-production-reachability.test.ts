@@ -1,0 +1,285 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, relative, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+// =============================================================================
+// Institutional reachability gate.
+//
+// The constitution says no orphan abstractions, and that every subsystem must
+// pay rent. Both were being broken silently: an audit found that deterministic
+// institutional judgment, its later-reality evaluation, and the owner
+// disposition loop had no production writer at all — machinery, a founder
+// surface, and a benchmark, exercised only by their own tests.
+//
+// That defect was found by hand. This gate finds it automatically. Every module
+// under src/services/institution must be reachable from a real production entry
+// point, or be declared DARK with an honest reason.
+//
+// The list is enforced EXACTLY in both directions, like the architectural
+// ratchets: a newly orphaned module fails, and a module that has since been
+// wired fails until it is removed from the list. Darkness can only be recorded
+// deliberately, and it can only be paid down — never quietly accumulated.
+//
+// What this gate does NOT prove, stated plainly so its passing is not read as
+// more than it is: reachability is measured per module, not per behaviour. A
+// module counts as reachable when production imports it at all — including
+// when a founder surface imports it only to READ. Several institution modules
+// are reachable in exactly that way while their write paths remain undriven,
+// so this gate cannot tell you the ladder is being climbed in production. That
+// is tracked as proof debt in IMPLEMENTATION_STATE, not here.
+// =============================================================================
+
+const ROOT = resolve(__dirname, '../..');
+
+// Real production entry points. Routes, middleware, and services are reachable
+// from the server; jobs from the scheduler; the CLI is an operator surface.
+const ENTRY_POINTS = ['src/index.ts', 'src/jobs/index.ts', 'src/cli/index.ts'];
+
+/**
+ * Modules with no production path, each with the reason it is honest for them
+ * to have none. A reason like "for later" is not honest — that is speculative
+ * architecture, and the answer is deletion until the consumer exists.
+ */
+const DARK: Record<string, string> = {
+  // Benchmarks are gates. Being exercised only by the test suite is what they
+  // are for; a production caller would make the gate part of the thing it
+  // measures.
+  'development-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  'institutional-judgment-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  'production-reachability-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  'support-pilot-readiness.ts': 'prospective readiness contract — scored by its own gate, never by production',
+  'support-drafting-benchmark.ts': 'frozen prospective contract (E1) — no model exists to score against it yet',
+  'reconstruction-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  'responsibility-assisting-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  'responsibility-recognition-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  'responsibility-shadowing-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  'responsibility-understanding-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+
+  // `development-observation.ts` left this list when Foundry began observing
+  // its own repository. That was always the honest blocker: development
+  // Shadowing needs an independent view of the same reality, and for a
+  // CUSTOMER's company Foundry has none — it would be checking an expectation
+  // against its own say-so. For the Foundry company the supply genuinely
+  // exists, so the scheduled pass now records a real deterministic check
+  // through the ordinary intake.
+  //
+  // `development-shadowing.ts` left this list when the owner gained a way to
+  // state what they expect a check to report. The blocker was always that
+  // opening an expectation requires someone to PREDICT, and Foundry predicting
+  // on its own behalf would be manufacturing the prediction to fit the
+  // evidence. The owner stating it — a bounded choice among checks that already
+  // report — is the same shape the metric path has always used.
+};
+
+function tsFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const path = resolve(dir, entry);
+    return statSync(path).isDirectory() ? tsFiles(path) : path.endsWith('.ts') ? [path] : [];
+  });
+}
+
+/** Static `from '...'` and dynamic `import('...')` alike — the institution is
+ * reached almost entirely through dynamic imports, so a static-only graph
+ * would report the whole subsystem as dark and prove nothing. */
+function importsOf(file: string): string[] {
+  const source = readFileSync(file, 'utf8');
+  const out: string[] = [];
+  const re = /(?:from\s*|import\s*\(\s*)['"](\.[^'"]+)['"]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source)) !== null) {
+    const target = resolve(dirname(file), m[1].replace(/\.js$/, '.ts'));
+    out.push(target);
+  }
+  return out;
+}
+
+function reachable(): Set<string> {
+  const seen = new Set<string>();
+  const queue = ENTRY_POINTS.map((e) => resolve(ROOT, e));
+  while (queue.length) {
+    const file = queue.pop()!;
+    if (seen.has(file)) continue;
+    let exists = false;
+    try { exists = statSync(file).isFile(); } catch { exists = false; }
+    if (!exists) continue;
+    seen.add(file);
+    queue.push(...importsOf(file));
+  }
+  return seen;
+}
+
+describe('institutional reachability', () => {
+  it('every institution module is production-reachable or declared dark, exactly', () => {
+    const live = reachable();
+    const modules = tsFiles(resolve(ROOT, 'src/services/institution'))
+      .map((f) => relative(resolve(ROOT, 'src/services/institution'), f));
+
+    const orphans = modules.filter((m) =>
+      !live.has(resolve(ROOT, 'src/services/institution', m)) && !(m in DARK));
+    const wired = Object.keys(DARK).filter((m) =>
+      live.has(resolve(ROOT, 'src/services/institution', m)));
+    const missing = Object.keys(DARK).filter((m) => !modules.includes(m));
+
+    expect(orphans,
+      'Institution modules with no production path and no declared reason. ' +
+      'Wire it to something real, or delete it — "for later" is speculative architecture:\n' +
+      orphans.join('\n')).toEqual([]);
+    expect(wired,
+      'These are declared dark but are now production-reachable. Good news: ' +
+      'remove them from DARK in this commit so the darkness can only shrink:\n' +
+      wired.join('\n')).toEqual([]);
+    expect(missing,
+      `DARK names modules that no longer exist:\n${missing.join('\n')}`).toEqual([]);
+  });
+
+  it('the institution has a production evidence intake that something calls', () => {
+    // The gate above scans institution modules, and by doing so it missed the
+    // worst orphan in the system: `emitSignalEvent` — the only function that
+    // records a company signal AND runs responsibility discovery — lived in
+    // src/services/scp and had no caller anywhere. Discovery was reachable and
+    // never fed, so nothing in production ever reached the first rung.
+    //
+    // Module-level reachability could not see that, so this asserts the intake
+    // directly. If the last caller is ever removed, the ladder loses its
+    // supply, and that must fail here rather than in silence.
+    const callers = tsFiles(resolve(ROOT, 'src'))
+      .filter((f) => !f.endsWith('services/scp/events/dispatcher.ts'))
+      .filter((f) => /\bemitSignalEvent\b/.test(readFileSync(f, 'utf8')));
+    expect(callers,
+      'Nothing produces company evidence. The institution cannot recognise a ' +
+      'responsibility it is never told about.').not.toEqual([]);
+  });
+
+  it('every link in the support chain has a real production caller', () => {
+    // The chain's callers were previously asserted inside the vertical test.
+    // That proves the chain worked once; it does not stop a link going dark
+    // later. This is the permanent version.
+    //
+    // Only `src/` is scanned, so a test-only or benchmark-only caller cannot
+    // satisfy a link — which is exactly the failure mode this program keeps
+    // finding. Each entry names the module that DEFINES the symbol, so a module
+    // referring to itself never counts as its own caller.
+    const CHAIN: Array<[string, string, string]> = [
+      ['company evidence intake', 'emitSignalEvent', 'services/scp/events/dispatcher.ts'],
+      ['responsibility discovery', 'discoverResponsibilityFromSignal', 'services/institution/discovery.ts'],
+      ['founder evidence', 'recordFounderEvidenceAnswer', 'services/institution/founder-evidence.ts'],
+      // Without a production caller for the declaration, a company could never
+      // tell Foundry what to listen for, and independent observation would
+      // silently remain SaaS-only however general the machinery underneath.
+      // A company's own systems raising work. Without a production caller the
+      // first rung is fed by a person or by nothing, and the more a company has
+      // automated the less Foundry can see.
+      ['external company report', 'reportExternalObligation', 'services/founder/company-report.ts'],
+      ['company observation channel', 'registerObservationChannel', 'services/institution/company-observation.ts'],
+      ['company observation intake', 'recordCompanyObservations', 'services/institution/company-observation.ts'],
+      ['understanding advancement', 'earnResponsibilityUnderstanding', 'services/institution/responsibility-understanding.ts'],
+      ['expectation + shadowing entry', 'beginExternalMetricShadowing', 'services/institution/external-shadowing.ts'],
+      // The development twin. Without it, independent check results arrive with
+      // nothing to resolve and development shadowing stays dark.
+      ['development expectation entry', 'beginFounderDevelopmentShadowing', 'services/institution/development-shadowing.ts'],
+      ['independent observation', 'recordExternalMetricObservations', 'services/institution/external-observation.ts'],
+      ['shadow comparison', 'resolveExternalMetricShadowing', 'services/institution/external-shadowing.ts'],
+      ['authority grant', 'grantAssistingAuthority', 'services/institution/assisting-admission.ts'],
+      ['authority revocation', 'revokeAssistingAuthority', 'services/institution/assisting-admission.ts'],
+      ['assisting admission', 'enterResponsibilityAssisting', 'services/institution/responsibility-assisting.ts'],
+      ['customer message intake', 'ingestCustomerMessage', 'services/institution/customer-message-intake.ts'],
+      ['responsibility/channel association', 'registerSupportChannel', 'services/institution/customer-message-intake.ts'],
+      ['founder reply proposal', 'proposeSupportReply', 'services/institution/support-reply.ts'],
+      // The second effect kind must have a real founder behind it, or migration
+      // 136 widened the boundary for nobody.
+      ['founder notice authoring', 'proposeResponsibilityNotice', 'services/institution/responsibility-notice.ts'],
+      ['notice planning', 'planResponsibilityNotice', 'services/institution/responsibility-notice.ts'],
+      ['action planning', 'planProposedReply', 'services/institution/support-reply.ts'],
+      ['assisted plan writer', 'planAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
+      ['governed execution', 'executeAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
+      // The last link of the loop. Without a production caller the institution
+      // can act and can never learn, and `unresolved` becomes permanent by
+      // construction rather than by fact.
+      ['outcome reporting', 'reportEffectOutcome', 'services/institution/effect-outcome.ts'],
+      ['outcome reconciliation', 'reconcileAssistedSupportEmail', 'services/institution/responsibility-assisted-email.ts'],
+    ];
+    const files = tsFiles(resolve(ROOT, 'src'));
+    const dark: string[] = [];
+    for (const [link, symbol, definedIn] of CHAIN) {
+      // Invocation, not mention. Import lines are stripped first, and the
+      // symbol must appear in call position — otherwise renaming a call while
+      // leaving the import behind would keep the gate green on a dead link,
+      // which is exactly the brittleness this program keeps paying for.
+      const callers = files
+        .filter((f) => !f.endsWith(definedIn))
+        .filter((f) => {
+          const source = readFileSync(f, 'utf8')
+            .split('\n')
+            .filter((line) => !/^\s*(import|export)\s/.test(line) && !/^\s*[\w,{} ]+\}?\s*from\s/.test(line))
+            .join('\n');
+          return new RegExp(`\\b${symbol}\\s*\\(`).test(source);
+        });
+      if (!callers.length) dark.push(`${link} — nothing in src/ calls ${symbol}()`);
+    }
+    expect(dark,
+      'A link in the support chain exists but nothing production-facing reaches it. ' +
+      'A service in src/ is not enough; a test-only caller is not enough:\n' + dark.join('\n'),
+    ).toEqual([]);
+  });
+
+  it('every link a person needs to SEE has a production reader', () => {
+    // The write chain above is thorough and was green while four separate
+    // surfaces were unreachable by a human being:
+    //
+    //   • customer messages were stored and never rendered, so the three reply
+    //     routes could never be given a message id;
+    //   • support channels could not be created, and the intake key was thrown
+    //     away on redirect, so no message could ever arrive;
+    //   • `conflicting` outcomes told the owner their judgment was needed
+    //     without showing them what the disagreement was;
+    //   • a notice saved without ticking "send it for me" vanished.
+    //
+    // Every one of them is the same defect as the write links this gate was
+    // built for, on the other side of the glass. A chain that can only be
+    // driven by a test is not reachable, and neither is one whose output a
+    // person can never see.
+    const READ_CHAIN: Array<[string, string, string]> = [
+      ['messages a founder can act on', 'getMessagesAwaitingReply', 'services/institution/support-reply.ts'],
+      ['the channel a message arrives on', 'getSupportChannels', 'services/institution/customer-message-intake.ts'],
+      ['effects awaiting an answer', 'getUnresolvedEffects', 'services/institution/effect-outcome.ts'],
+      ['what the disagreement actually is', 'getDisputedEffects', 'services/institution/effect-outcome.ts'],
+      ['notices written and not sent', 'getUncarriedNotices', 'services/institution/responsibility-notice.ts'],
+      ['quantities the company declared', 'getObservationChannels', 'services/institution/company-observation.ts'],
+      ['responsibilities worth granting', 'getAssistingCandidates', 'services/institution/assisting-admission.ts'],
+      ['what Foundry did under permission', 'getFounderAssistingActivity', 'services/institution/responsibility-assisted-email.ts'],
+    ];
+    const files = tsFiles(resolve(ROOT, 'src'));
+    // A reader only counts when a ROUTE reads it. A service calling another
+    // service proves the data moves; it does not prove a person can see it,
+    // which is the whole property being asserted here.
+    const routes = files.filter((f) => f.includes(`${'/'}routes${'/'}`));
+    const unseen: string[] = [];
+    for (const [link, symbol, definedIn] of READ_CHAIN) {
+      const readers = routes
+        .filter((f) => !f.endsWith(definedIn))
+        .filter((f) => {
+          const source = readFileSync(f, 'utf8')
+            .split('\n')
+            .filter((line) => !/^\s*(import|export)\s/.test(line) && !/^\s*[\w,{} ]+\}?\s*from\s/.test(line))
+            .join('\n');
+          return new RegExp(`\\b${symbol}\\s*\\(`).test(source);
+        });
+      if (!readers.length) unseen.push(`${link} — no route calls ${symbol}()`);
+    }
+    expect(unseen,
+      'Something the institution records can never be seen by the person it is for. '
+      + 'A service-to-service caller does not count:\n' + unseen.join('\n'),
+    ).toEqual([]);
+  });
+
+  it('the reasons are load-bearing, not decoration', () => {
+    // A reason that says "later" is exactly the speculative architecture the
+    // constitution forbids. Every entry must name a real blocker or a real
+    // design intent.
+    for (const [module, reason] of Object.entries(DARK)) {
+      expect(reason.length, `${module} needs a real reason`).toBeGreaterThan(20);
+      expect(reason, `${module}: "for later" is not a reason to keep an orphan`)
+        .not.toMatch(/\b(later|future|eventually|someday|will be used)\b/i);
+    }
+  });
+});

@@ -2,6 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { executeRaw, query } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import { splitSqlStatements } from '../../src/db/migrate.js';
 import { finishReservation, reserveSpend, SpendCeilingError } from '../../src/services/ai/spend-ledger.js';
 
@@ -15,13 +16,16 @@ const input = (overrides: Record<string, unknown> = {}) => ({
 });
 
 beforeAll(async () => {
-  for (const file of ['075_ai_daily_spend.sql', '099_ai_spend_reservations.sql']) {
-    for (const sql of splitSqlStatements(readFileSync(resolve(__dirname, `../../src/db/migrations/${file}`), 'utf8'))) {
-      await query(sql);
-    }
-  }
-  await query('CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, owner_id TEXT NOT NULL)');
-  await query("INSERT OR IGNORE INTO products(id, owner_id) VALUES ('p1', 'f1')");
+  // The migrations are the schema. Anything this file used to create by hand
+  // is already here, in the shape the product actually has — a fixture that
+  // disagrees with the schema proves nothing about the product.
+  await runMigrations();
+  // Two migrations were re-applied on top by hand, which is how this file's
+  // `products` came to be a two-column stand-in and how the second apply
+  // collided with a column a later migration had already added.
+  await query(
+    `INSERT OR IGNORE INTO founders (id, clerk_user_id, email) VALUES ('f1','clerk_f1','f1@test.local')`);
+  await query("INSERT OR IGNORE INTO products(id, name, owner_id) VALUES ('p1', 'Ledger Co', 'f1')");
 });
 
 beforeEach(async () => {

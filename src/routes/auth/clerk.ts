@@ -5,6 +5,8 @@
 import { Hono } from 'hono';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
+import { verifiedPrimaryEmail } from '../../middleware/auth.js';
+import { log } from '../../lib/logger.js';
 import { createCustomer } from '../../services/billing/stripe.js';
 
 export const authRoutes = new Hono();
@@ -45,7 +47,22 @@ authRoutes.get('/auth/signup', (c) => {
       });
     }
     initClerk().catch(e => {
-      document.getElementById("sign-up").innerHTML = '<p style="color:#ef4444;">Failed to load authentication. Please refresh the page.</p><p style="color:#64748b;font-size:0.8rem;">' + e.message + '</p>';
+      // THE ERROR TEXT IS BUILT AS NODES, NOT AS HTML. This concatenated
+      // the error message into innerHTML, and the error comes from a third-party
+      // module loaded over the network: any markup in it — from a crafted CDN
+      // response, a proxy error page, or a message that happens to contain
+      // angle brackets — was rendered as HTML on the sign-in page.
+      const box = document.getElementById("sign-up");
+      box.textContent = "";
+      const headline = document.createElement("p");
+      headline.style.color = "#ef4444";
+      headline.textContent = "Failed to load authentication. Please refresh the page.";
+      const detail = document.createElement("p");
+      detail.style.color = "#64748b";
+      detail.style.fontSize = "0.8rem";
+      detail.textContent = String(e && e.message ? e.message : e);
+      box.appendChild(headline);
+      box.appendChild(detail);
     });
   </script>
 </body>
@@ -88,7 +105,22 @@ authRoutes.get('/auth/login', (c) => {
       });
     }
     initClerk().catch(e => {
-      document.getElementById("sign-in").innerHTML = '<p style="color:#ef4444;">Failed to load authentication. Please refresh the page.</p><p style="color:#64748b;font-size:0.8rem;">' + e.message + '</p>';
+      // THE ERROR TEXT IS BUILT AS NODES, NOT AS HTML. This concatenated
+      // the error message into innerHTML, and the error comes from a third-party
+      // module loaded over the network: any markup in it — from a crafted CDN
+      // response, a proxy error page, or a message that happens to contain
+      // angle brackets — was rendered as HTML on the sign-in page.
+      const box = document.getElementById("sign-in");
+      box.textContent = "";
+      const headline = document.createElement("p");
+      headline.style.color = "#ef4444";
+      headline.textContent = "Failed to load authentication. Please refresh the page.";
+      const detail = document.createElement("p");
+      detail.style.color = "#64748b";
+      detail.style.fontSize = "0.8rem";
+      detail.textContent = String(e && e.message ? e.message : e);
+      box.appendChild(headline);
+      box.appendChild(detail);
     });
   </script>
 </body>
@@ -184,19 +216,59 @@ authRoutes.post('/auth/webhook', async (c) => {
     const founderResult = await query('SELECT id FROM founders WHERE clerk_user_id = ?', [userId]);
     if (founderResult.rows.length > 0) {
       const founderId = (founderResult.rows[0] as Record<string, string>).id;
-      // Delete products (and all cascaded child rows) then the founder
-      const productsResult = await query('SELECT id FROM products WHERE owner_id = ?', [founderId]);
-      for (const row of productsResult.rows) {
-        const productId = (row as Record<string, string>).id;
-        await query('DELETE FROM products WHERE id = ?', [productId]);
+
+      // THIS USED TO DELETE BY HAND: `DELETE FROM products` per company, then
+      // `DELETE FROM founders`. It raises. Seven foreign keys into products'
+      // descendants are ON DELETE NO ACTION and this database runs with
+      // foreign_keys=ON, so deleting a company that has ever had a chat
+      // message fails outright — account deletion via the identity provider
+      // has never completed for a real company, and left no record of having
+      // been attempted.
+      //
+      // It also bypassed everything erasure knows: no ordering, no retention
+      // dispositions, no completion record. It would have deleted the evidence
+      // that the erasure happened, the financial records that must survive it,
+      // and the idempotency keys that stop a retry re-sending a real message.
+      //
+      // Same door as every other erasure now.
+      const { eraseFounderAccount } = await import('../../services/privacy/consent.js');
+      const outcome = await eraseFounderAccount(founderId);
+      if (outcome.failed.length > 0) {
+        // Clerk retries on a non-2xx, and a partial erasure must be retried
+        // rather than reported done. The per-product failure records are
+        // already written.
+        return c.json({
+          error: 'account erasure incomplete',
+          products_erased: outcome.productsErased.length,
+          products_failed: outcome.failed.length,
+        }, 500);
       }
-      await query('DELETE FROM founders WHERE id = ?', [founderId]);
     }
   }
 
   if (payload.type === 'user.created') {
     const userId = payload.data.id as string;
-    const email = (payload.data.email_addresses as Array<{ email_address: string }>)?.[0]?.email_address ?? '';
+    // THE VERIFIED PRIMARY ADDRESS, for the same reason the session path uses
+    // one: `founders.email` decides who reaches the platform-operator surface,
+    // so it is an authorization input and `[0]` is not an answer to "who is
+    // this". The provider names the primary address and its verification
+    // status; both are required.
+    const email = verifiedPrimaryEmail({
+      primaryEmailAddressId: payload.data.primary_email_address_id as string | null,
+      emailAddresses: (payload.data.email_addresses as Array<{
+        id?: string; email_address?: string; verification?: { status?: string | null } | null;
+      }> | undefined)?.map((a) => ({
+        id: a.id,
+        emailAddress: a.email_address,
+        verification: a.verification,
+      })),
+    });
+    if (email === null) {
+      // Not an error: an unverified sign-up is a real state. Clerk re-delivers
+      // `user.updated` once the address is verified, and that path provisions.
+      log.info('clerk.user_created_without_verified_primary_email', { userId });
+      return c.json({ received: true, provisioned: false });
+    }
     const name = `${payload.data.first_name ?? ''} ${payload.data.last_name ?? ''}`.trim() || null;
 
     // Check if founder already exists
@@ -236,10 +308,12 @@ authRoutes.post('/auth/webhook', async (c) => {
         } catch { /* non-fatal */ }
       })();
 
-      // Create or update cohort (for Foundry's own tracking)
-      const foundryProduct = await query("SELECT id FROM products WHERE name = 'Foundry' LIMIT 1", []);
-      if (foundryProduct.rows.length > 0) {
-        const fpId = (foundryProduct.rows[0] as Record<string, string>).id;
+      // Create or update cohort (for Foundry's own tracking). Scoped by
+      // canonical system identity (migration 123) so signup cohorts can never
+      // be written into a customer product that happens to be named "Foundry".
+      const { resolveFoundryProductId } = await import('../../services/system-identity.js');
+      const fpId = await resolveFoundryProductId();
+      if (fpId) {
         await query(
           `INSERT INTO cohorts (id, product_id, acquisition_period, acquisition_channel, founder_count)
            VALUES (?, ?, ?, 'organic', 1)

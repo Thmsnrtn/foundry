@@ -5,7 +5,8 @@
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
-import { encryptCredentialPayload } from '../encryption.js';
+import { decryptCredentialPayload, encryptCredentialPayload } from '../encryption.js';
+import { DIRECTION_BY_PROVIDER } from './direction.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,127 @@ export interface NormalizedEvent {
   created_at: string;
 }
 
+// ─── What is a credential, and what is merely configuration ──────────────────
+//
+// Two founder-facing forms configured integrations and disagreed about this,
+// with real consequences in both directions:
+//
+//   /integrations/:type/connect         split the form, encrypting everything
+//                                       that was not one of five named config
+//                                       keys into `credentials_json`.
+//   /agents/integrations/:name/connect  put EVERY form field into `config_json`
+//                                       in plaintext — api keys, bot tokens and
+//                                       auth tokens included.
+//
+// And all four sync adapters read their credential from `config_json`. So the
+// path that worked was the one storing provider secrets in the clear, and the
+// path that encrypted them correctly produced integrations that silently never
+// synced: the adapter looked in the wrong place and reported "missing config
+// field" forever.
+//
+// One list now decides, in both writers and every reader. It is an ALLOW-list
+// of non-secret keys, so a field nobody has classified is treated as a
+// credential — the fail-closed direction. A new provider whose config key is
+// missing here gets encrypted unnecessarily, which costs nothing; the opposite
+// mistake writes somebody's API key to a plaintext column.
+export const NON_SECRET_CONFIG_KEYS = [
+  'activation_event', 'active_user_event', 'team_id', 'host', 'account_id',
+  'org_slug', 'project_slug', 'project_id', 'workspace', 'region', 'channel',
+  // Identifiers, not secrets: which org, which repo, which channel. Knowing
+  // one tells you where to point a credential you do not have.
+  'org', 'repo', 'owner', 'channel_id', 'workspace_id', 'base_url',
+] as const;
+
+export function isNonSecretConfigKey(key: string): boolean {
+  return (NON_SECRET_CONFIG_KEYS as readonly string[]).includes(key);
+}
+
+/** Split a submitted form into what may be stored in the clear and what may not. */
+export function splitIntegrationFields(
+  fields: Record<string, unknown>,
+): { config: Record<string, unknown>; credentials: Record<string, string> } {
+  const config: Record<string, unknown> = {};
+  const credentials: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (value == null || value === '') continue;
+    if (isNonSecretConfigKey(key)) config[key] = value;
+    else credentials[key] = String(value);
+  }
+  return { config, credentials };
+}
+
+/**
+ * The credentials an adapter needs, decrypted.
+ *
+ * ONE SOURCE. There is deliberately no `config_json` fallback any more.
+ * Migration 140 moved every secret-shaped key out of that column and now
+ * refuses new ones, so a value that is not in `credentials_json` is not a
+ * credential this system will use.
+ *
+ * The fallback existed for one session as compatibility, and removing it is
+ * the point rather than a tidy-up: while it was there, an adapter would
+ * silently authenticate with a secret that had been sitting in a plaintext
+ * column, which is exactly the state that needs to become impossible instead
+ * of merely deprecated.
+ */
+export async function getIntegrationCredentials(
+  productId: string, name: string,
+): Promise<Record<string, string>> {
+  const row = (await query(
+    'SELECT credentials_json FROM integrations WHERE product_id=? AND name=?',
+    [productId, name],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!row) return {};
+  try {
+    const plaintext = decryptCredentialPayload(row.credentials_json as string | null);
+    return plaintext ? JSON.parse(plaintext) as Record<string, string> : {};
+  } catch { return {}; }
+}
+
+export interface QuarantinedSecret {
+  integration: string; key: string; quarantinedAt: string; rotated: boolean;
+}
+
+/**
+ * Secrets that were found sitting in a plaintext config column, by key.
+ *
+ * Migration 140 recorded the KEY and discarded the value on purpose: this list
+ * exists to tell an operator what to rotate, and a quarantine that stores the
+ * secret is the plaintext column with a more reassuring name.
+ *
+ * A secret that has been in a plaintext column must be rotated, not relocated.
+ * Nothing here can do that for them — the new value has to come from the
+ * provider — so the honest product behaviour is to say so plainly.
+ */
+export async function quarantinedSecrets(
+  productId: string, includeRotated = false,
+): Promise<QuarantinedSecret[]> {
+  const rows = await query(
+    `SELECT integration_name, secret_key, quarantined_at, rotated_at
+       FROM integration_secret_quarantine
+      WHERE product_id=?${includeRotated ? '' : ' AND rotated_at IS NULL'}
+      ORDER BY quarantined_at, secret_key`, [productId]);
+  return (rows.rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    integration: String(r.integration_name ?? 'unknown'),
+    key: String(r.secret_key),
+    quarantinedAt: String(r.quarantined_at),
+    rotated: r.rotated_at != null,
+  }));
+}
+
+/** Marks a quarantined key as rotated. Called when a founder re-enters the
+ * credential through the ordinary form, because re-entering IS the rotation —
+ * the new value arrives encrypted and the old one is already gone. */
+export async function markSecretsRotated(
+  productId: string, integrationName: string,
+): Promise<number> {
+  const result = await query(
+    `UPDATE integration_secret_quarantine SET rotated_at=datetime('now')
+      WHERE product_id=? AND integration_name=? AND rotated_at IS NULL`,
+    [productId, integrationName]);
+  return Number(result.rowsAffected ?? 0);
+}
+
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function rowToIntegration(row: Record<string, unknown>): IntegrationRecord {
@@ -46,7 +168,10 @@ function rowToIntegration(row: Record<string, unknown>): IntegrationRecord {
     id: row.id as string,
     product_id: row.product_id as string,
     name: row.name as string,
-    type: row.type as string,
+    // The DIRECTION. This field has always carried one on this path; `type` is
+    // what it used to be stored in, and two other writers put a provider key
+    // there. Migration 204 retired that column.
+    type: row.direction as string,
     status: row.status as string,
     config_json: (() => {
       try { return JSON.parse(row.config_json as string || '{}'); } catch { return {}; }
@@ -132,40 +257,42 @@ export async function connectIntegration(
 ): Promise<void> {
   const existing = await getIntegration(productId, name);
 
-  // Determine integration type based on name
-  const typeMap: Record<string, string> = {
-    stripe: 'inbound',
-    posthog: 'inbound',
-    plausible: 'inbound',
-    resend: 'outbound',
-    github: 'bidirectional',
-    sentry: 'inbound',
-    linear: 'bidirectional',
-  };
-  const type = typeMap[name] ?? 'inbound';
+  // WHICH WAY THIS CONNECTION POINTS. This map has always been a DIRECTION, and
+  // it was being written into `type` — a column two other writers fill with a
+  // provider key and one with a category. `direction` is its own column now
+  // (migration 203) with a database trigger holding the vocabulary, and `type`
+  // keeps the same value only until the retirement commit removes it.
+  const direction = DIRECTION_BY_PROVIDER[name] ?? 'inbound';
 
   const configJson = JSON.stringify(config.config_json ?? {});
   const authorizedAgents = JSON.stringify(config.authorized_agents ?? ['all']);
   const now = new Date().toISOString();
   const credentialsCiphertext = encryptCredentialPayload(config.credentials_json);
 
+  // Re-entering a credential IS the rotation: the new value arrives encrypted
+  // and the plaintext one is already gone. Anything still quarantined for this
+  // integration is therefore settled by this write.
+  if (credentialsCiphertext) await markSecretsRotated(productId, name);
+
   if (existing) {
     await query(
       `UPDATE integrations SET
         status = 'active',
-        type = ?,
+        direction = ?,
+        provider = COALESCE(provider, ?),
         credentials_json = COALESCE(?, credentials_json),
         config_json = ?,
         authorized_agents = ?,
-        updated_at = ?
+        updated_at = datetime('now')
        WHERE product_id = ? AND name = ?`,
-      [type, credentialsCiphertext, configJson, authorizedAgents, now, productId, name],
+      [direction, name, credentialsCiphertext, configJson, authorizedAgents, productId, name],
     );
   } else {
     await query(
-      `INSERT INTO integrations (id, product_id, name, type, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
-      [nanoid(), productId, name, type, credentialsCiphertext, configJson, authorizedAgents, now, now],
+      `INSERT INTO integrations (id, product_id, name, provider, direction, status, credentials_json, config_json, authorized_agents, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, datetime('now'), datetime('now'))`,
+      [nanoid(), productId, name, name, direction, credentialsCiphertext, configJson,
+       authorizedAgents],
     );
   }
 }
@@ -175,8 +302,8 @@ export async function connectIntegration(
  */
 export async function disconnectIntegration(productId: string, name: string): Promise<void> {
   await query(
-    `UPDATE integrations SET status = 'disconnected', updated_at = ? WHERE product_id = ? AND name = ?`,
-    [new Date().toISOString(), productId, name],
+    `UPDATE integrations SET status = 'disconnected', updated_at = datetime('now') WHERE product_id = ? AND name = ?`,
+    [productId, name],
   );
 }
 
@@ -216,9 +343,10 @@ export async function storeEvent(
 
   // Update total_inbound_events counter on the integration
   await query(
-    `UPDATE integrations SET total_inbound_events = total_inbound_events + 1, last_synced_at = ?, updated_at = ?
+    `UPDATE integrations SET total_inbound_events = total_inbound_events + 1,
+            last_synced_at = datetime('now'), updated_at = datetime('now')
      WHERE product_id = ? AND name = ?`,
-    [now, now, productId, event.integration_name],
+    [productId, event.integration_name],
   );
 
   return id;

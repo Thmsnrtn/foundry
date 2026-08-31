@@ -20,8 +20,12 @@ export const betaRoutes = new Hono<AuthEnv>();
 betaRoutes.get('/beta', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'beta', 'Beta', undefined, c);
-  const products = await query('SELECT id FROM products WHERE owner_id = ?', [founder.id]);
-  const productId = products.rows.length > 0 ? (products.rows[0] as Record<string, string>).id : null;
+  // TWO COMPANIES ON ONE PAGE. The layout resolves the selected company —
+  // cookie first, which is what the switcher sets — and this ran its own
+  // `WHERE owner_id = ?` and took row zero. A founder with two companies could
+  // read one company's name in the header while the intake list below it
+  // belonged to the other.
+  const productId = ctx.productId;
   const intakes = productId ? await getBetaIntakes(productId) : { rows: [] };
   const count = productId
     ? await query('SELECT COUNT(*) as c FROM beta_intake WHERE product_id = ?', [productId])

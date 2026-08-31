@@ -31,7 +31,7 @@ export const FEATURE_GATES: Record<string, FeatureGateConfig> = {
   temporal:       { requiredTier: ['investor_ready'], name: 'Temporal Intelligence', description: 'Signal replay and prediction accuracy tracking', upgradeMessage: 'Temporal Intelligence lets you replay your Signal history day-by-day and measures how accurate your scenario predictions were. Available on Investor-Ready.' },
   competitive:    { requiredTier: ['investor_ready'], name: 'Competitive Intelligence', description: 'Weekly competitor monitoring', upgradeMessage: 'Competitive Intelligence runs weekly scans of your competitors and surfaces pricing changes, feature launches, and positioning shifts. Available on Investor-Ready.' },
   cohorts:        { requiredTier: ['investor_ready'], name: 'Cohort Analysis', description: 'Retention by acquisition period and channel', upgradeMessage: 'Cohort Analysis tracks retention across acquisition cohorts and channels, identifying which users actually stick and why. Available on Investor-Ready.' },
-  story:          { requiredTier: ['investor_ready'], name: 'Founding Story Engine', description: 'Timestamped publishable case studies', upgradeMessage: 'The Founding Story Engine generates publishable case studies with cryptographic timestamps. Available on Investor-Ready.' },
+  story:          { requiredTier: ['investor_ready'], name: 'Founding Story Engine', description: 'Timestamped publishable case studies', upgradeMessage: 'The Founding Story Engine turns your recorded milestones into publishable case studies. Available on Investor-Ready.' },
   multi_product:  { requiredTier: ['investor_ready'], name: 'Multi-Product', description: 'Govern more than one product', upgradeMessage: 'Investor-Ready allows unlimited products with cross-portfolio intelligence. Available on Investor-Ready.' },
 };
 
@@ -158,12 +158,20 @@ function getFeaturePreview(featureName: string): string {
         <li style="margin-bottom:0.35rem;"><strong>Signal Classification</strong> — Each signal is rated low/medium/high significance. High signals automatically create stressors in your risk engine.</li>
         <li style="margin-bottom:0.35rem;"><strong>Digest Integration</strong> — Competitive context appears in your weekly digest alongside MRR and stressor data.</li>
       </ul>`,
+    // WHAT THIS PROMISED AND WHAT EXISTS. The three bullets here described
+    // retention curves, channel attribution and automatic deviation stressors.
+    // The reading half of all three is built and tested; the WRITING half does
+    // not exist for any customer company — nothing in Foundry records a
+    // cohort's activation or retention, and the only writer of the `cohorts`
+    // table is Foundry's own signup webhook writing Foundry's own product. An
+    // upgrade page is the last place a capability should be described by its
+    // reader.
     'Cohort Analysis': `
       <h3 style="margin-bottom:0.5rem;">What you get with Cohort Analysis</h3>
       <ul style="font-size:0.9rem;color:#374151;padding-left:1.25rem;list-style:disc;">
-        <li style="margin-bottom:0.35rem;"><strong>Retention Curves</strong> — Day 7, 14, 30, 60, 90 retention by acquisition period and channel.</li>
-        <li style="margin-bottom:0.35rem;"><strong>Channel Attribution</strong> — Which acquisition source retains best? Organic vs. paid vs. referral vs. content.</li>
-        <li style="margin-bottom:0.35rem;"><strong>Historical Comparison</strong> — Every new cohort compared against your historical average. Deviations trigger stressors automatically.</li>
+        <li style="margin-bottom:0.35rem;"><strong>The cohort page and API</strong> — acquisition periods and channels, with retention at day 7, 14, 30 and 60 shown for any cohort whose numbers have been recorded.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Deviation stressors</strong> — when a cohort's day-14 retention falls below the average across your recorded cohorts, the risk engine raises it.</li>
+        <li style="margin-bottom:0.35rem;"><strong>Not yet</strong> — Foundry has no path for reporting cohort retention today, so these surfaces will be empty until it does. This is being built; it is listed here rather than described as though it already works.</li>
       </ul>`,
   };
   return previews[featureName] ?? `

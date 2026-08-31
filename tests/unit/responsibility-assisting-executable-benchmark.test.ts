@@ -4,7 +4,6 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { registerToolHandler } from '../../src/services/outbound/gateway.js';
 import { SEND_EMAIL_POLICY } from '../../src/services/integration/resend.js';
-import { discoverResponsibilityFromSignal } from '../../src/services/institution/discovery.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
 import { earnResponsibilityUnderstanding,type UnderstandingFact } from '../../src/services/institution/responsibility-understanding.js';
 import { beginResponsibilityShadowing,compareShadowObservation } from '../../src/services/institution/responsibility-shadowing.js';
@@ -12,6 +11,7 @@ import { recordConsent,revokeConsent } from '../../src/services/autopilot/consen
 import { enterResponsibilityAssisting } from '../../src/services/institution/responsibility-assisting.js';
 import { executeAssistedSupportEmail,planAssistedSupportEmail,reconcileAssistedSupportEmail } from '../../src/services/institution/responsibility-assisted-email.js';
 import { evaluateAssistingBenchmark,type AssistingBenchmarkActual } from '../../src/services/institution/responsibility-assisting-benchmark.js';
+import { reportedObligation } from '../fixtures/responsibility-state.js';
 
 type Truth={name:string;transport:'accepted'|'ambiguous';observations:Array<'support_reply_effective'|'support_reply_failed'>;
   expected:'verified_success'|'verified_failure'|'unresolved'|'conflicting'};
@@ -32,25 +32,32 @@ beforeAll(async()=>{
 });
 
 async function admit(name:string) {
-  const ids={signal:`${name}_signal`,channel:`${name}_channel`,actual:`${name}_actual`};
+  const ids={channel:`${name}_channel`,actual:`${name}_actual`};
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    (?,'gate_product','support','support_spike','high','{}','Independent queue evidence'),
     (?,'gate_product','support','support_queue_observed','low','{}','Independent observation channel'),
-    (?,'gate_product','support','support_capacity_restored','low','{}','Independent shadow observation')`,[ids.signal,ids.channel,ids.actual]);
-  const responsibility=(await discoverResponsibilityFromSignal('gate_product',ids.signal))!;
+    (?,'gate_product','support','support_capacity_restored','low','{}','Independent shadow observation')`,[ids.channel,ids.actual]);
+  // A HELD-OUT BENCHMARK IS WORTH WHAT ITS ENTRY POINT IS WORTH. Each company
+  // used to be admitted by a SaaS-shaped signal handed straight to discovery,
+  // which nothing in production emits — so the benchmark measured governed
+  // assistance on six responsibilities the system could not have reached. Each
+  // company now says what it owes, through the one intake that exists.
+  const reported=await reportedObligation('gate_product','gate_owner',
+    {kind:'customer_commitment',what:`Resolve the request ${name} is waiting on`});
+  const signalId=reported.signalId;
+  const responsibility={id:reported.responsibilityId};
   const facts:Record<UnderstandingFact,unknown>={purpose:'Keep customers supported',desired_outcome:'Resolve the request',
     success_conditions:['request resolved'],failure_conditions:[],operating_constraints:['one bounded reply'],dependencies:['support system'],
     systems:[],current_carrier:null,commitments:[],authority_requirements:['owner grant'],capability_requirements:['send_email'],
     risks:['incorrect reply'],failure_modes:[],stakeholder_obligations:[],financial_consequence:null};
   for (const predicate of ['purpose','desired_outcome','success_conditions','operating_constraints','dependencies','risks'] as UnderstandingFact[])
     await recordReconstructionClaim({productId:'gate_product',subject:`responsibility:${responsibility.id}`,predicate,value:facts[predicate],
-      epistemicStatus:'known',evidenceRefs:[{kind:'signal_event',id:ids.signal}],derivationMethod:'held-out canonical evidence',observedAt:new Date()});
+      epistemicStatus:'known',evidenceRefs:[{kind:'signal_event',id:signalId}],derivationMethod:'held-out canonical evidence',observedAt:new Date()});
   await earnResponsibilityUnderstanding('gate_product',responsibility.id);
   const expectation=await recordReconstructionClaim({productId:'gate_product',subject:`responsibility:${responsibility.id}`,
     predicate:'expected_observed_event',value:'support_capacity_restored',epistemicStatus:'known',
     evidenceRefs:[{kind:'signal_event',id:ids.channel}],derivationMethod:'held-out expectation',observedAt:new Date()});
   await beginResponsibilityShadowing({productId:'gate_product',responsibilityId:responsibility.id,expectedEventType:'support_capacity_restored',
-    expectationClaimId:expectation,observationSourceSignalId:ids.channel});
+    expectationClaimId:expectation,observationSourceSignalId:ids.channel,observationSourceKind:'support'});
   const expectationId=String(((await query('SELECT id FROM responsibility_shadow_expectations WHERE responsibility_id=?',[responsibility.id])).rows[0] as Record<string,unknown>).id);
   await compareShadowObservation({productId:'gate_product',expectationId,observationSignalId:ids.actual});
   const comparisonId=String(((await query('SELECT id FROM responsibility_shadow_comparisons WHERE expectation_id=?',[expectationId])).rows[0] as Record<string,unknown>).id);

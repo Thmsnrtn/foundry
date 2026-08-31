@@ -338,9 +338,23 @@ async function getMetricsContext(productId: string): Promise<MCPToolResult> {
 - NPS: ${m.nps_score ?? '?'}
 
 ## Revenue
-- New MRR: $${((mrr?.new_cents ?? 0) / 100).toFixed(0)}
-- Churned MRR: $${((mrr?.churned_cents ?? 0) / 100).toFixed(0)}
-- Health Ratio: ${health?.value.toFixed(2) ?? '?'} (${health?.indicator ?? '?'})`);
+- MRR: ${mrr?.level_cents == null ? 'not reported' : `$${(mrr.level_cents / 100).toFixed(0)}`}
+- Net new this period: ${dollarsOrNotReported(mrr?.net_new_cents ?? null)}
+- New MRR: ${dollarsOrNotReported(mrr?.new_cents ?? null)}
+- Churned MRR: ${dollarsOrNotReported(mrr?.churned_cents ?? null)}
+- Health Ratio: ${health?.value == null ? 'unknown — no new MRR to divide by' : `${health.value.toFixed(2)} (${health.indicator})`}`);
+}
+
+/**
+ * Dollars, or the words for not having been told.
+ *
+ * The three movement lines printed `$0` for a company that had never reported a
+ * movement, on the same card where the level and the health ratio already said
+ * "not reported" and "unknown". Migration 202 made the columns able to say it;
+ * this is the surface saying it.
+ */
+function dollarsOrNotReported(cents: number | null): string {
+  return cents === null ? 'not reported' : `$${(cents / 100).toFixed(0)}`;
 }
 
 async function getCompetitiveContext(productId: string): Promise<MCPToolResult> {

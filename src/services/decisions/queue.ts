@@ -60,19 +60,38 @@ export async function createDecision(input: {
   return id;
 }
 
+/**
+ * Resolve a decision.
+ *
+ * `decidedBy` is the KIND — 'founder' or 'second_self' — and stays one: the
+ * shadow ledger measures agreement on founder-decided rows, and the demotion
+ * path fires only on autopilot-decided ones. `resolvedByFounderId` is WHO, and
+ * is the thing that was missing: three doors reach this, every human one of
+ * them wrote the same four letters, and a company with three founders recorded
+ * 'founder' for all of them. NULL means not recorded — never "the owner".
+ */
 export async function resolveDecision(
   decisionId: string,
   productId: string,
   chosenOption: string,
-  decidedBy: string
+  decidedBy: string,
+  resolvedByFounderId?: string,
 ): Promise<void> {
-  const now = new Date().toISOString();
+  // ONE COLUMN, ONE CLOCK. This wrote `decided_at` as a JavaScript ISO string
+  // while the other writer — `decisions/actions.ts`, the execution path — wrote
+  // `datetime('now')`. Two formats in one column: 'T' sorts after a space, so
+  // ordering by `decided_at` interleaved the two paths wrongly, MAX() preferred
+  // whichever row was written the JavaScript way, and every range comparison
+  // against a SQLite-format bound split on which code path had resolved the
+  // decision. The neighbouring `follow_up_at` on this very statement was
+  // already `datetime('now', ...)`.
   await query(
     `UPDATE decisions
-     SET status = 'approved', chosen_option = ?, decided_at = ?, decided_by = ?,
+     SET status = 'approved', chosen_option = ?, decided_at = datetime('now'), decided_by = ?,
+         decided_by_founder_id = ?,
          follow_up_at = datetime('now', '+30 days')
      WHERE id = ? AND product_id = ?`,
-    [chosenOption, now, decidedBy, decisionId, productId]
+    [chosenOption, decidedBy, resolvedByFounderId ?? null, decisionId, productId]
   );
 
   // Dispatch webhook
@@ -100,10 +119,12 @@ export async function recordOutcome(
   outcome: string,
   valence?: number | null,
 ): Promise<void> {
-  const now = new Date().toISOString();
+  // The same column, the same two clocks: `roi/outcome-tracker.ts` and
+  // `accuracy/tracker.ts` both stamp `outcome_measured_at` with
+  // `datetime('now')`, and this path wrote an ISO string.
   await query(
-    `UPDATE decisions SET outcome = ?, outcome_measured_at = ?, outcome_valence = ? WHERE id = ? AND product_id = ?`,
-    [outcome, now, valence ?? null, decisionId, productId]
+    `UPDATE decisions SET outcome = ?, outcome_measured_at = datetime('now'), outcome_valence = ? WHERE id = ? AND product_id = ?`,
+    [outcome, valence ?? null, decisionId, productId]
   );
 }
 

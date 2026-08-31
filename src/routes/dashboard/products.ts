@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { query, getProductsByOwner, getProductByOwner, getLifecycleState } from '../../db/client.js';
+import { query, getProductsByOwner, getVisibleProducts, getProductByOwner, getLifecycleState } from '../../db/client.js';
 import { getProductDNA, upsertProductDNA, getDNACompletionStatus } from '../../services/wisdom/dna.js';
 import { logFailure, getAllFailures } from '../../services/wisdom/failures.js';
 import { getRelevantPatterns, invalidatePattern } from '../../services/wisdom/patterns.js';
@@ -11,6 +11,7 @@ import { dnaEditor, failureLogView, judgmentPatternsView, remediationPRList, rem
 import { getLayoutContext } from './_shared.js';
 import { checkAndAwardMilestones } from '../../services/ux/milestones.js';
 import { requireTier } from '../../middleware/tier-gate.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 import { productDNAUpdateSchema, failureLogSchema, validate } from '../../lib/validation.js';
 import { log } from '../../lib/logger.js';
 import type { FailureCategory } from '../../types/index.js';
@@ -26,7 +27,8 @@ export const productRoutes = new Hono<AuthEnv>();
 
 productRoutes.get('/products', async (c) => {
   const founder = c.get('founder');
-  const result = await getProductsByOwner(founder.id);
+  // Owned or accepted into.
+  const result = await getVisibleProducts(founder.id);
   return c.json({ products: result.rows });
 });
 
@@ -73,7 +75,12 @@ productRoutes.get('/products/:id/dna', requireTier('wisdom'), async (c) => {
   return c.html(dashboardLayout(ctx, content));
 });
 
-productRoutes.post('/products/:id/dna', requireTier('wisdom'), async (c) => {
+// THE DNA IS WHAT EVERY AGENT GROUNDS ITSELF IN — the audience, the pain, the
+// positioning, what the company is not. Editing it changes what the whole
+// institution believes about itself, which is company management, not
+// ordinary work.
+productRoutes.post('/products/:id/dna', requireTier('wisdom'),
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);
@@ -94,7 +101,8 @@ productRoutes.post('/products/:id/dna', requireTier('wisdom'), async (c) => {
 // Draft the DNA fields from the founder's existing assets (README, metadata)
 // with one AI call. Only fills empty fields — never overwrites the founder's
 // own words (Phase 1.6).
-productRoutes.post('/products/:id/dna/autodraft', requireTier('wisdom'), async (c) => {
+productRoutes.post('/products/:id/dna/autodraft',
+  requireCompanyCapability('can_trigger_actions'), requireTier('wisdom'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const prodResult = await getProductByOwner(productId, founder.id);

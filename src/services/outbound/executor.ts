@@ -77,19 +77,30 @@ async function executeAction(action: OutboundActionRecord): Promise<{ success: b
       throw new Error(`Unknown resend action: ${action.action_type}`);
     }
 
-    // Future integrations: linear, github, etc.
+    // A ROW SAYING 'executed' FOR SOMETHING NOTHING EXECUTED.
+    //
+    // This wrote status 'executed', stamped `executed_at`, and returned
+    // success — while its own result message read "no executor registered
+    // yet". Both halves were stored: the founder's inbox, the actions page and
+    // the Letter all read `status`, and every one of them was told Foundry had
+    // done a thing whose record admits nothing happened.
+    //
+    // It was not a rare path. `executeAction` switches on `integration_name`,
+    // and every agent-originated action carries the AGENT's name there
+    // ('atlas', 'beacon', …), never 'resend' — so this branch is where all of
+    // them land. The sibling module learned this exact lesson already: the SCP
+    // executor's `send_email` case used to claim a send it had not made, and
+    // the honest answer there was a refusal rather than a flattened success.
+    //
+    // So this refuses. Both callers already wrap the call and write status
+    // 'failed' with the reason, which is the true statement: Foundry could not
+    // carry this out. An action nobody can execute is a gap the founder should
+    // see, not a success to be counted.
     default: {
-      // Mark as executed with a log result
-      const now = new Date().toISOString();
-      await query(
-        `UPDATE outbound_actions SET status = 'executed', result_json = ?, executed_at = ? WHERE id = ?`,
-        [
-          JSON.stringify({ message: `Action ${action.action_type} on ${action.integration_name} logged — no executor registered yet` }),
-          now,
-          action.id,
-        ],
+      throw new Error(
+        `No executor registered for ${action.integration_name}: ` +
+        `action ${action.action_type} was not carried out`,
       );
-      return { success: true, result: { logged: true } };
     }
   }
 }
@@ -102,6 +113,42 @@ async function executeAction(action: OutboundActionRecord): Promise<{ success: b
  * - authority_level = 1: queue with 1-hour notification window
  * - authority_level = 2: queue for CEO approval
  */
+/**
+ * THE AUTHORITY A PROPOSAL MAY NOT TALK ITS WAY OUT OF.
+ *
+ * `authorityLevel` arrives from the agent, and the agent got it from a language
+ * model. Every agent prompt asks for `"authority_level": 0 | 1 | 2` and not one
+ * of them says what the numbers mean, so the field is chosen uninstructed. It
+ * is not a label: level 0 is a branch below that executes the action
+ * immediately. A model answering 0 was therefore deciding to act without asking
+ * anyone — for an agent whose founder-set level often says the opposite. Atlas
+ * ships configured at 2, commented "Code changes always need approval", and
+ * could proceed at 0 without that number ever being read.
+ *
+ * The level on `agent_instances` is the founder's answer to the same question,
+ * so it wins wherever it is stricter. A proposal may be MORE cautious than its
+ * configuration — a model saying "ask a person about this one" is allowed to be
+ * right — and may never be less. Competence is not authority in either
+ * direction: being confident does not grant permission, and the grant is the
+ * founder's to give.
+ *
+ * ABSENCE IS NOT PERMISSION. A name with no instance row has no founder-set
+ * authority behind it at all, which is a reason to ask rather than a reason to
+ * proceed, so it takes the strictest level rather than the most convenient one.
+ */
+async function bindingAuthority(
+  productId: string, agentName: string, proposed: 0 | 1 | 2,
+): Promise<0 | 1 | 2> {
+  const r = await query(
+    `SELECT authority_level FROM agent_instances WHERE product_id = ? AND agent_name = ?`,
+    [productId, agentName],
+  );
+  const raw = r.rows.length > 0 ? Number(r.rows[0].authority_level) : NaN;
+  const configured = Number.isInteger(raw) && raw >= 0 && raw <= 2 ? raw : 2;
+  const bound = Math.max(proposed, configured);
+  return (bound >= 2 ? 2 : bound === 1 ? 1 : 0);
+}
+
 export async function proposeAction(params: {
   productId: string;
   agentName: string;
@@ -128,12 +175,16 @@ export async function proposeAction(params: {
 
   const id = nanoid();
   const now = new Date().toISOString();
-  const expiresInHours = params.expiresInHours ?? (params.authorityLevel === 2 ? 72 : 24);
+  // Everything below reads this, never `params.authorityLevel` — the proposed
+  // level is an opinion and this is the one that binds.
+  const authorityLevel = await bindingAuthority(
+    params.productId, params.agentName, params.authorityLevel);
+  const expiresInHours = params.expiresInHours ?? (authorityLevel === 2 ? 72 : 24);
   const expiresAt = new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString();
 
   // Determine initial status
   let status: string;
-  if (params.authorityLevel === 0) {
+  if (authorityLevel === 0) {
     status = 'approved'; // Will be executed immediately
   } else {
     status = 'pending_approval';
@@ -151,7 +202,7 @@ export async function proposeAction(params: {
       params.agentName,
       params.integrationName,
       params.actionType,
-      params.authorityLevel,
+      authorityLevel,
       status,
       JSON.stringify(params.parameters),
       params.previewText,
@@ -171,7 +222,7 @@ export async function proposeAction(params: {
   );
 
   // Authority level 0: execute immediately
-  if (params.authorityLevel === 0) {
+  if (authorityLevel === 0) {
     const action = await getAction(id);
     if (action) {
       try {
@@ -187,17 +238,29 @@ export async function proposeAction(params: {
     }
   }
 
-  // Authority level 1: auto-approve after notification window (1 hour)
-  // In production this would be handled by a background job. For now, queue it.
-  if (params.authorityLevel === 1) {
-    // Update approved_by to 'auto' and approved_at to +1 hour
-    // The actual execution would be triggered by a scheduler
-    const autoApproveAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    await query(
-      `UPDATE outbound_actions SET approved_by = 'auto', approved_at = ? WHERE id = ?`,
-      [autoApproveAt, id],
-    );
-  }
+  // AUTHORITY LEVEL 1 WAITS FOR A PERSON, AND THE RECORD SAYS SO.
+  //
+  // This used to stamp `approved_by = 'auto'` and `approved_at` ONE HOUR IN THE
+  // FUTURE the moment the action was proposed — while `status` stayed
+  // 'pending_approval' and no scheduler existed to execute it. Three untruths in
+  // four lines: an approval that had not happened, a timestamp for a moment that
+  // had not arrived, and a window nothing was counting down.
+  //
+  // `approved_by = 'auto'` has one meaning in this codebase — see
+  // `acting-principal.ts`: an action that reached its notice window without
+  // anybody objecting. There was no notice (nothing tells the founder a level-1
+  // action is pending except the dashboard they may not open) and no window.
+  //
+  // So nothing is written here. A level-1 action is pending approval, exactly
+  // like a level-2 one, and the difference between them survives in
+  // `authority_level` rather than in a claim about what has been authorised.
+  //
+  // WHETHER FOUNDRY MAY SEND ON A SILENT TIMER IS NOT AN ENGINEERING QUESTION.
+  // A working version needs a notice the founder actually receives, a window
+  // that is counted, and a sweep that executes — and that is Foundry acting
+  // outward, at a customer, because a person did not answer in time. It is with
+  // the owner as OWNER_DECISIONS_PENDING §14. It does not come back as a
+  // timestamp written in advance.
 
   return { action_id: id, status };
 }
@@ -230,14 +293,25 @@ export async function getPendingApprovals(productId: string): Promise<OutboundAc
  */
 export async function approveAction(
   actionId: string,
-  approvedBy: string = 'ceo',
+  /** The person. Not a role: a constant here makes an authorisation merely
+   *  attributed rather than attributable, which is the whole point of the
+   *  field. Callers resolve it from the authenticated founder. */
+  approvedBy: string,
 ): Promise<{ success: boolean; result?: unknown }> {
-  const now = new Date().toISOString();
+  // ONE VOCABULARY, BOTH LEDGERS. Fails closed for the same reason the other
+  // door does: a value this does not recognise means the record would not say
+  // who authorised the action, and an authorisation nobody can be held to is
+  // not an authorisation.
+  const { isPrincipalRef } = await import('./acting-principal.js');
+  if (!isPrincipalRef(approvedBy)) {
+    throw new Error(`approver is not a principal reference: ${approvedBy}`);
+  }
 
   // Mark as approved
   await query(
-    `UPDATE outbound_actions SET status = 'approved', approved_by = ?, approved_at = ? WHERE id = ?`,
-    [approvedBy, now, actionId],
+    `UPDATE outbound_actions SET status = 'approved', approved_by = ?,
+            approved_at = datetime('now') WHERE id = ?`,
+    [approvedBy, actionId],
   );
 
   const action = await getAction(actionId);
@@ -256,19 +330,33 @@ export async function approveAction(
 }
 
 /**
- * CEO rejects an action — records as negative feedback signal.
+ * A person rejects an action — recorded as a negative feedback signal.
+ *
+ * WHO DECIDED IS A PERSON, NOT A ROLE, on this side too. This wrote the literal
+ * 'ceo' into `approved_by`, so the record of who turned an action down was the
+ * same string for every founder of every company — and the reason defaulted to
+ * "Rejected by CEO", which attributes a decision to a role nobody holds. The
+ * route verifies ownership and then had nothing to hand on.
  */
-export async function rejectAction(actionId: string, reason?: string): Promise<void> {
+export async function rejectAction(
+  actionId: string, decidedBy: string, reason?: string,
+): Promise<void> {
+  const { isPrincipalRef } = await import('./acting-principal.js');
+  if (!isPrincipalRef(decidedBy)) {
+    throw new Error(`decider is not a principal reference: ${decidedBy}`);
+  }
   const now = new Date().toISOString();
   await query(
     `UPDATE outbound_actions SET
       status = 'rejected',
-      approved_by = 'ceo',
-      approved_at = ?,
+      approved_by = ?,
+      approved_at = datetime('now'),
       feedback_status = 'negative',
       feedback_data_json = ?
      WHERE id = ?`,
-    [now, JSON.stringify({ reason: reason ?? 'Rejected by CEO', rejected_at: now }), actionId],
+    [decidedBy,
+      JSON.stringify({ reason: reason ?? 'Rejected without a stated reason', rejected_at: now }),
+      actionId],
   );
 }
 

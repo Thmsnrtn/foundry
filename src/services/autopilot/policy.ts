@@ -25,6 +25,7 @@ import { query } from '../../db/client.js';
 import { buildInsert } from '../../db/schema/kernel.js';
 import { resolveDecision } from '../decisions/queue.js';
 import { log } from '../../lib/logger.js';
+import { foundryJudgementTestedSql, foundryJudgementWasTested } from '../decisions/foundry-proposed.js';
 
 export type AutopilotMode = 'shadow' | 'suggest' | 'act';
 export const AUTOPILOT_GRACE_HOURS = 12;
@@ -129,7 +130,18 @@ export interface ShadowStats {
 
 /** The shadow ledger, computed from data Foundry already records: on every
  *  founder-resolved decision that carried a recommendation, did the founder
- *  choose it? This is trust measured with zero delegated risk. */
+ *  choose it? This is trust measured with zero delegated risk.
+ *
+ *  A WHITESPACE-ONLY RECOMMENDATION IS NOT A VIEW. `recommendation IS NOT NULL`
+ *  admitted it, and TRIM(LOWER('  ')) = TRIM(LOWER('')) is true, so a decision
+ *  where Foundry said nothing and the founder chose nothing was counted in the
+ *  numerator as AGREEMENT — the letter crediting Foundry for agreeing with a
+ *  choice neither of them made. It is excluded from both sides now, not just
+ *  the numerator: it was never a sample of Foundry's judgement.
+ *
+ *  Found by asserting this count against the promotion ledger's own copy of the
+ *  same comparison rather than against a constant. Two copies are fine when
+ *  they are pinned; these two were not, and they disagreed. */
 export async function getShadowStats(productId: string): Promise<ShadowStats[]> {
   const r = await query(
     `SELECT category,
@@ -138,7 +150,12 @@ export async function getShadowStats(productId: string): Promise<ShadowStats[]> 
      FROM decisions
      WHERE product_id = ? AND decided_by = 'founder' AND status IN ('approved','rejected')
        AND recommendation IS NOT NULL AND chosen_option IS NOT NULL
+       AND TRIM(recommendation) != ''
      GROUP BY category`,
+    // The agreement test above is the same rule as
+    // `foundryJudgementTestedSql`, restricted to founder-resolved rows because
+    // a shadow ledger is by definition about decisions Foundry did not make.
+
     [productId],
   );
   return (r.rows as unknown as Array<Record<string, unknown>>).map((row) => {
@@ -157,18 +174,41 @@ export async function getShadowStats(productId: string): Promise<ShadowStats[]> 
 // RESOLVED outcomes only — pending banks nothing. ─────────────────────────────
 
 /** Count each measured decision outcome into the ledger exactly once:
- *  positive → clean cycle (progress toward promotion); negative on a
- *  second_self decision → anomaly (instant one-rung demotion). */
+ *  positive AND attributable to Foundry's judgement → clean cycle (progress
+ *  toward promotion); negative on a second_self decision → anomaly (instant
+ *  one-rung demotion).
+ *
+ *  A CLEAN CYCLE HAS TO BE ABOUT FOUNDRY, and for a long time it was not.
+ *  Promotion out of `shadow` is the whole question of whether Foundry's
+ *  judgement can be trusted — and in shadow mode Foundry decides nothing. Every
+ *  decision is the founder's. Banking a clean cycle on any positive outcome
+ *  therefore promoted Foundry for the FOUNDER deciding well, including on the
+ *  ten occasions where the founder chose the opposite of what Foundry
+ *  recommended. Foundry could earn the right to start suggesting by being
+ *  wrong, as long as somebody else was right.
+ *
+ *  So an outcome banks a clean cycle only when Foundry's judgement is the one
+ *  that was tested:
+ *    • the decision was Foundry's own (`second_self`), or
+ *    • Foundry recommended an option and the founder took THAT option.
+ *  A founder decision with no recommendation on it tested nothing of Foundry's
+ *  and banks nothing. This is the same comparison `getShadowStats` already
+ *  makes on the same two columns; it was measured, displayed in the letter, and
+ *  not used by the one decision it exists for.
+ *
+ *  The row is still CLAIMED either way, so an unattributable outcome is counted
+ *  once and retired rather than rescanned on every tick forever. */
 export async function processOutcomeFeedback(productId: string): Promise<{ cleanCycles: number; anomalies: number }> {
   const rows = await query(
-    `SELECT id, category, decided_by, outcome_valence FROM decisions
+    `SELECT id, category, decided_by, outcome_valence, recommendation, chosen_option
+     FROM decisions
      WHERE product_id = ? AND autopilot_counted = 0 AND outcome_valence IS NOT NULL
        AND decided_by IN ('founder', 'second_self') LIMIT 50`,
     [productId],
   );
   let cleanCycles = 0;
   let anomalies = 0;
-  for (const r of rows.rows as unknown as Array<Record<string, string | number>>) {
+  for (const r of rows.rows as unknown as Array<Record<string, string | number | null>>) {
     // Atomic claim: only the tick that flips the flag banks this outcome, so
     // two overlapping sweeps can never double-count the same decision.
     const claim = await query(
@@ -179,7 +219,7 @@ export async function processOutcomeFeedback(productId: string): Promise<{ clean
     const category = (r.category as string) ?? 'uncategorized';
     // outcome_valence is an INTEGER column: 1 positive, -1 negative, 0 mixed.
     const valence = Number(r.outcome_valence);
-    if (valence === 1) {
+    if (valence === 1 && foundryJudgementWasTested(r)) {
       cleanCycles++;
       await recordCleanCycle(productId, category);
     } else if (valence === -1 && r.decided_by === 'second_self') {

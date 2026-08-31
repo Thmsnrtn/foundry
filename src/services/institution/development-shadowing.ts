@@ -14,10 +14,13 @@
 // expectation table, comparison table, or responsibility ledger of its own.
 // =============================================================================
 
+import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { recordReconstructionClaim } from './reconstruction.js';
 import { beginResponsibilityShadowing, compareShadowObservation } from './responsibility-shadowing.js';
-import { developmentEventType, getDevelopmentObservationsInWindow } from './development-observation.js';
+import {
+  developmentEventCheck, developmentEventType, getDevelopmentObservationsInWindow,
+} from './development-observation.js';
 import type { Responsibility } from './responsibility.js';
 
 export type ShadowClassification = 'matched' | 'deviated' | 'unresolved';
@@ -48,7 +51,13 @@ export async function beginDevelopmentShadowing(input: {
   const responsibility = await beginResponsibilityShadowing({
     productId: input.productId, responsibilityId: input.responsibilityId,
     expectedEventType, expectationClaimId: input.expectationClaimId,
-    observationSourceSignalId: input.observationSourceSignalId, validUntil: input.validUntil,
+    observationSourceSignalId: input.observationSourceSignalId,
+    // `development_verification`, not the source of the nominated signal. The
+    // signal that justifies entering Shadowing here is a `repository`
+    // observation of the NEED; the verification it will be tested against has
+    // not happened yet. Migration 191 has the full account.
+    observationSourceKind: 'development_verification',
+    validUntil: input.validUntil,
   });
   const created = await query(
     `SELECT id FROM responsibility_shadow_expectations
@@ -86,9 +95,27 @@ export async function resolveDevelopmentShadowing(input: {
   const expectedEventType = String(expectation.expected_event_type);
   const validUntil = expectation.valid_until == null ? null : String(expectation.valid_until);
 
-  const observations = await getDevelopmentObservationsInWindow(
+  // ONLY OBSERVATIONS OF THE CHECK THAT WAS PREDICTED.
+  //
+  // The window selector is deliberately about the whole company, so a
+  // deviating observation cannot be hidden. But every observation it returned
+  // was then compared against this one expectation, and comparison is exact
+  // event-type equality — so an observation of a DIFFERENT check classified as
+  // `deviated`, which dominates the verdict and is counted as a wrong
+  // prediction when this responsibility later asks for authority. Foundry
+  // would have looked worse at predicting than it is, cited a check the owner
+  // never made a claim about, and no correct observation of the right check
+  // could rescue it.
+  //
+  // The subject comes from the expectation, never from the caller, so
+  // narrowing to it cannot be used to cherry-pick: a deviating observation of
+  // THIS check is still unavoidable. An expectation whose subject cannot be
+  // read stays unresolved rather than being resolved by observations of
+  // something else.
+  const expectedCheck = developmentEventCheck(expectedEventType);
+  const observations = (await getDevelopmentObservationsInWindow(
     input.productId, String(expectation.created_at), validUntil,
-  );
+  )).filter((o) => expectedCheck !== null && o.check === expectedCheck);
 
   const comparisons: DevelopmentShadowVerdict['comparisons'] = [];
   for (const observation of observations) {
@@ -109,11 +136,115 @@ export async function resolveDevelopmentShadowing(input: {
       productId: input.productId, subject: `responsibility:${responsibilityId}`,
       predicate: 'development_shadow_comparison',
       value: { expectedEventType, verdict, observed: comparisons.map((c) => c.eventType) },
-      epistemicStatus: verdict === 'deviated' ? 'conflicting' : 'known',
+      // A CONFLICT IS BETWEEN SOURCES, NOT BETWEEN A PREDICTION AND REALITY.
+      //
+      // Every deviation was recorded as `conflicting`, and the claim guard has
+      // said since migration 106 that a conflicting claim needs at least two
+      // sources to be in conflict. So the most ordinary deviation there is —
+      // one observation, reporting something other than what was predicted —
+      // threw instead of being recorded, and the failure was in the write of
+      // what Foundry had just learned. Only a window whose observations
+      // disagreed with EACH OTHER ever got through, which is why nothing
+      // caught it.
+      //
+      // One observation falsifying a prediction is not unsettled: it is a
+      // known result, and the deviation is carried by the verdict, which is
+      // what the founder is shown and what the authority request counts.
+      epistemicStatus: comparisons.some((c) => c.classification === 'deviated')
+        && comparisons.some((c) => c.classification !== 'deviated') ? 'conflicting' : 'known',
       evidenceRefs: comparisons.map((c) => ({ kind: 'signal_event' as const, id: c.observationId })),
       derivationMethod: 'bounded development shadow comparison', observedAt: new Date(),
     })
     : null;
 
   return { expectationId: input.expectationId, expectedEventType, comparisons, verdict, learnedClaimId };
+}
+
+/**
+ * Checks this company has actually received independent development
+ * observations for.
+ *
+ * Shadowing may only begin where real evidence already arrives — the same rule
+ * the metric path enforces. Offering a check nothing reports would be promising
+ * that observation will happen rather than proving that it does.
+ */
+export async function availableDevelopmentChecks(productId: string): Promise<string[]> {
+  const rows = await query(
+    `SELECT DISTINCT json_extract(payload_json,'$.check') AS check_name FROM signal_events
+      WHERE product_id=? AND source='development_verification'
+      ORDER BY check_name`,
+    [productId],
+  );
+  return (rows.rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => String(r.check_name ?? '')).filter(Boolean);
+}
+
+/**
+ * The owner states what they would expect a development check to report if this
+ * responsibility is being carried, and Foundry begins watching.
+ *
+ * This is the development twin of `beginExternalMetricShadowing`, and it exists
+ * for the same reason: without it, `development-shadowing.ts` had no production
+ * path that OPENS an expectation, so observations arrived with nothing to
+ * resolve. Foundry does not predict on its own behalf — the expectation is the
+ * owner's, stated as a bounded structured choice from checks that already
+ * report, never parsed out of prose.
+ *
+ * Watching is not permission, here as everywhere.
+ */
+export async function beginFounderDevelopmentShadowing(input: {
+  productId: string; responsibilityId: string; founderId: string;
+  check: string; expectedResult: string; validUntil?: Date;
+}): Promise<Responsibility | null> {
+  const check = input.check.trim();
+  const expectedResult = input.expectedResult.trim();
+  if (!check || !['passed', 'failed'].includes(expectedResult)) return null;
+
+  const owned = await query(
+    `SELECT r.id FROM institutional_responsibilities r JOIN products p ON p.id=r.product_id
+      WHERE r.id=? AND r.product_id=? AND p.owner_id=? AND r.state='understood'
+        AND r.capability='development' AND r.disposition='active'`,
+    [input.responsibilityId, input.productId, input.founderId],
+  );
+  if (!owned.rows.length) return null;
+
+  // The check must already have produced real independent evidence for this
+  // company. Entering the rung on a silent check would be a promise.
+  const source = (await query(
+    `SELECT id FROM signal_events
+      WHERE product_id=? AND source='development_verification'
+        AND json_extract(payload_json,'$.check')=?
+      ORDER BY created_at DESC LIMIT 1`,
+    [input.productId, check],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!source) return null;
+
+  const statementId = nanoid();
+  await query(
+    `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
+     VALUES (?,?,'founder_assertion_structured',?,'low',?,?)`,
+    [statementId, input.productId, `founder_expects_check:${check}:${expectedResult}`,
+      JSON.stringify({
+        founder_id: input.founderId, responsibility_id: input.responsibilityId,
+        check, expected_result: expectedResult,
+      }),
+      'The owner said what they would expect this check to report if this is being handled'],
+  );
+  const expectationClaimId = await recordReconstructionClaim({
+    productId: input.productId, subject: `responsibility:${input.responsibilityId}`,
+    predicate: 'development_expectation',
+    value: { check, expected: expectedResult },
+    epistemicStatus: 'known',
+    evidenceRefs: [{ kind: 'signal_event', id: statementId }],
+    derivationMethod: 'authenticated owner expectation, stated as a bounded choice',
+    observedAt: new Date(),
+  });
+
+  const { responsibility } = await beginDevelopmentShadowing({
+    productId: input.productId, responsibilityId: input.responsibilityId,
+    expectedCheck: check, expectedResult,
+    expectationClaimId, observationSourceSignalId: String(source.id),
+    validUntil: input.validUntil,
+  });
+  return responsibility;
 }

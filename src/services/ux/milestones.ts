@@ -5,7 +5,6 @@
 
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
-import { createNotification } from './notifications.js';
 import { captureArtifact } from '../story/engine.js';
 import type { MilestoneEvent } from '../../types/index.js';
 
@@ -153,16 +152,25 @@ export async function checkAndAwardMilestones(
       };
       awarded.push(milestone);
 
-      // Create notification
-      await createNotification(
-        founderId,
-        productId,
-        'milestone',
-        `🏆 ${def.title}`,
-        def.description,
-        `/products/${productId}/journey`,
-        'View Journey',
-      );
+      // THROUGH THE INTERRUPTION POLICY. A milestone is a celebration, which
+      // is the most optional thing Foundry ever says — and the founder's
+      // ceiling is exactly where they get to say they would rather read it
+      // tomorrow. Since migration 182 the quiet rungs record the event, so
+      // honouring that costs them nothing.
+      const { deliver } = await import('./interruption.js');
+      let prefs: Record<string, unknown> | null = null;
+      try {
+        const prow = (await query('SELECT preferences FROM founders WHERE id = ?', [founderId]))
+          .rows[0] as Record<string, unknown> | undefined;
+        prefs = prow?.preferences ? JSON.parse(String(prow.preferences)) : null;
+      } catch { /* unset or unreadable preferences are no ceiling */ }
+
+      await deliver(founderId, productId, {
+        importance: 'info',
+        title: `🏆 ${def.title}`,
+        body: def.description,
+        actionUrl: `/products/${productId}/journey`, actionLabel: 'View Journey',
+      }, prefs as never);
 
       // Create Founding Story artifact for significant milestones
       if (STORY_MILESTONES.has(key)) {
@@ -185,20 +193,38 @@ export async function checkAndAwardMilestones(
 /**
  * Get milestones that the founder has not yet seen.
  */
-export async function getUnseenMilestones(founderId: string): Promise<MilestoneEvent[]> {
+export async function getUnseenMilestones(
+  founderId: string,
+  productId: string,
+): Promise<MilestoneEvent[]> {
+  // SCOPED TO THE COMPANY BEING LOOKED AT. This was founder-scoped, and its one
+  // caller feeds the toast on a PRODUCT's dashboard — so a milestone earned by
+  // one of the founder's companies popped up over another company's numbers,
+  // with nothing in the toast to say which company it belonged to.
   const result = await query(
-    'SELECT * FROM milestone_events WHERE founder_id = ? AND seen_at IS NULL ORDER BY created_at DESC',
-    [founderId],
+    `SELECT * FROM milestone_events
+      WHERE founder_id = ? AND product_id = ? AND seen_at IS NULL
+      ORDER BY created_at DESC`,
+    [founderId, productId],
   );
   return result.rows as unknown as MilestoneEvent[];
 }
 
 /**
- * Mark all unseen milestones as seen for this founder.
+ * Mark this company's unseen milestones as seen.
+ *
+ * The founder-wide version cleared every company at once, and its one caller is
+ * ONE company's journey page: opening company A's story silently marked company
+ * B's milestones as seen, and B's toast never appeared again for a page the
+ * founder had not opened.
  */
-export async function markMilestonesAsSeen(founderId: string): Promise<void> {
+export async function markMilestonesAsSeen(
+  founderId: string,
+  productId: string,
+): Promise<void> {
   await query(
-    'UPDATE milestone_events SET seen_at = CURRENT_TIMESTAMP WHERE founder_id = ? AND seen_at IS NULL',
-    [founderId],
+    `UPDATE milestone_events SET seen_at = CURRENT_TIMESTAMP
+      WHERE founder_id = ? AND product_id = ? AND seen_at IS NULL`,
+    [founderId, productId],
   );
 }

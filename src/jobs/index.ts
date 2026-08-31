@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { logger } from '../services/logger.js';
-import { getAllActiveProducts, query, getActiveStressors, getLatestMetrics, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
+import { getAllActiveProducts, operatingProduct, query, getActiveStressors, getLatestMetrics, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
 import { evaluateConditions } from '../services/lifecycle/monitor.js';
 import { runCompetitiveScan } from '../services/intelligence/competitive.js';
 import { identifyStressors, type StressorInputs } from '../services/intelligence/stressor.js';
@@ -28,7 +28,16 @@ import { refreshFounderHealthMetrics } from '../services/intelligence/founder-he
 import { scanGeopoliticalRisks } from '../services/intelligence/global.js';
 import { scanRegulatoryChanges } from '../services/intelligence/regulatory.js';
 import { aggregateInsights } from '../services/wisdom/network.js';
-import { runAllDueSyncs } from '../services/integrations/framework.js';
+// `runAllDueSyncs` was imported here and never scheduled. It belongs to the
+// second integration subsystem — services/integrations/framework.ts — which
+// writes `integrations.last_sync_at` / `last_sync_status` / `error_count` while
+// the Integrations page reads `last_synced_at` / `last_error` / `status`. Two
+// generations of the same columns on one table, and only the first is
+// displayed. The scheduled job is `integration_sync`, which runs the OTHER
+// subsystem (services/integrations/sync.ts). Left as-is rather than wired up:
+// scheduling a second hourly sync over the same rows would double every
+// provider call, and reconciling the two vocabularies is a real piece of work,
+// not an import statement. Recorded in the frontier.
 import { generatePredictions } from '../services/intelligence/predictive.js';
 import { generateDraftsForPendingDecisions } from '../services/decisions/actions.js';
 import { refreshAllCustomerHealth } from '../services/customers/intelligence.js';
@@ -162,7 +171,7 @@ export async function digestGenerate(): Promise<void> {
   for (const fRow of founders.rows) {
     const f = fRow as Record<string, unknown>;
     try {
-      const products = await query("SELECT id, name FROM products WHERE owner_id = ? AND status = 'active'", [f.id]);
+      const products = await query("SELECT id, name FROM products WHERE owner_id = ? AND ${operatingProduct()}", [f.id]);
       for (const pRow of products.rows) {
         const p = pRow as Record<string, string>;
         const ls = await query('SELECT risk_state FROM lifecycle_state WHERE product_id = ?', [p.id]);
@@ -196,14 +205,6 @@ export async function behavioralTriggers(): Promise<void> {
   logger.info('behavioral_triggers complete', { jobName: 'behavioral_triggers' });
 }
 
-// ─── Data retention — daily ──────────────────────────────────────────────────
-export async function dataRetention(): Promise<void> {
-  logger.info('data_retention starting', { jobName: 'data_retention' });
-  const { purgeExpiredRecords } = await import('../services/retention.js');
-  const counts = await purgeExpiredRecords();
-  logger.info('data_retention complete', { jobName: 'data_retention', counts });
-}
-
 // ─── SLO / degradation check — hourly ────────────────────────────────────────
 export async function sloCheck(): Promise<void> {
   logger.info('slo_check starting', { jobName: 'slo_check' });
@@ -212,26 +213,31 @@ export async function sloCheck(): Promise<void> {
   logger.info('slo_check complete', { jobName: 'slo_check', breachCount: breaches.length });
 }
 
-// ─── 6. Metric Snapshot — Daily midnight UTC ──────────────────────────────────
-export async function metricSnapshot(): Promise<void> {
-  logger.info('metric_snapshot starting', { jobName: 'metric_snapshot' });
-  // This job is a no-op if metrics are pushed via API.
-  // It serves as a fallback to ensure daily snapshots exist.
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    const today = new Date().toISOString().split('T')[0];
-    const existing = await query(
-      'SELECT id FROM metric_snapshots WHERE product_id = ? AND snapshot_date = ?', [p.id, today]);
-    if (existing.rows.length === 0) {
-      // Create empty snapshot as placeholder
-      await query(
-        'INSERT INTO metric_snapshots (id, product_id, snapshot_date) VALUES (?, ?, ?)',
-        [nanoid(), p.id, today]);
-    }
-  }
-  logger.info('metric_snapshot complete', { jobName: 'metric_snapshot' });
-}
+// ─── 6. THE DAILY PLACEHOLDER SNAPSHOT, AND WHY IT IS GONE ───────────────────
+//
+// `metricSnapshot` inserted an EMPTY `metric_snapshots` row for every active
+// product at midnight UTC, "to ensure daily snapshots exist". Nothing needed
+// them to exist, and their existence was read as measurement all over the
+// codebase:
+//
+//   • `getMRRDecomposition` read the LATEST row — the placeholder — and
+//     returned a confident decomposition of zeros to ten importers, because
+//     the four movement columns are `INTEGER DEFAULT 0` and cannot say
+//     "not reported". It now selects the newest row that reports SOMETHING,
+//     which was a workaround for this job.
+//   • `/v1/metrics/health` computed `is_stale` from the EXISTENCE of a row, so
+//     every company was fresh from its first day forever.
+//   • `assessMigrationReadiness` and several intelligence readers took the
+//     latest row and found a company with no revenue.
+//
+// The two ingest paths that genuinely depended on the row — the GitHub and
+// Intercom adapters, which wrote into today's snapshot with a bare UPDATE and
+// reported success when it matched nothing — upsert now. The Stripe webhook
+// path always called `ensureSnapshot` for itself. So nothing is left that needs
+// a row it did not write.
+//
+// WHAT THE ABSENCE OF A ROW NOW MEANS: this company reported nothing that day.
+// That is a fact worth being able to state, and a row of zeros cannot state it.
 
 // ─── 7. Slot Enforcement — Daily 9:00 UTC ────────────────────────────────────
 export async function slotEnforcement(): Promise<void> {
@@ -277,33 +283,41 @@ export async function coldStartCheck(): Promise<void> {
 // ─── 9. Scenario Accuracy — Weekly after synthesis ────────────────────────────
 export async function scenarioAccuracy(): Promise<void> {
   logger.info('scenario_accuracy starting', { jobName: 'scenario_accuracy' });
-  // Find decisions with outcomes that have scenario models but no accuracy score
+  // A PAID FRONTIER CALL THAT NOTHING READ, DUPLICATING A FREE DETERMINISTIC ONE.
+  //
+  // This asked Opus, once per decision and up to twenty per pass, to classify
+  // an outcome as positive/neutral/negative and score how close the base case
+  // had been. It then wrote that answer to `scenario_models.outcome_accuracy`
+  // — a column no SELECT in this repository reads. Every reader of
+  // `scenario_models` takes `id`, `option_label`, `base_case`, `best_case`,
+  // `stress_case`, and none of them takes the accuracy.
+  //
+  // Meanwhile the direction it was paying to infer is already a recorded fact:
+  // `decisions.outcome_valence`, which the prediction-accuracy job beside this
+  // one reads deterministically and writes to `prediction_accuracy`, a table
+  // that IS read. So the model was being asked for something the database
+  // already knew, and the answer was filed where nobody looks.
+  //
+  // Cognition pays rent or it goes. What this job is FOR — contributing the
+  // outcome to the cross-company pattern pool — is kept, computed from the
+  // valence the founder recorded. The scenario comparison it was scoring is
+  // not lost either: nothing consumed it, and if a consumer appears the
+  // deterministic comparison can be written then, without buying it.
   const decisions = await query(
-    `SELECT d.*, sm.id as scenario_id, sm.best_case, sm.base_case, sm.stress_case
+    `SELECT d.id, d.product_id, d.category, d.chosen_option, d.outcome_valence
      FROM decisions d
      JOIN scenario_models sm ON d.id = sm.decision_id
-     WHERE d.outcome IS NOT NULL AND sm.outcome_accuracy IS NULL
+     JOIN products p ON p.id = d.product_id
+     WHERE d.outcome IS NOT NULL AND d.outcome_valence IS NOT NULL
+       AND ${operatingProduct('p')}
      LIMIT 20`, []);
 
   for (const row of decisions.rows) {
     const d = row as Record<string, unknown>;
     try {
-      // Simple accuracy scoring: compare outcome direction
-      const outcome = d.outcome as string;
-      const baseCase = JSON.parse(d.base_case as string) as Record<string, unknown>;
+      const valence = Number(d.outcome_valence);
+      const outcomeDirection = valence === 1 ? 'positive' : valence === -1 ? 'negative' : 'neutral';
 
-      // Ask Claude to evaluate accuracy
-      const response = await callOpus(
-        'Evaluate scenario prediction accuracy. Return JSON: {"predicted_direction": "positive|neutral|negative", "actual_direction": "positive|neutral|negative", "accuracy_score": 0.0-1.0}',
-        `Base case prediction: ${JSON.stringify(baseCase)}\nActual outcome: ${outcome}`,
-        512
-      );
-      const accuracy = parseJSONResponse<Record<string, unknown>>(response.content);
-
-      await query('UPDATE scenario_models SET outcome_accuracy = ? WHERE id = ?',
-        [JSON.stringify(accuracy), d.scenario_id]);
-
-      // Feed into decision patterns
       const ls = await query('SELECT * FROM lifecycle_state WHERE product_id = ?', [d.product_id]);
       const lsRow = ls.rows[0] as Record<string, string> | undefined;
 
@@ -314,12 +328,16 @@ export async function scenarioAccuracy(): Promise<void> {
         riskState: (lsRow?.risk_state as RiskStateValue) ?? 'green',
         metricsContext: {},
         optionChosen: d.chosen_option as string,
-        outcomeDirection: accuracy.actual_direction as 'positive' | 'neutral' | 'negative',
+        outcomeDirection,
         outcomeMagnitude: 'moderate',
         outcomeTimeframeDays: 30,
         marketCategory: null,
         contributingFactors: null,
-        scenarioAccuracyScore: accuracy.accuracy_score as number,
+        // NOT A SCORE ANY MORE, AND NOT A FABRICATED ONE. The accuracy figure
+        // came from the model call that has gone; inventing a number here
+        // would be worse than the call was. The pool records the outcome
+        // without a scenario-accuracy claim.
+        scenarioAccuracyScore: null,
       });
     } catch (err) {
       logger.error(`scenario_accuracy error for decision ${d.id}:`, { jobName: 'scenario_accuracy', error: String(err) });
@@ -328,6 +346,7 @@ export async function scenarioAccuracy(): Promise<void> {
   logger.info('scenario_accuracy complete', { jobName: 'scenario_accuracy' });
 }
 
+
 // ─── 10. Yellow Pulse — Thursday (for Yellow state products) ──────────────────
 export async function yellowPulse(): Promise<void> {
   logger.info('yellow_pulse starting', { jobName: 'yellow_pulse' });
@@ -335,7 +354,7 @@ export async function yellowPulse(): Promise<void> {
     `SELECT p.*, f.email FROM products p
      JOIN founders f ON p.owner_id = f.id
      JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE ls.risk_state = 'yellow' AND p.status = 'active'`, []);
+     WHERE ls.risk_state = 'yellow' AND ${operatingProduct('p')}`, []);
 
   for (const row of products.rows) {
     const p = row as Record<string, unknown>;
@@ -356,7 +375,7 @@ export async function redDaily(): Promise<void> {
     `SELECT p.*, f.email FROM products p
      JOIN founders f ON p.owner_id = f.id
      JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE ls.risk_state = 'red' AND p.status = 'active'`, []);
+     WHERE ls.risk_state = 'red' AND ${operatingProduct('p')}`, []);
 
   for (const row of products.rows) {
     const p = row as Record<string, unknown>;
@@ -435,7 +454,16 @@ export async function founderPatternSynthesis(): Promise<void> {
 
       // Check for 3+ resolved Gate 3 decisions with reasoning
       const decisions = await query(
-        `SELECT COUNT(*) as cnt FROM decisions WHERE product_id = ? AND gate = 3 AND status = 'resolved' AND resolution_reasoning IS NOT NULL`,
+        // `decisions.status` has never had a 'resolved' value — the
+        // vocabulary is pending / approved / rejected / executed / expired. So
+        // this count was always zero, `cnt < 3` always held, and
+        // founder-pattern synthesis has never run for anybody. A decision the
+        // founder settled is one they approved or rejected; both carry the
+        // reasoning this looks for.
+        `SELECT COUNT(*) as cnt FROM decisions
+          WHERE product_id = ? AND gate = 3
+            AND status IN ('approved','rejected','executed')
+            AND resolution_reasoning IS NOT NULL`,
         [p.id]
       );
       const cnt = (decisions.rows[0] as Record<string, number>)?.cnt ?? 0;
@@ -458,7 +486,7 @@ export async function dnaCompletionNudge(): Promise<void> {
      FROM products p
      JOIN founders f ON p.owner_id = f.id
      JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE p.status = 'active'
+     WHERE ${operatingProduct('p')}
        AND (ls.dna_completion_pct IS NULL OR ls.dna_completion_pct < 60)
        AND p.created_at < datetime('now', '-14 days')`, []
   );
@@ -468,7 +496,7 @@ export async function dnaCompletionNudge(): Promise<void> {
     try {
       // Max 1 nudge per week: check audit_log
       const recent = await query(
-        `SELECT id FROM audit_log WHERE product_id = ? AND action = 'dna_completion_nudge' AND created_at > datetime('now', '-7 days')`,
+        `SELECT id FROM audit_log WHERE product_id = ? AND action_type = 'dna_completion_nudge' AND created_at > datetime('now', '-7 days')`,
         [p.id]
       );
       if (recent.rows.length > 0) continue;
@@ -588,32 +616,23 @@ export async function navBadgeRefresh(): Promise<void> {
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
+      // FOUR OF THESE SIX COUNTS FED A BADGE THAT DOES NOT EXIST. The sidebar
+      // draws one badge — the count beside "Decide" — and has since the nav was
+      // cut to five doors. An audit's age, unacknowledged competitive signals,
+      // unseen milestones and open remediation PRs were swept for every product
+      // every six hours, written into `lifecycle_state`, read back on every
+      // dashboard page load, and handed to a layout that ignored them. Their
+      // columns are dropped in migration 211.
+      //
+      // `dna_completion_pct` stays: `wisdom/dna.ts` reads it, and writes it
+      // itself on every DNA update — this job was a second writer of the same
+      // number, so it is no longer one.
       const pendingDecisions = await query("SELECT COUNT(*) as c FROM decisions WHERE product_id = ? AND status = 'pending'", [p.id]);
-      const lastAudit = await query('SELECT created_at FROM audit_scores WHERE product_id = ? ORDER BY created_at DESC LIMIT 1', [p.id]);
-      const unreadSignals = await query("SELECT COUNT(*) as c FROM competitive_signals WHERE product_id = ? AND acknowledged = 0", [p.id]);
-      const openPRs = await query("SELECT COUNT(*) as c FROM remediation_prs WHERE product_id = ? AND status = 'pr_open'", [p.id]);
-      const unseenMilestones = await query('SELECT COUNT(*) as c FROM milestone_events WHERE product_id = ? AND seen_at IS NULL', [p.id]);
-
       const pendingCount = (pendingDecisions.rows[0] as Record<string, number>)?.c ?? 0;
-      const lastAuditDate = (lastAudit.rows[0] as Record<string, string>)?.created_at;
-      const auditAgeDays = lastAuditDate ? Math.floor((Date.now() - new Date(lastAuditDate).getTime()) / 86400000) : 999;
-      const unreadCount = (unreadSignals.rows[0] as Record<string, number>)?.c ?? 0;
-      const openPRCount = (openPRs.rows[0] as Record<string, number>)?.c ?? 0;
-      const unseenCount = (unseenMilestones.rows[0] as Record<string, number>)?.c ?? 0;
-
-      const dna = await getProductDNA(p.id);
-      const dnaCompletion = dna?.completion_pct ?? 0;
 
       await query(
-        `UPDATE lifecycle_state SET
-          pending_decisions_count = ?,
-          audit_age_days = ?,
-          unread_competitive_signals = ?,
-          open_remediation_prs = ?,
-          unread_milestones = ?,
-          dna_completion_pct = ?
-         WHERE product_id = ?`,
-        [pendingCount, auditAgeDays, unreadCount, openPRCount, unseenCount, dnaCompletion, p.id],
+        'UPDATE lifecycle_state SET pending_decisions_count = ? WHERE product_id = ?',
+        [pendingCount, p.id],
       );
     } catch (err) {
       logger.error(`nav_badge_refresh error for ${p.id}:`, { jobName: 'nav_badge_refresh', error: String(err) });
@@ -625,7 +644,19 @@ export async function navBadgeRefresh(): Promise<void> {
 // ─── 20. Signal Alert Check — Every 2 hours ───────────────────────────────────
 
 import { computeSignal } from '../services/signal.js';
-import { createNotification } from '../services/ux/notifications.js';
+
+/** The founder's interruption ceiling, for a job that needs to route an event
+ *  through `ux/interruption.ts`. Unset or unreadable preferences are no
+ *  ceiling, which is the same thing `decideChannel` assumes. */
+async function founderPrefs(founderId: string): Promise<Record<string, unknown> | null> {
+  try {
+    const row = (await query('SELECT preferences FROM founders WHERE id = ?', [founderId]))
+      .rows[0] as Record<string, unknown> | undefined;
+    return row?.preferences ? JSON.parse(String(row.preferences)) as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function signalAlertCheck(): Promise<void> {
   logger.info('signal_alert_check starting', { jobName: 'signal_alert_check' });
@@ -649,6 +680,18 @@ export async function signalAlertCheck(): Promise<void> {
 
       // Compute current Signal (also records today's snapshot)
       const signal = await computeSignal(p.id);
+
+      // NO ALERT ABOUT A COMPANY NOTHING IS KNOWN ABOUT. `computeSignal`
+      // returns a default when there is no metric snapshot, and that default
+      // used to be written into `signal_history` like any other score — so the
+      // first day a company actually reported something, the real score landed
+      // against a default baseline and the founder was told their Signal had
+      // "dropped 30 points" from a number their company was never at.
+      //
+      // `signal.ts` no longer records the default, so any row read above is a
+      // real measurement; this guard covers the other end.
+      if (!signal.hasData) continue;
+
       const drop = prevScore - signal.score;
 
       // Alert conditions: significant drop OR tier degradation
@@ -674,7 +717,14 @@ export async function signalAlertCheck(): Promise<void> {
           ? `${p.name} moved from ${prevTier} to ${signal.tier} tier (${prevScore} → ${signal.score}). Review stressors now.`
           : `${p.name} Signal dropped from ${prevScore} to ${signal.score} in the last 24 hours.`;
 
-        await createNotification(p.owner_id, p.id, 'signal_alert', title, body, '/dashboard', 'View Signal');
+        // Through the policy. A Signal falling is worth acting on, and the
+        // ceiling now costs the founder nothing: migration 182 records the
+        // quieted event and the Letter reads it back.
+        const { deliver } = await import('../services/ux/interruption.js');
+        await deliver(p.owner_id, p.id, {
+          importance: 'action_needed',
+          title, body, actionUrl: '/dashboard', actionLabel: 'View Signal',
+        }, await founderPrefs(p.owner_id) as never);
         logger.info(`signal_alert_check: alert created for ${p.name} — drop ${drop}pts, tier: ${prevTier} → ${signal.tier}`, { jobName: 'signal_alert_check' });
       }
     } catch (err) {
@@ -713,15 +763,18 @@ export async function decisionFollowUp(): Promise<void> {
       );
       if (alreadySent.rows.length > 0) continue;
 
-      await createNotification(
-        d.owner_id,
-        d.product_id,
-        'decision_followup',
-        'How did that decision go?',
-        `Time to log the outcome of: "${d.what}" — decision ID: ${d.id}. You chose: ${d.chosen_option}. What actually happened?`,
-        `/decisions/${d.id}`,
-        'Log outcome',
-      );
+      // Through the policy. Safe since migration 182: the letter rung records
+      // the event, so a founder who quieted their ceiling reads it in the
+      // Letter instead of losing it. Before that, this bell had to bypass the
+      // ceiling to avoid dropping the fact.
+      const { deliver } = await import('../services/ux/interruption.js');
+      await deliver(d.owner_id, d.product_id, {
+        // A decision whose outcome is unlogged is a question, not an alarm.
+        importance: 'attention',
+        title: 'How did that decision go?',
+        body: `Time to log the outcome of: "${d.what}" — decision ID: ${d.id}. You chose: ${d.chosen_option}. What actually happened?`,
+        actionUrl: `/decisions/${d.id}`, actionLabel: 'Log outcome',
+      }, await founderPrefs(d.owner_id) as never);
 
       // Push back follow_up_at by 7 days to prevent re-notifying immediately
       await query(
@@ -800,7 +853,7 @@ Return JSON only, no markdown:
   "action": "The one concrete thing to do today, ≤80 chars, or null if none"
 }`;
 
-      const raw = await callOpus('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400);
+      const raw = await callOpus('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400, p.id);
       const insight = parseJSONResponse<{ headline: string; context: string; action: string | null }>(raw.content);
 
       if (insight?.headline) {
@@ -874,7 +927,7 @@ Return JSON only:
   ]
 }`;
 
-      const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600);
+      const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, p.id);
       const plan = parseJSONResponse<{ synthesis: string; items: Array<{ id: string; text: string; category: string; impact: string }> }>(raw.content);
 
       if (plan?.items) {
@@ -972,11 +1025,12 @@ export async function predictionAccuracyJob(): Promise<void> {
        AND NOT EXISTS (
          SELECT 1 FROM prediction_accuracy pa WHERE pa.decision_id = d.id
        )
+     ORDER BY d.decided_at ASC
      LIMIT 50`,
     [],
   );
 
-  const { recordPredictionAccuracy } = await import('../services/temporal/replay.js');
+  const { recordPredictionAccuracy } = await import('../services/temporal/prediction-accuracy.js');
 
   for (const row of decisions.rows) {
     const d = row as Record<string, unknown>;
@@ -988,6 +1042,9 @@ export async function predictionAccuracyJob(): Promise<void> {
         direction as 'positive' | 'neutral' | 'negative',
         null,
         null,
+        // Already selected above, and previously discarded one call short of
+        // the scorer that needed it to grade the right forecast.
+        d.chosen_option == null ? null : String(d.chosen_option),
       );
     } catch (err) {
       logger.error(`prediction_accuracy error for decision ${d.id}:`, { jobName: 'prediction_accuracy', error: String(err) });
@@ -1087,7 +1144,7 @@ async function scpTemporalAnalysis(): Promise<void> {
   // Weekly: analyze temporal trends for all active SCP products
   const { query } = await import('../db/client.js');
   const { getSignalTimeline, analyzeTemporalTrends } = await import('../services/scp/temporal.js');
-  const products = await query(`SELECT id FROM products WHERE scp_status = 'active'`);
+  const products = await query(`SELECT id FROM products WHERE ${operatingProduct()}`);
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
@@ -1129,7 +1186,7 @@ async function scpWisdomSynthesis(): Promise<void> {
   // Weekly: synthesize wisdom patterns for all active SCP products
   const { query } = await import('../db/client.js');
   const { synthesizeWisdomPatterns } = await import('../services/scp/wisdom.js');
-  const products = await query(`SELECT id FROM products WHERE scp_status = 'active'`);
+  const products = await query(`SELECT id FROM products WHERE ${operatingProduct()}`);
   for (const row of products.rows) {
     const p = row as Record<string, string>;
     try {
@@ -1159,7 +1216,7 @@ async function scpDNANudge(): Promise<void> {
     `SELECT p.id, p.name, f.email
      FROM products p
      JOIN founders f ON p.owner_id = f.id
-     WHERE p.scp_status = 'active'
+     WHERE ${operatingProduct('p')}
        AND p.company_lifecycle_state IN ('setup', 'learning')
      LIMIT 50`
   );
@@ -1174,7 +1231,7 @@ async function scpLifecycleRules(): Promise<void> {
   logger.info('scp_lifecycle_rules starting', { jobName: 'scp_lifecycle_rules' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
-    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
   );
   const { evaluateLifecycleRules } = await import('../services/customer/lifecycle.js');
   let totalTriggered = 0;
@@ -1191,7 +1248,7 @@ async function scpPLUpdate(): Promise<void> {
   logger.info('scp_pl_update starting', { jobName: 'scp_pl_update' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
-    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
   );
   const { getAICompanyPL } = await import('../services/financial/economics.js');
   for (const row of products.rows) {
@@ -1200,7 +1257,7 @@ async function scpPLUpdate(): Promise<void> {
     // Update products table with latest AI cost trailing 30d
     await dbQuery(
       `UPDATE products SET ai_cost_trailing_30d_usd=?, attributed_revenue_trailing_30d_usd=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-      [pl.costs.total_usd, pl.revenue.total_usd, productId]
+      [pl.costs.total_usd, pl.attributed_revenue.total_usd, productId]
     );
   }
   logger.info(`scp_pl_update: Updated P&L for ${products.rows.length} products`, { jobName: 'scp_pl_update' });
@@ -1212,7 +1269,7 @@ async function scpStrategySynthesis(): Promise<void> {
   logger.info('scp_strategy_synthesis starting', { jobName: 'scp_strategy_synthesis' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
-    `SELECT id FROM products WHERE scp_status = 'active' AND company_lifecycle_state NOT IN ('setup') LIMIT 50`
+    `SELECT id FROM products WHERE ${operatingProduct()} AND company_lifecycle_state NOT IN ('setup') LIMIT 50`
   );
   const { generateStrategicSynthesis } = await import('../services/strategy/synthesis.js');
   let generated = 0;
@@ -1233,27 +1290,59 @@ async function scpIntegrationFabricSync(): Promise<void> {
   logger.info('scp_integration_fabric_sync starting', { jobName: 'scp_integration_fabric_sync' });
   const { query: dbQuery } = await import('../db/client.js');
   const products = await dbQuery(
-    `SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`
+    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
   );
   const { syncPostHogEvents } = await import('../services/integration/posthog.js');
   const { syncGitHubEvents } = await import('../services/integration/github.js');
 
-  let posthogSynced = 0;
-  let githubSynced = 0;
+  // The same shape as the extended sync below: both of these return
+  // `{ synced, error? }`, the `error` was never read, a throw was swallowed per
+  // product, and neither wrote `integration_sync_log` — so the integrations
+  // page said no sync had been attempted while this ran hourly.
+  const { recordSyncAttempt } = await import('../services/integrations/health.js');
+  const providers: Array<{ name: string; run: (p: string) => Promise<{ synced: number; error?: string }> }> = [
+    { name: 'posthog', run: syncPostHogEvents },
+    { name: 'github', run: syncGitHubEvents },
+  ];
+
+  const recorded = new Map<string, number>(providers.map((p) => [p.name, 0]));
+  let failed = 0;
 
   for (const row of products.rows) {
     const productId = (row as Record<string, unknown>).id as string;
-    try {
-      const ph = await syncPostHogEvents(productId);
-      posthogSynced += ph.synced;
-    } catch { /* non-fatal per product */ }
-    try {
-      const gh = await syncGitHubEvents(productId);
-      githubSynced += gh.synced;
-    } catch { /* non-fatal per product */ }
+    for (const { name, run } of providers) {
+      const startedAt = new Date().toISOString();
+      try {
+        const result = await run(productId);
+        await recordSyncAttempt({
+          productId, provider: name, startedAt,
+          recordsProcessed: result.synced ?? 0, error: result.error ?? null,
+        });
+        if (result.error) {
+          failed += 1;
+          logger.error(`scp_integration_fabric_sync: ${name} failed for ${productId}: ${result.error}`,
+            { jobName: 'scp_integration_fabric_sync' });
+        } else {
+          recorded.set(name, (recorded.get(name) ?? 0) + (result.synced ?? 0));
+        }
+      } catch (err) {
+        failed += 1;
+        const message = err instanceof Error ? err.message : String(err);
+        await recordSyncAttempt({
+          productId, provider: name, startedAt, recordsProcessed: 0, error: message,
+        }).catch(() => { /* the throw above is the finding */ });
+        logger.error(`scp_integration_fabric_sync: ${name} threw for ${productId}: ${message}`,
+          { jobName: 'scp_integration_fabric_sync' });
+      }
+    }
   }
 
-  logger.info(`scp_integration_fabric_sync: PostHog: ${posthogSynced} events, GitHub: ${githubSynced} events`, { jobName: 'scp_integration_fabric_sync' });
+  // Summaries stored, not raw provider events: each run writes a handful of
+  // trend rows.
+  const line = `scp_integration_fabric_sync: PostHog ${recorded.get('posthog') ?? 0} summaries, `
+    + `GitHub ${recorded.get('github') ?? 0} summaries, ${failed} provider sync(s) failed`;
+  if (failed > 0) logger.error(line, { jobName: 'scp_integration_fabric_sync' });
+  else logger.info(line, { jobName: 'scp_integration_fabric_sync' });
 }
 
 // ─── SCP v4: Extended Integrations Sync — Every 2h ───────────────────────────
@@ -1261,34 +1350,84 @@ async function scpIntegrationFabricSync(): Promise<void> {
 async function scpExtendedIntegrationsSync(): Promise<void> {
   logger.info('scp_extended_integrations_sync starting', { jobName: 'scp_extended_integrations_sync' });
   const { query: dbQuery } = await import('../db/client.js');
-  const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+  const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
 
-  let total = 0;
+  // FIVE WAYS THIS LOST A FAILURE, and one number that could not tell "nothing
+  // to sync" from "everything broken".
+  //
+  //  1. Each import was wrapped in `.catch(() => ({ syncXEvents: async () =>
+  //     ({ synced: 0 }) }))`, so a module that could not be LOADED — a
+  //     deployment fault — became a function reporting a clean zero.
+  //  2. `allSettled` results were read as `r.status === 'fulfilled' ? synced :
+  //     0`, so a sync that THREW contributed zero and was never mentioned.
+  //  3. All six of these functions return `{ synced, error? }` and set
+  //     `integrations.last_error` themselves. The `error` field was never read.
+  //  4. A per-product `catch {}` swallowed whatever was left.
+  //  5. Nothing was written to `integration_sync_log`, so the integrations
+  //     page — which is careful and right — told the founder "No sync has been
+  //     attempted in the last 7 days" about integrations Foundry had been
+  //     syncing every two hours.
+  //
+  // The imports are hoisted out of the loop and no longer substituted: a module
+  // that will not load should fail this job once, loudly, rather than a hundred
+  // times silently. Each provider records its own attempt, so a failure reaches
+  // the founder's page rather than only this log line.
+  const [
+    { syncSentryEvents },
+    { syncLinearEvents },
+    { syncIntercomEvents },
+    { syncSlackEvents },
+  ] = await Promise.all([
+    import('../services/integration/sentry.js'),
+    import('../services/integration/linear.js'),
+    import('../services/integration/intercom.js'),
+    import('../services/integration/slack.js'),
+  ]);
+  const { recordSyncAttempt } = await import('../services/integrations/health.js');
+
+  const providers: Array<{ name: string; run: (p: string) => Promise<{ synced: number; error?: string }> }> = [
+    { name: 'sentry', run: syncSentryEvents },
+    { name: 'linear', run: syncLinearEvents },
+    { name: 'intercom', run: syncIntercomEvents },
+    { name: 'slack', run: syncSlackEvents },
+  ];
+
+  let recorded = 0;
+  let failed = 0;
   for (const row of products.rows) {
     const productId = (row as Record<string, unknown>).id as string;
-    try {
-      const [
-        { syncSentryEvents },
-        { syncLinearEvents },
-        { syncIntercomEvents },
-        { syncSlackEvents },
-      ] = await Promise.all([
-        import('../services/integration/sentry.js').catch(() => ({ syncSentryEvents: async () => ({ synced: 0 }) })),
-        import('../services/integration/linear.js').catch(() => ({ syncLinearEvents: async () => ({ synced: 0 }) })),
-        import('../services/integration/intercom.js').catch(() => ({ syncIntercomEvents: async () => ({ synced: 0 }) })),
-        import('../services/integration/slack.js').catch(() => ({ syncSlackEvents: async () => ({ synced: 0 }) })),
-      ]);
-      const results = await Promise.allSettled([
-        syncSentryEvents(productId),
-        syncLinearEvents(productId),
-        syncIntercomEvents(productId),
-        syncSlackEvents(productId),
-      ]);
-      const synced = results.reduce((sum, r) => sum + (r.status === 'fulfilled' ? (r.value.synced ?? 0) : 0), 0);
-      total += synced;
-    } catch { /* non-fatal per product */ }
+    await Promise.all(providers.map(async ({ name, run }) => {
+      const startedAt = new Date().toISOString();
+      try {
+        const result = await run(productId);
+        await recordSyncAttempt({
+          productId, provider: name, startedAt,
+          recordsProcessed: result.synced ?? 0, error: result.error ?? null,
+        });
+        if (result.error) {
+          failed += 1;
+          logger.error(`scp_extended_integrations_sync: ${name} failed for ${productId}: ${result.error}`,
+            { jobName: 'scp_extended_integrations_sync' });
+        } else {
+          recorded += result.synced ?? 0;
+        }
+      } catch (err) {
+        failed += 1;
+        const message = err instanceof Error ? err.message : String(err);
+        await recordSyncAttempt({
+          productId, provider: name, startedAt, recordsProcessed: 0, error: message,
+        }).catch(() => { /* the throw above is the finding; do not mask it with a second one */ });
+        logger.error(`scp_extended_integrations_sync: ${name} threw for ${productId}: ${message}`,
+          { jobName: 'scp_extended_integrations_sync' });
+      }
+    }));
   }
-  logger.info(`scp_extended_integrations_sync: Synced ${total} events across ${products.rows.length} products`, { jobName: 'scp_extended_integrations_sync' });
+  // `recorded` counts summary rows the syncs wrote, not raw provider events —
+  // each of these functions stores a handful of trend summaries per run.
+  const line = `scp_extended_integrations_sync: recorded ${recorded} summaries across `
+    + `${products.rows.length} products, ${failed} provider sync(s) failed`;
+  if (failed > 0) logger.error(line, { jobName: 'scp_extended_integrations_sync' });
+  else logger.info(line, { jobName: 'scp_extended_integrations_sync' });
 }
 
 // ─── SCP v4: Benchmark Refresh — Sunday 3:00 UTC ────────────────────────────
@@ -1306,19 +1445,17 @@ async function scpBenchmarkRefresh(): Promise<void> {
        JOIN products p ON ms.product_id = p.id
        JOIN lifecycle_state ls ON ms.product_id = ls.product_id
        WHERE ms.snapshot_date = date('now', '-1 day')
-         AND p.scp_status = 'active'
+         AND ${operatingProduct('p')}
        LIMIT 200`
     );
 
-    const stageMap: Record<string, string> = {
-      prompt_1: 'pre_revenue', prompt_2: 'pre_revenue', prompt_2_5: 'pre_revenue',
-      prompt_3: 'early', prompt_4: 'early', prompt_5: 'early',
-      prompt_6: 'growth', prompt_7: 'growth', prompt_8: 'scale', prompt_9: 'scale',
-    };
+    // The band vocabulary lives with the pool that is keyed on it, so the
+    // reader in `network/cohort-patterns.ts` cannot invent a second spelling.
+    const { lifecycleBandForPrompt } = await import('../services/benchmarking/pool.js');
 
     for (const row of products.rows) {
       const r = row as Record<string, unknown>;
-      const stage = stageMap[r.current_prompt as string] ?? 'early';
+      const stage = lifecycleBandForPrompt(r.current_prompt as string | null);
       const contributions = [];
       if (r.churn_rate != null) contributions.push({ metric_name: 'churn_rate', value: Number(r.churn_rate), company_stage: stage, industry: 'saas' });
       if (r.activation_rate != null) contributions.push({ metric_name: 'activation_rate', value: Number(r.activation_rate), company_stage: stage, industry: 'saas' });
@@ -1342,7 +1479,7 @@ async function scpDecisionRetrospectives(): Promise<void> {
     const { getDecisionsDueForRetrospective } = await import('../services/scp/decision-log.js');
     const { query: dbQuery } = await import('../db/client.js');
 
-    const products = await dbQuery(`SELECT id, owner_id, name FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id, owner_id, name FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let notified = 0;
 
     for (const row of products.rows) {
@@ -1350,16 +1487,14 @@ async function scpDecisionRetrospectives(): Promise<void> {
       const due = await getDecisionsDueForRetrospective(p.id as string);
       if (due.length === 0) continue;
 
-      const { createNotification } = await import('../services/ux/notifications.js');
-      await createNotification(
-        p.owner_id as string,
-        p.id as string,
-        'decision_retrospective',
-        `${due.length} decision${due.length > 1 ? 's' : ''} ready for retrospective`,
-        `Review outcomes for: ${due.slice(0, 2).map(d => `"${d.decision_title}"`).join(', ')}${due.length > 2 ? ` +${due.length - 2} more` : ''}. Rate how each decision played out to improve future judgment.`,
-        '/agents/decisions',
-        'Review decisions'
-      );
+      const { deliver } = await import('../services/ux/interruption.js');
+      await deliver(p.owner_id as string, p.id as string, {
+        // Rating past decisions improves future judgment; it is not urgent.
+        importance: 'attention',
+        title: `${due.length} decision${due.length > 1 ? 's' : ''} ready for retrospective`,
+        body: `Review outcomes for: ${due.slice(0, 2).map(d => `"${d.decision_title}"`).join(', ')}${due.length > 2 ? ` +${due.length - 2} more` : ''}. Rate how each decision played out to improve future judgment.`,
+        actionUrl: '/agents/decisions', actionLabel: 'Review decisions',
+      }, await founderPrefs(p.owner_id as string) as never);
       notified++;
     }
     logger.info(`scp_decision_retrospectives: Notified ${notified} products`, { jobName: 'scp_decision_retrospectives' });
@@ -1368,29 +1503,40 @@ async function scpDecisionRetrospectives(): Promise<void> {
   }
 }
 
-// ─── SCP v4: Wellbeing Focus Cleanup — Daily midnight ────────────────────────
-
-async function scpWellbeingFocusCleanup(): Promise<void> {
-  logger.info('scp_wellbeing_focus_cleanup starting', { jobName: 'scp_wellbeing_focus_cleanup' });
+// ─── Decision expiry — with the retrospective sweep ─────────────────────────
+//
+// `decisions.status` has permitted 'expired' since migration 001, the type
+// declares it, and the WEEKLY OUTCOME REPORT TELLS THE FOUNDER HOW MANY
+// DECISIONS EXPIRED UNACTED THIS WEEK. Nothing ever wrote the value. So that
+// number was structurally zero — "you let nothing lapse" — however many
+// decisions had sat past their deadline, and those decisions stayed pending in
+// the queue forever, indistinguishable from ones still worth making.
+//
+// The deadline column is real and is set. This is the producing half that was
+// never built, and its absence made a report say something false rather than
+// merely doing nothing.
+//
+// Only decisions that carry a deadline expire. A decision with no deadline is
+// not late; it is unscheduled, and sweeping those up would silently clear the
+// queue of everything the founder has not got to yet.
+async function scpExpireOverdueDecisions(): Promise<void> {
+  logger.info('scp_expire_overdue_decisions starting', { jobName: 'scp_expire_overdue_decisions' });
   try {
     const { query: dbQuery } = await import('../db/client.js');
-    // Clear expired focus areas
-    await dbQuery(
-      `UPDATE founder_focus_settings SET focus_area=NULL, focus_ends_at=NULL WHERE focus_ends_at IS NOT NULL AND focus_ends_at <= datetime('now')`
-    );
-    // Clear expired vacation modes
-    await dbQuery(
-      `UPDATE founder_focus_settings SET vacation_mode_until=NULL WHERE vacation_mode_until IS NOT NULL AND vacation_mode_until <= datetime('now')`
-    );
-    // Clear expired decision snoozes
-    await dbQuery(
-      `DELETE FROM decision_snooze_log WHERE snoozed_until <= datetime('now')`
-    );
-    logger.info('scp_wellbeing_focus_cleanup: Cleaned up expired focus and snooze records', { jobName: 'scp_wellbeing_focus_cleanup' });
+    const result = await dbQuery(
+      `UPDATE decisions SET status = 'expired'
+        WHERE status = 'pending'
+          AND deadline IS NOT NULL
+          AND datetime(deadline) < datetime('now')
+          AND deleted_at IS NULL`,
+      []);
+    logger.info(`scp_expire_overdue_decisions: Expired ${result.rowsAffected ?? 0} overdue decisions`,
+      { jobName: 'scp_expire_overdue_decisions' });
   } catch (err) {
-    logger.error('scp_wellbeing_focus_cleanup: Error:', { jobName: 'scp_wellbeing_focus_cleanup', error: String(err) });
+    logger.error('scp_expire_overdue_decisions: Error:', { jobName: 'scp_expire_overdue_decisions', error: String(err) });
   }
 }
+
 
 // ─── SCP v4: Webhook Delivery Cleanup — Sunday 4:00 UTC ─────────────────────
 
@@ -1400,12 +1546,54 @@ async function scpWebhookDeliveryCleanup(): Promise<void> {
     const { query: dbQuery } = await import('../db/client.js');
     // Keep last 30 days of delivery records, delete older ones
     const result = await dbQuery(
-      `DELETE FROM webhook_deliveries WHERE created_at < datetime('now', '-30 days')`
+      `DELETE FROM webhook_deliveries
+         WHERE COALESCE(delivered_at, failed_at) < datetime('now', '-30 days')`
     );
     logger.info(`scp_webhook_delivery_cleanup: Cleaned up old webhook delivery records`, { jobName: 'scp_webhook_delivery_cleanup' });
   } catch (err) {
     logger.error('scp_webhook_delivery_cleanup: Error:', { jobName: 'scp_webhook_delivery_cleanup', error: String(err) });
   }
+}
+
+// ─── Per-subject work, and what failed ───────────────────────────────────────
+//
+// ELEVEN SCHEDULED JOBS SHARED ONE SHAPE: a loop over products or founders,
+// `catch { /* non-fatal per product */ }`, and a closing line reporting only
+// the successes. So a run in which EVERY company failed logged the same
+// sentence as a run with nothing to do. "Generated 0 compressed briefs" was
+// both "no companies" and "every company's weekly brief threw", and nothing
+// anywhere distinguished them — the outer try/catch never fires, because the
+// loop completes.
+//
+// `institution/loop-health.ts` exists precisely to separate "nothing happened"
+// from "nothing ran", and it cannot see this — correctly, and by design. It
+// records the JOB, and the job succeeded; and it scopes itself deliberately to
+// the two loops whose silence changes the founder's own page, saying so in its
+// header. These eleven belong to the operator log, which is exactly where their
+// failures were invisible.
+//
+// `scp_scenario_refresh` shows what was intended: someone had already separated
+// "awaiting a stated cash position" from "generated" — two non-failure outcomes
+// told apart — while the failure path stayed uncounted beside them.
+//
+// Nothing here changes what any job DOES.
+
+/** One subject's failure, named, at error level. The message is for the
+ *  operator's log, not for `job_health`, which stores an error CLASS only.
+ *  Exported so the behaviour can be RUN in a test rather than read. */
+export function logSubjectFailure(jobName: string, subjectId: string, err: unknown): void {
+  logger.error(
+    `${jobName}: ${subjectId} failed: ${err instanceof Error ? err.message : String(err)}`,
+    { jobName },
+  );
+}
+
+/** A job's closing line, said so that a failure cannot read as an empty day.
+ *  Exported for the same reason as above. */
+export function reportRun(jobName: string, sentence: string, failed: number): void {
+  const line = failed > 0 ? `${jobName}: ${sentence}, and ${failed} failed` : `${jobName}: ${sentence}`;
+  if (failed > 0) logger.error(line, { jobName });
+  else logger.info(line, { jobName });
 }
 
 // ─── SCP v5: Prediction Accuracy Check — Daily 6:00 UTC ──────────────────────
@@ -1415,16 +1603,20 @@ async function scpPredictionAccuracyCheck(): Promise<void> {
   try {
     const { measurePendingPredictions } = await import('../services/scp/accuracy/tracker.js');
     const { query: dbQuery } = await import('../db/client.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status='active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let totalMeasured = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         const result = await measurePendingPredictions(productId);
         totalMeasured += result.measured;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_prediction_accuracy', productId, err);
+      }
     }
-    logger.info(`scp_prediction_accuracy: Measured ${totalMeasured} predictions`, { jobName: 'scp_prediction_accuracy' });
+    reportRun('scp_prediction_accuracy', `Measured ${totalMeasured} predictions`, failed);
   } catch (err) {
     logger.error('scp_prediction_accuracy: Error:', { jobName: 'scp_prediction_accuracy', error: String(err) });
   }
@@ -1437,16 +1629,20 @@ async function scpCompressedBrief(): Promise<void> {
   try {
     const { generateCompressedWeeklyBrief } = await import('../services/scp/briefing/compressed.js');
     const { query: dbQuery } = await import('../db/client.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status='active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let generated = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         await generateCompressedWeeklyBrief(productId);
         generated++;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_compressed_brief', productId, err);
+      }
     }
-    logger.info(`scp_compressed_brief: Generated ${generated} compressed briefs`, { jobName: 'scp_compressed_brief' });
+    reportRun('scp_compressed_brief', `Generated ${generated} compressed briefs`, failed);
   } catch (err) {
     logger.error('scp_compressed_brief: Error:', { jobName: 'scp_compressed_brief', error: String(err) });
   }
@@ -1460,17 +1656,27 @@ async function scpScenarioRefresh(): Promise<void> {
     const { generateScenariosForProduct } = await import('../services/scp/forecasting/runway.js');
     const { query: dbQuery } = await import('../db/client.js');
     const products = await dbQuery(
-      `SELECT id FROM products WHERE scp_status='active' LIMIT 100`
+      `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
     );
     let generated = 0;
+    let awaitingPosition = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
-        await generateScenariosForProduct(productId);
-        generated++;
-      } catch { /* non-fatal per product */ }
+        // Null means the company has not stated its cash position, which is a
+        // normal state and not a failure — counted apart so the log does not
+        // read as though every company were being modelled.
+        if (await generateScenariosForProduct(productId) === null) awaitingPosition++;
+        else generated++;
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_scenario_refresh', productId, err);
+      }
     }
-    logger.info(`scp_scenario_refresh: Generated scenarios for ${generated} products`, { jobName: 'scp_scenario_refresh' });
+    reportRun('scp_scenario_refresh',
+      `Generated scenarios for ${generated} products, `
+      + `${awaitingPosition} awaiting a stated cash position`, failed);
   } catch (err) {
     logger.error('scp_scenario_refresh: Error:', { jobName: 'scp_scenario_refresh', error: String(err) });
   }
@@ -1482,18 +1688,25 @@ async function scpDebateRun(): Promise<void> {
   logger.info('scp_debate_run starting', { jobName: 'scp_debate_run' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
+    const rows = await query(
+      `SELECT DISTINCT ai.product_id FROM agent_instances ai
+         JOIN products p ON p.id = ai.product_id
+        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     const today = new Date().toISOString().slice(0, 10);
     let ran = 0;
+    let failed = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
       try {
         const { runDebateForProduct } = await import('../services/scp/debate/orchestrator.js');
         await runDebateForProduct(productId, today);
         ran++;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_debate_run', productId, err);
+      }
     }
-    logger.info(`scp_debate_run: Ran debate for ${ran} products`, { jobName: 'scp_debate_run' });
+    reportRun('scp_debate_run', `Ran debate for ${ran} products`, failed);
   } catch (err) {
     logger.error('scp_debate_run: Error:', { jobName: 'scp_debate_run', error: String(err) });
   }
@@ -1503,8 +1716,12 @@ async function scpFailurePatternScan(): Promise<void> {
   logger.info('scp_failure_pattern_scan starting', { jobName: 'scp_failure_pattern_scan' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
+    const rows = await query(
+      `SELECT DISTINCT ai.product_id FROM agent_instances ai
+         JOIN products p ON p.id = ai.product_id
+        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let scanned = 0;
+    let failed = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
       try {
@@ -1512,9 +1729,12 @@ async function scpFailurePatternScan(): Promise<void> {
         await seedDefaultPatterns();
         await scanForFailurePatterns(productId);
         scanned++;
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_failure_pattern_scan', productId, err);
+      }
     }
-    logger.info(`scp_failure_pattern_scan: Scanned ${scanned} products`, { jobName: 'scp_failure_pattern_scan' });
+    reportRun('scp_failure_pattern_scan', `Scanned ${scanned} products`, failed);
   } catch (err) {
     logger.error('scp_failure_pattern_scan: Error:', { jobName: 'scp_failure_pattern_scan', error: String(err) });
   }
@@ -1524,8 +1744,12 @@ async function scpPromptEvolution(): Promise<void> {
   logger.info('scp_prompt_evolution starting', { jobName: 'scp_prompt_evolution' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
+    const rows = await query(
+      `SELECT DISTINCT ai.product_id FROM agent_instances ai
+         JOIN products p ON p.id = ai.product_id
+        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let evolved = 0;
+    let failed = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
       try {
@@ -1533,9 +1757,12 @@ async function scpPromptEvolution(): Promise<void> {
         await recordMutationOutcome(productId, '');  // update outcome stats for active mutations
         await generatePromptMutations(productId);
         evolved++;
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_prompt_evolution', productId, err);
+      }
     }
-    logger.info(`scp_prompt_evolution: Processed ${evolved} products`, { jobName: 'scp_prompt_evolution' });
+    reportRun('scp_prompt_evolution', `Processed ${evolved} products`, failed);
   } catch (err) {
     logger.error('scp_prompt_evolution: Error:', { jobName: 'scp_prompt_evolution', error: String(err) });
   }
@@ -1545,17 +1772,24 @@ async function scpExecutionPlaybookEval(): Promise<void> {
   logger.info('scp_playbook_eval starting', { jobName: 'scp_playbook_eval' });
   try {
     const { query } = await import('../db/client.js');
-    const rows = await query(`SELECT DISTINCT product_id FROM agent_instances WHERE status = 'active'`, []);
+    const rows = await query(
+      `SELECT DISTINCT ai.product_id FROM agent_instances ai
+         JOIN products p ON p.id = ai.product_id
+        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
     let triggered = 0;
+    let failed = 0;
     for (const row of rows.rows) {
       const productId = String((row as Record<string, unknown>)['product_id']);
       try {
         const { evaluatePlaybooksForProduct } = await import('../services/scp/playbooks/execution-engine.js');
         const result = await evaluatePlaybooksForProduct(productId);
         triggered += result.triggered;
-      } catch { /* non-fatal */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_playbook_eval', productId, err);
+      }
     }
-    logger.info(`scp_playbook_eval: Triggered ${triggered} playbook actions`, { jobName: 'scp_playbook_eval' });
+    reportRun('scp_playbook_eval', `Triggered ${triggered} playbook actions`, failed);
   } catch (err) {
     logger.error('scp_playbook_eval: Error:', { jobName: 'scp_playbook_eval', error: String(err) });
   }
@@ -1568,16 +1802,20 @@ async function scpSignalEvents(): Promise<void> {
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { processPendingSignalEvents } = await import('../services/scp/events/dispatcher.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let total = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         const processed = await processPendingSignalEvents(productId);
         total += processed;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_signal_events', productId, err);
+      }
     }
-    logger.info(`scp_signal_events: Processed ${total} signal events`, { jobName: 'scp_signal_events' });
+    reportRun('scp_signal_events', `Processed ${total} signal events`, failed);
   } catch (err) {
     logger.error('scp_signal_events: Error:', { jobName: 'scp_signal_events', error: String(err) });
   }
@@ -1590,18 +1828,22 @@ async function scpROIMonthly(): Promise<void> {
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { computeMonthlyROI } = await import('../services/scp/roi/calculator.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     const now = new Date();
     const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     let computed = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         await computeMonthlyROI(productId, month);
         computed++;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_roi_monthly', productId, err);
+      }
     }
-    logger.info(`scp_roi_monthly: Computed ROI for ${computed} products`, { jobName: 'scp_roi_monthly' });
+    reportRun('scp_roi_monthly', `Computed ROI for ${computed} products`, failed);
   } catch (err) {
     logger.error('scp_roi_monthly: Error:', { jobName: 'scp_roi_monthly', error: String(err) });
   }
@@ -1617,19 +1859,23 @@ async function scpFounderStateAssessment(): Promise<void> {
     const founders = await dbQuery(
       `SELECT DISTINCT f.id FROM founders f
        JOIN products p ON p.owner_id = f.id
-       WHERE p.scp_status = 'active'
+       WHERE ${operatingProduct('p')}
        LIMIT 100`
     );
     let assessed = 0;
+    let failed = 0;
     for (const row of founders.rows) {
       const founderId = (row as Record<string, unknown>).id as string;
       try {
         await detectBehavioralSignals(founderId);
         await assessFounderState(founderId);
         assessed++;
-      } catch { /* non-fatal per founder */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_founder_state', founderId, err);
+      }
     }
-    logger.info(`scp_founder_state: Assessed ${assessed} founders`, { jobName: 'scp_founder_state' });
+    reportRun('scp_founder_state', `Assessed ${assessed} founders`, failed);
   } catch (err) {
     logger.error('scp_founder_state: Error:', { jobName: 'scp_founder_state', error: String(err) });
   }
@@ -1642,16 +1888,20 @@ async function scpPriorityRebuild(): Promise<void> {
   try {
     const { query: dbQuery } = await import('../db/client.js');
     const { rebuildPriorityQueue } = await import('../services/scp/priority/ranker.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE scp_status = 'active' LIMIT 100`);
+    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
     let total = 0;
+    let failed = 0;
     for (const row of products.rows) {
       const productId = (row as Record<string, unknown>).id as string;
       try {
         const inserted = await rebuildPriorityQueue(productId);
         total += inserted;
-      } catch { /* non-fatal per product */ }
+      } catch (err) {
+        failed += 1;
+        logSubjectFailure('scp_priority_rebuild', productId, err);
+      }
     }
-    logger.info(`scp_priority_rebuild: Rebuilt ${total} priority actions`, { jobName: 'scp_priority_rebuild' });
+    reportRun('scp_priority_rebuild', `Rebuilt ${total} priority actions`, failed);
   } catch (err) {
     logger.error('scp_priority_rebuild: Error:', { jobName: 'scp_priority_rebuild', error: String(err) });
   }
@@ -1911,13 +2161,20 @@ export async function memoryPremiseCheck(): Promise<void> {
       const res = await checkPremises(p.id);
       totalFalsified += res.falsified;
       if (res.falsified > 0) {
-        const { createNotification } = await import('../services/ux/notifications.js');
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          'A past decision now rests on a false premise',
-          `${res.falsified} belief(s) behind decisions you made are now contradicted by your own metrics. Revisit them before they cost you.`,
-          '/strategic-decisions', 'Review',
-        );
+        // THROUGH THE INTERRUPTION POLICY. `checkPremises` sets
+        // `status='falsified'`, and the Letter's `getExpiredBeliefs` reads
+        // exactly that status — so the fact survives being quieted, which is
+        // the condition that makes routing here safe. See the letter rung in
+        // `ux/interruption.ts` for why that condition is not optional.
+        const { deliver } = await import('../services/ux/interruption.js');
+        await deliver(p.owner_id, p.id, {
+          // A decision resting on a premise the company's own metrics now
+          // contradict is something to act on, not something to be woken for.
+          importance: 'action_needed',
+          title: 'A past decision now rests on a false premise',
+          body: `${res.falsified} belief(s) behind decisions you made are now contradicted by your own metrics. Revisit them before they cost you.`,
+          actionUrl: '/strategic-decisions', actionLabel: 'Review',
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`memory_premise_check error for ${p.id}`, { jobName: 'memory_premise_check', error: String(err) });
@@ -1930,15 +2187,44 @@ export async function memoryPremiseCheck(): Promise<void> {
 // No gate-3+ decision sits uncontested: any pending high-stakes decision without
 // a pre-mortem gets one. Cost-bounded (max 5 per run; the AI cost ceiling in
 // callClaude is the hard backstop).
-export async function redTeamSweep(): Promise<void> {
-  logger.info('red_team_sweep starting', { jobName: 'red_team_sweep' });
+/**
+ * The decisions this sweep can actually review.
+ *
+ * A BOUNDED QUEUE THAT SELECTS WORK IT CANNOT DO STOPS BEING A QUEUE.
+ *
+ * This asked for the five oldest uncontested gate-3 decisions and said nothing
+ * about whether Foundry may act for the company they belong to. `runPreMortem`
+ * spends money, so the AI client refuses it for a company that is paused,
+ * unpaid or being erased — and the `red_team_reviews` row that would mark the
+ * decision as handled is written only after that call returns. So the refusal
+ * left no trace: the decision stayed uncontested, `NOT EXISTS` stayed true, and
+ * `ORDER BY created_at ASC LIMIT 5` picked the same five rows on the next run,
+ * and every run after that.
+ *
+ * Five old decisions belonging to companies Foundry may not act for were enough
+ * to occupy the entire window permanently, and no operating company's decision
+ * would ever be red-teamed again. Nothing would have reported this: each run
+ * logged five per-decision errors and completed, and "no gate-3+ decision sits
+ * uncontested" would have been false for every company at once.
+ *
+ * Exported so this is provable against seeded rows rather than by reading SQL.
+ */
+export async function pendingRedTeamWork(): Promise<Array<{ id: string; product_id: string }>> {
   const pending = await query(
     `SELECT d.id, d.product_id FROM decisions d
+     JOIN products p ON p.id = d.product_id
      WHERE d.status = 'pending' AND d.gate >= 3
+       AND ${operatingProduct('p')}
        AND NOT EXISTS (SELECT 1 FROM red_team_reviews r WHERE r.decision_id = d.id)
      ORDER BY d.created_at ASC LIMIT 5`,
     [],
   );
+  return pending.rows as unknown as Array<{ id: string; product_id: string }>;
+}
+
+export async function redTeamSweep(): Promise<void> {
+  logger.info('red_team_sweep starting', { jobName: 'red_team_sweep' });
+  const pending = { rows: await pendingRedTeamWork() };
   let reviewed = 0;
   for (const row of pending.rows) {
     const d = row as Record<string, string>;
@@ -1966,13 +2252,17 @@ export async function founderPulseCheck(): Promise<void> {
       const { getFounderPulse } = await import('../services/wellbeing/pulse.js');
       const pulse = await getFounderPulse(p.id);
       if (pulse.signal === 'overloaded') {
-        const { createNotification } = await import('../services/ux/notifications.js');
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          'A note about your week',
-          pulse.message,
-          '/dashboard', 'See the week',
-        );
+        // Through the policy. A note about the founder's own strain is the
+        // last thing that should arrive as an interruption — and the policy
+        // already quiets non-critical events for an overloaded founder, which
+        // is exactly who this is about.
+        const { deliver } = await import('../services/ux/interruption.js');
+        await deliver(p.owner_id, p.id, {
+          importance: 'info',
+          title: 'A note about your week',
+          body: pulse.message,
+          actionUrl: '/dashboard', actionLabel: 'See the week',
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`founder_pulse_check error for ${p.id}`, { jobName: 'founder_pulse_check', error: String(err) });
@@ -1994,13 +2284,21 @@ export async function networkRadarCheck(): Promise<void> {
       const { scanForWarnings } = await import('../services/network/radar.js');
       const warnings = await scanForWarnings(p.id);
       if (warnings.length > 0) {
-        const { createNotification } = await import('../services/ux/notifications.js');
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          `Peer radar: ${warnings.length} vital${warnings.length > 1 ? 's' : ''} in the danger tail`,
-          warnings[0].message + (warnings.length > 1 ? ` (+${warnings.length - 1} more in The Letter)` : ''),
-          '/letter', 'Read The Letter',
-        );
+        // THROUGH THE INTERRUPTION POLICY, because the Letter carries this fact
+        // itself — `letter/composer.ts` calls `scanForWarnings` too. That is the
+        // condition which makes quieting safe: a founder whose ceiling is
+        // `letter` loses the bell and still reads the warning, which is exactly
+        // what they asked for. The bell used to ignore their ceiling entirely.
+        const { deliver } = await import('../services/ux/interruption.js');
+        await deliver(p.owner_id, p.id, {
+          // A peer signal in the danger tail is worth reading, not worth a
+          // phone buzzing: the Letter is where it belongs and where it already
+          // is.
+          importance: 'attention',
+          title: `Peer radar: ${warnings.length} vital${warnings.length > 1 ? 's' : ''} in the danger tail`,
+          body: warnings[0].message + (warnings.length > 1 ? ` (+${warnings.length - 1} more in The Letter)` : ''),
+          actionUrl: '/letter', actionLabel: 'Read The Letter',
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`network_radar error for ${p.id}`, { jobName: 'network_radar', error: String(err) });
@@ -2022,14 +2320,18 @@ export async function autopilotTick(): Promise<void> {
       const { runAutopilotTick } = await import('../services/autopilot/policy.js');
       const result = await runAutopilotTick(p.id);
       if (result.acted > 0) {
-        const { createNotification } = await import('../services/ux/notifications.js');
+        const { deliver } = await import('../services/ux/interruption.js');
         const first = result.decisions[0];
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          `Second Self handled ${result.acted} decision${result.acted > 1 ? 's' : ''}`,
-          `"${first.what}" resolved to the team's recommendation (${first.category}). You have 24h to undo from the decision page — an undo also pulls that category back.`,
-          `/decisions/${first.id}`, 'Review / undo',
-        );
+        // ACTION NEEDED, and it earns that: something was decided FOR the
+        // founder and the window to undo it is twenty-four hours. The policy's
+        // floor keeps `action_needed` in the letter even for an overloaded
+        // founder, so the undo window is never quieted out of existence.
+        await deliver(p.owner_id, p.id, {
+          importance: 'action_needed',
+          title: `Second Self handled ${result.acted} decision${result.acted > 1 ? 's' : ''}`,
+          body: `"${first.what}" resolved to the team's recommendation (${first.category}). You have 24h to undo from the decision page — an undo also pulls that category back.`,
+          actionUrl: `/decisions/${first.id}`, actionLabel: 'Review / undo',
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`autopilot_tick error for ${p.id}`, { jobName: 'autopilot_tick', error: String(err) });
@@ -2053,13 +2355,15 @@ export async function customerSuccessSweep(): Promise<void> {
       proposed += res.proposed;
       sent += res.sent;
       if (res.proposed > 0) {
-        const { createNotification } = await import('../services/ux/notifications.js');
-        await createNotification(
-          p.owner_id, p.id, 'system',
-          'Check-in drafts waiting for your approval',
-          `${res.proposed} at-risk customer(s) have a check-in drafted from their real account state. Approve or discard in the action queue.`,
-          '/agents/actions', 'Review drafts',
-        );
+        const { deliver } = await import('../services/ux/interruption.js');
+        // Drafts sit in the queue until approved; nothing reaches a customer
+        // while the founder is not looking. Action needed, not urgent.
+        await deliver(p.owner_id, p.id, {
+          importance: 'action_needed',
+          title: 'Check-in drafts waiting for your approval',
+          body: `${res.proposed} at-risk customer(s) have a check-in drafted from their real account state. Approve or discard in the action queue.`,
+          actionUrl: '/agents/actions', actionLabel: 'Review drafts',
+        }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
       logger.error(`customer_success_sweep error for ${p.id}`, { jobName: 'customer_success_sweep', error: String(err) });
@@ -2135,10 +2439,22 @@ export async function fleetLetterNotify(): Promise<void> {
       if (!anchorProduct) continue;
 
       const result = await deliver(founderId, anchorProduct, {
-        importance: top ? (top.gate >= 3 ? 'action_needed' : 'attention') : 'info',
+        // A responsibility has no gate, and a passed date the COMPANY gave is
+        // not "attention" — it is the one ask that is already late. Gate 3+
+        // decisions and overdue responsibilities are both action_needed; the
+        // rest is attention.
+        importance: top
+          ? ((top.kind === 'decision' ? top.gate >= 3
+            : top.kind === 'responsibility' ? top.because === 'overdue'
+              : top.evaluationState === 'contradicted')
+            ? 'action_needed' : 'attention')
+          : 'info',
         title: top ? `Your letter: ${top.what} needs you` : 'Your letter is ready',
         body: top
-          ? `Top of ${letter.needsYou.length} across ${letter.products.length} companies: ${top.what} (${top.productName}).`
+          // `needsYou` is capped at MAX_NEEDS_YOU for the page, so this read
+          // `Top of 5` whatever the real number of asks was — a count of the
+          // cap, printed as a count of the fleet.
+          ? `Top of ${letter.needsYouTotal} across ${letter.products.length} companies: ${top.what} (${top.productName}).`
           : `What ran across your ${letter.products.length} companies while you were away.`,
         actionUrl: '/letter',
         actionLabel: 'Read the letter',
@@ -2182,8 +2498,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
   digest_generate:      { fn: digestGenerate,       schedule: '0 7 * * 1',       description: 'Generate and send weekly digests (Monday)' },
   behavioral_triggers:  { fn: behavioralTriggers,   schedule: '0 */6 * * *',     description: 'Evaluate behavioral trigger emails (every 6h)' },
-  metric_snapshot:      { fn: metricSnapshot,       schedule: '0 0 * * *',       description: 'Ensure daily metric snapshots exist' },
-  data_retention:       { fn: dataRetention,        schedule: '30 3 * * *',      description: 'Purge operational log rows past the retention window (daily)' },
   slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
   slot_enforcement:     { fn: slotEnforcement,      schedule: '0 9 * * *',       description: 'Enforce founding cohort activation window' },
   cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },
@@ -2233,7 +2547,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_playbook_eval: { fn: scpExecutionPlaybookEval, schedule: '0 * * * *', description: 'Evaluate execution playbook conditions for all active products (hourly)' },
   scp_benchmark_refresh: { fn: scpBenchmarkRefresh, schedule: '0 3 * * 0', description: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
   scp_decision_retrospectives: { fn: scpDecisionRetrospectives, schedule: '0 9 * * 1', description: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
-  scp_wellbeing_focus_cleanup: { fn: scpWellbeingFocusCleanup, schedule: '0 0 * * *', description: 'Clear expired focus areas and vacation modes (daily midnight)' },
+  scp_expire_overdue_decisions: { fn: scpExpireOverdueDecisions, schedule: '5 0 * * *', description: 'Mark pending decisions past their deadline as expired (daily)' },
   scp_webhook_delivery_cleanup: { fn: scpWebhookDeliveryCleanup, schedule: '0 4 * * 0', description: 'Clean up old webhook delivery records (Sunday 4:00 UTC)' },
   // SCP v7: Event bus, ROI, founder intelligence, priority queue
   scp_signal_events:       { fn: scpSignalEvents,           schedule: '0 * * * *',   description: 'Process pending signal events and dispatch to target agents (hourly)' },
@@ -2252,8 +2566,20 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   data_deletion_processor: {
     fn: async () => {
       const { processScheduledDeletions } = await import('../services/privacy/consent.js');
-      const deleted = await processScheduledDeletions();
-      if (deleted > 0) logger.info(`Processed ${deleted} scheduled deletions`, { jobName: 'data_deletion_processor' });
+      const outcome = await processScheduledDeletions();
+      if (outcome.completed > 0) {
+        logger.info(`Processed ${outcome.completed} scheduled deletions`, { jobName: 'data_deletion_processor' });
+      }
+      // A run that erased nothing because everything failed used to be
+      // indistinguishable from a run with nothing to do. An erasure request
+      // that cannot be honoured has a clock running on it and has to be
+      // visible, not merely retried in silence.
+      if (outcome.failed.length > 0) {
+        logger.error(`${outcome.failed.length} scheduled deletion(s) did not complete`, {
+          jobName: 'data_deletion_processor',
+          products: outcome.failed.map((f) => f.productId).join(','),
+        });
+      }
     },
     schedule: '0 3 * * *', // Daily at 3:00 UTC
     description: 'Process scheduled data deletions (30-day delay)',
@@ -2295,6 +2621,317 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     },
     schedule: '0 5 * * *', // Daily at 5 UTC
     description: 'Drop rows past the per-table retention horizon',
+  },
+  // Institutional judgment: the production writer. Deterministic judgment, its
+  // later-reality evaluation, and the owner disposition loop all existed with
+  // no caller outside the test suite, so the founder-facing "needs your
+  // direction" section could only ever be empty. This pass raises at most one
+  // judgment per standing conflict (migration 124 makes that identity unique)
+  // and observes conflicts that later evidence has settled. It grants nothing
+  // and executes nothing: every judgment still requires the owner's separate
+  // authority, and direction is still not permission.
+  institutional_judgment_tick: {
+    fn: async () => {
+      const products = await query(`SELECT id FROM products WHERE ${operatingProduct()}`, []);
+      const { runInstitutionalJudgmentPass } = await import(
+        '../services/institution/institutional-judgment.js'
+      );
+      const { runJudgmentObservationPass } = await import(
+        '../services/institution/institutional-judgment-evaluation.js'
+      );
+      // A COMPANY'S LOOPS CAN STOP INSIDE A TICK THAT SUCCEEDS.
+      //
+      // Every unit below is wrapped so that "one product's institutional state
+      // must never stop another's pass" — they log and continue, so this job
+      // resolves and `recordJobSuccess` writes a fresh `last_success_at`. A
+      // company whose pass throws on every run therefore reads a page saying
+      // nothing has stopped, and the staleness branch that would eventually
+      // notice is defeated by the very same write.
+      //
+      // Failures are remembered per company here and recorded once at the end.
+      // A slice failed if something in it was already logged as an ERROR: that
+      // is the code's own judgement, not a new one, which is why the
+      // understanding handler below — "not yet sufficient... is not an error" —
+      // is deliberately not counted.
+      const companyFailures = new Map<string, unknown>();
+      const noteFailure = (productId: string, err: unknown): void => {
+        if (!companyFailures.has(productId)) companyFailures.set(productId, err);
+      };
+
+      let raised = 0; let observed = 0;
+      for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
+        const productId = String(row.id);
+        // One product's institutional state must never stop another's pass.
+        try {
+          const pass = await runInstitutionalJudgmentPass(productId);
+          if (pass.raised) raised++;
+          observed += (await runJudgmentObservationPass(productId)).length;
+        } catch (err) {
+          noteFailure(productId, err);
+          logger.error(
+            `institutional_judgment_tick failed for ${productId}: ${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'institutional_judgment_tick', productId },
+          );
+        }
+      }
+      // Two links the reachability gate found dark: nothing in production ever
+      // *earned* Understanding from accumulated facts, and nothing ever
+      // *resolved* an open shadow expectation. Both are deterministic reads of
+      // state that already exists — neither invents evidence, and both refuse
+      // themselves when the evidence is insufficient.
+      let understood = 0; let compared = 0;
+      const { earnResponsibilityUnderstanding } = await import(
+        '../services/institution/responsibility-understanding.js'
+      );
+      const { resolveExternalMetricShadowing } = await import(
+        '../services/institution/external-shadowing.js'
+      );
+      const { resolveDevelopmentShadowing } = await import(
+        '../services/institution/development-shadowing.js'
+      );
+      for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
+        const productId = String(row.id);
+        const visible = await query(
+          `SELECT id FROM institutional_responsibilities
+            WHERE product_id=? AND state='visible' AND disposition='active'`, [productId]);
+        for (const r of visible.rows as unknown as Array<Record<string, unknown>>) {
+          // Throws when the facts are not yet sufficient. That is the normal
+          // case and is not an error.
+          try { await earnResponsibilityUnderstanding(productId, String(r.id)); understood++; } catch { /* not yet */ }
+        }
+        const open = await query(
+          `SELECT x.id FROM responsibility_shadow_expectations x
+             JOIN institutional_responsibilities r ON r.id=x.responsibility_id
+            WHERE x.product_id=? AND r.state='shadowing'
+              AND x.expected_event_type LIKE 'external_metric:%'`, [productId]);
+        for (const x of open.rows as unknown as Array<Record<string, unknown>>) {
+          try {
+            const resolved = await resolveExternalMetricShadowing(productId, String(x.id));
+            if (resolved.classification !== 'unresolved') compared++;
+          } catch (err) {
+            noteFailure(productId, err);
+            logger.error(
+              `shadow resolution failed for ${String(x.id)}: ${err instanceof Error ? err.message : String(err)}`,
+              { jobName: 'institutional_judgment_tick', productId },
+            );
+          }
+        }
+
+        // THE DEVELOPMENT TWIN, WHICH NOTHING RESOLVED. The founder can open a
+        // development expectation from The Letter — Foundry asks what they
+        // would expect a check to report, and records their answer — and
+        // `resolveDevelopmentShadowing` had no caller outside its own tests. So
+        // the institution asked a person a question and never compared the
+        // answer against what the check actually said.
+        //
+        // Identical treatment to the metric twin above, and deliberately in the
+        // same loop: they are one thing, and having them wired in two places
+        // is how one of them came to be wired in none.
+        const openDevelopment = await query(
+          `SELECT x.id FROM responsibility_shadow_expectations x
+             JOIN institutional_responsibilities r ON r.id=x.responsibility_id
+            WHERE x.product_id=? AND r.state='shadowing' AND r.capability='development'
+              AND x.expected_event_type LIKE 'development_verified:%'`, [productId]);
+        for (const x of openDevelopment.rows as unknown as Array<Record<string, unknown>>) {
+          try {
+            const resolved = await resolveDevelopmentShadowing(
+              { productId, expectationId: String(x.id) });
+            if (resolved.verdict !== 'unresolved') compared++;
+          } catch (err) {
+            noteFailure(productId, err);
+            logger.error(
+              `development shadow resolution failed for ${String(x.id)}: ${err instanceof Error ? err.message : String(err)}`,
+              { jobName: 'institutional_judgment_tick', productId },
+            );
+          }
+        }
+      }
+
+      // Foundry observes one true fact about its own repository, as an ordinary
+      // company. The canonical identity is resolved inside that module — the
+      // outer boundary — and everything past it is the same intake any other
+      // company's evidence uses. This is the supply that development Shadowing
+      // never had: an independent check of a reality Foundry does not get to
+      // narrate. It records an observation and nothing else; no repair, no
+      // command, no permission.
+      let selfObserved = false;
+      try {
+        const { observeFoundryRepositoryReality } = await import(
+          '../services/foundry/self-observation.js'
+        );
+        const outcome = await observeFoundryRepositoryReality();
+        selfObserved = outcome.observed;
+        if (outcome.observed && outcome.result === 'failed') {
+          logger.warn(
+            `schema snapshot has drifted from the migrations that produce it: ${outcome.observation.eventType}`,
+            { jobName: 'institutional_judgment_tick' },
+          );
+        }
+        // The second check of the same shape, so the machinery downstream is
+        // exercised by more than one input. Nothing here special-cases it: the
+        // reader that puts a failing check on The Letter takes the latest
+        // observation per check and needed no change to see this one.
+        const { observeFoundryBaselineLiveness } = await import(
+          '../services/foundry/self-observation.js'
+        );
+        const liveness = await observeFoundryBaselineLiveness();
+        selfObserved = selfObserved || liveness.observed;
+      } catch (err) {
+        logger.error(
+          `foundry self-observation failed: ${err instanceof Error ? err.message : String(err)}`,
+          { jobName: 'institutional_judgment_tick' },
+        );
+      }
+
+      // One outcome per company, whether or not anything went wrong for it —
+      // a run that succeeded has to clear a previous failure, or a company that
+      // recovers stays marked as failing for good.
+      const { recordCompanyLoopOutcome } = await import(
+        '../services/institution/loop-health.js'
+      );
+      for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
+        const productId = String(row.id);
+        await recordCompanyLoopOutcome(
+          productId, 'institutional_judgment_tick', companyFailures.get(productId) ?? null);
+      }
+
+      if (raised > 0 || observed > 0 || understood > 0 || compared > 0 || selfObserved) {
+        logger.info(
+          `institutional_judgment_tick: raised=${raised} observed=${observed} understood=${understood} compared=${compared} self_observed=${selfObserved}`,
+          { jobName: 'institutional_judgment_tick' },
+        );
+      }
+    },
+    schedule: '20 */6 * * *', // Every 6 hours
+    description: 'Raise deterministic institutional judgments from real institutional state and observe conflicts later evidence has settled',
+  },
+  // The outcome loop's external half had nowhere to land.
+  //
+  // Migration 137 gave `outcome_status` a supply, and `/ingest/effect-outcome`
+  // lets a system that can actually see the result report it. But
+  // `reconcileAssistedSupportEmail` — the only function that turns those
+  // observations into an outcome — had exactly one caller: the founder
+  // answering the question themselves in The Letter.
+  //
+  // So an outcome reported by a rota system, a delivery scan or a helpdesk sat
+  // in `signal_events` and changed nothing, and the effect stayed `unresolved`
+  // until a person happened to answer. `reconcile_after`, written by the
+  // dispatch path since the day it was built, was read by nobody.
+  //
+  // This pass buys NO privilege. It calls the same canonical function the
+  // founder's answer calls, which reads only independently recorded evidence
+  // and refuses to invent any. It reconciles only effects that ALREADY have an
+  // observation, so a run with nothing to learn changes nothing at all.
+  institutional_effect_reconciliation: {
+    fn: async () => {
+      const { listActionsAwaitingOutcomeReconciliation, reconcileAssistedSupportEmail } = await import(
+        '../services/institution/responsibility-assisted-email.js'
+      );
+      // WHICH ROWS ARE CONSIDERED IS THE SERVICE'S QUESTION, NOT THE JOB'S.
+      //
+      // This held its own SELECT, and that copy carried a rule the service did
+      // not: it took only rows still unresolved, so the first report to arrive
+      // settled the verdict permanently and a later contradiction was never
+      // looked at. The selector now lives beside the function that acts on it
+      // and reopens a settled outcome when more evidence exists than the
+      // verdict was decided from.
+      //
+      // Still a reconciliation rather than a sweep: an effect nobody has said
+      // anything about is not selected, so a run with nothing to learn changes
+      // nothing at all. And the tenant clause was never what protected
+      // tenancy — `reconcileAssistedSupportEmail` is product-scoped and refuses
+      // an action belonging to someone else.
+      const pending = await listActionsAwaitingOutcomeReconciliation();
+
+      let reconciled = 0; let verified = 0; let conflicting = 0;
+      // Same reason as the judgment tick: this handler logs and continues, so a
+      // company whose every reconciliation throws sits inside a run that
+      // succeeds. Only companies that actually had work are recorded — a
+      // company with nothing pending had no slice to succeed or fail, and
+      // saying otherwise would be inventing an outcome.
+      const touched = new Set<string>();
+      const companyFailures = new Map<string, unknown>();
+      for (const row of pending) {
+        touched.add(row.productId);
+        // One company's state must never stop another's reconciliation.
+        try {
+          const outcome = await reconcileAssistedSupportEmail(row.productId, row.actionId);
+          reconciled++;
+          if (outcome === 'verified_success' || outcome === 'verified_failure') verified++;
+          if (outcome === 'conflicting') conflicting++;
+        } catch (err) {
+          if (!companyFailures.has(row.productId)) companyFailures.set(row.productId, err);
+          logger.error(
+            `institutional_effect_reconciliation failed for ${row.actionId}: ${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'institutional_effect_reconciliation', productId: row.productId },
+          );
+        }
+      }
+      if (touched.size) {
+        const { recordCompanyLoopOutcome } = await import(
+          '../services/institution/loop-health.js'
+        );
+        for (const productId of touched) {
+          await recordCompanyLoopOutcome(
+            productId, 'institutional_effect_reconciliation', companyFailures.get(productId) ?? null);
+        }
+      }
+      if (reconciled > 0) {
+        // Disagreement is worth saying out loud. It is a real state, it stays
+        // visible, and nothing here resolves it toward the convenient answer.
+        logger.info(
+          `institutional_effect_reconciliation: reconciled=${reconciled} verified=${verified} conflicting=${conflicting}`,
+          { jobName: 'institutional_effect_reconciliation' },
+        );
+      }
+    },
+    schedule: '10 * * * *', // Hourly
+    description: 'Turn independently reported effect outcomes into resolved outcome status; reconciles only effects that already have an observation',
+  },
+  // Entitlement to ACT, swept into line with billing (owner decision).
+  //
+  // Cancelling a subscription already stopped Foundry acting. A founder who
+  // never subscribed, or whose trial expired without converting, looked exactly
+  // like a paying customer to every capability gate — so the agents kept
+  // running and the AI spend kept accruing on an account that would never pay.
+  //
+  // This writes the SAME `scp_status='paused'` that `customer.subscription
+  // .deleted` writes, so every check that already honours a cancellation
+  // honours a lapsed trial too, rather than adding a second thing to keep in
+  // agreement. It resumes as well as pauses: one-way enforcement leaves a
+  // founder who subscribes after a lapse stuck read-only until somebody
+  // notices, which is a worse product than not enforcing at all.
+  // Shared rate-limit counters accumulate one row per (key, window). Nothing
+  // else deletes them.
+  rate_limit_counter_sweep: {
+    fn: async () => {
+      const { sweepRateLimitCounters } = await import('../middleware/rate-limit.js');
+      const removed = await sweepRateLimitCounters();
+      if (removed > 0) {
+        logger.info(`rate_limit_counter_sweep: removed ${removed} closed windows`,
+          { jobName: 'rate_limit_counter_sweep' });
+      }
+    },
+    schedule: '40 * * * *', // Hourly
+    description: 'Delete rate-limit counters for windows that have closed',
+  },
+  entitlement_sweep: {
+    fn: async () => {
+      const { sweepEntitlements, sendTrialEndingNotices } = await import(
+        '../services/billing/entitlement.js');
+      // Warn BEFORE pausing, in that order and in the same tick: a founder
+      // whose trial ends within the hour should get the warning rather than
+      // only the obituary.
+      const warned = await sendTrialEndingNotices();
+      const { paused, resumed } = await sweepEntitlements();
+      if (paused.length || resumed.length || warned.length) {
+        logger.info(
+          `entitlement_sweep: paused=${paused.length} resumed=${resumed.length} warned=${warned.length}`,
+          { jobName: 'entitlement_sweep' });
+      }
+    },
+    schedule: '25 * * * *', // Hourly
+    description: 'Pause acting for products whose owner has no paid tier and no live trial; resume when they do',
   },
   // Wave 2 / Council 16: Foundry's own customer onboarding sequence
   welcome_sequence_tick: {

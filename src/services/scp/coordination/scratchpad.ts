@@ -13,7 +13,11 @@ import { sanitizeForPrompt } from '../../ai/sanitize.js';
 
 export interface AgentFinding {
   position: string;           // agent's main position (1-2 sentences)
-  confidence: number;         // 0-1
+  /** 0-1, or NULL when the run did not score its domain. It used to be 0.5 in
+   *  that case, which every other agent's prompt then read as "50% confidence"
+   *  in this agent's position — a number nothing produced, stated to a model
+   *  that weighs positions against each other. */
+  confidence: number | null;
   key_metric?: string;        // the metric driving the finding
   action_recommended?: string; // the single action recommended
 }
@@ -125,8 +129,10 @@ export async function getScratchpadContext(productId: string): Promise<string> {
   const lines: string[] = ['WHAT OTHER AGENTS HAVE FOUND TODAY:'];
 
   for (const [agentName, finding] of agentEntries) {
-    const confidencePct = Math.round(finding.confidence * 100);
-    let line = `- ${agentName.charAt(0).toUpperCase() + agentName.slice(1)}: [${finding.position} — ${confidencePct}% confidence]`;
+    const stated = finding.confidence == null
+      ? 'confidence not stated'
+      : `${Math.round(finding.confidence * 100)}% confidence`;
+    let line = `- ${agentName.charAt(0).toUpperCase() + agentName.slice(1)}: [${finding.position} — ${stated}]`;
     if (finding.action_recommended) {
       line += ` → Recommended: ${finding.action_recommended}`;
     }
@@ -215,7 +221,7 @@ async function classifyConsensusConflict(
         `Position: ${sanitizeForPrompt(f.position)}`,
         f.action_recommended ? `Action: ${sanitizeForPrompt(f.action_recommended)}` : '',
         f.key_metric ? `Metric: ${sanitizeForPrompt(f.key_metric)}` : '',
-        `Confidence: ${f.confidence}`,
+        f.confidence == null ? 'Confidence: not stated' : `Confidence: ${f.confidence}`,
       ].filter(Boolean);
       return parts.join('\n');
     })

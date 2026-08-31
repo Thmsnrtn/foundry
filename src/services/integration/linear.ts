@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { storeEvent, getIntegration } from './fabric.js';
+import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,7 +43,7 @@ export async function syncLinearEvents(productId: string): Promise<{ synced: num
     return { synced: 0 };
   }
 
-  const apiKey = integration.config_json.api_key as string | undefined;
+  const apiKey = (await getIntegrationCredentials(productId, 'linear')).api_key;
   const teamId = integration.config_json.team_id as string | undefined;
 
   if (!apiKey || !teamId) {

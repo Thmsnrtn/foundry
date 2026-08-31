@@ -86,12 +86,31 @@ export async function acceptInvitation(token: string, founderId: string): Promis
   );
 
   if (existing.rows.length === 0) {
-    const canTrigger = inv.role === 'co_founder';
+    // A COLUMN A MIGRATION BACKFILLED AND THIS INSERT NEVER LEARNED ABOUT.
+    //
+    // Migration 151 added `can_manage_company` with DEFAULT FALSE and
+    // backfilled it from the role label, saying what it was for: "Those routes
+    // are not owner-only work... A co-founder should be able to do them; an
+    // advisor or an investor observer should not." Every member who joined
+    // AFTER that migration ran got the default instead, so a co-founder was
+    // permanently denied the ~25 routes it gates — settings, API keys, sending
+    // identity, integrations, connections, and the door where a company grants
+    // Foundry permission to help at all.
+    //
+    // Nobody noticed because `memberMay` short-circuits true for the owner, and
+    // the owner is who tries things.
+    //
+    // Derived from the role exactly as the migration's backfill derives it, and
+    // exactly as `can_trigger_actions` beside it already does. A test compares
+    // the two rules, because one rule written in two places is a defect unless
+    // something checks that they still agree.
+    const isCoFounder = inv.role === 'co_founder';
     await query(
       `INSERT INTO team_members
-       (id, product_id, founder_id, role, can_trigger_actions, invited_by)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [nanoid(), inv.product_id, founderId, inv.role, canTrigger ? 1 : 0, inv.invited_by],
+       (id, product_id, founder_id, role, can_trigger_actions, can_manage_company, invited_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [nanoid(), inv.product_id, founderId, inv.role,
+        isCoFounder ? 1 : 0, isCoFounder ? 1 : 0, inv.invited_by],
     );
   }
 
@@ -153,12 +172,31 @@ export async function computeAlignmentScore(productId: string): Promise<Alignmen
   const members = await getTeamMembers(productId);
   if (members.length < 2) return null;
 
-  // Get recent decision votes to measure priority consensus
+  // Recent decision votes, FROM PRINCIPALS ENTITLED TO CAST THEM.
+  //
+  // `can_vote_decisions` existed and nothing read it, so an investor_observer
+  // could vote and their vote fed this score. Refusing new ones at the route
+  // stops the intake; it does not clean what the intake already accepted.
+  //
+  // The rows stay. What actually happened is evidence, and deleting it would
+  // be fabricating a history in which it did not. What changes is that the
+  // CURRENT canonical alignment is computed only from votes whose caster is
+  // entitled to vote today: the owner, and members whose membership carries
+  // the permission. A vote from somebody since removed, or since restricted,
+  // stops counting — which is the same rule read forwards.
   const recentVotes = await query(
-    `SELECT dv.decision_id, dv.vote, dv.preferred_option, f.id as founder_id
-     FROM decision_votes dv
-     JOIN founders f ON dv.founder_id = f.id
-     WHERE dv.product_id = ? AND dv.voted_at > date('now', '-30 days')`,
+    `SELECT dv.decision_id, dv.vote, dv.preferred_option, dv.founder_id
+       FROM decision_votes dv
+      WHERE dv.product_id = ? AND dv.voted_at > date('now', '-30 days')
+        AND (
+          EXISTS (SELECT 1 FROM products p
+                   WHERE p.id = dv.product_id AND p.owner_id = dv.founder_id)
+          OR EXISTS (SELECT 1 FROM team_members t
+                      WHERE t.product_id = dv.product_id
+                        AND t.founder_id = dv.founder_id
+                        AND t.status = 'active'
+                        AND t.can_vote_decisions = 1)
+        )`,
     [productId],
   );
 
@@ -227,7 +265,124 @@ export async function computeAlignmentScore(productId: string): Promise<Alignmen
 }
 
 /**
+ * WHAT A MEMBER MAY DO, NOT MERELY THAT THEY ARE ONE.
+ *
+ * `team_members` has carried five permission columns since migration 010 —
+ * can_view_decisions, can_vote_decisions, can_view_financials, can_view_audit,
+ * can_trigger_actions — and the invite flow writes them. Nothing read any of
+ * them. The only guard was `hasProductAccess`, which asks whether somebody is
+ * on the team at all, so an `investor_observer` — a role whose name says they
+ * observe — could cast a vote on a company decision, and those votes feed the
+ * co-founder alignment score.
+ *
+ * The columns were not decoration: `can_trigger_actions` defaults to FALSE
+ * while the others default TRUE, which is a considered position about what an
+ * advisor should be able to do. It was written down and never asked.
+ *
+ * The owner is always allowed: they are not a member and have no row here.
+ */
+export type MemberCapability =
+  | 'can_view_decisions'
+  | 'can_vote_decisions'
+  | 'can_view_financials'
+  | 'can_view_audit'
+  | 'can_trigger_actions'
+  /** Ordinary company management: credentials, integrations, share links, the
+   * sending address, inviting colleagues. NOT ownership — cancelling the
+   * subscription, pausing the company and archiving the product stay behind an
+   * ownership check, because they are not capabilities anyone can be granted. */
+  | 'can_manage_company';
+
+/** Every capability, so a gate can iterate them rather than a list going stale
+ * beside the union. */
+export const MEMBER_CAPABILITIES: readonly MemberCapability[] = [
+  'can_view_decisions', 'can_vote_decisions', 'can_view_financials',
+  'can_view_audit', 'can_trigger_actions', 'can_manage_company',
+] as const;
+
+export async function memberMay(
+  productId: string, founderId: string, capability: MemberCapability,
+): Promise<boolean> {
+  // THE UNION IS A TYPE, AND TYPES ARE ERASED.
+  //
+  // The capability is interpolated into SQL as a column name. It was protected
+  // by every call site happening to pass a string literal — which is a property
+  // of the wiring, not of this function, and this function is one call site
+  // away from being reachable with a request-supplied string.
+  //
+  // `push.ts` carries the identical shape and was given a runtime lookup for
+  // exactly this reason. This is the AUTHORITY check, so it is the last place
+  // that should be relying on a type that does not exist at runtime.
+  //
+  // Fails CLOSED. An unrecognised capability is not "no such restriction", it
+  // is "I do not know what you are asking for", and the safe answer to that is
+  // no — checked before the ownership shortcut, so an unknown capability cannot
+  // be answered `true` for an owner either.
+  if (!MEMBER_CAPABILITIES.includes(capability)) return false;
+
+  const owner = await query(
+    `SELECT 1 FROM products WHERE id = ? AND owner_id = ?`, [productId, founderId]);
+  if (owner.rows.length > 0) return true;
+
+  const res = await query(
+    `SELECT ${capability} AS allowed FROM team_members
+      WHERE product_id = ? AND founder_id = ? AND status = 'active'`,
+    [productId, founderId]);
+  const row = res.rows[0] as Record<string, unknown> | undefined;
+  // Not a member at all, and a member whose flag is off, are both "no". They
+  // are different facts and the caller does not need to tell them apart —
+  // saying which would tell a stranger whether somebody is on the team.
+  if (!row) return false;
+  return Number(row.allowed) === 1;
+}
+
+/**
+ * Is this person the owner of this company?
+ *
+ * OWNERSHIP IS NOT A PERMISSION. It is the exceptional boundary: the one
+ * person who can end the subscription, pause the company, archive the product
+ * and decide who pays. Nothing grants it and no membership row confers it,
+ * which is why it is asked separately rather than being the top rung of a
+ * ladder.
+ */
+export async function isCompanyOwner(productId: string, founderId: string): Promise<boolean> {
+  const res = await query(
+    `SELECT 1 FROM products WHERE id = ? AND owner_id = ?`, [productId, founderId]);
+  return res.rows.length > 0;
+}
+
+/**
+ * The companies this person may see: the ones they own, and the ones they have
+ * been accepted into.
+ *
+ * THE DASHBOARD USED TO LIST BY `owner_id` ALONE. A founder could invite a
+ * co-founder, have the invitation accepted, and that person would open the
+ * dashboard to nothing at all — no company, no pages, no way in. The invite
+ * flow existed, the membership row existed, and no query joined them to what
+ * anybody could see.
+ *
+ * Visibility is not capability. Being able to see the company is where the
+ * question starts, and every consequential route still asks its own.
+ */
+export async function visibleProductIds(founderId: string): Promise<string[]> {
+  const res = await query(
+    `SELECT id FROM products WHERE owner_id = ? AND status != 'archived'
+      UNION
+     SELECT p.id FROM products p
+       JOIN team_members t ON t.product_id = p.id
+      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'
+     ORDER BY 1`,
+    [founderId, founderId]);
+  return (res.rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.id));
+}
+
+/**
  * Check if a founder has access to a product (owner or active team member).
+ *
+ * MEMBERSHIP, NOT PERMISSION. Callers deciding whether somebody may DO
+ * something want `memberMay`; this only answers whether they belong here at
+ * all, and every route that admits a team member has to say which capability
+ * it requires.
  */
 export async function hasProductAccess(productId: string, founderId: string): Promise<boolean> {
   const result = await query(

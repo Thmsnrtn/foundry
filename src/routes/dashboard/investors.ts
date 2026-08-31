@@ -9,11 +9,43 @@ import type { AuthEnv } from '../../middleware/auth.js';
 import { buildSharedContext } from './_shared.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { query } from '../../db/client.js';
-import { generateBoardPacket, computeFundingReadiness, getSCPBoardSection } from '../../services/investor/board_packet.js';
+import { computeFundingReadiness, getSCPBoardSection } from '../../services/investor/board_packet.js';
+// ONE WRITER PER TABLE. This surface used to generate through its own
+// board-packet writer, which filled a disjoint set of columns from the one
+// the navigation actually points at. Both wrote into `board_packets`, so each
+// rendered the other's rows as an empty document. It generates through the
+// canonical writer now; see migration 164.
+import { generateBoardPacket } from '../../services/scp/investor/board-packet.js';
 import { nanoid } from 'nanoid';
 import { requireTier } from '../../middleware/tier-gate.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const investorRoutes = new Hono<AuthEnv>();
+
+// EVERY ROUTE IN THIS ROUTER IS INVESTOR MATERIAL.
+//
+// `team_members.can_view_financials` has existed since migration 010 and nothing read it.
+// That was survivable only because an invited member could not see the company
+// at all — the dashboard listed by `owner_id`. Now that membership makes the
+// company visible, this is the guard that was always supposed to be here.
+//
+// Router-level rather than per-route: a capability that has to be remembered
+// on each new handler is one that will be forgotten on one of them.
+// SCOPED TO THIS ROUTER'S OWN PATHS, NOT '*'.
+//
+// This router is mounted at '/', and in Hono a sub-app's middleware is merged
+// under its MOUNT PATH — so `use('*')` here applied to every path in the whole
+// application. It ran in front of the REST API, which answered
+// `{"error":"Unauthorized"}` to every request with a valid key, and in front of
+// the transcript webhooks, which did the same. Both are dead surfaces caused by
+// a capability check written for these pages.
+//
+// Owners were unaffected (`memberMay` short-circuits for the owner) and
+// `can_view_financials` defaults TRUE for members, so the damage landed exactly
+// where there is no session at all: machine-facing callers.
+investorRoutes.use('/investors', requireCompanyCapability('can_view_financials'));
+investorRoutes.use('/investors/*', requireCompanyCapability('can_view_financials'));
+
 
 // ─── GET /investors ───────────────────────────────────────────────────────────
 
@@ -33,7 +65,7 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
       [ctx.product.id],
     ),
     query(
-      `SELECT score, verdict, narrative, key_gaps, created_at
+      `SELECT score, verdict, narrative, key_gaps, unmeasured, measured_components, created_at
        FROM funding_readiness WHERE product_id = ? ORDER BY created_at DESC LIMIT 1`,
       [ctx.product.id],
     ),
@@ -42,6 +74,11 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
   const investorRows = investors.rows as Array<Record<string, unknown>>;
   const packetRows = packets.rows as Array<Record<string, unknown>>;
   const readinessRow = readiness.rows[0] as Record<string, unknown> | undefined;
+  const unmeasured = readinessRow?.unmeasured
+    ? JSON.parse(readinessRow.unmeasured as string) as string[]
+    : [];
+  const measuredComponents = readinessRow?.measured_components == null
+    ? null : Number(readinessRow.measured_components);
   const keyGaps = readinessRow?.key_gaps
     ? JSON.parse(readinessRow.key_gaps as string) as string[]
     : [];
@@ -67,10 +104,23 @@ investorRoutes.get('/investors', requireTier('investor_layer'), async (c) => {
           </form>
         </div>
         <p class="funding-narrative">${readinessRow.narrative as string}</p>
+        ${measuredComponents !== null && measuredComponents < 7 ? html`
+          <p style="font-size:0.8rem;color:var(--text-muted);">
+            ${measuredComponents} of 7 components had a real figure behind them. The rest
+            score a neutral 50, so this number is partly a placeholder — not a
+            middling assessment.
+          </p>
+        ` : ''}
         ${keyGaps.length > 0 ? html`
           <div class="key-gaps">
             <strong>Key gaps:</strong>
             <ul>${keyGaps.map((g) => html`<li>${g}</li>`)}</ul>
+          </div>
+        ` : ''}
+        ${unmeasured.length > 0 ? html`
+          <div class="key-gaps">
+            <strong>Not measured:</strong>
+            <ul>${unmeasured.map((u) => html`<li>${u}</li>`)}</ul>
           </div>
         ` : ''}
       </div>
@@ -289,7 +339,11 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
         <!-- Health Score -->
         <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
-          <div style="font-size:2rem;font-weight:700;color:${scpSection.health_score >= 70 ? '#4ecca3' : scpSection.health_score >= 40 ? '#ffb347' : '#ff6b6b'};">${scpSection.health_score}</div>
+          <div style="font-size:${scpSection.health_score === null ? '0.9rem' : '2rem'};font-weight:700;color:${
+            scpSection.health_score === null ? 'var(--text-muted,#64748b)'
+            : scpSection.health_score >= 70 ? '#4ecca3'
+            : scpSection.health_score >= 40 ? '#ffb347' : '#ff6b6b'};">${
+            scpSection.health_score === null ? 'not scored' : scpSection.health_score}</div>
           <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Company Health</div>
         </div>
         <!-- Lifecycle State -->
@@ -301,27 +355,20 @@ investorRoutes.get('/investors/packets/:quarter', async (c) => {
         </div>
         <!-- AI ROI -->
         <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
-          ${scpSection.roi !== null ? html`
-            <div style="font-size:2rem;font-weight:700;color:${scpSection.roi >= 2 ? '#4ecca3' : scpSection.roi >= 1 ? '#ffb347' : '#ff6b6b'};">${scpSection.roi.toFixed(1)}x</div>
+          ${scpSection.attributed_roi !== null ? html`
+            <div style="font-size:2rem;font-weight:700;color:${scpSection.attributed_roi >= 2 ? '#4ecca3' : scpSection.attributed_roi >= 1 ? '#ffb347' : '#ff6b6b'};">${scpSection.attributed_roi.toFixed(1)}x</div>
           ` : html`
             <div style="font-size:1.5rem;font-weight:700;color:var(--text-muted,#64748b);">—</div>
           `}
-          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">AI ROI</div>
-        </div>
-        <!-- Evolution Cycles -->
-        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
-          <div style="font-size:2rem;font-weight:700;color:#6c63ff;">${scpSection.total_evolution_cycles}</div>
-          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Evolution Cycles</div>
+          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Attributed AI ROI</div>
+          <div style="font-size:10px;color:var(--text-muted,#64748b);margin-top:2px;line-height:1.35;">
+            measured cost, estimated revenue
+          </div>
         </div>
         <!-- AI Cost -->
         <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
           <div style="font-size:1.3rem;font-weight:700;color:var(--text-primary,#e2e8f0);">$${scpSection.ai_cost_30d_usd.toFixed(2)}</div>
           <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">AI Cost (30d)</div>
-        </div>
-        <!-- Golden Suite -->
-        <div style="background:var(--bg-page,#0d0d1a);border-radius:6px;padding:12px;text-align:center;">
-          <div style="font-size:2rem;font-weight:700;color:#ffb347;">${scpSection.golden_suite_size}</div>
-          <div style="font-size:11px;color:var(--text-muted,#64748b);margin-top:2px;">Golden Lessons</div>
         </div>
       </div>
 
@@ -379,18 +426,23 @@ investorRoutes.post('/investors/compute-readiness', async (c) => {
 
     await query(
       `INSERT INTO funding_readiness
-       (id, product_id, score, verdict, key_gaps, narrative,
+       (id, product_id, score, verdict, key_gaps, unmeasured, measured_components, narrative,
         mrr_trajectory_score, churn_score, activation_score,
         technical_debt_score, decision_track_record_score,
         team_completeness_score, market_clarity_score)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(product_id, date(created_at)) DO UPDATE SET
          score = excluded.score, verdict = excluded.verdict,
-         key_gaps = excluded.key_gaps, narrative = excluded.narrative`,
+         key_gaps = excluded.key_gaps, unmeasured = excluded.unmeasured,
+         measured_components = excluded.measured_components,
+         narrative = excluded.narrative`,
       [
         nanoid(), ctx.product.id,
         result.score, result.verdict,
-        JSON.stringify(result.key_gaps), result.narrative,
+        JSON.stringify(result.key_gaps),
+        JSON.stringify(result.unmeasured),
+        result.measured_components.measured,
+        result.narrative,
         result.component_scores.mrr_trajectory_score,
         result.component_scores.churn_score,
         result.component_scores.activation_score,

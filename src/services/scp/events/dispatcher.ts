@@ -1,12 +1,39 @@
 // =============================================================================
 // FOUNDRY — Signal Event Dispatcher
-// Event-driven agent activation: emit signals, trigger targeted agent runs
-// within minutes of high-severity events arriving.
+//
+// This said "Event-driven agent activation: emit signals, trigger targeted agent
+// runs within minutes of high-severity events arriving." NO AGENT HAS EVER BEEN
+// RUN THAT WAY, and the reason is one missing link rather than a broken one.
+//
+// `processSignalEvent` does run in production — a scheduled job and a dashboard
+// route both drain pending signals through it. What it reads is
+// `relevant_agents_json`, filled from the event map below by `emitSignalEvent`.
+// But that function has exactly one caller, the company-report path, which emits
+// `founder_reported:<kind>` and `external_company_reported:<kind>` — neither is
+// a key in the map, so the column is written `[]`. The fifteen other places that
+// insert into `signal_events` do so directly and never set the column at all, so
+// it arrives NULL and is read as `[]`.
+//
+// The consequence is exact: every call takes the empty-list early return,
+// marking the signal processed. Everything below that point — the synthetic
+// integration event, the dynamic agent load, the runnable-export search, the
+// session linking, the cleanup — has never executed in production.
+//
+// It is KEPT rather than deleted, and the distinction matters. This is not an
+// orphan abstraction: the map and the reader are a coherent pair with a missing
+// producer, so deleting it would lose a capability rather than remove a
+// pretence. Retiring the named-agent routing is a design decision recorded as
+// blocked in the live frontier. What is not kept is the sentence claiming it
+// happens. `discovery-is-not-reachable-from-integrations.test.ts` asserts both
+// halves — nothing emits a routed event type, and nothing else writes the
+// column — so if this ever comes alive it will be because someone made it, and
+// they will find out here.
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { logger } from '../../logger.js';
+import { isLoadableAgentName } from '../types.js';
 
 // Maps event types to the agents best positioned to analyze them
 const EVENT_AGENT_MAP: Record<string, string[]> = {
@@ -107,7 +134,12 @@ export async function processSignalEvent(eventId: string): Promise<void> {
 
   let relevantAgents: string[] = [];
   try {
-    relevantAgents = JSON.parse((row.relevant_agents_json as string) ?? '[]') as string[];
+    // Narrowed to the closed vocabulary before any of it reaches `import()`.
+    // These names were written by EVENT_AGENT_MAP, but they arrive here from a
+    // database column, and a module specifier resolves paths — an unvalidated
+    // stored string is a directory traversal waiting for a bad write.
+    relevantAgents = (JSON.parse((row.relevant_agents_json as string) ?? '[]') as unknown[])
+      .filter(isLoadableAgentName);
   } catch {
     relevantAgents = [];
   }

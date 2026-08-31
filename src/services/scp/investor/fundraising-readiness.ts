@@ -6,6 +6,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { ratePoints } from '../../ai/measured.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -156,16 +157,41 @@ export async function assessFundraisingReadiness(
 ): Promise<FundraisingReadiness> {
   const mult = ROUND_MULTIPLIERS[targetRound];
 
-  // Load metrics
+  // Load metrics — two snapshots, because growth needs a previous level to
+  // compare against and there is no growth column to read.
   let metricsRow: Record<string, unknown> = {};
+  let mrrGrowthPct: number | null = null;
   try {
     const metricsResult = await query(
-      'SELECT * FROM metric_snapshots WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 1',
+      'SELECT * FROM metric_snapshots WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 2',
       [productId]
     );
     if (metricsResult.rows.length > 0) {
       metricsRow = metricsResult.rows[0] as Record<string, unknown>;
     }
+    // ...AND THE THRESHOLD IT IS SCORED AGAINST IS 15%/MONTH. The two
+    // snapshots are consecutive rows, which for a daily reporter is yesterday,
+    // so a company growing 0.5% a day — about 16% a month, over the bar —
+    // scored zero of the two points and was told "growth: 0.5%/mo" in an
+    // investor-readiness assessment. The rate is monthly-equivalent, from the
+    // gap between the two dates.
+    const prior = metricsResult.rows[1] as Record<string, unknown> | undefined;
+    const now = metricsRow.mrr_cents == null ? null : Number(metricsRow.mrr_cents);
+    const then = prior?.mrr_cents == null ? null : Number(prior.mrr_cents);
+    const gapDays = (Date.parse(`${String(metricsRow.snapshot_date)}T00:00:00Z`)
+      - Date.parse(`${String(prior?.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+    if (now !== null && then !== null && then > 0
+      && Number.isFinite(gapDays) && gapDays > 0) {
+      mrrGrowthPct = ((now / then) ** (30.44 / gapDays) - 1) * 100;
+    }
+  } catch { /* ok */ }
+
+  // Customers counted where they actually live, across both stores. There is
+  // no customer count on a metric snapshot.
+  let customerCount: number | null = null;
+  try {
+    const { getCompanyCustomers } = await import('../../institution/company-customers.js');
+    customerCount = (await getCompanyCustomers(productId)).length;
   } catch { /* ok */ }
 
   // Load DNA
@@ -180,14 +206,37 @@ export async function assessFundraisingReadiness(
       [productId]
     );
     if (dnaResult.rows.length > 0) {
+      // FIVE MORE COLUMNS THAT DO NOT EXIST, IN THE SAME ASSESSMENT.
+      //
+      // `target_customer`, `competitors`, `positioning`, `core_hypothesis` and
+      // `hypothesis_validated` have never been columns on `product_dna`. Read
+      // off a `SELECT *` row they are `undefined`, so all four flags were FALSE
+      // for every company that has ever run this — six of the ten points on the
+      // narrative dimension and two on the traction dimension, withheld from
+      // everybody, in an assessment of whether they are ready to raise.
+      //
+      // The real fields are `icp_description`, `competitive_landscape` and
+      // `positioning_statement`. There is no hypothesis on the DNA at all: a
+      // tested hypothesis is one in the `hypotheses` table that has reached a
+      // terminal status, which is what "tested" means — including 'disproven'
+      // and 'inconclusive', because a hypothesis that failed was still tested.
       const dnaRow = dnaResult.rows[0] as Record<string, unknown>;
       dnaCompletion = (dnaRow.completion_pct as number) ?? 0;
-      hasICP = !!(dnaRow.target_customer && String(dnaRow.target_customer).length > 20);
-      hasCompetitive = !!(dnaRow.competitors && String(dnaRow.competitors).length > 20);
-      hasPositioning = !!(dnaRow.positioning && String(dnaRow.positioning).length > 20);
-      hasHypothesisTested = !!(dnaRow.core_hypothesis && (dnaRow.hypothesis_validated as boolean));
+      const filled = (v: unknown) => !!(v && String(v).trim().length > 20);
+      hasICP = filled(dnaRow.icp_description);
+      hasCompetitive = filled(dnaRow.competitive_landscape);
+      hasPositioning = filled(dnaRow.positioning_statement);
     }
   } catch { /* ok */ }
+
+  try {
+    const testedResult = await query(
+      `SELECT COUNT(*) AS cnt FROM hypotheses
+        WHERE product_id = ? AND status IN ('completed','disproven','inconclusive')`,
+      [productId],
+    );
+    hasHypothesisTested = Number((testedResult.rows[0] as Record<string, unknown>)?.cnt ?? 0) > 0;
+  } catch { /* an unreadable table is not a hypothesis nobody tested */ }
 
   // Load lifecycle state (has_cto, advisors, etc.)
   let lifecycleState: string | null = null;
@@ -229,9 +278,13 @@ export async function assessFundraisingReadiness(
   // Load CAC tracking
   let hasCACTracked = false;
   try {
+    // `cac_cents` is not on `metric_snapshots` and never was — CAC is recorded
+    // on `unit_economics_snapshots.cac`. This query raised, the catch swallowed
+    // it, and every company was reported to an investor-readiness score as not
+    // tracking customer acquisition cost, including the ones that do.
     const cacResult = await query(
-      `SELECT COUNT(*) as cnt FROM metric_snapshots
-       WHERE product_id=? AND cac_cents IS NOT NULL LIMIT 1`,
+      `SELECT COUNT(*) as cnt FROM unit_economics_snapshots
+       WHERE product_id=? AND cac IS NOT NULL LIMIT 1`,
       [productId]
     );
     hasCACTracked = ((cacResult.rows[0] as Record<string, unknown>)?.cnt as number) > 0;
@@ -239,11 +292,21 @@ export async function assessFundraisingReadiness(
 
   const data: ProductData = {
     mrr_cents: metricsRow.mrr_cents as number | null,
-    mrr_growth_pct: metricsRow.mrr_growth_pct as number | null,
-    churn_rate: metricsRow.churn_rate as number | null,
-    customer_count: metricsRow.customer_count as number | null,
-    activation_rate: metricsRow.activation_rate as number | null,
-    d30_retention: metricsRow.d30_retention as number | null,
+    // `mrr_growth_pct` AND `customer_count` ARE NOT COLUMNS on
+    // `metric_snapshots` and never have been. Read off a `SELECT *` row, they
+    // were `undefined` forever, so the growth and customer tests in
+    // `scoreTraction` could never award their four points to anybody. Growth is
+    // computed here from two snapshots of the level; the customer count comes
+    // from the accessor that actually knows, across both customer stores.
+    mrr_growth_pct: mrrGrowthPct,
+    churn_rate: ratePoints(metricsRow.churn_rate),
+    customer_count: customerCount,
+    // POINTS, NOT FRACTIONS — every threshold below is written in percentage
+    // points. And `d30_retention` is not a column: the real one is
+    // `day_30_retention`, so this read `undefined` and scored zero for every
+    // company that has ever reported retention.
+    activation_rate: ratePoints(metricsRow.activation_rate),
+    d30_retention: ratePoints(metricsRow.day_30_retention),
     dna_completion_pct: dnaCompletion,
     has_cto: hasCTO,
     has_advisors: hasAdvisors,

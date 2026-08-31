@@ -6,9 +6,10 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { getProductByOwner } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
+import { hasProductAccess } from '../../services/team/members.js';
 import {
   getHypotheses,
   getExperiments,
@@ -28,8 +29,10 @@ agentExperimentRoutes.get('/products/:id/agents/experiments', async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
 
-  const prodResult = await getProductByOwner(productId, founder.id);
-  if (prodResult.rows.length === 0) return c.redirect('/dashboard');
+  // Membership, not ownership: the capability guard above already decided
+  // whether this person may run experiments here; this only confirms the
+  // company in the path is one they belong to.
+  if (!(await hasProductAccess(productId, founder.id))) return c.redirect('/dashboard');
 
   const ctx = await getLayoutContext(founder, 'agents-strategy', 'Experiments', productId);
 
@@ -68,13 +71,21 @@ agentExperimentRoutes.get('/products/:id/agents/experiments', async (c) => {
 
 // ─── POST /products/:id/agents/experiments/:hypId/approve ────────────────────
 
-agentExperimentRoutes.post('/products/:id/agents/experiments/:hypId/approve', async (c) => {
+// AN EXPERIMENT RUNS ON REAL CUSTOMERS. Approving, starting and stopping one
+// were scoped on ownership and gated by nothing: a co-founder who runs the
+// product could not start one, and nothing but the ownership scope stopped
+// anyone else. The guard resolves the company from the path, which is the
+// company these handlers serve.
+agentExperimentRoutes.post('/products/:id/agents/experiments/:hypId/approve',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const hypId = c.req.param('hypId');
 
-  const prodResult = await getProductByOwner(productId, founder.id);
-  if (prodResult.rows.length === 0) return c.redirect('/dashboard');
+  // Membership, not ownership: the capability guard above already decided
+  // whether this person may run experiments here; this only confirms the
+  // company in the path is one they belong to.
+  if (!(await hasProductAccess(productId, founder.id))) return c.redirect('/dashboard');
 
   const body = await c.req.parseBody();
   const name = (body.name as string) || 'Experiment';
@@ -102,13 +113,16 @@ agentExperimentRoutes.post('/products/:id/agents/experiments/:hypId/approve', as
 
 // ─── POST /products/:id/agents/experiments/:expId/start ──────────────────────
 
-agentExperimentRoutes.post('/products/:id/agents/experiments/:expId/start', async (c) => {
+agentExperimentRoutes.post('/products/:id/agents/experiments/:expId/start',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const expId = c.req.param('expId');
 
-  const prodResult = await getProductByOwner(productId, founder.id);
-  if (prodResult.rows.length === 0) return c.redirect('/dashboard');
+  // Membership, not ownership: the capability guard above already decided
+  // whether this person may run experiments here; this only confirms the
+  // company in the path is one they belong to.
+  if (!(await hasProductAccess(productId, founder.id))) return c.redirect('/dashboard');
 
   const activeCount = await getActiveExperimentCount(productId);
   if (activeCount >= 3) {
@@ -127,13 +141,16 @@ agentExperimentRoutes.post('/products/:id/agents/experiments/:expId/start', asyn
 
 // ─── POST /products/:id/agents/experiments/:expId/stop ───────────────────────
 
-agentExperimentRoutes.post('/products/:id/agents/experiments/:expId/stop', async (c) => {
+agentExperimentRoutes.post('/products/:id/agents/experiments/:expId/stop',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const productId = c.req.param('id');
   const expId = c.req.param('expId');
 
-  const prodResult = await getProductByOwner(productId, founder.id);
-  if (prodResult.rows.length === 0) return c.redirect('/dashboard');
+  // Membership, not ownership: the capability guard above already decided
+  // whether this person may run experiments here; this only confirms the
+  // company in the path is one they belong to.
+  if (!(await hasProductAccess(productId, founder.id))) return c.redirect('/dashboard');
 
   const body = await c.req.parseBody();
   const reason = (body.reason as string) || 'Stopped by CEO';

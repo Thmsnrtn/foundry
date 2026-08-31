@@ -12,6 +12,7 @@ import { getLayoutContext } from './_shared.js';
 import { getOrGenerateAudioScript, generateAudioBriefScript } from '../../services/scp/briefing/audio.js';
 import { generateWeeklyEmailDigest, sendEmailDigest, getEmailDigestHistory } from '../../services/scp/briefing/email-digest.js';
 import { processVoiceReply } from '../../services/scp/briefing/voice-reply.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const ambientRoutes = new Hono<AuthEnv>();
 
@@ -153,7 +154,8 @@ function segment(label: string, text: string): string {
 
 // ─── POST /ambient/audio/generate ─────────────────────────────────────────────
 
-ambientRoutes.post('/ambient/audio/generate', async (c) => {
+ambientRoutes.post('/ambient/audio/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'ambient', 'Audio Brief', undefined, c);
   if (!ctx.productId) return c.redirect('/ambient');
@@ -254,7 +256,8 @@ ambientRoutes.get('/ambient/email', async (c) => {
 
 // ─── POST /ambient/email/generate ─────────────────────────────────────────────
 
-ambientRoutes.post('/ambient/email/generate', async (c) => {
+ambientRoutes.post('/ambient/email/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'ambient', 'Email Digest', undefined, c);
   if (!ctx.productId) return c.redirect('/ambient');
@@ -270,7 +273,10 @@ ambientRoutes.post('/ambient/email/generate', async (c) => {
 
 // ─── POST /ambient/email/send ──────────────────────────────────────────────────
 
-ambientRoutes.post('/ambient/email/send', async (c) => {
+// Sends the company's digest to an address in the request body. Outward
+// effect and company financials in one call, previously ungated.
+ambientRoutes.post('/ambient/email/send',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'ambient', 'Email Digest', undefined, c);
   if (!ctx.productId) return c.redirect('/ambient');
@@ -472,7 +478,8 @@ ambientRoutes.get('/ambient/voice', async (c) => {
 
 // ─── POST /ambient/voice/process ──────────────────────────────────────────────
 
-ambientRoutes.post('/ambient/voice/process', async (c) => {
+ambientRoutes.post('/ambient/voice/process',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'ambient', 'Voice Reply', undefined, c);
   if (!ctx.productId) return c.json({ error: 'No product selected' }, 400);
@@ -482,6 +489,7 @@ ambientRoutes.post('/ambient/voice/process', async (c) => {
     mime_type: string;
     context: string;
     briefing_date: string;
+    action_execution_id?: string;
   };
 
   try {
@@ -496,9 +504,16 @@ ambientRoutes.post('/ambient/voice/process', async (c) => {
 
   try {
     const result = await processVoiceReply(ctx.productId, {
+      // The speaker, not the category. Only the approval branch consults it,
+      // and it decides whether this person may execute an effect at all.
+      founder_id: founder.id,
       audio_base64: body.audio_base64,
       mime_type: body.mime_type,
       context: body.context ?? '',
+      // Names the action being approved. Absent, a voice approval approves
+      // nothing rather than approving whichever action happens to be newest.
+      action_execution_id: typeof body.action_execution_id === 'string'
+        ? body.action_execution_id : undefined,
       briefing_date: body.briefing_date ?? new Date().toISOString().slice(0, 10),
     });
     return c.json(result);

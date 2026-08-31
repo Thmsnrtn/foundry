@@ -6,22 +6,21 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { principalRef } from '../outbound/acting-principal.js';
 import { nanoid } from 'nanoid';
 import { getIntegration } from './fabric.js';
 import { withRetry } from '../resilience.js';
 import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/gateway.js';
+import { assertSenderOfRecord, SenderOfRecordError } from '../outbound/sender-of-record.js';
+import {
+  fromLine, getSendingIdentity, recordSendingIdentityAccepted,
+} from '../outbound/sending-identity.js';
+
+/** The one Foundry From, named once so the guard and both providers agree. */
+const DEFAULT_FOUNDRY_FROM = 'Foundry <noreply@foundry.app>';
 import { log } from '../../lib/logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface EmailMetrics {
-  sent: number;
-  delivered: number;
-  opened: number;
-  clicked: number;
-  open_rate: number;
-  click_rate: number;
-}
 
 interface SendEmailParams {
   to: string[];
@@ -45,73 +44,19 @@ export async function isResendConnected(productId: string): Promise<boolean> {
   return integration !== null && integration.status === 'active';
 }
 
-// ─── Email Queuing ────────────────────────────────────────────────────────────
-
-/**
- * Queue an email to be sent by creating an outbound_action record.
- * Returns the outbound_action ID.
- */
-export async function queueEmail(
-  productId: string,
-  params: {
-    agent_name: string;
-    to: string | string[];
-    subject: string;
-    html: string;
-    rationale: string;
-    confidence?: number;
-    authority_level?: number;
-  },
-): Promise<string> {
-  const id = nanoid();
-  const authorityLevel = params.authority_level ?? 2;
-  const confidence = params.confidence ?? 0.8;
-  const toList = Array.isArray(params.to) ? params.to : [params.to];
-
-  const parameters = {
-    to: toList,
-    subject: params.subject,
-    html: params.html,
-  };
-
-  const previewText = `Send email to ${toList.join(', ')}: "${params.subject}"`;
-
-  // Expires in 48 hours by default (emails become stale)
-  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-  const now = new Date().toISOString();
-
-  const status = authorityLevel === 0 ? 'approved' : 'pending_approval';
-
-  await query(
-    `INSERT INTO outbound_actions (
-      id, product_id, agent_name, integration_name, action_type,
-      authority_level, status, parameters_json, preview_text, rationale,
-      confidence, expires_at, created_at
-    ) VALUES (?, ?, ?, 'resend', 'send_email', ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      id,
-      productId,
-      params.agent_name,
-      authorityLevel,
-      status,
-      JSON.stringify(parameters),
-      previewText,
-      params.rationale,
-      confidence,
-      expiresAt,
-      now,
-    ],
-  );
-
-  // Update outbound_actions count on integration
-  await query(
-    `UPDATE integrations SET total_outbound_actions = total_outbound_actions + 1, updated_at = ?
-     WHERE product_id = ? AND name = 'resend'`,
-    [now, productId],
-  );
-
-  return id;
-}
+// ─── Email Queuing — REMOVED ─────────────────────────────────────────────────
+//
+// `queueEmail` created an `outbound_actions` row from an authority level the
+// CALLER supplied, and wrote `status='approved'` when that level was zero. It
+// carried no responsibility, so `assisted_action_plan_guard` — which fires only
+// when `responsibility_id` is present — never looked at it. A caller could
+// therefore certify its own authority and mark the action approved, which is
+// the one thing the outbound boundary exists to refuse.
+//
+// Nothing in `src/` or `tests/` called it. It was a door standing open in a
+// wall nobody had walked through yet, and deleting it removes no capability:
+// the governed path is `planAssistedSupportEmail` -> `executeAssistedSupportEmail`,
+// which binds a responsibility, an exact live consent, and a scope.
 
 // ─── Email Execution (gateway-routed) ─────────────────────────────────────────
 
@@ -149,13 +94,39 @@ export async function executeEmailSend(
   } catch {
     parameters = { to: [], subject: '', html: '' };
   }
-  const toList = Array.isArray(parameters.to) ? parameters.to : [String(parameters.to)];
+  // A COERCION THAT MANUFACTURED A RECIPIENT.
+  //
+  // `[String(parameters.to)]` turned an ABSENT `to` into the one-element list
+  // `["undefined"]`, and the gateway's `requireCustomerExternalId` is satisfied
+  // by any non-empty string. So a row whose `parameters_json` parsed but
+  // carried no recipient reached the provider as an attempted send to the
+  // address "undefined" — burning the dedup key and marking the action executed
+  // or failed, rather than refusing it as malformed.
+  //
+  // The parse-FAILURE path was already safe: it produces `to: []`, so
+  // `primaryRecipient` is undefined and the gateway refuses. Valid JSON missing
+  // a field was the gap, which is the more likely of the two.
+  const toList = (Array.isArray(parameters.to) ? parameters.to : [parameters.to])
+    .filter((addr): addr is string => typeof addr === 'string' && addr.trim().length > 0);
   const primaryRecipient = toList[0];
 
   const now = new Date().toISOString();
+  // WHAT AUTHORISED THIS, WHEN NOBODY APPROVED IT.
+  //
+  // The default here was 'auto', which `acting-principal.ts` defines as an
+  // action that reached its notice window without anybody objecting — and which
+  // the founder's action history renders in those words. A row arrives here
+  // with no approver only when it was born at authority level 0: no window was
+  // ever offered and nobody was asked, because the code says this class of
+  // action does not need asking. That is a standing authority, not silence
+  // after a notice, and the two are different facts about who is responsible.
   await query(
-    `UPDATE outbound_actions SET status = 'executing', approved_by = COALESCE(approved_by, 'auto'), approved_at = COALESCE(approved_at, ?), executed_at = ? WHERE id = ?`,
-    [now, now, actionId],
+    `UPDATE outbound_actions SET status = 'executing',
+            approved_by = COALESCE(approved_by, ?),
+            approved_at = COALESCE(approved_at, datetime('now')),
+            executed_at = datetime('now')
+      WHERE id = ?`,
+    [principalRef('system', 'standing_authority'), actionId],
   );
 
   const req: GatewayRequest = {
@@ -172,9 +143,28 @@ export async function executeEmailSend(
   const gatewayResult = await invoke(req);
 
   if (!gatewayResult.ok) {
+    // 'refused' IS NOT IN THE VOCABULARY. `outbound_actions.status` permits
+    // pending_approval, approved, executing, executed, failed, rejected and
+    // cancelled — so this UPDATE raised on any real database. The email was
+    // correctly not sent and the row saying why was never written; the action
+    // stayed at 'executing', set moments earlier, which reads as an effect in
+    // flight rather than one that was stopped. Only a fabricated test schema
+    // with no CHECK on it made this look like it worked.
+    //
+    // 'rejected' is the term the institution's other refusal path already uses
+    // (responsibility-assisted-email, when authority is revoked mid-flight),
+    // and `effect_certainty='not_attempted'` is what says nothing left the
+    // building. WHO refused goes in result_json, because 'rejected' alone
+    // cannot distinguish a founder saying no from a guard stopping it.
     await query(
-      `UPDATE outbound_actions SET status = 'refused', result_json = ? WHERE id = ?`,
-      [JSON.stringify({ phase: gatewayResult.phase, reason: gatewayResult.reason }), actionId],
+      `UPDATE outbound_actions
+          SET status = 'rejected', effect_certainty = 'not_attempted', result_json = ?
+        WHERE id = ?`,
+      [JSON.stringify({
+        refused_by: 'outbound_gateway',
+        phase: gatewayResult.phase,
+        reason: gatewayResult.reason,
+      }), actionId],
     );
     log.warn('resend.send_email.refused', {
       productId,
@@ -213,21 +203,139 @@ export async function executeEmailSend(
     return { success: true, message_id: handlerResult.message_id };
   }
 
-  // Logged-mode (no API key) or unrecognized result: still mark executed.
+  // TWO DIFFERENT THINGS WERE SHARING THIS BRANCH, AND ONE EXPLANATION.
+  //
+  // It read "Logged-mode (no API key) or unrecognized result: still mark
+  // executed", and wrote the same row for both: status 'executed' and the
+  // message "No RESEND_API_KEY set — email logged only".
+  //
+  // For logged mode that is true and deliberate. It is the dev path for
+  // FOUNDRY's own mail when Foundry has no provider key; a message to a
+  // customer goes out under the COMPANY's key, so "no key" is not a state that
+  // message can be in. `resend-gateway.test.ts` pins that and says why.
+  //
+  // For anything else it was a guess presented as a cause. A null result, or a
+  // shape this function does not recognise, means the send is UNKNOWN — and it
+  // was recorded as a completed send whose stated reason named an environment
+  // variable that may well have been set. Unknown is a valid state here and it
+  // is not this one.
+  if (handlerResult && 'logged' in handlerResult) {
+    await query(
+      `UPDATE outbound_actions SET status = 'executed', result_json = ? WHERE id = ?`,
+      [
+        JSON.stringify({
+          mode: 'logged',
+          message: 'No RESEND_API_KEY set — email logged only',
+          gateway_invocation_id: gatewayResult.invocation_id,
+          cached: gatewayResult.cached,
+        }),
+        actionId,
+      ],
+    );
+    return { success: true };
+  }
+
   await query(
-    `UPDATE outbound_actions SET status = 'executed', result_json = ? WHERE id = ?`,
+    `UPDATE outbound_actions SET status = 'failed', result_json = ? WHERE id = ?`,
     [
       JSON.stringify({
-        mode: 'logged',
-        message: 'No RESEND_API_KEY set — email logged only',
+        message: 'Gateway returned no recognisable send result — whether this '
+          + 'email left is unknown, and it is not recorded as sent',
         gateway_invocation_id: gatewayResult.invocation_id,
         cached: gatewayResult.cached,
       }),
       actionId,
     ],
   );
-  return { success: true };
+  return { success: false };
 }
+
+
+/**
+ * Is this message going to the founder, or to one of their customers?
+ *
+ * Decided from the database rather than from the request: `dataClass` and
+ * `surface` are what the CALLER says the message is, and the rule is about who
+ * is actually receiving it.
+ *
+ * A message addressed to the founder AND a customer is a message to a
+ * customer; the strictest recipient decides.
+ */
+async function recipientIsFounder(
+  productId: string, recipients: string[],
+): Promise<boolean> {
+  if (recipients.length === 0) return true;      // nothing addressed to anyone
+  const known = await query(
+    `SELECT lower(f.email) AS email
+       FROM products p JOIN founders f ON f.id = p.owner_id
+      WHERE p.id = ?
+      UNION
+     SELECT lower(f.email) AS email
+       FROM team_members t JOIN founders f ON f.id = t.founder_id
+      WHERE t.product_id = ? AND t.status = 'active'`,
+    [productId, productId]);
+  const inbox = new Set(
+    (known.rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.email)));
+  return recipients.every((r) => inbox.has(r));
+}
+
+/**
+ * Decide who this message goes out as, and refuse if the answer is nobody.
+ *
+ * THE RULE EXISTED AND NOTHING CALLED IT. `services/outbound/sender-of-record.ts`
+ * says Foundry must never be the From on a message to a THIRD PARTY — a
+ * founder's customer. Those go out under the founder's own connected sender:
+ * their domain, their opt-out footer, their CAN-SPAM responsibility. Its header
+ * says "Department third-party paths must call it before dispatch" and adds
+ * "this lights the rule up BEFORE the live path exists, so it can never regress
+ * open". `assertSenderOfRecord` had ZERO callers anywhere in the system, and
+ * the live path — this handler — defaulted `from` to a Foundry domain.
+ *
+ * It could not have been enforced until now, because the "founder's own
+ * connected sender" it presupposes did not exist as a mechanism: every send
+ * went through Foundry's platform key. Migration 150 and
+ * `outbound/sending-identity.ts` are that mechanism, so the rule is now
+ * enforceable and enforced.
+ *
+ * FOUNDER MAIL keeps Foundry's From and Foundry's key — welcome, digests,
+ * alerts, account notices. That is Foundry writing to its own customer and is
+ * exactly what the rule permits.
+ *
+ * THIRD-PARTY MAIL goes out under the company's own identity and through the
+ * company's own provider account. With no identity connected there is nothing
+ * to send as, and the send refuses with a reason a founder can act on rather
+ * than borrowing Foundry's domain.
+ */
+async function resolveSender(
+  req: GatewayRequest, params: SendEmailParams,
+): Promise<{ from: string; credential: string | null; identityUsed: boolean }> {
+  const recipients = (params.to ?? []).map((r) => r.toLowerCase().trim()).filter(Boolean);
+  const toFounder = await recipientIsFounder(req.productId, recipients);
+
+  if (toFounder) {
+    // Foundry writing to its own customer. An explicit `from` still has to
+    // pass the rule — a caller cannot opt into a worse position than the
+    // default by supplying one.
+    const from = params.from ?? DEFAULT_FOUNDRY_FROM;
+    assertSenderOfRecord({ from, recipientIsFounder: true });
+    return { from, credential: null, identityUsed: false };
+  }
+
+  const identity = await getSendingIdentity(req.productId);
+  if (!identity) {
+    throw new SenderOfRecordError(
+      'This message is going to one of your customers, and your company has no '
+      + 'sending address of its own yet. Connect one in Settings → Sending — '
+      + 'mail to your customers goes out as you, on your domain, not as Foundry.');
+  }
+
+  const from = fromLine(identity);
+  // Belt as well as braces: an identity is refused at setup if it names a
+  // Foundry domain, and refused again here if one ever gets past that.
+  assertSenderOfRecord({ from, recipientIsFounder: false });
+  return { from, credential: identity.credential, identityUsed: true };
+}
+
 
 // ─── send_email Handler (registered with the gateway) ────────────────────────
 
@@ -246,8 +354,15 @@ export async function executeEmailSend(
  */
 export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSuccess | { logged: true }> {
   const params = req.params as unknown as SendEmailParams;
-  const apiKey = process.env.RESEND_API_KEY;
   const sendgridKey = process.env.SENDGRID_API_KEY;
+
+  const sender = await resolveSender(req, params);
+  // THE COMPANY'S OWN ACCOUNT SENDS THE COMPANY'S OWN MAIL. That is what makes
+  // the domain verification real — the provider refuses a From the account has
+  // not verified — and what puts the reputation and the bounce handling on the
+  // party that owns the domain, which is the substance of the rule rather than
+  // its cosmetics.
+  const apiKey = sender.credential ?? process.env.RESEND_API_KEY;
 
   if (!apiKey && !sendgridKey) {
     log.info('resend.send_email.logged_only', {
@@ -261,13 +376,29 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
 
   // SendGrid is the server-owned fallback mechanism for the same semantic
   // send_email capability. Callers do not select the provider.
-  if (!apiKey && sendgridKey) {
+  //
+  // IT IS FOUNDRY'S ACCOUNT, so it is not available to a company's own mail.
+  // Falling back would send the founder's From through Foundry's provider,
+  // which is the exact substitution the sender-of-record rule exists to
+  // prevent — the domain would be theirs and the reputation, bounce handling
+  // and compliance obligation would be ours.
+  //
+  // `!sender.identityUsed` cannot currently be false here: a connected
+  // identity always carries a credential, so `apiKey` is set whenever one is
+  // in use and this branch is already unreachable for company mail. Mutation
+  // testing says so — removing the condition changes no test. It stays as the
+  // structural statement of the rule, so that if a credential ever becomes
+  // optional the fallback does not quietly reopen. What actually protects the
+  // rule today is the line above: `apiKey` is the COMPANY's key.
+  if (!apiKey && sendgridKey && !sender.identityUsed) {
     const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${sendgridKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         personalizations: [{ to: params.to.map((email) => ({ email })) }],
-        from: { email: 'briefings@foundry.app', name: 'Foundry' },
+        // The From the rule was applied to, never a second one the check
+        // never saw. This used to hard-code 'briefings@foundry.app'.
+        from: { email: sender.from.replace(/^.*<|>.*$/g, '').trim() },
         subject: params.subject,
         content: [
           ...(params.text ? [{ type: 'text/plain', value: params.text }] : []),
@@ -291,7 +422,7 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
             'Idempotency-Key': req.dedupKey!,
           },
           body: JSON.stringify({
-            from: params.from ?? 'Foundry <noreply@foundry.app>',
+            from: sender.from,
             to: params.to,
             subject: params.subject,
             html: params.html,
@@ -317,6 +448,10 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
       messageId,
       to: params.to,
     });
+    // "Connected" and "working" are different facts, and a settings page that
+    // cannot tell them apart tells a founder their sender is fine when it has
+    // never once been used.
+    if (sender.identityUsed) await recordSendingIdentityAccepted(req.productId);
     return { message_id: messageId, raw: responseData };
   } catch (err) {
     lastError = err;
@@ -327,9 +462,9 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
         last_error = ?,
         error_count_trailing_7d = error_count_trailing_7d + 1,
         status = 'errored',
-        updated_at = ?
+        updated_at = datetime('now')
        WHERE product_id = ? AND name = 'resend'`,
-      [String(err), new Date().toISOString(), req.productId],
+      [String(err), req.productId],
     );
     throw lastError;
   }
@@ -343,53 +478,22 @@ export const SEND_EMAIL_POLICY = {
 } as const;
 registerToolHandler('send_email', sendEmailHandler, SEND_EMAIL_POLICY);
 
-// ─── Email Metrics ────────────────────────────────────────────────────────────
+// ─── Email Metrics — REMOVED ─────────────────────────────────────────────────
+//
+// `getEmailMetrics` counted `email.delivered` / `email.opened` events from
+// `integration_events`. Nothing writes those: there is no Resend webhook intake,
+// and the only writer of that table is the fabric's `storeEvent`, called by Slack
+// and Sentry. So the function returned delivered=0 and open_rate=0 for every
+// company, always — presenting UNKNOWN as a measured zero, which is the
+// epistemic error the rest of this system is built to refuse. It had no caller
+// anywhere, so it never told anybody that.
+//
+// DELIVERY EVIDENCE IS STILL WORTH HAVING, and this is not it. A provider
+// delivery or bounce event is exactly the independently observed outcome the
+// effect layer wants, and it needs a real webhook intake with signature
+// verification — an external surface, not a counter over an empty table.
 
-/**
- * Get email performance metrics from stored events.
- */
-export async function getEmailMetrics(
-  productId: string,
-  days: number = 30,
-): Promise<EmailMetrics> {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-
-  // Count executed email actions
-  const sentResult = await query(
-    `SELECT COUNT(*) as count FROM outbound_actions
-     WHERE product_id = ? AND integration_name = 'resend' AND action_type = 'send_email'
-       AND status = 'executed' AND executed_at >= ?`,
-    [productId, since],
-  );
-  const sent = ((sentResult.rows[0] as Record<string, unknown>)?.count as number) ?? 0;
-
-  // Count delivery/open/click events from integration_events (Resend webhooks)
-  const eventResult = await query(
-    `SELECT event_type, COUNT(*) as count FROM integration_events
-     WHERE product_id = ? AND integration_name = 'resend' AND created_at >= ?
-     GROUP BY event_type`,
-    [productId, since],
-  );
-
-  let delivered = 0;
-  let opened = 0;
-  let clicked = 0;
-
-  for (const row of eventResult.rows) {
-    const r = row as Record<string, unknown>;
-    const eventType = r.event_type as string;
-    const count = r.count as number;
-
-    if (eventType === 'email.delivered') delivered += count;
-    if (eventType === 'email.opened') opened += count;
-    if (eventType === 'email.clicked') clicked += count;
-  }
-
-  // Provider acceptance is not delivery. With no independently ingested
-  // delivery event the business outcome remains unknown, never inferred.
-
-  const open_rate = delivered > 0 ? Math.round((opened / delivered) * 100) / 100 : 0;
-  const click_rate = delivered > 0 ? Math.round((clicked / delivered) * 100) / 100 : 0;
-
-  return { sent, delivered, opened, clicked, open_rate, click_rate };
-}
+/** Exposed for tests. The determination is the load-bearing half of the
+ * sender-of-record rule — the rule itself is four lines — and it reads the
+ * database, so testing it through a mocked provider would prove less. */
+export const __recipientIsFounderForTest = recipientIsFounder;

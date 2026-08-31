@@ -54,7 +54,7 @@ describe('fresh-DB migration', () => {
     await db.execute({ sql: "INSERT INTO products (id, name, owner_id) VALUES ('p1','P','f1')", args: [] });
     // Must not throw a CHECK-constraint error.
     await db.execute({
-      sql: "INSERT INTO integrations (id, product_id, type, status, name) VALUES ('i1','p1','stripe','active','stripe')",
+      sql: "INSERT INTO integrations (id, product_id, provider, direction, status, name) VALUES ('i1','p1','stripe','inbound','active','stripe')",
       args: [],
     });
     const r = await db.execute({ sql: "SELECT status FROM integrations WHERE id='i1'", args: [] });

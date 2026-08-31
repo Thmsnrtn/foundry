@@ -29,11 +29,24 @@ export async function upsertNetworkProfile(
     timezone?: string;
   }
 ): Promise<void> {
-  const product = await query(
-    "SELECT sector_profile, growth_stage FROM products WHERE owner_id = ? AND status = 'active' LIMIT 1",
+  // A FOUNDER WITH TWO COMPANIES HAS NO SINGLE SECTOR, and this took whichever
+  // one SQLite returned first — `LIMIT 1` with no ORDER BY — to describe them
+  // to every other founder in the network. The profile carries the sector and
+  // stage when they are unambiguous; when the founder's active companies
+  // disagree, it carries neither, and the founder can state them themselves.
+  const productsResult = await query(
+    "SELECT sector_profile, growth_stage FROM products WHERE owner_id = ? AND status = 'active'",
     [founderId]
   );
-  const p = product.rows[0] as Record<string, string> | undefined;
+  const rows = productsResult.rows as Array<Record<string, string | null>>;
+  const only = <K extends 'sector_profile' | 'growth_stage'>(key: K): string | null => {
+    const values = [...new Set(rows.map((r) => r[key]).filter((v): v is string => !!v))];
+    return values.length === 1 ? values[0] : null;
+  };
+  const p = rows.length === 0 ? undefined : {
+    sector_profile: only('sector_profile'),
+    growth_stage: only('growth_stage'),
+  };
 
   await query(
     `INSERT INTO network_profiles (id, founder_id, display_name, bio, sector, growth_stage, expertise_areas, seeking_help_with, willing_to_help_with, timezone)
@@ -70,7 +83,21 @@ export async function findMatches(founderId: string, limit: number = 5): Promise
   const me = myProfile.rows[0] as Record<string, unknown> | undefined;
   if (!me) return [];
 
-  // Find founders in same sector/stage who are visible and not already introduced
+  // A SHORTLIST OF TWENTY, AND THE RANKING BELOW ONLY SEES THOSE TWENTY.
+  //
+  // This took twenty candidates in storage order and then scored and sorted
+  // them, so the best match in the network could not win if it was not among
+  // the arbitrary twenty the database happened to return first. That is the
+  // same shape as the fleet letter that ranked only the fifty oldest pending
+  // decisions: naming a page a page is not enough when the ranking that follows
+  // is the thing that decides.
+  //
+  // The full score needs JSON overlap between two founders' expertise and needs,
+  // which SQL here cannot compute — so the page is ordered by the part of the
+  // score it CAN: a candidate matching both sector and stage starts 25 points
+  // ahead of one matching neither. The residual is real and is said out loud
+  // rather than left in the shape of the query: this returns the best matches
+  // among a shortlist of twenty, not the best matches in the network.
   const candidates = await query(
     `SELECT np.* FROM network_profiles np
      WHERE np.founder_id != ?
@@ -80,8 +107,9 @@ export async function findMatches(founderId: string, limit: number = 5): Promise
        SELECT founder_b_id FROM introductions WHERE founder_a_id = ?
        UNION SELECT founder_a_id FROM introductions WHERE founder_b_id = ?
      )
+     ORDER BY (np.sector = ?) DESC, (np.growth_stage = ?) DESC, np.founder_id ASC
      LIMIT 20`,
-    [founderId, me.sector, me.growth_stage, founderId, founderId]
+    [founderId, me.sector, me.growth_stage, founderId, founderId, me.sector, me.growth_stage]
   );
 
   if (candidates.rows.length === 0) return [];
@@ -159,24 +187,11 @@ export async function respondToIntroduction(
   }
 }
 
-/**
- * Submit a peer review.
- */
-export async function submitPeerReview(
-  reviewerId: string,
-  productId: string,
-  reviewType: string,
-  content: string,
-  rating?: number
-): Promise<string> {
-  const id = nanoid();
-  await query(
-    `INSERT INTO peer_reviews (id, reviewer_id, reviewee_product_id, review_type, content, rating, status, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, 'completed', datetime('now'))`,
-    [id, reviewerId, productId, reviewType, content, rating ?? null]
-  );
-  return id;
-}
+// `submitPeerReview` was here. It wrote into a table nothing has ever read,
+// through a route that took the reviewed company's id out of the request body
+// and asked nothing. Retired in migration 163 rather than given a reader — the
+// reader is what was ruled out, and a writer with no reader is not a feature
+// waiting for one.
 
 /**
  * Create or join a cohort group.

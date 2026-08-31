@@ -97,18 +97,37 @@ export async function getAcquirerSignals(productId: string): Promise<AcquirerSig
 // ─── getTopAcquirerCandidates ────────────────────────────────────────────────
 
 export async function getTopAcquirerCandidates(productId: string): Promise<AcquirerCandidate[]> {
+  // THE RATIONALE WAS PICKED ALPHABETICALLY. `MAX(strategic_rationale)` over a
+  // group of strings returns the one that sorts last, and it sat in the same
+  // row as `MAX(detected_at)` — so a reader takes the sentence beside "Latest"
+  // to be the latest one. It was whichever rationale happened to start with the
+  // highest character. Two signals for the same acquirer, and the older one
+  // beginning with "They..." beats the newer one beginning with "Acquired...".
+  //
+  // This card is read as the current thinking on an acquirer, and it feeds the
+  // acquisition thesis prompt. The correlated read below takes the rationale
+  // from the most recent signal that has one, with `rowid` as the tiebreak two
+  // signals recorded in the same second need — an id here is a nanoid, which is
+  // not a clock, while SQLite assigns rowid in insertion order.
   const res = await query(
     `SELECT
-       acquirer_name,
-       acquirer_type,
+       s.acquirer_name,
+       s.acquirer_type,
        COUNT(*) as signal_count,
-       AVG(fit_score) as avg_fit_score,
-       MAX(detected_at) as latest_signal,
-       MAX(strategic_rationale) as strategic_rationale
-     FROM acquirer_signals
-     WHERE product_id=?
-     GROUP BY acquirer_name, acquirer_type
-     ORDER BY avg_fit_score DESC, signal_count DESC
+       AVG(s.fit_score) as avg_fit_score,
+       MAX(s.detected_at) as latest_signal,
+       (SELECT s2.strategic_rationale
+          FROM acquirer_signals s2
+         WHERE s2.product_id = s.product_id
+           AND s2.acquirer_name = s.acquirer_name
+           AND s2.acquirer_type = s.acquirer_type
+           AND s2.strategic_rationale IS NOT NULL
+         ORDER BY s2.detected_at DESC, s2.rowid DESC
+         LIMIT 1) as strategic_rationale
+     FROM acquirer_signals s
+     WHERE s.product_id=?
+     GROUP BY s.acquirer_name, s.acquirer_type
+     ORDER BY avg_fit_score DESC, signal_count DESC, s.acquirer_name ASC
      LIMIT 10`,
     [productId]
   );
@@ -140,13 +159,33 @@ export async function generateAcquirerThesis(productId: string): Promise<string>
 Be specific, strategic, and grounded in the data provided. Avoid generic advice.
 Write in clear prose, 3-5 paragraphs. Focus on actionable insights.`;
 
+  // FOUR LABELS, THREE OF THEM WRONG. This block described the company to a
+  // model that writes an acquisition thesis about it, and:
+  //
+  //   "Product:" was `dna.product_id` — a nanoid. The model was told the
+  //   company is called "V1StGXR8_Z5jdHi6B-myT".
+  //   "Current phase:" was `market_insight`, which is a note about the market
+  //   the founder wrote, not a stage of the company.
+  //   "Key differentiator:" was the positioning statement, which is a different
+  //   sentence with a different job; `what_we_are_not` is the differentiator.
+  //
+  //   And every absent field read "Unknown", which in a thesis prompt is a
+  //   statement about the company rather than about Foundry's records.
+  const nameRow = (await query('SELECT name FROM products WHERE id = ?', [productId])
+    .catch(() => ({ rows: [] }))).rows[0] as Record<string, unknown> | undefined;
+  const productName = (nameRow?.name as string) ?? null;
+  const orNotRecorded = (v: string | null | undefined) => v ?? 'not recorded in Foundry';
+
   const productDescription = dna
-    ? `Product: ${dna.product_id ?? 'Unknown'}
-Problem it solves: ${dna.icp_pain ?? 'Unknown'}
-Target customer: ${dna.icp_description ?? 'Unknown'}
-Key differentiator: ${dna.positioning_statement ?? 'Unknown'}
-Current phase: ${dna.market_insight ?? 'Unknown'}`
-    : 'Product DNA not available.';
+    ? `Company: ${orNotRecorded(productName)}
+Problem it solves: ${orNotRecorded(dna.icp_pain)}
+Target customer: ${orNotRecorded(dna.icp_description)}
+Positioning statement: ${orNotRecorded(dna.positioning_statement)}
+What it is deliberately not: ${orNotRecorded(dna.what_we_are_not)}
+The founder's market insight: ${orNotRecorded(dna.market_insight)}`
+    : `Company: ${orNotRecorded(productName)}
+No Product DNA has been recorded, so the problem, the customer and the
+positioning below are not available. Do not infer them.`;
 
   const maContext = maScore
     ? `M&A Readiness Score: ${maScore.overall_score}/10

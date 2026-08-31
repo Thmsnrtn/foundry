@@ -111,3 +111,62 @@ describe('governed repository change', () => {
     expect(readRepositoryFile(root, '../outside.txt')).toBeNull();
   });
 });
+
+describe('the last path component is a path too', () => {
+  // The confinement loop deliberately stops at `dirname(absolute)` and
+  // re-appends the basename UNRESOLVED, so the one segment the write actually
+  // opens was the one segment nothing checked. Every case below wrote straight
+  // through before, while the module header claimed it refused exactly this.
+
+  it('refuses a symlink whose target is inside the constitutional ring', () => {
+    mkdirSync(join(root, 'src/db/migrations'), { recursive: true });
+    writeFileSync(join(root, 'src/db/migrations/999_target.sql'), '-- the ring\n');
+    symlinkSync('../../src/db/migrations/999_target.sql', join(root, 'docs/db/artifact.sql'));
+
+    const receipt = applyRepositoryChange(change({ path: 'docs/db/artifact.sql', content: 'DROP TABLE decisions;\n' }));
+
+    // `isConstitutionalPath` was asked about the REQUESTED path, which is not
+    // in the ring. It was never asked about where the path leads.
+    expect(receipt).toMatchObject({ status: 'refused', refusedReason: 'path_is_symlink' });
+    expect(readFileSync(join(root, 'src/db/migrations/999_target.sql'), 'utf8')).toBe('-- the ring\n');
+  });
+
+  it('refuses a symlink whose target is outside the repository', () => {
+    writeFileSync(join(outside, 'elsewhere.txt'), 'not ours\n');
+    symlinkSync(join(outside, 'elsewhere.txt'), join(root, 'docs/db/escape.sql'));
+
+    const receipt = applyRepositoryChange(change({ path: 'docs/db/escape.sql', content: 'ours now\n' }));
+
+    expect(receipt).toMatchObject({ status: 'refused', refusedReason: 'path_is_symlink' });
+    expect(readFileSync(join(outside, 'elsewhere.txt'), 'utf8')).toBe('not ours\n');
+  });
+
+  it('refuses a DANGLING symlink, which is the case rollback could not undo', () => {
+    // Nothing at the target yet, so `priorExisted` would be false, the write
+    // would CREATE a file in the ring, and rollback would remove the link and
+    // leave the created file standing.
+    mkdirSync(join(root, 'src/db/migrations'), { recursive: true });
+    symlinkSync('../../src/db/migrations/998_new.sql', join(root, 'docs/db/pending.sql'));
+
+    const receipt = applyRepositoryChange(change({ path: 'docs/db/pending.sql', content: 'created\n' }));
+
+    expect(receipt).toMatchObject({ status: 'refused', refusedReason: 'path_is_symlink' });
+    expect(existsSync(join(root, 'src/db/migrations/998_new.sql'))).toBe(false);
+  });
+
+  it('still refuses a symlinked PARENT, which is what the loop was for', () => {
+    symlinkSync(outside, join(root, 'docs/linked'));
+
+    const receipt = applyRepositoryChange(change({ path: 'docs/linked/file.sql', content: 'x\n' }));
+
+    expect(receipt.status).toBe('refused');
+    expect(receipt.refusedReason).toBe('path_escapes_repository');
+  });
+
+  it('does not refuse an ordinary file, which is the point of a bright line', () => {
+    // The rule is "a symlinked final component is refused", not "anything
+    // unusual is refused" — a kernel that says no to everything protects
+    // nothing, because it stops being used.
+    expect(applyRepositoryChange(change()).status).toBe('applied');
+  });
+});

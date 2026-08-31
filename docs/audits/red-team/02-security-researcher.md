@@ -48,6 +48,41 @@ The following SEC findings from the prior audit have been addressed:
 
 ## Findings
 
+## Status ledger — verified against the code, not remembered
+
+**An audit with no ledger is a list of things somebody may have done.** These
+sixteen tickets were recorded with remediations and then partly applied; nothing
+said which, and three of the sixteen happened to cite themselves in the code
+while the rest did not. RT02-04 sat between two routes that BOTH cite their
+ticket, unfixed, for that reason alone.
+
+Each line below was checked by reading the code as it is, not the ticket's line
+numbers, which are stale. "Fixed" means the described attack no longer works —
+by whatever mechanism, not necessarily the one the ticket proposed.
+
+| Ticket | State | How |
+|---|---|---|
+| RT02-01 | fixed | CSRF middleware rewritten; the blanket JSON exemption is gone |
+| RT02-02 | fixed | `voice_sessions` joined to `products` on `owner_id` at the route |
+| RT02-03 | fixed | `getProductByOwner` before `processVoiceMemo` |
+| RT02-04 | fixed | `getProductByOwner` before `startVoiceSession`. **Was open until this cycle** |
+| RT02-05 | fixed | `benchmarkProduct` requires the subject to be an active member of the portfolio, and returns null otherwise. **Was open until this cycle** |
+| RT02-06 | fixed | `addToPortfolio` resolves the target's owner and refuses a company the caller does not own |
+| RT02-07 | fixed | All three prompts now carry the transcript inside a `<transcript>` data block, with the system prompt saying what a block is. The words are not rewritten: `wrapDataBlock` escapes the angle brackets that could close the block and changes nothing else, because the denylist in `sanitizeForPrompt` mangles a founder's own dictation. **Was open until this cycle** |
+| RT02-08 | fixed at the scan | Competitor names, positioning and pricing, and the product's own name, are wrapped in `<competitors>` and `<product>` blocks in the weekly competitive scan — the path whose output becomes signals and stressors. The sanitisation layer the ticket says does not exist has existed since Wave 1 (`ai/sanitize.ts`, `ai/prompt-shield.ts`); these two boundaries had simply never been wired to it. **Was open until this cycle** |
+| RT02-09 | partial, and the rest is a connect flow | The replay is closed: the event id is globally unique in `stripe_events`, so a captured delivery replayed at another product does nothing. The route now also refuses a `:productId` that names no operating company, which previously ran the whole chain and returned success. **The binding is still open**: one webhook secret serves every tenant, so anyone holding it can mint an event for any company. That needs the company's own Stripe account id on the product row and a per-account secret |
+| RT02-10 | fixed | The key is gone rather than hashed: `authenticatePortfolioKey` had no caller, so the `pfk_` string was minted, stored in the clear and handed to the customer while authenticating nothing. Minting removed, reader removed, migration 200 nulls the stored secrets. **Was open until this cycle** |
+| RT02-11 | fixed | `encryptCredentialPayload`/`decryptCredentialPayload` at both connect surfaces |
+| RT02-12 | fixed | `getProductIdForApiKey` hashes before comparing |
+| RT02-13 | fixed | Both pages build the error as nodes and set `textContent`; neither assigns `.innerHTML` at all. The message comes from a module fetched from a third-party CDN, so any markup in it was being parsed on the page that takes a password. **Was open until this cycle** |
+| RT02-14 | partial | `'unsafe-inline'` still stands (14 inline `<script>` blocks and 37 inline event handlers, which a nonce does not cover — a whole piece of work, not a directive edit). **What was found while reading it is worse and is fixed:** the enforced `script-src` named neither origin the product's own auth and landing pages load Clerk from, so an enforcing browser blocked authentication entirely; and a SECOND policy sat in `middleware/security.ts` that nothing imported |
+| RT02-15 | fixed (by the shape of it) | The write path checks `cross_company_patterns`, and that consent **cannot be recorded at all** — it is in the TypeScript union and not in migration 041's CHECK — so nothing has written `decision_patterns` since the gate landed. What the read paths could still serve was pre-gate and seed rows: the correct reader already excludes rows with no `contributor_hash` and counts distinct companies against the five-company floor, and the second reader, which counted ROWS and had no production caller, is deleted |
+| RT02-16 | fixed | `lib/sql-like.ts` escapes `%`, `_` and `\` and the four queries that search for a person- or model-supplied substring name `ESCAPE '\'`. A bare `%` used to resolve whichever active stressor came first. **Was open until this cycle** |
+
+**Keep this table honest by re-verifying it, not by trusting it.** A row saying
+"fixed" is a claim about code that changes; the only thing that makes it true is
+somebody reading the code again.
+
 ### RT02-01 CSRF Bypass via JSON Content-Type on Cookie-Authenticated Routes
 - **Severity:** P0
 - **Reproduction:** The CSRF middleware (`src/middleware/csrf.ts` lines 52-57) completely skips CSRF validation for any request with `Content-Type: application/json`. The comment says "Skip CSRF for JSON API routes -- they use Bearer auth, not cookies." This is wrong. The dashboard routes at `/api/*` use Clerk session cookies (set by `authMiddleware` via `__session` cookie), not Bearer tokens. An attacker can craft a page that sends a `fetch()` POST to any `/api/*` endpoint with `Content-Type: application/json` and the `credentials: include` option. The victim's `__session` cookie will be sent automatically. CORS will block the response, but the side-effecting POST will already have executed. This bypasses CSRF protection for every JSON API endpoint, including:
@@ -128,6 +163,10 @@ The following SEC findings from the prior audit have been addressed:
 - **Evidence:** `src/routes/dashboard/onboarding.ts` lines 297-303: competitor names are stored directly from user input. `src/services/conversation/context.ts` line 175: product name interpolated into AI context. No sanitization layer exists anywhere in the codebase -- `src/services/ai/sanitize.ts` does not exist.
 - **Remediation:** Create an AI input sanitization layer. Strip control characters, limit length, detect common injection patterns. Wrap all user-generated content in XML-style delimiters in prompts and instruct the model to treat delimited content as data only.
 
+- **Resolution (both).** `ai/sanitize.ts` gains `wrapDataBlock(tag, content)` and `dataBlockInstruction(tag)`: the content goes inside a named XML block with its angle brackets escaped, and the SYSTEM prompt — not the user turn — says that anything inside that tag is data and must never be followed as an instruction. Applied to the three transcript prompts in `voice/processor.ts` and to the competitive scan's two blocks.
+- **Why not `sanitizeForPrompt` at these sites.** The existing helper also replaces a denylist of phrases with `[filtered]` and redacts PII. That is the right trade for a stranger's text; it is the wrong one for a person's own dictation, where it mangles "we should act as a team" and removes the email address the founder just asked Foundry to write to. THE BOUNDARY IS THE DEFENCE; THE DENYLIST IS THE TAX. Both are in the toolbox and the choice between them is now written down.
+- **What this does not claim.** A delimiter plus an instruction raises the bar; it is not a proof. What bounds the blast radius is still the gate system — the extraction creates PENDING decisions, and no outward effect leaves without the outbound gateway's checks. Covered by `tests/unit/a-transcript-is-data.test.ts`.
+
 ### RT02-09 Per-Product Stripe Webhook Trusts URL-Supplied Product ID
 - **Severity:** P1
 - **Reproduction:** `POST /webhooks/stripe/:productId` extracts the `productId` from the URL and passes it directly to `processStripeEventChain`. The Stripe signature verification confirms the event is from Stripe, but it does not verify the `productId` matches any data in the event. An attacker who has a legitimate Stripe webhook secret (or who can replay a valid Stripe event) can route that event's processing to any product ID.
@@ -143,6 +182,7 @@ The following SEC findings from the prior audit have been addressed:
 - **Reproduction:** Portfolio API keys (`pfk_*`) are stored as plaintext in the `portfolios.api_key` column. Authentication (`authenticatePortfolioKey`) does a direct plaintext comparison: `SELECT id FROM portfolios WHERE api_key = ?`. A database compromise leaks all portfolio API keys. Compare with the main API keys which are properly SHA-256 hashed before storage.
 - **Evidence:** `src/services/portfolio/manager.ts` line 29: `const apiKey = \`pfk_${nanoid(32)}\``; line 32: stored as plaintext; lines 236-238: `authenticatePortfolioKey` queries plaintext.
 - **Remediation:** Hash portfolio API keys with SHA-256 before storage (same pattern as `src/services/rbac/permissions.ts`). Store only the hash. Return the raw key only once at creation time.
+- **Resolution:** Not hashed — removed. Reading the code for the fix found what the ticket had not: `authenticatePortfolioKey` **had no caller**. It was imported by `src/routes/api/platform.ts` and never invoked. So the key was minted, stored as a plaintext secret, returned to the portfolio owner, and authenticated nothing anywhere. Hashing would have shrunk the blast radius of a database leak and left the worse half standing: an API key handed to a customer says a door exists. `createPortfolio` no longer mints or returns a key, `authenticatePortfolioKey` is deleted, and migration `200_a_key_that_opened_nothing.sql` nulls the secrets already written — the part a code change cannot do. The column stays (dropping it needs a table rebuild) and is now visible to the write-only-column ratchet. If portfolio-key authentication is wanted it comes back whole: minted, hashed, accepted by a documented route, revocable. Covered by `tests/unit/a-key-that-opened-nothing.test.ts`.
 
 ### RT02-11 Integration Credentials Still Stored in Plaintext
 - **Severity:** P1
@@ -165,11 +205,19 @@ The following SEC findings from the prior audit have been addressed:
 - **Evidence:** `src/routes/auth/clerk.ts` line 36: `const pk = "${publishableKey}";` inside inline script. Lines 47-49: `'<p style="color:#ef4444;">Failed to load...</p><p style="color:#64748b;font-size:0.8rem;">' + e.message + '</p>'` -- string concatenation with unescaped error message inserted via `.innerHTML`.
 - **Remediation:** Use `textContent` instead of `.innerHTML` for error messages. Move the publishable key to a `data-` attribute on a DOM element.
 
+- **Resolution:** Both handlers now build two `<p>` elements and set `textContent`, so nothing on either page assigns `innerHTML` — the failure mode is removed by construction rather than by escaping. The publishable key interpolation stays: it is a server-side constant, it is public by design (that is what "publishable" means), and it is not attacker-controlled. Covered by `tests/unit/an-error-message-rendered-as-html.test.ts`.
+
 ### RT02-14 CSP Allows 'unsafe-inline' for Scripts
 - **Severity:** P2
 - **Reproduction:** The Content-Security-Policy includes `script-src 'self' 'unsafe-inline' https://unpkg.com https://*.clerk.accounts.dev`. The `'unsafe-inline'` directive completely undermines the XSS protection that CSP is supposed to provide. If any XSS vector exists (or is introduced), CSP will not block inline script execution. The auth pages use inline `<script>` tags that require `'unsafe-inline'`, but this should be addressed with nonces.
 - **Evidence:** `src/middleware/security-headers.ts` line 26: `"script-src 'self' 'unsafe-inline' https://unpkg.com https://*.clerk.accounts.dev"`.
 - **Remediation:** Replace `'unsafe-inline'` with nonce-based CSP. Generate a per-request nonce, add it to inline scripts as `<script nonce="...">`, and use `'nonce-<value>'` in the CSP directive.
+
+- **What was found reading it, and fixed.** The `'unsafe-inline'` in this directive is the least of what was wrong with it.
+  1. **The enforced policy forbade the product's own pages.** `script-src` allowed `'self'` and `https://*.clerk.accounts.dev`. The sign-up, sign-in and sign-out pages import Clerk from `https://cdn.jsdelivr.net`, and the landing page loads it from `https://unpkg.com`. An enforcing browser blocks all four — authentication does not load, and the sign-in page falls into the catch handler that says "failed to load authentication". Both origins are named now.
+  2. **There were two policies and one was enforced.** `middleware/security.ts` exported a second `securityHeaders` that nothing imported, allowing unpkg but not jsdelivr, and carrying `object-src 'none'` and `base-uri 'self'` that the live one lacked — so the dead copy looked stricter than the real one. It is deleted and its two directives moved to the live file.
+  3. **A test now reads the origins the pages actually load from and requires the policy to name each one**, so the two cannot drift apart again (`tests/unit/a-policy-that-forbade-the-product.test.ts`).
+- **What remains, and the trigger for doing it:** nonce-based CSP means a per-request nonce on 14 inline `<script>` blocks AND rewriting 37 inline event handlers, which nonces do not cover. Do it as one piece with its own verification — an XSS sink that survives is worse than a policy that admits it allows inline script.
 
 ### RT02-15 Wisdom Opt-Out Not Enforced at Query Layer for Decision Patterns
 - **Severity:** P2
@@ -177,18 +225,49 @@ The following SEC findings from the prior audit have been addressed:
 - **Evidence:** `src/services/decisions/patterns.ts` lines 9-32: No opt-out check. `src/db/client.ts` lines 222-237: `getRelevantPatterns` has no wisdom opt-out filter.
 - **Remediation:** Check `wisdom_network_opted_in` before inserting into `decision_patterns`. Add the opt-out filter to all `decision_patterns` read queries, not just the wisdom network endpoint.
 
+- **Resolution, and what reading it found.** The write path is gated on `cross_company_patterns` — and that consent type is in the TypeScript union but NOT in migration 041's CHECK constraint, so `recordConsent` throws for it and it can never be granted. Nothing has written `decision_patterns` since. The remaining exposure was therefore not new contributions but old rows: pre-gate contributions and the demo row `db/seed.ts` writes with no `contributor_hash` at all.
+  - `topPeerValidatedDecisionTypes` — the reader the dashboard uses — already counts DISTINCT contributor hashes, excludes rows with none, and holds the five-company floor.
+  - `computePeerSignal` did none of that: `COUNT(*)`, no floor, unattributed rows included, and a headline reading "Founders like you who acted on this saw positive outcomes 75% of the time (n=4)" over what could be one company deciding four times. It had **no production caller** — only tests, one of which asserted the row count as its expected behaviour. Deleted rather than repaired, because a wrong function beside the right one in the same file is a trap for the next reader.
+  - `decorateForDisplay` survives with its only caller and now takes its floor from the shared constant rather than a second literal `5`, and says "companies" where it used to say "n".
+- **Not done here, deliberately:** making `cross_company_patterns` grantable. That would open a new cross-company data flow, and the owner's answer on §13 says cross-company contribution stays explicitly opt-in and that broad release is counsel debt. Adding the toggle is that decision, not an engineering tidy-up.
+
 ### RT02-16 SQL LIKE Injection via AI-Extracted Stressor Name
 - **Severity:** P2
 - **Reproduction:** In `src/routes/api/ask.ts` lines 437-441, when the AI classifies a message as a `resolve_stressor` action, the `stressor_name` extracted by Claude is used in a SQL `LIKE` pattern: `AND stressor_name LIKE ? LIMIT 1` with value `%${classified.entities.stressor_name}%`. The stressor name comes from Claude's JSON response to a user message. An attacker can craft a message like "resolve the stressor named `%`" which would cause Claude to extract `stressor_name: "%"`. The resulting query would be `LIKE %%%` which matches any stressor, potentially resolving the wrong stressor. While this is a parameterized query (no SQL injection risk), the LIKE wildcards allow the attacker to influence which row is matched.
 - **Evidence:** `src/routes/api/ask.ts` lines 439-441: `AND stressor_name LIKE ? LIMIT 1`, `[productId, \`%${classified.entities.stressor_name}%\`]`.
 - **Remediation:** Escape LIKE wildcards (`%` and `_`) in the stressor name before using it in the query. Use `LIKE ? ESCAPE '\'` and replace `%` with `\%` and `_` with `\_`.
+- **Resolution:** Done, and at four sites rather than one — the same shape was in `scp/memory/graph.ts` (a founder's own search text), and twice in `scp/accuracy/tracker.ts` (an experiment name and a customer id parsed out of prediction criteria). `lib/sql-like.ts` owns the escaping so the pattern and its `ESCAPE` clause cannot drift apart. Worth stating plainly: the query was always parameterised and there was never an SQL injection here. The injection was into the PATTERN, and on the `resolve_stressor` path it reached a WRITE — the row it matched was marked resolved. Covered by `tests/unit/a-wildcard-the-model-chose.test.ts`.
 
-## Status: HAS P0-P1
+## Status as written, and status now
 
-**P0 findings:** 2 (RT02-02, RT02-03)
-**P1 findings:** 8 (RT02-01, RT02-04, RT02-05, RT02-06, RT02-07, RT02-08, RT02-09, RT02-10, RT02-11, RT02-12)
-**P2 findings:** 4 (RT02-13, RT02-14, RT02-15, RT02-16)
+**As the auditor left it:** 2 P0 (RT02-02, RT02-03), 8 P1 (RT02-01, RT02-04,
+RT02-05, RT02-06, RT02-07, RT02-08, RT02-09, RT02-10, RT02-11, RT02-12), 4 P2
+(RT02-13, RT02-14, RT02-15, RT02-16). The two P0s were IDOR in the voice
+endpoints, exploitable by changing an id in a request body. The P1 cluster had
+two themes: IDOR in the portfolio and benchmark layer, and no prompt-injection
+defence at any AI-ingesting surface.
 
-The two P0 findings are straightforward IDOR vulnerabilities in the voice endpoints that allow cross-tenant data manipulation and information leakage. These are exploitable by any authenticated user with zero sophistication -- just change the product_id or session_id in the request body.
+**Now: every ticket is closed except the binding half of RT02-09**, which needs
+a Stripe Connect account id on the product row and is a schema and connect-flow
+change rather than a fix. The table at the top of this file is the per-ticket
+record; four things are worth carrying out of it:
 
-The P1 cluster is dominated by two themes: (1) remaining IDOR gaps in the portfolio/benchmark layer that allow metric exfiltration, and (2) zero prompt injection defense across all AI-ingesting surfaces. The prompt injection risk is material because user-controlled strings (competitor names, product names, voice transcripts, conversation messages) are interpolated directly into Claude prompts with no sanitization, delimiting, or defense-in-depth.
+1. **In three tickets the ticket was not the worst of it.** RT02-10 asked for a
+   key to be hashed, and the key authenticated nothing. RT02-14 asked for
+   nonces, and the enforced policy forbade the product's own auth pages. RT02-15
+   asked for a read-path filter, and the consent that gates the write cannot be
+   granted at all. **Read the code the ticket points at before implementing the
+   remediation it proposes** — three times here the remediation would have made
+   a false claim more robust.
+2. **The prompt-injection theme was half solved before the audit ran.**
+   `ai/sanitize.ts` and `ai/prompt-shield.ts` existed and were used at three
+   boundaries; the transcript and competitor paths had never been wired to them.
+   "No defence exists" and "the defence is not applied here" call for different
+   work.
+3. **What a boundary claims.** Delimiting untrusted content and instructing the
+   model raises the bar. It is not a proof, and nothing in this repository says
+   otherwise: what bounds the blast radius is the gate system — pending
+   decisions, the outbound gateway, the authority ladder.
+4. **Two tests were testing what was not enforced** — the CSP middleware nobody
+   mounted, and a portfolio key reader with no caller. A green assertion about a
+   dead code path is worse than no assertion, because it is read as coverage.

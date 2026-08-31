@@ -2,7 +2,16 @@
 // FOUNDRY — Execution Playbooks
 // Founder-facing UI to create and manage standing-order playbooks.
 // Rules evaluate automatically on every agent run; actions fire without
-// per-execution approval when auto_execute=true.
+// per-execution approval when auto_execute=true AND the company's autonomy
+// for that capability permits it (see `autoExecuteVerdict`).
+//
+// APPROVING ONE ACTION NEEDED `can_trigger_actions`; WRITING THE STANDING
+// ORDER THAT APPROVES ACTIONS FOREVER NEEDED NOTHING. Every mutating route
+// here creates, arms, disarms or fires outward effects, so every one of them
+// asks the same capability the one-off approval asks. Reading is left open:
+// anyone who can see the company can see what it has standing orders to do,
+// and hiding that from a member would make the machine less legible, not
+// safer.
 // =============================================================================
 
 import { Hono } from 'hono';
@@ -18,7 +27,11 @@ import {
   deletePlaybook,
   getTriggerLog,
   getWeeklyExecutionCounts,
+  autoExecuteVerdict,
+  playbookCapability,
 } from '../../services/scp/playbooks/execution-engine.js';
+import type { AutoExecuteVerdict } from '../../services/scp/playbooks/execution-engine.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const executionPlaybooks = new Hono<AuthEnv>();
 
@@ -61,8 +74,15 @@ function resultBadgeStyle(result: string): string {
     case 'triggered':      return 'background:#4ecca322;color:#4ecca3;border:1px solid #4ecca344;';
     case 'skipped':        return 'background:rgba(255,255,255,0.05);color:var(--text-muted);border:1px solid rgba(255,255,255,0.1);';
     case 'budget_exceeded': return 'background:#ffb34722;color:#ffb347;border:1px solid #ffb34744;';
+    case 'held_for_approval': return 'background:#7aa2f722;color:#7aa2f7;border:1px solid #7aa2f744;';
     default:               return 'background:rgba(255,255,255,0.05);color:var(--text-muted);border:1px solid rgba(255,255,255,0.1);';
   }
+}
+
+/** The reason a requested auto-execute will not fire, or null if it will.
+ *  Narrowing in a template literal is unreadable; narrowing here is not. */
+function heldReason(v: AutoExecuteVerdict | undefined): string | null {
+  return v && !v.allowed ? v.reason : null;
 }
 
 const INPUT_STYLE = 'width:100%;box-sizing:border-box;padding:0.45rem 0.65rem;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:var(--text-primary);font-size:0.85rem;';
@@ -91,6 +111,15 @@ executionPlaybooks.get('/playbooks/execution', async (c) => {
     getWeeklyExecutionCounts(productId),
   ]);
 
+  // A BADGE THAT SAYS "Auto-execute" WHEN NOTHING WILL AUTO-EXECUTE IS A LIE
+  // THE FOUNDER PLANS AROUND. The checkbox records what they asked for; the
+  // ladder, the platform cap and the consent ledger decide what happens. Show
+  // the second thing, and say which of the three is holding it.
+  const verdicts = new Map<string, Awaited<ReturnType<typeof autoExecuteVerdict>>>();
+  await Promise.all(playbooks.filter((p) => p.auto_execute).map(async (p) => {
+    verdicts.set(p.id, await autoExecuteVerdict(productId, p.action_type));
+  }));
+
   const playbookItems = playbooks.map((p) => {
     const weeklyCount = weeklyCounts[p.id] ?? 0;
     const budgetLabel = p.execution_budget_weekly !== null
@@ -107,14 +136,20 @@ executionPlaybooks.get('/playbooks/execution', async (c) => {
               <span style="font-size:0.9rem;font-weight:600;color:var(--text-primary);">${p.name}</span>
               <span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,0.07);color:var(--text-dim);border:1px solid rgba(255,255,255,0.12);">${triggerTypeLabel(p.trigger_type)}</span>
               <span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,0.07);color:var(--text-dim);border:1px solid rgba(255,255,255,0.12);">${actionTypeLabel(p.action_type)}</span>
-              ${p.auto_execute
-                ? html`<span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;background:#4ecca322;color:#4ecca3;border:1px solid #4ecca344;">Auto-execute</span>`
-                : html`<span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;background:#ffb34722;color:#ffb347;border:1px solid #ffb34744;">Needs approval</span>`}
+              ${!p.auto_execute
+                ? html`<span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;background:#ffb34722;color:#ffb347;border:1px solid #ffb34744;">Needs approval</span>`
+                : verdicts.get(p.id)?.allowed
+                  ? html`<span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;background:#4ecca322;color:#4ecca3;border:1px solid #4ecca344;">Auto-executes</span>`
+                  : html`<span title="${heldReason(verdicts.get(p.id)) ?? ''}" style="font-size:0.7rem;padding:2px 8px;border-radius:99px;background:#7aa2f722;color:#7aa2f7;border:1px solid #7aa2f744;">Auto-execute asked — held</span>`}
               ${!p.is_active
                 ? html`<span style="font-size:0.7rem;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,0.04);color:var(--text-muted);border:1px solid rgba(255,255,255,0.08);">Inactive</span>`
                 : ''}
               <span style="font-size:0.72rem;color:${budgetOver ? '#ff6b6b' : 'var(--text-muted)'};margin-left:auto;">${budgetLabel}</span>
             </div>
+
+            ${heldReason(verdicts.get(p.id))
+              ? html`<div style="font-size:0.78rem;color:#7aa2f7;margin-bottom:0.4rem;">Waiting for approval each time: ${heldReason(verdicts.get(p.id))}. Grant it under <a href="/controls" style="color:#7aa2f7;">Controls → ${playbookCapability(p.action_type)}</a>.</div>`
+              : ''}
 
             <!-- Description / Conditions -->
             ${p.description ? html`<div style="font-size:0.82rem;color:var(--text-dim);margin-bottom:0.35rem;">${p.description}</div>` : ''}
@@ -322,6 +357,13 @@ executionPlaybooks.get('/playbooks/execution/new', async (c) => {
               Auto-execute (no approval required)
             </label>
           </div>
+          <div style="font-size:0.73rem;color:var(--text-muted);margin:-0.4rem 0 0 1.9rem;">
+            This asks for autonomy; it does not grant it. Foundry auto-executes only
+            while the matching dial in <a href="/controls" style="color:var(--accent);">Controls</a>
+            is set to act and a live consent is on record. Actions that leave your own
+            tools — email, calls, webhooks, MCP tools — sit under Outreach, which the
+            platform currently holds at suggest, so those always wait for you.
+          </div>
 
           <!-- Weekly Budget -->
           <div>
@@ -345,7 +387,8 @@ executionPlaybooks.get('/playbooks/execution/new', async (c) => {
 
 // ─── POST /playbooks/execution ────────────────────────────────────────────────
 
-executionPlaybooks.post('/playbooks/execution', async (c) => {
+executionPlaybooks.post('/playbooks/execution',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'New Execution Playbook', undefined, c);
 
@@ -404,27 +447,37 @@ executionPlaybooks.post('/playbooks/execution', async (c) => {
 
 // ─── POST /playbooks/execution/:id/toggle ────────────────────────────────────
 
-executionPlaybooks.post('/playbooks/execution/:id/toggle', async (c) => {
-  const founder = c.get('founder');
-  const id = c.req.param('id');
-  const body = await c.req.parseBody();
-  const active = (body.active as string) === '1';
-  await togglePlaybook(id, active, founder.id);
-  return c.redirect('/playbooks/execution');
-});
+executionPlaybooks.post('/playbooks/execution/:id/toggle',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+    const founder = c.get('founder');
+    const id = c.req.param('id');
+    const ctx = await getLayoutContext(founder, 'agents', 'Execution Playbooks', undefined, c);
+    if (!ctx.productId) return c.redirect('/playbooks/execution');
+    const body = await c.req.parseBody();
+    const active = (body.active as string) === '1';
+    // Scoped to the company the guard just authorized. Pausing a standing
+    // order is the emergency stop for it; an ownership scope put that out of
+    // reach of the people most likely to need it.
+    await togglePlaybook(id, active, ctx.productId);
+    return c.redirect('/playbooks/execution');
+  });
 
 // ─── POST /playbooks/execution/:id/delete ────────────────────────────────────
 
-executionPlaybooks.post('/playbooks/execution/:id/delete', async (c) => {
-  const founder = c.get('founder');
-  const id = c.req.param('id');
-  await deletePlaybook(id, founder.id);
-  return c.redirect('/playbooks/execution');
-});
+executionPlaybooks.post('/playbooks/execution/:id/delete',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+    const founder = c.get('founder');
+    const id = c.req.param('id');
+    const ctx = await getLayoutContext(founder, 'agents', 'Execution Playbooks', undefined, c);
+    if (!ctx.productId) return c.redirect('/playbooks/execution');
+    await deletePlaybook(id, ctx.productId);
+    return c.redirect('/playbooks/execution');
+  });
 
 // ─── POST /playbooks/execution/evaluate ──────────────────────────────────────
 
-executionPlaybooks.post('/playbooks/execution/evaluate', async (c) => {
+executionPlaybooks.post('/playbooks/execution/evaluate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Execution Playbooks', undefined, c);
 

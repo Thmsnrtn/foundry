@@ -149,7 +149,7 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
   });
 
   it('integrations (own-Stripe): canonical product_id/credentials/status + ON CONFLICT(product_id,name)', async () => {
-    const sql = `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
+    const sql = `INSERT INTO integrations (id, product_id, owner_id, name, provider, direction, status, credentials, config)
                  VALUES (?, ?, ?, 'stripe', 'stripe', 'inbound', 'active', ?, ?)
                  ON CONFLICT (product_id, name) DO UPDATE SET credentials = excluded.credentials, status = 'active'`;
     await db.execute({ sql, args: ['int1', 'p1', 'o1', 'enc1', '{}'] });
@@ -192,16 +192,10 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
     expect(Number((r.rows[0] as Record<string, unknown>).p50)).toBe(0.05);
   });
 
-  it('decision_snooze_log: live snoozeDecision signature (reason, default decision_type, UNIQUE)', async () => {
-    const sql = `INSERT INTO decision_snooze_log (id, product_id, decision_id, snoozed_until, reason)
-                 VALUES (?, ?, ?, ?, ?)
-                 ON CONFLICT(product_id, decision_id) DO UPDATE SET snoozed_until=excluded.snoozed_until, reason=excluded.reason`;
-    await db.execute({ sql, args: ['sn1', 'p1', 'dec1', '2026-02-01', 'busy'] });
-    await db.execute({ sql, args: ['sn2', 'p1', 'dec1', '2026-03-01', 'still busy'] }); // conflict path
-    const r = await db.execute({ sql: "SELECT snoozed_until, decision_type FROM decision_snooze_log WHERE product_id='p1' AND decision_id='dec1'", args: [] });
-    expect((r.rows[0] as Record<string, unknown>).snoozed_until).toBe('2026-03-01');
-    expect((r.rows[0] as Record<string, unknown>).decision_type).toBe('outbound_action'); // default
-  });
+  // `decision_snooze_log` was dropped in migration 157. It was read by a
+  // nightly cleanup sweep and written by nothing — no snooze button, no route,
+  // no API — so the sweep cleared an always-empty table. The reconciliation
+  // this case checked was real; the feature behind it never existed.
 
   // ── UPDATE-path fixes ────────────────────────────────────────────────────────
 

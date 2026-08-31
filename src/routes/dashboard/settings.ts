@@ -2,6 +2,7 @@
 // FOUNDRY — Settings Route
 // =============================================================================
 
+import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { getCookie } from 'hono/cookie';
@@ -10,9 +11,9 @@ import { query } from '../../db/client.js';
 import { createBillingPortalSession, createCheckoutSession } from '../../services/billing/stripe.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { settingsPage } from '../../views/components.js';
-import { getLayoutContext } from './_shared.js';
+import { getLayoutContext, selectedProductId } from './_shared.js';
 import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
 import { nanoid } from 'nanoid';
 import { randomBytes } from 'crypto';
 
@@ -20,7 +21,7 @@ export const settingsRoutes = new Hono<AuthEnv>();
 
 // ─── Checkout → Stripe ──────────────────────────────────────────────────────
 
-settingsRoutes.post('/checkout', requireRole('owner'), async (c) => {
+settingsRoutes.post('/checkout', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const tier = body.tier as 'solo' | 'growth' | 'investor_ready';
@@ -56,7 +57,7 @@ settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
 
-  const products = await query('SELECT id, name, github_repo_url, share_token, ingest_token, status FROM products WHERE owner_id = ?', [founder.id]);
+  const products = await query('SELECT id, name, github_repo_url, website_url, share_token, ingest_token, status, scp_status FROM products WHERE owner_id = ?', [founder.id]);
 
   // Use the cookie-selected product (consistent with ctx.productId), fall back to first
   const cookieProductId = getCookie(c, 'foundry_product');
@@ -67,6 +68,13 @@ settingsRoutes.get('/settings', async (c) => {
   const productId = firstProduct?.id ?? null;
   const shareToken = firstProduct?.share_token ?? null;
   const ingestToken = firstProduct?.ingest_token ?? null;
+  // Read without the credential: nothing that renders a page has a reason to
+  // decrypt an API key.
+  const { getSendingIdentitySummary } = await import('../../services/outbound/sending-identity.js');
+  const sendingIdentity = firstProduct
+    ? await getSendingIdentitySummary(String(firstProduct.id))
+    : null;
+  const sendingError = c.req.query('sending_error') ?? null;
   const comps = productId
     ? await query('SELECT * FROM competitors WHERE product_id = ?', [productId])
     : { rows: [] };
@@ -77,7 +85,41 @@ settingsRoutes.get('/settings', async (c) => {
     [founder.id]
   );
   const wisdomOptIn = ((wisdomResult.rows[0] as Record<string, unknown>)?.wisdom_network_opted_in ?? 1) === 1;
+
+  // WEEKEND MODE HAD AN ENFORCEMENT AND NO DOOR. `products.cadence_mode` has
+  // existed since migration 070, whose comment describes the feature — "drops
+  // agent cadences for the side-project founder segment" — and the scheduler
+  // reads it and clamps every cadence to weekly when it is 'weekend'. Nothing
+  // anywhere set it: no toggle, no onboarding question, no API. The rule was
+  // written, enforced, and unreachable, which from the founder's side is
+  // indistinguishable from not existing.
+  const cadenceResult = productId
+    ? await query('SELECT cadence_mode FROM products WHERE id = ?', [productId])
+    : { rows: [] };
+  const weekendMode = String(
+    (cadenceResult.rows[0] as Record<string, unknown> | undefined)?.cadence_mode ?? '') === 'weekend';
   const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
+
+  // Systems the owner has let report to them, and exactly what each may say.
+  // The metric token above is a credential for POSTING NUMBERS; before
+  // migration 139 it also opened two intakes with quite different consequences.
+  const { getIngestCredentials, INGEST_PURPOSES, INGEST_PURPOSE_LABELS, INGEST_REFUSAL_LABELS } = await import(
+    '../../services/institution/ingest-credentials.js');
+  const credentials = productId ? await getIngestCredentials(productId) : [];
+  // A freshly minted secret is shown once. The redirect carries the credential
+  // ID, never the secret itself — a secret in a URL lands in request logs, in
+  // history, and in whatever the browser sends as a referrer.
+  const mintedId = c.req.query('minted');
+  const { revealIngestSecret } = await import('../../services/institution/ingest-credentials.js');
+  const mintedSecret = mintedId && productId
+    ? await revealIngestSecret({ productId, founderId: founder.id as string, credentialId: mintedId })
+    : null;
+
+  // API keys. Until now nothing anywhere could issue one, so `/api/v1` and the
+  // transcript webhooks were mounted, authenticated, and unreachable.
+  const { getApiKeys, API_SCOPES, API_SCOPE_LABELS } = await import(
+    '../../services/api/api-key-issuance.js');
+  const apiKeys = productId ? await getApiKeys(productId) : [];
 
   const tierLabel = getTierBadge(founder.tier);
   const capabilities = getTierCapabilities(founder.tier);
@@ -87,6 +129,7 @@ settingsRoutes.get('/settings', async (c) => {
   const successMessages: Record<string, string> = {
     company_paused: 'Product paused. All agent activity and data ingestion are suspended.',
     company_resumed: 'Product resumed. Agent activity and data ingestion are active.',
+    interruption_ceiling: 'Saved. Foundry will not reach you more loudly than that.',
   };
   const successBannerMsg = successParam ? successMessages[successParam] ?? null : null;
 
@@ -98,7 +141,7 @@ settingsRoutes.get('/settings', async (c) => {
       products.rows as Array<Record<string, unknown>>,
       comps.rows as Array<Record<string, unknown>>,
     )}
-    <div class="card">
+    ${isPrivateOwnerInstance() ? '' : html`<div class="card">
       <h3>Subscription</h3>
       <p><strong>Current Plan:</strong> <span class="badge badge-watch">${tierLabel}</span></p>
       <p style="font-size:0.87rem;color:#6b7280;">You have access to ${capabilities.length} features.</p>
@@ -115,7 +158,7 @@ settingsRoutes.get('/settings', async (c) => {
           <form method="POST" action="/settings/manage-subscription"><button type="submit" class="btn btn-secondary btn-sm">Manage Subscription</button></form>
         ` : ''}
       </div>
-    </div>
+    </div>`}
 
     <div class="card">
       <h3>Products</h3>
@@ -125,6 +168,7 @@ settingsRoutes.get('/settings', async (c) => {
           <div>
             <strong>${p.name}</strong>
             ${p.github_repo_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.github_repo_url}</span>` : ''}
+            ${p.website_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.website_url}</span>` : ''}
           </div>
           <a href="/products/${p.id}/audit" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">View</a>
         </div>`)}
@@ -149,7 +193,7 @@ settingsRoutes.get('/settings', async (c) => {
           <form method="POST" action="/settings/toggle-product-status">
             <input type="hidden" name="product_id" value="${productId}" />
             <button type="submit" class="btn btn-secondary btn-sm" aria-label="Pause or resume product">
-              ${(firstProduct as Record<string, string> | null)?.status === 'paused' ? 'Resume' : 'Pause'}
+              ${(firstProduct as Record<string, string> | null)?.scp_status === 'paused' ? 'Resume' : 'Pause'}
             </button>
           </form>
         </div>
@@ -205,6 +249,23 @@ settingsRoutes.get('/settings', async (c) => {
     </div>
 
     <div class="card">
+      <h3>How loudly Foundry may interrupt you</h3>
+      <p style="font-size:0.8rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">
+        The loudest channel Foundry may ever use. It can go quieter than this on
+        its own — when you are strained, it does — but never louder. Push is the
+        only tier that interrupts your life.
+      </p>
+      <form method="POST" action="/settings/interruption-ceiling" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+        ${(['log', 'letter', 'notification', 'push'] as const).map((ch) => html`
+          <button type="submit" name="max_channel" value="${ch}"
+            class="btn ${((founder.preferences?.max_channel ?? 'push') === ch) ? 'btn-primary' : 'btn-ghost'}"
+            style="font-size:0.8rem;text-transform:capitalize;">
+            ${ch === 'log' ? 'Log only' : ch === 'letter' ? 'The letter' : ch === 'notification' ? 'In-app' : 'Push'}
+          </button>`)}
+      </form>
+    </div>
+
+    <div class="card">
       <h3>Wisdom Network</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         When enabled, Foundry contributes anonymized decision patterns from your business to
@@ -212,6 +273,23 @@ settingsRoutes.get('/settings', async (c) => {
         names are ever shared — only aggregated shapes and outcomes. In return, your AI
         recommendations benefit from patterns across all contributing businesses.
       </p>
+      ${productId ? html`
+      <div class="wisdom-toggle-row">
+        <div>
+          <div class="wisdom-toggle-label">Weekend pace</div>
+          <div class="wisdom-toggle-desc">This is a side project — run the agents weekly, not daily</div>
+        </div>
+        <form method="POST" action="/settings/cadence-mode" style="display:flex;align-items:center;">
+          <input type="hidden" name="mode" value="${weekendMode ? 'standard' : 'weekend'}" />
+          <label class="toggle" title="${weekendMode ? 'Back to the standard pace' : 'Slow every agent to weekly'}">
+            <input type="checkbox" ${weekendMode ? 'checked' : ''}
+              onchange="this.closest('form').submit()" />
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </form>
+      </div>` : ''}
+
       <div class="wisdom-toggle-row">
         <div>
           <div class="wisdom-toggle-label">Contribute anonymously</div>
@@ -297,6 +375,7 @@ settingsRoutes.get('/settings', async (c) => {
       <details style="margin-bottom:0.75rem;">
         <summary style="font-size:0.82rem;color:var(--text-dim);cursor:pointer;">Example payload</summary>
         <pre class="ingest-example">{
+  "mrr": 52000,
   "new_mrr": 4500,
   "churned_mrr": 200,
   "activation_rate": 0.34,
@@ -306,7 +385,15 @@ settingsRoutes.get('/settings', async (c) => {
   "active_users": 87,
   "signups_7d": 23
 }</pre>
-        <p style="font-size:0.78rem;color:var(--text-dim);margin:0.35rem 0 0;">MRR values in dollars. Rates as decimals (0.34 = 34%).</p>
+        <p style="font-size:0.78rem;color:var(--text-dim);margin:0.35rem 0 0;">
+          MRR values in dollars. Rates as decimals (0.34 = 34%).
+          <strong>"mrr" is what you bill in total this month; "new_mrr" is only
+          the part of it that is new business.</strong> Send both if you have
+          both — the total is what your investor materials and forecasts read,
+          and the movement is what revenue health is measured from. Sending
+          neither is fine; sending the total under the wrong name is not, which
+          is why they are spelled out here.
+        </p>
       </details>
       <form method="POST" action="/settings/generate-ingest" style="display:inline;">
         <button type="submit" class="btn btn-ghost btn-sm">Regenerate token</button>
@@ -315,6 +402,168 @@ settingsRoutes.get('/settings', async (c) => {
       <form method="POST" action="/settings/generate-ingest">
         <button type="submit" class="btn btn-secondary btn-sm">Generate ingest URL</button>
       </form>`}
+    </div>` : ''}
+
+    ${productId ? html`
+    <div class="card">
+      <h3>Who your customers hear from</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        Mail Foundry sends to <em>your customers</em> goes out as you — your
+        domain, your reply address, your unsubscribe footer. It never goes out
+        as Foundry. That means it needs your own email provider account, so the
+        sending domain is one you have verified and the delivery reputation is
+        yours. Mail Foundry sends to <em>you</em> — briefings, alerts, billing
+        — still comes from Foundry.
+      </p>
+      ${sendingIdentity ? html`
+      <p style="font-size:0.87rem;margin:0 0 0.5rem;">
+        Sending as <strong>${sendingIdentity.fromName
+          ? `${sendingIdentity.fromName} <${sendingIdentity.fromEmail}>`
+          : sendingIdentity.fromEmail}</strong> via ${sendingIdentity.provider}.
+      </p>
+      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 0.75rem;">
+        ${sendingIdentity.lastAcceptedAt
+          ? `Last accepted by the provider ${sendingIdentity.lastAcceptedAt}.`
+          : 'Connected, but nothing has been sent through it yet — so it has not been proved to work.'}
+      </p>
+      <form method="POST" action="/settings/sending-identity/disconnect">
+        <button type="submit" class="btn btn-ghost btn-sm">Disconnect</button>
+      </form>
+      <p style="font-size:0.75rem;color:var(--text-dim);margin:0.5rem 0 0;">
+        Disconnecting stops customer mail. It does not send it as Foundry instead.
+      </p>
+      ` : html`
+      <p style="font-size:0.82rem;color:var(--text-dim);margin:0 0 0.75rem;">
+        Not connected — mail to your customers is refused until it is.
+      </p>`}
+      ${sendingError ? html`
+      <p style="font-size:0.82rem;color:#ff6b6b;margin:0 0 0.75rem;">${sendingError}</p>` : ''}
+      <form method="POST" action="/settings/sending-identity" style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">
+        <input type="email" name="from_email" required placeholder="you@yourdomain.com"
+               value="${sendingIdentity?.fromEmail ?? ''}" />
+        <input type="text" name="from_name" placeholder="Display name (optional)"
+               value="${sendingIdentity?.fromName ?? ''}" />
+        <input type="password" name="credential" required placeholder="Your Resend API key" />
+        <button type="submit" class="btn btn-secondary btn-sm">
+          ${sendingIdentity ? 'Replace sending address' : 'Connect sending address'}
+        </button>
+      </form>
+    </div>` : ''}
+
+    ${productId ? html`
+    <div class="card">
+      <h3>Systems that report to you</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        The metric URL above is for posting numbers. Two other things a system can
+        tell Foundry — that something needs handling, and whether something Foundry
+        sent actually worked — need their own credential, so a tool you gave a
+        metrics URL to cannot do either. Each credential says what that system may
+        say. None of them authorises anything.
+      </p>
+
+      ${mintedSecret ? html`
+      <div style="margin-bottom:1rem;padding:0.75rem;border:1px solid var(--border);border-radius:6px;">
+        <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.35rem;">
+          Copy this now — it is shown once here, and afterwards only on this page.
+        </div>
+        <input type="text" readonly value="${mintedSecret}"
+          style="width:100%;font-size:0.78rem;font-family:monospace;cursor:pointer;"
+          onclick="this.select()" />
+      </div>` : ''}
+
+      ${credentials.length ? html`
+      <table style="width:100%;font-size:0.82rem;margin-bottom:1rem;">
+        <tbody>
+        ${credentials.map((cred) => html`
+          <tr>
+            <td style="padding:0.35rem 0;">
+              <strong>${cred.label}</strong>
+              <div style="color:var(--text-dim);font-size:0.76rem;">
+                may ${cred.purposes.map((p) => INGEST_PURPOSE_LABELS[p].may).join('; ')}
+              </div>
+              ${cred.refusalCount > 0 && !cred.revoked ? html`
+              <div style="color:#ffb347;font-size:0.76rem;margin-top:0.2rem;">
+                I have turned this away ${String(cred.refusalCount)} ${cred.refusalCount === 1 ? 'time' : 'times'} since it last got through — ${INGEST_REFUSAL_LABELS[cred.lastRefusalReason as keyof typeof INGEST_REFUSAL_LABELS] ?? 'I could not use what it sent'}.
+              </div>` : ''}
+            </td>
+            <td style="text-align:right;padding:0.35rem 0;">
+              ${cred.revoked ? html`<span style="color:var(--text-dim);">withdrawn</span>` : html`
+              <form method="POST" action="/settings/ingest-credentials/${cred.id}/revoke" style="display:inline;">
+                <button type="submit" class="btn btn-ghost btn-sm">Withdraw</button>
+              </form>`}
+            </td>
+          </tr>`)}
+        </tbody>
+      </table>` : ''}
+
+      <form method="POST" action="/settings/ingest-credentials">
+        <input type="text" name="label" maxlength="80" required
+          placeholder="Which system is this for?"
+          style="width:100%;margin-bottom:0.5rem;font-size:0.85rem;" />
+        ${INGEST_PURPOSES.map((purpose) => html`
+        <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;">
+          <input type="checkbox" name="purpose" value="${purpose}" />
+          It may ${INGEST_PURPOSE_LABELS[purpose].may}
+          <span style="color:var(--text-dim);"> — it may not ${INGEST_PURPOSE_LABELS[purpose].mayNot}</span>
+        </label>`)}
+        <button type="submit" class="btn btn-secondary btn-sm" style="margin-top:0.5rem;">
+          Issue credential
+        </button>
+      </form>
+    </div>` : ''}
+
+    ${productId ? html`
+    <div class="card">
+      <h3>API keys</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        For programs that read and write your data directly — the REST API, the
+        MCP tools, and call-transcript webhooks. A key does exactly what you tick
+        and nothing else, and every key expires. It is shown once when you issue
+        it, because only a hash of it is stored.
+      </p>
+
+      ${apiKeys.length ? html`
+      <table style="width:100%;font-size:0.82rem;margin-bottom:1rem;">
+        <tbody>
+        ${apiKeys.map((key) => html`
+          <tr>
+            <td style="padding:0.35rem 0;">
+              <strong>${key.label}</strong>
+              <code style="font-size:0.72rem;color:var(--text-dim);"> ${key.prefix}…</code>
+              <div style="color:var(--text-dim);font-size:0.76rem;">
+                ${key.scopes.join(', ') || 'no scopes'}
+                ${key.expiresAt ? html` · expires ${key.expiresAt.slice(0, 10)}` : ''}
+                ${key.lastUsedAt ? html` · last used ${key.lastUsedAt.slice(0, 10)}` : html` · never used`}
+              </div>
+            </td>
+            <td style="text-align:right;padding:0.35rem 0;">
+              ${key.revoked ? html`<span style="color:var(--text-dim);">withdrawn</span>` : html`
+              <form method="POST" action="/settings/api-keys/${key.id}/revoke" style="display:inline;">
+                <button type="submit" class="btn btn-ghost btn-sm">Withdraw</button>
+              </form>`}
+            </td>
+          </tr>`)}
+        </tbody>
+      </table>` : ''}
+
+      <form method="POST" action="/settings/api-keys">
+        <input type="text" name="label" maxlength="80" required
+          placeholder="What is this key for?"
+          style="width:100%;margin-bottom:0.5rem;font-size:0.85rem;" />
+        ${API_SCOPES.map((scope) => html`
+        <label style="display:block;font-size:0.82rem;margin-bottom:0.3rem;">
+          <input type="checkbox" name="scope" value="${scope}" />
+          <code style="font-size:0.76rem;">${scope}</code> —
+          may ${API_SCOPE_LABELS[scope].may}
+          <span style="color:var(--text-dim);">; may not ${API_SCOPE_LABELS[scope].mayNot}</span>
+        </label>`)}
+        <label style="display:block;font-size:0.82rem;margin:0.6rem 0 0.5rem;">
+          Expires in
+          <input type="number" name="days" min="1" max="365" value="90"
+            style="width:5rem;font-size:0.82rem;" /> days
+        </label>
+        <button type="submit" class="btn btn-secondary btn-sm">Issue API key</button>
+      </form>
     </div>` : ''}
   `;
   return c.html(dashboardLayout(ctx, content));
@@ -355,38 +604,266 @@ settingsRoutes.get('/checkout', async (c) => {
 
 // ─── Share Token Generation ───────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/generate-share', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/generate-share', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   // Use current product from cookie, not LIMIT 1 (FRICTION: settings targeting wrong product)
   const { getCookie } = await import('hono/cookie');
-  const cookieProductId = getCookie(c, 'foundry_product');
-  const products = await query(
-    'SELECT id FROM products WHERE owner_id = ? AND id = ?',
-    [founder.id, cookieProductId ?? '']
-  );
-  if (products.rows.length === 0) {
-    // Fallback to first product if cookie not set
-    const fallback = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
-    if (fallback.rows.length === 0) return c.redirect('/settings');
-  }
-  const productId = (products.rows[0] as Record<string, string>)?.id ?? cookieProductId;
-  const token = randomBytes(24).toString('hex');
+  // THE FALLBACK WAS COMPUTED AND THROWN AWAY. When the cookie was unset or
+  // stale, this ran a second query, ignored its result, and set `productId` to
+  // the cookie value it had just failed to resolve — so the UPDATE matched
+  // nothing, and the founder was redirected to a page that looked like it had
+  // generated them a public share link.
+  const productId = await selectedProductId(c, founder.id);
+  if (!productId) return c.redirect('/settings?error=no_company_selected');
 
+  const token = randomBytes(24).toString('hex');
   await query('UPDATE products SET share_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
   return c.redirect('/settings');
 });
 
 // ─── Ingest Token Generation ──────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/generate-ingest', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/generate-ingest', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
-  const products = await query('SELECT id FROM products WHERE owner_id = ? LIMIT 1', [founder.id]);
-  if (products.rows.length === 0) return c.redirect('/settings');
+  // Rotating an ingest token is a change to how a named company reports its
+  // own numbers. `LIMIT 1` with no ORDER BY rotated it on whichever company
+  // SQLite returned first.
+  const productId = await selectedProductId(c, founder.id);
+  if (!productId) return c.redirect('/settings?error=no_company_selected');
 
-  const productId = (products.rows[0] as Record<string, string>).id;
   const token = randomBytes(24).toString('hex');
-
   await query('UPDATE products SET ingest_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
+  return c.redirect('/settings');
+});
+
+// ─── Scoped ingest credentials (migration 139) ───────────────────────────────
+//
+// The owner issues one of their systems a credential and chooses, explicitly,
+// which intakes it may use. There is no "all purposes" option and no way to
+// widen one afterwards: a credential is withdrawn and a new one issued, so the
+// answer to "what was this secret ever allowed to do?" stays true.
+
+settingsRoutes.post('/settings/ingest-credentials', requireCompanyCapability('can_manage_company'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+
+  const body = await c.req.parseBody({ all: true });
+  const raw = body.purpose;
+  const purposes = (Array.isArray(raw) ? raw : raw == null ? [] : [raw]).map(String);
+
+  const { mintIngestCredential } = await import('../../services/institution/ingest-credentials.js');
+  const minted = await mintIngestCredential({
+    productId: ctx.productId, founderId: founder.id as string,
+    label: String(body.label ?? ''), purposes,
+  });
+  if ('refused' in minted) return c.redirect('/settings');
+  // The ID, not the secret. The page reads the secret back and shows it once.
+  return c.redirect(`/settings?minted=${minted.id}`);
+});
+
+// ─── The company's own sending address (migration 150) ───────────────────────
+//
+// `services/outbound/sender-of-record.ts` has always said Foundry must never be
+// the From on a message to a founder's CUSTOMER. Enforcing that needs somewhere
+// for the founder to say who their mail comes from — a rule the person it
+// binds cannot satisfy is not a rule, it is an outage. This is that control.
+//
+// The credential is the founder's own provider key, so the send goes through
+// their account: their verified domain, their reputation, their bounce
+// handling. Foundry cannot verify domain ownership and does not pretend to;
+// the provider can, and refuses anything it has not verified.
+
+settingsRoutes.post('/settings/sending-identity', requireCompanyCapability('can_manage_company'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+
+  const body = await c.req.parseBody() as Record<string, string>;
+  const { setSendingIdentity, SendingIdentityError } = await import(
+    '../../services/outbound/sending-identity.js');
+  try {
+    await setSendingIdentity({
+      productId: ctx.productId,
+      provider: 'resend',
+      credential: String(body.credential ?? ''),
+      fromEmail: String(body.from_email ?? ''),
+      fromName: body.from_name ? String(body.from_name) : null,
+    });
+  } catch (err) {
+    // The founder gets the reason. A form that silently does nothing is how
+    // the Mark Reviewed button spent its whole life.
+    if (!(err instanceof SendingIdentityError)) throw err;
+    return c.redirect(`/settings?sending_error=${encodeURIComponent(err.message)}`);
+  }
+  return c.redirect('/settings?sending=connected');
+});
+
+settingsRoutes.post('/settings/sending-identity/disconnect', requireCompanyCapability('can_manage_company'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+
+  const { clearSendingIdentity } = await import('../../services/outbound/sending-identity.js');
+  const removed = await clearSendingIdentity(ctx.productId);
+  // Said plainly: after this, mail to your customers stops rather than going
+  // out under somebody else's name.
+  return c.redirect(removed ? '/settings?sending=disconnected' : '/settings');
+});
+
+settingsRoutes.post('/settings/ingest-credentials/:id/revoke', requireCompanyCapability('can_manage_company'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+  const { revokeIngestCredential } = await import('../../services/institution/ingest-credentials.js');
+  await revokeIngestCredential({
+    productId: ctx.productId, founderId: founder.id as string, credentialId: c.req.param('id'),
+  });
+  return c.redirect('/settings');
+});
+
+// ─── API key issuance ────────────────────────────────────────────────────────
+//
+// Deliberately NOT at `POST /api/v1/settings/api-keys`, which the revenue
+// dashboard used to advertise and which never existed. It could not have:
+// that namespace is behind API-key authentication, so minting the first key
+// there would require already having one. Issuance belongs on the
+// authenticated founder surface.
+//
+// The key is rendered in this response and never redirected, because only its
+// hash is stored and there is nothing to read back — and because a secret in a
+// URL lands in request logs, in history, and in a referrer.
+
+settingsRoutes.post('/settings/api-keys', requireCompanyCapability('can_manage_company'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+
+  const body = await c.req.parseBody({ all: true });
+  const rawScopes = body.scope;
+  const scopes = (Array.isArray(rawScopes) ? rawScopes : rawScopes == null ? [] : [rawScopes]).map(String);
+  const days = Number(body.days ?? 90);
+
+  const { issueApiKey } = await import('../../services/api/api-key-issuance.js');
+  const issued = await issueApiKey({
+    productId: ctx.productId, founderId: founder.id as string,
+    label: String(body.label ?? ''), scopes,
+    days: Number.isFinite(days) ? days : undefined,
+  });
+  if ('refused' in issued) {
+    return c.html(dashboardLayout(ctx, html`
+      <div class="card">
+        <h3>Key not issued</h3>
+        <p>${issued.refused === 'scopes_required'
+          ? 'Choose at least one thing the key may do.'
+          : issued.refused === 'label_required'
+            ? 'Give the key a name so you can recognise it later.'
+            : 'That request was refused.'}</p>
+        <a href="/settings" class="btn btn-secondary btn-sm">Back to settings</a>
+      </div>`));
+  }
+
+  return c.html(dashboardLayout(ctx, html`
+    <div class="card">
+      <h3>Copy this key now</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);">
+        It is shown once. Foundry stored only a hash of it, so nobody — including
+        Foundry — can show it to you again. If you lose it, withdraw it and issue
+        another.
+      </p>
+      <input type="text" readonly value="${issued.key}"
+        style="width:100%;font-family:monospace;font-size:0.8rem;cursor:pointer;"
+        onclick="this.select()" />
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.75rem;">
+        <strong>${issued.label}</strong> — ${issued.scopes.join(', ')} ·
+        expires ${issued.expiresAt.slice(0, 10)}
+      </p>
+      <a href="/settings" class="btn btn-secondary btn-sm">Back to settings</a>
+    </div>`));
+});
+
+// ─── Portfolio principals (owner decision §12) ───────────────────────────────
+//
+// A CREDENTIAL WITH NO WAY IN IS A SENTENCE IN A MIGRATION, and this campaign
+// has found that shape four times. The ecosystem routes now require a principal
+// scoped to named companies rather than possession of one global secret, which
+// means those routes serve nobody until one can be issued. This is the way in.
+//
+// THE EXCEPTIONAL BOUNDARY, not an ordinary company capability. A credential
+// that reads SEVERAL companies at once is the same kind of act as ending a
+// subscription or archiving a product: nothing grants it, and being able to
+// manage a company is not the same as being able to mint a portfolio key over
+// it. `requireOwner()` asks that of the selected company; the service then
+// requires ownership of EVERY company named in the body, and a database trigger
+// requires it again — because the service check is a property of one function
+// while the trigger is a property of the table, and ownership can change after
+// issuance.
+
+settingsRoutes.post('/settings/portfolio-principals', requireOwner(), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+
+  const body = await c.req.parseBody({ all: true });
+  const raw = body.company;
+  const companyIds = (Array.isArray(raw) ? raw : raw == null ? [] : [raw]).map(String);
+  const days = Number(body.days ?? 90);
+
+  const { issueEcosystemPrincipal } = await import(
+    '../../services/institution/ecosystem-principal.js');
+  const issued = await issueEcosystemPrincipal({
+    founderId: founder.id as string,
+    label: String(body.label ?? ''),
+    companyIds,
+    days: Number.isFinite(days) ? days : undefined,
+  });
+
+  if ('refused' in issued) {
+    return c.html(dashboardLayout(ctx, html`
+      <div class="card">
+        <h3>Principal not issued</h3>
+        <p>${issued.refused === 'companies_required'
+          ? 'Choose at least one company it may read. There is no "all companies" option, deliberately.'
+          : issued.refused === 'label_required'
+            ? 'Give it a name so you can recognise who holds it.'
+            : 'One of those companies is not yours to grant.'}</p>
+        <a href="/settings" class="btn btn-secondary btn-sm">Back to settings</a>
+      </div>`));
+  }
+
+  return c.html(dashboardLayout(ctx, html`
+    <div class="card">
+      <h3>Copy this key now</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);">
+        Shown once. Foundry stored only a hash, so nobody — including Foundry —
+        can show it again. It reads the companies listed below and no others.
+      </p>
+      <input type="text" readonly value="${issued.key}"
+        style="width:100%;font-family:monospace;font-size:0.8rem;cursor:pointer;"
+        onclick="this.select()" />
+      <p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.75rem;">
+        <strong>${issued.label}</strong> — ${issued.companyIds.length} ${issued.companyIds.length === 1 ? 'company' : 'companies'} ·
+        expires ${issued.expiresAt.slice(0, 10)}
+      </p>
+      <a href="/settings" class="btn btn-secondary btn-sm">Back to settings</a>
+    </div>`));
+});
+
+settingsRoutes.post('/settings/portfolio-principals/:id/revoke', requireOwner(), async (c) => {
+  const founder = c.get('founder');
+  const { revokeEcosystemPrincipal } = await import(
+    '../../services/institution/ecosystem-principal.js');
+  await revokeEcosystemPrincipal(c.req.param('id'), founder.id as string);
+  return c.redirect('/settings');
+});
+
+settingsRoutes.post('/settings/api-keys/:id/revoke', requireCompanyCapability('can_manage_company'), async (c) => {
+  const founder = c.get('founder');
+  const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+  if (!ctx.productId) return c.redirect('/settings');
+  const { revokeIssuedApiKey } = await import('../../services/api/api-key-issuance.js');
+  await revokeIssuedApiKey({
+    productId: ctx.productId, founderId: founder.id as string, keyId: c.req.param('id'),
+  });
   return c.redirect('/settings');
 });
 
@@ -398,7 +875,7 @@ settingsRoutes.get('/settings/add-product', async (c) => {
 
 // ─── Subscription Management (Stripe Customer Portal) ───────────────────────
 
-settingsRoutes.post('/settings/manage-subscription', requireRole('owner'), async (c) => {
+settingsRoutes.post('/settings/manage-subscription', requireOwner(), async (c) => {
   const founder = c.get('founder');
   if (!founder.stripe_customer_id) return c.redirect('/settings?error=no_subscription');
 
@@ -417,7 +894,7 @@ settingsRoutes.post('/settings/manage-subscription', requireRole('owner'), async
 
 // ─── Wisdom Toggle ────────────────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/wisdom-toggle', requireRole('admin'), async (c) => {
+settingsRoutes.post('/settings/wisdom-toggle', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const optedIn = body.opted_in === '1' ? 1 : 0;
@@ -430,9 +907,30 @@ settingsRoutes.post('/settings/wisdom-toggle', requireRole('admin'), async (c) =
   return c.redirect('/settings');
 });
 
+// ─── Cadence mode ───────────────────────────────────────────────────────────
+//
+// The other half of migration 070's weekend mode. `can_manage_company` rather
+// than ownership: how fast the company's agents run is company configuration,
+// and a co-founder invited to manage it should be able to change it.
+settingsRoutes.post('/settings/cadence-mode',
+  requireCompanyCapability('can_manage_company'), async (c) => {
+    const founder = c.get('founder');
+    const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
+    if (!ctx.productId) return c.redirect('/settings');
+    const body = await c.req.parseBody() as Record<string, string>;
+    // A closed vocabulary with one meaningful value; anything else is the
+    // standard pace. Writing NULL rather than 'standard' would make "never set"
+    // and "explicitly standard" the same fact, and the scheduler already treats
+    // both the same — but the settings page has to be able to tell them apart
+    // to render the toggle honestly.
+    const mode = body.mode === 'weekend' ? 'weekend' : 'standard';
+    await query('UPDATE products SET cadence_mode = ? WHERE id = ?', [mode, ctx.productId]);
+    return c.redirect('/settings');
+  });
+
 // ─── Company Pause / Resume ─────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/pause-company', requireRole('owner'), async (c) => {
+settingsRoutes.post('/settings/pause-company', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const { getCookie } = await import('hono/cookie');
   const cookieProductId = getCookie(c, 'foundry_product');
@@ -446,22 +944,20 @@ settingsRoutes.post('/settings/pause-company', requireRole('owner'), async (c) =
   );
   if (ownership.rows.length === 0) return c.redirect('/settings');
 
+  // The OPERATING axis only. This used to write `status='paused'` as well, and
+  // `status` is the lifecycle axis — so pausing a company also removed it from
+  // the population that administration reads: the entitlement sweep, account
+  // mail, billing notices. A founder who paused their company and then had a
+  // card declined would have been told nothing.
   await query(
-    "UPDATE products SET status = 'paused', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    "UPDATE products SET scp_status = 'paused', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
     [cookieProductId, founder.id]
-  );
-
-  // Also pause the SCP lifecycle to stop agent runs. scp_status lives on
-  // products (the scheduler gates on it), not lifecycle_state.
-  await query(
-    "UPDATE products SET scp_status = 'paused', updated_at = datetime('now') WHERE id = ?",
-    [cookieProductId]
   );
 
   return c.redirect('/settings?success=company_paused');
 });
 
-settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) => {
+settingsRoutes.post('/settings/resume-company', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const { getCookie } = await import('hono/cookie');
   const cookieProductId = getCookie(c, 'foundry_product');
@@ -475,14 +971,12 @@ settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) 
   );
   if (ownership.rows.length === 0) return c.redirect('/settings');
 
+  // Resuming lifts the founder's own pause. It does NOT lift a billing pause:
+  // `entitlement_paused_at` belongs to the sweep and is untouched here, so a
+  // founder cannot resume their way out of an unpaid account.
   await query(
-    "UPDATE products SET status = 'active', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    "UPDATE products SET scp_status = 'active', updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
     [cookieProductId, founder.id]
-  );
-
-  await query(
-    "UPDATE products SET scp_status = 'active', updated_at = datetime('now') WHERE id = ?",
-    [cookieProductId]
   );
 
   return c.redirect('/settings?success=company_resumed');
@@ -490,7 +984,7 @@ settingsRoutes.post('/settings/resume-company', requireRole('owner'), async (c) 
 
 // ─── Toggle Product Status (Pause/Resume from Manage Company UI) ─────────────
 
-settingsRoutes.post('/settings/toggle-product-status', requireRole('owner'), async (c) => {
+settingsRoutes.post('/settings/toggle-product-status', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const productId = body.product_id;
@@ -499,26 +993,44 @@ settingsRoutes.post('/settings/toggle-product-status', requireRole('owner'), asy
 
   // Verify ownership
   const prodResult = await query(
-    'SELECT id, status FROM products WHERE id = ? AND owner_id = ?',
+    'SELECT id, scp_status FROM products WHERE id = ? AND owner_id = ?',
     [productId, founder.id]
   );
   if (prodResult.rows.length === 0) return c.redirect('/settings');
 
-  const currentStatus = (prodResult.rows[0] as Record<string, string>).status;
-  const newStatus = currentStatus === 'paused' ? 'active' : 'paused';
-  const newScpStatus = currentStatus === 'paused' ? 'active' : 'paused';
+  // Read and write the SAME axis. This read `status` and wrote both, which is
+  // how the lifecycle axis came to carry an operating decision.
+  const paused = (prodResult.rows[0] as Record<string, string>).scp_status === 'paused';
+  const newScpStatus = paused ? 'active' : 'paused';
 
   await query(
-    "UPDATE products SET status = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
-    [newStatus, productId, founder.id]
+    "UPDATE products SET scp_status = ?, updated_at = datetime('now') WHERE id = ? AND owner_id = ?",
+    [newScpStatus, productId, founder.id]
   );
 
-  await query(
-    "UPDATE products SET scp_status = ?, updated_at = datetime('now') WHERE id = ?",
-    [newScpStatus, productId]
-  ).catch(() => { /* product row may not exist yet */ });
+  return c.redirect(`/settings?success=company_${paused ? 'resumed' : 'paused'}`);
+});
 
-  return c.redirect(`/settings?success=company_${newStatus === 'paused' ? 'paused' : 'resumed'}`);
+// ─── Interruption ceiling ────────────────────────────────────────────────────
+//
+// `preferences.max_channel` is honoured by `decideChannel`, described by the
+// interruption module as the thing that "always wins", and cited by two other
+// modules as the reason they check before reaching a phone. Nothing ever wrote
+// it: `fluency` was the only key any code path put into `founders.preferences`,
+// so the ceiling branch was dead and every founder sat permanently at push.
+//
+// A control the product calls the person's own, which the person cannot
+// exercise, is a claim about a control. This is where they exercise it.
+// NO COMPANY CAPABILITY, and the same reason as `/settings/fluency` beside it:
+// this writes the AUTHENTICATED FOUNDER'S OWN row and changes nothing about
+// what Foundry may do to the company. It can only bound how loudly Foundry
+// reaches this person, and the delivery policy may still go quieter on its own.
+settingsRoutes.post('/settings/interruption-ceiling', async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.parseBody() as Record<string, string>;
+  const { setMaxChannel } = await import('../../services/ux/interruption.js');
+  await setMaxChannel(founder.id, body.max_channel as 'log' | 'letter' | 'notification' | 'push');
+  return c.redirect('/settings?success=interruption_ceiling');
 });
 
 // ─── Fluency (one product, many voices) ───────────────────────────────────────

@@ -4,6 +4,8 @@
 
 import { Hono } from 'hono';
 import { apiKeyAuth } from '../middleware/auth.js';
+import { requireOperatingForWrites } from '../middleware/entitlement.js';
+import { apiKeyRateLimit, apiModelRateLimit } from '../../middleware/rate-limit.js';
 import { agentsApi } from './agents.js';
 import { customersApi } from './customers.js';
 import { experimentsApi } from './experiments.js';
@@ -23,6 +25,21 @@ apiV1.get('/health', (c) =>
 // Apply auth to all other routes
 apiV1.use('*', apiKeyAuth);
 
+// Then limit by the CREDENTIAL, not by the source address. `/api/*` carries an
+// IP-keyed flood guard, which is right for an unauthenticated request and wrong
+// once one carries a key: a single credential rotating addresses was unlimited,
+// while many customers behind one NAT shared a budget. This runs after auth
+// because that is where the tenant is known.
+apiV1.use('*', apiKeyRateLimit);
+
+// Then ask whether Foundry may act for this company at all. The API checked the
+// credential, its scopes and its rate, and never asked — so a company whose
+// subscription had lapsed or whose founder had paused it could still write
+// customers, metrics and experiments through it. Spend and outward effects were
+// already refused two layers down; ordinary writes were not, and the owner's
+// decision is that an unpaid account is read-only.
+apiV1.use('*', requireOperatingForWrites);
+
 // Mount sub-routers
 apiV1.route('/agents', agentsApi);
 apiV1.route('/customers', customersApi);
@@ -30,6 +47,11 @@ apiV1.route('/experiments', experimentsApi);
 apiV1.route('/briefings', briefingsApi);
 apiV1.route('/metrics', metricsApi);
 apiV1.route('/webhooks', webhooksApi);
+// The MCP transport reaches tools that call a model, so it carries a tighter
+// budget on top of the ordinary one. The global AI spend ceiling is a blunt
+// instrument: it stops everyone at once when one caller is expensive.
+apiV1.use('/mcp/*', apiModelRateLimit);
+apiV1.use('/mcp', apiModelRateLimit);
 apiV1.route('/mcp', mcpApi);
 
 export default apiV1;

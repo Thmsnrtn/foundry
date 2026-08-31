@@ -3,6 +3,7 @@
 // Validates Clerk session and resolves founder from database.
 // =============================================================================
 
+import { mayBeAdmitted } from '../lib/instance-posture.js';
 import { createMiddleware } from 'hono/factory';
 import { Clerk as ClerkBackend, verifyToken, type VerifyTokenOptions } from '@clerk/backend';
 import { getFounderByClerkId, query } from '../db/client.js';
@@ -25,6 +26,38 @@ export interface AuthEnv {
 /** Return true if the request looks like a browser navigation (accepts HTML). */
 function isBrowserRequest(acceptHeader: string | undefined): boolean {
   return !!acceptHeader && acceptHeader.includes('text/html');
+}
+
+/**
+ * The identity provider's PRIMARY address, and only when it is verified.
+ *
+ * `founders.email` is not a contact field. `isFounder(founder.email)` compares
+ * against it to decide who reaches the platform-operator surface, which writes
+ * across every tenant. So this is an authorization input, and it must be an
+ * address the provider says belongs to this person — not whichever entry
+ * happened to sort first in an array.
+ *
+ * Returns null rather than a fallback. There is no safe default for "which
+ * human is this".
+ */
+export function verifiedPrimaryEmail(user: {
+  primaryEmailAddressId?: string | null;
+  emailAddresses?: Array<{
+    id?: string;
+    emailAddress?: string;
+    verification?: { status?: string | null } | null;
+  }>;
+}): string | null {
+  const addresses = user.emailAddresses ?? [];
+  const primary = user.primaryEmailAddressId
+    ? addresses.find((a) => a.id === user.primaryEmailAddressId)
+    : undefined;
+  // No primary declared is not licence to pick one. A provider that cannot say
+  // which address is primary cannot answer the question this is asking.
+  if (!primary) return null;
+  if (primary.verification?.status !== 'verified') return null;
+  const email = primary.emailAddress;
+  return email && email.includes('@') ? email : null;
 }
 
 export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
@@ -84,7 +117,51 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
       try {
         const clerk = ClerkBackend({ secretKey });
         const user = await clerk.users.getUser(clerkUserId);
-        const email = user.emailAddresses?.[0]?.emailAddress ?? '';
+        // THE PRIMARY ADDRESS, AND ONLY IF IT IS VERIFIED.
+        //
+        // This took `emailAddresses[0]` — the first entry in an array, which is
+        // neither necessarily the primary address nor necessarily verified —
+        // and wrote it to `founders.email`. That column is not merely a
+        // contact field: `isFounder(founder.email)` is a string comparison
+        // against it and is the ONLY thing standing between a session and the
+        // platform-operator surface, which performs deliberately unscoped
+        // writes across every tenant. So the whole admin boundary rested on
+        // whatever address happened to sort first, and on an assumption about
+        // the identity provider's verification policy rather than on anything
+        // checked here. AUTHENTICATION IS NOT AUTHORIZATION, and an
+        // unverified address is not even authentication.
+        //
+        // Failing closed is the right direction: the identity provider's
+        // webhook provisions the row once verification completes, so the cost
+        // of refusing here is a delay, and the cost of accepting is an
+        // impersonation path to cross-tenant writes.
+        // `result` stays empty, so the existing "Founder not found" branch
+        // below refuses the request — the same answer as any unprovisioned
+        // session, which is what this is.
+        const email = verifiedPrimaryEmail(user);
+        if (email === null) {
+          logger.warn('Auto-provision refused: no verified primary email', { clerkUserId });
+          throw new Error('unverified_primary_email');
+        }
+        // A PRIVATE INSTITUTION HAS EXACTLY ONE PRINCIPAL.
+        //
+        // Auto-provision asked only whether the identity provider had verified
+        // the address — which is the right question for a commercial service
+        // and the wrong one for a private institution on a public hostname.
+        // Anyone who found the URL could obtain a founder row, create
+        // companies inside the owner's institution, and spend his model budget
+        // doing it. Refused here rather than at a later gate, so no row, no
+        // company and no spend exists to clean up afterwards.
+        //
+        // Commercial deployments are unaffected: `mayBeAdmitted` returns true
+        // for every verified address unless the deployment declares itself
+        // private.
+        if (!mayBeAdmitted(email)) {
+          logger.warn('Auto-provision refused: not the owner of this private instance',
+            { clerkUserId });
+          throw new Error('not_the_owner_of_this_instance');
+        }
+
         const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || null;
         const founderId = nanoid();
 
@@ -165,6 +242,12 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     };
 
     c.set('founder', founder);
+    // A human, in a session. No scopes: a person's authority comes from their
+    // role on a company, not from a credential's grant list.
+    const { PRINCIPAL_KEY } = await import('./principal.js');
+    c.set(PRINCIPAL_KEY as never, {
+      kind: 'human_session', founderId: founder.id,
+    } as never);
 
     // Update last_seen_at (fire-and-forget)
     query('UPDATE founders SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [founder.id]).catch((err) => { logger.error(`last_seen_at update failed: ${err}`); });

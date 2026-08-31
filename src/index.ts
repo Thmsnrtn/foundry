@@ -5,12 +5,17 @@
 
 import { validateEnvironment } from './env.js';
 
-// Validate environment before anything else
+// Validate environment before anything else. ONE LIST — this file used to
+// carry a second pair of its own (FATAL_ENV_VARS / DEGRADED_ENV_VARS) a few
+// lines below this call, disagreeing with `env.ts` about whether an AI key was
+// fatal. On a boot without one, `env.ts` printed "✓ Environment validated" and
+// this block then printed "FATAL: required config missing".
 if (process.env.NODE_ENV !== 'test') {
   validateEnvironment();
 }
 
 import { Hono } from 'hono';
+import { staticAssetHandler } from './routes/public/static-assets.js';
 import { cors } from 'hono/cors';
 import { logger as honoLogger } from 'hono/logger';
 import { CronJob } from 'cron';
@@ -142,49 +147,6 @@ import { acquireJobLock, releaseJobLock } from './services/job-lock.js';
 // Database migrations
 import { runMigrations } from './db/migrate.js';
 
-// ─── Startup Validation ───────────────────────────────────────────────────────
-
-// Config the app genuinely cannot run without. Missing any of these means a
-// broken deploy — fail FAST and LOUD in production rather than crash-looping or
-// (worse) serving a silently half-working app. AI counts as fatal: Foundry is
-// an AI product, so no key = no product.
-const FATAL_ENV_VARS = ['TURSO_DATABASE_URL', 'CLERK_SECRET_KEY', 'CLERK_PUBLISHABLE_KEY'];
-
-// Config that disables a feature when absent but lets the app run. We warn
-// loudly (with the concrete consequence) so a misconfiguration is visible in
-// logs the moment it boots, not when the first founder hits the broken path.
-const DEGRADED_ENV_VARS: Array<{ name: string; consequence: string }> = [
-  { name: 'STRIPE_SECRET_KEY', consequence: 'billing/checkout disabled' },
-  { name: 'STRIPE_WEBHOOK_SECRET', consequence: 'subscription + trial state will not update' },
-  { name: 'STRIPE_SOLO_PRICE_ID', consequence: 'Solo checkout disabled' },
-  { name: 'STRIPE_GROWTH_PRICE_ID', consequence: 'Growth checkout disabled' },
-  { name: 'STRIPE_INVESTOR_READY_PRICE_ID', consequence: 'Investor-Ready checkout disabled' },
-  { name: 'ENCRYPTION_KEY', consequence: 'integration credentials cannot be encrypted at rest' },
-  { name: 'RESEND_API_KEY', consequence: 'all outbound email (welcome, digests, alerts) disabled' },
-  { name: 'SENTRY_DSN', consequence: 'error tracking falls back to stderr only' },
-];
-
-const fatalMissing = FATAL_ENV_VARS.filter((v) => !process.env[v]);
-if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-  fatalMissing.push('OPENROUTER_API_KEY (or ANTHROPIC_API_KEY)');
-}
-if (fatalMissing.length > 0) {
-  const msg = `FATAL: required config missing — ${fatalMissing.join(', ')}. The app cannot function; set these before deploying.`;
-  logger.error(msg);
-  // In production a misconfigured boot must fail visibly, not serve a broken app.
-  if (process.env.NODE_ENV === 'production') {
-    console.error(`[STARTUP] ${msg}`);
-    process.exit(1);
-  } else {
-    console.warn(`[STARTUP] ${msg} (continuing in non-production)`);
-  }
-}
-
-const degradedMissing = DEGRADED_ENV_VARS.filter((d) => !process.env[d.name]);
-for (const d of degradedMissing) {
-  logger.warn(`Config missing: ${d.name} — ${d.consequence}`);
-}
-
 // ─── App Setup ───────────────────────────────────────────────────────────────
 
 const app = new Hono();
@@ -223,23 +185,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-app.get('/static/:file', (c) => {
-  const fileName = c.req.param('file');
-  if (!/^[\w.-]+$/.test(fileName)) return c.notFound();
-  try {
-    // Try local (src/public) then production (../src/public from dist/)
-    let filePath = resolve(__dirname, 'public', fileName);
-    try { readFileSync(filePath); } catch {
-      filePath = resolve(__dirname, '../src/public', fileName);
-    }
-    const content = readFileSync(filePath, 'utf-8');
-    const ext = fileName.split('.').pop();
-    const mimeTypes: Record<string, string> = { css: 'text/css', js: 'application/javascript', svg: 'image/svg+xml', json: 'application/json', png: 'image/png' };
-    return c.body(content, 200, { 'Content-Type': mimeTypes[ext ?? ''] ?? 'text/plain', 'Cache-Control': 'public, max-age=3600' });
-  } catch {
-    return c.notFound();
-  }
-});
+app.get('/static/:file', staticAssetHandler(__dirname));
 
 // PWA: manifest and service worker must be served from root scope
 app.get('/manifest.json', (c) => {
@@ -296,6 +242,33 @@ app.post('/webhooks/stripe/:productId', async (c) => {
   const rawBody = await c.req.text();
   try {
     const event = verifyStripeWebhook(rawBody, signature);
+    // THE URL NAMES THE COMPANY AND NOTHING CHECKED THAT THE COMPANY EXISTS.
+    //
+    // RT02-09 is about the signature proving the event came from Stripe and not
+    // which product it belongs to. The replay half is closed one layer down: the
+    // event id is globally unique in `stripe_events`, so the same captured event
+    // delivered at a second product does nothing.
+    //
+    // What was missing here is smaller and entirely checkable: the `:productId`
+    // was passed straight through, so an id belonging to no company — a typo, a
+    // deleted company, a paused one, a company on its way out under a scheduled
+    // erasure — ran the whole chain, wrote rows against it, and returned a
+    // success body. A company that is not operating does not receive revenue
+    // events; it certainly does not get metrics written and stressors raised.
+    //
+    // WHAT IS STILL NOT PROVEN, stated so nobody reads this guard as more than
+    // it is: one webhook secret serves every tenant, so anyone holding it can
+    // mint an event for any company. Binding an event to a company needs the
+    // company's own Stripe account id on the product row and a per-account
+    // secret — a connect-flow change that cannot be verified against real
+    // Stripe from here.
+    const { query: dbQuery, operatingProduct } = await import('./db/client.js');
+    const known = await dbQuery(
+      `SELECT id FROM products WHERE id = ? AND ${operatingProduct()}`, [productId]);
+    if (known.rows.length === 0) {
+      logger.warn('stripe webhook for a product that is not operating', { productId });
+      return c.json({ error: 'Unknown product' }, 404);
+    }
     const result = await processStripeEventChain(productId, event);
     return c.json({ received: true, ...result });
   } catch (err) {
@@ -393,6 +366,27 @@ app.use('/talk/*', authMiddleware);
 app.use('/connections', authMiddleware);
 app.use('/connections/*', authMiddleware);
 app.use('/api/*', apiRateLimit);
+
+// ─── REST API v1, MOUNTED BEFORE ANY ROUTER THAT SITS AT THE ROOT ────────────
+//
+// This was mounted near the bottom, after five dashboard routers that are
+// mounted at '/' and each register `use('*', requireCompanyCapability(...))`.
+// In Hono a sub-app's catch-all middleware is merged under its MOUNT PATH, so
+// at '/' it applies to every path in the application — including `/api/v1`.
+//
+// The whole REST API therefore answered `{"error":"Unauthorized"}` to every
+// request, valid key or not, because a financial-capability check written for
+// `/roi` and `/investors` ran in front of it. Mounted alone `apiV1` answers
+// 200; with one of those routers registered above it, 401.
+//
+// Registering it here fixes that without touching a single capability check —
+// the guarded pages stay guarded, which their own tests and the mount test
+// below both assert. It IS order-dependent, which is why the ordering is not
+// the whole fix: `a-key-that-works-through-the-real-door.test.ts` drives a real
+// key through the real app, so a router mounted above this one that shadows the
+// API again fails there rather than in a customer's integration.
+app.route('/api/v1', apiV1);
+
 
 // Per-user AI rate limit (30/hr) — front-stop to the AI client's
 // per-product daily cost ceiling. Mounted AFTER auth so the founder
@@ -528,9 +522,6 @@ app.route('/', priorityApi);
 // /agents and LAST among the /agents/* modules so its /:name pattern can
 // never shadow the specific pages (inbox, okr, actions, accuracy, …).
 app.route('/agents', agentRoutes);
-// REST API v1 (API key auth — no session needed)
-app.route('/api/v1', apiV1);
-
 // API routes
 app.route('/', apiProductRoutes);
 app.route('/', apiMetricRoutes);
@@ -585,17 +576,38 @@ function startScheduler(): void {
           return;
         }
         logger.info(`Running: ${name}`, { jobName: name });
+        // A LOG IS NOT A RECORD. Every failure here was logged and forgotten,
+        // so a week in which the institution's loops threw on every run looked
+        // exactly like a calm week on the page the founder reads. The class
+        // name of the error is kept and never its message — see
+        // `loop-health.ts` for why.
+        const { recordJobFailure, recordJobSuccess } = await import(
+          './services/institution/loop-health.js');
         try {
           await job.fn();
+          await recordJobSuccess(name).catch(() => { /* health is a record, never a gate */ });
         } catch (err) {
           logger.error(`Error in ${name}`, { jobName: name, error: String(err) });
+          await recordJobFailure(name, err).catch(() => { /* as above */ });
         } finally {
           await releaseJobLock(name);
         }
       }, null, true, 'UTC');
       logger.info(`Scheduled ${name} — ${job.schedule}`, { jobName: name });
     } catch (err) {
+      // THE ONE FAILURE THE HEALTH TABLE CANNOT INFER.
+      //
+      // A job whose schedule does not build never ticks, so it never reaches
+      // the success or failure calls above and never writes a `job_health`
+      // row. Absence is what a fresh install looks like too, so the loop
+      // report cannot tell the two apart and correctly refuses to guess.
+      // Recording it here is the only moment the difference is known: at this
+      // point the scheduler has the name, the throw, and the certainty that
+      // this job will not run in this process.
       logger.error(`Failed to schedule ${name}`, { jobName: name, error: String(err) });
+      void import('./services/institution/loop-health.js')
+        .then((m) => m.recordJobFailure(name, err))
+        .catch(() => { /* health is a record, never a gate — as in the tick above */ });
     }
   }
 }
@@ -610,56 +622,88 @@ logger.info(`FOUNDRY starting — port=${port}, env=${process.env.NODE_ENV ?? 'd
 
 import { serve } from '@hono/node-server';
 
-// Run migrations then start server
-runMigrations()
-  .then(async () => {
-    // Provision SCP instances for any existing products that don't have one yet
-    try {
-      const { ensureProvisioned } = await import('./services/scp/provisioner.js');
-      const { getAllActiveProducts } = await import('./db/client.js');
-      const products = await getAllActiveProducts();
-      for (const row of products.rows) {
-        const p = row as Record<string, string>;
-        await ensureProvisioned(p.id, p.owner_id).catch((err) => {
-          logger.warn(`SCP provision skipped for ${p.id}`, { productId: p.id, error: String(err) });
-        });
-      }
-      logger.info(`SCP: provisioned for ${products.rows.length} product(s)`);
-    } catch (err) {
-      // Non-fatal: SCP provisioning failure should not block server startup
-      logger.warn('SCP provisioning error (non-fatal)', { error: String(err) });
-    }
+// ─── Starting the process, and why that is a function now ───────────────────
+//
+// This ran at module scope, so importing `src/index.ts` migrated the database,
+// provisioned SCP instances, started the scheduler and BOUND A PORT. No test
+// has ever imported it — which is why the static-asset route served corrupted
+// bytes for its entire life without anything noticing, and why a large part of
+// the route surface is untestable rather than merely untested.
+//
+// The discriminator is the test runner rather than an entry-point check,
+// because the failure DIRECTION matters. `tsx watch` and `node dist/index.js`
+// set no such variable, so both are untouched; and if the detection ever
+// stopped working, the behaviour would revert to what it has always been —
+// starting the server — rather than to a production process that serves
+// nothing. A guard on startup has to fail towards starting.
+let processStarted = false;
 
-    // Phase 3.1: only the worker (or an all-in-one) process runs the scheduler.
-    // The 'web' process group serves HTTP without the 73 in-process crons.
-    const role = getProcessRole();
-    if (process.env.NODE_ENV === 'production') {
-      if (schedulerEnabledForRole(role)) {
-        startScheduler();
-      } else {
-        logger.info(`Scheduler disabled for PROCESS_ROLE=${role}`);
+/** Whether this process took the startup branch. Observable because the branch
+ *  itself is not: the listen happens inside a promise chain after migrations,
+ *  so a test finishes long before a port would be bound and cannot tell the two
+ *  cases apart by looking. A mutation removing the guard below passed until
+ *  this existed. */
+export function isProcessStarted(): boolean {
+  return processStarted;
+}
+
+function startProcess(): void {
+  processStarted = true;
+  runMigrations()
+    .then(async () => {
+      // Provision SCP instances for any existing products that don't have one yet
+      try {
+        const { ensureProvisioned } = await import('./services/scp/provisioner.js');
+        const { getAllActiveProducts } = await import('./db/client.js');
+        const products = await getAllActiveProducts();
+        for (const row of products.rows) {
+          const p = row as Record<string, string>;
+          await ensureProvisioned(p.id, p.owner_id).catch((err) => {
+            logger.warn(`SCP provision skipped for ${p.id}`, { productId: p.id, error: String(err) });
+          });
+        }
+        logger.info(`SCP: provisioned for ${products.rows.length} product(s)`);
+      } catch (err) {
+        // Non-fatal: SCP provisioning failure should not block server startup
+        logger.warn('SCP provisioning error (non-fatal)', { error: String(err) });
       }
-    }
-    serve({
-      fetch: app.fetch,
-      port,
-    }, (info) => {
-      logger.info(`Listening on http://localhost:${info.port} (role=${role})`);
+
+      // Phase 3.1: only the worker (or an all-in-one) process runs the scheduler.
+      // The 'web' process group serves HTTP without the 73 in-process crons.
+      const role = getProcessRole();
+      if (process.env.NODE_ENV === 'production') {
+        if (schedulerEnabledForRole(role)) {
+          startScheduler();
+        } else {
+          logger.info(`Scheduler disabled for PROCESS_ROLE=${role}`);
+        }
+      }
+      serve({
+        fetch: app.fetch,
+        port,
+      }, (info) => {
+        logger.info(`Listening on http://localhost:${info.port} (role=${role})`);
+      });
+    })
+    .catch((err) => {
+      logger.error('Migration error', { error: String(err?.message ?? err) });
+      if (process.env.NODE_ENV === 'production') {
+        // In production, migration failures are fatal — don't serve with inconsistent schema
+        logger.error('FATAL: Migrations failed in production. Exiting.');
+        process.exit(1);
+      }
+      // In development, start anyway with a warning
+      const port = parseInt(process.env.PORT ?? '8080');
+      serve({ fetch: app.fetch, port }, (info) => {
+        logger.info(`Listening on http://localhost:${info.port} (with migration warnings — DEV ONLY)`);
+      });
     });
-  })
-  .catch((err) => {
-    logger.error('Migration error', { error: String(err?.message ?? err) });
-    if (process.env.NODE_ENV === 'production') {
-      // In production, migration failures are fatal — don't serve with inconsistent schema
-      logger.error('FATAL: Migrations failed in production. Exiting.');
-      process.exit(1);
-    }
-    // In development, start anyway with a warning
-    const port = parseInt(process.env.PORT ?? '8080');
-    serve({ fetch: app.fetch, port }, (info) => {
-      logger.info(`Listening on http://localhost:${info.port} (with migration warnings — DEV ONLY)`);
-    });
-  });
+
+}
+
+// Importing the app must not start a server. `VITEST` is set in every vitest
+// worker and nowhere else.
+if (!process.env.VITEST) startProcess();
 
 // ─── Graceful Shutdown ───────────────────────────────────────────────────────
 // Allow in-flight requests to complete on SIGTERM (deployment) and SIGINT (dev)

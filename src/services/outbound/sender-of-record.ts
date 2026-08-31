@@ -18,6 +18,10 @@ const FOUNDRY_SENDER_DOMAINS = ['foundry.app', 'foundry.dev'];
 
 export class SenderOfRecordError extends Error {
   readonly code = 'SENDER_OF_RECORD';
+  /** Decided before the provider was contacted. The gateway reads this to
+   * report `refused` rather than `execution`, so a caller does not schedule
+   * reconciliation for a message that never left the building. */
+  readonly notAttempted = true;
   constructor(message: string) {
     super(message);
     this.name = 'SenderOfRecordError';

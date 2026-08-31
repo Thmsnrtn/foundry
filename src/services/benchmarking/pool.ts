@@ -1,11 +1,41 @@
 // =============================================================================
 // FOUNDRY — Benchmarking Pool Service
-// Anonymous opt-in benchmarking pool for cross-product metric comparison.
+//
+// Cross-product metric comparison, from companies that agreed to contribute.
+//
+// THIS HEADER SAID "ANONYMOUS OPT-IN" AND THE CODE WAS NEITHER. `submitBenchmark`
+// took every operating company's churn and activation rate with no consent
+// check at all, and stored each contribution against its `product_id`. The
+// privacy page meanwhile promised the founder that their data would be
+// "stripped of all identifying information before contributing", and offered a
+// toggle — `benchmark_contribution` — that no code path read. Ticking it and
+// leaving it untouched produced identical behaviour.
+//
+// Both halves are fixed here, and the honest one is worth stating: the pool is
+// NOT anonymous at rest and cannot be. A company must be able to erase what it
+// contributed, and erasure needs to know whose row it is. What is true is that
+// contribution is consented, and that nothing leaves the pool except an
+// aggregate over a minimum number of DISTINCT companies. The privacy page now
+// says that instead.
+//
 // Based on migration 030 (benchmark_contributions, benchmark_percentiles tables).
 // =============================================================================
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
+import { hasConsent } from '../privacy/consent.js';
+
+/**
+ * The smallest number of DISTINCT companies a published percentile may rest on.
+ *
+ * Counting rows instead would let one company contributing weekly become a
+ * "sample" of fifty-two — the same defect `decisions/patterns.ts` documents as
+ * fixed on its own reader and `intelligence/peer-signal.ts` still has. Below
+ * this, the segment publishes nothing: a percentile over one contributor is
+ * that contributor's exact number, handed to everybody in their segment.
+ */
+import { MIN_CONTRIBUTORS } from '../institution/contributor-floor.js';
+export { MIN_CONTRIBUTORS };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,10 +48,17 @@ export interface BenchmarkContribution {
 
 // ─── submitBenchmark ──────────────────────────────────────────────────────────
 
+/**
+ * Contribute this company's metrics, if the company agreed to.
+ *
+ * The consent check is HERE rather than in the caller, so every caller
+ * converges on it. A gate one caller remembers is not a gate.
+ */
 export async function submitBenchmark(
   productId: string,
   contributions: BenchmarkContribution[]
 ): Promise<void> {
+  if (!(await hasConsent(productId, 'benchmark_contribution'))) return;
   for (const contrib of contributions) {
     const industry = contrib.industry ?? 'saas';
     const category = mapIndustryToCategory(industry);
@@ -168,17 +205,24 @@ export async function refreshPercentiles(): Promise<void> {
 
     for (const metric of metricColumns) {
       const valuesResult = await query(
-        `SELECT ${metric.column} as val FROM benchmark_contributions
+        `SELECT ${metric.column} as val, product_id FROM benchmark_contributions
          WHERE lifecycle_state = ? AND company_category = ? AND ${metric.column} IS NOT NULL
          ORDER BY ${metric.column} ASC`,
         [lifecycleState, companyCategory]
       );
 
-      const values = valuesResult.rows
-        .map((r) => (r as Record<string, unknown>).val as number)
+      const rows = valuesResult.rows as unknown as Array<Record<string, unknown>>;
+      const values = rows
+        .map((r) => r.val as number)
         .filter((v) => v !== null && v !== undefined);
 
-      if (values.length === 0) continue;
+      // DISTINCT COMPANIES, not rows. The only floor here was `length === 0`,
+      // so a segment with one contributor published that company's exact churn
+      // as all four percentiles, to everybody in the segment. And the
+      // `sample_count` a founder reads counted contributions, so one company
+      // contributing weekly looked like fifty-two peers after a year.
+      const contributors = new Set(rows.map((r) => String(r.product_id)));
+      if (contributors.size < MIN_CONTRIBUTORS) continue;
 
       const p25 = percentileValue(values, 25);
       const p50 = percentileValue(values, 50);
@@ -204,7 +248,7 @@ export async function refreshPercentiles(): Promise<void> {
           p50,
           p75,
           p90,
-          values.length,
+          contributors.size,
         ]
       );
     }
@@ -230,6 +274,49 @@ function metricNameToColumn(metricName: string): string | null {
     ai_cost_pct_of_mrr: 'ai_cost_pct_of_mrr',
   };
   return map[metricName] ?? null;
+}
+
+/**
+ * The segment a company belongs to in the benchmark pool: which lifecycle band
+ * and which company category.
+ *
+ * ONE VOCABULARY, ONE HOME. The writer derived the lifecycle band inline in the
+ * benchmark job — `prompt_1..prompt_9` mapped to
+ * 'pre_revenue' | 'early' | 'growth' | 'scale' — and the cohort reader in
+ * `network/cohort-patterns.ts` built its own key by mapping the company's
+ * FUNDING stage to the literal strings 'prompt_1'..'prompt_4'. The two never
+ * intersected, so the reader's lookup missed for every company, every time, and
+ * fell through to a set of invented percentile bands nobody could see was
+ * invented.
+ *
+ * Both sides now ask here. A segment key is a fact about how the pool is
+ * partitioned, and the module that writes the partition owns it.
+ */
+export function lifecycleBandForPrompt(currentPrompt: string | null | undefined): string {
+  const bands: Record<string, string> = {
+    prompt_1: 'pre_revenue', prompt_2: 'pre_revenue', prompt_2_5: 'pre_revenue',
+    prompt_3: 'early', prompt_4: 'early', prompt_5: 'early',
+    prompt_6: 'growth', prompt_7: 'growth', prompt_8: 'scale', prompt_9: 'scale',
+  };
+  return bands[String(currentPrompt ?? '')] ?? 'early';
+}
+
+/** The pool segment for one product, read from what the pool is keyed on. */
+export async function benchmarkSegment(
+  productId: string,
+): Promise<{ lifecycleState: string; companyCategory: string }> {
+  const row = (await query(
+    `SELECT ls.current_prompt AS current_prompt, p.market_category AS market_category
+       FROM products p
+       LEFT JOIN lifecycle_state ls ON ls.product_id = p.id
+      WHERE p.id = ?`,
+    [productId],
+  )).rows[0] as Record<string, unknown> | undefined;
+
+  return {
+    lifecycleState: lifecycleBandForPrompt(row?.current_prompt as string | null),
+    companyCategory: mapIndustryToCategory(String(row?.market_category ?? 'saas')),
+  };
 }
 
 function mapIndustryToCategory(industry: string): string {

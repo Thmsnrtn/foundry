@@ -1,0 +1,307 @@
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { runMigrations } from '../../src/db/migrate.js';
+import { query } from '../../src/db/client.js';
+import { shadowWithVerdicts } from '../fixtures/responsibility-state.js';
+import { reportCompanyObligation } from '../../src/services/founder/company-report.js';
+import {
+  recordFounderEvidenceAnswer, selectFounderEvidenceQuestion,
+} from '../../src/services/institution/founder-evidence.js';
+import { earnResponsibilityUnderstanding } from '../../src/services/institution/responsibility-understanding.js';
+import { recordExternalMetricObservations } from '../../src/services/institution/external-observation.js';
+import {
+  beginExternalMetricShadowing, resolveExternalMetricShadowing,
+} from '../../src/services/institution/external-shadowing.js';
+import {
+  getAssistingCandidates, grantAssistingAuthority, revokeAssistingAuthority,
+} from '../../src/services/institution/assisting-admission.js';
+
+// =============================================================================
+// Shadowing → Assisting, made reachable from production-facing paths.
+//
+// The audit found no missing architecture. It found two missing writers:
+// `recordConsent` supported responsibility-bound authority with exact scope and
+// expiry and had no caller anywhere in src/, and `enterResponsibilityAssisting`
+// was reachable only from the development path, which is itself undriven.
+//
+// The vertical below runs through the real services with nothing seeded past
+// the first founder report and the first outside reading.
+// =============================================================================
+
+const OWNER = 'aa_owner';
+const STRANGER = 'aa_stranger';
+const PRODUCT = 'aa_bakery';
+
+async function countOf(sql: string, args: unknown[] = []): Promise<number> {
+  return Number(((await query(sql, args)).rows[0] as Record<string, unknown>).n);
+}
+
+let responsibilityId: string;
+
+beforeAll(async () => {
+  await runMigrations();
+  await query(`INSERT INTO founders (id,clerk_user_id,email) VALUES
+    (?,'aa_clerk','owner@example.com'),(?,'aa_stranger_clerk','stranger@example.com')`, [OWNER, STRANGER]);
+  await query('INSERT INTO products (id,name,owner_id) VALUES (?,?,?)', [PRODUCT, 'Halden Bread Supply', OWNER]);
+
+  // 1. The founder reports something the company must handle.
+  const reported = await reportCompanyObligation({
+    productId: PRODUCT, founderId: OWNER, obligationKind: 'customer_commitment',
+    what: 'Answer wholesale customers about their standing orders',
+  });
+  responsibilityId = reported!.responsibility!.id;
+
+  // 2. The founder answers what Foundry cannot observe, until it is understood.
+  for (let i = 0; i < 20; i++) {
+    const question = await selectFounderEvidenceQuestion(PRODUCT);
+    if (!question || question.answerShape === 'resource_amount') break;
+    await recordFounderEvidenceAnswer({
+      requestId: question.requestId, founderId: OWNER, statement: `How the bakery handles this (${i})`,
+    });
+  }
+  await earnResponsibilityUnderstanding(PRODUCT, responsibilityId);
+
+  // 3. An outside system reports a reading, twice — the second after the
+  //    expectation, so the comparison window is honest.
+  await query(
+    `INSERT INTO metric_snapshots (id,product_id,snapshot_date,support_volume_7d)
+     VALUES ('aa_snap',?,date('now','-1 day'),40)`, [PRODUCT]);
+  await recordExternalMetricObservations({
+    productId: PRODUCT, origin: 'ingest_endpoint', readings: [{ field: 'support_volume_7d', observedValue: 12 }],
+  });
+  await query(
+    `UPDATE signal_events SET created_at=datetime('now','-1 day')
+      WHERE product_id=? AND source='external_metric_ingest'`, [PRODUCT]);
+});
+
+describe('Shadowing to Assisting through production-facing paths', () => {
+  it('does not ask for permission on something it has only been told about', async () => {
+    // Understood is not enough. Foundry has not watched anything yet, so it has
+    // nothing to show and nothing to ask for.
+    expect(await getAssistingCandidates(PRODUCT)).toEqual([]);
+    expect(await grantAssistingAuthority({
+      productId: PRODUCT, responsibilityId, founderId: OWNER,
+    })).toBeNull();
+    expect(await countOf('SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=?', [PRODUCT])).toBe(0);
+  });
+
+  it('asks only once it has watched, and says exactly what it may and may not do', async () => {
+    await beginExternalMetricShadowing({
+      productId: PRODUCT, responsibilityId, founderId: OWNER,
+      field: 'support_volume_7d', direction: 'fell',
+    });
+    const expectationId = String(((await query(
+      'SELECT id FROM responsibility_shadow_expectations WHERE product_id=?', [PRODUCT]))
+      .rows[0] as Record<string, unknown>).id);
+    await query("UPDATE responsibility_shadow_expectations SET created_at=datetime(created_at,'-60 seconds') WHERE id=?",
+      [expectationId]);
+    await recordExternalMetricObservations({
+      productId: PRODUCT, origin: 'ingest_endpoint', readings: [{ field: 'support_volume_7d', observedValue: 5 }],
+    });
+    expect(await resolveExternalMetricShadowing(PRODUCT, expectationId))
+      .toMatchObject({ classification: 'matched' });
+
+    const candidates = await getAssistingCandidates(PRODUCT);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]).toMatchObject({ responsibilityId, granted: false });
+    expect(candidates[0].comparisons).toBeGreaterThan(0);
+    // The permission is described as an effect, not as a mode.
+    expect(candidates[0].may).toMatch(/reply to a customer/);
+    expect(candidates[0].mayNot).toMatch(/anyone else|spend money/);
+    expect(`${candidates[0].may} ${candidates[0].mayNot}`)
+      .not.toMatch(/autonomy|autopilot|consent|scope|capability|assisting/i);
+  });
+
+  it('grants exact bounded authority and admits — without sending anything', async () => {
+    const granted = await grantAssistingAuthority({
+      productId: PRODUCT, responsibilityId, founderId: OWNER, durationDays: 30,
+    });
+    expect(granted).toMatchObject({ admitted: true });
+    expect(granted!.responsibility).toMatchObject({ state: 'assisting' });
+
+    // The grant is exactly one product, one responsibility, one capability, one
+    // scope, low consequence, with an expiry.
+    const consent = (await query(
+      'SELECT * FROM autonomy_consents WHERE id=?', [granted!.consentId])).rows[0] as Record<string, unknown>;
+    expect(consent).toMatchObject({
+      product_id: PRODUCT, responsibility_id: responsibilityId,
+      capability: 'customer_support', to_mode: 'act', consequence_boundary: 'low',
+    });
+    expect(JSON.parse(String(consent.allowed_scope_json))).toEqual(['send_email:support_reply']);
+    expect(consent.expires_at).not.toBeNull();
+    expect(consent.revoked_at).toBeNull();
+
+    // Admission is not execution. Nothing was planned and nothing was sent.
+    expect(await countOf('SELECT COUNT(*) n FROM outbound_actions WHERE product_id=?', [PRODUCT])).toBe(0);
+    expect(await countOf('SELECT COUNT(*) n FROM action_executions WHERE product_id=?', [PRODUCT])).toBe(0);
+  });
+
+  it('lets the founder withdraw it immediately', async () => {
+    expect(await revokeAssistingAuthority({ productId: PRODUCT, responsibilityId, founderId: OWNER })).toBe(true);
+    expect(await countOf(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=? AND revoked_at IS NULL', [PRODUCT])).toBe(0);
+
+    // What Foundry learned while assisting stays true; what it may do does not.
+    expect((await query('SELECT state FROM institutional_responsibilities WHERE id=?', [responsibilityId])).rows[0])
+      .toMatchObject({ state: 'assisting' });
+    const candidates = await getAssistingCandidates(PRODUCT);
+    expect(candidates[0]).toMatchObject({ granted: false, grantExpiresAt: null });
+  });
+
+  it('never offers a permission the database would then refuse to honour', async () => {
+    // WHAT THIS CLOSES. The offer counted every comparison. Migration 113's
+    // assisting-entry guard counts far fewer: the comparison's expectation must
+    // rest on a reconstruction claim that is `known` or `inferred` and has not
+    // expired. So a responsibility whose expectation rested on an expired claim
+    // was offered, the founder could grant the permission, and the transition
+    // into Assisting was then refused by the database.
+    //
+    // The founder paid for that. They were asked to decide, they decided, and
+    // the grant could not be used — an offer outrunning what the system allows,
+    // pointed at the person granting authority.
+    const claim = (await query(
+      `SELECT claim.id FROM responsibility_shadow_expectations x
+         JOIN reconstruction_claims claim
+           ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
+        WHERE x.product_id=? LIMIT 1`, [PRODUCT])).rows[0] as Record<string, unknown>;
+    expect(claim, 'the fixture must have a real expectation claim').toBeTruthy();
+
+    const offeredBefore = (await getAssistingCandidates(PRODUCT))
+      .filter((c) => c.responsibilityId === responsibilityId);
+    expect(offeredBefore).toHaveLength(1);
+
+    // Expire the claim the expectation rests on. Nothing else changes: the
+    // comparison row is untouched and still says Foundry watched.
+    await query("UPDATE reconstruction_claims SET valid_until=datetime('now','-1 day') WHERE id=?",
+      [String(claim.id)]);
+
+    const offeredAfter = (await getAssistingCandidates(PRODUCT))
+      .filter((c) => c.responsibilityId === responsibilityId);
+    expect(offeredAfter, 'a permission the guard would refuse must not be offered')
+      .toHaveLength(0);
+
+    // And the guard really would have refused it, which is the whole reason.
+    const comparison = String(((await query(
+      'SELECT c.id FROM responsibility_shadow_comparisons c WHERE c.product_id=? LIMIT 1', [PRODUCT]))
+      .rows[0] as Record<string, unknown>).id);
+    await expect(query(
+      `INSERT INTO responsibility_transitions
+         (id,responsibility_id,from_state,to_state,evidence_ref,authority_ref,reason,actor_ref)
+       VALUES ('aa_refused',?, 'shadowing','assisting',?,?, 'test','test')`,
+      [responsibilityId, `shadow_comparison:${comparison}`, 'autonomy_consent:does_not_exist'],
+    )).rejects.toThrow();
+
+    await query('UPDATE reconstruction_claims SET valid_until=NULL WHERE id=?', [String(claim.id)]);
+  });
+
+  it('does not hide a refusal from the person who just granted authority', async () => {
+    // THE CODEBASE'S OWN CONVENTION, AND ITS ONE EXCEPTION. The notice-carry
+    // route answers `Not carried: <reason>`; the disposition routes all surface
+    // refusals. `grantAssistingAuthority` caught the database's refusal with a
+    // bare `catch {}` and returned `admitted: false` — and the route ignored
+    // that and redirected. So the single place that grants AUTHORITY was the
+    // single place a refusal was invisible: the founder granted permission, saw
+    // no difference, and was left with a live consent Foundry could not use.
+    //
+    // The responsibility is walked up the ladder for real rather than having
+    // its state written — migration 159 refuses that, and the first draft of
+    // this test found out, which is the guard doing its job.
+    const shaky = 'aa_shaky';
+    await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability)
+      VALUES (?,?,'Answer the second inbox','customer_support')`, [shaky, PRODUCT]);
+    await shadowWithVerdicts(shaky, PRODUCT, ['matched']);
+
+    // Now break exactly what the ENTRY guard checks and the grant path does
+    // not: the claim the expectation rests on stops being current. This is the
+    // residual race the refusal handling exists for — the offer already filters
+    // on it, but the world can move between offer and grant.
+    const claim = (await query(
+      `SELECT claim.id FROM responsibility_shadow_expectations x
+         JOIN reconstruction_claims claim
+           ON x.expectation_evidence_ref='reconstruction_claim:' || claim.id
+        WHERE x.responsibility_id=? LIMIT 1`, [shaky])).rows[0] as Record<string, unknown>;
+    expect(claim, 'the fixture must have walked the ladder properly').toBeTruthy();
+    await query("UPDATE reconstruction_claims SET epistemic_status='unknown' WHERE id=?", [String(claim.id)]);
+
+    const before = Number(((await query(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=?', [PRODUCT]))
+      .rows[0] as Record<string, unknown>).n);
+    const result = await grantAssistingAuthority({
+      productId: PRODUCT, responsibilityId: shaky, founderId: OWNER, durationDays: 7,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.admitted, 'the guard refused, so nothing was admitted').toBe(false);
+    expect(result!.refusal, 'and the reason must survive the catch').toBeTruthy();
+    expect(result!.refusal).toMatch(/assisting|shadow|evidence/i);
+
+    // THE GRANT THE OWNER MADE STILL STANDS. Foundry declining to use authority
+    // is always permitted; Foundry deleting an owner's grant would be editing
+    // the owner's decision.
+    const after = Number(((await query(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=?', [PRODUCT]))
+      .rows[0] as Record<string, unknown>).n);
+    expect(after, 'the grant the owner made still stands').toBe(before + 1);
+    expect((await query('SELECT state FROM institutional_responsibilities WHERE id=?', [shaky]))
+      .rows[0]).toMatchObject({ state: 'shadowing' });
+
+    await query("UPDATE reconstruction_claims SET epistemic_status='known' WHERE id=?", [String(claim.id)]);
+
+    // AND THE CARD SAYS WHAT IS TRUE. `granted` means a live consent exists;
+    // it does not mean Foundry is helping. Those were the same field, so a
+    // refused admission read exactly like an accepted one — the founder
+    // allowed something, saw the same words back, and nothing was happening.
+    const card = (await getAssistingCandidates(PRODUCT))
+      .find((candidate) => candidate.responsibilityId === shaky);
+    expect(card, 'the offer returns once its evidence is current again').toBeTruthy();
+    expect(card).toMatchObject({ granted: true, assisting: false });
+  });
+
+  it('refuses a stranger and another tenant', async () => {
+    // Measured as a DELTA, not as a whole-file total. This asserted that the
+    // product had zero live consents afterwards, which is a fact about every
+    // other test in the file rather than about the stranger — the moment one of
+    // them legitimately left a grant standing, this failed for a reason that
+    // had nothing to do with strangers.
+    const before = await countOf(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=? AND revoked_at IS NULL', [PRODUCT]);
+    expect(await grantAssistingAuthority({
+      productId: PRODUCT, responsibilityId, founderId: STRANGER,
+    })).toBeNull();
+    expect(await revokeAssistingAuthority({
+      productId: PRODUCT, responsibilityId, founderId: STRANGER,
+    })).toBe(false);
+    expect(await countOf(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE product_id=? AND revoked_at IS NULL', [PRODUCT]),
+    'the stranger changed nothing').toBe(before);
+    // And nothing they touched belongs to them either way.
+    expect(await countOf(
+      'SELECT COUNT(*) n FROM autonomy_consents WHERE founder_id=?', [STRANGER])).toBe(0);
+  });
+
+  it('has real production callers for the authority writer and the admission', () => {
+    // The gap was never missing architecture — it was missing writers. The
+    // wiring is therefore part of the contract, and this fails if the last
+    // caller is removed.
+    const walk = (dir: string): string[] => readdirSync(dir).flatMap((entry) => {
+      const path = resolve(dir, entry);
+      return statSync(path).isDirectory() ? walk(path) : path.endsWith('.ts') ? [path] : [];
+    });
+    const src = walk(resolve(process.cwd(), 'src'));
+    const callers = (symbol: string, definedIn: string): string[] => src
+      .filter((f) => !f.endsWith(definedIn))
+      .filter((f) => new RegExp(`\\b${symbol}\\b`).test(readFileSync(f, 'utf8')))
+      .map((f) => f.replace(process.cwd() + '/', ''));
+
+    expect(callers('recordConsent', 'services/autopilot/consent.ts'))
+      .toContain('src/services/institution/assisting-admission.ts');
+    expect(callers('enterResponsibilityAssisting', 'services/institution/responsibility-assisting.ts'))
+      .toContain('src/services/institution/assisting-admission.ts');
+    // And a founder-facing route reaches the grant and the withdrawal.
+    const routes = readFileSync(resolve(process.cwd(), 'src/routes/dashboard/letter.ts'), 'utf8');
+    expect(routes).toMatch(/grantAssistingAuthority/);
+    expect(routes).toMatch(/revokeAssistingAuthority/);
+  });
+});

@@ -14,9 +14,11 @@ import {
   cancelExecution,
   listPendingExecutions,
 } from '../../services/scp/actions/executor.js';
+import { principalRef, describePrincipal } from '../../services/outbound/acting-principal.js';
 import { getAllTemplates, createTemplate } from '../../services/scp/actions/templates.js';
 import { query } from '../../db/client.js';
 import type { ActionType } from '../../services/scp/actions/executor.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentsActions = new Hono<AuthEnv>();
 
@@ -193,9 +195,16 @@ agentsActions.get('/agents/actions', async (c) => {
           <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.2rem;flex-wrap:wrap;">
             <span style="font-size:0.72rem;padding:2px 8px;border-radius:99px;${statusBadgeStyle(status)}">${status}</span>
             <span style="font-size:0.79rem;color:var(--text-dim);">${label}</span>
-            ${ex.agent_name ? html`<span style="font-size:0.79rem;color:var(--text-muted);">by ${ex.agent_name}</span>` : ''}
+            ${ex.agent_name ? html`<span style="font-size:0.79rem;color:var(--text-muted);">proposed by ${ex.agent_name}</span>` : ''}
             <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${timeAgo(ex.created_at as string)}</span>
           </div>
+          <!-- WHO PROPOSED IT IS NOT WHO ALLOWED IT. This row showed the
+               agent's name and nothing else, so an action that reached outside
+               the company recorded its authorising principal and no surface
+               read it. An authority a founder cannot see is one they cannot
+               withdraw, and the two words this page used to blur — "by" for the
+               proposer — are the distinction the constitution turns on. -->
+          <div style="font-size:0.76rem;color:var(--text-muted);margin-bottom:0.2rem;">Authorised by ${describePrincipal(ex.approved_by as string | null, String(founder.id))}</div>
           ${resultText ? html`<div style="font-size:0.8rem;color:var(--text-dim);">${resultText}</div>` : ''}
           ${ex.error_message ? html`<div style="font-size:0.79rem;color:#ff6b6b;">${ex.error_message}</div>` : ''}
         </div>
@@ -244,21 +253,34 @@ agentsActions.get('/agents/actions', async (c) => {
 
 // ─── POST /agents/actions/:id/approve ─────────────────────────────────────────
 
-agentsActions.post('/agents/actions/:id/approve', async (c) => {
-  const founder = c.get('founder');
-  const id = c.req.param('id');
-  await approveAndExecute(id, founder.id, { ownerId: founder.id });
-  return c.redirect('/agents/actions?tab=history');
-});
+agentsActions.post('/agents/actions/:id/approve',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+    const founder = c.get('founder');
+    const id = c.req.param('id');
+    const ctx = await getLayoutContext(founder, 'agents', 'Actions', undefined, c);
+    if (!ctx.productId) return c.redirect('/agents/actions');
+    // Scoped to the company the guard above just authorized, not to ownership.
+    // The ownership scope was the only thing keeping a non-owner out, which
+    // made approving an outward effect owner-only by accident;
+    // `can_trigger_actions` exists to say who may.
+    // `kind:id`, not a bare id. This was the one caller writing a bare founder
+    // id into a column every other caller filled with a principal reference.
+    await approveAndExecute(id, principalRef('founder', String(founder.id)),
+      { scopeProductId: ctx.productId });
+    return c.redirect('/agents/actions?tab=history');
+  });
 
 // ─── POST /agents/actions/:id/cancel ──────────────────────────────────────────
 
-agentsActions.post('/agents/actions/:id/cancel', async (c) => {
-  const founder = c.get('founder');
-  const id = c.req.param('id');
-  await cancelExecution(id, founder.id);
-  return c.redirect('/agents/actions?tab=pending');
-});
+agentsActions.post('/agents/actions/:id/cancel',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
+    const founder = c.get('founder');
+    const id = c.req.param('id');
+    const ctx = await getLayoutContext(founder, 'agents', 'Actions', undefined, c);
+    if (!ctx.productId) return c.redirect('/agents/actions');
+    await cancelExecution(id, ctx.productId);
+    return c.redirect('/agents/actions?tab=pending');
+  });
 
 // ─── GET /agents/actions/templates ────────────────────────────────────────────
 
@@ -298,7 +320,15 @@ agentsActions.get('/agents/actions/templates', async (c) => {
     `;
   });
 
-  const ACTION_TYPES: ActionType[] = ['send_email', 'create_ticket', 'post_slack', 'schedule_call', 'update_crm', 'custom_webhook'];
+  // WHAT THE OFFER PROMISES, THE EXECUTOR MUST BE ABLE TO DO. `schedule_call`
+  // and `update_crm` were offered here and had no integration behind them: the
+  // executor returned success with a "pending" note, so a founder could build a
+  // template, approve an action, and read it as completed while nothing
+  // happened. They are refused at execution now, and offering a type that will
+  // be refused is the same defect one step earlier. Existing templates of those
+  // types still render — removing them from the picker is not deleting a
+  // founder's work.
+  const ACTION_TYPES: ActionType[] = ['send_email', 'create_ticket', 'post_slack', 'custom_webhook'];
 
   const content = html`
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.5rem;">
@@ -357,7 +387,10 @@ agentsActions.get('/agents/actions/templates', async (c) => {
 
 // ─── POST /agents/actions/templates ───────────────────────────────────────────
 
-agentsActions.post('/agents/actions/templates', async (c) => {
+// Authors the body of what gets sent. Not a dispatch, but the same
+// permission decides who may put words in the company's outbound mail.
+agentsActions.post('/agents/actions/templates',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Action Templates', undefined, c);
 

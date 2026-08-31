@@ -18,6 +18,32 @@ export interface VoiceReplyInput {
   mime_type: 'audio/webm' | 'audio/mp4' | 'audio/wav' | string;
   context: string; // what briefing item this is replying to
   briefing_date: string;
+  /** WHO is speaking.
+   *
+   * An approval is an authority decision, and this path recorded the approver
+   * as the literal string 'voice:founder' — a label naming no one. The click
+   * path asks `can_trigger_actions` before approving one action; this path
+   * asked nothing, so a member whose access to the company deliberately
+   * excludes executing effects could dispatch one by saying "yes, go ahead".
+   * The same consequence reached through a second door that did not ask.
+   *
+   * Only the approval branch consults it. Refusing the whole route to a member
+   * without that capability would refuse them note-taking and questions, which
+   * they may do — a guard that refuses the legitimate principal is not extra
+   * secure, it is broken. */
+  founder_id: string;
+  /** WHICH action the founder is approving.
+   *
+   * Approval used to bind to nothing: `routeApproval` took the most recently
+   * created pending `action_execution` for the product and approved that one,
+   * whatever the founder had actually been replying to. `context` — "what
+   * briefing item this is replying to" — was never read, is caller-supplied
+   * free text, and defaults to the empty string, so there was no way to tell
+   * which action was meant and nothing tried.
+   *
+   * A voice approval is an authority decision about ONE outward effect. If the
+   * caller cannot name it, no approval happens. */
+  action_execution_id?: string;
 }
 
 export interface VoiceReplyResult {
@@ -28,11 +54,45 @@ export interface VoiceReplyResult {
 
 // ─── Transcription ────────────────────────────────────────────────────────────
 
+// Transcription is a paid provider call, and it was the only one in the
+// codebase that spent money without reserving it first.
+//
+// Every model call goes through `services/ai/client.ts`, which atomically
+// reserves a conservative maximum against the global, product and founder
+// ceilings before dispatch, settles the actual usage afterwards, and releases
+// only on a definitive failure. This function POSTed straight to the provider
+// with the API key and none of that — so a caller holding a valid API key could
+// drive unbounded transcription cost that the daily ceiling never saw.
+//
+// It was also invisible to the consequential-effects audit: that detector
+// matches a quoted literal URL, and this call builds its URL from a template,
+// so the inventory reported zero direct effects while this one existed.
+//
+// COST BOUND. Whisper is billed per minute of audio and the response carries
+// no duration, so there is nothing to settle against. The reservation is
+// derived from the payload size — an upper bound on how much audio can be in
+// it — and settled at that same conservative figure. Recording the bound is
+// honest; releasing it as if the call were free would not be.
+const WHISPER_CENTS_PER_MINUTE = 0.6;
+// Compressed speech runs well under 1 MB/minute; 250 KB is a deliberately
+// pessimistic floor, so the estimate over-counts rather than under-counts.
+const BYTES_PER_MINUTE_FLOOR = 250_000;
+
+function transcriptionBoundCents(audioBase64: string): number {
+  const bytes = Math.ceil((audioBase64.length * 3) / 4);
+  const minutes = Math.max(1, Math.ceil(bytes / BYTES_PER_MINUTE_FLOOR));
+  return Math.max(1, Math.ceil(minutes * WHISPER_CENTS_PER_MINUTE));
+}
+
 /**
  * Calls OpenAI Whisper to transcribe base64-encoded audio.
- * Requires OPENAI_API_KEY.
+ * Requires OPENAI_API_KEY, and spends against the same ceilings every other
+ * provider call does.
  */
-export async function transcribeAudio(audioBase64: string, mimeType: string): Promise<string> {
+export async function transcribeAudio(
+  audioBase64: string, mimeType: string,
+  attribution: { productId?: string; founderId?: string } = {},
+): Promise<string> {
   // Use OpenRouter key (preferred) or fall back to direct OpenAI key
   const apiKey = process.env.OPENROUTER_API_KEY ?? process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -64,20 +124,49 @@ export async function transcribeAudio(audioBase64: string, mimeType: string): Pr
     ? 'https://openrouter.ai/api/v1'
     : 'https://api.openai.com/v1';
 
-  const response = await fetch(`${baseUrl}/audio/transcriptions`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
+  // Reserved BEFORE dispatch. A ceiling checked afterwards is a report, not a
+  // ceiling.
+  const { reserveSpend, finishReservation } = await import('../../ai/spend-ledger.js');
+  const boundCents = transcriptionBoundCents(audioBase64);
+  const reservation = await reserveSpend({
+    productId: attribution.productId, founderId: attribution.founderId,
+    model: 'whisper-1', amountCents: boundCents,
+    caps: {
+      global: parseInt(process.env.AI_DAILY_COST_CEILING_GLOBAL_CENTS ?? '50000', 10),
+      product: parseInt(process.env.AI_DAILY_COST_CEILING_CENTS ?? '2500', 10),
+      founder: parseInt(process.env.AI_DAILY_COST_CEILING_FOUNDER_CENTS ?? '10000', 10),
     },
-    body: formData,
   });
+
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/audio/transcriptions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    });
+  } catch (error) {
+    // The provider may or may not have processed it. Ambiguous is the honest
+    // state; it counts at the full authorized amount when it expires, and is
+    // never released as if nothing happened.
+    await finishReservation(reservation, { kind: 'ambiguous' });
+    throw error;
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
+    // A refused request is a definitive non-event, so the reservation goes back.
+    await finishReservation(reservation, { kind: 'released' });
     throw new Error(`Whisper API error ${response.status}: ${body}`);
   }
 
   const text = await response.text();
+  // Settled at the bound, not at zero. The response carries no duration, so the
+  // conservative estimate IS what we know, and pretending otherwise would make
+  // the ledger read as cheaper than reality.
+  await finishReservation(reservation, { kind: 'settled', actualCents: boundCents });
   return text.trim();
 }
 
@@ -88,7 +177,7 @@ interface IntentResult {
   summary: string;
 }
 
-async function classifyIntent(transcript: string, context: string, productId?: string): Promise<IntentResult> {
+async function classifyIntent(transcript: string, context: string, productId: string): Promise<IntentResult> {
   const systemPrompt = `You classify founder voice notes into one of four action types:
 - "decision": Founder is making or recording a strategic decision ("I've decided to...", "We're going to...", "My call is...")
 - "approval": Founder is approving a proposed action ("Yes, do it", "Approved", "Go ahead with...")
@@ -139,36 +228,97 @@ async function routeDecision(
   return `strategic_decisions_log:${id}`;
 }
 
+/**
+ * Approve the action the founder named — and only that one.
+ *
+ * THE OLD BEHAVIOUR, in two layers.
+ *
+ * It selected the most recently created pending `action_execution` for the
+ * product and approved that one, ignoring `context` entirely — so a founder
+ * saying "yes, go ahead" in reply to briefing item A would have approved
+ * whichever action happened to be newest, which is not necessarily A.
+ *
+ * Except it never approved anything at all, because it looked for
+ * `status = 'pending_approval'` and `action_executions.status` permits
+ * pending / approved / executing / completed / failed / cancelled. That
+ * spelling belongs to `outbound_actions`, a different table. The query matched
+ * no rows, ever, and fell through to filing the founder's approval as a note —
+ * silently, because the fall-through is also what happens when there is
+ * genuinely nothing to approve.
+ *
+ * So the feature has never worked, and the first time it did work it would
+ * have approved the wrong thing. Both halves are fixed here: the status is the
+ * one the table has, and the action is the one the founder named.
+ *
+ * A third half, found later: setting the status was never enough. See the body.
+ *
+ * An approval is authority over ONE effect. Binding it to "the latest" is not
+ * a loose match; it is a different decision.
+ */
 async function routeApproval(
   productId: string,
+  founderId: string,
   transcript: string,
   context: string,
+  actionExecutionId?: string,
 ): Promise<string> {
-  // Look for a pending action_execution referencing this context
-  try {
-    const pending = await query(
-      `SELECT id FROM action_executions
-       WHERE product_id = ? AND status = 'pending_approval'
-       ORDER BY created_at DESC LIMIT 1`,
-      [productId],
-    );
-
-    if (pending.rows.length > 0) {
-      const execId = (pending.rows[0] as Record<string, unknown>).id as string;
-      await query(
-        `UPDATE action_executions
-         SET status = 'approved', approved_at = datetime('now'), approval_note = ?
-         WHERE id = ?`,
-        [transcript, execId],
-      );
-      return `action_executions:${execId}`;
-    }
-  } catch {
-    // action_executions table may not exist or have different schema
+  if (!actionExecutionId) {
+    // Nothing to bind to. Recorded so the founder's words are not lost, and
+    // explicitly not an approval.
+    return routeNote(productId, transcript, context, 'approval_unbound');
   }
 
-  // Fall back to storing as a note
-  return routeNote(productId, transcript, context, 'approval');
+  // WHOSE APPROVAL? The click path asks `can_trigger_actions` in middleware
+  // before it reaches the executor. Saying it out loud reached the same effect
+  // with no question asked at all, and recorded the approver as the constant
+  // 'voice:founder' — which is not a principal, it is a category.
+  const { memberMay } = await import('../../team/members.js');
+  if (!(await memberMay(productId, founderId, 'can_trigger_actions'))) {
+    return routeNote(productId, transcript, context, 'approval_not_permitted');
+  }
+
+  // AN APPROVAL THAT ONLY MOVES A STATUS IS NOT AN APPROVAL.
+  //
+  // This used to write `status = 'approved'` itself and stop there. Nothing in
+  // the system ever picks an approved execution up again — the only transition
+  // out of 'approved' lives inside `approveAndExecute`, two lines after its own
+  // claim. So the founder said "yes, go ahead", the row stopped being pending,
+  // the effect never happened, and the action left the pending queue, which is
+  // the only place the dashboard would have let them approve it properly. The
+  // voice approval did not merely fail to act; it stranded the action out of
+  // reach of the path that works.
+  //
+  // It also stepped around the kill switch. `approveAndExecute` asks whether
+  // this is still a company Foundry may act for before it claims anything; a
+  // direct UPDATE asks nothing, so a voice reply dispatched — or here, silently
+  // half-dispatched — for a company whose subscription had lapsed or whose
+  // founder had paused it.
+  //
+  // Going through the door means the atomic pending-claim, the kill switch, the
+  // dispatch and the effect receipt all happen exactly as they do for a click.
+  const { approveAndExecute } = await import('../actions/executor.js');
+  const result = await approveAndExecute(actionExecutionId, `voice:${founderId}`, {
+    scopeProductId: productId,
+  });
+
+  if (!result.success && /^refused:/.test(result.error ?? '')) {
+    // Not a mis-binding: the company is not one Foundry may act for right now.
+    // Named separately so the founder's record says which of the two happened.
+    return routeNote(productId, transcript, context, 'approval_refused');
+  }
+  if (!result.success && /not found|not pending/i.test(result.error ?? '')) {
+    // The id names nothing pending for this company. Refused, and said so,
+    // rather than falling through to approving something else.
+    return routeNote(productId, transcript, context, 'approval_unmatched');
+  }
+
+  // A provider failure is still an approval that was given and acted on: the
+  // execution row carries the error, and the founder's words belong on it.
+  await query(
+    `UPDATE action_executions SET approval_note = ? WHERE id = ? AND product_id = ?`,
+    [transcript, actionExecutionId, productId],
+  );
+  return `action_executions:${actionExecutionId}`;
 }
 
 async function routeQuestion(
@@ -221,7 +371,11 @@ export async function processVoiceReply(
   data: VoiceReplyInput,
 ): Promise<VoiceReplyResult> {
   // 1. Transcribe
-  const transcript = await transcribeAudio(data.audio_base64, data.mime_type);
+  // Attributed, so the spend lands against this company's ceiling rather than
+  // only the global one.
+  const transcript = await transcribeAudio(data.audio_base64, data.mime_type, {
+    productId, founderId: data.founder_id,
+  });
 
   // 2. Classify intent
   const intent = await classifyIntent(transcript, data.context, productId);
@@ -234,7 +388,8 @@ export async function processVoiceReply(
       routedTo = await routeDecision(productId, transcript, data.context, data.briefing_date);
       break;
     case 'approval':
-      routedTo = await routeApproval(productId, transcript, data.context);
+      routedTo = await routeApproval(
+        productId, data.founder_id, transcript, data.context, data.action_execution_id);
       break;
     case 'question':
       routedTo = await routeQuestion(productId, transcript, data.context);
@@ -249,3 +404,8 @@ export async function processVoiceReply(
     routed_to: routedTo,
   };
 }
+
+/** Exposed for tests only. The reachable path runs through `processVoiceReply`,
+ * whose first step is a paid transcription call; testing the binding through a
+ * fake audio pipeline would prove less than testing the binding. */
+export const __routeApprovalForTest = routeApproval;

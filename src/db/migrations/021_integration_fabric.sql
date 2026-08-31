@@ -1,4 +1,10 @@
 -- Integration connections per company
+-- THIS STATEMENT DID NOT RUN. `integrations` was created by `008_integrations.sql`, and
+-- `CREATE TABLE IF NOT EXISTS` over an existing table does nothing — so the
+-- columns below are a PROPOSAL, not the schema. The live shape is the earlier
+-- one plus whatever later migrations added by ALTER; read
+-- `docs/db/schema.snapshot.sql` for what the database actually has.
+-- `tests/unit/only-the-first-create-is-the-schema.test.ts` pins the full list.
 CREATE TABLE IF NOT EXISTS integrations (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,

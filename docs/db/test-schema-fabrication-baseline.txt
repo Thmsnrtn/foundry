@@ -1,0 +1,17 @@
+# Tests that build their own version of a table the migrations already create.
+# May only shrink. See scripts/check-test-schema-fabrication.mjs.
+#
+# The thirteen below are the deliberate ones, and they are together for one
+# reason: they drive the responsibility ledger through states the real triggers
+# forbid. Operating is frozen by migration 115 and the demotion cases need it,
+# so these files use stand-ins on purpose.
+#
+# That is a real exception and also a real cost: what they prove holds for a
+# database the product cannot be in. Closing it properly means a way to
+# exercise a frozen state without disabling the guard that freezes it, which is
+# a design question rather than a fixture question. Recorded rather than
+# quietly converted.
+tests/unit/responsibility-transfer.test.ts:10 → products
+tests/unit/responsibility-transfer.test.ts:11 → signal_events
+tests/unit/responsibility-transfer.test.ts:12 → autonomy_consents
+tests/unit/responsibility-transfer.test.ts:13 → action_executions

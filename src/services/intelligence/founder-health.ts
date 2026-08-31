@@ -11,8 +11,13 @@ import type { FounderHealthRow } from '../../types/database.js';
 /**
  * Compute a motivation score (0-100) based on engagement signals.
  */
-export async function computeMotivationScore(founderId: string): Promise<number> {
-  let score = 50; // Baseline
+export async function computeMotivationScore(founderId: string): Promise<number | null> {
+  // 50 is a BASELINE that evidence moves, which is a legitimate design — but a
+  // baseline nothing moved is not a measurement of anybody's motivation, and it
+  // was stored as one and read as one. `signalsUsed` counts how many of the
+  // three signals below actually applied; none, and this returns null.
+  let score = 50;
+  let signalsUsed = 0;
 
   // 1. Login frequency trend (7-day vs 30-day)
   const recentLogins = await query(
@@ -29,6 +34,7 @@ export async function computeMotivationScore(founderId: string): Promise<number>
   const avgWeeklyRate = monthly / 4;
 
   if (avgWeeklyRate > 0) {
+    signalsUsed++;
     const loginTrend = weeklyRate / avgWeeklyRate;
     if (loginTrend >= 1.2) score += 15;      // Rising engagement
     else if (loginTrend >= 0.8) score += 5;   // Stable
@@ -45,6 +51,7 @@ export async function computeMotivationScore(founderId: string): Promise<number>
     [founderId]
   );
   if (recentDecisions.rows.length > 0) {
+    signalsUsed++;
     const latencies = (recentDecisions.rows as unknown as Array<Record<string, string>>).map((d) => {
       const created = new Date(d.created_at).getTime();
       const decided = new Date(d.decided_at).getTime();
@@ -58,9 +65,10 @@ export async function computeMotivationScore(founderId: string): Promise<number>
   }
 
   // 3. Activity consistency
-  if (recent > 0) score += 10;
+  if (recent > 0) { signalsUsed++; score += 10; }
   if (recent >= 5) score += 5;
 
+  if (signalsUsed === 0) return null;
   return Math.max(0, Math.min(100, score));
 }
 
@@ -74,17 +82,32 @@ export async function detectEngagementTrend(founderId: string): Promise<Engageme
     [founderId]
   );
 
-  if (snapshots.rows.length < 3) return 'stable';
+  // Three substitutions used to stand where absence should have been reported,
+  // all about a person: fewer than three snapshots returned 'stable'; a
+  // snapshot with no motivation score counted as 50; and with no older window
+  // to compare against, the baseline was 50 again — so `delta` was measured
+  // against a number nobody recorded.
+  const scores = (snapshots.rows as unknown as Array<Record<string, unknown>>)
+    .map((s) => s.motivation_score)
+    .filter((v): v is number => v !== null && v !== undefined)
+    .map(Number);
 
-  const scores = (snapshots.rows as unknown as Array<Record<string, number>>).map((s) => s.motivation_score ?? 50);
-  const recent = scores.slice(0, 3);
+  if (scores.length < 3) return 'unknown';
+
+  const recentScores = scores.slice(0, 3);
   const older = scores.slice(3);
+  const recentAvg = recentScores.reduce((a, b) => a + b, 0) / recentScores.length;
 
-  const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-  const olderAvg = older.length > 0 ? older.reduce((a, b) => a + b, 0) / older.length : 50;
+  // A low recent average is a finding on its own; it does not need a comparison.
+  if (recentAvg < 30) return 'critical';
+
+  // Without an older window there is no trend, and 'stable' would be a claim
+  // that it had not moved.
+  if (older.length === 0) return 'unknown';
+
+  const olderAvg = older.reduce((a, b) => a + b, 0) / older.length;
   const delta = recentAvg - olderAvg;
 
-  if (recentAvg < 30) return 'critical';
   if (delta > 10) return 'rising';
   if (delta < -10) return 'declining';
   return 'stable';

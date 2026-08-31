@@ -29,7 +29,7 @@ beforeAll(async () => {
   await query('PRAGMA foreign_keys=OFF', []);
   await query("INSERT INTO products (id, name, owner_id, status) VALUES ('en_p','EnCo','en_f','active')", []);
   await query(
-    `INSERT INTO integrations (id, product_id, owner_id, name, provider, type, status, credentials, config)
+    `INSERT INTO integrations (id, product_id, owner_id, name, provider, direction, status, credentials, config)
      VALUES ('en_srv', 'en_p', 'en_f', 'outbox', 'mcp', 'outbound', 'active', ?, ?)`,
     [encryptToken('tok'), JSON.stringify({ url: 'https://outbox.example/mcp' })],
   );

@@ -3,17 +3,31 @@
   "findings": [
     {
       "file": "src/lib/webhooks.ts",
-      "line": 101,
+      "line": 135,
       "detector": "dynamic_webhook_post",
-      "status": "control_path",
-      "capability": "product-scoped customer webhook credential and receipt owner"
+      "status": "governed",
+      "capability": "customer webhook fan-out — kill-switch checked before dispatch, per-delivery receipt after"
     },
     {
       "file": "src/routes/dashboard/onboarding.ts",
-      "line": 197,
+      "line": 312,
       "detector": "external_post",
       "status": "control_path",
       "capability": "GitHub OAuth credential exchange"
+    },
+    {
+      "file": "src/services/ai/client.ts",
+      "line": 361,
+      "detector": "templated_post",
+      "status": "control_path",
+      "capability": "the central AI client — atomic reservation before dispatch, settlement or release after"
+    },
+    {
+      "file": "src/services/ai/client.ts",
+      "line": 521,
+      "detector": "templated_post",
+      "status": "control_path",
+      "capability": "the central AI client — atomic reservation before dispatch, settlement or release after"
     },
     {
       "file": "src/services/billing/stripe.ts",
@@ -52,35 +66,49 @@
     },
     {
       "file": "src/services/billing/stripe.ts",
-      "line": 125,
+      "line": 134,
       "detector": "stripe_sdk_mutation",
       "status": "control_path",
       "capability": "Foundry SaaS billing credential owner"
     },
     {
       "file": "src/services/distribution/outbound-webhooks.ts",
-      "line": 106,
+      "line": 116,
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "post_webhook capability handler"
     },
     {
+      "file": "src/services/integration/github-gateway.ts",
+      "line": 57,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "GitHub capability handlers"
+    },
+    {
+      "file": "src/services/integration/github-gateway.ts",
+      "line": 100,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "GitHub capability handlers"
+    },
+    {
       "file": "src/services/integration/linear.ts",
       "line": 181,
       "detector": "external_post",
-      "status": "unresolved",
-      "capability": "GraphQL operation requires operation tracing"
+      "status": "read_only",
+      "capability": "GraphQL queries: in-progress, completed and velocity issue counts"
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 265,
+      "line": 394,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 286,
+      "line": 417,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
@@ -89,29 +117,29 @@
       "file": "src/services/integration/slack.ts",
       "line": 132,
       "detector": "external_post",
-      "status": "control_path",
-      "capability": "Slack credential owner with effect receipts"
+      "status": "governed",
+      "capability": "Slack sender — every caller kill-switch checked before dispatch, effect receipts after"
+    },
+    {
+      "file": "src/services/integration/stripe-gateway.ts",
+      "line": 69,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "Stripe capability handlers"
+    },
+    {
+      "file": "src/services/integration/stripe-gateway.ts",
+      "line": 114,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "Stripe capability handlers"
     },
     {
       "file": "src/services/integrations/linear.ts",
       "line": 129,
       "detector": "external_post",
-      "status": "unresolved",
-      "capability": "GraphQL read/write operation requires operation tracing"
-    },
-    {
-      "file": "src/services/integrations/linear.ts",
-      "line": 157,
-      "detector": "external_post",
-      "status": "unresolved",
-      "capability": "GraphQL read/write operation requires operation tracing"
-    },
-    {
-      "file": "src/services/integrations/linear.ts",
-      "line": 196,
-      "detector": "external_post",
-      "status": "unresolved",
-      "capability": "GraphQL read/write operation requires operation tracing"
+      "status": "read_only",
+      "capability": "GraphQL query: completed issues for ship-cadence metrics"
     },
     {
       "file": "src/services/integrations/stripe-sync.ts",
@@ -121,18 +149,32 @@
       "capability": "Stripe OAuth credential exchange"
     },
     {
-      "file": "src/services/scp/actions/executor.ts",
-      "line": 429,
-      "detector": "external_post",
-      "status": "control_path",
-      "capability": "approved Linear action with durable receipt"
+      "file": "src/services/notifications/push.ts",
+      "line": 357,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "APNs/FCM device push, registered as the send_push gateway capability. It was classified unreachable — registration routes live, no sender anywhere — and the owner chose to wire it rather than remove the surface. Wiring it was the deliberate act this line asked for: it now inherits the kill-switch, the entitlement pause, dedup and audit from the same door as email, and the live caller is the risk-state transition"
     },
     {
       "file": "src/services/scp/actions/executor.ts",
-      "line": 501,
+      "line": 565,
+      "detector": "external_post",
+      "status": "governed",
+      "capability": "approved Linear action — kill-switch checked before dispatch, durable receipt after"
+    },
+    {
+      "file": "src/services/scp/actions/executor.ts",
+      "line": 637,
       "detector": "dynamic_webhook_post",
+      "status": "governed",
+      "capability": "approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt"
+    },
+    {
+      "file": "src/services/scp/briefing/voice-reply.ts",
+      "line": 143,
+      "detector": "templated_post",
       "status": "control_path",
-      "capability": "approved custom webhook with SSRF guard and durable receipt"
+      "capability": "Whisper transcription — reserves against the AI ceilings before dispatch, settles at a conservative bound, releases only on a definitive refusal"
     }
   ]
 }

@@ -5,6 +5,9 @@
 
 import { createMiddleware } from 'hono/factory';
 
+import { query } from '../db/client.js';
+import { log } from '../lib/logger.js';
+
 interface RateLimitEntry {
   count: number;
   resetAt: number;
@@ -27,16 +30,100 @@ setInterval(() => {
 }, 60000);
 
 /**
+ * The caller's address, as reported by something the caller cannot write.
+ *
+ * The default key used to be `x-forwarded-for` verbatim, whole, and first in
+ * preference order. That header is APPENDED to by each hop: on Fly, which is
+ * where this runs, the platform adds the real address to the end of whatever
+ * the client sent. Reading the whole string therefore let a caller choose its
+ * own bucket — a random value per request is a fresh counter every time and no
+ * limit at all — and filled a store whose emergency eviction resets the
+ * counters of everyone else in it.
+ *
+ * Order of trust: the platform's own header, then the CDN's, then the LAST hop
+ * of X-Forwarded-For, which is the entry the nearest trusted proxy wrote. Only
+ * the front of that list is attacker-controlled.
+ */
+export function clientIp(c: { req: { header: (name: string) => string | undefined } }): string {
+  const fly = c.req.header('fly-client-ip');
+  if (fly) return normalizeIp(fly);
+  const cf = c.req.header('cf-connecting-ip');
+  if (cf) return normalizeIp(cf);
+  const xff = c.req.header('x-forwarded-for');
+  if (xff) {
+    const hops = xff.split(',').map((h) => h.trim()).filter(Boolean);
+    if (hops.length) return normalizeIp(hops[hops.length - 1]!);
+  }
+  return 'unknown';
+}
+
+/**
+ * One caller, one bucket, however they spell their address.
+ *
+ * An address is a string until something turns it into an identity, and a
+ * limiter keyed on the string gives a fresh allowance to anyone who can write
+ * theirs a different way. `2001:db8::1`, `2001:0DB8:0000:...:0001` and
+ * `[2001:db8::1]:443` are the same machine and were three budgets.
+ *
+ * IPv6 is bucketed by its /64. A residential IPv6 allocation is a /64 or
+ * larger, so the caller chooses the low 64 bits freely — keying on the full
+ * address is keying on something they control, which is the same defect as
+ * trusting X-Forwarded-For, one layer down. A /64 is the smallest unit that is
+ * assigned rather than chosen.
+ */
+export function normalizeIp(raw: string): string {
+  let ip = raw.trim().toLowerCase();
+
+  // `[v6]:port` and `v4:port` — a proxy may include the source port.
+  const bracketed = /^\[([^\]]+)\](?::\d+)?$/.exec(ip);
+  if (bracketed) ip = bracketed[1]!;
+  else if (/^\d{1,3}(\.\d{1,3}){3}:\d+$/.test(ip)) ip = ip.slice(0, ip.lastIndexOf(':'));
+
+  // IPv4-mapped IPv6: the same machine as the bare IPv4 address.
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(ip);
+  if (mapped) return mapped[1]!;
+
+  if (!ip.includes(':')) return ip;                      // IPv4, or something odd
+
+  const groups = expandIpv6(ip);
+  if (!groups) return ip;                                // unparseable: key on it as-is
+  return `${groups.slice(0, 4).join(':')}::/64`;
+}
+
+/** IPv6 to eight zero-padded groups, or null when it is not an address. */
+function expandIpv6(ip: string): string[] | null {
+  const halves = ip.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0]!.split(':').filter(Boolean) : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1]!.split(':').filter(Boolean) : [];
+  if (halves.length === 1 && head.length !== 8) return null;
+  const fill = 8 - head.length - tail.length;
+  if (fill < 0) return null;
+  const groups = [...head, ...Array(halves.length === 2 ? fill : 0).fill('0'), ...tail];
+  if (groups.length !== 8) return null;
+  if (!groups.every((g) => /^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.map((g) => g.replace(/^0+(?=.)/, ''));
+}
+
+/**
  * Rate limiting middleware factory.
  * @param maxRequests Maximum requests per window
  * @param windowMs Window size in milliseconds
  * @param keyFn Function to extract the rate limit key from the request
+ * @param namespace Distinguishes this limiter's counters from every other
+ *   limiter's. Required, because omitting it is not a smaller mistake: four
+ *   limiters previously shared the default IP key and therefore ONE counter, so
+ *   fifty page views spent the ten-request login allowance and the 120/min API
+ *   budget was really "120 minus whatever else that address did".
  */
-export function rateLimit(maxRequests: number, windowMs: number, keyFn?: (c: any) => string) {
+export function rateLimit(
+  maxRequests: number,
+  windowMs: number,
+  keyFn?: (c: any) => string,
+  namespace = 'ip',
+) {
   return createMiddleware(async (c, next) => {
-    const key = keyFn
-      ? keyFn(c)
-      : c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
+    const key = keyFn ? keyFn(c) : `${namespace}:${clientIp(c)}`;
 
     const now = Date.now();
     let entry = store.get(key);
@@ -61,11 +148,11 @@ export function rateLimit(maxRequests: number, windowMs: number, keyFn?: (c: any
   });
 }
 
-/** Standard rate limits */
-export const publicRateLimit = rateLimit(60, 60000);   // 60 req/min for public routes
-export const apiRateLimit = rateLimit(120, 60000);      // 120 req/min for authenticated API
-export const webhookRateLimit = rateLimit(300, 60000);  // 300 req/min for webhooks
-export const authRateLimit = rateLimit(10, 60000);      // 10 req/min for auth endpoints
+/** Standard rate limits. Each namespaced, so they count their own traffic. */
+export const publicRateLimit = rateLimit(60, 60000, undefined, 'public');    // 60 req/min
+export const apiRateLimit = rateLimit(120, 60000, undefined, 'api');         // 120 req/min
+export const webhookRateLimit = rateLimit(300, 60000, undefined, 'webhook'); // 300 req/min
+export const authRateLimit = rateLimit(10, 60000, undefined, 'auth');        // 10 req/min
 
 /**
  * AI rate limit — 30 requests / hour per founder. Front-stop to the
@@ -78,11 +165,10 @@ export const authRateLimit = rateLimit(10, 60000);      // 10 req/min for auth e
  * Keys on the founder id when authenticated, falls back to IP for
  * pre-auth paths so an unauthenticated burst can't drain quota.
  */
-export const aiRateLimit = rateLimit(30, 60 * 60 * 1000, (c) => {
+export const aiRateLimit = sharedRateLimit(30, 60 * 60 * 1000, (c) => {
   const founder = c.get('founder' as never) as { id?: string } | undefined;
   if (founder?.id) return `ai:founder:${founder.id}`;
-  const ip = c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
-  return `ai:ip:${ip}`;
+  return `ai:ip:${clientIp(c)}`;
 });
 
 /**
@@ -92,9 +178,116 @@ export const aiRateLimit = rateLimit(30, 60 * 60 * 1000, (c) => {
  * (you audit a product once, occasionally re-run) while stopping a stranger
  * from cost-bombing us by hammering run-audit. Keys on founder id, IP fallback.
  */
-export const auditRateLimit = rateLimit(6, 60 * 60 * 1000, (c) => {
+/**
+ * The public API, limited by the CREDENTIAL rather than by the source address.
+ *
+ * `/api/*` already carries an IP-keyed flood guard, and that is the right shape
+ * for an unauthenticated request. It is the wrong shape once a request carries
+ * a credential: a single key rotating source addresses was unlimited, while
+ * many customers behind one NAT shared a single budget. The limit that matters
+ * on an authenticated surface is per key, and it belongs after authentication —
+ * which is why it is applied inside the v1 router rather than beside the flood
+ * guard in the composition root.
+ *
+ * The AI and audit limits have always keyed by founder. This is the same rule
+ * reaching the surface the owner has just made live.
+ */
+export const apiKeyRateLimit = rateLimit(600, 60 * 60 * 1000, (c) => {
+  const productId = c.get('productId' as never) as string | undefined;
+  const userId = c.get('userId' as never) as string | undefined;
+  if (productId) return `apikey:product:${productId}`;
+  if (userId) return `apikey:user:${userId}`;
+  // Unreachable behind apiKeyAuth, and fail-closed rather than unlimited if it
+  // ever is: an unattributable request shares one bucket with every other.
+  return 'apikey:unattributed';
+});
+
+/**
+ * A tighter budget for the calls that spend money.
+ *
+ * The MCP transport reaches tools that call a model — `foundry_red_team` runs
+ * Sonnet. Under the ordinary API allowance those were 600 model calls an hour
+ * per key, guarded only by the global AI spend ceiling, which is a blunt
+ * instrument that stops everyone at once when one caller is expensive.
+ */
+export const apiModelRateLimit = sharedRateLimit(60, 60 * 60 * 1000, (c) => {
+  const productId = c.get('productId' as never) as string | undefined;
+  return `apimodel:${productId ?? 'unattributed'}`;
+});
+
+export const auditRateLimit = sharedRateLimit(6, 60 * 60 * 1000, (c) => {
   const founder = c.get('founder' as never) as { id?: string } | undefined;
   if (founder?.id) return `audit:founder:${founder.id}`;
-  const ip = c.req.header('x-forwarded-for') ?? c.req.header('cf-connecting-ip') ?? 'unknown';
-  return `audit:ip:${ip}`;
+  return `audit:ip:${clientIp(c)}`;
 });
+
+// ─── Shared counters, for the limits that guard money ────────────────────────
+//
+// Every limit above is a Map in ONE Node process, and fly.toml runs
+// `min_machines_running = 2` behind a load balancer. So each of those limits is
+// really twice what its docstring says, and more if the web group is ever
+// scaled up. For flood control that is tolerable — blunting a burst twice as
+// generously still blunts it. For the limits that exist to stop a bill it is
+// not: those are the front stop to real money, and a ceiling multiplied by the
+// machine count is not a ceiling.
+//
+// These count in the database instead, so every machine shares one number.
+
+/** Increment and read the shared counter for (key, window). One statement, so
+ * two machines incrementing at once cannot both read 9 and both write 10. */
+async function bumpSharedCounter(
+  key: string, windowMs: number, now: number,
+): Promise<number | null> {
+  const windowStart = Math.floor(now / windowMs) * windowMs;
+  try {
+    const res = await query(
+      `INSERT INTO rate_limit_counters (key, window_start, window_ms, count, updated_at)
+            VALUES (?, ?, ?, 1, datetime('now'))
+       ON CONFLICT(key, window_start)
+       DO UPDATE SET count = count + 1, updated_at = datetime('now')
+         RETURNING count`,
+      [key, windowStart, windowMs]);
+    const row = res.rows[0] as Record<string, unknown> | undefined;
+    return row ? Number(row.count) : null;
+  } catch (err) {
+    log.warn('rate_limit.shared_counter_failed', { key, error: (err as Error).message });
+    return null;
+  }
+}
+
+/**
+ * A rate limit every machine agrees on.
+ *
+ * Falls back to the in-process limiter when the database is unreachable. That
+ * is deliberately fail-OPEN relative to the shared counter and fail-CLOSED
+ * relative to nothing: the caller is still limited, just per-machine, which is
+ * exactly the behaviour this replaced. Refusing all traffic because a counter
+ * table is unavailable would turn a bookkeeping outage into an outage.
+ */
+export function sharedRateLimit(
+  maxRequests: number, windowMs: number, keyFn: (c: any) => string,
+) {
+  const fallback = rateLimit(maxRequests, windowMs, keyFn);
+  return createMiddleware(async (c, next) => {
+    const key = keyFn(c);
+    const count = await bumpSharedCounter(key, windowMs, Date.now());
+    if (count === null) return fallback(c, next);
+
+    const windowStart = Math.floor(Date.now() / windowMs) * windowMs;
+    c.header('X-RateLimit-Limit', String(maxRequests));
+    c.header('X-RateLimit-Remaining', String(Math.max(0, maxRequests - count)));
+    c.header('X-RateLimit-Reset', String(Math.ceil((windowStart + windowMs) / 1000)));
+    if (count > maxRequests) {
+      return c.json({ error: 'Too many requests. Please try again later.' }, 429);
+    }
+    await next();
+  });
+}
+
+/** Drop counters for windows that have closed. Called by an hourly job; the
+ * table is otherwise append-mostly and would grow without bound. */
+export async function sweepRateLimitCounters(now: number = Date.now()): Promise<number> {
+  const res = await query(
+    `DELETE FROM rate_limit_counters WHERE window_start + window_ms < ?`, [now]);
+  return Number(res.rowsAffected ?? 0);
+}

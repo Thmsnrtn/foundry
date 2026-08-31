@@ -114,7 +114,10 @@ export async function validateHypothesis(
     estimatedDurationDays: number;
     predictedRoi?: number;
   },
+  scopeProductId: string,
 ): Promise<void> {
+  // Scoped for the same reason as its siblings: a hypothesis id the caller
+  // does not own must be indistinguishable from one that does not exist.
   await query(
     `UPDATE hypotheses SET
        validated_by = ?,
@@ -124,7 +127,7 @@ export async function validateHypothesis(
        estimated_duration_days = ?,
        predicted_roi = ?,
        updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
+     WHERE id = ? AND product_id = ?`,
     [
       params.validatedBy,
       params.nullHypothesis,
@@ -133,6 +136,7 @@ export async function validateHypothesis(
       params.estimatedDurationDays,
       params.predictedRoi ?? null,
       hypothesisId,
+      scopeProductId,
     ],
   );
 }
@@ -167,8 +171,9 @@ export async function approveAndCreateExperiment(
 
   // Mark hypothesis as approved
   await query(
-    `UPDATE hypotheses SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [hypothesisId],
+    `UPDATE hypotheses SET status = 'approved', updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND product_id = ?`,
+    [hypothesisId, scopeProductId],
   );
 
   // Create experiment
@@ -222,8 +227,9 @@ export async function startExperiment(experimentId: string, scopeProductId: stri
   if (expResult.rows.length > 0) {
     const hypothesisId = (expResult.rows[0] as Record<string, unknown>).hypothesis_id as string;
     await query(
-      `UPDATE hypotheses SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [hypothesisId],
+      `UPDATE hypotheses SET status = 'active', updated_at = CURRENT_TIMESTAMP
+         WHERE id = ? AND product_id = ?`,
+      [hypothesisId, scopeProductId],
     );
   }
 }
@@ -241,7 +247,23 @@ export async function updateResults(
     significant: boolean;
     winner?: 'control' | 'treatment' | 'inconclusive';
   },
+  scopeProductId: string,
 ): Promise<void> {
+  // WHOSE EXPERIMENT. Every other mutator in this file takes the product the
+  // caller has already proved ownership of and scopes on it; this one wrote
+  // `WHERE id = ?` and, one level down, `UPDATE hypotheses ... WHERE id = ?`
+  // with no scope at all. It has no caller yet, which is the only reason that
+  // was not a cross-tenant write — and the only reason it would have shipped
+  // as one the day something called it.
+  const expResult = await query(
+    'SELECT hypothesis_id FROM experiments WHERE id = ? AND product_id = ?',
+    [experimentId, scopeProductId],
+  );
+  if (expResult.rows.length === 0) {
+    throw new Error(`Experiment ${experimentId} not found`);
+  }
+  const hypothesisId = (expResult.rows[0] as Record<string, unknown>).hypothesis_id as string;
+
   const winner = results.winner ?? (results.significant
     ? (results.treatment_mean > results.control_mean ? 'treatment' : 'control')
     : 'inconclusive');
@@ -253,23 +275,40 @@ export async function updateResults(
        status = 'completed',
        actual_end_at = CURRENT_TIMESTAMP,
        updated_at = CURRENT_TIMESTAMP
-     WHERE id = ?`,
-    [JSON.stringify(results), winner, experimentId],
+     WHERE id = ? AND product_id = ?`,
+    [JSON.stringify(results), winner, experimentId, scopeProductId],
   );
 
-  // Update hypothesis status based on results
-  const expResult = await query(
-    'SELECT hypothesis_id FROM experiments WHERE id = ?',
-    [experimentId],
+  // WHAT THE EXPERIMENT ESTABLISHED, which is not always something.
+  //
+  // This used to be `results.significant ? 'completed' : 'disproven'`. Three
+  // outcomes were being squeezed into two names, and the one that lost was the
+  // commonest: an experiment whose arms did not separate says nothing about
+  // the statement, and calling that "disproven" tells the institution it has
+  // learned something it has not. Worse, it is the record the next agent reads
+  // before proposing again — so a hypothesis nobody had tested properly looked
+  // closed, and `disproven_evidence` sat NULL beside it because there was no
+  // evidence to put there.
+  //
+  // Migration 147 gives the third outcome its own name.
+  const newStatus = !results.significant
+    ? 'inconclusive'
+    : winner === 'control' ? 'disproven' : 'completed';
+
+  // A claim of contradiction now carries what contradicted it. The schema
+  // asked for this from the beginning ("If disproven, why") and nothing wrote
+  // it.
+  const evidence = newStatus === 'disproven'
+    ? `Control outperformed treatment: control ${results.control_mean}, `
+      + `treatment ${results.treatment_mean}, effect size ${results.effect_size}, `
+      + `p=${results.p_value} (experiment ${experimentId}).`
+    : null;
+
+  await query(
+    `UPDATE hypotheses SET status = ?, disproven_evidence = ?,
+       updated_at = CURRENT_TIMESTAMP WHERE id = ? AND product_id = ?`,
+    [newStatus, evidence, hypothesisId, scopeProductId],
   );
-  if (expResult.rows.length > 0) {
-    const hypothesisId = (expResult.rows[0] as Record<string, unknown>).hypothesis_id as string;
-    const newStatus = results.significant ? 'completed' : 'disproven';
-    await query(
-      `UPDATE hypotheses SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [newStatus, hypothesisId],
-    );
-  }
 }
 
 /**
@@ -336,8 +375,9 @@ export async function getExperimentSummary(productId: string): Promise<{
   pending_approval: number;
   running: number;
   completed: number;
-  avg_roi_completed: number;
-  recent_win?: { name: string; effect_size: number; metric: string };
+  /** NULL when the experiment recorded no effect size. It used to be `?? 0`,
+   *  and the strategy card announced the win as "+0.0%". */
+  recent_win?: { name: string; effect_size: number | null; metric: string };
 }> {
   const hypResult = await query(
     `SELECT COUNT(*) as total,
@@ -356,30 +396,48 @@ export async function getExperimentSummary(productId: string): Promise<{
   );
   const expRow = (expResult.rows[0] as Record<string, unknown>) ?? {};
 
-  // Average ROI for completed experiments
-  const roiResult = await query(
-    `SELECT AVG(roi_vs_predicted) as avg_roi
-     FROM experiments WHERE product_id = ? AND status = 'completed' AND roi_vs_predicted IS NOT NULL`,
-    [productId],
-  );
-  const avgRoi = ((roiResult.rows[0] as Record<string, unknown>)?.avg_roi as number) ?? 0;
+  // `avg_roi_completed` IS GONE. It averaged `experiments.roi_vs_predicted`,
+  // a column NOTHING IN THIS CODEBASE WRITES, and `?? 0` turned the empty
+  // average into a zero. Nobody rendered it — but `strategy/synthesis.ts`
+  // passes this whole object into a model's context block, so every strategic
+  // synthesis ever generated was told this company's completed experiments
+  // returned an average ROI of exactly 0. Removed rather than defaulted: the
+  // producing half does not exist.
 
-  // Most recent win
+  // MOST RECENT WIN, ORDERED BY A DATE SOMETHING SETS. `actual_end_at` is
+  // written by `updateResults`, which has no caller; the engine that actually
+  // concludes experiments writes `ended_at`. So this ordered every row by NULL
+  // and `LIMIT 1` returned an arbitrary win, called "recent".
   const winResult = await query(
     `SELECT e.name, e.success_metric, e.results_json
      FROM experiments e
      WHERE e.product_id = ? AND e.winner = 'treatment' AND e.status = 'completed'
-     ORDER BY e.actual_end_at DESC LIMIT 1`,
+     ORDER BY COALESCE(e.actual_end_at, e.ended_at, e.concluded_at, e.updated_at) DESC,
+              e.rowid DESC
+     LIMIT 1`,
     [productId],
   );
 
-  let recentWin: { name: string; effect_size: number; metric: string } | undefined;
+  let recentWin: { name: string; effect_size: number | null; metric: string } | undefined;
   if (winResult.rows.length > 0) {
     const w = winResult.rows[0] as Record<string, unknown>;
-    const results = w.results_json ? JSON.parse(w.results_json as string) : {};
+    // TWO WRITERS, TWO SHAPES. `updateResults` stores
+    // `{control_mean, treatment_mean, p_value, effect_size, ...}`; the engine
+    // that concludes experiments stores per-variant metrics with no
+    // `effect_size` key at all. `?? 0` announced every win the engine
+    // concluded as "+0.0%". An unparsable blob threw here and took the whole
+    // strategy page down with it.
+    let results: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = w.results_json ? JSON.parse(w.results_json as string) : {};
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        results = parsed as Record<string, unknown>;
+      }
+    } catch { /* an unreadable blob is an unrecorded effect, not a crash */ }
+    const effect = results.effect_size;
     recentWin = {
       name: w.name as string,
-      effect_size: (results.effect_size as number) ?? 0,
+      effect_size: typeof effect === 'number' && Number.isFinite(effect) ? effect : null,
       metric: w.success_metric as string,
     };
   }
@@ -389,7 +447,6 @@ export async function getExperimentSummary(productId: string): Promise<{
     pending_approval: (hypRow.pending as number) ?? 0,
     running: (expRow.running as number) ?? 0,
     completed: (expRow.completed as number) ?? 0,
-    avg_roi_completed: avgRoi,
     recent_win: recentWin,
   };
 }

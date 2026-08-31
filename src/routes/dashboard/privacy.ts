@@ -4,6 +4,8 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { csvCell, csvRow } from '../../lib/csv.js';
+import { clientIp } from '../../middleware/rate-limit.js';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
@@ -16,9 +18,12 @@ import {
   updateDataResidencySettings,
   exportProductData,
   scheduleDataDeletion,
+  pendingDeletion,
+  cancelDataDeletion,
   type ConsentType,
 } from '../../services/privacy/consent.js';
 import { getProductsByOwner } from '../../db/client.js';
+import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
 
 export const privacySettings = new Hono<AuthEnv>();
 
@@ -91,10 +96,35 @@ privacySettings.get('/privacy', async (c) => {
   const successBannerText = successMsg === 'all_deletion_scheduled'
     ? `Deletion scheduled for all ${ctx.allProducts.length} product${ctx.allProducts.length !== 1 ? 's' : ''}. Data will be removed after 30 days.`
     : successMsg === 'deletion_scheduled'
-    ? 'Deletion scheduled. Product data will be removed after 30 days.'
+    ? 'Deletion scheduled. Product data will be removed after 30 days — you can still stop it until then.'
+    : successMsg === 'deletion_cancelled'
+    ? 'Deletion cancelled. Nothing will be removed.'
+    : successMsg === 'nothing_pending'
+    ? 'There was no deletion scheduled for this product.'
     : successMsg
     ? 'Settings saved successfully.'
     : null;
+
+  // A COUNTDOWN NOBODY CAN SEE IS NOT A GRACE PERIOD. After clicking Delete the
+  // page showed a banner once and then looked exactly as it had before, for
+  // thirty days.
+  const pending = await pendingDeletion(productId);
+  const pendingBanner = pending
+    ? html`<div style="background:#ff6b6b22;border:1px solid #ff6b6b66;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;">
+        <div style="color:#ff6b6b;font-weight:600;font-size:0.9rem;margin-bottom:0.35rem;">Deletion scheduled</div>
+        <div style="color:var(--text-dim);font-size:0.82rem;line-height:1.5;">
+          ${pending.overdue
+            ? html`All data for ${ctx.productName} was due to be permanently deleted on
+              <strong>${pending.deletesOn.slice(0, 10)}</strong>, and there is no record that it was.
+              You can still stop it.`
+            : html`All data for ${ctx.productName} is scheduled to be permanently deleted on
+              <strong>${pending.deletesOn.slice(0, 10)}</strong>. Until then you can stop it.`}
+        </div>
+        <form method="POST" action="/privacy/delete/cancel" style="margin-top:0.75rem;">
+          <button type="submit" class="btn btn-ghost" style="font-size:0.8rem;">Stop the deletion</button>
+        </form>
+      </div>`
+    : '';
 
   const successBanner = successBannerText
     ? html`<div style="background:${successMsg?.includes('deletion') ? '#ff6b6b22' : '#4ecca322'};border:1px solid ${successMsg?.includes('deletion') ? '#ff6b6b44' : '#4ecca344'};border-radius:8px;padding:0.75rem 1.25rem;margin-bottom:1.5rem;color:${successMsg?.includes('deletion') ? '#ff6b6b' : '#4ecca3'};font-size:0.875rem;font-weight:500;">
@@ -105,21 +135,42 @@ privacySettings.get('/privacy', async (c) => {
   const consentItems: Array<{ name: ConsentType; label: string; description: string; learnMore: string; }> = [
     {
       name: 'benchmark_contribution',
-      label: 'Anonymized Benchmarking',
-      description: 'Share your anonymized metrics to the Foundry benchmarking pool. You\'ll get industry percentile comparisons in return.',
-      learnMore: 'Your data is stripped of all identifying information before contributing. Only aggregated statistics are ever accessible to other founders.',
+      label: 'Contribute to Benchmarking',
+      // THIS PROMISED SOMETHING THE CODE DID NOT DO, twice over. It said
+      // "anonymized" and "stripped of all identifying information", while the
+      // pool stored each contribution against the company id — and it said
+      // "share", while the contribution happened whether or not this toggle was
+      // ever ticked. Both are fixed; the wording now describes the second
+      // version rather than the first.
+      description: 'Contribute your activation and churn rates to the Foundry benchmarking pool, and get percentile comparisons back. Off unless you turn it on.',
+      learnMore: 'Contributions are stored against your company so you can erase them — they are not anonymous at rest, and saying otherwise would be untrue. What leaves the pool is only an aggregate, and only once at least five different companies are in the same segment. Below that, nothing is published.',
     },
     {
+      // TWO CLAIMS WERE UNTRUE AND ONE CONTROL DID NOTHING. Nothing read this
+      // toggle: contribution to the wisdom network was consented separately
+      // while RECEIVING was governed by nothing, so a company that left this
+      // off was served insights anyway. It governs the reading now
+      // (`wisdom/network.ts`). "Hundreds of products" was a scale nobody
+      // measured, and "statistical patterns" was an eligibility floor of five
+      // companies rather than a statistic — the same overstatement this page
+      // already corrected one toggle above.
       name: 'aggregate_insights',
       label: 'Aggregate Insights',
-      description: 'Receive insights derived from anonymized data across all Foundry products in your category.',
-      learnMore: 'Insights are generated from statistical patterns across hundreds of products. No individual product data is ever revealed.',
+      description: 'Receive insights drawn from what other Foundry companies in your category decided, and what happened. Off unless you turn it on.',
+      learnMore: 'An insight is published only once at least five different companies are behind it, and it carries the number that was measured rather than a claim of statistical significance. It is a peer signal, not evidence about your company.',
     },
     {
+      // THIS DESCRIBED A CHOICE THE CODE DID NOT OFFER, and now it offers it.
+      // Foundry's own funnel recorded a NAMED founder's whole progression
+      // whether or not this was on. The owner's decision is to split rather
+      // than gate the lot: service, billing and configuration state stays
+      // ungated and is disclosed here in those words, and the usage half is
+      // recorded ONLY with this consent — not filtered later, not recorded at
+      // all — and then against a contributor hash rather than a name.
       name: 'product_improvement',
       label: 'Help Improve Foundry',
-      description: 'Allow Foundry to use your anonymized usage patterns to improve the product for everyone.',
-      learnMore: 'This covers feature usage, navigation patterns, and error rates — never your business data or customer information.',
+      description: 'Let Foundry learn from how you use it. Off means the usage half is not recorded at all, rather than recorded and ignored.',
+      learnMore: 'Foundry always records what it needs to run and bill your account: that you signed up, connected a repo, started a trial, and paid. That is service state, not analytics, and a switch over it would not be a real choice. This toggle covers the rest — completing an audit, opening a briefing, approving a decision. With it on, those are stored against a one-way hash rather than your name, and they go when your account does. With it off, nothing is written.',
     },
     {
       name: 'ai_training_opt_out',
@@ -193,6 +244,7 @@ privacySettings.get('/privacy', async (c) => {
   ).join('');
 
   const content = html`
+    ${pendingBanner}
     ${successBanner}
 
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.75rem;flex-wrap:wrap;gap:0.5rem;">
@@ -241,7 +293,16 @@ privacySettings.get('/privacy', async (c) => {
               <select id="data_retention_days" name="data_retention_days" class="input" style="max-width:200px;">
                 ${''}${html([retentionSelect] as unknown as TemplateStringsArray)}
               </select>
-              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">How long Foundry retains your product data. Current: ${retentionLabel(residency.data_retention_days)}</p>
+              <!-- THIS SAID "How long Foundry retains your product data" AND
+                   GOVERNED NOTHING. The data_residency_settings row was written
+                   by this form, read back by this page, and consulted by no
+                   job. The retention sweep now honours it where it is SHORTER
+                   than the platform horizon — a company that set this did so to
+                   keep less — and the sentence says which half is in force
+                   rather than implying both. Keeping data LONGER than the
+                   platform horizon is the question already with counsel, and a
+                   dropdown does not answer it. -->
+              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">A shorter period than Foundry's own is honoured: your data goes when you asked, not when Foundry's schedule would. A longer one is not — Foundry's horizon still applies. Current: ${retentionLabel(residency.data_retention_days)}</p>
             </div>
 
             <div>
@@ -251,7 +312,13 @@ privacySettings.get('/privacy', async (c) => {
               <select id="delete_agent_logs_after_days" name="delete_agent_logs_after_days" class="input" style="max-width:200px;">
                 ${''}${html([logRetentionSelect] as unknown as TemplateStringsArray)}
               </select>
-              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Agent activity logs older than this are automatically deleted. Current: ${logRetentionLabel(residency.delete_agent_logs_after_days)}</p>
+              <!-- Same correction, narrower scope. This governs agent chatter
+                   (agent_messages), where the shorter of this and the retention
+                   period above wins. It deliberately does NOT reach the audit
+                   trail: two of its event types are the record that an erasure
+                   happened, and whether that record may be shortened is a legal
+                   question, not a dropdown. -->
+              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Agent-to-agent activity older than this is deleted, if that is sooner than Foundry's own schedule. The audit trail is kept separately — it is what answers &ldquo;why didn't you show me this?&rdquo; — and this setting does not shorten it. Current: ${logRetentionLabel(residency.delete_agent_logs_after_days)}</p>
             </div>
 
           </div>
@@ -282,6 +349,17 @@ privacySettings.get('/privacy', async (c) => {
           </div>
         </div>
 
+        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+          <div style="flex:1;min-width:200px;">
+            <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);margin-bottom:0.25rem;">Export What Foundry Holds About You</div>
+            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Not a company &mdash; you. Your profile and preferences, how you like to be worked with, your devices and connections, your referrals, and your own activity inside companies you do not own. Credentials are shown as present, never as their value.</p>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-shrink:0;flex-wrap:wrap;">
+            <a href="/privacy/export-account" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download your own account data as JSON">JSON</a>
+            <a href="/privacy/export-account?format=csv" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download your own account data as CSV">CSV</a>
+          </div>
+        </div>
+
         ${ctx.allProducts.length > 1 ? html`
         <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
@@ -298,7 +376,7 @@ privacySettings.get('/privacy', async (c) => {
         <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.875rem;font-weight:600;color:#ff6b6b;margin-bottom:0.25rem;">Request Product Deletion</div>
-            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Permanently delete this product and all associated data. This action cannot be undone. Please export your data first.</p>
+            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Permanently delete this product and all associated data, after a 30-day grace period. You can stop it during those 30 days; once it runs it cannot be undone. Please export your data first.</p>
           </div>
           <button
             type="button"
@@ -337,7 +415,7 @@ privacySettings.get('/privacy', async (c) => {
         <h2 style="margin:0 0 0.75rem;color:#ff6b6b;font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>
         <p style="margin:0 0 1rem;font-size:0.875rem;color:var(--text-dim);line-height:1.55;">
           This will permanently schedule deletion of all data for <strong>${ctx.productName}</strong> including metrics, briefings, decisions, and agent logs.
-          This cannot be undone.
+          You have 30 days to stop it. After that it cannot be undone.
         </p>
         <p style="margin:0 0 1.5rem;font-size:0.8rem;color:var(--text-muted);">
           We recommend <a href="/privacy/export" style="color:var(--accent);">exporting your data</a> before proceeding.
@@ -369,7 +447,8 @@ privacySettings.get('/privacy', async (c) => {
 
 // ─── POST /privacy/consent ─────────────────────────────────────────────────────
 
-privacySettings.post('/privacy/consent', async (c) => {
+privacySettings.post('/privacy/consent',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Privacy & Data', undefined, c);
 
@@ -390,7 +469,10 @@ privacySettings.post('/privacy/consent', async (c) => {
     return c.redirect('/privacy');
   }
 
-  const ip = c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip') ?? undefined;
+  // The address is stored as EVIDENCE of the consent, so it has to be one the
+  // consenting browser could not have written itself. The raw header is
+  // client-supplied; `clientIp` reads the hop a trusted proxy added.
+  const ip = clientIp(c);
 
   await recordConsent(ctx.productId, founder.id, consentType, granted, ip);
 
@@ -399,7 +481,8 @@ privacySettings.post('/privacy/consent', async (c) => {
 
 // ─── POST /privacy/residency ───────────────────────────────────────────────────
 
-privacySettings.post('/privacy/residency', async (c) => {
+privacySettings.post('/privacy/residency',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Privacy & Data', undefined, c);
 
@@ -433,16 +516,11 @@ function jsonToCsv(rows: unknown[]): string {
   if (rows.length === 0) return '';
   const headers = Object.keys(rows[0] as Record<string, unknown>);
   const escape = (val: unknown): string => {
-    const str = val === null || val === undefined ? '' : String(val);
-    if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
+    return csvCell(val);
   };
   const lines = [headers.join(',')];
   for (const row of rows) {
-    const r = row as Record<string, unknown>;
-    lines.push(headers.map((h) => escape(r[h])).join(','));
+    lines.push(csvRow(headers, row as Record<string, unknown>));
   }
   return lines.join('\n');
 }
@@ -499,10 +577,55 @@ privacySettings.get('/privacy/export', async (c) => {
   });
 });
 
+// ─── GET /privacy/export-account — what Foundry holds about the PERSON ───────
+//
+// Every export on this page answered for a COMPANY. The person had no way to
+// ask what was held about THEM — their voice, their health circumstances, their
+// devices, their peer profile, their referral history, and their own activity
+// inside companies they do not own. All of it was already mapped, and mapped
+// only so an erasure could clear it.
+//
+// The erasure fires from the identity provider's `user.deleted` webhook, so
+// there is no moment on this page where Foundry could offer it. This is that
+// moment, offered before it is needed rather than after it is too late.
+//
+// ALWAYS THE ACTING PERSON. There is no id parameter: the subject is the
+// session, so this cannot become a way to read somebody else.
+privacySettings.get('/privacy/export-account', async (c) => {
+  const founder = c.get('founder');
+  const { exportFounderData } = await import('../../services/privacy/consent.js');
+  const data = await exportFounderData(String(founder.id));
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (c.req.query('format') === 'csv') {
+    const csvParts = (Object.entries(data) as Array<[string, unknown[]]>)
+      .filter(([, rows]) => Array.isArray(rows) && rows.length > 0)
+      .map(([name, rows]) => `# ${name}\n${jsonToCsv(rows)}`)
+      .join('\n\n');
+    return csvResponse(csvParts, `foundry-account-${today}.csv`);
+  }
+
+  return new Response(JSON.stringify({
+    exported_at: new Date().toISOString(),
+    scope: 'account',
+    founder_id: founder.id,
+    ...data,
+  }, null, 2), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Disposition': `attachment; filename="foundry-account-${today}.json"`,
+    },
+  });
+});
+
 // ─── GET /settings/export-all — Fleet-wide data export (F-064-A) ─────────────
 
 privacySettings.get('/settings/export-all', async (c) => {
   const founder = c.get('founder');
+  // DELIBERATELY OWNER-ONLY. Erasure and export are the data controller's
+  // rights over the company's records, not an ordinary company capability a
+  // colleague can be granted.
   const products = await getProductsByOwner(founder.id);
 
   if (products.rows.length === 0) {
@@ -564,16 +687,32 @@ privacySettings.get('/settings/export-all', async (c) => {
 
 // ─── POST /privacy/delete ──────────────────────────────────────────────────────
 
-privacySettings.post('/privacy/delete', async (c) => {
+// SCHEDULES ERASURE OF THE SELECTED COMPANY. Not a capability anything
+// grants — the exceptional boundary, like ending the subscription.
+privacySettings.post('/privacy/delete',
+  requireOwner(), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Privacy & Data', undefined, c);
 
   if (!ctx.productId) return c.redirect('/privacy');
 
-  await scheduleDataDeletion(ctx.productId, 30);
+  await scheduleDataDeletion(ctx.productId, 30, founder.id);
 
   return c.redirect('/privacy?success=deletion_scheduled');
 });
+
+// ─── POST /privacy/delete/cancel ──────────────────────────────────────────────
+//
+// The window the page promises, with a door in it. Owner-only, like scheduling:
+// the two halves of one decision answer to the same boundary.
+privacySettings.post('/privacy/delete/cancel',
+  requireOwner(), async (c) => {
+    const founder = c.get('founder');
+    const ctx = await getLayoutContext(founder, 'settings', 'Privacy & Data', undefined, c);
+    if (!ctx.productId) return c.redirect('/privacy');
+    const cancelled = await cancelDataDeletion(ctx.productId, founder.id);
+    return c.redirect(`/privacy?success=${cancelled ? 'deletion_cancelled' : 'nothing_pending'}`);
+  });
 
 // ─── GET /settings/delete-all-products — Fleet-wide deletion confirmation (F-063-A) ──
 
@@ -596,7 +735,8 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
       <h1 style="color:#ff6b6b;margin:0 0 0.5rem;">Delete All Products</h1>
       <p style="color:var(--text-dim);margin:0 0 1.5rem;font-size:0.875rem;line-height:1.55;">
         This will schedule deletion for <strong>all ${productList.length} product${productList.length > 1 ? 's' : ''}</strong>
-        and their associated data. Deletion occurs after a 30-day grace period. This action cannot be undone.
+        and their associated data. Deletion occurs after a 30-day grace period, and can be stopped
+        from each product's Privacy page until then. Once it runs it cannot be undone.
       </p>
 
       <div class="card" style="margin-bottom:1.5rem;padding:0;overflow:hidden;">
@@ -642,7 +782,7 @@ privacySettings.post('/settings/delete-all-products', async (c) => {
 
   for (const row of products.rows) {
     const p = row as Record<string, unknown>;
-    await scheduleDataDeletion(p.id as string, 30);
+    await scheduleDataDeletion(p.id as string, 30, founder.id);
   }
 
   return c.redirect('/privacy?success=all_deletion_scheduled');

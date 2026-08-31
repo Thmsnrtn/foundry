@@ -62,6 +62,40 @@ function currentQuarter(): string {
   return `${now.getFullYear()}-Q${q}`;
 }
 
+/**
+ * What an experiment established, from the columns that are actually written.
+ *
+ * BOTH INVESTOR DOCUMENTS READ `experiments.learnings`, WHICH NOTHING WRITES.
+ * Concluding an experiment writes `winner`, `results_json` and
+ * `early_stop_reason`; stopping one early writes `early_stop_reason`. The
+ * `learnings` column has no writer anywhere — not in TypeScript, not in a
+ * trigger — so the Experiments section of a board packet and of an investor
+ * update has always listed names against a NULL outcome, and the model then
+ * wrote about a quarter of experiments that apparently concluded nothing.
+ *
+ * 'inconclusive' is a real winner value and is reported as itself: an
+ * experiment whose arms did not separate says nothing about the statement, and
+ * telling an investor it "won" or "lost" would be the same overclaim the
+ * hypothesis vocabulary was fixed to avoid.
+ */
+export function experimentOutcome(row: {
+  status?: unknown; winner?: unknown; early_stop_reason?: unknown;
+}): string {
+  const winner = row.winner == null ? null : String(row.winner);
+  const stopped = row.early_stop_reason == null ? null : String(row.early_stop_reason);
+  const status = String(row.status ?? 'pending');
+  if (winner === 'inconclusive') return 'inconclusive — the arms did not separate';
+  if (winner) return `${winner} won`;
+  if (stopped) return `stopped early: ${stopped}`;
+  // CONCLUDED IS NOT AN OUTCOME. An experiment concluded through the documented
+  // API can carry `outcome` and `winning_variant_id` without a `winner`, and
+  // this used to fall through to the status — so "completed" appeared in the
+  // outcome column of a board packet, reading like a result. It is a state, and
+  // what it means here is that nobody told us which arm won.
+  if (status === 'completed') return 'concluded — the winning arm was not recorded';
+  return status;
+}
+
 // ─── generateBoardPacket ──────────────────────────────────────────────────────
 
 export async function generateBoardPacket(
@@ -89,6 +123,7 @@ export async function generateBoardPacket(
 
   // 3. Load metrics: latest metric_snapshots
   let metricsSnapshot: Record<string, unknown> = {};
+  let priorSnapshot: Record<string, unknown> = {};
   try {
     const metricsResult = await query(
       `SELECT * FROM metric_snapshots WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 2`,
@@ -97,12 +132,24 @@ export async function generateBoardPacket(
     if (metricsResult.rows.length > 0) {
       metricsSnapshot = metricsResult.rows[0] as Record<string, unknown>;
     }
+    if (metricsResult.rows.length > 1) {
+      priorSnapshot = metricsResult.rows[1] as Record<string, unknown>;
+    }
   } catch {
     // table may not have expected columns
   }
 
   // 4. Load briefings from this quarter
-  let briefingsSummary = 'No briefings available for this quarter.';
+  //
+  // AN UNREAD SOURCE IS NOT AN EMPTY ONE. Each section below was initialised to
+  // its own negative claim and then wrapped in a catch that discarded the
+  // error, so a query that threw produced the confident sentence rather than
+  // the true one — in a document that goes to a BOARD. "No active risks" and
+  // "we could not read our risks" are materially different statements, and only
+  // the first was ever sent. The negative claims are still made, but only from
+  // the branch that actually looked. Same correction the decisions section
+  // below already carries, for the same reason.
+  let briefingsSummary = 'Briefings for this quarter could not be read.';
   try {
     const briefingsResult = await query(
       `SELECT headline, briefing_date, agent_contributions FROM scp_briefings
@@ -116,16 +163,18 @@ export async function generateBoardPacket(
         return `[${row.briefing_date as string}] ${row.headline as string}`;
       });
       briefingsSummary = lines.join('\n');
+    } else {
+      briefingsSummary = 'No briefings this quarter.';
     }
   } catch {
     // briefings table may not exist yet
   }
 
   // 5. Load active stressors
-  let stressorsText = 'None active.';
+  let stressorsText = 'Active risks could not be read for this quarter.';
   try {
     const stressorsResult = await query(
-      `SELECT title, severity, description FROM stressor_history
+      `SELECT stressor_name AS title, severity, signal AS description FROM stressor_history
        WHERE product_id=? AND status='active'`,
       [productId]
     );
@@ -136,36 +185,53 @@ export async function generateBoardPacket(
           return `[${row.severity as string}] ${row.title as string}: ${row.description as string}`;
         })
         .join('\n');
+    } else {
+      stressorsText = 'None active.';
     }
   } catch {
     // stressor_history may not exist
   }
 
   // Load recent decisions
+  //
+  // THIS READ `agent_decisions`, WHICH NOTHING HAS EVER WRITTEN. Migration 083
+  // created the table because three surfaces queried a table that did not
+  // exist, and said so plainly: "No writer yet — the tab renders empty until
+  // agents populate it." Nothing ever did. So the decisions section of a
+  // document founders send to their INVESTORS has said "No recent decisions."
+  // for every company in every quarter, however many decisions the company
+  // actually made, while the real ledger sat one table away. The catch made the
+  // two indistinguishable: an empty result and a missing table produced the
+  // same sentence.
+  //
+  // `decisions` is the canonical ledger — the queue the founder resolves, the
+  // rows the shadow ledger and the autopilot read, the thing the word means
+  // everywhere else in the system. Under-reporting to investors is not a
+  // neutral failure, so this now says what is true, and says nothing when it
+  // has nothing.
   let decisionsText = 'No recent decisions.';
-  try {
-    const decisionsResult = await query(
-      `SELECT title, status, reasoning FROM agent_decisions
-       WHERE product_id=? AND created_at >= ? ORDER BY created_at DESC LIMIT 20`,
-      [productId, start]
-    );
-    if (decisionsResult.rows.length > 0) {
-      decisionsText = decisionsResult.rows
-        .map((r) => {
-          const row = r as Record<string, unknown>;
-          return `[${row.status as string}] ${row.title as string}`;
-        })
-        .join('\n');
-    }
-  } catch {
-    // agent_decisions may not exist
+  const decisionsResult = await query(
+    `SELECT what, status, chosen_option FROM decisions
+      WHERE product_id = ? AND created_at >= ? AND deleted_at IS NULL
+      ORDER BY created_at DESC LIMIT 20`,
+    [productId, start]
+  );
+  if (decisionsResult.rows.length > 0) {
+    decisionsText = (decisionsResult.rows as unknown as Array<Record<string, unknown>>)
+      .map((row) => {
+        // A resolved decision is worth more to a reader than its status word:
+        // what was chosen is the thing an investor is being told.
+        const chosen = row.chosen_option == null ? '' : ` → ${String(row.chosen_option)}`;
+        return `[${String(row.status)}] ${String(row.what)}${chosen}`;
+      })
+      .join('\n');
   }
 
   // Load experiment outcomes
-  let experimentsText = 'No experiments this quarter.';
+  let experimentsText = 'Experiments for this quarter could not be read.';
   try {
     const experimentsResult = await query(
-      `SELECT name, status, outcome_summary FROM experiments
+      `SELECT name, status, winner, early_stop_reason FROM experiments
        WHERE product_id=? AND updated_at >= ? ORDER BY updated_at DESC LIMIT 10`,
       [productId, start]
     );
@@ -173,19 +239,34 @@ export async function generateBoardPacket(
       experimentsText = experimentsResult.rows
         .map((r) => {
           const row = r as Record<string, unknown>;
-          return `[${row.status as string}] ${row.name as string}: ${row.outcome_summary as string ?? 'pending'}`;
+          return `[${row.status as string}] ${row.name as string}: ${experimentOutcome(row)}`;
         })
         .join('\n');
+    } else {
+      experimentsText = 'No experiments this quarter.';
     }
   } catch {
     // experiments table may vary
   }
 
   // 6. Compute MRR display values
+  //
+  // `mrr_growth_pct` HAS NEVER BEEN A COLUMN. Read off a `SELECT *` row it is
+  // `undefined`, so every board packet ever generated showed growth as "N/A" —
+  // in the document a founder takes to their board. The second snapshot was
+  // already being fetched by the query above and thrown away; growth is derived
+  // from the two levels, as a monthly-equivalent rate from the gap between
+  // their dates, because consecutive rows are a day apart for most companies.
   const mrrCents = (metricsSnapshot.mrr_cents as number) ?? null;
-  const mrrGrowthPct = (metricsSnapshot.mrr_growth_pct as number) ?? null;
+  const priorMrrCents = (priorSnapshot.mrr_cents as number) ?? null;
+  const growthGapDays = (Date.parse(`${String(metricsSnapshot.snapshot_date)}T00:00:00Z`)
+    - Date.parse(`${String(priorSnapshot.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+  const mrrGrowthPct = (mrrCents !== null && priorMrrCents !== null && priorMrrCents > 0
+    && Number.isFinite(growthGapDays) && growthGapDays > 0)
+    ? Math.round(((mrrCents / priorMrrCents) ** (30.44 / growthGapDays) - 1) * 1000) / 10
+    : null;
   const mrrDisplay = mrrCents !== null ? `$${(mrrCents / 100).toLocaleString()}` : 'N/A';
-  const growthDisplay = mrrGrowthPct !== null ? `${mrrGrowthPct.toFixed(1)}%` : 'N/A';
+  const growthDisplay = mrrGrowthPct !== null ? `${mrrGrowthPct.toFixed(1)}%/mo` : 'N/A';
 
   // 7. Build prompt and call Claude
   const systemPrompt = `You are a board-level strategic advisor helping a founder prepare for their board meeting.
@@ -231,14 +312,29 @@ Return a JSON object with this exact structure:
   const narrative = parseJSONResponse<BoardPacketNarrative>(response.content);
 
   // 8. INSERT into board_packets
+  //
+  // `period_start` and `period_end` are NOT NULL with no default, and this
+  // INSERT never supplied them — so every board packet this system has ever
+  // tried to generate raised at the last step. The AI call happens FIRST, so
+  // the money was spent, the narrative was written, and then the write threw
+  // and the founder saw nothing. The two values were computed at the top of
+  // this function and simply not passed down.
+  //
+  // A column check that only asks "does this column exist" cannot see this:
+  // every column named here is real. What was missing is a column that is not
+  // named and cannot be absent.
   const id = nanoid();
   await query(
-    `INSERT INTO board_packets (id, product_id, quarter, narrative_json, metrics_snapshot_json, status)
-     VALUES (?, ?, ?, ?, ?, 'draft')`,
+    `INSERT INTO board_packets
+       (id, product_id, quarter, period_start, period_end,
+        narrative_json, metrics_snapshot_json, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'draft')`,
     [
       id,
       productId,
       quarter,
+      start,
+      end,
       JSON.stringify(narrative),
       JSON.stringify(metricsSnapshot),
     ]
@@ -250,8 +346,28 @@ Return a JSON object with this exact structure:
 
 // ─── getBoardPacket ───────────────────────────────────────────────────────────
 
+/**
+ * ANY AUTHENTICATED FOUNDER COULD READ ANY COMPANY'S BOARD PACKET.
+ *
+ * `SELECT * FROM board_packets WHERE id=?`, and the route above it loaded the
+ * founder and never used them. A board packet carries the executive summary,
+ * the key metrics, the wins, the risks, the asks and the next-quarter goals —
+ * the most sensitive document Foundry produces about a company.
+ *
+ * THE RULE WAS KNOWN AND APPLIED THREE TIMES IN THE SAME FILE'S NEIGHBOURS.
+ * `getInvestorUpdate(id, ownerId)` joins `products` and scopes on `owner_id`,
+ * with a comment saying exactly why; `markPacketFinalized` and `markUpdateSent`
+ * both take the founder. The READ of the most sensitive of the four was the one
+ * that was missed — which is what happens when a rule lives in each caller
+ * rather than in one place.
+ *
+ * An unguessable id is not an authorisation control. Ids leak — a shared URL, a
+ * log line, a screenshot — and deliberate sharing already has its own module
+ * with its own tokens.
+ */
 export async function getBoardPacket(
-  packetId: string
+  packetId: string,
+  ownerId: string,
 ): Promise<{
   packet: BoardPacketNarrative;
   quarter: string;
@@ -259,8 +375,10 @@ export async function getBoardPacket(
   status: string;
 } | null> {
   const result = await query(
-    'SELECT * FROM board_packets WHERE id=?',
-    [packetId]
+    `SELECT bp.* FROM board_packets bp
+     JOIN products p ON p.id = bp.product_id
+     WHERE bp.id=? AND p.owner_id=?`,
+    [packetId, ownerId]
   );
   if (result.rows.length === 0) return null;
   const row = result.rows[0] as Record<string, unknown>;
@@ -320,12 +438,33 @@ export async function listBoardPackets(
   });
 }
 
-// ─── markPacketReviewed ───────────────────────────────────────────────────────
+// ─── markPacketFinalized ──────────────────────────────────────────────────────
 
-export async function markPacketReviewed(packetId: string, ownerId: string): Promise<void> {
-  await query(
-    `UPDATE board_packets SET status='reviewed'
+/**
+ * The founder has been through the packet and it is ready to share.
+ *
+ * THIS USED TO WRITE status='reviewed'. `board_packets` was created by
+ * migration 011 with the vocabulary draft/finalized/shared. Migration 039 then
+ * wrote `CREATE TABLE IF NOT EXISTS board_packets` with draft/reviewed/
+ * published — and because the table already existed, that definition was a
+ * silent no-op. The code was written against the version that never took
+ * effect, so this UPDATE raised every time, the route caught it as
+ * "non-fatal", and the founder's Mark Reviewed button did nothing, forever,
+ * without saying so. The button never even disappeared, because the status it
+ * was waiting for could not be reached.
+ *
+ * `finalized` is the live value and, per migration 011's own comment on the
+ * column beside it, means exactly this: "when founder marks it ready to
+ * share". So the timestamp is set too, which nothing had ever done.
+ *
+ * Returns whether a row was actually changed, so a caller cannot report
+ * success for a packet that does not exist or is not theirs.
+ */
+export async function markPacketFinalized(packetId: string, ownerId: string): Promise<boolean> {
+  const res = await query(
+    `UPDATE board_packets SET status='finalized', finalized_at=datetime('now')
      WHERE id=? AND product_id IN (SELECT id FROM products WHERE owner_id=?)`,
     [packetId, ownerId]
   );
+  return (res.rowsAffected ?? 0) > 0;
 }

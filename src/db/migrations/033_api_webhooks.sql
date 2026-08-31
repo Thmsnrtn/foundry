@@ -9,6 +9,12 @@
 --       "decision.raised","briefing.generated","alert.critical"]
 -- secret_hash stores a hashed shared secret used to sign payloads (HMAC-SHA256)
 -- failure_count is incremented on each failed delivery attempt; used to auto-disable
+-- THIS STATEMENT DID NOT RUN. `outbound_webhooks` was created by `013_voice_push.sql`, and
+-- `CREATE TABLE IF NOT EXISTS` over an existing table does nothing — so the
+-- columns below are a PROPOSAL, not the schema. The live shape is the earlier
+-- one plus whatever later migrations added by ALTER; read
+-- `docs/db/schema.snapshot.sql` for what the database actually has.
+-- `tests/unit/only-the-first-create-is-the-schema.test.ts` pins the full list.
 CREATE TABLE IF NOT EXISTS outbound_webhooks (
   id               TEXT PRIMARY KEY,
   product_id       TEXT NOT NULL,
@@ -30,6 +36,12 @@ CREATE TABLE IF NOT EXISTS outbound_webhooks (
 -- webhook_deliveries: one row per attempted delivery of an event to a webhook
 -- attempt_count increments on each retry; next_retry_at drives the retry scheduler
 -- delivered_at is set on HTTP 2xx; failed_at is set when max retries are exhausted
+-- THIS STATEMENT DID NOT RUN. `webhook_deliveries` was created by `006_api_keys_webhooks.sql`, and
+-- `CREATE TABLE IF NOT EXISTS` over an existing table does nothing — so the
+-- columns below are a PROPOSAL, not the schema. The live shape is the earlier
+-- one plus whatever later migrations added by ALTER; read
+-- `docs/db/schema.snapshot.sql` for what the database actually has.
+-- `tests/unit/only-the-first-create-is-the-schema.test.ts` pins the full list.
 CREATE TABLE IF NOT EXISTS webhook_deliveries (
   id              TEXT PRIMARY KEY,
   webhook_id      TEXT NOT NULL REFERENCES outbound_webhooks(id),

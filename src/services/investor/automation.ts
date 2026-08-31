@@ -7,76 +7,99 @@ import { query } from '../../db/client.js';
 import { callOpus, callSonnet, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 
-/**
- * Generate a monthly investor update from product data.
- */
-export async function generateInvestorUpdate(
-  productId: string,
-  ownerId: string,
-  founderHighlight?: string
-): Promise<{ id: string; content: string }> {
-  const [product, metrics, stressors, decisions, competitive] = await Promise.all([
-    query('SELECT name, sector_profile, growth_stage FROM products WHERE id = ?', [productId]),
-    query('SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 4', [productId]),
-    query("SELECT stressor_name, severity FROM stressor_history WHERE product_id = ? AND status = 'active'", [productId]),
-    query("SELECT what, status, category FROM decisions WHERE product_id = ? AND decided_at > datetime('now', '-30 days')", [productId]),
-    query("SELECT competitor_name, signal_summary, significance FROM competitive_signals WHERE product_id = ? AND detected_at > datetime('now', '-30 days')", [productId]),
-  ]);
-
-  const p = product.rows[0] as Record<string, string> | undefined;
-  const m = metrics.rows as unknown as Array<Record<string, unknown>>;
-  const latestMRR = m[0] ? (((m[0].new_mrr_cents as number) ?? 0) + ((m[0].expansion_mrr_cents as number) ?? 0)) / 100 : 0;
-
-  const prompt = `Generate a professional monthly investor update email.
-
-Product: ${p?.name ?? 'Unknown'}
-Current MRR: $${latestMRR.toFixed(0)}
-Growth stage: ${p?.growth_stage ?? 'growth'}
-${founderHighlight ? `Founder highlight: ${founderHighlight}` : ''}
-
-Metrics (last 4 periods): ${JSON.stringify(m.map((r) => ({
-  date: r.snapshot_date, mrr: ((r.new_mrr_cents as number) ?? 0) / 100,
-  users: r.active_users, churn: r.churn_rate,
-})))}
-
-Active stressors: ${(stressors.rows as unknown as Array<Record<string, string>>).map((s) => s.stressor_name).join(', ') || 'None'}
-
-Key decisions: ${(decisions.rows as unknown as Array<Record<string, string>>).map((d) => `${d.what} (${d.status})`).join(', ') || 'None'}
-
-Competitive signals: ${(competitive.rows as unknown as Array<Record<string, string>>).map((c) => `${c.competitor_name}: ${c.signal_summary}`).join('; ') || 'None'}
-
-Format: Subject line, then structured update with: Highlights, Key Metrics, Challenges, Next Month Focus, Ask (if any).
-Be concise and professional. Investors want signal, not noise.`;
-
-  const response = await callOpus(
-    'You are writing a monthly investor update for a SaaS founder. Professional, data-driven, concise.',
-    prompt,
-    2048,
-    productId
-  );
-
-  const period = new Date().toISOString().slice(0, 7);
-  const id = nanoid();
-
-  await query(
-    `INSERT INTO investor_updates (id, product_id, owner_id, period, subject, content, metrics_snapshot, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'draft')`,
-    [id, productId, ownerId, period, `${p?.name} — ${period} Update`, response.content, JSON.stringify(m)]
-  );
-
-  return { id, content: response.content };
-}
+// `generateInvestorUpdate` was here — the second writer into
+// `investor_updates`, and the one that never set `month`. Every dashboard read
+// keys on that column: `WHERE product_id=? AND month=?` for the duplicate
+// check, `ORDER BY month DESC` for the list. So an update created through the
+// API was invisible to the surface that shows updates AND invisible to the
+// check that stops a second one being written for the same month.
+//
+// The canonical writer is in services/scp/investor/investor-update.ts, and it
+// deliberately fills both generations of column names so every reader of
+// either sees the same update. Retired in migration 164, which backfills
+// `month` and `draft_text` for the rows this one left behind.
 
 /**
- * Generate board deck slides from product data.
+ * A BOARD DECK ASSEMBLED FROM WHAT THE COMPANY ACTUALLY REPORTED.
+ *
+ * This asked a model for eight slides including "Key Metrics (MRR, growth,
+ * churn, NPS)", "Customer Health (cohort trends, churn analysis)" and
+ * "Financial Overview (runway, unit economics)" — and passed it the company's
+ * NAME, SECTOR AND STAGE. Nothing else. No metric, no customer, no runway.
+ *
+ * So every number on those slides was invented, by a model told to be
+ * "data-focused", in a document a founder takes to their investors. Of every
+ * claim-without-evidence in this repository this is the one with the furthest
+ * reach: the others mislead the founder, and this one is handed onward by them
+ * to people making funding decisions.
+ *
+ * The company's real figures are passed now, through `ai/measured.ts`, which
+ * says `unknown` where nothing was reported rather than letting a fallback
+ * become a fact. And the model is told, in the system prompt, that unknown must
+ * survive to the slide — because a model asked for a board deck will otherwise
+ * write a plausible number over a gap without being asked to.
+ *
+ * `board_decks` stays on the unread-tables baseline. The route returns the deck
+ * to its caller, so nothing is lost by nobody reading the row; whether a
+ * founder should be able to retrieve a past deck is a product question, and the
+ * two sibling functions retired from this file (migrations 164 and 165) show
+ * what happens when that question is answered by writing a row and hoping.
  */
 export async function generateBoardDeck(productId: string, ownerId: string): Promise<{ id: string; slides: string[] }> {
   const product = await query('SELECT name, sector_profile, growth_stage FROM products WHERE id = ?', [productId]);
   const p = product.rows[0] as Record<string, string> | undefined;
 
+  const { pctOfFraction, measured, money } = await import('../ai/measured.js');
+
+  const metricsRow = (await query(
+    `SELECT mrr_cents, churn_rate, activation_rate, day_30_retention, nps_score,
+            active_users, new_mrr_cents, churned_mrr_cents, snapshot_date
+       FROM metric_snapshots WHERE product_id = ?
+      ORDER BY snapshot_date DESC LIMIT 1`, [productId]))
+    .rows[0] as Record<string, unknown> | undefined;
+
+  const { getCompanyCustomers, getCustomersAtRisk, getFallingCustomers } =
+    await import('../institution/company-customers.js');
+  const [customers, atRisk, falling] = await Promise.all([
+    getCompanyCustomers(productId), getCustomersAtRisk(productId),
+    getFallingCustomers(productId),
+  ]);
+
+  const { getFinancialPosition } = await import('../financial/position.js');
+  const position = await getFinancialPosition(productId);
+
+  const competitorRows = (await query(
+    'SELECT name FROM competitors WHERE product_id = ? LIMIT 8', [productId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+
+  const facts = [
+    `As of: ${metricsRow?.snapshot_date ? String(metricsRow.snapshot_date) : 'no metric snapshot has ever been reported'}`,
+    `MRR: ${money(metricsRow?.mrr_cents)}`,
+    `New MRR this period: ${money(metricsRow?.new_mrr_cents)}`,
+    `Churned MRR this period: ${money(metricsRow?.churned_mrr_cents)}`,
+    `Churn rate: ${pctOfFraction(metricsRow?.churn_rate)}`,
+    `Activation rate: ${pctOfFraction(metricsRow?.activation_rate)}`,
+    `30-day retention: ${pctOfFraction(metricsRow?.day_30_retention)}`,
+    `NPS: ${measured(metricsRow?.nps_score, 1)}`,
+    `Active users: ${measured(metricsRow?.active_users)}`,
+    `Customers on record: ${customers.length}`,
+    `Customers currently at risk: ${atRisk.length}`,
+    `Customers whose health is falling: ${falling.length}`,
+    position === null
+      ? 'Cash and burn: not stated by the founder, so runway cannot be computed'
+      : `Cash on hand: ${money(position.cashOnHandCents)}; monthly burn: `
+        + `${money(position.monthlyBurnCents)}; as of ${position.asOfDate}`,
+    competitorRows.length
+      ? `Competitors on record: ${competitorRows.map((c) => String(c.name)).join(', ')}`
+      : 'Competitors on record: none',
+  ].join('\n');
+
   const prompt = `Generate board deck slide content (text only) for a quarterly board meeting.
 
 Product: ${p?.name ?? 'Unknown'} (${p?.sector_profile ?? 'SaaS'}, ${p?.growth_stage ?? 'growth'})
+
+THE COMPANY'S REPORTED FIGURES — the only numbers you may state:
+${facts}
 
 Generate 6-8 slides:
 1. Executive Summary (3 bullets)
@@ -91,7 +114,16 @@ Generate 6-8 slides:
 Return JSON: {"slides": ["slide 1 content", "slide 2 content", ...]}`;
 
   const response = await callOpus(
-    'You are writing board meeting slides for a SaaS startup. Be strategic and data-focused.',
+    'You are writing board meeting slides for a SaaS startup. Be strategic and data-focused.\n\n'
+    + 'EVERY NUMBER YOU WRITE MUST COME FROM THE REPORTED FIGURES GIVEN TO YOU. '
+    + 'Where a figure reads "unknown", or is absent from that list, say so on the '
+    + 'slide in plain words — "not yet measured", "no snapshot reported" — and do '
+    + 'NOT estimate, interpolate, illustrate or use a placeholder. This deck goes '
+    + 'to investors. A slide that says a number is not known is useful; a slide '
+    + 'with an invented number on it is a false statement made by the founder to '
+    + 'people deciding whether to fund them. Sections about plans, priorities and '
+    + 'discussion topics may be written freely — the constraint is on FACTS about '
+    + 'this company, not on prose.',
     prompt,
     4096,
     productId
@@ -109,69 +141,9 @@ Return JSON: {"slides": ["slide 1 content", "slide 2 content", ...]}`;
   return { id, slides: result.slides };
 }
 
-/**
- * Assess fundraise readiness against what investors look for.
- */
-export async function assessFundraiseReadiness(
-  productId: string,
-  ownerId: string,
-  targetRound: string = 'seed'
-): Promise<{
-  overall_score: number;
-  dimensions: Record<string, { score: number; gap: string }>;
-  recommendations: string[];
-}> {
-  const [product, metrics, economics] = await Promise.all([
-    query('SELECT name, sector_profile, growth_stage FROM products WHERE id = ?', [productId]),
-    query('SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1', [productId]),
-    query('SELECT * FROM unit_economics_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1', [productId]),
-  ]);
-
-  const p = product.rows[0] as Record<string, string> | undefined;
-  const m = metrics.rows[0] as Record<string, unknown> | undefined;
-  const e = economics.rows[0] as Record<string, unknown> | undefined;
-
-  const prompt = `Assess this product's readiness for a ${targetRound} fundraise.
-
-Product: ${p?.name ?? 'Unknown'} (${p?.sector_profile ?? 'SaaS'})
-Stage: ${p?.growth_stage ?? 'early'}
-Metrics: ${JSON.stringify(m ?? {})}
-Unit Economics: ${JSON.stringify(e ?? {})}
-
-Score 0-100 on each dimension, identify the gap, and provide specific recommendations.
-Dimensions: growth_rate, retention, market_size, team, unit_economics, product_market_fit, defensibility
-
-Return JSON:
-{
-  "overall_score": 0-100,
-  "dimensions": {"growth_rate": {"score": N, "gap": "..."}, ...},
-  "recommendations": ["specific actions to improve readiness"]
-}`;
-
-  const response = await callOpus(
-    'You are a fundraising readiness advisor. Score against real investor expectations.',
-    prompt,
-    2048,
-    productId
-  );
-
-  const result = parseJSONResponse<{
-    overall_score: number;
-    dimensions: Record<string, { score: number; gap: string }>;
-    recommendations: string[];
-  }>(response.content);
-
-  await query(
-    `INSERT INTO fundraise_readiness (id, product_id, owner_id, target_round, overall_score, dimension_scores, gaps, recommendations)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      nanoid(), productId, ownerId, targetRound,
-      result.overall_score,
-      JSON.stringify(result.dimensions),
-      JSON.stringify(Object.values(result.dimensions).map((d) => d.gap)),
-      JSON.stringify(result.recommendations),
-    ]
-  );
-
-  return result;
-}
+// `assessFundraiseReadiness` was here. It wrote into `fundraise_readiness`,
+// which nothing has ever read — no page, no response, no prompt, no job. The
+// API route that called it returns the assessment in its response body, so its
+// caller loses nothing; only the row was pointless. Retired in migration 165,
+// and the route now computes through the canonical round-based assessment in
+// services/scp/investor/fundraising-readiness.ts.

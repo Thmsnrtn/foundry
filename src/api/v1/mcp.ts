@@ -22,8 +22,39 @@ export const mcpApi = new Hono<ApiAuthEnv>();
 const PROTOCOL_VERSION = '2025-06-18';
 const LOOP_TOOL_NAMES = new Set(LOOP_TOOLS.map((t) => t.name));
 
+// Tools that CHANGE something. Everything else on this transport reads.
+//
+// This endpoint had no scope check of any kind: it sat behind `apiKeyAuth` and
+// nothing else, so a key issued to read metrics could resolve a decision and
+// record a new one. Scopes were resolved by the middleware and then, on this
+// one surface, never consulted.
+//
+// The check is per TOOL rather than per endpoint, because `tools/call` is one
+// route carrying twenty different consequences. An endpoint-level scope would
+// have to be the widest of them, which is how a read key ends up able to write.
+const WRITING_TOOLS = new Set(['foundry_resolve_decision', 'foundry_record_decision']);
+
+/** The scope one tool call needs. Unknown names are treated as writing: a tool
+ * this map has not been taught about is not assumed to be harmless. */
+function scopeForTool(name: string): 'agents:read' | 'agents:write' {
+  if (WRITING_TOOLS.has(name)) return 'agents:write';
+  if (LOOP_TOOL_NAMES.has(name) || READ_TOOL_NAMES.has(name)) return 'agents:read';
+  return 'agents:write';
+}
+
+/** A key holds a scope when it was granted that scope. There is no value
+ *  meaning "all of them": `issueApiKey` refuses any scope no route honours,
+ *  `'*'` included, and the settings page tells the founder a key "does exactly
+ *  what you tick and nothing else". This used to read `'*'` as every tool —
+ *  a fail-open default for an unknown string, one unvalidated issuance path
+ *  away from being reachable. That path is gone too. */
+function holds(scopes: string[], scope: string): boolean {
+  return scopes.includes(scope);
+}
+
 // The read tools require product_id in their schemas; over the remote transport
 // the product is fixed by the API key, so expose them with product_id removed.
+const READ_TOOL_NAMES = new Set(FOUNDRY_TOOLS.map((t) => t.name));
 const READ_TOOLS_REMOTE = FOUNDRY_TOOLS.map((t) => ({
   ...t,
   inputSchema: {
@@ -75,14 +106,46 @@ mcpApi.post('/', async (c) => {
     }
     case 'ping':
       return c.json(rpcResult(body.id, {}));
-    case 'tools/list':
-      return c.json(rpcResult(body.id, { tools: [...READ_TOOLS_REMOTE, ...LOOP_TOOLS] }));
+    case 'tools/list': {
+      // Only what this key can actually call. Advertising a tool and then
+      // refusing it teaches a client that the server is unreliable, when in
+      // fact the key is simply narrower than the server.
+      const scopes = c.get('scopes') ?? [];
+      return c.json(rpcResult(body.id, {
+        tools: [...READ_TOOLS_REMOTE, ...LOOP_TOOLS]
+          .filter((t) => holds(scopes, scopeForTool(t.name))),
+      }));
+    }
     case 'tools/call': {
       const params = body.params ?? {};
       const name = String(params.name ?? '');
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       const productId = c.get('productId');
       const founderId = c.get('userId');
+
+      // Re-checked at call time, not inferred from what `tools/list` returned.
+      // A client that remembers a tool from a wider key must still be refused.
+      const required = scopeForTool(name);
+      if (!holds(c.get('scopes') ?? [], required)) {
+        return c.json(rpcError(body.id, -32603, `Insufficient permissions. Required scope: ${required}`), 403);
+      }
+
+      // AND MAY FOUNDRY ACT FOR THIS COMPANY AT ALL? The scope says what this
+      // credential is allowed to do; this says whether the company is one
+      // Foundry is operating. The API's method-based check cannot answer it
+      // here — `tools/call` is a single POST carrying both reads and writes,
+      // so refusing the method would refuse the reads the owner's read-only
+      // decision permits. The same read/write vocabulary decides: a writing
+      // tool is a write.
+      if (required === 'agents:write' && productId) {
+        const { companyMayBeChanged } = await import('../middleware/entitlement.js');
+        const verdict = await companyMayBeChanged(productId);
+        if (!verdict.allowed) {
+          return c.json(rpcError(body.id, -32603,
+            `Foundry is not currently acting for this company — ${verdict.reason}. `
+            + 'Read tools still work.'), 403);
+        }
+      }
 
       const result = LOOP_TOOL_NAMES.has(name)
         ? await executeLoopTool(name, args, { productId, founderId })

@@ -8,9 +8,10 @@
 // classification and execution identity.
 // =============================================================================
 
+import { query } from '../../db/client.js';
 import { checkKillSwitch } from './kill-switch.js';
 import { checkAllowed } from './classification.js';
-import { checkAndIncrement } from './budget.js';
+import { checkAndIncrement, confirmSend, releaseHold, operatorBudgetKey, OPERATOR_WEEKLY_CAP, DEFAULT_CAP } from './budget.js';
 import { checkAndReserve, storeResult, releaseReservation } from './idempotency.js';
 import { recordGatewayInvocation, newInvocationId } from './audit.js';
 
@@ -21,8 +22,28 @@ export interface GatewayRequest {
   tool: string;                               // 'send_email'|'create_pr'|...
   action: string;                             // human-readable description
   params: Record<string, unknown>;
-  /** Required for at-most-once dedup. Without it, idempotency is skipped. */
-  dedupKey?: string;
+  /**
+   * The at-most-once identity of this effect. `null` means this caller has
+   * decided not to dedup and accepts that a retry sends again.
+   *
+   * REQUIRED, THOUGH IT MAY BE NULL, AND THIS IS DEFENCE IN DEPTH RATHER THAN A
+   * HOLE BEING CLOSED. Every registered tool policy sets `requireDedupKey`
+   * today, so an omitted key is refused below at `policy.requireDedupKey` and
+   * no effect reaches a handler without one.
+   *
+   * What that leaves is a tool registered LATER whose policy forgets the flag:
+   * the runtime requirement is per-policy, so it is exactly as complete as the
+   * next registration remembers to be. The comment here used to say "without
+   * it, idempotency is skipped" while the type let a caller omit the field —
+   * naming the hazard and permitting it in the same breath.
+   *
+   * Making it required costs nothing at runtime, since all twelve call sites
+   * already pass one, and moves the requirement from something each policy
+   * restates to something the compiler keeps. Skipping at-most-once stays
+   * possible, because a caller may genuinely have no stable identity for an
+   * effect — but it has to be written down as `null` rather than forgotten.
+   */
+  dedupKey: string | null;
   /** Customer fact used by policies that require communication budgeting. */
   customerExternalId?: string;
   /** Legacy assertion checked against, but never overrides, server policy. */
@@ -40,7 +61,17 @@ export type RefusalPhase =
   | 'budget'
   | 'in_flight'
   | 'no_handler'
-  | 'execution';
+  | 'contact_refused'
+  | 'execution'
+  // A handler refused before touching the provider. 'execution' means "the
+  // handler ran and we do not know what reached the outside world", which is
+  // why callers schedule reconciliation on it. A refusal decided inside the
+  // handler — the sender-of-record rule, a missing company sending identity —
+  // is the opposite: definitively nothing was attempted. Filing one under the
+  // other makes a message that never left the building look like one that
+  // might have, and books reconciliation work for an effect that does not
+  // exist.
+  | 'refused';
 
 export type GatewayResult =
   | {
@@ -67,6 +98,20 @@ export interface ToolPolicy {
   dataClass: string;
   requireDedupKey: boolean;
   requireCustomerExternalId: boolean;
+  /**
+   * Survives a company pause. Almost nothing should: a paused company reaches
+   * nobody. The exception is Foundry's own account mail to its own customer —
+   * "your trial has ended", "your subscription is cancelled and here is when
+   * access stops" — which every subscription product delivers regardless of
+   * plan state, and which a founder cannot be left without, since the reason
+   * they are paused is exactly what it explains.
+   *
+   * It is a property of the REGISTERED capability, never of the request. A
+   * caller chooses a tool name; the server chooses what that tool may do. The
+   * one tool that carries this flag also builds its own body from a fixed set
+   * of notice kinds, so naming it does not buy the ability to send anything.
+   */
+  deliverableWhilePaused?: boolean;
 }
 
 const DEFAULT_IDEM_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
@@ -97,7 +142,9 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   }
 
   // 1. Kill-switch
-  const ks = await checkKillSwitch(req.productId, req.tool, policy.actor);
+  const ks = await checkKillSwitch(req.productId, req.tool, policy.actor, {
+    deliverableWhilePaused: policy.deliverableWhilePaused === true,
+  });
   if (ks.blocked) {
     await recordGatewayInvocation({
       invocation_id: invocationId,
@@ -124,6 +171,40 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   }
   if (policy.requireCustomerExternalId && !req.customerExternalId) {
     return refusePolicy(invocationId, req, 'customer external id is required');
+  }
+
+  // 2b. THE PERSON THIS REACHES MAY HAVE SAID NO.
+  //
+  // Owner authority answers whether this actor may act. It does not answer
+  // whether this may be done to THIS person, and the person an effect reaches
+  // is not represented by the founder's permission. Migration 094 stated the
+  // rule on its face — "never contacted again, by any mode, at any trust
+  // level" — and one department consulted it while the governed path did not.
+  //
+  // Checked HERE because this is where every outward effect converges, so no
+  // caller has to remember it. `requireCustomerExternalId` already means "this
+  // effect is addressed to an identified party", so the condition is a property
+  // of the registered capability rather than a new field a caller could omit.
+  if (policy.requireCustomerExternalId && req.customerExternalId) {
+    const { contactIsRefused } = await import('../institution/contact-constraint.js');
+    const constraint = await contactIsRefused(req.productId, req.customerExternalId);
+    if (constraint.refused) {
+      await recordGatewayInvocation({
+        invocation_id: invocationId,
+        product_id: req.productId,
+        agent: policy.actor,
+        tool: req.tool,
+        action: req.action,
+        outcome: 'refused',
+        reason: `contact_refused: ${constraint.reason}`,
+      });
+      return {
+        ok: false,
+        invocation_id: invocationId,
+        phase: 'contact_refused',
+        reason: constraint.reason,
+      };
+    }
   }
 
   // 3. Classification is mandatory and derived from the registered policy.
@@ -211,10 +292,30 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     }
   };
 
-  // 5. Communication budget (only when a customer key is provided)
+  // 5. Communication budget (only when a recipient key is provided)
+  //
+  // WHO THE CEILING IS FOR. The cap of three a week exists so Foundry's agents
+  // cannot nag a company's CUSTOMER. Every founder-bound send passes the
+  // founder's own address as the recipient key — the daily briefing, the weekly
+  // digest, the welcome sequence and the billing account notice all drew on one
+  // budget of three — so a founder on daily digests was over the cap by
+  // Wednesday and the next thing refused was whatever came next, including
+  // "your card was declined and the account will be paused".
+  //
+  // The answer is NOT a field the caller sets. This file's rule is that a
+  // caller cannot skip or downgrade a control by declaring a safer fact, and a
+  // bigger allowance is a downgrade. So the gateway asks the database who this
+  // address belongs to: an operator of THIS product — its owner, or a team
+  // member — gets the operator ceiling, and everyone else gets the customer
+  // one. Nothing at any call site changed, and nothing at any call site can
+  // change the answer.
+  let heldBudgetKey: string | null = null;
+  const week = currentWeekStart();
   if (req.customerExternalId) {
-    const week = currentWeekStart();
-    const budget = await checkAndIncrement(req.productId, req.customerExternalId, week);
+    const operator = await recipientIsOperator(req.productId, req.customerExternalId);
+    const budgetKey = operator ? operatorBudgetKey(req.customerExternalId) : req.customerExternalId;
+    const cap = operator ? OPERATOR_WEEKLY_CAP : DEFAULT_CAP;
+    const budget = await checkAndIncrement(req.productId, budgetKey, week, cap);
     if (!budget.allowed) {
       await releaseIfReserved();
       await recordGatewayInvocation({
@@ -233,12 +334,23 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
         reason: `cap ${budget.cap} reached for week ${week}`,
       };
     }
+    // Taken as a HOLD. Every path below that does not reach the provider gives
+    // it back; the caller owes the recipient that much.
+    heldBudgetKey = budgetKey;
   }
+
+  const releaseBudgetHold = async () => {
+    if (heldBudgetKey) {
+      await releaseHold(req.productId, heldBudgetKey, week).catch(() => {});
+      heldBudgetKey = null;
+    }
+  };
 
   // 6. Dispatch to registered handler
   const handler = handlers.get(req.tool);
   if (!handler) {
     await releaseIfReserved();
+    await releaseBudgetHold();
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,
@@ -261,9 +373,19 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     result = await handler(req);
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
+    // A handler may declare that it refused before reaching the provider.
+    // Nothing more elaborate than a flag on the error: the alternative is a
+    // taxonomy of failure types nobody would keep accurate.
+    const definitivelyNotAttempted =
+      typeof err === 'object' && err !== null
+      && (err as { notAttempted?: unknown }).notAttempted === true;
     // Release the reservation: a failed attempt must not convert every
-    // subsequent retry into a fake cached success for the TTL window.
+    // subsequent retry into a fake cached success for the TTL window. The
+    // budget hold goes back with it — including, and especially, for a
+    // `notAttempted` refusal, which the next two lines classify as definitively
+    // never having reached the provider.
     await releaseIfReserved();
+    await releaseBudgetHold();
     await recordGatewayInvocation({
       invocation_id: invocationId,
       product_id: req.productId,
@@ -271,12 +393,12 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
       tool: req.tool,
       action: req.action,
       outcome: 'failed',
-      reason: `execution: ${reason}`,
+      reason: `${definitivelyNotAttempted ? 'refused' : 'execution'}: ${reason}`,
     });
     return {
       ok: false,
       invocation_id: invocationId,
-      phase: 'execution',
+      phase: definitivelyNotAttempted ? 'refused' : 'execution',
       reason,
     };
   }
@@ -284,6 +406,11 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   // 7. Cache result + audit
   if (req.dedupKey) {
     await storeResult(req.productId, req.tool, req.dedupKey, result);
+  }
+  // The hold becomes a send. `last_sent_at` is written here and nowhere else.
+  if (heldBudgetKey) {
+    await confirmSend(req.productId, heldBudgetKey, week);
+    heldBudgetKey = null;
   }
   await recordGatewayInvocation({
     invocation_id: invocationId,
@@ -311,6 +438,33 @@ async function refusePolicy(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Whether this address belongs to somebody who OPERATES this company.
+ *
+ * The owner of the product, or a team member of it. Asked of the database
+ * rather than of the caller, because the answer decides which ceiling applies
+ * and this file does not let a caller choose its own ceiling.
+ *
+ * Anything that is not an email address is not an operator: the recipient key
+ * is a Stripe customer id on some paths, and a lookup by email would never
+ * match one anyway — this only says so in one place instead of by accident.
+ */
+async function recipientIsOperator(productId: string, recipientKey: string): Promise<boolean> {
+  if (!recipientKey.includes('@')) return false;
+  const result = await query(
+    `SELECT 1 AS present FROM products p
+       JOIN founders f ON f.id = p.owner_id
+      WHERE p.id = ? AND lower(f.email) = lower(?)
+      UNION ALL
+     SELECT 1 AS present FROM team_members tm
+       JOIN founders f2 ON f2.id = tm.founder_id
+      WHERE tm.product_id = ? AND lower(f2.email) = lower(?)
+      LIMIT 1`,
+    [productId, recipientKey, productId, recipientKey],
+  );
+  return result.rows.length > 0;
+}
 
 function currentWeekStart(d: Date = new Date()): string {
   const copy = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));

@@ -40,7 +40,7 @@ interface LedgerClaudeResponse {
     confidence: number;
     attribution_type: 'direct' | 'contribution' | 'protective';
   }>;
-  domain_health_score: number;
+  domain_health_score?: number;
   briefing_contribution: string;
   briefing_priority: 'high' | 'normal' | 'low';
 }
@@ -89,8 +89,12 @@ export class LedgerAgent extends BaseAgent {
 
     // ── 4. Query outbound_actions executed in last 30 days ────────────────────
     const executedActionsResult = await db(
+      // `estimated_value_usd` is not a column on `outbound_actions` — the
+      // money it records is `cost_usd`, what the action COST, not what it was
+      // guessed to be worth. Ledger's whole reason for reading this table is
+      // spend, so the sum is spend, and it is named for what it is.
       `SELECT agent_name, COUNT(*) as executed_count,
-              SUM(estimated_value_usd) as total_estimated_value_usd
+              SUM(COALESCE(cost_usd, 0)) as total_cost_usd
        FROM outbound_actions
        WHERE product_id = ?
          AND status = 'executed'
@@ -128,25 +132,39 @@ export class LedgerAgent extends BaseAgent {
         evolutionCandidates: [],
         tokensUsed: 0,
         costUsd: 0,
-        domainHealthScore: 50,
       };
     }
 
     // ── 7. Build prompt data ──────────────────────────────────────────────────
+    // These three are COMPANY-REPORTED and nullable. `|| 0` told the financial
+    // agent that a month with no churn figure had churned exactly nothing, and
+    // that a month with no new-business figure won exactly nothing. A month
+    // nobody reported and a month that genuinely stood still looked identical to
+    // the agent whose whole job is reading the shape of the revenue.
+    //
+    // Foundry's OWN ledgers below are different and are left as they are: an
+    // absent `ai_cost_trailing_30d_usd` really does mean no spend was recorded,
+    // because Foundry is the thing that records it.
+    const { money } = await import('../../ai/measured.js');
     const metricRows = metricsResult.rows as Record<string, unknown>[];
     const mrrSeries = metricRows.map(row => {
       const date = row.snapshot_date as string;
-      const newMrr = (Number(row.new_mrr_cents) || 0) / 100;
-      const churned = (Number(row.churned_mrr_cents) || 0) / 100;
-      const expansion = (Number(row.expansion_mrr_cents) || 0) / 100;
-      return `${date}: new=$${newMrr.toFixed(2)} churned=$${churned.toFixed(2)} expansion=$${expansion.toFixed(2)}`;
+      return `${date}: new=${money(row.new_mrr_cents)} `
+        + `churned=${money(row.churned_mrr_cents)} `
+        + `expansion=${money(row.expansion_mrr_cents)}`;
     }).join(' | ');
 
     const productRow = productResult.rows.length > 0
       ? (productResult.rows[0] as Record<string, unknown>)
       : null;
     const aiCostTotal = productRow ? Number(productRow.ai_cost_trailing_30d_usd) || 0 : 0;
-    const budget = productRow ? Number(productRow.operating_budget_monthly_usd) || 50 : 50;
+    // The founder's operating budget. `|| 50` invented a $50/month budget for a
+    // company that had not set one — and then `budgetUtilization` divided the
+    // real AI spend by that invented number and reported the percentage to the
+    // agent that judges whether the spend is justified. `|| 50` also swallowed a
+    // genuine budget of 0.
+    const budget = productRow?.operating_budget_monthly_usd == null
+      ? null : Number(productRow.operating_budget_monthly_usd);
     const attributedRevenue = productRow ? Number(productRow.attributed_revenue_trailing_30d_usd) || 0 : 0;
 
     const costRow = costResult.rows.length > 0 ? (costResult.rows[0] as Record<string, unknown>) : null;
@@ -162,12 +180,18 @@ export class LedgerAgent extends BaseAgent {
     const executedRows = executedActionsResult.rows as Record<string, unknown>[];
     const executedContext = executedRows.length > 0
       ? executedRows.map(r =>
-          `${r.agent_name as string}: ${r.executed_count as number} actions, est. value $${(Number(r.total_estimated_value_usd) || 0).toFixed(2)}`
+          `${r.agent_name as string}: ${r.executed_count as number} actions, cost $${(Number(r.total_cost_usd) || 0).toFixed(2)}`
         ).join(', ')
       : 'No executed actions in 30d';
 
-    const roi = aiCostTotal > 0 ? attributedRevenue / aiCostTotal : 0;
-    const budgetUtilization = budget > 0 ? (aiCostTotal / budget) * 100 : 0;
+    // A COMPANY THAT HAS SPENT NOTHING HAS NO ROI, NOT AN ROI OF ZERO. The
+    // fallback reported the worst possible return for the state of having spent
+    // nothing yet, to an agent whose job is judging whether the spend is worth
+    // it. See `ai/measured.ts`.
+    const roi = aiCostTotal > 0 ? attributedRevenue / aiCostTotal : null;
+    const budgetUtilization = budget !== null && budget > 0
+      ? (aiCostTotal / budget) * 100
+      : null;
 
     // Stripe integration events
     const stripeEvents = (context.integrationEvents ?? []).filter(e => e.source === 'stripe');
@@ -190,8 +214,8 @@ You track AI/tool costs as a percentage of revenue — costs that are growing fa
     );
 
     const userPrompt = `MRR last ${metricRows.length} periods (newest first): ${mrrSeries || 'No MRR data'}.
-Total AI cost (30d): $${directCost.toFixed(4)}. Budget: $${budget.toFixed(2)}/month. Utilization: ${budgetUtilization.toFixed(1)}%.
-Attributed revenue (30d): $${attributedRevenue.toFixed(2)}. Calculated ROI: ${roi.toFixed(2)}x.
+Total AI cost (30d): $${directCost.toFixed(4)}. Budget: ${budget === null ? 'not set by the founder' : `$${budget.toFixed(2)}/month`}. Utilization: ${budgetUtilization === null ? 'unknown' : `${budgetUtilization.toFixed(1)}%`}.
+Attributed revenue (30d): $${attributedRevenue.toFixed(2)}. Calculated ROI: ${roi === null ? 'not computable — nothing has been spent yet' : `${roi.toFixed(2)}x`}.
 Revenue by agent: ${revenueBreakdown}.
 Executed actions (30d): ${executedContext}.
 ${stripeContext}.
@@ -225,7 +249,9 @@ Return JSON only (no markdown fences):
       "attribution_type": "direct" | "contribution" | "protective"
     }
   ],
-  "domain_health_score": number (0-100),
+  "domain_health_score": number (0-100), OMIT THIS FIELD ENTIRELY if you have no
+    evidence to score the domain on — an omitted score is recorded as unknown,
+    and a guessed one is recorded as a measurement,
   "briefing_contribution": "string (2-3 sentences max)",
   "briefing_priority": "high" | "normal" | "low"
 }`;
@@ -247,7 +273,6 @@ Return JSON only (no markdown fences):
         evolutionCandidates: [],
         tokensUsed,
         costUsd,
-        domainHealthScore: 50,
       };
     }
 
@@ -278,7 +303,7 @@ Return JSON only (no markdown fences):
           parameters: {
             title: rec.title,
             estimated_impact_usd: rec.estimated_impact_usd,
-            budget_utilization_pct: health?.budget_utilization_pct ?? budgetUtilization,
+            budget_utilization_pct: health?.budget_utilization_pct ?? budgetUtilization ?? 0,
           },
           authority_level: 1,
           estimated_value_usd: rec.estimated_impact_usd,
@@ -291,19 +316,29 @@ Return JSON only (no markdown fences):
 
     // Broadcast budget warning when utilization > 80%
     const utilPct = health?.budget_utilization_pct ?? budgetUtilization;
-    if (utilPct > 80) {
+    const utilText = utilPct === null ? 'unknown' : `${utilPct.toFixed(1)}%`;
+    if (utilPct !== null && utilPct > 80) {
       agentMessages.push({
         to_agent: 'broadcast',
         message_type: 'alert',
         priority: utilPct > 95 ? 'critical' : 'high',
-        subject: `Budget utilization at ${utilPct.toFixed(1)}% — AI cost review needed`,
-        body: `Ledger reports budget utilization at ${utilPct.toFixed(1)}% for the month. AI costs: $${directCost.toFixed(4)}. Budget cap: $${budget.toFixed(2)}. All agents should minimize unnecessary Claude calls until next billing cycle.`,
+        subject: `Budget utilization at ${utilText} — AI cost review needed`,
+        // `utilPct` is only non-null when a budget was set, so this branch
+        // cannot be reached without one — but the value is narrowed explicitly
+        // rather than asserted, because that coupling is not visible here.
+        body: `Ledger reports budget utilization at ${utilText} for the month. `
+          + `AI costs: $${directCost.toFixed(4)}. `
+          + `Budget cap: ${budget === null ? 'not set' : `$${budget.toFixed(2)}`}. `
+          + `All agents should minimize unnecessary Claude calls until next billing cycle.`,
       });
     }
 
     // Alert Forge when NRR < 90%
-    const nrr = health?.nrr_estimate ?? 100;
-    if (nrr < 90) {
+    // 100% NET REVENUE RETENTION IS A HEALTHY COMPANY. It was what a model
+    // declining to estimate produced, and it went into the run description as
+    // a figure. Null raises nothing and is reported as nothing.
+    const nrr = health?.nrr_estimate ?? null;
+    if (nrr !== null && nrr < 90) {
       agentMessages.push({
         to_agent: 'forge',
         message_type: 'alert',
@@ -349,7 +384,7 @@ Return JSON only (no markdown fences):
     const analysisAction: AgentAction = {
       id: nanoid(),
       type: 'analysis_complete',
-      description: `Completed financial analysis: AI cost $${directCost.toFixed(4)}, budget utilization ${utilPct.toFixed(1)}%, ROI ${roi.toFixed(2)}x, NRR ${nrr.toFixed(1)}%`,
+      description: `Completed financial analysis: AI cost $${directCost.toFixed(4)}, budget utilization ${utilText}, ROI ${roi === null ? 'not computable' : `${roi.toFixed(2)}x`}, NRR ${nrr === null ? 'not estimated' : `${nrr.toFixed(1)}%`}`,
       authority_level: 0,
       executed: true,
       executed_at: new Date().toISOString(),
@@ -365,7 +400,13 @@ Return JSON only (no markdown fences):
       evolutionCandidates: [],
       tokensUsed,
       costUsd,
-      domainHealthScore: parsed.domain_health_score ?? 50,
+      // No `?? 50`. The type says `domainHealthScore?: number` — "if provided" —
+      // and a model that did not return a score has not scored the domain. 50 is
+      // the middle of the bar the dashboard draws, so an unscored agent used to
+      // render as exactly average, in amber, next to agents that were measured.
+      // Migration-free fix: the column is already nullable and run-recorder
+      // already writes null.
+      domainHealthScore: parsed.domain_health_score,
       outboundActions,
       agentMessages,
     };

@@ -17,33 +17,94 @@ export interface ValueDeliverySnapshot {
 }
 
 /**
- * Compute the Value Delivery Index (0-100).
+ * THE SAME ABSENCE SCORED AS EXCELLENT AND AS ZERO, IN ONE FILE.
+ *
+ * The index was a weighted sum in which every unreported component was
+ * substituted, and the substitutions did not agree with each other:
+ *
+ *   core_workflow_completion_rate ?? 0    an unreported rate scored 0
+ *   feature_utilization_breadth   ?? 0    an unreported breadth scored 0
+ *   time_to_first_value_hours     ?? 100  100 - 100 = 0, the worst
+ *   engagement_depth_score        ?? 0    an unreported score scored 0
+ *   support_ticket_rate           ?? 0    100 - 0 = 100, the BEST
+ *
+ * So a product reporting nothing scored 15/100 — fifteen points of perfect
+ * support performance, and zero for everything else. `if (!m) return 0` gave a
+ * product with no snapshot at all a flat 0 on "how effectively the product
+ * delivers value". And `identifyValueDeliveryStressors` read the same missing
+ * breadth as 100, so the same silence was excellent there and worthless here.
+ *
+ * The index is now a weighted average over the components that were ACTUALLY
+ * REPORTED, with the weights renormalised, and null when none were. `coverage`
+ * says how much of the full weighting was measured, because an index built from
+ * one component of five is not the same claim as one built from all five, and a
+ * single number cannot carry that difference.
+ *
+ * `value_delivery_metrics.value_delivery_index` was already declared nullable.
+ * The schema allowed unknown; the producer could not express it.
  */
-export async function computeValueDeliveryIndex(productId: string): Promise<number> {
+const VDI_COMPONENTS: ReadonlyArray<{
+  key: keyof ValueDeliverySnapshot;
+  weight: number;
+  score: (value: number) => number;
+}> = [
+  { key: 'core_workflow_completion_rate', weight: 0.30, score: (v) => v },
+  { key: 'feature_utilization_breadth', weight: 0.15, score: (v) => v },
+  { key: 'time_to_first_value_hours', weight: 0.20, score: (v) => Math.max(0, 100 - v) },
+  { key: 'engagement_depth_score', weight: 0.20, score: (v) => v },
+  { key: 'support_ticket_rate', weight: 0.15, score: (v) => Math.max(0, 100 - v * 10) },
+];
+
+export interface ValueDeliveryIndex {
+  /** 0-100 over the components reported, or null when none were. */
+  index: number | null;
+  /** The components that went into it. */
+  components_reported: string[];
+  /** Share of the full weighting that was measured, 0-1. Null when nothing was. */
+  coverage: number | null;
+}
+
+/** Weighted average over the reported components only. */
+export function valueDeliveryIndexOf(
+  m: Partial<Record<keyof ValueDeliverySnapshot, number | null | undefined>> | undefined,
+): ValueDeliveryIndex {
+  if (!m) return { index: null, components_reported: [], coverage: null };
+
+  let weighted = 0;
+  let weightUsed = 0;
+  const reported: string[] = [];
+
+  for (const c of VDI_COMPONENTS) {
+    const raw = m[c.key];
+    if (raw === null || raw === undefined) continue;
+    weighted += c.score(Number(raw)) * c.weight;
+    weightUsed += c.weight;
+    reported.push(c.key);
+  }
+
+  if (weightUsed === 0) return { index: null, components_reported: [], coverage: null };
+
+  const index = Math.round(Math.min(100, Math.max(0, weighted / weightUsed)));
+  return { index, components_reported: reported, coverage: weightUsed };
+}
+
+/**
+ * Compute the Value Delivery Index from the latest snapshot.
+ */
+export async function computeValueDeliveryIndex(productId: string): Promise<ValueDeliveryIndex> {
   const result = await query(
     'SELECT * FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
     [productId]
   );
   const m = result.rows[0] as Record<string, unknown> | undefined;
-  if (!m) return 0;
-
-  const components = [
-    { value: (m.core_workflow_completion_rate as number) ?? 0, weight: 0.30 },
-    { value: (m.feature_utilization_breadth as number) ?? 0, weight: 0.15 },
-    { value: Math.max(0, 100 - ((m.time_to_first_value_hours as number) ?? 100)), weight: 0.20 },
-    { value: (m.engagement_depth_score as number) ?? 0, weight: 0.20 },
-    { value: Math.max(0, 100 - ((m.support_ticket_rate as number) ?? 0) * 10), weight: 0.15 },
-  ];
-
-  const index = components.reduce((sum, c) => sum + c.value * c.weight, 0);
-  return Math.round(Math.min(100, Math.max(0, index)));
+  return valueDeliveryIndexOf(m as Parameters<typeof valueDeliveryIndexOf>[0]);
 }
 
 /**
  * Assess time to first value.
  */
 export async function assessTimeToFirstValue(productId: string): Promise<{
-  hours: number;
+  hours: number | null;
   benchmark: string;
   recommendation: string | null;
 }> {
@@ -51,7 +112,19 @@ export async function assessTimeToFirstValue(productId: string): Promise<{
     'SELECT time_to_first_value_hours FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
     [productId]
   );
-  const hours = (result.rows[0] as Record<string, number> | undefined)?.time_to_first_value_hours ?? 0;
+  const raw = (result.rows[0] as Record<string, number | null> | undefined)?.time_to_first_value_hours;
+
+  // `?? 0` meant zero hours, and zero hours falls in the first branch below:
+  // a product that had never measured time-to-first-value was told its
+  // onboarding was "Excellent — users get value within minutes".
+  if (raw === null || raw === undefined) {
+    return {
+      hours: null,
+      benchmark: 'Not measured — no time-to-first-value has been reported',
+      recommendation: null,
+    };
+  }
+  const hours = Number(raw);
 
   let benchmark: string;
   let recommendation: string | null = null;
@@ -76,10 +149,30 @@ export async function assessTimeToFirstValue(productId: string): Promise<{
 /**
  * Detect declining value delivery trends.
  */
+/**
+ * Detect declining value delivery trends.
+ *
+ * THE FILE FIXED THE INDEX AND LEFT THIS FUNCTION SUBSTITUTING ZEROS. The
+ * header above describes exactly this defect in `computeValueDeliveryIndex` and
+ * says it was repaired; four comparisons here still read every unreported
+ * component as 0, and the direction of the lie depends on which side is
+ * missing:
+ *
+ *   latest missing, prior 60   →  0 < 55   →  "core_workflow_completion" is declining
+ *   prior missing, latest 60   →  60 < -5  →  nothing is wrong
+ *
+ * The same silence is a decline in one line and no problem in the next, and the
+ * VDI sentence would report "declined from 72 to 0" about a snapshot that
+ * reported no index at all.
+ *
+ * A comparison needs two measurements. Components that have only one are named
+ * as unassessable rather than counted either way.
+ */
 export async function detectValueDecline(productId: string): Promise<{
-  declining: boolean;
+  declining: boolean | null;
   trend_description: string;
   affected_components: string[];
+  unassessable_components: string[];
 }> {
   const snapshots = await query(
     'SELECT * FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 4',
@@ -87,35 +180,61 @@ export async function detectValueDecline(productId: string): Promise<{
   );
 
   if (snapshots.rows.length < 2) {
-    return { declining: false, trend_description: 'Insufficient data', affected_components: [] };
+    // Null, not false: "nothing is declining" and "this cannot be said" are
+    // different answers, and one snapshot cannot support the first.
+    return {
+      declining: null,
+      trend_description: 'Insufficient data',
+      affected_components: [],
+      unassessable_components: [],
+    };
   }
 
-  const rows = snapshots.rows as unknown as Array<Record<string, number>>;
+  const rows = snapshots.rows as unknown as Array<Record<string, number | null>>;
   const latest = rows[0]!;
   const prior = rows[rows.length - 1]!;
 
   const affected: string[] = [];
+  const unassessable: string[] = [];
 
-  if ((latest.core_workflow_completion_rate ?? 0) < (prior.core_workflow_completion_rate ?? 0) - 5) {
-    affected.push('core_workflow_completion');
-  }
-  if ((latest.engagement_depth_score ?? 0) < (prior.engagement_depth_score ?? 0) - 5) {
-    affected.push('engagement_depth');
-  }
-  if ((latest.support_ticket_rate ?? 0) > (prior.support_ticket_rate ?? 0) + 2) {
-    affected.push('support_load');
+  /** Compare a component only when both ends of the comparison exist. */
+  const moved = (
+    name: string,
+    column: string,
+    worse: (now: number, before: number) => boolean,
+  ): void => {
+    const now = latest[column];
+    const before = prior[column];
+    if (now == null || before == null) { unassessable.push(name); return; }
+    if (worse(Number(now), Number(before))) affected.push(name);
+  };
+
+  moved('core_workflow_completion', 'core_workflow_completion_rate', (n, b) => n < b - 5);
+  moved('engagement_depth', 'engagement_depth_score', (n, b) => n < b - 5);
+  moved('support_load', 'support_ticket_rate', (n, b) => n > b + 2);
+
+  const latestVDI = latest.value_delivery_index;
+  const priorVDI = prior.value_delivery_index;
+  if (latestVDI == null || priorVDI == null) {
+    return {
+      declining: null,
+      trend_description: latestVDI == null && priorVDI == null
+        ? 'No value delivery index reported in either snapshot'
+        : 'Only one of the two snapshots reported a value delivery index',
+      affected_components: affected,
+      unassessable_components: [...unassessable, 'value_delivery_index'],
+    };
   }
 
-  const latestVDI = (latest.value_delivery_index ?? 0);
-  const priorVDI = (prior.value_delivery_index ?? 0);
-  const declining = latestVDI < priorVDI - 5;
+  const declining = Number(latestVDI) < Number(priorVDI) - 5;
 
   return {
     declining,
     trend_description: declining
-      ? `VDI declined from ${priorVDI} to ${latestVDI} (${(priorVDI - latestVDI).toFixed(0)} point drop)`
+      ? `VDI declined from ${priorVDI} to ${latestVDI} (${(Number(priorVDI) - Number(latestVDI)).toFixed(0)} point drop)`
       : `VDI stable at ${latestVDI}`,
     affected_components: affected,
+    unassessable_components: unassessable,
   };
 }
 
@@ -176,12 +295,14 @@ export async function identifyValueDeliveryStressors(productId: string): Promise
       signal: decline.trend_description,
       timeframe_days: 30,
       neutralizing_action: `Focus on: ${decline.affected_components.join(', ')}. VDI decline predicts future churn.`,
-      severity: vdi < 40 ? 'critical' : 'elevated',
+      // An unknown index is not a low one. Without it this stays 'elevated',
+      // which is what a decline on its own warrants.
+      severity: vdi.index !== null && vdi.index < 40 ? 'critical' : 'elevated',
       competitive_correlation: null,
     });
   }
 
-  if (ttfv.hours > 72) {
+  if (ttfv.hours !== null && ttfv.hours > 72) {
     items.push({
       name: 'Slow time to first value',
       signal: `Users take ${ttfv.hours.toFixed(0)} hours to experience value`,
@@ -197,8 +318,12 @@ export async function identifyValueDeliveryStressors(productId: string): Promise
     'SELECT feature_utilization_breadth FROM value_delivery_metrics WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1',
     [productId]
   );
-  const breadth = (latest.rows[0] as Record<string, number> | undefined)?.feature_utilization_breadth ?? 100;
-  if (breadth < 30) {
+  // `?? 100` read an unreported breadth as perfect, so this stressor could
+  // never fire for a product that had not measured it — and the index above
+  // read the same silence as 0. One absence, two opposite readings, one file.
+  const breadthRaw = (latest.rows[0] as Record<string, number | null> | undefined)?.feature_utilization_breadth;
+  const breadth = breadthRaw === null || breadthRaw === undefined ? null : Number(breadthRaw);
+  if (breadth !== null && breadth < 30) {
     items.push({
       name: 'Feature underutilization',
       signal: `Only ${breadth.toFixed(0)}% of features used by average user`,
@@ -222,15 +347,11 @@ export async function reportValueDeliveryMetrics(
 ): Promise<void> {
   const today = new Date().toISOString().split('T')[0]!;
 
-  // Compute VDI from provided components
-  const components = [
-    { value: metrics.core_workflow_completion_rate ?? 0, weight: 0.30 },
-    { value: metrics.feature_utilization_breadth ?? 0, weight: 0.15 },
-    { value: Math.max(0, 100 - (metrics.time_to_first_value_hours ?? 100)), weight: 0.20 },
-    { value: metrics.engagement_depth_score ?? 0, weight: 0.20 },
-    { value: Math.max(0, 100 - (metrics.support_ticket_rate ?? 0) * 10), weight: 0.15 },
-  ];
-  const vdi = Math.round(components.reduce((sum, c) => sum + c.value * c.weight, 0));
+  // ONE ROW THAT TOLD THE TRUTH IN FIVE COLUMNS AND A LIE IN THE SIXTH. The
+  // INSERT below correctly stores null for every component the caller did not
+  // supply — and the index was computed from those same absences coerced to 0
+  // and 100. The same function that reads the index now writes it.
+  const vdi = valueDeliveryIndexOf(metrics).index;
 
   await query(
     `INSERT INTO value_delivery_metrics (id, product_id, owner_id, snapshot_date, core_workflow_completion_rate, feature_utilization_breadth, time_to_first_value_hours, outcome_achievement_rate, engagement_depth_score, value_delivery_index, nps_score, support_ticket_rate)

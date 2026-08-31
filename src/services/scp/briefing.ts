@@ -116,8 +116,8 @@ export async function generateDailyBriefing(
   let riskState: string | null = null;
   try {
     const signalResult = await query(
-      `SELECT signal_score, risk_state FROM signal_history
-       WHERE product_id=? ORDER BY computed_at DESC LIMIT 1`,
+      `SELECT score AS signal_score, risk_state FROM signal_history
+       WHERE product_id=? ORDER BY recorded_at DESC LIMIT 1`,
       [productId]
     );
     if (signalResult.rows.length > 0) {
@@ -133,15 +133,35 @@ export async function generateDailyBriefing(
   let mrrCents: number | null = null;
   let mrrGrowthPct: number | null = null;
   try {
+    // `mrr_growth_pct` has never been a column on `metric_snapshots`, so this
+    // query raised — and the catch below, written for a table that "may not
+    // exist yet", swallowed it. The founder's briefing has shown no signal
+    // score and no growth figure since the column was renamed, and said
+    // nothing about why. Growth is DERIVED from two snapshots, which is what
+    // it always was.
     const metricsResult = await query(
-      `SELECT mrr_cents, mrr_growth_pct FROM metric_snapshots
-       WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 1`,
+      `SELECT mrr_cents, snapshot_date FROM metric_snapshots
+       WHERE product_id=? ORDER BY snapshot_date DESC LIMIT 2`,
       [productId]
     );
     if (metricsResult.rows.length > 0) {
       const mr = metricsResult.rows[0] as Record<string, unknown>;
       mrrCents = mr.mrr_cents as number | null;
-      mrrGrowthPct = mr.mrr_growth_pct as number | null;
+      const prior = metricsResult.rows[1] as Record<string, unknown> | undefined;
+      const priorMrr = prior ? (prior.mrr_cents as number | null) : null;
+      // One snapshot is not a growth rate, and neither is growth from zero.
+      // Reporting either as a percentage invents a denominator.
+      // ...AND OVER WHATEVER GAP SEPARATES THEM. The two snapshots are
+      // consecutive rows, which for a daily reporter is yesterday — so this is
+      // a day-over-day figure reported to the founder as the company's growth.
+      // A monthly-equivalent rate from the gap between the dates is the same
+      // arithmetic the Ghost simulator and the stage detector now use.
+      const gapDays = (Date.parse(`${String(mr.snapshot_date)}T00:00:00Z`)
+        - Date.parse(`${String(prior?.snapshot_date)}T00:00:00Z`)) / 86_400_000;
+      mrrGrowthPct = (mrrCents != null && priorMrr != null && priorMrr > 0
+        && Number.isFinite(gapDays) && gapDays > 0)
+        ? Math.round(((mrrCents / priorMrr) ** (30.44 / gapDays) - 1) * 1000) / 10
+        : null;
     }
   } catch {
     // metric_snapshots columns may vary
@@ -165,14 +185,14 @@ export async function generateDailyBriefing(
   }
 
   const attributedRevenue = (prod.attributed_revenue_trailing_30d_usd as number) ?? 0;
-  const roi = aiCost30d > 0 ? attributedRevenue / aiCost30d : null;
+  const attributedRoi = aiCost30d > 0 ? attributedRevenue / aiCost30d : null;
 
   const financialSummary: FinancialSummary = {
     mrr_cents: mrrCents,
     mrr_growth_pct: mrrGrowthPct,
     ai_cost_30d_usd: aiCost30d,
     attributed_revenue_usd: attributedRevenue,
-    roi,
+    attributed_roi: attributedRoi,
   };
 
   // Collect pending_decisions from all sessions
@@ -556,8 +576,8 @@ export function formatBriefingAsHTML(briefing: SCPBriefing, companyName: string)
   const mrrDisplay = fin?.mrr_cents !== null && fin?.mrr_cents !== undefined
     ? `$${(fin.mrr_cents / 100).toLocaleString()}`
     : 'N/A';
-  const roiDisplay = fin?.roi !== null && fin?.roi !== undefined
-    ? `${fin.roi.toFixed(1)}x`
+  const roiDisplay = fin?.attributed_roi !== null && fin?.attributed_roi !== undefined
+    ? `${fin.attributed_roi.toFixed(1)}x`
     : 'N/A';
 
   return `
@@ -613,7 +633,7 @@ export function formatBriefingAsHTML(briefing: SCPBriefing, companyName: string)
     <div style="display:flex; gap:24px; flex-wrap:wrap; font-size:14px; color:var(--text-secondary, #94a3b8);">
       <span><strong style="color:var(--text-primary, #e2e8f0);">MRR:</strong> ${mrrDisplay}</span>
       <span><strong style="color:var(--text-primary, #e2e8f0);">AI Cost (30d):</strong> $${fin ? fin.ai_cost_30d_usd.toFixed(2) : '0.00'}</span>
-      <span><strong style="color:var(--text-primary, #e2e8f0);">ROI:</strong> ${roiDisplay}</span>
+      <span><strong style="color:var(--text-primary, #e2e8f0);">Attributed ROI:</strong> ${roiDisplay}</span>
     </div>
   </div>
 

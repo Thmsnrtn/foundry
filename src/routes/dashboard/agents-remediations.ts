@@ -19,6 +19,7 @@ import {
 } from '../../services/scp/remediation.js';
 import type { RemediationItem } from '../../services/scp/remediation.js';
 import type { AgentName } from '../../services/scp/types.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentRemediationRoutes = new Hono<AuthEnv>();
 
@@ -215,7 +216,8 @@ agentRemediationRoutes.get('/agents/remediations', async (c) => {
 
 // ─── POST /agents/remediations/:id/resolve ───────────────────────────────────
 
-agentRemediationRoutes.post('/agents/remediations/:id/resolve', async (c) => {
+agentRemediationRoutes.post('/agents/remediations/:id/resolve',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
 
@@ -226,7 +228,8 @@ agentRemediationRoutes.post('/agents/remediations/:id/resolve', async (c) => {
 
 // ─── POST /agents/remediations/:id/dismiss ───────────────────────────────────
 
-agentRemediationRoutes.post('/agents/remediations/:id/dismiss', async (c) => {
+agentRemediationRoutes.post('/agents/remediations/:id/dismiss',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const ctx = await buildSharedContext(c);
   if (!ctx.product) return c.redirect('/products');
 

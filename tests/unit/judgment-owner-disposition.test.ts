@@ -8,7 +8,7 @@ import { recordReconstructionClaim } from '../../src/services/institution/recons
 import { createDeterministicCapacityJudgment } from '../../src/services/institution/institutional-judgment.js';
 import { evaluateInstitutionalJudgment } from '../../src/services/institution/institutional-judgment-evaluation.js';
 import {
-  getMaterialJudgments, recordJudgmentDisposition,
+  getJudgmentRecord, getMaterialJudgments, recordJudgmentDisposition,
 } from '../../src/services/institution/institutional-judgment-disposition.js';
 
 let app: Hono;
@@ -193,5 +193,186 @@ describe('authenticated owner disposition on institutional judgments', () => {
   it('never surfaces another tenant judgment through the owner projection', async () => {
     expect((await getMaterialJudgments('jd_product')).map((j) => j.id)).not.toContain(foreignJudgmentId);
     expect((await getMaterialJudgments('jd_foreign')).map((j) => j.id)).toEqual([foreignJudgmentId]);
+  });
+});
+
+describe('the owner is shown what the judgment was computed from', () => {
+  it('gives them the numbers, the cost of each side, and whether Foundry can order them', async () => {
+    // The owner was asked "which way do you want to go?" while `constraints_json`,
+    // `consequences_json` and `expected_economic_effect_json` were written on
+    // every judgment and read by nothing. So the section withheld how much
+    // resource there is, how much is wanted, what each side loses, and whether
+    // Foundry could rank them at all — which is most of what the decision is.
+    const [judgment] = await getMaterialJudgments('jd_product');
+
+    // The actual scarcity, from the canonical capacity and demand claims.
+    expect(judgment.limit).toMatchObject({ resource: 'work_block', available: 2, requested: 3 });
+
+    // What each side loses, by TITLE. An id on screen is ontology leaking into
+    // the founder's language, and a consequence attached to nothing is worse
+    // than no consequence.
+    expect(judgment.consequences).toContainEqual({
+      title: 'Urgent support obligation', consequence: 'customer commitment at risk',
+    });
+    expect(JSON.stringify(judgment.consequences)).not.toContain('jd_support');
+
+    // AND WHETHER FOUNDRY CAN ORDER THEM ON MONEY, reported as itself. The
+    // fixture records no economic claim, so the honest answer is that it
+    // cannot — which is the single thing an owner most wants and the worst
+    // possible place to imply a confidence.
+    expect(judgment.economicOrdering).toBe('unknown');
+  });
+
+  it('puts all of it on the page, in the founder\'s words', async () => {
+    const page = await (await app.request('/letter', { headers: { 'x-founder': 'jd_owner' } })).text();
+    expect(page, 'the scarcity itself must be shown').toContain('You have 2 work blocks; these need 3');
+    expect(page).toContain('customer commitment at risk');
+    expect(page, 'not knowing the money must be said, not omitted')
+      .toContain('I cannot tell you which costs more');
+
+    // The consequence is attached to a NAME. Asserted on the sentence rather
+    // than by banning the id from the whole page: an id inside a form action is
+    // a correct identifier, and a blanket ban would have made this test about
+    // URL shapes instead of about founder language.
+    expect(page).toContain('If Urgent support obligation gives way: customer commitment at risk');
+    expect(page).not.toContain('If jd_support gives way');
+    expect(page).not.toContain('expected_economic_effect');
+  });
+});
+
+describe('Foundry reads back how its own judgment has held up', () => {
+  it('counts what later reality did to the judgments it made, from the claim nothing read', async () => {
+    // WHAT THIS CLOSES. `evaluateInstitutionalJudgment` wrote every later-reality
+    // comparison twice: to `institutional_judgment_evaluations.state`, and as a
+    // `later_reality_comparison` claim carrying the observations it rested on.
+    // The column is read — it decides what still needs the owner. The claim was
+    // read by nothing, and neither was the `learned_claim_id` pointing at it.
+    // Foundry was recording whether it had been right about this company and
+    // never once looking.
+    //
+    // The founder is the person that record is for: how much weight to give the
+    // next judgment is decided on it.
+    const record = await getJudgmentRecord('jd_product');
+    expect(record).not.toBeNull();
+    // ONE JUDGMENT COUNTS ONCE. This used to compare the total against the
+    // number of CLAIMS, which is the defect written down as an assertion: the
+    // observation pass writes a new claim on every tick that sees new evidence
+    // about the same judgment, so the count grew with the observing rather than
+    // with the judging.
+    const judgments = await query(
+      `SELECT DISTINCT subject FROM reconstruction_claims
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`, []);
+    expect(judgments.rows.length).toBeGreaterThan(0);
+    expect(record!.borneOut + record!.contradicted + record!.unresolved)
+      .toBe(judgments.rows.length);
+    // The earlier tests drove this judgment to contradicted, so at least one is.
+    expect(record!.contradicted).toBeGreaterThan(0);
+
+    // A company Foundry has never been observed on is told nothing, rather than
+    // shown a vacuous perfect record.
+    expect(await getJudgmentRecord('jd_foreign')).toBeNull();
+  });
+
+  it('lets a supported judgment go stale but never un-contradicts itself by waiting', async () => {
+    // Read-time expiry exists so an old positive claim does not silently remain
+    // current. Being WRONG is a thing that happened, and letting time turn it
+    // into "nobody knows" would let Foundry improve its record by waiting.
+    await query(
+      `UPDATE reconstruction_claims SET value_json = ?, valid_until = datetime('now','-1 day')
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`,
+      [JSON.stringify('supported')]);
+    const stale = await getJudgmentRecord('jd_product');
+    expect(stale!.borneOut, 'an expired success is not current evidence').toBe(0);
+
+    await query(
+      `UPDATE reconstruction_claims SET value_json = ?
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`,
+      [JSON.stringify('contradicted')]);
+    const wrong = await getJudgmentRecord('jd_product');
+    expect(wrong!.contradicted, 'a contradiction does not expire in Foundry\'s favour')
+      .toBeGreaterThan(0);
+  });
+
+  it('puts the record on the page, in the founder\'s language and never as a rate', async () => {
+    // PRODUCTION REACHABLE IS NOT HUMAN REACHABLE. A record Foundry computes
+    // and never shows is the same to a founder as one it does not compute.
+    await query(
+      `UPDATE reconstruction_claims SET value_json = ?, valid_until = NULL
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`,
+      [JSON.stringify('contradicted')]);
+    const page = await (await app.request('/letter', { headers: { 'x-founder': 'jd_owner' } })).text();
+    expect(page, 'the record must reach the page').toContain('judgment');
+    expect(page).toContain('I have made about your company');
+    expect(page).toContain('that it contradicted');
+    // Counts, never a rate: a percentage invites a confidence the evidence
+    // cannot carry.
+    expect(page).not.toMatch(/\d+% (accurate|correct|right)/);
+  });
+
+  it('calls conflicting evidence unresolved rather than picking a side', async () => {
+    await query(
+      `UPDATE reconstruction_claims SET value_json = ?, valid_until = NULL
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison'`,
+      [JSON.stringify('conflicting')]);
+    const record = await getJudgmentRecord('jd_product');
+    expect(record).toMatchObject({ borneOut: 0, contradicted: 0 });
+    expect(record!.unresolved).toBeGreaterThan(0);
+  });
+});
+
+describe('one judgment, observed many times', () => {
+  // `evaluateInstitutionalJudgment` writes a NEW later_reality_comparison claim
+  // — fresh id, no upsert, and `reconstruction_claims` has no unique key on
+  // (subject, predicate) — on every six-hourly tick that sees new evidence about
+  // the same judgment. The record tallied one entry per CLAIM, so the letter's
+  // "Of the N judgments I have made about your company and since checked"
+  // counted observations, not judgments. And because a judgment's state
+  // legitimately moves, the earlier claims stayed behind and the SAME judgment
+  // was added to `unresolved` and to an outcome column at once.
+
+  it('does not count the same judgment again each time it is observed', async () => {
+    const before = await getJudgmentRecord('jd_product');
+    const total = (r: { borneOut: number; contradicted: number; unresolved: number } | null): number =>
+      r === null ? 0 : r.borneOut + r.contradicted + r.unresolved;
+
+    // The same judgment, observed twice more, moving as evidence arrives.
+    // The evidence refs are copied from the claim already on this subject: a
+    // trigger requires every claim to rest on something, which is exactly the
+    // rule that makes this record worth reading.
+    const seed = (await query(
+      `SELECT subject, evidence_refs_json FROM reconstruction_claims
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison' LIMIT 1`, []))
+      .rows[0] as unknown as { subject: string; evidence_refs_json: string };
+    const subject = seed.subject;
+    for (const [i, state] of [['a', 'partially_observed'], ['b', 'supported']] as const) {
+      await query(
+        `INSERT INTO reconstruction_claims
+           (id,product_id,subject,predicate,value_json,epistemic_status,confidence,
+            evidence_refs_json,derivation_method,observed_at)
+         VALUES (?, 'jd_product', ?, 'later_reality_comparison', ?, 'known', NULL,
+                 ?, 'bounded later-reality comparison', ?)`,
+        [`jr_${i}`, subject, JSON.stringify(state), seed.evidence_refs_json,
+         new Date(Date.now() + (state === 'supported' ? 2 : 1) * 60000).toISOString()]);
+    }
+
+    const after = await getJudgmentRecord('jd_product');
+    expect(total(after)).toBe(total(before));
+  });
+
+  it('reads the judgment\'s CURRENT state, not every state it has been in', async () => {
+    const subject = String((await query(
+      `SELECT subject FROM reconstruction_claims
+        WHERE product_id='jd_product' AND predicate='later_reality_comparison' LIMIT 1`, []))
+      .rows[0]!.subject);
+    const record = await getJudgmentRecord('jd_product');
+
+    // The newest claim for that subject is 'supported', written above.
+    const newest = await query(
+      `SELECT value_json FROM reconstruction_claims
+        WHERE product_id='jd_product' AND subject=? AND predicate='later_reality_comparison'
+        ORDER BY observed_at DESC LIMIT 1`, [subject]);
+    expect(JSON.parse(String(newest.rows[0]!.value_json))).toBe('supported');
+    // So this judgment is borne out, and is NOT also sitting in unresolved.
+    expect(record!.borneOut).toBeGreaterThan(0);
   });
 });

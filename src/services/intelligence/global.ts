@@ -49,51 +49,32 @@ export function convertToReferenceCurrency(amount: number, exchangeRate: number)
   return amount / exchangeRate;
 }
 
-/**
- * Detect currency erosion: when local MRR is flat but USD value is declining.
- */
-export async function detectCurrencyErosion(founderId: string): Promise<{
-  erosion_detected: boolean;
-  local_trend: 'growing' | 'flat' | 'declining';
-  usd_trend: 'growing' | 'flat' | 'declining';
-  erosion_pct: number;
-} | null> {
-  const products = await query(
-    "SELECT id FROM products WHERE owner_id = ? AND status = 'active' LIMIT 1",
-    [founderId]
-  );
-  const productId = (products.rows[0] as Record<string, string>)?.id;
-  if (!productId) return null;
-
-  const metrics = await query(
-    'SELECT local_currency_mrr, new_mrr_cents, exchange_rate FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 4',
-    [productId]
-  );
-
-  if (metrics.rows.length < 2) return null;
-
-  const rows = metrics.rows as unknown as Array<Record<string, number>>;
-  const latestLocal = rows[0]?.local_currency_mrr ?? 0;
-  const priorLocal = rows[rows.length - 1]?.local_currency_mrr ?? 0;
-  const latestUSD = rows[0]?.new_mrr_cents ?? 0;
-  const priorUSD = rows[rows.length - 1]?.new_mrr_cents ?? 0;
-
-  const localChange = priorLocal > 0 ? (latestLocal - priorLocal) / priorLocal : 0;
-  const usdChange = priorUSD > 0 ? (latestUSD - priorUSD) / priorUSD : 0;
-
-  const localTrend = localChange > 0.02 ? 'growing' : localChange < -0.02 ? 'declining' : 'flat';
-  const usdTrend = usdChange > 0.02 ? 'growing' : usdChange < -0.02 ? 'declining' : 'flat';
-
-  const erosionDetected = (localTrend === 'flat' || localTrend === 'growing') && usdTrend === 'declining';
-  const erosionPct = erosionDetected ? Math.abs(usdChange * 100) : 0;
-
-  return {
-    erosion_detected: erosionDetected,
-    local_trend: localTrend,
-    usd_trend: usdTrend,
-    erosion_pct: Math.round(erosionPct * 10) / 10,
-  };
-}
+// `detectCurrencyErosion` was here, and it reported FX erosion on the live
+// `GET /api/currency-health` endpoint for a phenomenon it could not observe.
+//
+// It compared the trend of `local_currency_mrr` against the trend of
+// `new_mrr_cents`. Three things were wrong with that, and each alone would have
+// been enough:
+//
+//   NOTHING CAN FILL THE CURRENCY COLUMNS. `local_currency_mrr` and
+//   `exchange_rate` were added by migration 011 and no path writes either — no
+//   ingest field, no integration, no route, no job. A company has no way to
+//   report the local-currency figure this detector is about.
+//
+//   SO THE FALLBACK WAS THE WHOLE INPUT. `?? 0` on both sides made
+//   `localChange` zero, which reads as 'flat', and flat-local against
+//   declining-USD is exactly the erosion condition. The detector fired whenever
+//   the USD series fell.
+//
+//   AND THE USD SERIES WAS THE WRONG QUANTITY. `new_mrr_cents` is one period's
+//   new business; `local_currency_mrr` is a level. Their trends are not
+//   comparable even when both are present.
+//
+// Removed rather than repaired, on the owner decision recorded at migration 157:
+// the consuming half goes, and if currency exposure is genuinely wanted it comes
+// back as a whole feature — an ingest field a company can actually fill, a
+// stored rate, and a comparison between two series of the same kind. Migration
+// 193 drops the two columns nothing could write.
 
 /**
  * Scan for geopolitical risks affecting a product's markets.
@@ -129,7 +110,7 @@ Only include real, current risks. Return empty array if none are relevant.`;
   const response = await callSonnet(
     'You are a geopolitical risk analyst for SaaS businesses. Only flag real, current risks.',
     prompt,
-    2048
+    2048, productId
   );
 
   const signals = parseJSONResponse<Array<{

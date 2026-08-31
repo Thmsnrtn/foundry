@@ -18,8 +18,16 @@ import type { Fluency } from '../ux/fluency.js';
 
 export interface Letter {
   handled: string[];       // what ran without you (last 24h)
-  needsYou: string | null; // the ONE thing (highest-stakes pending decision)
+  needsYou: string | null; // the ONE thing, across BOTH canonical sources
+  /** Where the one thing actually is. It is not always the decision queue. */
+  needsYouHref: string;
   learned: string[];       // expired beliefs, vindications, radar warnings
+  /** What the interruption policy chose NOT to interrupt you for. An event
+   *  quieted to the letter rung is written to `quieted_events` and read back
+   *  here — before migration 182 those rungs wrote nothing, so a founder
+   *  lowering their ceiling silently lost the fact rather than receiving it
+   *  more quietly. */
+  noted: string[];
   trust: string[];         // graduation proposals + dissent record
   quiet: boolean;          // true when there is genuinely nothing needing you
   /** True for a brand-new product with no history yet: an empty Letter here
@@ -30,8 +38,19 @@ export interface Letter {
 
 // Fluency Law: the same Letter — identical facts, identical structure — in the
 // founder's voice. MCP/machine callers pass 'technical' for the terse form.
+/** Plain words for why a responsibility needs the founder. No ontology on
+ *  screen: the internal reason never appears, only what it means for them. */
+const ASK_WORDS: Record<string, string> = {
+  permission_withdrawn: 'you took my permission away, so I have stopped',
+  permission_expired: 'my permission ran out, so I have stopped',
+  outcome_unresolved: 'I did something here and nobody knows yet whether it worked',
+  watching: 'I have been watching this and could help if you let me',
+  overdue: 'the date you gave me has passed',
+};
+
 export async function composeLetter(productId: string, f: Fluency = 'balanced'): Promise<Letter> {
-  const [executions, gate0, pending, expired, digest, radar, ledger, dissent] = await Promise.all([
+  const [executions, gate0, pending, expired, digest, radar, ledger, dissent, quieted,
+    executedDrafts] = await Promise.all([
     query(
       `SELECT action_type, integration FROM action_executions
        WHERE product_id = ? AND status = 'completed'
@@ -39,9 +58,18 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
       [productId],
     ),
     query(
+      // 'system_gate_0' used to be in this list. Migration 001's comment on
+      // the column named it as a vocabulary value — "founder, system_gate_0,
+      // system_gate_1" — and nothing has ever written either system marker. So
+      // half of "what Foundry handled for you" asked for a term that cannot
+      // match. Nothing was lost, because the autopilot resolves gate-<=1
+      // decisions as 'second_self' and that half works; but the query carried a
+      // dead term for as long as it has existed, and it survived review because
+      // the schema said it was real. Migration 158 makes the vocabulary a CHECK,
+      // so the next one fails the build instead.
       `SELECT what, decided_by FROM decisions
        WHERE product_id = ? AND datetime(decided_at) >= datetime('now', '-1 day')
-         AND decided_by IN ('system_gate_0', 'second_self') LIMIT 10`,
+         AND decided_by = 'second_self' LIMIT 10`,
       [productId],
     ),
     query(
@@ -55,6 +83,31 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
     scanForWarnings(productId),
     getTrustLedger(productId),
     getDissentRecord(productId),
+    // What the interruption policy quieted to this rung in the last day. Same
+    // window as the executions and gate-0 decisions above: a quieted event is a
+    // fact about a moment, and giving it a delivered flag would invent a second
+    // place for "did the founder see this" to be wrong.
+    query(
+      `SELECT title, body, importance FROM quieted_events
+        WHERE product_id = ? AND channel = 'letter'
+          AND datetime(created_at) >= datetime('now', '-1 day')
+        ORDER BY created_at DESC LIMIT 10`,
+      [productId]),
+    // ARTIFACTS FOUNDRY PRODUCED, AND WHO LET IT.
+    //
+    // `action_drafts` is a second execution path beside `action_executions`:
+    // pricing copy, landing copy, an onboarding flow, a remediation PR. Its
+    // results were recorded TWICE — `execution_result` on the draft and a whole
+    // row in `auto_execution_log` — and read by neither. So the one path where
+    // Foundry produces something by itself was the one the founder could not
+    // see, and `approved_at IS NULL` is the only place the distinction between
+    // "I approved this" and "Foundry did it alone" survives.
+    query(
+      `SELECT action_type, title, execution_result, approved_at FROM action_drafts
+        WHERE product_id = ? AND status = 'executed'
+          AND datetime(COALESCE(executed_at, created_at)) >= datetime('now', '-1 day')
+        ORDER BY executed_at DESC LIMIT 10`,
+      [productId]),
   ]);
 
   const handled: string[] = [
@@ -72,12 +125,93 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
           ? `Handled a routine call (gate 0): ${d.what}`
           : `Handled autonomously (gate 0): ${d.what}`),
     ),
+    ...(executedDrafts.rows as unknown as Array<Record<string, unknown>>).map((d) => {
+      // The distinction is the point. "Made you a pricing page" and "made you a
+      // pricing page without asking" are different sentences, and only one of
+      // them is the founder's own decision coming back to them.
+      const what = String(d.title ?? d.action_type ?? 'an artifact');
+      const alone = d.approved_at == null;
+      const result = d.execution_result == null ? '' : ` — ${String(d.execution_result)}`;
+      return f === 'plain'
+        ? (alone
+          ? `Made this without asking, because you had trusted it with the category: ${what}${result}`
+          : `Made this after you approved it: ${what}${result}`)
+        : (alone
+          ? `Auto-executed (gate 0): ${what}${result}`
+          : `Executed on approval: ${what}${result}`);
+    }),
   ];
 
+  // ONE QUESTION, ONE ANSWER.
+  //
+  // This card says "the one thing that needs you" and read the highest-gate
+  // pending row of `decisions`. Meanwhile The Letter rendered the institution's
+  // own NEEDS_YOU list twenty-seven lines below, computed independently from
+  // `institutional_responsibilities`. Nothing reconciled them, so the page
+  // answered its own central question twice, differently — and the headline
+  // could say "Gate-2: pick a pricing page" while an obligation whose date had
+  // passed sat further down under a quieter heading.
+  //
+  // Both ledgers are canonical for what they hold: `decisions` is the decision
+  // queue, `institutional_responsibilities` is the responsibility ladder.
+  // Neither is copied and no third store is created — this is a projection
+  // over both, which is what the constitution permits and what the page was
+  // pretending to be already.
+  //
+  // Overdue wins, because a date the company stated has passed and that is a
+  // fact about the world rather than about where Foundry has got to. Then the
+  // other reasons a responsibility needs the founder, then the decision queue.
   const top = pending.rows[0] as Record<string, unknown> | undefined;
-  const needsYou = top
-    ? `Gate-${top.gate}: ${top.what}${top.deadline ? ` (deadline ${top.deadline})` : ''}`
+  const decisionAsk = top
+    ? { text: `Gate-${top.gate}: ${top.what}${top.deadline ? ` (deadline ${top.deadline})` : ''}`,
+        href: '/decisions' }
     : null;
+
+  const { getSevenDayResponsibilitySummary } = await import(
+    '../institution/absence-summary.js');
+  const institutional = await getSevenDayResponsibilitySummary(productId).catch(() => null);
+  const overdue = institutional?.NEEDS_YOU.find((i) => i.needsYouBecause === 'overdue');
+  const otherAsk = institutional?.NEEDS_YOU.find((i) => i.needsYouBecause !== 'overdue');
+
+  // THE THIRD CANONICAL SOURCE. `strategic_decisions_log` holds the judgments
+  // Foundry raised about the company — two responsibilities wanting the same
+  // resource, and the owner having to allocate or change capacity. They
+  // rendered in their own section and could never be the one thing, however
+  // material, so the headline projected over two of the three stores that can
+  // hold something needing the founder.
+  //
+  // A CONTRADICTED judgment is LATE, in exactly the sense `overdue` is: the
+  // observation pass may only report it against a date the company itself
+  // stated, and it means that date passed with the conflict still standing. It
+  // is placed directly after the overdue responsibility rather than above it
+  // because it is usually derived from one — the concrete obligation is the
+  // thing, the judgment is the commentary on it.
+  //
+  // A judgment that is merely open or conflicting is real and is not late, so
+  // it ranks below the founder's own decision queue and below a responsibility
+  // that has lost its permission. It is still the one thing when nothing else
+  // is, which is the point: Foundry asked, and nobody answered.
+  const { getMaterialJudgments } = await import(
+    '../institution/institutional-judgment-disposition.js');
+  const judgments = await getMaterialJudgments(productId).catch(() => []);
+  const contradicted = judgments.find((j) => j.evaluationState === 'contradicted');
+  const openJudgment = judgments.find((j) => j.evaluationState !== 'contradicted');
+
+  const chosen = overdue
+    ? { text: `${overdue.title} — you said this was due ${overdue.dueAt?.slice(0, 10) ?? 'earlier'}, and it has not been handled`,
+        href: '/letter' }
+    : contradicted
+      ? { text: `${contradicted.title} — the date you gave passed and this is still unresolved`,
+          href: '/letter' }
+      : decisionAsk ?? (otherAsk
+        ? { text: `${otherAsk.title} — ${ASK_WORDS[otherAsk.needsYouBecause ?? 'watching']}`,
+            href: '/letter' }
+        : openJudgment
+          ? { text: `${openJudgment.title} — I raised this and you have not said which way to go`,
+              href: '/letter' }
+          : null);
+  const needsYou = chosen?.text ?? null;
+  const needsYouHref = chosen?.href ?? '/decisions';
 
   const learned: string[] = [
     ...expired.slice(0, 3).map(
@@ -122,12 +256,19 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
       : `${dept}: ${row.n} shadowed action(s) in 24h — promotable in Controls.`);
   }
 
-  const quiet = handled.length === 0 && !needsYou && learned.length === 0 && trust.length === 0;
+  // What Foundry noticed and deliberately did not interrupt for. Rendered as
+  // the founder's own words about it, not as a policy decision: they do not
+  // need to know which rung it took, only what it was.
+  const noted: string[] = (quieted.rows as unknown as Array<Record<string, string>>)
+    .map((q) => f === 'plain' ? `${q.title} — ${q.body}` : `[${q.importance}] ${q.title}: ${q.body}`);
+
+  const quiet = handled.length === 0 && !needsYou && learned.length === 0
+    && trust.length === 0 && noted.length === 0;
   // First-run: a genuinely empty Letter on a product that has never had metrics
   // or a decision is a NEW founder, not an established one on a quiet day.
   const firstRun = quiet && digest.holding === 0 && digest.falsified === 0
     && !(await hasAnyHistory(productId));
-  return { handled, needsYou, learned, trust, quiet, firstRun };
+  return { handled, needsYou, needsYouHref, learned, noted, trust, quiet, firstRun };
 }
 
 /** Has this product ever produced a metric snapshot or a decision? Distinguishes

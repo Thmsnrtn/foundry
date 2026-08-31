@@ -83,10 +83,10 @@ Return JSON:
 
   const response = gate <= 1 ? await callSonnet(
     'You are a COO generating ready-to-execute business artifacts. Be specific and complete.',
-    prompt, 4096
+    prompt, 4096, productId
   ) : await callOpus(
     'You are a COO generating high-stakes business artifacts. Be thorough and strategic.',
-    prompt, 4096
+    prompt, 4096, productId
   );
 
   const result = parseJSONResponse<{
@@ -118,7 +118,11 @@ Return JSON:
       artifact_type: draft.artifact_type,
       draft_content: draft.draft_content,
     });
-    if (verdict.verdict === 'block' || verdict.verdict === 'warn') {
+    // 'unscored' joins them: the auto-execution was conditioned on a check
+    // that did not happen, so the permission it granted is withdrawn until a
+    // person looks. Only 'no_fingerprint' and 'exempt' pass through untouched,
+    // because those are settled states rather than failures.
+    if (verdict.verdict === 'block' || verdict.verdict === 'warn' || verdict.verdict === 'unscored') {
       draft.auto_executable = false;
       draft.status = 'draft';
       const tag =
@@ -274,12 +278,12 @@ async function executeAction(draftId: string, productId: string): Promise<{ succ
     [success ? 'executed' : 'failed', result, draftId]
   );
 
-  // Log execution
-  await query(
-    `INSERT INTO auto_execution_log (id, product_id, action_draft_id, action_type, trigger, output, success)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [nanoid(), productId, draftId, d.action_type, d.gate === 0 ? 'auto_gate_0' : 'founder_approved', result, success ? 1 : 0]
-  );
+  // The execution record is the UPDATE above and nothing else. `auto_execution_log`
+  // duplicated every field of it — the draft id, the action type, the output as
+  // `execution_result`, success as `status`, and the trigger as
+  // `approved_at IS NULL` — and nothing read either copy. Migration 185 retired
+  // the duplicate and gave the surviving one a reader: the Letter now says what
+  // Foundry made, and whether it asked first.
 
   // Update linked decision if exists
   if (d.decision_id) {

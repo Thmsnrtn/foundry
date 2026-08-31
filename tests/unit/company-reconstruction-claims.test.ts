@@ -4,19 +4,20 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { getReconstructionClaims, recordReconstructionClaim, reconstructCompany } from '../../src/services/institution/reconstruction.js';
+import { grantAuthority, moveResponsibilityTo } from '../fixtures/responsibility-state.js';
 
 beforeAll(async () => {
   await runMigrations();
   await query("INSERT INTO founders (id,clerk_user_id,email) VALUES ('rc_owner','rc_clerk','rc@example.com'),('rc_other','rc_other_clerk','other@example.com')", []);
   await query("INSERT INTO products (id,name,owner_id) VALUES ('rc_product','Unfamiliar Co','rc_owner'),('rc_foreign','Foreign Co','rc_other')", []);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary) VALUES
-    ('rc_signal_a','rc_product','manual','support_spike','medium','{}','Support queue rising'),
-    ('rc_signal_b','rc_product','manual','support_spike','medium','{}','Support team says normal'),
-    ('rc_foreign_signal','rc_foreign','manual','support_spike','medium','{}','Foreign signal')`, []);
-  await query(`INSERT INTO integrations (id,product_id,type,status,name,last_synced_at) VALUES
-    ('rc_current_system','rc_product','inbound','active','stripe','2025-12-31'),
-    ('rc_stale_system','rc_product','inbound','active','github','2025-01-01'),
-    ('rc_foreign_system','rc_foreign','inbound','active','linear','2025-12-31')`, []);
+    ('rc_signal_a','rc_product','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Support queue rising'),
+    ('rc_signal_b','rc_product','company_observation_baseline','company_observation_baseline:support_capacity','low','{}','Support team says normal'),
+    ('rc_foreign_signal','rc_foreign','company_observation_baseline','company_observation_baseline:support_queue','low','{}','Foreign signal')`, []);
+  await query(`INSERT INTO integrations (id,product_id,direction,status,name,provider,last_synced_at) VALUES
+    ('rc_current_system','rc_product','inbound','active','stripe','stripe','2025-12-31'),
+    ('rc_stale_system','rc_product','inbound','active','github','github','2025-01-01'),
+    ('rc_foreign_system','rc_foreign','inbound','active','linear','linear','2025-12-31')`, []);
   await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability,state)
     VALUES ('rc_responsibility','rc_product','Restore support capacity','customer_support','visible'),
            ('rc_foreign_responsibility','rc_foreign','Foreign work','customer_support','visible')`, []);
@@ -62,6 +63,27 @@ describe('provenance-bearing reconstruction claims', () => {
       VALUES ('recursive','rc_product','company','purpose','"x"','known','[{"kind":"reconstruction_claim","id":"anything"}]','copy','2026-01-01')`,[])).rejects.toThrow();
   });
 
+  it('orders same-second claims by insertion, so a correction cannot lose to what it corrects', async () => {
+    // Found while wiring institutional judgment to a scheduled pass: claims
+    // were ordered by `created_at, id`, and claim ids are nanoids. Two claims
+    // about the same subject recorded in the same second therefore resolved in
+    // random order, so a later correction could silently lose to the value it
+    // was correcting — and every consumer that takes "the last claim wins"
+    // would read a superseded fact.
+    for (const amount of [1, 2, 3, 4, 5]) {
+      await recordReconstructionClaim({
+        productId: 'rc_product', subject: 'product:rc_product', predicate: 'ordering_probe',
+        value: { amount }, epistemicStatus: 'known',
+        evidenceRefs: [{ kind: 'signal_event', id: 'rc_signal_a' }],
+        derivationMethod: 'observed', observedAt: new Date('2026-01-01'),
+      });
+    }
+    const probes = (await getReconstructionClaims('rc_product'))
+      .filter((c) => c.predicate === 'ordering_probe')
+      .map((c) => (c.value as { amount: number }).amount);
+    expect(probes).toEqual([1, 2, 3, 4, 5]);
+  });
+
   it('builds a sparse unfamiliar-company projection without copying or completing missing truth', async () => {
     const reconstruction=await reconstructCompany('rc_product',new Date('2026-01-01'));
     expect(reconstruction.identity).toMatchObject({productId:'rc_product',name:'Unfamiliar Co',evidenceRef:{kind:'product',id:'rc_product'}});
@@ -73,5 +95,41 @@ describe('provenance-bearing reconstruction claims', () => {
     expect(reconstruction.unknowns).toContain('company_purpose');
     expect(JSON.stringify(reconstruction)).not.toContain('Foreign');
     expect((await reconstructCompany('missing')).identity).toBeNull();
+  });
+});
+
+describe('the reconstruction reports authority the way execution reads it', () => {
+  it('binds it to the responsibility and lets it expire', async () => {
+    // THE COPIED FRAGMENT THAT DRIFTED. This asked only for an unrevoked
+    // act-grant for the same CAPABILITY. Two things followed. An expired grant
+    // reported as active authority, because nothing checked the date. And a
+    // grant bound to ONE responsibility made every other responsibility of that
+    // capability report authority it did not have — while execution requires a
+    // grant bound to the responsibility itself.
+    //
+    // "A copied fragment of a rule drifts the moment the rule grows another
+    // axis" is already written in this codebase, about the operating predicate.
+    // Authority grew two axes and the copies did not follow, so there is a
+    // canonical `liveActGrant()` now.
+    await query(`INSERT INTO institutional_responsibilities (id,product_id,title,capability)
+      VALUES ('rc_granted','rc_product','Answer the inbox','customer_support'),
+             ('rc_ungranted','rc_product','Answer the other inbox','customer_support')`, []);
+    for (const id of ['rc_granted', 'rc_ungranted']) {
+      await moveResponsibilityTo(id, 'shadowing', { productId: 'rc_product' });
+    }
+    const ref = await grantAuthority('rc_product', 'rc_owner', 'customer_support', 'rc_granted');
+
+    const authority = async (id: string): Promise<boolean> =>
+      (await reconstructCompany('rc_product')).responsibilities
+        .find((r) => r.id === id)!.activeAuthority;
+
+    expect(await authority('rc_granted'), 'the granted one has authority').toBe(true);
+    expect(await authority('rc_ungranted'),
+      'a grant for one responsibility is not a grant for its neighbour').toBe(false);
+
+    // And it ends when it runs out, without anybody revoking anything.
+    await query("UPDATE autonomy_consents SET expires_at=datetime('now','-1 hour') WHERE id=?",
+      [ref.replace('autonomy_consent:', '')]);
+    expect(await authority('rc_granted'), 'an expired grant is not active authority').toBe(false);
   });
 });

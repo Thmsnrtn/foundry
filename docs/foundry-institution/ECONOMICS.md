@@ -2,6 +2,12 @@
 
 Optimize the maximum **defensible company value** per unit of money, computation, time, attention, and risk, subject to safety, quality, owner policy, legal duties, and contractual constraints.
 
+Optimization is subordinate to legitimacy. Profit, conversion, retention, labour
+reduction and engagement do not make deceptive, discriminatory or exploitative
+conduct a successful outcome, and a metric that improves through such conduct
+has not improved. When an optimization and the legitimacy envelope disagree, the
+envelope wins and the conflict is recorded rather than resolved quietly.
+
 The tier covenant is: **a plan changes how much Foundry can carry, not whether
 Foundry attempts to carry responsibilities intelligently.** Safety, epistemic
 honesty, and authority controls do not become paid upgrades.

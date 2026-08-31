@@ -3,7 +3,9 @@
 // Common data loader for layout context across all dashboard routes.
 // =============================================================================
 
-import { query, getProductsByOwner, getLifecycleState } from '../../db/client.js';
+import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
+import { query, getProductsByOwner,
+  getVisibleProducts, getLifecycleState } from '../../db/client.js';
 import type { LayoutOptions } from '../../views/layout.js';
 import type { RiskStateValue, NextAction, AppNotification, MilestoneEvent, OnboardingTour, NavBadges, Founder } from '../../types/index.js';
 import { getProductDNA } from '../../services/wisdom/dna.js';
@@ -17,6 +19,41 @@ import { getFluency, navExplain } from '../../services/ux/fluency.js';
 import { getCookie } from 'hono/cookie';
 import type { Context } from 'hono';
 import type { AuthEnv } from '../../middleware/auth.js';
+
+/**
+ * The company this founder is acting on, or null.
+ *
+ * WHICHEVER COMPANY SORTED FIRST WAS DECIDING REAL ACTIONS. Three POST routes
+ * resolved the company with `SELECT id FROM products WHERE owner_id = ? LIMIT 1`
+ * — no ORDER BY, so the row SQLite happened to return first. A founder with two
+ * companies rotated an ingest token on whichever one that was, generated a
+ * public share link for it, and had the week's plan written for it. The
+ * pause/resume routes already did this correctly, from the cookie the company
+ * switcher sets; this is that rule with one home.
+ *
+ * Returns null when there is no selection or the selection is not this
+ * founder's, and the caller does nothing rather than acting on a guess.
+ */
+export async function selectedProductId(
+  honoCtx: Parameters<typeof getCookie>[0],
+  founderId: string,
+): Promise<string | null> {
+  const cookieProductId = getCookie(honoCtx, 'foundry_product');
+  if (cookieProductId) {
+    const owned = await query(
+      'SELECT id FROM products WHERE id = ? AND owner_id = ?',
+      [cookieProductId, founderId]);
+    if (owned.rows.length > 0) return (owned.rows[0] as Record<string, string>).id;
+  }
+
+  // No cookie, or a stale one. A founder with exactly ONE company has made an
+  // unambiguous choice by having only one; more than one is a choice nobody has
+  // made, and picking is what this function exists to stop.
+  const all = await query(
+    "SELECT id FROM products WHERE owner_id = ? AND status != 'archived' ORDER BY id",
+    [founderId]);
+  return all.rows.length === 1 ? (all.rows[0] as Record<string, string>).id : null;
+}
 
 export interface UXContext {
   nextAction: NextAction | null;
@@ -34,7 +71,6 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
   founderEmail: string;
   dnaCompletionPct: number;
   wisdomLayerActive: boolean;
-  openPRCount: number;
   /** CSRF token for form auto-injection */
   csrfToken: string;
   /** All products owned by this founder, for the switcher */
@@ -53,6 +89,30 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
  * Fetch common layout data for a dashboard page.
  * Returns founder name, primary product info, and risk state.
  */
+
+/**
+ * WHAT THE OWNER OF THE INSTITUTION IS TOLD ABOUT TRIALS: NOTHING.
+ *
+ * `trialStatus` and `showStartTrial` drive the banner above every page — "Start
+ * your 14-day free trial to keep your AI agents running. Choose a plan →". In a
+ * commercial deployment that is honest. In a private owner institution it is an
+ * invitation to buy access to something the reader already owns, and it is the
+ * loudest element on the first screen a founder sees.
+ *
+ * Suppressed at the source rather than hidden in the template: a template that
+ * merely stops rendering a countdown leaves the countdown running underneath,
+ * and something else will eventually read it.
+ */
+function accessTrial(founder: { trial_ends_at?: string | null; tier?: string | null }): {
+  trialStatus: TrialStatus; showStartTrial: boolean;
+} {
+  if (isPrivateOwnerInstance()) {
+    return { trialStatus: { state: 'none', daysRemaining: 0, onTrial: false }, showStartTrial: false };
+  }
+  const trialStatus = getTrialStatus(founder.trial_ends_at, founder.tier);
+  return { trialStatus, showStartTrial: !founder.tier && trialStatus.state === 'none' };
+}
+
 export async function getLayoutContext(
   founder: Founder,
   activeNav: string,
@@ -64,7 +124,9 @@ export async function getLayoutContext(
 ): Promise<LayoutContext> {
   const founderName = founder.name ?? founder.email;
 
-  const products = await getProductsByOwner(founder.id);
+  // Every company this person may see — owned or accepted into. This used to
+  // be `getProductsByOwner`, so an invited co-founder saw nothing at all.
+  const products = await getVisibleProducts(founder.id);
   const allProducts = products.rows.map((p) => {
     const r = p as Record<string, unknown>;
     return { id: r.id as string, name: r.name as string };
@@ -76,7 +138,7 @@ export async function getLayoutContext(
     unreadNotificationCount: 0,
     unseenMilestones: [],
     tourState: null,
-    navBadges: { decisions_count: 0, has_overdue_audit: false, unread_signals: false, unseen_milestones: false, open_prs_count: 0, dna_completion: 0 },
+    navBadges: { decisions_count: 0 },
     canAccess: (featureKey: string) => canAccessFn(founder, featureKey),
   };
 
@@ -98,11 +160,9 @@ export async function getLayoutContext(
       founderEmail: founder.email,
       dnaCompletionPct: 0,
       wisdomLayerActive: false,
-      openPRCount: 0,
       allProducts: [],
       ux: emptyUx,
-      trialStatus: getTrialStatus(founder.trial_ends_at, founder.tier),
-      showStartTrial: !founder.tier && getTrialStatus(founder.trial_ends_at, founder.tier).state === 'none',
+      ...accessTrial(founder),
       navExplainer: navExplain(activeNav, getFluency(founder)),
     };
   }
@@ -129,29 +189,19 @@ export async function getLayoutContext(
   const dna = await getProductDNA(productId);
   const dnaCompletionPct = dna?.completion_pct ?? 0;
   const wisdomLayerActive = (ls?.wisdom_layer_active as number | null) === 1;
-  const prCountResult = await query(
-    "SELECT COUNT(*) as cnt FROM remediation_prs WHERE product_id = ? AND status = 'pr_open'",
-    [productId]
-  );
-  const openPRCount = (prCountResult.rows[0] as Record<string, number>)?.cnt ?? 0;
-
   // UX Intelligence Layer — parallel fetches
   const [nextAction, unreadNotifs, unreadCount, unseenMilestones, tourState] = await Promise.all([
     getNextAction(founder, productId),
     getUnreadNotifications(founder.id),
     getUnreadCount(founder.id),
-    getUnseenMilestones(founder.id),
+    getUnseenMilestones(founder.id, productId),
     getTourState(founder.id),
   ]);
 
-  // Nav badges from lifecycle_state cached columns
+  // The one badge the sidebar draws. The other five were computed here, cached
+  // in `lifecycle_state` by a job, and read into a struct the layout ignored.
   const navBadges: NavBadges = {
     decisions_count: (ls?.pending_decisions_count as number) ?? 0,
-    has_overdue_audit: ((ls?.audit_age_days as number) ?? 0) > 30,
-    unread_signals: ((ls?.unread_competitive_signals as number) ?? 0) > 0,
-    unseen_milestones: ((ls?.unread_milestones as number) ?? 0) > 0,
-    open_prs_count: (ls?.open_remediation_prs as number) ?? 0,
-    dna_completion: dnaCompletionPct,
   };
 
   const ux: UXContext = {
@@ -178,11 +228,9 @@ export async function getLayoutContext(
     founderEmail: founder.email,
     dnaCompletionPct,
     wisdomLayerActive,
-    openPRCount,
     allProducts,
     ux,
-    trialStatus: getTrialStatus(founder.trial_ends_at, founder.tier),
-    showStartTrial: !founder.tier && getTrialStatus(founder.trial_ends_at, founder.tier).state === 'none',
+    ...accessTrial(founder),
     navExplainer: navExplain(activeNav, getFluency(founder)),
   };
 }

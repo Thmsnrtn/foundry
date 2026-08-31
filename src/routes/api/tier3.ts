@@ -81,7 +81,15 @@ tier3ApiRoutes.get('/api/products/:id/regulatory-exposure', requireTier('investo
   const exposure = await classifyRegulatoryExposure(productId);
   const debt = await assessComplianceDebt(productId);
   const stressors = await identifyRegulatoryStressors(productId);
-  return c.json({ exposure, compliance_debt_score: debt, stressors });
+  // Null means no compliance requirements are recorded for this company —
+  // nothing writes them today — rather than "none are unmet", which is what a
+  // zero on this scale says.
+  return c.json({
+    exposure,
+    compliance_debt_score: debt,
+    compliance_debt_basis: debt === null ? 'no compliance requirements recorded' : 'recorded requirements',
+    stressors,
+  });
 });
 
 tier3ApiRoutes.post('/api/products/:id/regulatory-scan', requireTier('investor_layer'), async (c) => {
@@ -148,7 +156,7 @@ tier3ApiRoutes.get('/api/products/:id/switching-costs', requireTier('investor_la
   const prodResult = await getProductByOwner(productId, founder.id);
   if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
 
-  const costs = await analyzeSwitchingCosts(productId, founder.id);
+  const costs = await analyzeSwitchingCosts(productId);
   return c.json(costs);
 });
 

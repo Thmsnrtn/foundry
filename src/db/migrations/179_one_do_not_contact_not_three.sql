@@ -1,0 +1,32 @@
+-- =============================================================================
+-- Migration 179: retire the third do-not-contact, which was never one
+--
+-- `customer_intelligence.do_not_contact_until` was created by migration 022
+-- with the comment `-- Rate limiting`. It has NO READERS AND NO WRITERS: in all
+-- of `src/`, the only occurrence of the name is the CREATE TABLE that made it.
+-- Nothing can put a date in it and nothing would look if something did.
+--
+-- That matters more than an unused column usually would, because of what it is
+-- named. A person reading the schema — or a future steward looking for where
+-- "do not contact" is enforced — finds a column that says the thing, and it
+-- says nothing. This campaign has now found four separate controls that named a
+-- protection and governed nothing; the difference here is that a REAL one now
+-- exists beside it.
+--
+-- WHAT ACTUALLY HOLDS. `outreach_suppressions` records a constraint the person
+-- themselves stated, `contactIsRefused` reads it, and the outbound gateway
+-- consults it before classification at the point every outward effect
+-- converges — so no caller has to remember it. That is the affected-party term
+-- of the legitimate action envelope, and it is one implementation on purpose.
+--
+-- A SECOND MECHANISM IS NOT A SECOND PROTECTION. It is a place for the two to
+-- disagree, and the one that governs is whichever the next reader happens to
+-- find. Rate limiting, which is what this column's comment says it was for,
+-- already exists as `communication_budgets` and the per-department envelopes —
+-- both consulted, both tested.
+--
+-- Retired rather than wired, for the reason migration 167 gives: wiring it
+-- would mean inventing a second answer to a question that already has one.
+-- =============================================================================
+
+ALTER TABLE customer_intelligence DROP COLUMN do_not_contact_until;

@@ -12,6 +12,7 @@ import { generatePromptMutations, activateMutation, listEvolutions } from '../..
 import { getPreferences, inferPreferencesFromHistory } from '../../services/scp/preferences/learner.js';
 import { AGENT_DISPLAY_NAMES } from '../../services/scp/types.js';
 import type { AgentName } from '../../services/scp/types.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentIntelligence = new Hono<AuthEnv>();
 
@@ -226,7 +227,8 @@ agentIntelligence.get('/agents/intelligence', async (c) => {
 
 // ─── POST /agents/intelligence/mutations/generate ─────────────────────────────
 
-agentIntelligence.post('/agents/intelligence/mutations/generate', async (c) => {
+agentIntelligence.post('/agents/intelligence/mutations/generate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Intelligence', undefined, c);
 
@@ -246,7 +248,8 @@ agentIntelligence.post('/agents/intelligence/mutations/generate', async (c) => {
 
 // ─── POST /agents/intelligence/mutations/:id/activate ────────────────────────
 
-agentIntelligence.post('/agents/intelligence/mutations/:id/activate', async (c) => {
+agentIntelligence.post('/agents/intelligence/mutations/:id/activate',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const mutationId = c.req.param('id');
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Intelligence', undefined, c);
@@ -274,7 +277,8 @@ agentIntelligence.post('/agents/intelligence/mutations/:id/activate', async (c) 
 
 // ─── POST /agents/intelligence/preferences/infer ──────────────────────────────
 
-agentIntelligence.post('/agents/intelligence/preferences/infer', async (c) => {
+agentIntelligence.post('/agents/intelligence/preferences/infer',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Intelligence', undefined, c);
 

@@ -1,0 +1,26 @@
+-- =============================================================================
+-- AN ANSWER WITH NO COMPANY IN IT.
+--
+-- `switching_cost_analysis` stored the output of `analyzeSwitchingCosts`, which
+-- asked a model — given a product's NAME and SECTOR and nothing else — how many
+-- hours it costs a customer to leave, then divided one invented number by
+-- another to get `switching_cost_ratio`. Nothing ever read a row; the
+-- investor-layer route returns the values to its caller.
+--
+-- Foundry holds no evidence that bears on switching cost. Its `integrations`
+-- are the FOUNDER's connections to Stripe and Linear, not the customer's
+-- entanglement with the product, so there is nothing honest to feed in. The
+-- estimate is kept and now says what it is made of; the row is retired rather
+-- than given an invented reader, on the owner decision recorded at migration
+-- 157 — anything genuinely wanted comes back as a whole feature, against a
+-- ledger that is actually populated.
+--
+-- Worth stating plainly, because it was the sharper half: when the model
+-- returned zero for the incumbent's cost, the ratio became exactly 1 — "leaving
+-- us costs a customer precisely what leaving the incumbent costs them" — and
+-- for a product that could not be found, the function returned portability and
+-- integration-depth scores of 50 and a ratio of 1. Confident midpoints about
+-- nothing.
+-- =============================================================================
+
+DROP TABLE IF EXISTS switching_cost_analysis;

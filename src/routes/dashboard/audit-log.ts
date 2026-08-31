@@ -4,13 +4,40 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { csvRow } from '../../lib/csv.js';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const auditLog = new Hono<AuthEnv>();
+
+// EVERY ROUTE IN THIS ROUTER IS THE COMPANY’S AUDIT TRAIL.
+//
+// `team_members.can_view_audit` has existed since migration 010 and nothing read it.
+// That was survivable only because an invited member could not see the company
+// at all — the dashboard listed by `owner_id`. Now that membership makes the
+// company visible, this is the guard that was always supposed to be here.
+//
+// Router-level rather than per-route: a capability that has to be remembered
+// on each new handler is one that will be forgotten on one of them.
+// SCOPED TO THIS ROUTER'S OWN PATHS, NOT '*'.
+//
+// This router is mounted at '/', and in Hono a sub-app's middleware is merged
+// under its MOUNT PATH — so `use('*')` here applied to every path in the whole
+// application. It ran in front of the REST API, which answered
+// `{"error":"Unauthorized"}` to every request with a valid key, and in front of
+// the transcript webhooks, which did the same. Both are dead surfaces caused by
+// a capability check written for these pages.
+//
+// Owners were unaffected (`memberMay` short-circuits for the owner) and
+// `can_view_financials` defaults TRUE for members, so the damage landed exactly
+// where there is no session at all: machine-facing callers.
+auditLog.use('/audit-log', requireCompanyCapability('can_view_audit'));
+auditLog.use('/audit-log/*', requireCompanyCapability('can_view_audit'));
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -254,16 +281,10 @@ auditLog.get('/audit-log/export', async (c) => {
   // Build CSV
   const csvHeaders = ['created_at', 'actor_type', 'actor_name', 'actor_id', 'action', 'resource_type', 'resource_id', 'details', 'ip_address'];
   const csvRows = entries.map((e) => {
-    return csvHeaders.map((h) => {
-      const val = e[h];
-      if (val === null || val === undefined) return '';
-      const str = typeof val === 'string' ? val : JSON.stringify(val);
-      // Escape CSV: wrap in quotes if contains comma, quote, or newline
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
-    }).join(',');
+    // One escaper, shared with the privacy export. Both quoted correctly for
+    // RFC 4180 and neither neutralised a formula; the audit log carries
+    // `reasoning` and `trigger` strings that can hold content from outside.
+    return csvRow(csvHeaders, e as Record<string, unknown>);
   });
 
   const csv = [csvHeaders.join(','), ...csvRows].join('\n');

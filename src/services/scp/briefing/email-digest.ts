@@ -146,14 +146,28 @@ export async function generateWeeklyEmailDigest(productId: string): Promise<Emai
     if (res.rows.length > 0) {
       const latest = res.rows[0] as Record<string, unknown>;
       const prev = res.rows[1] as Record<string, unknown> | undefined;
-      const mrr = latest.mrr_cents ? `$${((latest.mrr_cents as number) / 100).toLocaleString()}` : 'unknown';
-      const churn = latest.churn_rate != null ? `${(latest.churn_rate as number).toFixed(1)}%` : 'unknown';
-      const activation = latest.activation_rate != null ? `${(latest.activation_rate as number).toFixed(1)}%` : 'unknown';
+      // `!= null`: a recorded $0 is pre-revenue, not unmeasured.
+      const mrr = latest.mrr_cents != null ? `$${((latest.mrr_cents as number) / 100).toLocaleString()}` : 'unknown';
+      // Stored as 0–1 fractions: 2% churn was reaching the founder's inbox
+      // as "0.0%".
+      const churn = latest.churn_rate != null ? `${((latest.churn_rate as number) * 100).toFixed(1)}%` : 'unknown';
+      const activation = latest.activation_rate != null ? `${((latest.activation_rate as number) * 100).toFixed(1)}%` : 'unknown';
 
+      // "WoW" WAS A GUESS ABOUT THE INTERVAL. These are the two most recent
+      // snapshots, and `metric_snapshots` is keyed by DATE — most companies
+      // report daily, so this went to the founder's inbox as a week-over-week
+      // figure when it was yesterday against the day before. The interval is
+      // measured and stated.
       let mrrDelta = '';
-      if (prev?.mrr_cents && latest.mrr_cents) {
+      if (prev?.mrr_cents != null && latest.mrr_cents != null && (prev.mrr_cents as number) > 0) {
         const pct = (((latest.mrr_cents as number) - (prev.mrr_cents as number)) / (prev.mrr_cents as number)) * 100;
-        mrrDelta = ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% WoW)`;
+        const gapDays = Math.round(
+          (Date.parse(`${String(latest.snapshot_date)}T00:00:00Z`)
+            - Date.parse(`${String(prev.snapshot_date)}T00:00:00Z`)) / 86_400_000);
+        const over = Number.isFinite(gapDays) && gapDays > 0
+          ? (gapDays === 1 ? 'over 1 day' : `over ${gapDays} days`)
+          : 'since the previous report';
+        mrrDelta = ` (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% ${over})`;
       }
 
       metricsContext = `MRR: ${mrr}${mrrDelta}, Churn: ${churn}, Activation: ${activation}`;
@@ -188,7 +202,7 @@ export async function generateWeeklyEmailDigest(productId: string): Promise<Emai
   let stressorsContext = '';
   try {
     const res = await query(
-      `SELECT type, severity FROM stressor_history
+      `SELECT stressor_name AS type, severity FROM stressor_history
        WHERE product_id = ? AND status = 'active'
        ORDER BY CASE severity WHEN 'critical' THEN 1 WHEN 'elevated' THEN 2 ELSE 3 END
        LIMIT 5`,

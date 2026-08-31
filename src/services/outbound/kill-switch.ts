@@ -3,6 +3,23 @@
 // Refuses outbound when the product is paused, the specific tool is disabled,
 // or the calling agent is paused. Reads existing fields plus the new
 // products.disabled_tools JSON column added in migration 068.
+//
+// TWO PAUSE AXES, BOTH LOAD-BEARING. `products.status` is the archive axis: the
+// record is gone. `products.scp_status` is the acting axis: the company is not
+// operating right now. Three separate places write `scp_status='paused'` — a
+// cancelled Stripe subscription, a founder pausing from settings, and the
+// hourly entitlement sweep that enforces "unpaid means read-only" — and until
+// this file read it, none of them stopped a single outbound effect. The SCP
+// scheduler honoured the pause, so no NEW agent work started; but every job
+// that emails on its own timer (red daily, yellow pulse, DNA nudge, behavioural
+// triggers) filtered on `status='active'` and sent anyway. The pause looked
+// total from the code that wrote it and was not.
+//
+// It is checked HERE rather than at those call sites deliberately. This is the
+// single door every outbound effect passes through, and the alternative —
+// adding `AND scp_status='active'` to a dozen SELECTs — is the exact shape this
+// codebase keeps finding broken: several implementations of one rule, drifting
+// apart, with the weakest one live.
 // =============================================================================
 
 import { query } from '../../db/client.js';
@@ -16,9 +33,18 @@ export interface KillSwitchResult {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
+/** SCP states in which the company is not acting outward.
+ *
+ * Named rather than inverted — `scp_status <> 'active'` would also catch
+ * 'provisioning', and onboarding email is sent before a product is ever marked
+ * active. Blocking signup in order to enforce billing is not the trade the
+ * owner decision asked for. */
+const NOT_ACTING = new Set(['paused', 'archived']);
+
 /**
  * Check whether (product, tool, agent) is allowed to invoke. Blocks on:
- *   - product status != 'active' (product-wide pause)
+ *   - product status != 'active' (the record is archived or deleted)
+ *   - product scp_status in ('paused','archived') (the company is not acting)
  *   - tool listed in products.disabled_tools (per-tool kill)
  *   - agent_instances row for (product, agent) with status='paused'
  *
@@ -27,10 +53,15 @@ export interface KillSwitchResult {
 export async function checkKillSwitch(
   productId: string,
   tool: string,
-  agentName?: string | null
+  agentName?: string | null,
+  /** Server-owned capability facts. Supplied by the gateway from the REGISTERED
+   * policy for the tool — never from the request, which is why this parameter
+   * has no route to a caller. */
+  capability?: { deliverableWhilePaused?: boolean },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
-    `SELECT status, disabled_tools FROM products WHERE id = ?`,
+    `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools
+       FROM products WHERE id = ?`,
     [productId]
   );
   const productRow = productResult.rows[0] as Record<string, unknown> | undefined;
@@ -42,6 +73,41 @@ export async function checkKillSwitch(
       blocked: true,
       reason: `product status is '${productRow.status}'`,
     };
+  }
+  // A missing scp_status does not block. The column has been on products since
+  // migration 017 with a default, so NULL means a row older than the SCP model
+  // rather than a company anybody paused — and refusing outbound for those
+  // would silence accounts nobody made a decision about.
+  // TWO PAUSE REASONS, ONE ANSWER TO "MAY WE ACT", DIFFERENT ANSWERS TO "MAY WE
+  // WRITE TO THE ACCOUNT". `scp_status` is the founder's or an operator's
+  // decision to stop the company; `entitlement_paused_at` is the billing
+  // sweep's. Both stop the institution acting. Neither stops account mail,
+  // because account mail is about the pause — and a founder who paused their
+  // own company still needs to hear that their card was declined.
+  //
+  // 'archived' is exempt from nothing: that record is gone and there is no
+  // relationship left to write to.
+  //
+  // A THIRD AXIS: a scheduled erasure. For the thirty days of the grace window
+  // this company kept mailing its customers on the way out. Unlike the other
+  // two it exempts nothing — not even account mail. There is a difference
+  // between telling a founder their card was declined, which they need, and
+  // continuing to reach their customers on behalf of a company being deleted.
+  const scpStatus = String(productRow.scp_status ?? '');
+  const entitlementPaused = productRow.entitlement_paused_at != null;
+  const erasureScheduled = productRow.erasure_scheduled_at != null;
+  const pausedReason = NOT_ACTING.has(scpStatus) ? scpStatus
+    : erasureScheduled ? 'scheduled for deletion'
+    : entitlementPaused ? 'unentitled' : null;
+  if (pausedReason) {
+    const exempt = capability?.deliverableWhilePaused === true
+      && pausedReason !== 'archived' && pausedReason !== 'scheduled for deletion';
+    if (!exempt) {
+      return {
+        blocked: true,
+        reason: `company is ${pausedReason} — Foundry is not acting for this product`,
+      };
+    }
   }
   if (isToolDisabledForRow(productRow.disabled_tools, tool)) {
     return {

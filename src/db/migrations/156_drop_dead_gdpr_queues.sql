@@ -1,0 +1,33 @@
+-- =============================================================================
+-- Migration 156: a second erasure that would have reported success
+--
+-- `src/jobs/gdpr.ts` held two functions — processDataExports (Article 20) and
+-- processAccountDeletions (Article 17) — reading two queues:
+-- `data_export_requests` and `deletion_requests`. Nothing wrote a row into
+-- either. Nothing called either function. Neither was scheduled. The whole file
+-- was unreachable.
+--
+-- That would be merely dead code except for what it would have done if anyone
+-- had wired it up. `processAccountDeletions` deletes from a HAND-WRITTEN LIST
+-- of about twenty-five tables — out of the ~266 this schema has — and then
+-- writes `status = 'completed'` on the request. A partial erasure that reports
+-- success is worse than one that fails: the founder is told their data is gone,
+-- the record says the obligation was met, and most of it is still there.
+--
+-- Both features already work, through paths this campaign hardened:
+--
+--   export    GET /privacy/export and /settings/export-all, synchronously.
+--   erasure   scheduleDataDeletion -> processScheduledDeletions, which runs the
+--             canonical `erasurePlan()`: every table classified, children before
+--             parents, failures recorded rather than swallowed, and a
+--             completion written only when the erasure actually completed.
+--
+-- Two implementations of one obligation, one of them live and correct and one
+-- of them dead and partial. Same disposition `account_roles` and
+-- `agent_decisions` got, and for a sharper reason: this one is a landmine. The
+-- moment somebody adds a "delete my account" button pointing at
+-- `deletion_requests`, they get the partial erasure and the false receipt.
+-- =============================================================================
+
+DROP TABLE IF EXISTS data_export_requests;
+DROP TABLE IF EXISTS deletion_requests;

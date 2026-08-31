@@ -57,42 +57,76 @@ export interface Baseline {
   monthlyGrowthMean: number;   // e.g. 0.04 = +4%/mo
   monthlyGrowthStd: number;
   nSnapshots: number;
+  /** Calendar days between the first and last snapshot used. Four snapshots a
+   *  day apart and four a quarter apart are different evidence, and the number
+   *  travels with the estimate so a reader can tell them apart. */
+  historySpanDays: number;
 }
 
 /** The company's own trajectory, from its own history. Returns null (abstain)
  *  below MIN_HISTORY usable points — we never simulate on fabricated numbers. */
 export async function estimateBaseline(productId: string): Promise<Baseline | null> {
+  // THE MOST RECENT 24 SNAPSHOTS, NOT THE FIRST 24. `ORDER BY snapshot_date ASC
+  // LIMIT 24` takes the OLDEST rows, so a company with two years of history was
+  // simulated forward from the growth rate of its first three weeks. The
+  // ordering is reversed here and the series re-sorted into date order below.
   const r = await query(
     `SELECT snapshot_date, mrr_cents, new_mrr_cents, expansion_mrr_cents,
             contraction_mrr_cents, churned_mrr_cents
      FROM metric_snapshots WHERE product_id = ?
-     ORDER BY snapshot_date ASC LIMIT 24`,
+     ORDER BY snapshot_date DESC LIMIT 24`,
     [productId],
   );
+  const rows = (r.rows as unknown as Array<Record<string, string | number | null>>)
+    .slice().reverse();
+
   // MRR series: prefer absolute mrr_cents; else reconstruct cumulatively from deltas.
-  const series: number[] = [];
+  const series: Array<{ date: string; mrr: number }> = [];
   let cum = 0;
-  for (const row of r.rows as unknown as Array<Record<string, number | null>>) {
-    if (row.mrr_cents != null) { series.push(Number(row.mrr_cents)); cum = Number(row.mrr_cents); continue; }
+  for (const row of rows) {
+    const date = String(row.snapshot_date);
+    if (row.mrr_cents != null) {
+      cum = Number(row.mrr_cents);
+      series.push({ date, mrr: cum });
+      continue;
+    }
     const delta = Number(row.new_mrr_cents ?? 0) + Number(row.expansion_mrr_cents ?? 0)
       - Number(row.contraction_mrr_cents ?? 0) - Number(row.churned_mrr_cents ?? 0);
     cum += delta;
-    if (cum > 0) series.push(cum);
+    if (cum > 0) series.push({ date, mrr: cum });
   }
   if (series.length < MIN_HISTORY) return null;
 
+  // A GROWTH RATE HAS A PERIOD, AND THIS ONE'S WAS WHATEVER THE COMPANY'S
+  // REPORTING CADENCE HAPPENED TO BE. The rate between two consecutive
+  // snapshots was called `monthlyGrowthMean` and compounded three times for a
+  // 90-day horizon. `metric_snapshots` is keyed by DATE and companies report
+  // daily, so for most of them this was the mean DAILY growth compounded over
+  // three days, presented as a 90-day forecast with p10/p50/p90 bands. Each
+  // observed step is now converted to its monthly equivalent using the gap
+  // between the two dates, which is what the rest of this file assumes it has.
+  const DAYS_PER_MONTH = 30.44;
   const growths: number[] = [];
   for (let i = 1; i < series.length; i++) {
-    if (series[i - 1] > 0) growths.push(series[i] / series[i - 1] - 1);
+    const prev = series[i - 1];
+    const next = series[i];
+    if (prev.mrr <= 0) continue;
+    const gapDays = (Date.parse(`${next.date}T00:00:00Z`) - Date.parse(`${prev.date}T00:00:00Z`))
+      / 86_400_000;
+    if (!Number.isFinite(gapDays) || gapDays <= 0) continue;
+    growths.push((next.mrr / prev.mrr) ** (DAYS_PER_MONTH / gapDays) - 1);
   }
   if (growths.length < MIN_HISTORY - 1) return null;
   const mean = growths.reduce((a, b) => a + b, 0) / growths.length;
   const variance = growths.reduce((a, b) => a + (b - mean) ** 2, 0) / growths.length;
+  const spanDays = (Date.parse(`${series[series.length - 1].date}T00:00:00Z`)
+    - Date.parse(`${series[0].date}T00:00:00Z`)) / 86_400_000;
   return {
-    currentMrrCents: series[series.length - 1],
+    currentMrrCents: series[series.length - 1].mrr,
     monthlyGrowthMean: mean,
     monthlyGrowthStd: Math.sqrt(variance),
     nSnapshots: series.length,
+    historySpanDays: Number.isFinite(spanDays) ? spanDays : 0,
   };
 }
 
@@ -172,7 +206,7 @@ export async function runGhostFork(decisionId: string, productId: string): Promi
   if (options.length === 0) options = [{ label: decision.recommendation as string ?? 'Proceed' }];
 
   // Judgment layer (labeled as such): map each option to a growth-delta prior.
-  const userPrompt = `DECISION: ${decision.what}\nWHY NOW: ${decision.why_now ?? 'n/a'}\n\nCOMPANY BASELINE (from its own history, ${base.nSnapshots} snapshots): MRR ${fmt(base.currentMrrCents)}, monthly growth mean ${(base.monthlyGrowthMean * 100).toFixed(1)}% ± ${(base.monthlyGrowthStd * 100).toFixed(1)}%.\n\nOPTIONS:\n${options.map((o, i) => `${i + 1}. ${o.label}${o.description ? ` — ${o.description}` : ''}`).join('\n')}\n\nFor EACH option, estimate the shift it makes to MONTHLY MRR growth in percentage points over the next 90 days, as a conservative point estimate. Respond ONLY JSON: {"options":[{"label","growth_delta_pp","rationale"}]}`;
+  const userPrompt = `DECISION: ${decision.what}\nWHY NOW: ${decision.why_now ?? 'n/a'}\n\nCOMPANY BASELINE (from its own history: ${base.nSnapshots} snapshots spanning ${Math.round(base.historySpanDays)} days): MRR ${fmt(base.currentMrrCents)}, monthly growth mean ${(base.monthlyGrowthMean * 100).toFixed(1)}% ± ${(base.monthlyGrowthStd * 100).toFixed(1)}%.\n\nOPTIONS:\n${options.map((o, i) => `${i + 1}. ${o.label}${o.description ? ` — ${o.description}` : ''}`).join('\n')}\n\nFor EACH option, estimate the shift it makes to MONTHLY MRR growth in percentage points over the next 90 days, as a conservative point estimate. Respond ONLY JSON: {"options":[{"label","growth_delta_pp","rationale"}]}`;
   const response = await callSonnet(
     'You translate a business decision\'s options into conservative monthly-growth deltas (percentage points). You are an estimator, not a cheerleader: when in doubt, estimate closer to 0. Your numbers are labeled as judgment-priors and combined with the company\'s real variance — do not inflate.',
     userPrompt, 800, productId,
@@ -187,6 +221,7 @@ export async function runGhostFork(decisionId: string, productId: string): Promi
 
   const assumptions = JSON.stringify({
     n_snapshots: base.nSnapshots,
+    history_span_days: base.historySpanDays,
     monthly_growth_mean: base.monthlyGrowthMean,
     monthly_growth_std: base.monthlyGrowthStd,
     runs: RUNS, horizon_months: HORIZON_MONTHS, seed,

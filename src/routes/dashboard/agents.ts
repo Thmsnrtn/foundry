@@ -21,6 +21,7 @@ import {
   type GoldenSuiteEntry,
   type EvolutionVersion,
 } from '../../services/scp/types.js';
+import { requireCompanyCapability } from '../../middleware/rbac.js';
 
 export const agentRoutes = new Hono<AuthEnv>();
 
@@ -42,11 +43,36 @@ function timeAgo(dateStr: string | null): string {
   return `${days} day${days === 1 ? '' : 's'} ago`;
 }
 
-function successRate(instance: Record<string, unknown>): number {
+/**
+ * Null when the agent has never run. It used to return 0, so an agent that had
+ * never been asked to do anything read "0% success" beside agents that had run
+ * hundreds of times and failed sometimes — the worst score on the page, for the
+ * one that had not been measured.
+ */
+function successRate(instance: Record<string, unknown>): number | null {
   const total = (instance.total_sessions as number) ?? 0;
   const successful = (instance.successful_sessions as number) ?? 0;
-  if (total === 0) return 0;
+  if (total === 0) return null;
   return Math.round((successful / total) * 100);
+}
+
+/**
+ * Domain health, or null when nothing has scored it.
+ *
+ * `?? 50` put an unscored agent at the exact middle of the bar, in amber, which
+ * is a claim about a domain nobody looked at. The agents themselves no longer
+ * invent the number either — `AgentResult.domainHealthScore` has always been
+ * declared optional, "if provided", and five agents defeated that with `?? 50`
+ * before it reached the column.
+ */
+function domainHealth(instance: Record<string, unknown>): number | null {
+  const raw = instance.domain_health_score;
+  return raw == null ? null : Number(raw);
+}
+
+function healthColorOf(score: number | null): string {
+  if (score === null) return 'var(--text-muted)';
+  return score >= 70 ? '#4ecca3' : score >= 40 ? '#ffb347' : '#ff6b6b';
 }
 
 function authorityLabel(level: number): string {
@@ -157,8 +183,8 @@ agentRoutes.get('/', async (c) => {
 
   const agentCards = agents.map((agent) => {
     const rate = successRate(agent as unknown as Record<string, unknown>);
-    const healthScore = (agent.domain_health_score as number) ?? 50;
-    const healthColor = healthScore >= 70 ? '#4ecca3' : healthScore >= 40 ? '#ffb347' : '#ff6b6b';
+    const healthScore = domainHealth(agent as unknown as Record<string, unknown>);
+    const healthColor = healthColorOf(healthScore);
     const displayName = AGENT_DISPLAY_NAMES[agent.agent_name] ?? agent.display_name;
     const role = AGENT_ROLES[agent.agent_name] ?? agent.role_description ?? '';
 
@@ -189,15 +215,15 @@ agentRoutes.get('/', async (c) => {
       <div>
         <div style="display:flex;justify-content:space-between;margin-bottom:0.3rem;">
           <span style="font-size:0.7rem;color:var(--text-muted);letter-spacing:0.05em;text-transform:uppercase;">Domain Health</span>
-          <span style="font-size:0.7rem;font-weight:700;color:${healthColor};">${healthScore}</span>
+          <span style="font-size:0.7rem;font-weight:700;color:${healthColor};">${healthScore === null ? 'not scored' : healthScore}</span>
         </div>
         <div style="height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;">
-          <div style="height:100%;width:${healthScore}%;background:${healthColor};border-radius:2px;transition:width 0.3s;"></div>
+          <div style="height:100%;width:${healthScore ?? 0}%;background:${healthColor};border-radius:2px;transition:width 0.3s;"></div>
         </div>
       </div>
 
       <div style="font-size:0.75rem;color:var(--text-dim);">
-        ${agent.total_sessions} sessions · ${rate}% success
+        ${agent.total_sessions} sessions · ${rate === null ? 'never run' : `${rate}% success`}
       </div>
 
       <div style="font-size:0.72rem;color:var(--text-muted);">
@@ -235,7 +261,10 @@ agentRoutes.get('/', async (c) => {
 
 // ─── POST /agents/provision — Provision SCP ───────────────────────────────────
 
-agentRoutes.post('/provision', async (c) => {
+// Provisioning stands the company's agents up. Resuming a paused one puts it
+// back to work; pausing stays open, because it only ever stops something.
+agentRoutes.post('/provision',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'agents', 'Agent Roster', undefined, c);
 
@@ -299,8 +328,8 @@ agentRoutes.get('/:name', async (c) => {
   const rate = successRate(agent as unknown as Record<string, unknown>);
   const displayName = AGENT_DISPLAY_NAMES[agent.agent_name] ?? agent.display_name;
   const role = AGENT_ROLES[agent.agent_name] ?? agent.role_description ?? '';
-  const healthScore = (agent.domain_health_score as number) ?? 50;
-  const healthColor = healthScore >= 70 ? '#4ecca3' : healthScore >= 40 ? '#ffb347' : '#ff6b6b';
+  const healthScore = domainHealth(agent as unknown as Record<string, unknown>);
+  const healthColor = healthColorOf(healthScore);
 
   const ranToast = ranParam === '1'
     ? html`<div style="background:#4ecca322;border:1px solid #4ecca344;border-radius:8px;padding:0.75rem 1rem;margin-bottom:1.5rem;color:#4ecca3;font-size:0.85rem;">Agent run triggered successfully.</div>`
@@ -385,7 +414,7 @@ agentRoutes.get('/:name', async (c) => {
 
     <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:2rem;">
       <div style="font-size:0.82rem;color:var(--text-dim);">${agent.total_sessions} sessions</div>
-      <div style="font-size:0.82rem;color:var(--text-dim);">${rate}% success</div>
+      <div style="font-size:0.82rem;color:var(--text-dim);">${rate === null ? 'Never run' : `${rate}% success`}</div>
       <div style="font-size:0.82rem;color:var(--text-dim);">v${agent.version}</div>
       <div style="font-size:0.82rem;color:var(--text-dim);">Level ${agent.authority_level} authority</div>
     </div>
@@ -393,12 +422,12 @@ agentRoutes.get('/:name', async (c) => {
     <!-- Domain Health Score -->
     <div class="card" style="padding:1.25rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:1.5rem;">
       <div style="text-align:center;">
-        <div style="font-size:2.5rem;font-weight:800;color:${healthColor};line-height:1;">${healthScore}</div>
+        <div style="font-size:${healthScore === null ? '1.1rem' : '2.5rem'};font-weight:800;color:${healthColor};line-height:1;">${healthScore === null ? 'not scored' : healthScore}</div>
         <div style="font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--text-muted);margin-top:0.25rem;">Domain Health</div>
       </div>
       <div style="flex:1;">
         <div style="height:8px;border-radius:4px;background:rgba(255,255,255,0.08);overflow:hidden;">
-          <div style="height:100%;width:${healthScore}%;background:${healthColor};border-radius:4px;transition:width 0.4s;"></div>
+          <div style="height:100%;width:${healthScore ?? 0}%;background:${healthColor};border-radius:4px;transition:width 0.4s;"></div>
         </div>
         <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">Last run: ${timeAgo(agent.last_run_at)}</div>
       </div>
@@ -420,7 +449,7 @@ agentRoutes.get('/:name', async (c) => {
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);">Golden Suite — ${goldenEntries.length} active lessons</div>
       </div>
       ${goldenEntries.length === 0
-        ? html`<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:0.85rem;">No golden lessons yet. They accumulate as the agent runs.</div>`
+        ? html`<div style="padding:1.5rem;text-align:center;color:var(--text-muted);font-size:0.85rem;">No golden lessons. Nothing writes one yet, so this stays empty however long the agent runs — your corrections are carried in its versioned config instead.</div>`
         : goldenRows}
     </div>
 
@@ -460,7 +489,8 @@ agentRoutes.get('/:name', async (c) => {
 
 // ─── POST /agents/:name/run — Manual Trigger ──────────────────────────────────
 
-agentRoutes.post('/:name/run', async (c) => {
+agentRoutes.post('/:name/run',
+  requireCompanyCapability('can_trigger_actions'), async (c) => {
   const founder = c.get('founder');
   const name = c.req.param('name');
 
@@ -483,7 +513,11 @@ agentRoutes.post('/:name/run', async (c) => {
 
 // ─── POST /agents/:name/authority — Change Authority Level ────────────────────
 
-agentRoutes.post('/:name/authority', async (c) => {
+// SETTING AN AGENT'S AUTHORITY LEVEL IS GRANTING AUTHORITY. It decides how
+// far the company's agents may act without a human, and it asked nothing:
+// any member who could select the company could raise it.
+agentRoutes.post('/:name/authority',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const name = c.req.param('name');
 
@@ -537,7 +571,10 @@ agentRoutes.post('/:name/authority', async (c) => {
 
 // ─── POST /agents/decisions/:id/approve — Approve a Decision ─────────────────
 
-agentRoutes.post('/decisions/:id/approve', async (c) => {
+// Approving an agent-session decision. Same permission as the decision queue
+// it mirrors: `can_vote_decisions` is what says who has a say.
+agentRoutes.post('/decisions/:id/approve',
+  requireCompanyCapability('can_vote_decisions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
 
@@ -547,20 +584,24 @@ agentRoutes.post('/decisions/:id/approve', async (c) => {
   const productId = ctx.productId;
   const body = await c.req.parseBody() as Record<string, string>;
 
-  // Log audit notification
-  try {
-    await query(
-      `INSERT INTO notifications (id, founder_id, product_id, type, title, body, created_at)
-       VALUES (lower(hex(randomblob(16))), ?, ?, 'scp_decision', 'Decision Approved', ?, CURRENT_TIMESTAMP)`,
-      [
-        founder.id,
-        productId,
-        `SCP decision ${decisionId} was approved by founder.`,
-      ]
-    );
-  } catch {
-    // notifications table may not exist yet — non-fatal
-  }
+  // NO NOTIFICATION HERE, DELIBERATELY.
+  //
+  // This wrote one: type 'scp_decision', titled "Decision Approved", body
+  // "SCP decision <id> was approved by founder.", addressed to `founder.id` —
+  // the person who had just clicked approve. Foundry told the founder what the
+  // founder had done, one moment after they did it.
+  //
+  // Its comment called it an audit notification, and the interruption ladder
+  // in `ux/interruption.ts` defines the tier for exactly that: `log` is the
+  // audit trail, "visible if the founder goes looking". A bell is two rungs
+  // above it. The record it was reaching for already exists and is better —
+  // `recordDecisionOutcome` below writes `decision_outcomes` with the outcome,
+  // the agent and the session — so this added no history, only attention.
+  //
+  // The Attention Law optimises for attention RETURNED. An echo of the reader's
+  // own click is the purest form of the opposite, and the raw INSERT also went
+  // around `createNotification`, and so around the founder's own ceiling on how
+  // loud Foundry may be.
 
   // Look up the session and agent that contains this decision
   try {
@@ -615,7 +656,8 @@ agentRoutes.post('/decisions/:id/approve', async (c) => {
 
 // ─── POST /agents/decisions/:id/deny — Deny a Decision ───────────────────────
 
-agentRoutes.post('/decisions/:id/deny', async (c) => {
+agentRoutes.post('/decisions/:id/deny',
+  requireCompanyCapability('can_vote_decisions'), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('id');
 
@@ -727,7 +769,8 @@ agentRoutes.post('/:name/pause', async (c) => {
 
 // ─── POST /agents/:name/resume — Resume Agent ────────────────────────────────
 
-agentRoutes.post('/:name/resume', async (c) => {
+agentRoutes.post('/:name/resume',
+  requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const name = c.req.param('name');
 

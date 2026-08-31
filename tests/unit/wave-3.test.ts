@@ -8,12 +8,10 @@ import { resolve } from 'path';
 import { nanoid } from 'nanoid';
 
 import { query, executeRaw } from '../../src/db/client.js';
+import { runMigrations } from '../../src/db/migrate.js';
 import {
-  computePeerSignal,
-  decorateForDisplay,
   topPeerValidatedDecisionTypes,
 } from '../../src/services/intelligence/peer-signal.js';
-import { computeFinancialSnapshot } from '../../src/services/intelligence/financial-snapshot.js';
 import {
   getOrCreateReferralLink,
   resolveReferralCode,
@@ -30,84 +28,10 @@ let productId: string;
 
 async function setupSchema(): Promise<void> {
   await executeRaw(`
-    CREATE TABLE IF NOT EXISTS founders (
-      id TEXT PRIMARY KEY,
-      clerk_user_id TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      tier TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS products (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      owner_id TEXT NOT NULL REFERENCES founders(id),
-      status TEXT DEFAULT 'active',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS metric_snapshots (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      snapshot_date DATE NOT NULL,
-      new_mrr_cents INTEGER,
-      expansion_mrr_cents INTEGER DEFAULT 0,
-      contraction_mrr_cents INTEGER DEFAULT 0,
-      churned_mrr_cents INTEGER DEFAULT 0,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(product_id, snapshot_date)
-    );
-    CREATE TABLE IF NOT EXISTS ai_cost_log (
-      id TEXT PRIMARY KEY,
-      product_id TEXT,
-      model TEXT,
-      cost_usd REAL,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS decisions (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      gate INTEGER,
-      what TEXT NOT NULL,
-      why_now TEXT NOT NULL,
-      status TEXT DEFAULT 'pending',
-      decided_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS action_drafts (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      action_type TEXT,
-      title TEXT,
-      draft_content TEXT,
-      artifact_type TEXT,
-      gate INTEGER,
-      auto_executable INTEGER,
-      status TEXT,
-      executed_at TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS scp_briefings (
-      id TEXT PRIMARY KEY,
-      product_id TEXT NOT NULL,
-      briefing_date DATE NOT NULL,
-      signal_score INTEGER,
-      headline TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS decision_patterns (
-      id TEXT PRIMARY KEY,
-      decision_type TEXT NOT NULL,
-      product_lifecycle_stage TEXT NOT NULL,
-      risk_state_at_decision TEXT NOT NULL,
-      key_metrics_context TEXT NOT NULL,
-      option_chosen_category TEXT NOT NULL,
-      outcome_direction TEXT,
-      outcome_magnitude TEXT,
-      outcome_timeframe_days INTEGER,
-      market_category TEXT,
-      contributing_factors TEXT,
-      scenario_accuracy_score REAL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+    -- The real AI cost ledger. This fixture used to create ai_cost_log, a
+    -- table no migration has ever created, with a cost_usd column and a
+    -- timestamp clock — so the feature passed against a schema that existed
+    -- only inside this file, while the query threw on every real call.
   `);
   await executeRaw(
     readFileSync(
@@ -118,6 +42,10 @@ async function setupSchema(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // The migrations are the schema. Tables this file used to write by hand are
+  // already here, in the shape the product actually has — including the NOT
+  // NULL columns and foreign keys a hand-written stand-in leaves out.
+  await runMigrations();
   await setupSchema();
 });
 
@@ -133,7 +61,6 @@ beforeEach(async () => {
     [productId, 'Test', founderId]
   );
   await executeRaw('DELETE FROM decision_patterns');
-  await executeRaw('DELETE FROM ai_cost_log');
   await executeRaw('DELETE FROM metric_snapshots');
   await executeRaw('DELETE FROM referral_links');
   await executeRaw('DELETE FROM referral_conversions');
@@ -143,117 +70,80 @@ beforeEach(async () => {
 // ─── Peer signal ─────────────────────────────────────────────────────────────
 
 describe('peer-signal', () => {
-  it('returns null when no patterns match', async () => {
-    const r = await computePeerSignal({
-      decision_type: 'pricing_change',
-      product_lifecycle_stage: 'growth',
-    });
-    expect(r).toBeNull();
+  it('has one implementation, and it is the one that counts companies', async () => {
+    // `computePeerSignal` and `decorateForDisplay` were deleted with the tests
+    // that pinned them. They counted ROWS — no contributor floor, and rows with
+    // no `contributor_hash` (the seed writes one) counted too — and then said
+    // "Founders like you who acted on this saw positive outcomes 75% of the
+    // time (n=4)" about what could be one company deciding four times. The test
+    // here asserted `sample_size === 4` on four unattributed rows: the defect,
+    // recorded as the expected behaviour.
+    //
+    // Neither had a production caller. The correct reader is below.
+    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+    const { readFileSync } = await import('node:fs');
+    const src = stripComments(
+      readFileSync('src/services/intelligence/peer-signal.ts', 'utf8'), { lineComments: true });
+    expect(src).not.toMatch(/export async function computePeerSignal/);
+    expect(src).toContain('COUNT(DISTINCT contributor_hash)');
+    // `decorateForDisplay` survives — its only caller counts companies — and
+    // its floor is now the shared constant rather than a second literal 5.
+    expect(src).toContain('signal.sample_size >= PEER_SIGNAL_MIN_SAMPLE');
   });
 
-  it('aggregates positive_outcome_rate across matching rows', async () => {
-    // 4 rows: 3 positive, 1 negative
-    for (const dir of ['positive', 'positive', 'positive', 'negative']) {
+  it('topPeerValidatedDecisionTypes counts COMPANIES, not rows', async () => {
+    // This case used to insert six rows with no contributor and expect them to
+    // qualify, because the reader counted rows. "n=5 founders like you" then
+    // meant five DECISIONS, which one company satisfies on its own — and the
+    // sentence went to that company's competitor. The reader now counts
+    // distinct contributors, so the fixture says which company each row is.
+    //
+    // pricing_change: six different companies, five positive → 83% (qualifies)
+    const dirs = ['positive', 'positive', 'positive', 'positive', 'positive', 'negative'];
+    for (const [i, dir] of dirs.entries()) {
       await query(
-        `INSERT INTO decision_patterns
-          (id, decision_type, product_lifecycle_stage, risk_state_at_decision,
-           key_metrics_context, option_chosen_category, outcome_direction,
-           outcome_timeframe_days)
+        `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage,
+           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction,
+           contributor_hash)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nanoid(), 'pricing_change', 'growth', 'green', '{}', 'increase', dir, 30]
+        [nanoid(), 'pricing_change', 'growth', 'green', '{}', 'inc', dir, `peer_co_${i}`]
       );
     }
-    const r = await computePeerSignal({
-      decision_type: 'pricing_change',
-      product_lifecycle_stage: 'growth',
-    });
-    expect(r).not.toBeNull();
-    expect(r!.sample_size).toBe(4);
-    expect(r!.positive_outcome_rate).toBeCloseTo(0.75, 2);
-  });
-
-  it('decorateForDisplay flags worth_surfacing only when n >= 5', () => {
-    const small = decorateForDisplay({
-      decision_type: 'x',
-      approval_rate: 1,
-      positive_outcome_rate: 0.8,
-      sample_size: 3,
-      median_outcome_days: 10,
-    });
-    expect(small.worth_surfacing).toBe(false);
-
-    const big = decorateForDisplay({
-      decision_type: 'x',
-      approval_rate: 1,
-      positive_outcome_rate: 0.8,
-      sample_size: 12,
-      median_outcome_days: 10,
-    });
-    expect(big.worth_surfacing).toBe(true);
-    expect(big.headline).toMatch(/80%/);
-  });
-
-  it('topPeerValidatedDecisionTypes filters by sample size and positive rate', async () => {
-    // pricing_change: 6 rows, 5 positive, 1 negative → 83% (qualifies)
-    for (const dir of ['positive', 'positive', 'positive', 'positive', 'positive', 'negative']) {
+    // small_sample: three companies (under the floor)
+    for (const [i, dir] of ['positive', 'positive', 'positive'].entries()) {
       await query(
         `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage,
-           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [nanoid(), 'pricing_change', 'growth', 'green', '{}', 'inc', dir]
+           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction,
+           contributor_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nanoid(), 'small_sample', 'growth', 'green', '{}', 'inc', dir, `small_co_${i}`]
       );
     }
-    // small_sample: 3 rows (under threshold)
-    for (const dir of ['positive', 'positive', 'positive']) {
+    // one_company_many_times: eight rows, one company. Qualified before.
+    for (let i = 0; i < 8; i += 1) {
       await query(
         `INSERT INTO decision_patterns (id, decision_type, product_lifecycle_stage,
-           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [nanoid(), 'small_sample', 'growth', 'green', '{}', 'inc', dir]
+           risk_state_at_decision, key_metrics_context, option_chosen_category, outcome_direction,
+           contributor_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [nanoid(), 'one_company_many_times', 'growth', 'green', '{}', 'inc', 'positive', 'busy_co']
       );
     }
     const top = await topPeerValidatedDecisionTypes('growth', 5);
-    expect(top.length).toBe(1);
-    expect(top[0].decision_type).toBe('pricing_change');
+    expect(top.map((t) => t.decision_type)).toEqual(['pricing_change']);
+    expect(top[0].sample_size).toBe(6);
   });
 });
 
 // ─── Financial snapshot ──────────────────────────────────────────────────────
 
-describe('financial-snapshot', () => {
-  it('returns null mrr when no snapshots', async () => {
-    const r = await computeFinancialSnapshot(productId);
-    expect(r.mrr_cents).toBeNull();
-    expect(r.arr_cents).toBeNull();
-    expect(r.ai_cost_30d_usd).toBe(0);
-  });
-
-  it('computes net MRR + ARR + AI cost + operating margin', async () => {
-    // Insert a snapshot: $5000 new, $200 expansion, $100 contraction, $50 churn
-    await query(
-      `INSERT INTO metric_snapshots
-         (id, product_id, snapshot_date, new_mrr_cents, expansion_mrr_cents, contraction_mrr_cents, churned_mrr_cents)
-       VALUES (?, ?, date('now'), 500000, 20000, 10000, 5000)`,
-      [nanoid(), productId]
-    );
-    // Insert AI cost: $20 in last 30 days
-    await query(
-      `INSERT INTO ai_cost_log (id, product_id, model, cost_usd, timestamp)
-       VALUES (?, ?, 'claude-sonnet', 20, datetime('now', '-5 days'))`,
-      [nanoid(), productId]
-    );
-
-    const r = await computeFinancialSnapshot(productId);
-    // Net MRR = 500000 + 20000 - 10000 - 5000 = 505000 cents = $5050
-    expect(r.mrr_cents).toBe(505000);
-    expect(r.arr_cents).toBe(505000 * 12);
-    expect(r.ai_cost_30d_usd).toBe(20);
-    // Operating margin: 5050 - 20 = 5030
-    expect(r.operating_margin_30d_usd).toBeCloseTo(5030, 1);
-    // Margin pct: 5030 / 5050 ≈ 0.996
-    expect(r.margin_pct_30d).toBeCloseTo(0.996, 2);
-  });
-});
+// `financial-snapshot` was deleted in this batch. It had no callers anywhere,
+// and its AI-cost figure came from `ai_usage_log`, a table nothing in
+// production ever wrote to — so the case removed from here INSERTED rows into
+// that table itself to make the assertion pass. A test that manufactures the
+// evidence for its own subject proves the function computes, not that the
+// company's operating margin was ever known. The real per-company AI cost is
+// in `ai_daily_spend`, which the spend ceiling maintains.
 
 // ─── Referrals ───────────────────────────────────────────────────────────────
 
@@ -309,8 +199,8 @@ describe('briefing-share', () => {
   it('creates share, resolves it, increments view_count', async () => {
     // Pre-insert briefing record for the FK-ish JOIN
     await query(
-      `INSERT INTO scp_briefings (id, product_id, briefing_date, signal_score, headline)
-       VALUES (?, ?, date('now'), 80, 'Test headline')`,
+      `INSERT INTO scp_briefings (id, product_id, briefing_date, signal_score, headline, full_briefing)
+       VALUES (?, ?, date('now'), 80, 'Test headline', 'The whole briefing.')`,
       ['briefing-1', productId]
     );
     const code = await createBriefingShare(founderId, productId, 'briefing-1');
@@ -325,8 +215,8 @@ describe('briefing-share', () => {
 
   it('revoke deletes only owner shares', async () => {
     await query(
-      `INSERT INTO scp_briefings (id, product_id, briefing_date, signal_score, headline)
-       VALUES (?, ?, date('now'), 80, 'Test')`,
+      `INSERT INTO scp_briefings (id, product_id, briefing_date, signal_score, headline, full_briefing)
+       VALUES (?, ?, date('now'), 80, 'Test', 'The whole briefing.')`,
       ['briefing-2', productId]
     );
     const code = await createBriefingShare(founderId, productId, 'briefing-2');
