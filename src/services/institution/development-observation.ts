@@ -151,7 +151,26 @@ export interface FailingSelfCheck {
   observedAt: string;
 }
 
-export async function getFailingSelfChecks(productId: string): Promise<FailingSelfCheck[]> {
+/** A check's latest standing, whichever way it went. */
+export interface SelfCheckStanding extends FailingSelfCheck {
+  result: string;
+}
+
+/**
+ * Where every check about this company currently stands — passed and failed
+ * alike.
+ *
+ * A PASSING CHECK IS ALSO SOMETHING THAT HAPPENED. `getFailingSelfChecks` reads
+ * this and keeps the failures, which is right for a card that exists to
+ * interrupt. But it made the only surface for an observation a failure surface,
+ * and an institution whose first true fact about itself was `passed` had
+ * nothing to show for it: the day Foundry first observed its own repository,
+ * the owner's Letter said "It's empty because there's no data yet".
+ *
+ * The latest-per-check rule and the clock that decides it live here now, so the
+ * two readers cannot drift apart on which observation is current.
+ */
+export async function getSelfCheckStanding(productId: string): Promise<SelfCheckStanding[]> {
   const rows = await query(
     `SELECT payload_json FROM signal_events
       WHERE product_id = ? AND source = 'development_verification'
@@ -159,7 +178,7 @@ export async function getFailingSelfChecks(productId: string): Promise<FailingSe
     [productId],
   );
 
-  const latest = new Map<string, FailingSelfCheck & { result: string }>();
+  const latest = new Map<string, SelfCheckStanding>();
   for (const row of rows.rows as unknown as Array<Record<string, unknown>>) {
     let payload: { check?: unknown; result?: unknown; detail?: unknown; observed_at?: unknown };
     try {
@@ -177,7 +196,11 @@ export async function getFailingSelfChecks(productId: string): Promise<FailingSe
     });
   }
 
-  return [...latest.values()]
+  return [...latest.values()];
+}
+
+export async function getFailingSelfChecks(productId: string): Promise<FailingSelfCheck[]> {
+  return (await getSelfCheckStanding(productId))
     .filter((c) => c.result === 'failed')
     .map(({ check, detail, observedAt }) => ({ check, detail, observedAt }));
 }

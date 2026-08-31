@@ -588,6 +588,37 @@ const failingSelfChecksSection = (
       </div>`)}
   </div>`;
 
+// WHAT I CHECKED ABOUT MYSELF, WHEN IT WENT THE OTHER WAY.
+//
+// The card above interrupts because something drifted. Nothing reported a check
+// that HELD, so an institution whose only fact about itself was `passed` had no
+// surface at all — and the day Foundry first observed its own repository in
+// production, 76 seconds after the owner established the company, the Letter
+// told him "It's empty because there's no data yet" and sent him to connect
+// Stripe. The observation was real, durable and attributed; it was simply
+// invisible.
+//
+// Deliberately quiet. It states the check, what it found and when, and it does
+// NOT say Foundry is keeping it that way — nobody has asked it to, and a check
+// running is not a responsibility being carried. That distinction is the whole
+// ladder: observing is not carrying, and this card must not blur the rung the
+// institution is actually on.
+const selfChecksHeldSection = (
+  items: Array<{ check: string; detail: string; observedAt: string }>,
+) => items.length === 0 ? '' : html`
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem;">What I checked about myself</div>
+    ${items.map((item) => html`
+      <div style="padding:0.35rem 0;">
+        <div style="font-size:0.86rem;color:var(--text-primary);">${item.check.replaceAll('-', ' ')} — held.</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${item.detail}</div>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
+          Checked ${item.observedAt.slice(0, 10)}. Nobody has asked me to keep it
+          that way, so I only look.
+        </div>
+      </div>`)}
+  </div>`;
+
 // PART OF ME HAS STOPPED RUNNING, AND THIS PAGE IS THEREFORE OUT OF DATE.
 //
 // "Nothing happened" and "nothing ran" are different facts, and the letter said
@@ -1171,9 +1202,11 @@ letterRoutes.get('/letter', async (c) => {
   const { getUnwatchableResponsibilities } = await import(
     '../../services/institution/external-shadowing.js');
   const unwatchable = await getUnwatchableResponsibilities(ctx.productId);
-  const { getFailingSelfChecks } = await import(
+  const { getSelfCheckStanding } = await import(
     '../../services/institution/development-observation.js');
-  const failingSelfChecks = await getFailingSelfChecks(ctx.productId);
+  const selfCheckStanding = await getSelfCheckStanding(ctx.productId);
+  const failingSelfChecks = selfCheckStanding.filter((c) => c.result === 'failed');
+  const heldSelfChecks = selfCheckStanding.filter((c) => c.result === 'passed');
   const { getStepAwayHorizon } = await import(
     '../../services/institution/absence-summary.js');
   const stepAway = await getStepAwayHorizon(ctx.productId);
@@ -1214,6 +1247,17 @@ letterRoutes.get('/letter', async (c) => {
   // An authority a founder cannot see is one they cannot withdraw.
   const hasDevelopmentActivity = development.changes.length > 0
     || development.permitted.length > 0 || development.record !== null;
+  // AND AN OBSERVATION IS INSTITUTIONAL STATE BEFORE ANY OF THAT EXISTS.
+  //
+  // The list above is what Foundry has CHANGED, what it MAY change, and how its
+  // changes have held up — the three facts a company has once Foundry is
+  // already working on it. A company Foundry has only OBSERVED has none of
+  // them, and that is exactly the state the first recursive company was in: one
+  // true observation of its own repository, no change, no authority, no record.
+  // So the funnel below claimed "there's no data yet" over the institution's
+  // first fact about itself, and replaced the body — which is where the report
+  // form is, so the owner could not take the next step either.
+  const hasSelfObservation = selfCheckStanding.length > 0;
   // Both short-circuit branches below replace the whole body, so both would
   // hide a person the company has been asked not to contact. Neither may: the
   // founder who recorded that constraint has to be able to see the list they
@@ -1238,6 +1282,7 @@ letterRoutes.get('/letter', async (c) => {
 
     ${loopsStoppedSection(failingLoops)}
     ${failingSelfChecksSection(failingSelfChecks)}
+    ${selfChecksHeldSection(heldSelfChecks)}
     ${stepAwaySection(stepAway)}
 
     ${stopped ? html`
@@ -1264,8 +1309,8 @@ letterRoutes.get('/letter', async (c) => {
       <a href="/privacy" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">Stop the deletion</a>
     </div>` : ''}
     ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
-      && supportChannels.length === 0 && !hasDevelopmentActivity && !fleetHasItems
-          && !hasRecordedPerson
+      && supportChannels.length === 0 && !hasDevelopmentActivity && !hasSelfObservation
+          && !fleetHasItems && !hasRecordedPerson
       && !stopped && !deletion ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
         <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
@@ -1296,7 +1341,16 @@ letterRoutes.get('/letter', async (c) => {
         <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.4rem;">${fleetChrome
     ? 'Switch companies at the top to look at another.'
     : "That's the goal. Go build — or rest."}</div>
-      </div>` : html`
+      </div>
+      <!-- A QUIET DAY IS NOT A CLOSED DOOR.
+           Reporting what the company has to handle is the one intake the
+           running system has — discovery admits a founder report and nothing
+           else — and it lived only in the busy body, so on a quiet day, and on
+           the first day of a new company, there was no way to tell Foundry
+           about an obligation at all. That is the rung the owner has to climb
+           before anything can be understood, watched or permitted, and it was
+           behind the one branch that means "nothing is happening yet". -->
+      ${reportObligationSection(obligationOptions)}` : html`
       ${letter.needsYou ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--accent);">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:0.4rem;">The one thing that needs you</div>

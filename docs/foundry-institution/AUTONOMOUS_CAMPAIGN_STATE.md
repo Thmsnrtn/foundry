@@ -36,6 +36,37 @@ same event. The practical consequence is small and worth stating: a check
 running when the rollback happens is gone with it, and its log file goes with
 the container. Re-run it after recovering; do not go looking for the log.
 
+**AND CHECK WHETHER YOU ARE ON THE CAMPAIGN BRANCH AT ALL.** The tenth recovery
+was not a rollback, and every instruction above would have missed it. A new
+session opened on a FRESH CLONE OF `master` with a designated branch cut from
+it: tree clean, HEAD equal to `origin/master`, nothing to fetch, `git log`
+perfectly coherent — and 728 commits of this campaign absent. Every check in
+this section compares the working directory with its own branch, and both
+agreed, because the branch itself was the wrong one. A handoff written as if
+the session were continuous made it worse, not better: it described work that
+was real, and none of which was in front of the model reading it.
+
+`master` is not merely stale. This branch has been merged into it exactly once,
+at `abfe96c`, whose tree is byte-identical to the merge base — so `master`
+contributes NO content, and a session that trusts it starts from a codebase that
+could not have built what production is running.
+
+**The cheapest tell needs no branch name:** production answers `/internal/health`
+with a `storage` field, and nothing on `master` can emit one. After that,
+`git ls-remote --heads origin` lists every branch and
+`git ls-tree -r --name-only origin/<branch> -- src/db/migrations | wc -l` ranks
+them; the campaign branch is the one with 257. **Fetch every branch first** —
+`git ls-tree` against an unfetched ref returns zero and reads exactly like an
+empty branch, which is how this nearly got written off as "the work is gone".
+
+The recovery is a MERGE, not a reset. Because `master` adds nothing, merging the
+campaign branch into the designated branch yields a tree identical to the
+campaign tip and pushes without a force. Prove it rather than assume it: build,
+then `md5sum` every `dist/**/*.js` and every migration, and compare against the
+same list taken off the running machine through `fly ssh console`. All 702 files
+matched, which is what "repository truth equals production truth" means when it
+is measured instead of asserted.
+
 **RUN THE ANCESTOR CHECK AGAINST `FETCH_HEAD`, NEVER AGAINST `origin/<branch>`
 BEFORE FETCHING.** On the eighth rollback the first command run was
 `git merge-base --is-ancestor HEAD origin/<branch>`, which SUCCEEDED and printed
@@ -161,12 +192,30 @@ What is proven against reality:
   `institutional_judgment_tick — 20 */6 * * *`, the job that carries
   self-observation.
 
-**What is NOT yet proven, and why.** `products = 0`. The database is fully
-migrated and empty, so `resolveFoundryProductId()` finds nothing and
-self-observation returns `identity_not_established` rather than an observation.
-The Foundry company must exist before the recursion can run, and a founder row
-is keyed to a real Clerk user — seeding one here would create an owner nobody
-can log in as. That step is the owner's identity and no one else's.
+**THE OWNER TOOK THAT STEP, AND THE RECURSION RAN.** (2026-08-31, read from
+the volume, not inferred.) `founders = 1` — the real Clerk user. `products = 1`
+— `Foundry`, created 22:33:48 by the owner pressing the establish action, not by
+a seed. `system_identities` binds `foundry` to that product row with the reason
+"owner established the institution's first company", so `resolveFoundryProductId()`
+resolves in production.
+
+Seventy-six seconds later, at 22:35:04, `observeFoundryRepositoryReality` wrote
+the institution's first true fact about itself: `development_verified:schema-snapshot-freshness:passed`,
+detail `695 schema objects, all described by docs/db/schema.snapshot.sql`,
+attributed to that product, durable on the volume. Real owner → real company →
+real identity → real self-observation is DONE, and none of it needed GitHub: the
+observation compares the live schema against the snapshot the image carries, so
+the deployed artifact can see itself with no external sense connected at all.
+
+**What the chain still lacks is a RESPONSIBILITY.** `institutional_responsibilities = 0`.
+Discovery admits `founder_report` and `external_company_report` and nothing else,
+and a `development_verification` event is neither — correctly, since an
+observation is not a company saying what it owes. So the next rung is the
+owner's to place, and it is one form: report the maintenance obligation in The
+Letter. Everything above it already exists and was verified reachable —
+understanding, `beginFounderDevelopmentShadowing` against a check that already
+reports, the comparison, the assisting offer, and the seven-day grant at
+`POST /autopilot/development/grant`.
 
 **How deployment works now.** `fly.private.toml` plus
 `.github/workflows/deploy-private.yml`: a commit whose message contains the
