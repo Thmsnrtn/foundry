@@ -47,6 +47,20 @@ kill_timeout = 5
   PROCESS_ROLE = "all"             # one process serves HTTP and runs the schedule
   TURSO_DATABASE_URL = "file:/data/foundry.db"   # on the volume below, not the image
 
+  # COST AS A CONSTRAINT, NOT AN INTENTION.
+  #
+  # The code ships ceilings of $25/product/day, $100/founder/day and
+  # $500/day globally. Those are fleet numbers; one owner proving one
+  # responsibility should not be able to reach them by accident. The
+  # Foundry-on-Foundry path itself spends nothing — self-observation,
+  # development shadowing and institutional_judgment_tick make no model call at
+  # all, verified by reading every call site — but 88 jobs run on this machine
+  # and three of them do call a model. These bound the blast radius of a
+  # surprise to about a coffee.
+  AI_DAILY_COST_CEILING_CENTS = "200"          # $2 per company per day
+  AI_DAILY_COST_CEILING_FOUNDER_CENTS = "500"  # $5 per owner per day
+  AI_DAILY_COST_CEILING_GLOBAL_CENTS = "500"   # $5 per day, everything
+
 # Institutional memory. Everything Foundry has ever observed about a company
 # lives here; without it the ephemeral-container problem simply moves to Fly.
 [mounts]

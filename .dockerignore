@@ -3,7 +3,31 @@ dist
 .git
 .gitignore
 *.md
-docs/
+# docs/ is excluded EXCEPT docs/db, which Foundry's self-observation reads:
+# `observeFoundryRepositoryReality` compares the live schema against
+# docs/db/schema.snapshot.sql, and baseline liveness reads the six baseline
+# files beside it. A blanket `docs/` kept those out of the BUILD CONTEXT, so the
+# Dockerfile's COPY of docs/db could not have worked either — the fix and the
+# thing defeating it sat in two different files.
+#
+# Written as explicit sibling exclusions rather than `docs/` plus `!docs/db/`.
+# The negation form is the documented idiom, but its behaviour after a whole
+# directory has been excluded is exactly the kind of subtlety that fails
+# silently in a build nobody watches, and this is 308K.
+docs/architecture/
+docs/audits/
+docs/blockers/
+docs/compliance/
+docs/design/
+docs/features/
+docs/foundry-institution/
+docs/operations/
+docs/roadmap/
+docs/scp/
+docs/security/
+docs/strategy/
+docs/CONTRIBUTING.md
+docs/stripe-shared-account.md
 tests/
 mockups/
 ios/

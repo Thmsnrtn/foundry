@@ -70,3 +70,42 @@ describe('the runtime image contains what self-observation reads', () => {
       'baselines disappeared; this test is asserting nothing').toBeGreaterThan(0);
   });
 });
+
+// The Dockerfile is only half the question. A COPY cannot copy what never
+// entered the build context, and `.dockerignore` excluded all of docs/ — so the
+// first version of this fix would have FAILED THE BUILD, while this test
+// passed, because it asserted the presence of a line rather than the effect of
+// one. The two halves live in different files and only agree by being checked
+// together.
+function ignoredByDocker(path: string): boolean {
+  const rules = readFileSync(resolve(import.meta.dirname, '../../.dockerignore'), 'utf8')
+    .split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  let excluded = false;
+  for (const rule of rules) {
+    const negated = rule.startsWith('!');
+    const pattern = (negated ? rule.slice(1) : rule).replace(/\/$/, '');
+    if (path === pattern || path.startsWith(`${pattern}/`)) excluded = !negated;
+  }
+  return excluded;
+}
+
+describe('the build context contains what the image copies', () => {
+  it('does not exclude the schema snapshot from the build context', () => {
+    expect(ignoredByDocker(SNAPSHOT_PATH),
+      `.dockerignore excludes ${SNAPSHOT_PATH}, so the Dockerfile COPY of it cannot succeed`)
+      .toBe(false);
+  });
+
+  it('does not exclude any baseline liveness reads', () => {
+    for (const b of LIVENESS_BASELINES) {
+      expect(ignoredByDocker(b.path), `.dockerignore excludes ${b.path}`).toBe(false);
+    }
+  });
+
+  it('still keeps the rest of docs out of the image', () => {
+    // The point was never to ship documentation. 308K of institutional prose in
+    // a runtime image is not a capability.
+    expect(ignoredByDocker('docs/foundry-institution/CONSTITUTION.md'),
+      'the whole docs tree is being shipped — only docs/db is needed').toBe(true);
+  });
+});
