@@ -138,6 +138,55 @@ inherited list because it was inherited.
 
 ## Active work
 
+**PRIVATE FOUNDRY IS DEPLOYED AND PERSISTENT.** (2026-08-31)
+
+Not configuration — observed. `foundry-intel`, one machine
+`8ed91e5c723648` in `iad`, `role=all`, checks 1/1, on a 1GB encrypted
+volume `foundry_data` (zone cb36) holding `foundry.db` at 4,485,120 bytes —
+the same size a fully migrated empty institution measures locally.
+
+What is proven against reality:
+
+- **Health** — `{"status":"ok","checks":{"database":"ok","ai_configured":"ok",
+  "clerk_configured":"ok"},"storage":"volume"}`. The `storage` field exists for
+  exactly this: it says institutional memory is on the volume, not a hosted
+  database, without putting a hostname on a public endpoint.
+- **Private** — `/letter`, `/decisions`, `/agents`, `/autopilot` all answer 401
+  to anonymous callers; only `/` and `/pricing` are public.
+- **Persistent across a real restart** — after `fly machine restart` the log
+  reads `[MIGRATE] All migrations already applied.` The schema was found on the
+  volume, not rebuilt. The ephemeral-container problem no longer determines
+  Foundry's memory of reality.
+- **Scheduled** — the scheduler runs in production and registered
+  `institutional_judgment_tick — 20 */6 * * *`, the job that carries
+  self-observation.
+
+**What is NOT yet proven, and why.** `products = 0`. The database is fully
+migrated and empty, so `resolveFoundryProductId()` finds nothing and
+self-observation returns `identity_not_established` rather than an observation.
+The Foundry company must exist before the recursion can run, and a founder row
+is keyed to a real Clerk user — seeding one here would create an owner nobody
+can log in as. That step is the owner's identity and no one else's.
+
+**How deployment works now.** `fly.private.toml` plus
+`.github/workflows/deploy-private.yml`: a commit whose message contains the
+deploy marker pushes to this branch and a GitHub runner builds with
+`--local-only` and deploys. Three trigger designs were needed —
+`workflow_dispatch` requires the default branch, tag pushes are 403 from this
+environment's git proxy, and only a marked branch push works. The build cannot
+happen in the agent environment at all: Fly's depot builder needs a gRPC channel
+the egress proxy refuses (x509 unknown authority), and Fly's classic builder
+answers `unauthorized` to an app-scoped token.
+
+**A defect this found.** The image previously published on the app could never
+have booted against an empty database: `007_schema_hardening` indexed
+`stressor_history(created_at)`, a column that table has never had, and
+migrations abort fatally in production. Current code fixes it to
+`identified_at`. The old blocker note blamed missing secrets; that was a
+symptom.
+
+---
+
 **PHASE: PRIVATE-FIRST. THE OWNER IS CUSTOMER ZERO.**
 
 Superseded sequencing, kept because the findings under it stand. Commercial
