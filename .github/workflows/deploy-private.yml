@@ -18,13 +18,18 @@
 # =============================================================================
 name: Deploy Private Foundry
 
+# TRIGGERED BY A TAG, NOT A BUTTON.
+#
+# workflow_dispatch only exists for workflows on the DEFAULT branch, and this
+# work lives on the campaign branch — master is several hundred commits behind
+# and merging it is not this agent's call. A tag push runs the workflow from the
+# tagged commit, so `git tag deploy-private-<n> && git push origin <tag>` is a
+# deliberate, auditable deploy that needs no default-branch change and cannot
+# fire by accident on an ordinary push.
 on:
-  workflow_dispatch:
-    inputs:
-      reason:
-        description: 'Why this deploy is happening (recorded in the run)'
-        required: false
-        default: 'private deployment'
+  push:
+    tags:
+      - 'deploy-private-*'
 
 jobs:
   deploy:
