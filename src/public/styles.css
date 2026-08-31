@@ -144,7 +144,15 @@ hr { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
   cursor: pointer;
   transition: all var(--transition);
   text-decoration: none;
+  /* Short labels should not break mid-phrase, so nowrap stays the default. But
+     a button is laid out by its label, and a long one then makes the button
+     wider than the screen: on a 390px viewport the day-one call to action ran
+     off the right edge with its text cut in half, and so did every other long
+     button in the product. `max-width` stops the button exceeding its
+     container; the narrow-viewport rule below lets the label wrap instead of
+     the page overflowing. */
   white-space: nowrap;
+  max-width: 100%;
 }
 .btn:hover { text-decoration: none; }
 
@@ -1397,6 +1405,9 @@ textarea { resize: vertical; min-height: 100px; }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* A phone is where a founder asks "does anything need me?", so a button that
+     runs off the screen costs the answer. Wrapping beats overflowing. */
+  .btn               { white-space: normal; text-align: center; }
   .sidebar           { display: none; }
   .main-with-sidebar { margin-left: 0; padding: 1rem; padding-bottom: calc(56px + env(safe-area-inset-bottom) + 1rem); }
   .main-full         { padding-bottom: calc(56px + env(safe-area-inset-bottom) + 1rem); }
