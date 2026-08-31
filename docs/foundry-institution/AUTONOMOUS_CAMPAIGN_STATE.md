@@ -1418,15 +1418,20 @@ the record and `history/SEAM_CAMPAIGN_HISTORY.md` is the narrative.
     the founder would cost the attention it measures, and the law is better
     enforced where the decision is made, at build time.
 
-    **What is left is the lived number, and it is a real decision.** The
-    proposed definition: a day the founder could safely not look is a day on
-    which nothing was delivered above the `letter` rung AND nothing expired
-    unreviewed — both computable now from `deliver()` and
-    `outbound_actions.expires_at`, with no new capture. It is left unbuilt
-    because it decides what Foundry optimises for, and because a metric with
-    nowhere honest to live becomes a dashboard by default. The static ratchet
-    holds the direction in the meantime, which is the half that does not need
-    the answer.
+    **CORRECTION — the lived number already exists, and this entry said it did
+    not.** `getStepAwayHorizon` in `absence-summary.ts` computes exactly it, on
+    top of a deterministic seven-day responsibility view classifying every
+    responsibility HANDLED / CHANGED / NEEDS_YOU / DELIBERATELY_NOT_DONE /
+    STILL_OPEN. The Letter renders it under the heading "If you went away", and
+    `how-long-could-you-be-away.test.ts` covers it.
+
+    The original claim came from grepping for the phrase "safely not look" and
+    for a symbol name that does not exist (`absenceSummary`). Neither absence
+    proved anything: the capability was there under different words. **A grep
+    that finds nothing has found nothing — it has not found an absence.** The
+    ratchet added here is still worth keeping, because it constrains the
+    interruption surface at build time, which the horizon does not. But nothing
+    about the north star was unmeasured.
 
 16. **Prism is four different jobs, and one of them is nobody's.** Found while
     drafting the action-type table above, and not fixed because deciding what an
