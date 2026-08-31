@@ -1,0 +1,80 @@
+# =============================================================================
+# FOUNDRY — PRIVATE, OWNER-CONTROLLED DEPLOYMENT
+#
+# The smallest configuration that keeps the institution ALIVE rather than
+# merely reachable. It is deliberately not fly.toml: that file describes a
+# commercial shape (a web pool behind a load balancer plus a separate worker,
+# two machines minimum for deploy overlap), and a single owner needs none of it.
+#
+# THREE DECISIONS, EACH FORCED BY SOMETHING REAL.
+#
+# 1. ONE MACHINE, PROCESS_ROLE=all.
+#    A Fly volume attaches to exactly one machine. The web and worker process
+#    groups cannot share a file-backed database, and the worker is the process
+#    that writes observations the web process reads. `process-role.ts` already
+#    supports 'all' — "both (default — single-machine dev and backward
+#    compatibility)" — and the DB-backed job locks make a scheduler safe
+#    wherever it runs. So one process is not a compromise here; it is what makes
+#    a local database coherent at all.
+#
+# 2. A VOLUME, AND THEREFORE NO HOSTED DATABASE.
+#    The application selects its database with one variable. libSQL in file mode
+#    was verified end to end: migrations ran, 245 tables were created, the
+#    health endpoint reported database ok, and institutional state survived a
+#    full process restart. What it lacked was durable disk — fly.toml has no
+#    [mounts], so a file database would be destroyed with the machine. A volume
+#    supplies that, which removes a hosted database from the required set
+#    entirely. Turso remains a valid choice; it is no longer a prerequisite.
+#
+# 3. THE MACHINE NEVER STOPS.
+#    Self-observation runs inside institutional_judgment_tick on `20 */6 * * *`.
+#    A suspended machine runs no cron, so auto-stop would mean an institution
+#    that observes its own repository only when someone happens to visit it.
+#    min_machines_running = 1 is the cost floor of being alive.
+# =============================================================================
+
+app = "foundry-intel"
+primary_region = "iad"
+kill_signal = "SIGINT"
+kill_timeout = 5
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"          # the scheduler starts on this value alone
+  PORT = "8080"
+  PROCESS_ROLE = "all"             # one process serves HTTP and runs the schedule
+  TURSO_DATABASE_URL = "file:/data/foundry.db"   # on the volume below, not the image
+
+# Institutional memory. Everything Foundry has ever observed about a company
+# lives here; without it the ephemeral-container problem simply moves to Fly.
+[mounts]
+  source = "foundry_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false       # a stopped machine keeps no schedule
+  auto_start_machines = true
+  min_machines_running = 1         # one, not two: nobody needs deploy overlap here
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 50
+    soft_limit = 40
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "10s"
+    grace_period = "45s"           # migrations run before the port binds
+    method = "GET"
+    path = "/internal/health"
+
+# Smaller than the commercial shape. One owner is not a request pool.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1024mb"
+  cpu_kind = "shared"
+  cpus = 1
