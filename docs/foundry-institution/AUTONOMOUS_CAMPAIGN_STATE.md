@@ -91,7 +91,7 @@ inherited list because it was inherited.
 ## Verified checkpoint
 
 - **Branch:** `claude/foundry-autonomous-continuation-0gents`. Never merged to master.
-- **Head:** `03bef04`, pushed. Verify against `git log -1` before trusting this
+- **Head:** `c062778`, pushed. Verify against `git log -1` before trusting this
   line; it is the one thing here that goes stale fastest.
 - **Migrations:** 257 files, highest **221**. Ordering gated. **Snapshot
   freshness is now a GATE, not a note.** It went stale twice in one session —
@@ -103,7 +103,7 @@ inherited list because it was inherited.
   the chain. **A note that has to be remembered at the right moment is not a
   control; the distance between a mistake and its discovery is the thing to
   fix.**
-- **Validation:** `npm run check` green end to end — **472 files / 4,013 tests**,
+- **Validation:** `npm run check` green end to end — **475 files / 4,029 tests**,
   `CHECK_EXIT=0`, read from the run that wrote the log.
   **`tests/unit` IS NOT THE SUITE.** `test:ci` is a bare `vitest --run`, which
   also runs `tests/simulation` and `tests/evals`. Checkpoints before this
