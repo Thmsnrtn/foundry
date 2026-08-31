@@ -10,7 +10,7 @@
     },
     {
       "file": "src/routes/dashboard/onboarding.ts",
-      "line": 301,
+      "line": 312,
       "detector": "external_post",
       "status": "control_path",
       "capability": "GitHub OAuth credential exchange"

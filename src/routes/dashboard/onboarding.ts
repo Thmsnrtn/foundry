@@ -97,7 +97,7 @@ const establishedFoundry = (companyName: string) => html`
         Foundry, that you own it, and that Foundry may begin observing itself. It will know
         very little else until you connect a sense.
       </div>
-      <form method="POST" action="/establish" style="margin-top:1rem;">
+      <form method="POST" action="/onboarding/establish" style="margin-top:1rem;">
         <button type="submit" class="btn btn-primary">Establish ${companyName}</button>
       </form>
       <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.85rem;line-height:1.55;">
@@ -114,7 +114,18 @@ const establishedFoundry = (companyName: string) => html`
 // which is every caller of this route by definition. The posture check below
 // answers "is this deployment private" and cannot stand in for "may this caller
 // found a company" — one is about the deployment, the other about the principal.
-onboardingRoutes.post('/establish', requireInstitutionOwner(), async (c) => {
+// AT /onboarding/establish, NOT /establish, AND THE REASON IS A BUG THIS HAD.
+//
+// It first lived at /establish — a new top-level path — and top-level paths in
+// this app inherit nothing. `/onboarding/*` carries authMiddleware; `/establish`
+// did not, so `c.get('founder')` was undefined, and the owner pressing the only
+// button on his own first screen was told he was not the owner. The guard
+// failed closed correctly; the route was simply never authenticated.
+//
+// The concept is distinct from onboarding, but the protections are not worth
+// re-deriving per path. Under this prefix it inherits auth and CSRF that are
+// already right, and there is one fewer door for the next route to forget.
+onboardingRoutes.post('/onboarding/establish', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   if (!isPrivateOwnerInstance()) return c.redirect('/onboarding');
 

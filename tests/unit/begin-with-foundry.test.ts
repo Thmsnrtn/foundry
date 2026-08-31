@@ -62,7 +62,7 @@ describe('an owner with nothing established', () => {
   it('is offered one owner-level action, not a customer funnel', async () => {
     const body = await (await app.request('/onboarding')).text();
     expect(body).toContain('Begin with Foundry');
-    expect(body).toMatch(/action="\/establish"/);
+    expect(body).toMatch(/action="\/onboarding\/establish"/);
     // The funnel's language must not be what greets the owner of the place.
     expect(body).not.toContain('Identify Competitors');
     expect(body).not.toContain('health check');
@@ -88,7 +88,7 @@ describe("only the institution owner may found its companies", () => {
     for (const v of Object.values(mod)) {
       if (v && typeof v === 'object' && 'routes' in (v as object)) stranger.route('/', v as never);
     }
-    const res = await stranger.request('/establish', { method: 'POST' });
+    const res = await stranger.request('/onboarding/establish', { method: 'POST' });
     expect(res.status, 'founding a company is not something any session may do').toBe(403);
     expect(await resolveFoundryProductId()).toBeNull();
   });
@@ -99,7 +99,7 @@ describe('establishing writes the smallest true thing', () => {
     // Runs before establishment: nothing is bound yet, which is the state this
     // guard exists for.
     process.env.FOUNDRY_INSTANCE_POSTURE = 'commercial';
-    const res = await app.request('/establish', { method: 'POST' });
+    const res = await app.request('/onboarding/establish', { method: 'POST' });
     expect(res.headers.get('location')).toBe('/onboarding');
     expect(await resolveFoundryProductId()).toBeNull();
   });
@@ -107,7 +107,7 @@ describe('establishing writes the smallest true thing', () => {
   it('creates the company and binds the canonical identity', async () => {
     expect(await resolveFoundryProductId(), 'nothing should exist yet').toBeNull();
 
-    const res = await app.request('/establish', { method: 'POST' });
+    const res = await app.request('/onboarding/establish', { method: 'POST' });
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/letter');
 
@@ -123,19 +123,46 @@ describe('establishing writes the smallest true thing', () => {
   });
 
   it('starts no agents and calls no model', async () => {
-    await app.request('/establish', { method: 'POST' });
+    await app.request('/onboarding/establish', { method: 'POST' });
     const agents = (await query('SELECT COUNT(*) AS c FROM agent_instances')).rows[0] as Record<string, number>;
     expect(agents.c, 'establishing is a statement of fact, not a provisioning event').toBe(0);
   });
 
   it('is idempotent — a second press orients rather than duplicates', async () => {
-    await app.request('/establish', { method: 'POST' });
+    await app.request('/onboarding/establish', { method: 'POST' });
     const first = await resolveFoundryProductId();
-    const res = await app.request('/establish', { method: 'POST' });
+    const res = await app.request('/onboarding/establish', { method: 'POST' });
     expect(res.headers.get('location')).toBe('/letter');
     expect(await resolveFoundryProductId()).toBe(first);
     const n = (await query('SELECT COUNT(*) AS c FROM products')).rows[0] as Record<string, number>;
     expect(n.c, 'the identity is already bound and does not move').toBe(1);
   });
 
+});
+
+describe('the route is actually authenticated', () => {
+  it('sits under a prefix that carries authMiddleware', async () => {
+    // THE BUG THIS PINS. It first lived at /establish, a new top-level path.
+    // Top-level paths inherit nothing here: `/onboarding/*` carries
+    // authMiddleware and `/establish` did not, so `c.get('founder')` was
+    // undefined and the owner pressing the only button on his own first screen
+    // was told he was not the owner. The guard failed closed correctly — the
+    // route was simply never authenticated.
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const idx = readFileSync(resolve(import.meta.dirname, '../../src/index.ts'), 'utf8');
+    const prefixes = [...idx.matchAll(/app\.use\('([^']+)',\s*authMiddleware\)/g)].map((m) => m[1]);
+    const covered = prefixes.some((x) => x.endsWith('/*')
+      && '/onboarding/establish'.startsWith(x.slice(0, -1)));
+    expect(covered,
+      `no authMiddleware prefix covers /onboarding/establish; prefixes: ${prefixes.join(', ')}`)
+      .toBe(true);
+  });
+
+  it('is under CSRF too, inherited from the same prefix', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const idx = readFileSync(resolve(import.meta.dirname, '../../src/index.ts'), 'utf8');
+    expect(idx).toContain("app.use('/onboarding/*', csrfMiddleware)");
+  });
 });

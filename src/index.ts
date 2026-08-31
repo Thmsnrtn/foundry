@@ -406,11 +406,6 @@ app.use('/founder-ops/*', authMiddleware);
 import { csrfMiddleware } from './middleware/csrf.js';
 app.use('/dashboard/*', csrfMiddleware);
 app.use('/onboarding/*', csrfMiddleware);
-// Founding the institution's first company is a cookie-authenticated write, so
-// it needs the same origin proof as every other one. It sits at /establish
-// rather than under /onboarding because it is not onboarding — it is the owner
-// naming what this institution begins with.
-app.use('/establish', csrfMiddleware);
 app.use('/settings', csrfMiddleware);
 app.use('/settings/*', csrfMiddleware);
 app.use('/products/*', csrfMiddleware);
