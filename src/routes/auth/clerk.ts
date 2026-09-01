@@ -40,10 +40,10 @@ authRoutes.get('/auth/signup', (c) => {
       const m = await import("https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm");
       const clerk = new m.Clerk(pk);
       await clerk.load();
-      if (clerk.user) { window.location.href = "/dashboard"; return; }
+      if (clerk.user) { window.location.href = "/foundry"; return; }
       clerk.mountSignUp(document.getElementById("sign-up"), {
-        forceRedirectUrl: "/dashboard",
-        fallbackRedirectUrl: "/dashboard",
+        forceRedirectUrl: "/foundry",
+        fallbackRedirectUrl: "/foundry",
       });
     }
     initClerk().catch(e => {
@@ -98,10 +98,10 @@ authRoutes.get('/auth/login', (c) => {
       const m = await import("https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm");
       const clerk = new m.Clerk(pk);
       await clerk.load();
-      if (clerk.user) { window.location.href = "/dashboard"; return; }
+      if (clerk.user) { window.location.href = "/foundry"; return; }
       clerk.mountSignIn(document.getElementById("sign-in"), {
-        forceRedirectUrl: "/dashboard",
-        fallbackRedirectUrl: "/dashboard",
+        forceRedirectUrl: "/foundry",
+        fallbackRedirectUrl: "/foundry",
       });
     }
     initClerk().catch(e => {

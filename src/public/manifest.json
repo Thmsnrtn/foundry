@@ -2,7 +2,7 @@
   "name": "Foundry",
   "short_name": "Foundry",
   "description": "The truth about your business, always.",
-  "start_url": "/dashboard",
+  "start_url": "/foundry",
   "display": "standalone",
   "background_color": "#0a0a12",
   "theme_color": "#0a0a12",
@@ -25,7 +25,7 @@
   "shortcuts": [
     {
       "name": "Dashboard",
-      "url": "/dashboard",
+      "url": "/foundry",
       "description": "View your Signal"
     },
     {

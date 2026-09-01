@@ -128,6 +128,20 @@ dashboardRoutes.post('/switch-product', async (c) => {
 
 dashboardRoutes.get('/dashboard', async (c) => {
   const founder = c.get('founder');
+
+  // EVERY OLD PATH LEADS BACK HERE, AND HERE IS THE OLD PRODUCT.
+  //
+  // The owner tapped a link to his surface and landed in the thirty-door
+  // dashboard, because the sign-in page bounces an already-signed-in user to
+  // `/dashboard` and the installed app's start_url was `/dashboard` too. Those
+  // are fixed at their source; this is the backstop for everything else that
+  // still points here — a bookmark, a home-screen icon installed before the
+  // cutover, an internal redirect written years ago.
+  //
+  // Private deployments only: a commercial customer's dashboard is their
+  // product, and this is not their surface.
+  const { isPrivateOwnerInstance } = await import('../../lib/instance-posture.js');
+  if (isPrivateOwnerInstance()) return c.redirect('/foundry');
   // Owned or accepted into. An invited co-founder used to land here and see
   // an empty dashboard.
   const products = await getVisibleProducts(founder.id);

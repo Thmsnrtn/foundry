@@ -283,3 +283,53 @@ describe('the surface is private', () => {
     expect(idx).toContain("app.use('/foundry/*', csrfMiddleware)");
   });
 });
+
+describe('every way in leads to the owner surface', () => {
+  it('signs him in to his institution, not to the old application', async () => {
+    // WHAT HE ACTUALLY EXPERIENCED. He tapped a link to /foundry, was not
+    // signed in on that navigation, and the login page — seeing an existing
+    // Clerk session — sent him straight to /dashboard. Everything shipped was
+    // live and correct, and he never saw any of it.
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const clerk = readFileSync(
+      resolve(import.meta.dirname, '../../src/routes/auth/clerk.ts'), 'utf8');
+    expect(clerk).not.toContain('"/dashboard"');
+    expect(clerk).toContain('forceRedirectUrl: "/foundry"');
+    expect(clerk).toContain('fallbackRedirectUrl: "/foundry"');
+  });
+
+  it('opens the installed app on the owner surface', async () => {
+    // A home-screen icon installed before the cutover opens start_url, and
+    // start_url was the old dashboard.
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const manifest = JSON.parse(readFileSync(
+      resolve(import.meta.dirname, '../../src/public/manifest.json'), 'utf8')) as
+      { start_url: string };
+    expect(manifest.start_url).toBe('/foundry');
+  });
+
+  it('sends an old bookmark to the owner surface on a private deployment', async () => {
+    process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
+    process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
+    try {
+      const { dashboardRoutes } = await import('../../src/routes/dashboard/index.js');
+      const backstop = new Hono();
+      backstop.use('*', async (c, next) => {
+        c.set('founder' as never,
+          { id: OWNER, email: 'owner@example.com', name: 'Thomas Norton' } as never);
+        c.set('csrfToken' as never, 'test' as never);
+        await next();
+      });
+      backstop.route('/', dashboardRoutes);
+      const res = await backstop.request('/dashboard',
+        { headers: { cookie: `foundry_product=${COMPANY}` } });
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe('/foundry');
+    } finally {
+      delete process.env.FOUNDRY_INSTANCE_POSTURE;
+      delete process.env.FOUNDRY_OWNER_EMAIL;
+    }
+  });
+});
