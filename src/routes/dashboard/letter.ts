@@ -1899,6 +1899,7 @@ async function loadDevelopmentAuthorityItems(productId: string): Promise<Array<{
 // editing a form, and the database refuses the constitutional ring regardless.
 letterRoutes.post('/autopilot/development/grant', requireOwner(), async (c) => {
   const founder = c.get('founder');
+  const back = backTo((await c.req.parseBody()).return_to);
   const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');
   const body = await c.req.parseBody() as Record<string, string>;
@@ -1930,9 +1931,9 @@ letterRoutes.post('/autopilot/development/grant', requireOwner(), async (c) => {
   } catch (err) {
     logger.error(`development authority grant refused: ${err instanceof Error ? err.message : String(err)}`,
       { productId: ctx.productId });
-    return c.redirect('/autopilot?error=grant_refused');
+    return c.redirect(`${back}?error=grant_refused`);
   }
-  return c.redirect('/autopilot?granted=development');
+  return c.redirect(`${back}?done=allowed`);
 });
 
 letterRoutes.post('/autopilot/development/revoke', requireOwner(), async (c) => {
@@ -1942,7 +1943,7 @@ letterRoutes.post('/autopilot/development/revoke', requireOwner(), async (c) => 
   const body = await c.req.parseBody() as Record<string, string>;
   const { revokeDevelopmentAuthority } = await import('../../services/institution/development-authority.js');
   await revokeDevelopmentAuthority(ctx.productId, String(body.consent_id ?? ''), String(founder.id));
-  return c.redirect('/autopilot?revoked=development');
+  return c.redirect(`${backTo(body.return_to)}?done=withdrawn`);
 });
 
 letterRoutes.post('/autopilot/panic', async (c) => {

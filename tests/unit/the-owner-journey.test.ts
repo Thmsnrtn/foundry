@@ -30,7 +30,13 @@ import { query } from '../../src/db/client.js';
 // =============================================================================
 
 const OWNER = 'j_owner';
-const COMPANY = 'j_company';
+// A COMPANY PER TEST, rather than deleting rows between them. The first version
+// cleared tables in `beforeEach` and swallowed the failures with a bare catch —
+// so a delete the schema refuses looked like a clean slate, and the next test
+// hit a UNIQUE violation on evidence that was never removed. A fresh id cannot
+// lie about that.
+let COMPANY = 'j_company_0';
+let seq = 0;
 let app: Hono;
 
 const get = async (path: string) => {
@@ -56,18 +62,14 @@ const candidateId = async () => String(((await query(
 
 beforeEach(async () => {
   await runMigrations();
-  for (const t of ['responsibility_candidate_decisions', 'responsibility_candidates',
-    'responsibility_transitions', 'institutional_responsibilities', 'reconstruction_claims',
-    'signal_events', 'products', 'founders']) {
-    await query(`DELETE FROM ${t}`, []).catch(() => { /* table may not exist in older shapes */ });
-  }
-  await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
+  COMPANY = `j_company_${++seq}`;
+  await query('INSERT OR IGNORE INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
     [OWNER, 'clerk_j', 'owner@example.com', 'Thomas Norton']);
   await query(`INSERT INTO products (id,name,owner_id,status,operating_budget_monthly_usd)
     VALUES (?,'Foundry',?,'active',50)`, [COMPANY, OWNER]);
   await query(`INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary,processed)
-    VALUES ('j_a',?,'development_verification','development_verified:schema-snapshot-freshness:passed','low',?,?,0)`,
-    [COMPANY, JSON.stringify({
+    VALUES (?,?,'development_verification','development_verified:schema-snapshot-freshness:passed','low',?,?,0)`,
+    [`j_a_${String(seq)}`, COMPANY, JSON.stringify({
       check: 'schema-snapshot-freshness', result: 'passed',
       detail: '695 schema objects', observed_at: '2026-09-01T01:30:32.041Z',
     }), 'schema-snapshot-freshness reported passed']);
@@ -78,7 +80,7 @@ beforeEach(async () => {
     productId: COMPANY, convergenceKey: 'self_maintenance:schema-snapshot-freshness',
     proposedResponsibility:
       'regenerate the committed schema snapshot after a migration changes the schema',
-    evidenceRefs: [{ kind: 'signal_event', id: 'j_a' }],
+    evidenceRefs: [{ kind: 'signal_event', id: `j_a_${String(seq)}` }],
     derivationMethod: 'self_maintenance_scope', rationale: 'runs independently',
     epistemicStatus: 'known', capabilityDependency: 'development',
     authorityRequired: true, observedAt: new Date(),
@@ -199,5 +201,104 @@ describe('the three acts stay three acts', () => {
     expect(said).toContain('Permission to do the work, for seven days');
     // The authority it would ask for is named, and not taken here.
     expect(said).toContain('this permits no changes');
+  });
+});
+
+describe('the permission it earns', () => {
+  /** All the way to shadowing, through the real doors, exactly as he would. */
+  const untilItCanAsk = async () => {
+    const id = await candidateId();
+    const { promoteResponsibilityCandidate } = await import(
+      '../../src/services/institution/responsibility-candidate.js');
+    const rid = await promoteResponsibilityCandidate({
+      productId: COMPANY, candidateId: id, mechanism: 'authenticated_owner', ownerId: OWNER });
+    const { describeOwnSelfMaintenance } = await import(
+      '../../src/services/foundry/self-observation.js');
+    await describeOwnSelfMaintenance({ productId: COMPANY });
+    const { earnResponsibilityUnderstanding } = await import(
+      '../../src/services/institution/responsibility-understanding.js');
+    await earnResponsibilityUnderstanding(COMPANY, rid);
+    await post(`/letter/responsibilities/${rid}/watch-check`,
+      { check: 'schema-snapshot-freshness', expected_result: 'passed' });
+    return rid;
+  };
+
+  it('asks for exactly what it needs, on the evidence it actually has', async () => {
+    await untilItCanAsk();
+    const said = await reads('/foundry');
+
+    expect(said).toContain('Authority');
+    expect(said).toContain('May I do this myself, for seven days?');
+    expect(said).toContain('Allow for 7 days');
+    // The scope, in both directions.
+    expect(said).toContain('One file, and only that one');
+    expect(said).toContain('The database, any other file, anything that alters behaviour');
+    expect(said).toContain('Seven days, then it stops by itself');
+    expect(said).toContain('It stays a manual job and I keep watching');
+    // NO EVIDENCE YET, AND IT DOES NOT PRETEND. Nothing has been compared, so
+    // it must not claim a record it does not have.
+    expect(said).toContain('I said what my check would report 0 times');
+  });
+
+  it('counts its record honestly once it has one', async () => {
+    const rid = await untilItCanAsk();
+    const expectation = (await query(
+      'SELECT id FROM responsibility_shadow_expectations WHERE responsibility_id=?', [rid],
+    )).rows[0] as Record<string, unknown>;
+    // The ordinary intake, for THIS company. `observeFoundryRepositoryReality`
+    // resolves the canonical Foundry identity, which is a single immutable row —
+    // one test can bind it and no other can, so a per-test company must use the
+    // door every company's evidence uses.
+    const { recordDevelopmentObservation } = await import(
+      '../../src/services/institution/development-observation.js');
+    await recordDevelopmentObservation({
+      productId: COMPANY, check: 'schema-snapshot-freshness', result: 'passed',
+      // A MINUTE LATER, because the comparison window is strictly after the
+      // expectation and both would otherwise land in the same second. A real
+      // observation arrives on the next tick, hours after he agreed.
+      detail: '695 schema objects', observedAt: new Date(Date.now() + 60_000),
+    });
+    const { resolveDevelopmentShadowing } = await import(
+      '../../src/services/institution/development-shadowing.js');
+    const verdict = await resolveDevelopmentShadowing(
+      { productId: COMPANY, expectationId: String(expectation.id) });
+    expect(verdict.verdict).toBe('matched');
+
+    const said = await reads('/foundry');
+    // One is one. Not "reliable", not a percentage from a single observation.
+    expect(said).toContain('I said what my check would report 1 time and was right each time');
+  });
+
+  it('grants, shows the standing permission, and takes it back — without leaving', async () => {
+    const rid = await untilItCanAsk();
+
+    const allowed = await post('/autopilot/development/grant', { responsibility_id: rid });
+    expect(allowed.location).toBe('/foundry?done=allowed');
+
+    const after = await reads('/foundry?done=allowed');
+    expect(after).toContain('Allowed.');
+    expect(after).toContain('I check my work every time');
+    // Authority he cannot see is authority he cannot withdraw.
+    expect(after).toContain('You are letting me change one file');
+    expect(after).toContain('Take it back');
+    // And it is no longer asking for what it now has.
+    expect(after).not.toContain('May I do this myself');
+
+    const consent = (await query(
+      "SELECT id FROM autonomy_consents WHERE product_id=? AND capability='development'",
+      [COMPANY])).rows[0] as Record<string, unknown>;
+    const back = await post('/autopilot/development/revoke', { consent_id: String(consent.id) });
+    expect(back.location).toBe('/foundry?done=withdrawn');
+
+    const ended = await reads('/foundry?done=withdrawn');
+    expect(ended).toContain('Taken back.');
+    expect(ended).toContain('I can no longer change anything');
+  });
+
+  it('answers what it could change with the scope, not with "nothing"', async () => {
+    await untilItCanAsk();
+    const said = await reads('/foundry?q=' + encodeURIComponent('what can you change?'));
+    expect(said).toContain('One file:');
+    expect(said).toContain('put the file back as it was');
   });
 });

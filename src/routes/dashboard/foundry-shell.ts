@@ -85,8 +85,10 @@ interface OwnerState {
   checks: Array<{ check: string; result: string; detail: string; observedAt: string }>;
   responsibilities: Array<{ id: string; title: string; state: string; check: string | null }>;
   pendingCandidates: Array<{ id: string; proposal: string; check: string | null }>;
-  permissions: Array<{ what: string; until: string }>;
+  permissions: Array<{ id: string; what: string; until: string; path: string | null }>;
   declined: Array<{ id: string; title: string }>;
+  grantable: Array<{ responsibilityId: string; title: string; check: string;
+    path: string; verification: string[]; matched: number; wrong: number }>;
   budgetMonthly: number;
   spent30d: number;
   connectedSenses: string[];
@@ -126,7 +128,7 @@ async function readOwnerState(productId: string, founderName: string): Promise<O
   // A live permission is the one control that must never be hard to find, so it
   // is read on every request rather than kept behind a door.
   const consents = (await query(
-    `SELECT capability, expires_at FROM autonomy_consents
+    `SELECT id, capability, expires_at, allowed_path_prefixes_json FROM autonomy_consents
       WHERE product_id = ? AND revoked_at IS NULL AND datetime(expires_at) > datetime('now')
       ORDER BY expires_at`, [productId])).rows as unknown as Array<Record<string, unknown>>;
 
@@ -136,6 +138,32 @@ async function readOwnerState(productId: string, founderName: string): Promise<O
     `SELECT id, proposed_responsibility FROM responsibility_candidates
       WHERE product_id = ? AND status = 'rejected' ORDER BY updated_at DESC LIMIT 5`,
     [productId])).rows as unknown as Array<Record<string, unknown>>;
+
+  // What Foundry could be permitted to do, and the evidence it would be
+  // permitted on. Read here so the authority request lives where he already is
+  // rather than behind a door he no longer has.
+  const { listGrantableDevelopmentResponsibilities } = await import(
+    '../../services/institution/development-authority.js');
+  const { SELF_MAINTENANCE_SCOPES } = await import(
+    '../../services/foundry/self-observation.js');
+  const offerable = await listGrantableDevelopmentResponsibilities(productId);
+  const grantable: OwnerState['grantable'] = [];
+  for (const g of offerable) {
+    const scope = SELF_MAINTENANCE_SCOPES[g.check];
+    if (!scope) continue;
+    const seen = (await query(
+      `SELECT c.classification, COUNT(*) AS n FROM responsibility_shadow_comparisons c
+         JOIN responsibility_shadow_expectations x ON x.id = c.expectation_id
+        WHERE x.responsibility_id = ? AND x.product_id = ?
+        GROUP BY c.classification`, [g.responsibilityId, productId]))
+      .rows as unknown as Array<Record<string, unknown>>;
+    const of = (k: string) => Number(seen.find((r) => String(r.classification) === k)?.n ?? 0);
+    grantable.push({
+      responsibilityId: g.responsibilityId, title: g.title, check: g.check,
+      path: scope.path, verification: scope.verification,
+      matched: of('matched'), wrong: of('deviated'),
+    });
+  }
 
   const candidateChecks = new Map<string, string>();
   for (const candidate of candidates) {
@@ -162,9 +190,18 @@ async function readOwnerState(productId: string, founderName: string): Promise<O
       id: candidate.id, proposal: candidate.proposedResponsibility,
       check: candidateChecks.get(candidate.id) ?? null,
     })),
-    permissions: consents.map((consent) => ({
-      what: String(consent.capability), until: String(consent.expires_at).slice(0, 10),
-    })),
+    permissions: consents.map((consent) => {
+      let path: string | null = null;
+      try {
+        const paths = JSON.parse(String(consent.allowed_path_prefixes_json ?? '[]')) as string[];
+        path = paths[0] ?? null;
+      } catch { path = null; }
+      return {
+        id: String(consent.id), what: String(consent.capability),
+        until: String(consent.expires_at).slice(0, 10), path,
+      };
+    }),
+    grantable,
     declined: declined.map((d) => {
       const proposal = String(d.proposed_responsibility);
       const known = Object.values(CHECK_IN_PLAIN_WORDS).find((p) => proposal.includes('schema'));
@@ -185,6 +222,8 @@ async function readOwnerState(productId: string, founderName: string): Promise<O
  * the institution exists to absorb.
  */
 type Attention =
+  | { kind: 'authorise'; responsibilityId: string; check: string; path: string;
+      verification: string[]; matched: number; wrong: number }
   | { kind: 'recognise'; candidateId: string; check: string | null; proposal: string }
   | { kind: 'expect'; responsibilityId: string; check: string; title: string }
   | { kind: 'stopped'; routines: string[] }
@@ -197,6 +236,16 @@ function whatNeedsHim(s: OwnerState): Attention {
   if (s.routinesFailing.length) return { kind: 'stopped', routines: s.routinesFailing };
   const drifted = s.checks.filter((c) => c.result === 'failed');
   if (drifted.length) return { kind: 'drifted', checks: drifted.map((d) => d.check) };
+  // AN EARNED PERMISSION REQUEST IS THE MOST CONSEQUENTIAL THING FOUNDRY EVER
+  // PUTS TO HIM, so it comes before anything it is merely offering to notice.
+  const grant = s.grantable.find((g) => !s.permissions.some((p) => p.what === 'development'));
+  if (grant) {
+    return {
+      kind: 'authorise', responsibilityId: grant.responsibilityId, check: grant.check,
+      path: grant.path, verification: grant.verification,
+      matched: grant.matched, wrong: grant.wrong,
+    };
+  }
   const candidate = s.pendingCandidates[0];
   if (candidate) {
     return {
@@ -260,6 +309,11 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .act{font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;
     color:var(--ink-3);margin:0 0 var(--s1)}
   .one .lead{font-size:1.02rem;margin:0 0 var(--s2)}
+  .standing{background:var(--card);border:1px solid var(--accent);border-radius:var(--r);
+    padding:var(--s3);margin:0 0 var(--s4);display:flex;flex-wrap:wrap;gap:var(--s2);
+    align-items:center;justify-content:space-between}
+  .standing p{margin:0;color:var(--ink-2);font-size:.95rem;flex:1 1 12rem;min-width:0}
+  .standing strong{color:var(--ink)}
   .done{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
     padding:var(--s3);margin:0 0 var(--s4)}
   .done p{color:var(--ink-2);font-size:.98rem}
@@ -466,6 +520,43 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
     });
   }
 
+  if (a.kind === 'authorise') {
+    const named = CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.check;
+    // ONE MATCHED PREDICTION IS ONE, AND IT SAYS SO. The evidence sentence is
+    // the honest count, not a rate and not a boast: "reliable" from a single
+    // observation is exactly the fabricated confidence this institution refuses
+    // everywhere else, and this is the worst place to start.
+    const record = a.wrong === 0
+      ? `I said what my check would report ${count(a.matched, 'time')} and was right each time.`
+      : `I said what my check would report ${count(a.matched + a.wrong, 'time')} and was wrong `
+        + `${count(a.wrong, 'time')}.`;
+    return decisionCard({
+      act: 'Authority',
+      question: 'May I do this myself, for seven days?',
+      title: named,
+      meaning: [
+        record,
+        'If you allow it, I may update one file — the description itself — and nothing else. '
+        + 'After each change I re-run the check, and if it does not pass I put the file back.',
+        'It ends on its own after seven days. You can take it back before that at any moment.',
+      ],
+      facts: [
+        ['What I could change', 'One file, and only that one'],
+        ['What I could not', 'The database, any other file, anything that alters behaviour'],
+        ['Cost', 'Nothing'],
+        ['Lasts', 'Seven days, then it stops by itself'],
+        ['If you do nothing', 'It stays a manual job and I keep watching'],
+      ],
+      primary: {
+        label: 'Allow for 7 days',
+        action: '/autopilot/development/grant',
+        fields: { responsibility_id: a.responsibilityId },
+      },
+      technical: `${a.path} · change class generated_artifact · verified by `
+        + `${a.verification.join(', ')} · responsibility ${a.responsibilityId}`,
+    });
+  }
+
   const plain = CHECK_IN_PLAIN_WORDS[a.check];
   return decisionCard({
     act: 'Responsibility',
@@ -492,6 +583,28 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
     technical: `${a.title} · check ${a.check} · development · understood`
       + ` · ${a.responsibilityId}`,
   });
+}
+
+/**
+ * A PERMISSION HE HAS GIVEN IS NEVER BEHIND A DOOR.
+ *
+ * Authority the owner cannot see is authority he cannot withdraw. While one is
+ * live it sits on the surface he opens, saying what it permits, when it ends by
+ * itself, and offering the way out — not as a card that needs him, because it
+ * does not, but as a standing fact about his institution.
+ */
+function standingPermission(s: OwnerState): HtmlEscapedString | Promise<HtmlEscapedString> {
+  const live = s.permissions[0];
+  if (!live) return html``;
+  return html`<section class="standing">
+    <p><strong>You are letting me change ${live.path ? 'one file' : live.what}</strong>
+      until ${live.until}. It stops then on its own.</p>
+    <form method="POST" action="/autopilot/development/revoke">
+      <input type="hidden" name="return_to" value="foundry" />
+      <input type="hidden" name="consent_id" value="${live.id}" />
+      <button class="btn" type="submit" style="width:auto">Take it back</button>
+    </form>
+  </section>`;
 }
 
 /**
@@ -531,6 +644,21 @@ function whatJustHappened(done: string, s: OwnerState,
     return html`<div class="done">
       <p><strong>Understood.</strong> I will not bring that up again.</p>
       <p>If you change your mind, ask me what you turned down.</p>
+    </div>`;
+  }
+  if (done === 'allowed' && s.permissions.length > 0) {
+    return html`<div class="done">
+      <p><strong>Allowed.</strong> From now until ${s.permissions[0].until} I can bring that one
+        file back into step myself when it drifts.</p>
+      <p>I check my work every time, and put it back if the check does not pass. It ends on
+        its own after seven days, and you can take it back before then.</p>
+      <p>You will hear from me when I have actually done something.</p>
+    </div>`;
+  }
+  if (done === 'withdrawn' && s.permissions.length === 0) {
+    return html`<div class="done">
+      <p><strong>Taken back.</strong> I can no longer change anything. I will keep watching
+        and tell you when it drifts.</p>
     </div>`;
   }
   if (done === 'reopened') {
@@ -586,16 +714,31 @@ function answerTo(key: string, s: OwnerState, a: Attention,
     }
     const named = a.kind === 'recognise'
       ? (a.check ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.proposal : a.proposal)
-      : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
+      : a.kind === 'authorise'
+        ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.check
+        : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
     if (key === 'change') {
-      return html`<div class="said">
-        <p><strong>Nothing.</strong> I have no permission to change anything, and this
-          decision does not give me one.</p>
-        <p>If I ever ask for that, it will be a separate question, for a set number of days,
-          naming exactly what I would touch — and you could take it back at any point.</p>
-      </div>`;
+      return a.kind === 'authorise'
+        ? html`<div class="said">
+          <p><strong>One file:</strong> the description of my own database, and nothing else.</p>
+          <p>Not the database, not any other file, and nothing that alters how anything
+            behaves. After each change I re-run the check; if it does not pass, I put the file
+            back as it was.</p>
+        </div>`
+        : html`<div class="said">
+          <p><strong>Nothing.</strong> I have no permission to change anything, and this
+            decision does not give me one.</p>
+          <p>If I ever ask for that, it will be a separate question, for a set number of days,
+            naming exactly what I would touch — and you could take it back at any point.</p>
+        </div>`;
     }
     if (key === 'undo') {
+      if (a.kind === 'authorise') {
+        return html`<div class="said">
+          <p>Yes, at any moment — and it also ends on its own after seven days without you
+            doing anything.</p>
+        </div>`;
+      }
       return html`<div class="said">
         <p>Yes. ${a.kind === 'recognise'
     ? 'If you say no I will not raise it again, but you can ask me what you turned down and put it back.'
@@ -603,6 +746,14 @@ function answerTo(key: string, s: OwnerState, a: Attention,
       </div>`;
     }
     if (key === 'ifyes') {
+      if (a.kind === 'authorise') {
+        return html`<div class="said">
+          <p>When the description falls out of step with the database, I bring it back into
+            step myself, instead of telling you about it.</p>
+          <p>Every time, I re-run the check afterwards. If it does not pass, I undo the
+            change. After seven days the permission ends on its own.</p>
+        </div>`;
+      }
       return a.kind === 'recognise'
         ? html`<div class="said">
           <p>I keep watching <strong>${named}</strong> and work out whether I can look after
@@ -689,8 +840,10 @@ function answerTo(key: string, s: OwnerState, a: Attention,
         change anything, spend anything, or contact anyone.</p>
       <p>Each of those would be something you allow separately, for a set time, and could take
         back whenever you wanted.</p>`
-    : html`<p>${raw(s.permissions.map((p) => `I may ${p.what}, until ${p.until}.`).join(' '))}</p>
-      <p><a href="/autopilot">Take that back</a></p>`}
+    : html`<p>I may change ${s.permissions[0].path
+      ? 'one file — my own description of my database — and nothing else'
+      : s.permissions[0].what}, until ${s.permissions[0].until}. It ends then by itself,
+      and you can take it back above.</p>`}
       <p>${s.spent30d === 0
     ? html`I have spent nothing. Your limit is $${String(s.budgetMonthly)} a month.`
     : html`I have spent $${s.spent30d.toFixed(2)} of your $${String(s.budgetMonthly)} this month.`}</p>
@@ -771,6 +924,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${orientation ? html`<p class="lede">${orientation}</p>` : ''}
 
     ${done ? whatJustHappened(done, s) : ''}
+    ${standingPermission(s)}
     ${theOneThing(attention)}
 
     ${key ? html`<p class="asked">${typed || QUESTIONS[key] || asked}</p>
