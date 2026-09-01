@@ -178,7 +178,7 @@ export class NotEntitledError extends Error {
  * missing row into a silent outage, and `authorizeSpend` already fails on one
  * whose owner cannot be resolved.
  */
-async function companyMayIncurCost(productId: string): Promise<string | null> {
+export async function companyMayIncurCost(productId: string): Promise<string | null> {
   try {
     // THE DECISION COMES FROM THE CANONICAL PREDICATE; the columns are read
     // only to say WHY. This used to test status and scp_status directly, which
@@ -191,10 +191,27 @@ async function companyMayIncurCost(productId: string): Promise<string | null> {
               COALESCE(scp_status,'active') AS scp,
               entitlement_paused_at AS billing_paused,
               erasure_scheduled_at AS erasing,
+              reality,
               CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating
          FROM products WHERE id = ?`, [productId]);
     const row = res.rows[0] as Record<string, unknown> | undefined;
     if (!row) return null;
+    // A REHEARSAL MAY NOT SPEND THE REAL COMPANIES' MONEY.
+    //
+    // The founder and global ceilings are shared pools — $100 and $500 a day
+    // across everything — reserved before dispatch and enforced by migration
+    // 099's triggers. A reference company exercising a loop could exhaust them
+    // and make genuine work fail with SpendCeilingError, which is the one
+    // failure mode where a fake company damages a real one without touching it.
+    //
+    // Refused outright rather than given its own pool, because nothing the
+    // reference world exists to exercise yet costs anything: observation,
+    // responsibility, shadowing, comparison, metrics and portfolio reasoning
+    // are all deterministic, exactly as the Foundry-on-Foundry loop is — it has
+    // spent $0 while proving the entire ladder. When a scenario genuinely needs
+    // a model, it gets a separate ceiling of its own, decided then and sized to
+    // what it is for. Refusing now costs nothing and cannot starve anyone.
+    if (String(row.reality) === 'reference') return 'a reference company';
     if (Number(row.operating) === 1) return null;
     if (String(row.s) !== 'active') return `archived (${String(row.s)})`;
     if (row.erasing != null) return 'scheduled for deletion';

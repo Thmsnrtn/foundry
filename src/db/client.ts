@@ -162,7 +162,13 @@ export async function executeRaw(sql: string): Promise<void> {
  * Get all products owned by a founder.
  */
 export async function getProductsByOwner(founderId: string): Promise<ResultSet> {
-  return query('SELECT * FROM products WHERE owner_id = ? AND status != ?', [founderId, 'archived']);
+  // REAL ONLY. This and `getVisibleProducts` are what the owner reads as "my
+  // companies" — fleet triage, the portfolio, the dashboard's redirect, the
+  // fleet letter's ranking. A reference company appearing among them would put
+  // fiction on the page where he decides what to do about his businesses.
+  return query(
+    `SELECT * FROM products WHERE owner_id = ? AND status != ? AND ${realCompany()}`,
+    [founderId, 'archived']);
 }
 
 /**
@@ -183,11 +189,12 @@ export async function getProductsByOwner(founderId: string): Promise<ResultSet> 
 export async function getVisibleProducts(founderId: string): Promise<ResultSet> {
   return query(
     `SELECT p.* FROM products p
-      WHERE p.owner_id = ? AND p.status != 'archived'
+      WHERE p.owner_id = ? AND p.status != 'archived' AND ${realCompany('p')}
       UNION
      SELECT p.* FROM products p
        JOIN team_members t ON t.product_id = p.id
       WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'
+        AND ${realCompany('p')}
      ORDER BY 1`,
     [founderId, founderId]);
 }
@@ -498,6 +505,44 @@ export function operatingProduct(alias = ''): string {
     // their own account — see `companyMayBeChanged`, which asks a different
     // question and says so.
     + ` AND ${p}erasure_scheduled_at IS NULL`;
+}
+
+/**
+ * IS THIS A COMPANY THAT ACTUALLY EXISTS?
+ *
+ * Migration 222 gave every company a `reality`, and this is the one definition
+ * of the question, for the same reason `operatingProduct` is one: a rule copied
+ * into thirty call sites is a rule that will disagree with itself, and this
+ * particular rule is the one standing between a rehearsal and the owner's
+ * truth.
+ *
+ * DELIBERATELY NOT PART OF `operatingProduct()`. That predicate asks whether
+ * the institution may act FOR a company, and a reference company may be acted
+ * for — exercising the institution is what it is for. What differs is where the
+ * results may travel. Applying this at the boundaries that matter, by name,
+ * makes each of those boundaries a decision somebody made; folding it into the
+ * universal predicate would make it an accident that held until someone wrote a
+ * query without it.
+ *
+ * Use it wherever an answer reaches the OWNER or the OUTSIDE WORLD:
+ *   · anything he reads as his portfolio, his companies, or his economics
+ *   · any aggregate, benchmark or cross-company pool
+ *   · any evidence that a capability worked, or any track record
+ *   · anything that spends real money or contacts a real person
+ *
+ * Do NOT use it to decide whether a routine may run. A reference company that
+ * no routine touches exercises nothing.
+ *
+ * Takes a table alias, never a caller value: it is composed into SQL text, so
+ * there is nothing here for a request to reach.
+ */
+export function realCompany(alias = ''): string {
+  return `${alias ? `${alias}.` : ''}reality = 'real'`;
+}
+
+/** The complement, for the development-only surfaces that exist to show it. */
+export function referenceCompany(alias = ''): string {
+  return `${alias ? `${alias}.` : ''}reality = 'reference'`;
 }
 
 /**

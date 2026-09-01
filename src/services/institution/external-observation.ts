@@ -33,8 +33,61 @@ export function isObservableField(value: string): value is ObservableField {
   return (OBSERVABLE_FIELDS as readonly string[]).includes(value);
 }
 
-export function externalObservationEventType(field: string, direction: ObservedDirection): string {
-  return `external_metric:${field}:${direction}`;
+// =============================================================================
+// TWO CHANNELS, ONE PATH (migration 223)
+//
+// A reference company exists to be run through this machinery, so it produces
+// exactly the observations that decide whether a responsibility may leave
+// Shadowing. If those carried the same `source` as a real provider's readings,
+// every count that decides what Foundry has earned would silently include
+// fiction, and nothing could tell the difference afterwards. So the world's
+// readings and the reference world's readings are different channels.
+//
+// The doc comment on `recordProviderSyncObservations` below argues against
+// inventing a new source value, for two specific reasons: the payload guard
+// would not fire on it, and the shadow-independence guard would not admit it.
+// Migration 223 answers both — one widened guard covering both channels, and a
+// sibling independence guard for the reference prefix — which is why this is a
+// channel and a provider sync is not.
+//
+// WRITES NARROW, READS WIDEN. A write must name the channel this company's
+// reality entitles it to; a read may union both, because the database
+// guarantees a company holds only one. That is what keeps this ONE code path
+// rather than two: a rehearsal that travels a different path rehearses nothing.
+// =============================================================================
+
+export type CompanyReality = 'real' | 'reference';
+
+/** Every metric observation, of whichever world. Safe to union: see above. */
+export function metricObservation(alias = ''): string {
+  const c = alias ? `${alias}.` : '';
+  return `${c}source IN ('external_metric_ingest', 'reference_metric_ingest')`;
+}
+
+/**
+ * Which world's readings this company produces.
+ *
+ * Defaults to real for a company that does not exist, matching the column's own
+ * default — a caller passing an unknown id gets refused by the foreign key at
+ * the insert, which is a better error than one invented here.
+ */
+export async function observationChannel(productId: string): Promise<{
+  reality: CompanyReality; source: string;
+}> {
+  const row = (await query('SELECT reality FROM products WHERE id = ?', [productId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const reality: CompanyReality = String(row?.reality ?? 'real') === 'reference'
+    ? 'reference' : 'real';
+  return {
+    reality,
+    source: reality === 'reference' ? 'reference_metric_ingest' : 'external_metric_ingest',
+  };
+}
+
+export function externalObservationEventType(
+  field: string, direction: ObservedDirection, reality: CompanyReality = 'real',
+): string {
+  return `${reality === 'reference' ? 'reference' : 'external'}_metric:${field}:${direction}`;
 }
 
 function directionOf(previous: number, observed: number): ObservedDirection {
@@ -58,6 +111,7 @@ export async function recordExternalMetricObservations(input: {
   readings: Array<{ field: string; observedValue: number }>;
 }): Promise<Array<{ id: string; field: string; direction: ObservedDirection }>> {
   const recorded: Array<{ id: string; field: string; direction: ObservedDirection }> = [];
+  const channel = await observationChannel(input.productId);
   for (const reading of input.readings) {
     if (!isObservableField(reading.field) || !Number.isFinite(reading.observedValue)) continue;
 
@@ -75,7 +129,7 @@ export async function recordExternalMetricObservations(input: {
     if (!Number.isFinite(previousValue)) continue;
 
     const direction = directionOf(previousValue, reading.observedValue);
-    const eventType = externalObservationEventType(reading.field, direction);
+    const eventType = externalObservationEventType(reading.field, direction, channel.reality);
     const id = 'extobs_' + createHash('sha256')
       .update([input.productId, reading.field, String(previousValue), String(reading.observedValue),
         new Date().toISOString().slice(0, 10)].join('\n'))
@@ -86,8 +140,8 @@ export async function recordExternalMetricObservations(input: {
 
     await query(
       `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-       VALUES (?,?,'external_metric_ingest',?,'low',?,?)`,
-      [id, input.productId, eventType,
+       VALUES (?,?,?,?,'low',?,?)`,
+      [id, input.productId, channel.source, eventType,
         JSON.stringify({
           origin: input.origin, field: reading.field, direction,
           observed_value: reading.observedValue, previous_value: previousValue,
@@ -173,7 +227,7 @@ export async function recordProviderSyncObservations(input: {
 export async function availableObservationChannels(productId: string): Promise<ObservableField[]> {
   const rows = await query(
     `SELECT DISTINCT json_extract(payload_json,'$.field') AS field FROM signal_events
-      WHERE product_id=? AND source='external_metric_ingest'`, [productId],
+      WHERE product_id=? AND ${metricObservation()}`, [productId],
   );
   return (rows.rows as unknown as Array<Record<string, unknown>>)
     .map((r) => String(r.field)).filter(isObservableField);

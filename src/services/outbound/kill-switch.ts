@@ -60,13 +60,36 @@ export async function checkKillSwitch(
   capability?: { deliverableWhilePaused?: boolean },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
-    `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools
+    `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools,
+            reality
        FROM products WHERE id = ?`,
     [productId]
   );
   const productRow = productResult.rows[0] as Record<string, unknown> | undefined;
   if (!productRow) {
     return { blocked: true, reason: `product ${productId} not found` };
+  }
+  // A COMPANY THAT IS NOT REAL MAY NOT REACH THE WORLD.
+  //
+  // This is the door every consequential effect passes through, which is why
+  // the refusal belongs here rather than in each handler: a reference company
+  // exists to exercise the institution, and the institution's job includes
+  // sending email, charging cards and writing to repositories. The handlers use
+  // the COMPANY's credential and fall back to the deployment's own — so a
+  // rehearsal that reached `sendEmailHandler` would send a real message to a
+  // real address from a real account, and the audit log would record it as
+  // allowed because every other check passed.
+  //
+  // Refused FIRST, and before the exemptions below. Account mail is exempt from
+  // the pause axes because a founder whose card was declined still needs to
+  // hear it; nobody needs to hear anything about a company that does not exist.
+  // 'deliverableWhilePaused' is about a real relationship in a paused state,
+  // and there is no relationship here.
+  if (productRow.reality === 'reference') {
+    return {
+      blocked: true,
+      reason: 'company is a reference company and may not reach the world',
+    };
   }
   if (productRow.status && productRow.status !== 'active') {
     return {

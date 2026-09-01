@@ -31,6 +31,7 @@ import { getResponsibility, type Responsibility } from './responsibility.js';
 import { beginResponsibilityShadowing, compareShadowObservation } from './responsibility-shadowing.js';
 import {
   availableObservationChannels, externalObservationEventType,
+  metricObservation, observationChannel,
   isObservableField, type ObservedDirection,
 } from './external-observation.js';
 import { getObservationChannels, isAdmissibleObservationField } from './company-observation.js';
@@ -74,7 +75,7 @@ export async function getShadowableResponsibilities(
   const declared = await getObservationChannels(productId);
   const reported = new Set((await query(
     `SELECT DISTINCT json_extract(payload_json,'$.field') AS field FROM signal_events
-      WHERE product_id=? AND source='external_metric_ingest'`, [productId],
+      WHERE product_id=? AND ${metricObservation()}`, [productId],
   )).rows.map((r) => String((r as Record<string, unknown>).field)));
 
   const companyDefined = declared
@@ -120,10 +121,11 @@ export async function getDarkenedWatches(productId: string): Promise<Array<{
          ON r.id=x.responsibility_id AND r.product_id=x.product_id
        JOIN company_observation_channels c
          ON c.product_id=x.product_id
-        -- The event type is external_metric:FIELD:DIRECTION; the channel
-        -- is the field in the middle, and matching on the prefix alone would
-        -- catch a channel whose key is a prefix of another's.
-        AND x.expected_event_type LIKE 'external_metric:' || c.channel_key || ':%'
+        -- The event type is PREFIX:FIELD:DIRECTION; the channel is the field
+        -- in the middle, and matching on the prefix alone would catch a channel
+        -- whose key is a prefix of another's.
+        AND (x.expected_event_type LIKE 'external_metric:' || c.channel_key || ':%'
+          OR x.expected_event_type LIKE 'reference_metric:' || c.channel_key || ':%')
       WHERE x.product_id=? AND c.revoked_at IS NOT NULL
         AND r.state='shadowing' AND r.disposition='active'
         AND NOT EXISTS (
@@ -170,7 +172,7 @@ export async function beginExternalMetricShadowing(input: {
   // exact metric. Entering Shadowing on a silent channel would be a promise.
   const channel = await query(
     `SELECT id FROM signal_events
-      WHERE product_id=? AND source='external_metric_ingest'
+      WHERE product_id=? AND ${metricObservation()}
         AND json_extract(payload_json,'$.field')=?
       ORDER BY created_at DESC LIMIT 1`,
     [input.productId, input.field],
@@ -222,13 +224,20 @@ export async function beginExternalMetricShadowing(input: {
     observedAt: new Date(),
   });
 
+  // The expectation names the channel that may resolve it, and for a reference
+  // company that is the reference channel — same rule, same independence, other
+  // world (migration 223). It is read once, here, from a column the company
+  // cannot edit, so a caller cannot choose which world its evidence comes from.
+  const { reality } = await observationChannel(input.productId);
+
   await beginResponsibilityShadowing({
     productId: input.productId, responsibilityId: input.responsibilityId,
-    expectedEventType: externalObservationEventType(input.field, input.direction),
+    expectedEventType: externalObservationEventType(input.field, input.direction, reality),
     expectationClaimId, observationSourceSignalId: channelSignalId,
     // The same source this function's own observation query filters on, and the
-    // same one migration 127's trigger hardcodes. Stated once, here.
-    observationSourceKind: 'external_metric_ingest',
+    // same one migrations 127 and 223 key their independence guards on.
+    observationSourceKind: reality === 'reference'
+      ? 'reference_metric_ingest' : 'external_metric_ingest',
     validUntil: input.validUntil,
   });
   return getResponsibility(input.productId, input.responsibilityId);
@@ -257,14 +266,30 @@ export function observationFieldLabel(
   return OBSERVABLE_FIELD_LABELS[field] ?? field;
 }
 
-/** The field an external-metric expectation is about. The event type is
- *  `external_metric:FIELD:DIRECTION` and the direction is a closed set, so the
+/**
+ * Every metric expectation, of whichever world.
+ *
+ * The twin of `metricObservation()`, and safe for the same reason: migration
+ * 223 lets a company hold readings from exactly one channel, so a union over
+ * both prefixes, scoped to one company, is that company's expectations and
+ * nothing else. Widening the READ is what keeps a reference company on the
+ * identical code path; the write side chooses the prefix from a column the
+ * company cannot edit.
+ */
+export const METRIC_EXPECTATION_PREFIXES = ['external_metric:', 'reference_metric:'] as const;
+
+export function metricExpectation(column = 'x.expected_event_type'): string {
+  return `(${METRIC_EXPECTATION_PREFIXES.map((p) => `${column} LIKE '${p}%'`).join(' OR ')})`;
+}
+
+/** The field a metric expectation is about. The event type is
+ *  `PREFIX:FIELD:DIRECTION` and the direction is a closed set, so the
  *  field is everything between the prefix and the final colon — a field
  *  carrying its own colon still reads correctly. */
 export function expectedMetricField(eventType: string): string | null {
-  const PREFIX = 'external_metric:';
-  if (!eventType.startsWith(PREFIX)) return null;
-  const rest = eventType.slice(PREFIX.length);
+  const prefix = METRIC_EXPECTATION_PREFIXES.find((p) => eventType.startsWith(p));
+  if (!prefix) return null;
+  const rest = eventType.slice(prefix.length);
   const at = rest.lastIndexOf(':');
   return at > 0 ? rest.slice(0, at) : null;
 }
@@ -306,7 +331,7 @@ export async function getSilentWatches(productId: string): Promise<Array<{
        JOIN institutional_responsibilities r
          ON r.id=x.responsibility_id AND r.product_id=x.product_id
       WHERE x.product_id=? AND r.state='shadowing' AND r.disposition='active'
-        AND x.expected_event_type LIKE 'external_metric:%'
+        AND ${metricExpectation()}
         AND NOT EXISTS (
           SELECT 1 FROM responsibility_shadow_comparisons cmp
            WHERE cmp.expectation_id=x.id AND cmp.classification IN ('matched','deviated'))
@@ -319,7 +344,7 @@ export async function getSilentWatches(productId: string): Promise<Array<{
   const lastByField = new Map<string, string>();
   for (const row of (await query(
     `SELECT json_extract(payload_json,'$.field') AS field, MAX(created_at) AS last_at
-       FROM signal_events WHERE product_id=? AND source='external_metric_ingest'
+       FROM signal_events WHERE product_id=? AND ${metricObservation()}
       GROUP BY 1`, [productId],
   )).rows as unknown as Array<Record<string, unknown>>) {
     if (row.field != null) lastByField.set(String(row.field), String(row.last_at));
@@ -383,7 +408,7 @@ export async function resolveExternalMetricShadowing(
   // here means the caller cannot present a comparison the guard would reject.
   const observations = await query(
     `SELECT id,event_type FROM signal_events
-      WHERE product_id=? AND source='external_metric_ingest'
+      WHERE product_id=? AND ${metricObservation()}
         AND json_extract(payload_json,'$.field')=?
         AND datetime(created_at)>datetime(?)
       ORDER BY created_at,id`,
@@ -470,7 +495,7 @@ export async function getUnwatchableResponsibilities(
   const declared = await getObservationChannels(productId);
   const reported = new Set((await query(
     `SELECT DISTINCT json_extract(payload_json,'$.field') AS field FROM signal_events
-      WHERE product_id=? AND source='external_metric_ingest'`, [productId],
+      WHERE product_id=? AND ${metricObservation()}`, [productId],
   )).rows.map((r) => String((r as Record<string, unknown>).field)));
   if (declared.some((c) => !c.revoked && reported.has(c.channelKey))) return [];
 

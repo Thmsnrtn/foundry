@@ -17,9 +17,10 @@
 // said it would.
 //
 // DELIBERATELY THE SAME SHAPE AS THE BUILT-IN PATH. Observations are written as
-// the same `external_metric_ingest` signals with the same `external_metric:*`
-// event types, so shadow entry, comparison, and resolution work on them without
-// modification. A parallel mechanism would have been a second truth for one
+// the same signals with the same event types as the built-in metrics — the
+// company's own channel per migration 223, which is `external_metric_ingest`
+// for a real company and the reference channel for a reference one — so shadow
+// entry, comparison, and resolution work on them without modification. A parallel mechanism would have been a second truth for one
 // fact, and the whole point is that the institution should not be able to tell
 // these apart.
 //
@@ -35,7 +36,7 @@ import { query } from '../../db/client.js';
 import { recordReconstructionClaim } from './reconstruction.js';
 import {
   OBSERVABLE_FIELDS, externalObservationEventType, isObservableField,
-  type ObservedDirection,
+  observationChannel, type ObservedDirection,
 } from './external-observation.js';
 
 export interface CompanyObservationChannel {
@@ -173,6 +174,7 @@ export async function recordCompanyObservations(input: {
   readings: Array<{ channelKey: string; observedValue: number }>;
 }): Promise<Array<{ id: string; channelKey: string; direction: ObservedDirection }>> {
   const recorded: Array<{ id: string; channelKey: string; direction: ObservedDirection }> = [];
+  const channel = await observationChannel(input.productId);
 
   for (const reading of input.readings) {
     const channelKey = String(reading.channelKey ?? '').trim();
@@ -187,7 +189,8 @@ export async function recordCompanyObservations(input: {
     // column per quantity.
     const prior = await query(
       `SELECT json_extract(payload_json,'$.observed_value') AS value FROM signal_events
-        WHERE product_id=? AND source IN ('external_metric_ingest','company_observation_baseline')
+        WHERE product_id=? AND source IN (
+            'external_metric_ingest','reference_metric_ingest','company_observation_baseline')
           AND json_extract(payload_json,'$.field')=?
         ORDER BY created_at DESC, rowid DESC LIMIT 1`,
       [input.productId, channelKey],
@@ -204,7 +207,7 @@ export async function recordCompanyObservations(input: {
     if (!Number.isFinite(previousValue)) continue;
 
     const direction = directionOf(previousValue, reading.observedValue);
-    const eventType = externalObservationEventType(channelKey, direction);
+    const eventType = externalObservationEventType(channelKey, direction, channel.reality);
     // Identity is the READING — this company, this channel, this value, today —
     // and deliberately NOT the previous value. Including the prior made a
     // replayed webhook chain: the first post moved 9→14 and recorded a rise,
@@ -222,8 +225,8 @@ export async function recordCompanyObservations(input: {
 
     await query(
       `INSERT INTO signal_events (id,product_id,source,event_type,severity,payload_json,summary)
-       VALUES (?,?,'external_metric_ingest',?,'low',?,?)`,
-      [id, input.productId, eventType,
+       VALUES (?,?,?,?,'low',?,?)`,
+      [id, input.productId, channel.source, eventType,
         JSON.stringify({
           origin: input.origin, field: channelKey, direction,
           observed_value: reading.observedValue, previous_value: previousValue,

@@ -42,6 +42,7 @@ import { query } from '../src/db/client.js';
 const WIDTHS = [375, 390, 393, 414, 430];
 const OWNER = 'mm_owner';
 const COMPANY = 'mm_company';
+let REFERENCE_COMPANY = '';
 
 /** Production's shape, so the measurement is of what the owner actually sees. */
 async function seed(): Promise<void> {
@@ -68,6 +69,23 @@ async function seed(): Promise<void> {
         JSON.stringify({ check, result: 'passed', detail, observed_at: new Date().toISOString() }),
         `${check} reported passed`]);
   }
+
+  // THE REFERENCE COMPANY'S PAGE IS MEASURED TOO, because it carries the
+  // longest unbroken prose in the product — the disclosure that says the
+  // company does not exist — above a list of numbers. If anything overflows on
+  // a phone, it is that, and it is the one page whose text may not be cut off.
+  const { establishReferenceCompany, advanceReferenceWorld } = await import(
+    '../src/services/reference/world.js');
+  const reference = await establishReferenceCompany({
+    scenarioKey: 'revenue_quietly_falling', ownerId: OWNER,
+  });
+  if (!reference) throw new Error('the reference scenario did not resolve');
+  await advanceReferenceWorld(reference.productId);
+  // With the questions on it, because those are the widest blocks on the page.
+  const { noticeWhatTheNumbersAreDoing } = await import(
+    '../src/services/institution/noticing.js');
+  await noticeWhatTheNumbersAreDoing(reference.productId);
+  REFERENCE_COMPANY = reference.productId;
 
   // A pending proposal, because the widest thing on the page is the decision.
   const { proposeResponsibilityCandidate } = await import(
@@ -100,7 +118,8 @@ async function main(): Promise<void> {
   const server = serve({ fetch: app.fetch, port: 4317 });
   const base = 'http://127.0.0.1:4317';
   const paths = ['/foundry', '/foundry?ask=okay', '/foundry?ask=working',
-    '/foundry/companies', `/foundry/companies/${COMPANY}`, '/foundry/controls'];
+    '/foundry/companies', `/foundry/companies/${COMPANY}`,
+    `/foundry/companies/${REFERENCE_COMPANY}`, '/foundry/controls'];
 
   const dir = 'docs/design/mobile';
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -155,7 +174,18 @@ async function main(): Promise<void> {
         failures.push(`${path} at ${String(width)}px ${String(scale * 100)}% text: +${String(overflow)}px `
           + `(widest ${m.widest.tag} reaching ${String(m.widest.w)}px)`);
       }
-      if (path === '/foundry' && scale === 1) {
+      if (scale === 1 && width === 390) {
+        // The home page, and the reference company's — the two the owner
+        // actually looks at, and the second is the one whose disclosure has to
+        // land before anything else on it does.
+        if (path === '/foundry') {
+          await page.screenshot({ path: `${dir}/foundry-390.png`, fullPage: true });
+        }
+        if (path === `/foundry/companies/${REFERENCE_COMPANY}`) {
+          await page.screenshot({ path: `${dir}/reference-company-390.png`, fullPage: true });
+        }
+      }
+      if (path === '/foundry' && scale === 1 && width !== 390) {
         await page.screenshot({ path: `${dir}/foundry-${String(width)}.png`, fullPage: true });
       }
     }

@@ -1531,13 +1531,24 @@ letterRoutes.get('/letter', async (c) => {
  * an open redirect, and this one is reachable by anyone who can get the owner to
  * submit a page.
  */
-function backTo(value: unknown): string {
-  return String(value ?? '') === 'foundry' ? '/foundry' : '/letter';
+/**
+ * A CLOSED ALLOWLIST OF SHAPES, NEVER A URL.
+ *
+ * The caller says which KIND of place it came from and the destination is built
+ * here, so there is no value a form can carry that becomes a redirect target.
+ * `company` needs the company, and takes it from the id this route already
+ * resolved server-side from the candidate and the authenticated owner — never
+ * from the request, which is the whole point.
+ */
+function backTo(value: unknown, productId?: string): string {
+  const from = String(value ?? '');
+  if (from === 'company' && productId) return `/foundry/companies/${productId}`;
+  return from === 'foundry' ? '/foundry' : '/letter';
 }
 
 letterRoutes.post('/letter/responsibility-candidates/:candidateId/promote',async(c)=>{
   const founder=c.get('founder');
-  const back=backTo((await c.req.parseBody()).return_to);
+  const returnTo=(await c.req.parseBody()).return_to;
   // Product is resolved server-side from candidate + authenticated owner. No
   // hidden field or caller actor can establish the grounding identity.
   const { query }=await import('../../db/client.js');
@@ -1545,6 +1556,7 @@ letterRoutes.post('/letter/responsibility-candidates/:candidateId/promote',async
     WHERE c.id=? AND p.owner_id=?`,[c.req.param('candidateId'),founder.id]);
   if (!result.rows.length) return c.text('Candidate decision refused',403);
   const productId=String((result.rows[0] as Record<string,unknown>).product_id);
+  const back=backTo(returnTo,productId);
   const { promoteResponsibilityCandidate }=await import('../../services/institution/responsibility-candidate.js');
   try {
     await promoteResponsibilityCandidate({productId,candidateId:c.req.param('candidateId'),mechanism:'authenticated_owner',ownerId:founder.id as string});
@@ -1582,11 +1594,12 @@ letterRoutes.post('/letter/responsibility-candidates/:candidateId/reconsider',as
 
 letterRoutes.post('/letter/responsibility-candidates/:candidateId/reject',async(c)=>{
   const founder=c.get('founder');
-  const back=backTo((await c.req.parseBody()).return_to);
+  const returnTo=(await c.req.parseBody()).return_to;
   const { query }=await import('../../db/client.js');
   const result=await query(`SELECT c.product_id FROM responsibility_candidates c JOIN products p ON p.id=c.product_id
     WHERE c.id=? AND p.owner_id=?`,[c.req.param('candidateId'),founder.id]);
   if (!result.rows.length) return c.text('Candidate decision refused',403);
+  const back=backTo(returnTo,String((result.rows[0] as Record<string,unknown>).product_id));
   const { decideResponsibilityCandidate }=await import('../../services/institution/responsibility-candidate.js');
   try {
     await decideResponsibilityCandidate({productId:String((result.rows[0] as Record<string,unknown>).product_id),

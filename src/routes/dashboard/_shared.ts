@@ -49,8 +49,22 @@ export async function selectedProductId(
   // No cookie, or a stale one. A founder with exactly ONE company has made an
   // unambiguous choice by having only one; more than one is a choice nobody has
   // made, and picking is what this function exists to stop.
+  //
+  // REAL COMPANIES ONLY, or reference companies would break this by existing.
+  // The rule is "exactly one, so the choice is unambiguous" — and a synthetic
+  // company created to exercise the institution is not a choice he has to make.
+  // Without this, seeding the reference world would push the count above one
+  // and silently return null, and every route that depends on this function
+  // would stop resolving a company for an owner who still has exactly one.
+  const { realCompany } = await import('../../db/client.js');
+  // No ORDER BY: the result is used only when it has exactly one row, so an
+  // ordering would decide nothing. (`id` is a nanoid, and ordering by one is
+  // what `check-id-tiebreak` exists to catch — converting this to a template
+  // literal for the predicate made the scanner able to read it for the first
+  // time, which is how a pointless clause surfaced after years.)
   const all = await query(
-    "SELECT id FROM products WHERE owner_id = ? AND status != 'archived' ORDER BY id",
+    `SELECT id FROM products WHERE owner_id = ? AND status != 'archived'
+       AND ${realCompany()}`,
     [founderId]);
   return all.rows.length === 1 ? (all.rows[0] as Record<string, string>).id : null;
 }

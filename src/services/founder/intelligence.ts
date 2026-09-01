@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { getOwnerEmail } from '../../lib/instance-posture.js';
-import { query } from '../../db/client.js';
+import { realCompany, query } from '../../db/client.js';
 import { callOpus, callSonnet } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 
@@ -127,12 +127,19 @@ export interface PulseData {
 }
 
 export async function getPulse(): Promise<PulseData> {
+  // Lifted out of the batch below because it interpolates the reality
+  // predicate: a template literal sitting between two plain-string queries put
+  // `decisions.status = 'pending'` inside the vocabulary scanner's window for
+  // `stressor_history`, and it reported a violation neither line contains.
+  const realProductCount = query(
+    `SELECT COUNT(*) as c FROM products WHERE status = 'active' AND ${realCompany()}`, []);
+
   const [
     foundersResult, productsResult, stressorsResult, decisionsResult,
     metricsResult, priorMetricsResult, recentFounders, recentChurn
   ] = await Promise.all([
     query("SELECT COUNT(*) as c FROM founders WHERE tier IS NOT NULL", []),
-    query("SELECT COUNT(*) as c FROM products WHERE status = 'active'", []),
+    realProductCount,
     query("SELECT severity, COUNT(*) as c FROM stressor_history WHERE status = 'active' GROUP BY severity", []),
     query("SELECT COUNT(*) as c FROM decisions WHERE status = 'pending'", []),
     // A ROW-WISE SUM DROPS EVERY ROW THAT DID NOT REPORT ALL FOUR. Migration 202
@@ -149,14 +156,19 @@ export async function getPulse(): Promise<PulseData> {
                 - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) AS total,
                 COUNT(new_mrr_cents) + COUNT(expansion_mrr_cents)
                 + COUNT(contraction_mrr_cents) + COUNT(churned_mrr_cents) AS reported
-             FROM metric_snapshots WHERE snapshot_date >= date('now', '-30 days')`, []),
+             FROM metric_snapshots m
+             WHERE m.snapshot_date >= date('now', '-30 days')
+               AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id
+                             AND ${realCompany('p')})`, []),
     query(`SELECT COALESCE(SUM(new_mrr_cents), 0) + COALESCE(SUM(expansion_mrr_cents), 0)
                 - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) AS total,
                 COUNT(new_mrr_cents) + COUNT(expansion_mrr_cents)
                 + COUNT(contraction_mrr_cents) + COUNT(churned_mrr_cents) AS reported
-             FROM metric_snapshots
-            WHERE snapshot_date >= date('now', '-60 days')
-              AND snapshot_date <  date('now', '-30 days')`, []),
+             FROM metric_snapshots m
+            WHERE m.snapshot_date >= date('now', '-60 days')
+              AND m.snapshot_date <  date('now', '-30 days')
+              AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id
+                            AND ${realCompany('p')})`, []),
     query("SELECT COUNT(*) as c FROM founders WHERE created_at > datetime('now', '-30 days')", []),
     query("SELECT COUNT(*) as c FROM founders WHERE tier IS NULL AND created_at < datetime('now', '-7 days')", []),
   ]);
@@ -330,7 +342,8 @@ export async function getMRRIntelligence(): Promise<MRRIntelligence> {
     `SELECT snapshot_date,
             COALESCE(SUM(new_mrr_cents), 0) + COALESCE(SUM(expansion_mrr_cents), 0)
           - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) as mrr
-     FROM metric_snapshots WHERE snapshot_date > date('now', '-90 days')
+     FROM metric_snapshots m WHERE m.snapshot_date > date('now', '-90 days')
+       AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id AND ${realCompany('p')})
      GROUP BY snapshot_date ORDER BY snapshot_date`, []
   );
 
@@ -423,7 +436,7 @@ export async function getChurnIntelligence(): Promise<ChurnIntelligence> {
   // without the limit that exists only so a card fits.
   const totals = await safeQuery(
     `SELECT
-       (SELECT COUNT(*) FROM products WHERE status = 'active') AS active,
+       (SELECT COUNT(*) FROM products WHERE status = 'active' AND ${realCompany()}) AS active,
        (SELECT COUNT(*) FROM products p JOIN lifecycle_state ls ON p.id = ls.product_id
          WHERE ls.risk_state IN ('yellow','red') AND p.status = 'active') AS at_risk,
        (SELECT COUNT(*) FROM products p JOIN lifecycle_state ls ON p.id = ls.product_id

@@ -104,6 +104,7 @@
 
 
 
+
                                   --      'api_key_created','role_granted'
                                   --      'config_changed','agent_evolved','integration_connected',
                             'operations','technology','customer','partnership','other'
@@ -123,6 +124,8 @@
                     CHECK (premise_type IN ('metric', 'qualitative')),
                     CHECK (status IN ('holding', 'falsified', 'unverifiable', 'revisited')),
                     CHECK (status IN ('on_track','at_risk','off_track','completed')),
+                  WHERE id=NEW.product_id AND reality='real');
+                  WHERE id=NEW.product_id AND reality='reference');
                   json_each('["src/db/migrations/","docs/foundry-institution/","scripts/",'
                  'customers','product','market','operations','team',
                  'financial','technical','strategy','other'
@@ -164,6 +167,7 @@
         AND k.action_type = NEW.action_type
         AND k.integration_name = NEW.integration_name)
         AND r.authority_ref='autonomy_consent:' || a.id
+        ELSE 'external_metric:' END)
         ON NEW.observation_ref='signal_event:' || observed.id
         SELECT 1 FROM products p WHERE json_extract(ref.value,'$.kind')='product'
         SELECT 1 FROM reconstruction_claims c WHERE json_extract(ref.value,'$.kind')='reconstruction_claim'
@@ -176,6 +180,7 @@
         UNION ALL SELECT 1 FROM institutional_responsibilities r WHERE json_extract(ref.value,'$.kind')='responsibility'
         UNION ALL SELECT 1 FROM integrations i WHERE json_extract(ref.value,'$.kind')='integration'
         UNION ALL SELECT 1 FROM signal_events e WHERE json_extract(ref.value,'$.kind')='signal_event'
+        WHEN 'reference_metric_ingest' THEN 'reference_metric:'
         instr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', '|' || NEW.from_state || '|'))) -
         instr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', '|' || NEW.from_state || '|')), '|', '')) + 1
         instr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', '|' || NEW.to_state || '|'))) -
@@ -220,6 +225,7 @@
       AND (claim.valid_until IS NULL OR datetime(claim.valid_until)>datetime('now'))
       AND COALESCE(r.capability,'') <> COALESCE(NEW.capability,''));
       AND NEW.observation_ref='signal_event:' || e.id
+      AND NEW.observation_ref='signal_event:' || e.id
       AND a.allowed_change_class=NEW.change_class
       AND a.capability='development' AND a.to_mode='act'
       AND a.capability=r.capability
@@ -245,9 +251,11 @@
       AND d.responsibility_refs_json IS NOT NULL);
       AND datetime(a.expires_at)>datetime('now')
       AND datetime(e.created_at)<=datetime(x.created_at));
+      AND datetime(e.created_at)<=datetime(x.created_at));
       AND e.product_id=NEW.product_id
       AND e.product_id=NEW.product_id AND e.source='development_verification'
       AND e.product_id=NEW.product_id AND e.source='external_metric_ingest');
+      AND e.product_id=NEW.product_id AND e.source='reference_metric_ingest');
       AND e.source='customer_message_ingest');
       AND e.source='founder_assertion'
       AND e.source='founder_reply_proposal'
@@ -278,6 +286,8 @@
       AND x.expected_event_type LIKE 'development_verified:%'
       AND x.expected_event_type LIKE 'external_metric:%'
       AND x.expected_event_type LIKE 'external_metric:%'
+      AND x.expected_event_type LIKE 'reference_metric:%'
+      AND x.expected_event_type LIKE 'reference_metric:%'
       AND x.responsibility_id=NEW.responsibility_id
       FROM responsibility_shadow_expectations x
       JOIN autonomy_consents a ON a.id=NEW.authority_consent_id
@@ -296,6 +306,7 @@
       SELECT 1 FROM institutional_responsibilities r
       SELECT 1 FROM institutional_responsibilities r
       SELECT 1 FROM json_each('["src/db/migrations/","docs/foundry-institution/","scripts/",'
+      SELECT 1 FROM products WHERE id = NEW.product_id AND reality = 'reference');
       SELECT 1 FROM products p WHERE p.id=NEW.product_id AND ('founder:' || p.owner_id)=NEW.actor_ref
       SELECT 1 FROM products p WHERE p.id=NEW.product_id AND ('founder:' || p.owner_id)=NEW.actor_ref
       SELECT 1 FROM reconstruction_claims c
@@ -317,6 +328,8 @@
       length(replace(substr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', 1,
       length(substr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', 1,
       length(substr('|unknown|visible|understood|shadowing|assisting|operating|mature|exception_owned|', 1,
+     AND EXISTS (SELECT 1 FROM products
+     AND EXISTS (SELECT 1 FROM products
      OR (NEW.scope='company' AND NEW.predicate NOT IN ('resource_capacity'));
      OR COALESCE(NEW.secret,'') NOT GLOB '[A-Za-z0-9_-]*';
      OR COALESCE(json_array_length(NEW.purposes_json),0) > 3;
@@ -343,6 +356,7 @@
      WHERE d.candidate_id = NEW.id
      WHERE d.responsibility_id = NEW.id
      WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
+     WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL
      WHERE p.owner_id = NEW.due_stated_by);
      WHERE p.owner_id = NEW.due_stated_by);
@@ -627,6 +641,7 @@
     SELECT 1 FROM products p
     SELECT 1 FROM products p
     SELECT 1 FROM products p
+    SELECT 1 FROM products p
     SELECT 1 FROM products p WHERE p.id=NEW.product_id AND p.owner_id=NEW.owner_id);
     SELECT 1 FROM products p WHERE p.id=NEW.product_id);
     SELECT 1 FROM reconstruction_claims c
@@ -647,9 +662,12 @@
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x
+    SELECT 1 FROM responsibility_shadow_expectations x
     SELECT 1 FROM responsibility_shadow_expectations x JOIN institutional_responsibilities r ON r.id=x.responsibility_id
     SELECT 1 FROM responsibility_shadow_expectations x, signal_events e
+    SELECT 1 FROM responsibility_shadow_expectations x, signal_events e
     SELECT 1 FROM responsibility_transitions
+    SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
     SELECT 1 FROM signal_events e
@@ -685,6 +703,8 @@
     WHERE NEW.evidence_ref='shadow_comparison:' || c.id
     WHERE NEW.observation_ref='signal_event:' || e.id
     WHERE NEW.observation_ref='signal_event:' || e.id
+    WHERE NEW.observation_ref='signal_event:' || e.id
+    WHERE NOT EXISTS (
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
@@ -723,7 +743,10 @@
     WHERE scope = 'global' AND scope_id = '__global__' AND date = NEW.date), 0) + NEW.reserved_cents > NEW.global_cap_cents
     WHERE scope = 'product' AND scope_id = NEW.product_id AND date = NEW.date), 0) + NEW.reserved_cents > NEW.product_cap_cents
     WHERE substr(g.value,1,length(r.value))=r.value OR substr(r.value,1,length(g.value))=g.value
+    WHERE trim(NEW.scenario) = '' OR trim(NEW.purpose) = '';
     WHERE trim(g.value)='' OR instr(g.value,'..')>0 OR substr(g.value,1,1)='/'
+    WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
+    WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
     WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
     WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
     WHERE x.id=NEW.expectation_id AND x.product_id=NEW.product_id
@@ -776,7 +799,11 @@
    WHERE NEW.evidence_ref IS NOT NULL AND NOT EXISTS (
    WHERE NEW.outcome_ref IS NOT NULL AND NOT EXISTS (
    WHERE NEW.outcome_ref IS NOT NULL AND NOT EXISTS (
+   WHERE NEW.source IN ('external_metric_ingest','effect_outcome_report')
+   WHERE NEW.source='reference_metric_ingest'
    WHERE p.id = NEW.principal_id AND pr.owner_id = p.created_by
+  'external_metric_ingest','effect_outcome_report','reference_metric_ingest')
+  ) AND NOT EXISTS (
   ) AND NOT EXISTS (
   ) AND NOT EXISTS (
   ) AND NOT EXISTS (
@@ -803,6 +830,7 @@
   )),
   )),
   )), fed_by TEXT
+  );
   );
   );
   );
@@ -901,6 +929,7 @@
   -- Every predicate coalesces its absence. A guard whose condition evaluates to
   -- Every predicate coalesces its absence. A guard whose condition evaluates to
   -- Every question names the responsibility it unblocks, at either scope.
+  -- Evidence must follow the prediction it tests, here as there.
   -- Evidence must follow the prediction it tests. An observation recorded
   -- Evolution signals
   -- Export state
@@ -949,7 +978,6 @@
   -- Re-resolve every source at decision time. Positive claim evidence must
   -- Relative, non-escaping prefixes only. A prefix that can climb out of the
   -- Reporting an obligation is not granting permission to discharge it. As with
-  -- Reproduced verbatim from migration 127. Replacing a trigger means
   -- Required (≥5) for status='active'; nullable for drafts.
   -- Retrospective fields — populated ~90 days after the decision
   -- Revenue
@@ -996,6 +1024,7 @@
   -- The observer may not see, cite, or echo the expectation it will be
   -- The plan must carry a real proposal, authored for that same message.
   -- The responsibility is this company's, and the person correcting owns it.
+  -- The row and the column cannot disagree. A reference_companies row for a
   -- The rung the policy chose. 'log' is recorded too: an audit trail the
   -- The same generic operational vocabulary migration 126 established, mirrored
   -- The secret is the whole of the authentication, so its floor is set here and
@@ -1039,6 +1068,7 @@
   -- checks — every one of them is made again on every new grant.
   -- claim another's customer.
   -- code, migrations, documents, or enforcement scripts that define what
+  -- company marked real would be a lie in whichever direction it was read.
   -- company-scoped because that is what they are — what one piece of work costs
   -- company-wide predicates the owner named (cash constraint, operating
   -- compared against. Verification that can read the expectation is
@@ -1065,7 +1095,6 @@
   -- here too.
   -- holding a belief for. Correcting a fact that was never stated is stating
   -- honours it; this is a list of intakes that exist, not of intakes anyone
-  -- independence tests caught it. Widening a vocabulary must not become a way
   -- indistinguishable from a real one.
   -- integration credentials are. This is what makes the send THEIRS.
   -- irrespective of later reality.
@@ -1098,7 +1127,6 @@
   -- refused, and so is a broad prefix that would contain part of the ring.
   -- refusing the legitimate path — the apply trigger below it does exactly this
   -- repository is not a bound scope.
-  -- reproducing ALL of it: the first version of this migration recreated only
   -- requires real comparison evidence there, and it still does. Applying this
   -- responsibility that reached Assisting is not permanently qualified
   -- responsibility-bound, and low consequence.
@@ -1113,6 +1141,7 @@
   -- separate owner-governed decision with its own evidence, not something a
   -- silently dropped field is a silently granted one waiting to happen.
   -- single responsibility: the scope must follow the meaning of the fact.
+  -- so the prefix-keyed independence guards below cannot confuse the two.
   -- still be current, non-conflicting, and canonically grounded.
   -- string cannot establish who is speaking for the company.
   -- string cannot establish who is speaking for the company.
@@ -1123,6 +1152,7 @@
   -- than stored and ignored — the shape of the attempt is the problem, and a
   -- that; who cast it goes with them.
   -- the bytes on disk are the bytes that were authorized. Passing checks alone
+  -- the channel: a reference reading announces itself as one in its event type,
   -- the evidence must be this company's own — a credential justified by another
   -- the field quietly dropped.
   -- the founder set aside has not been answered.
@@ -1130,15 +1160,13 @@
   -- the message is being attributed to. Attribution is structural.
   -- the ratchets/audits are what make any of it binding.
   -- the two attribution axes can never disagree about the same row.
-  -- the vocabulary checks, silently dropping the two guards below, and the
   -- thing worked, and this is exactly where that would be easiest to fudge.
   -- to name what must be rotated, and a quarantine that stores the secret is
-  -- to quietly narrow everything else the guard enforced.
   -- two never drift apart.
   -- unrecorded event, and it must not be able to enter the ledger as a credit.
   -- versus what the whole company has. They are the two inputs deterministic
   -- walks past a guard in this schema.
-  -- was observed rather than on a label a caller chose.
+  -- was observed rather than on a label a caller chose. It is ALSO derived from
   -- was refused or revoked has no result to report.
   -- well-meaning integration.
   -- what was reported rather than on a label the caller chose.
@@ -1163,9 +1191,10 @@
   CHECK (evidence_source IN ('observed', 'reference')));
   CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
   CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
+  CHECK (reality IN ('real', 'reference')));
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
   CHECK(disposition IN ('active','deliberately_not_done')), disposition_reason TEXT, disposition_evidence_ref TEXT, disposition_at DATETIME, capability TEXT NOT NULL DEFAULT 'general', discovery_evidence_ref TEXT, due_at DATETIME, due_stated_by TEXT);
-  CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME, website_url TEXT, health_score INTEGER);
+  CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME, website_url TEXT, health_score INTEGER, reality TEXT NOT NULL DEFAULT 'real'
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
   INSERT INTO ai_daily_spend(scope, scope_id, date, spent_cents, reserved_cents, updated_at)
@@ -1277,6 +1306,10 @@
   SELECT RAISE(ABORT, 'outcome_valence:not_in_vocabulary');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
+  SELECT RAISE(ABORT, 'products:reality_immutable');
+  SELECT RAISE(ABORT, 'reference_company:immutable') WHERE EXISTS (
+  SELECT RAISE(ABORT, 'reference_company:not_a_reference')
+  SELECT RAISE(ABORT, 'reference_company:reason_required')
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT, 'responsibility_disposition:evidence_required') WHERE trim(NEW.evidence_ref)='';
   SELECT RAISE(ABORT, 'responsibility_disposition:no_record') WHERE NOT EXISTS (
@@ -1421,6 +1454,7 @@
   SELECT RAISE(ABORT,'outbound_action:approved_in_the_future');
   SELECT RAISE(ABORT,'outbound_action:approved_in_the_future');
   SELECT RAISE(ABORT,'outbound_action:born_approved')
+  SELECT RAISE(ABORT,'real_company:reference_evidence_refused')
   SELECT RAISE(ABORT,'reconstruction_claim:conflict_requires_multiple_sources')
   SELECT RAISE(ABORT,'reconstruction_claim:derivation_required') WHERE trim(NEW.derivation_method)='';
   SELECT RAISE(ABORT,'reconstruction_claim:evidence_invalid') WHERE EXISTS (
@@ -1431,6 +1465,9 @@
   SELECT RAISE(ABORT,'reconstruction_claim:subject_required') WHERE trim(NEW.subject)='';
   SELECT RAISE(ABORT,'reconstruction_claim:unknown_has_value')
   SELECT RAISE(ABORT,'reconstruction_claim:value_required')
+  SELECT RAISE(ABORT,'reference_company:world_evidence_refused')
+  SELECT RAISE(ABORT,'reference_shadowing:observation_not_independent') WHERE EXISTS (
+  SELECT RAISE(ABORT,'reference_shadowing:observation_predates_expectation') WHERE EXISTS (
   SELECT RAISE(ABORT,'reply_proposal:authority_smuggled') WHERE
   SELECT RAISE(ABORT,'reply_proposal:founder_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'reply_proposal:message_invalid') WHERE NOT EXISTS (
@@ -1528,8 +1565,8 @@
   WHERE NEW.effect_id IS NULL OR NEW.authority_consent_id IS NULL
   WHERE NEW.established_reason IS NULL OR trim(NEW.established_reason)='';
   WHERE NEW.event_type <> 'effect_outcome:'
-  WHERE NEW.event_type <> 'external_metric:'
   WHERE NEW.event_type <> 'external_reported:'
+  WHERE NEW.event_type <> (CASE NEW.source
   WHERE NEW.identity_key IS NULL OR NEW.identity_key NOT IN ('foundry');
   WHERE NEW.intake_key IS NULL OR length(NEW.intake_key)<24;
   WHERE NEW.integration_name IN ('resend');
@@ -2011,6 +2048,7 @@
   created_at      TEXT NOT NULL DEFAULT (datetime('now'))
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -3404,6 +3442,7 @@
   product_id    TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   product_id    TEXT NOT NULL,
   product_id    TEXT NOT NULL,
+  product_id    TEXT PRIMARY KEY REFERENCES products(id),
   product_id    TEXT PRIMARY KEY,
   product_id   TEXT NOT NULL,
   product_id   TEXT NOT NULL,
@@ -3616,6 +3655,7 @@
   provider TEXT PRIMARY KEY
   provider TEXT,
   published BOOLEAN DEFAULT FALSE
+  purpose       TEXT NOT NULL,
   purposes_json TEXT NOT NULL,
   quality_score INTEGER,  -- 1-5, filled in retrospectively or inferred from outcomes
   quarantined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -3763,6 +3803,7 @@
   sample_count     INTEGER NOT NULL,
   sample_count     INTEGER,
   sample_size INTEGER NOT NULL,
+  scenario      TEXT NOT NULL,
   scenario_accuracy_score REAL,
   scenario_id TEXT REFERENCES forecast_scenarios(id),
   scenario_model TEXT,
@@ -4479,6 +4520,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -4522,6 +4564,7 @@ AFTER INSERT ON responsibility_transitions
 AFTER UPDATE OF status ON ai_spend_reservations
 BEFORE DELETE ON governed_effect_kinds
 BEFORE DELETE ON institutional_judgment_dispositions
+BEFORE DELETE ON reference_companies
 BEFORE DELETE ON system_identities
 BEFORE INSERT ON ai_spend_reservations
 BEFORE INSERT ON autonomy_consents
@@ -4553,10 +4596,12 @@ BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
 BEFORE INSERT ON products
 BEFORE INSERT ON reconstruction_claims
+BEFORE INSERT ON reference_companies
 BEFORE INSERT ON responsibility_candidate_decisions WHEN NEW.decision!='promoted'
 BEFORE INSERT ON responsibility_candidate_decisions WHEN NEW.decision='promoted'
 BEFORE INSERT ON responsibility_dispositions
 BEFORE INSERT ON responsibility_dispositions
+BEFORE INSERT ON responsibility_shadow_comparisons
 BEFORE INSERT ON responsibility_shadow_comparisons
 BEFORE INSERT ON responsibility_shadow_comparisons
 BEFORE INSERT ON responsibility_shadow_comparisons
@@ -4567,6 +4612,7 @@ BEFORE INSERT ON responsibility_transitions
 BEFORE INSERT ON responsibility_transitions
 BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='assisting'
 BEFORE INSERT ON responsibility_transitions WHEN NEW.to_state='operating'
+BEFORE INSERT ON signal_events
 BEFORE INSERT ON signal_events
 BEFORE INSERT ON signal_events WHEN NEW.source='customer_message_ingest'
 BEFORE INSERT ON signal_events WHEN NEW.source='development_verification'
@@ -4590,6 +4636,7 @@ BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
 BEFORE UPDATE OF due_at, due_stated_by ON institutional_responsibilities
 BEFORE UPDATE OF evidence_ref, authority_ref, outcome_ref
 BEFORE UPDATE OF outcome_valence ON decisions
+BEFORE UPDATE OF reality ON products
 BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE OF source_observed_at ON inbound_customer_messages
 BEFORE UPDATE OF state ON institutional_responsibilities
@@ -4609,6 +4656,11 @@ BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
 BEFORE UPDATE ON products
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
+BEGIN
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -4935,6 +4987,7 @@ CREATE INDEX idx_product_telemetry_step
 CREATE INDEX idx_products_entitlement_paused
 CREATE INDEX idx_products_market_category ON products(market_category);
 CREATE INDEX idx_products_owner ON products(owner_id);
+CREATE INDEX idx_products_reality ON products(reality);
 CREATE INDEX idx_products_status ON products(status);
 CREATE INDEX idx_psych_founder ON founder_psychology_insights(founder_id);
 CREATE INDEX idx_psych_product ON founder_psychology_insights(product_id);
@@ -5217,6 +5270,7 @@ CREATE TABLE rate_limit_counters (
 CREATE TABLE recommendation_outcomes (
 CREATE TABLE reconstruction_claims (
 CREATE TABLE red_team_reviews (
+CREATE TABLE reference_companies (
 CREATE TABLE referral_conversions (
 CREATE TABLE referral_links (
 CREATE TABLE regulatory_changes (
@@ -5325,9 +5379,13 @@ CREATE TRIGGER judgment_conflict_identity_immutable
 CREATE TRIGGER outbound_action_approval_not_in_the_future_insert
 CREATE TRIGGER outbound_action_approval_not_in_the_future_update
 CREATE TRIGGER outbound_action_birth_guard
+CREATE TRIGGER products_reality_immutable
 CREATE TRIGGER products_status_is_lifecycle_only_insert
 CREATE TRIGGER products_status_is_lifecycle_only_update
 CREATE TRIGGER reconstruction_claim_guard
+CREATE TRIGGER reference_companies_guard
+CREATE TRIGGER reference_companies_immutable
+CREATE TRIGGER reference_shadow_observation_independence_guard
 CREATE TRIGGER responsibility_assisting_entry_guard
 CREATE TRIGGER responsibility_authority_guard
 CREATE TRIGGER responsibility_authority_revocation_is_permanent
@@ -5356,6 +5414,7 @@ CREATE TRIGGER responsibility_transition_apply
 CREATE TRIGGER responsibility_transition_guard
 CREATE TRIGGER shadow_expectation_names_its_channel
 CREATE TRIGGER shadow_observation_matches_nominated_channel
+CREATE TRIGGER signal_event_evidence_matches_reality
 CREATE TRIGGER support_channel_guard
 CREATE TRIGGER system_identity_guard
 CREATE TRIGGER system_identity_immutable_delete
@@ -5496,6 +5555,11 @@ END;
 END;
 END;
 END;
+END;
+END;
+END;
+END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
@@ -5523,8 +5587,10 @@ WHEN NEW.observation_source_kind IS NULL OR trim(NEW.observation_source_kind)=''
 WHEN NEW.outcome_valence IS NOT NULL AND NEW.outcome_valence NOT IN (-1, 0, 1)
 WHEN NEW.outcome_valence IS NOT NULL AND NEW.outcome_valence NOT IN (-1, 0, 1)
 WHEN NEW.processed_at IS NOT NULL AND NEW.analysis_failed_at IS NOT NULL
+WHEN NEW.reality IS NOT OLD.reality
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
-WHEN NEW.source='external_metric_ingest'
+WHEN NEW.source IN (
+WHEN NEW.source IN ('external_metric_ingest','reference_metric_ingest')
 WHEN NEW.source_observed_at IS NOT NULL
 WHEN NEW.source_observed_at IS NOT NULL
 WHEN NEW.state <> OLD.state

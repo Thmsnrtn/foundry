@@ -32,9 +32,10 @@
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
-import { query } from '../../db/client.js';
+import { query, realCompany, referenceCompany } from '../../db/client.js';
 import { selectedProductId } from './_shared.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
+import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say.js';
 
 export const foundryShellRoutes = new Hono();
 
@@ -406,6 +407,15 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .know ul{margin:0;padding-left:1.1rem;color:var(--ink-2);font-size:.97rem}
   .know li{margin:0 0 var(--s1)}
   .gap{color:var(--alert)}
+  /* Deliberately not named ask: that class is the fixed bar at the bottom of
+     every page, and reusing it would pin every question to the floor. */
+  .noticed{border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);
+    margin:0 0 var(--s3);background:var(--card)}
+  .noticed h4{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:700;margin:0 0 var(--s2)}
+  .noticed p{margin:0 0 var(--s2);color:var(--ink-2);font-size:.97rem}
+  .noticed form{margin:0 0 var(--s2)}
+  .noticed form:last-child{margin:0}
   form.inline{display:flex;flex-wrap:wrap;gap:var(--s2);margin:0 0 var(--s3)}
   form.inline input[type=text]{flex:1 1 12rem;min-width:0;font:inherit;font-size:16px;
     padding:13px 15px;min-height:48px;border:1px solid var(--line);border-radius:12px;
@@ -1019,15 +1029,54 @@ interface CompanyView {
   budgetMonthly: number; spent30d: number;
   knows: string[]; gaps: Array<{ missing: string; unlocks: string; connect: string | null }>;
   responsibilities: Array<{ title: string; state: string }>;
+  numbers: CompanyNumbers;
+  /** Non-null only for a reference company: what it is, said before anything else. */
+  reference: { situation: string; premise: string } | null;
+  /** What Foundry has noticed and is asking about. Recognition, and nothing more. */
+  asks: Array<{ id: string; proposal: string; rationale: string }>;
 }
 
 async function readCompany(productId: string, founderId: string): Promise<CompanyView | null> {
   const row = (await query(
     `SELECT id, name, created_at, operating_budget_monthly_usd, ai_cost_trailing_30d_usd,
-            github_repo_url
+            github_repo_url, reality
        FROM products WHERE id = ? AND owner_id = ?`, [productId, founderId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
+
+  // WHAT IT IS, BEFORE ANYTHING IT SAYS. A reference company's page shows real
+  // arithmetic on invented numbers, and a page that showed that without saying
+  // so would be the single most misleading screen in the product.
+  let reference: CompanyView['reference'] = null;
+  if (String(row.reality) === 'reference') {
+    const ref = (await query(
+      'SELECT scenario FROM reference_companies WHERE product_id = ?', [productId]))
+      .rows[0] as Record<string, unknown> | undefined;
+    const { REFERENCE_SCENARIOS } = await import('../../services/reference/scenarios.js');
+    const situation = String(ref?.scenario ?? 'a company that does not exist');
+    reference = {
+      situation,
+      premise: REFERENCE_SCENARIOS.find((sc) => sc.situation === situation)?.premise ?? '',
+    };
+  }
+
+  const { whatTheNumbersSay } = await import('../../services/founder/what-the-numbers-say.js');
+  const numbers = await whatTheNumbersSay(productId);
+
+  // THE QUESTIONS BELONG ON THE COMPANY THEY ARE ABOUT. The home page asks one
+  // thing about Foundry itself; a question about this company would be
+  // homeless anywhere but here.
+  const { getPendingResponsibilityCandidates } = await import(
+    '../../services/institution/responsibility-candidate.js');
+  const pending = await getPendingResponsibilityCandidates(productId);
+  const rationales = new Map(((await query(
+    `SELECT id, rationale FROM responsibility_candidates
+      WHERE product_id = ? AND status = 'pending'`, [productId]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => [String(r.id), String(r.rationale)]));
+  const asks = pending.map((candidate) => ({
+    id: candidate.id, proposal: candidate.proposedResponsibility,
+    rationale: rationales.get(candidate.id) ?? '',
+  }));
 
   const objective = (await query(
     `SELECT objective_text FROM company_okrs WHERE product_id = ?
@@ -1058,16 +1107,34 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
       connect: '/agents/integrations',
     });
   }
-  gaps.push({
-    missing: 'I cannot see any money',
-    unlocks: 'revenue, what customers pay, and what is failing to collect',
-    connect: '/agents/integrations',
-  });
-  gaps.push({
-    missing: 'I cannot see any customers',
-    unlocks: 'who is using it, who is stuck, and who is leaving',
-    connect: '/agents/integrations',
-  });
+
+  // A GAP LIST THAT CONTRADICTS THE NUMBERS ABOVE IT IS WORSE THAN NO GAP LIST.
+  //
+  // These three were unconditional, so a company reporting $31.4k of monthly
+  // revenue was told, four inches below the figure, that Foundry cannot see any
+  // money. Whether it can see something is a question about what has arrived,
+  // and the readings are right there to ask.
+  const shown = new Map(numbers.numbers.map((n) => [n.label, n.now]));
+  const seesMoney = shown.has('monthly revenue') || shown.has('new revenue');
+  const seesCustomers = shown.has('people using it') || shown.has('new signups')
+    || numbers.numbers.some((n) => n.label.includes('leave') || n.label.includes('after a month'));
+
+  if (seesMoney) knows.push('I can see what it earns, and which way that is moving.');
+  else {
+    gaps.push({
+      missing: 'I cannot see any money',
+      unlocks: 'revenue, what customers pay, and what is failing to collect',
+      connect: '/agents/integrations',
+    });
+  }
+  if (seesCustomers) knows.push('I can see how many people are using it, and how many leave.');
+  else {
+    gaps.push({
+      missing: 'I cannot see any customers',
+      unlocks: 'who is using it, who is stuck, and who is leaving',
+      connect: '/agents/integrations',
+    });
+  }
 
   return {
     id: String(row.id), name: String(row.name),
@@ -1079,6 +1146,7 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
     responsibilities: responsibilities.map((r) => ({
       title: String(r.title), state: String(r.state),
     })),
+    numbers, reference, asks,
   };
 }
 
@@ -1087,10 +1155,26 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const founder = c.get('founder') as { id?: string } | undefined;
   if (!founder?.id) return c.redirect('/onboarding');
 
+  // YOUR companies means yours. A reference company appearing in this list
+  // would put a company he does not own, and that does not exist, under a
+  // heading that says both — and would make the count wrong everywhere the
+  // count is read. It appears below, under its own heading, saying what it is.
   const rows = (await query(
     `SELECT id, name, created_at FROM products
       WHERE owner_id = ? AND status = 'active' AND deleted_at IS NULL
+        AND ${realCompany()}
       ORDER BY created_at`, [String(founder.id)])).rows as unknown as Array<Record<string, unknown>>;
+
+  const references = (await query(
+    `SELECT p.id, p.name, r.scenario FROM products p
+       JOIN reference_companies r ON r.product_id = p.id
+      WHERE p.owner_id = ? AND p.status = 'active' AND ${referenceCompany('p')}
+      ORDER BY p.created_at`, [String(founder.id)]))
+    .rows as unknown as Array<Record<string, unknown>>;
+
+  const { REFERENCE_SCENARIOS } = await import('../../services/reference/scenarios.js');
+  const unstarted = REFERENCE_SCENARIOS.filter((sc) =>
+    !references.some((r) => String(r.scenario) === sc.situation));
 
   const body = html`
     <h1>Your companies</h1>
@@ -1105,7 +1189,25 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
       <button class="btn go" type="submit" style="width:auto">Add</button>
     </form>
     <p class="quiet">Adding one tells me it exists and that you own it. It does not connect
-      anything or let me do anything — those are separate, and I will ask.</p>`;
+      anything or let me do anything — those are separate, and I will ask.</p>
+
+    <div class="know" style="margin-top:var(--s5)">
+      <h3>Companies I made up</h3>
+      <p class="quiet">You should not have to hand me a real business to find out what I do
+        with one. These are invented. I run them exactly as I would run yours — same
+        numbers, same judgement, same ladder — and nothing I learn from them can ever be
+        told to you as fact about a real company, or let me act in the world.</p>
+      ${raw(references.map((r) => `<a class="item" href="/foundry/companies/${String(r.id)}">
+        <h3>${String(r.name)}</h3>
+        <p>${String(r.scenario)}</p></a>`).join(''))}
+      ${raw(unstarted.map((sc) => `<form method="POST" action="/foundry/reference"
+          style="margin-top:var(--s3)">
+          <input type="hidden" name="scenario" value="${sc.key}" />
+          <button class="btn" type="submit">Show me ${sc.situation}</button>
+        </form>`).join(''))}
+      ${unstarted.length === 0 && references.length === 0
+    ? html`<p class="lede">None.</p>` : ''}
+    </div>`;
 
   return c.html(page('Companies', body, 'companies'));
 });
@@ -1130,6 +1232,51 @@ foundryShellRoutes.post('/foundry/companies', requireInstitutionOwner(), async (
   return c.redirect(`/foundry/companies/${id}?done=added`);
 });
 
+/**
+ * BRING A COMPANY THAT DOES NOT EXIST INTO BEING.
+ *
+ * This is not one of the three owner acts. It is not RECOGNITION (there is
+ * nothing to recognise), not RESPONSIBILITY (nothing is being taken on), and
+ * emphatically not AUTHORITY — establishing a reference company grants Foundry
+ * nothing it did not already have, and the company it creates is refused at the
+ * door to the world and at every place money is spent. It is setup: the owner
+ * asking to be shown the work before entrusting any of his own.
+ *
+ * Owner-gated all the same, because it creates a row he will see.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/reference', requireInstitutionOwner(), async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+  const body = await c.req.parseBody();
+
+  const { establishReferenceCompany } = await import('../../services/reference/world.js');
+  const established = await establishReferenceCompany({
+    scenarioKey: String(body.scenario ?? ''), ownerId: String(founder.id),
+  });
+  if (!established) return c.redirect('/foundry/companies');
+
+  // Its first day arrives immediately, so the page he lands on has something on
+  // it. Every day after this one is the job's, at the same hour as everything
+  // else. Failing to advance must not fail the establishment: the company and
+  // its history are already real facts about the database.
+  try {
+    const { advanceReferenceWorld } = await import('../../services/reference/world.js');
+    await advanceReferenceWorld(established.productId);
+    // And the institution looks at it, rather than making him wait for 05:00 to
+    // find out whether anything here was worth noticing. The same function the
+    // tick calls, on the company just created.
+    const { noticeWhatTheNumbersAreDoing } = await import(
+      '../../services/institution/noticing.js');
+    await noticeWhatTheNumbersAreDoing(established.productId);
+  } catch (err) {
+    const { log } = await import('../../lib/logger.js');
+    log.error(`reference world did not advance: ${err instanceof Error ? err.message : String(err)}`,
+      { productId: established.productId });
+  }
+  return c.redirect(`/foundry/companies/${established.productId}`);
+});
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
   const founder = c.get('founder') as { id?: string } | undefined;
@@ -1141,10 +1288,57 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
   const body = html`
     <h1>${view.name}</h1>
+    ${view.reference ? html`<div class="know" style="border-color:var(--warn,#b45309)">
+      <h3>This company does not exist</h3>
+      <p>I made it up, so you could watch me work before handing me anything real.
+        It is ${view.reference.situation}.</p>
+      ${view.reference.premise ? html`<p class="quiet">${view.reference.premise}</p>` : ''}
+      <p class="quiet">The arithmetic below is real. The numbers it runs on are invented, and
+        they can never become a fact I tell you about a real company. I cannot send anything
+        for it, spend anything on it, or count it as a track record.</p>
+    </div>` : ''}
     ${done === 'added' ? html`<div class="done"><p><strong>Added.</strong> I know it exists and
       that it is yours. I cannot see anything about it yet.</p></div>` : ''}
     ${done === 'steered' ? html`<div class="done"><p><strong>Noted.</strong> I will weigh that
       when I decide what is worth your attention here.</p></div>` : ''}
+    ${done === 'recognised' ? html`<div class="done"><p><strong>Taken on.</strong> I will watch
+      it and tell you what I see. I still cannot change anything.</p></div>` : ''}
+    ${done === 'declined' ? html`<div class="done"><p><strong>Left alone.</strong> I will not
+      raise it again. Say so and I will look at it once more.</p></div>` : ''}
+
+    ${view.asks.length ? html`<div class="know">
+      <h3>${view.asks.length === 1 ? 'Something I noticed' : 'Things I noticed'}</h3>
+      <p class="quiet">Each of these is a movement, not a diagnosis. I am asking whether it is
+        worth me looking after — I am not saying anything is wrong, and I do not know why it
+        moved.</p>
+      <p class="quiet">Saying yes means I watch it and tell you what I see. It does not let me
+        change anything, spend anything, or contact anyone — those are separate questions I
+        would have to earn and then ask.</p>
+      ${raw(view.asks.map((a) => `<div class="noticed">
+        <h4>Is this worth me looking after?</h4>
+        <p><strong>${a.proposal}</strong></p>
+        <p>${a.rationale}</p>
+        <form method="POST" action="/letter/responsibility-candidates/${a.id}/promote">
+          <input type="hidden" name="return_to" value="company" />
+          <button class="btn go" type="submit">Yes — look after this</button>
+        </form>
+        <form method="POST" action="/letter/responsibility-candidates/${a.id}/reject">
+          <input type="hidden" name="return_to" value="company" />
+          <button class="btn" type="submit">No</button>
+        </form>
+      </div>`).join(''))}
+    </div>` : ''}
+
+    <div class="know">
+      <h3>Where the numbers are</h3>
+      ${view.numbers.absence
+    ? html`<p class="lede">${view.numbers.absence}</p>`
+    : html`<ul>${raw(view.numbers.numbers.map((n) =>
+      `<li><strong>${n.now}</strong> — ${n.sentence}</li>`).join(''))}</ul>
+      <p class="quiet">As of ${String(view.numbers.asOf)}. Movement is against the nearest
+        reading to a month before that. I am telling you where things are and which way they
+        are going; whether that is good is yours to say.</p>`}
+    </div>
 
     <div class="know">
       <h3>What I know</h3>
@@ -1185,7 +1379,11 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
     <div class="know">
       <h3>Money</h3>
-      <ul><li>$${view.spent30d.toFixed(2)} spent of $${String(view.budgetMonthly)} a month.</li></ul>
+      ${view.reference
+    ? html`<p class="lede">None, and none ever. I am refused at every place money is spent
+        for a company that does not exist, so it cannot draw on what the real ones share.</p>`
+    : html`<ul><li>$${view.spent30d.toFixed(2)} spent of
+        $${String(view.budgetMonthly)} a month.</li></ul>`}
     </div>`;
 
   return c.html(page(view.name, body, 'companies'));

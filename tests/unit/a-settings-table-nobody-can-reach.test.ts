@@ -71,8 +71,10 @@ describe('the table is gone', () => {
     // is here to catch the accidental kind. `metric_snapshot` — the daily
     // placeholder writer whose empty rows four readers took for measurements —
     // was removed after the two ingest paths that depended on it were made to
-    // upsert. Ninety, then eighty-nine, now eighty-eight.
-    expect(Object.keys(JOB_REGISTRY).length, 'eighty-nine before, eighty-eight now').toBe(88);
+    // upsert. Ninety, then eighty-nine, then eighty-eight. `reference_world_tick`
+    // — which advances every reference company by one day through the public
+    // metrics intake — makes eighty-nine again, deliberately.
+    expect(Object.keys(JOB_REGISTRY).length, 'eighty-eight before, eighty-nine now').toBe(89);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

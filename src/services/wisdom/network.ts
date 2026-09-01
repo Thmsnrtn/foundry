@@ -12,7 +12,7 @@
 
 import { createHmac } from 'crypto';
 
-import { query } from '../../db/client.js';
+import { realCompany, query } from '../../db/client.js';
 import { callOpus, institutionSpend, parseJSONResponse } from '../ai/client.js';
 import { nanoid } from 'nanoid';
 
@@ -107,6 +107,11 @@ export async function aggregateInsights(): Promise<number> {
      FROM products p
      JOIN founders f ON p.owner_id = f.id
      WHERE f.wisdom_network_opted_in = 1 AND p.status = 'active'
+       -- A FABRICATED CONTRIBUTOR COULD CLEAR THE FLOOR. The minimum sample
+       -- exists so no single company speaks for many; a reference company
+       -- counted here would let a rehearsal manufacture the quorum that makes
+       -- cross-company wisdom publishable.
+       AND ${realCompany('p')}
      GROUP BY p.sector_profile, p.growth_stage
      HAVING cnt >= ?`,
     [MIN_SAMPLE_SIZE]

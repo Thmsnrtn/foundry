@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { logger } from '../services/logger.js';
-import { getAllActiveProducts, operatingProduct, query, getActiveStressors, getLatestMetrics, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
+import { getAllActiveProducts, operatingProduct, realCompany, referenceCompany, query, getActiveStressors, getLatestMetrics, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
 import { evaluateConditions } from '../services/lifecycle/monitor.js';
 import { runCompetitiveScan } from '../services/intelligence/competitive.js';
 import { identifyStressors, type StressorInputs } from '../services/intelligence/stressor.js';
@@ -171,7 +171,19 @@ export async function digestGenerate(): Promise<void> {
   for (const fRow of founders.rows) {
     const f = fRow as Record<string, unknown>;
     try {
-      const products = await query("SELECT id, name FROM products WHERE owner_id = ? AND ${operatingProduct()}", [f.id]);
+      // A TEMPLATE LITERAL, BECAUSE IT WAS NOT ONE. This was written in double
+      // quotes, so `${operatingProduct()}` reached SQLite as those literal
+      // characters and every run of this job threw `unrecognized token: "$"`
+      // before sending a single digest. Nothing caught it: the string scanners
+      // in `scripts/` read template literals, so a query hidden in quotes is
+      // invisible to all of them, and the failure is swallowed by the per-
+      // founder try/catch below as one more logged error.
+      // And `realCompany()`, which the original could not have had: a digest is
+      // the owner reading his own companies, and a company that does not exist
+      // has nothing to tell him.
+      const products = await query(
+        `SELECT id, name FROM products
+          WHERE owner_id = ? AND ${operatingProduct()} AND ${realCompany()}`, [f.id]);
       for (const pRow of products.rows) {
         const p = pRow as Record<string, string>;
         const ls = await query('SELECT risk_state FROM lifecycle_state WHERE product_id = ?', [p.id]);
@@ -2622,6 +2634,55 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '0 5 * * *', // Daily at 5 UTC
     description: 'Drop rows past the per-table retention horizon',
   },
+  // THE REFERENCE WORLD, ONE DAY AT A TIME.
+  //
+  // A reference company arrives with ninety days of history and no observations
+  // of it (nobody watched those movements happen). Everything the institution
+  // can actually reason about — the readings that resolve an expectation, prove
+  // a channel is live, and carry a responsibility up the ladder — arrives here,
+  // one day per day, through the same public intake a real company's provider
+  // posts to.
+  //
+  // DELIBERATELY BEFORE `institutional_judgment_tick` at 05:00, so the day's
+  // reading is in front of the institution on the same pass rather than a day
+  // late. Advancing is idempotent per day: the intake upserts on
+  // (product_id, snapshot_date) and the observation recorder derives its id
+  // from the reading, so a re-run is the same day again, not a second one.
+  reference_world_tick: {
+    fn: async () => {
+      const { advanceReferenceWorld } = await import('../services/reference/world.js');
+      const worlds = await query(
+        `SELECT p.id FROM products p
+           JOIN reference_companies r ON r.product_id = p.id
+          WHERE ${operatingProduct('p')} AND ${referenceCompany('p')}
+          ORDER BY p.created_at, p.rowid`, []);
+      let advanced = 0;
+      for (const row of worlds.rows as unknown as Array<Record<string, unknown>>) {
+        const productId = String(row.id);
+        // One invented company's failure must not stop another's day, on the
+        // same principle the institutional tick states below.
+        try {
+          const result = await advanceReferenceWorld(productId);
+          if (result?.status === 200) advanced += 1;
+          else {
+            logger.error(
+              `reference_world_tick refused for ${productId}: status ${String(result?.status ?? 'none')}`,
+              { jobName: 'reference_world_tick', productId });
+          }
+        } catch (err) {
+          logger.error(
+            `reference_world_tick failed for ${productId}: ${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'reference_world_tick', productId });
+        }
+      }
+      logger.info(`reference_world_tick: advanced=${String(advanced)}`,
+        { jobName: 'reference_world_tick' });
+    },
+    schedule: '30 4 * * *', // Daily at 04:30 UTC, before the institution looks
+    description:
+      'Advance every reference company by one day through the public metrics intake, so the '
+      + 'institution can be exercised end to end without a real company (daily)',
+  },
   // Institutional judgment: the production writer. Deterministic judgment, its
   // later-reality evaluation, and the owner disposition loop all existed with
   // no caller outside the test suite, so the founder-facing "needs your
@@ -2683,14 +2744,33 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const { earnResponsibilityUnderstanding } = await import(
         '../services/institution/responsibility-understanding.js'
       );
-      const { resolveExternalMetricShadowing } = await import(
+      const { resolveExternalMetricShadowing, metricExpectation } = await import(
         '../services/institution/external-shadowing.js'
       );
       const { resolveDevelopmentShadowing } = await import(
         '../services/institution/development-shadowing.js'
       );
+      // NOTICING, WHICH IS THE RUNG BEFORE THE LADDER. Until this, the
+      // institution held only the responsibilities somebody handed it, so a
+      // company whose numbers were visibly coming apart produced nothing —
+      // proved by running the reference world past it. This reads what a
+      // company's own independent observations have done over a month and
+      // proposes a candidate for the adverse, material ones. It concludes
+      // nothing, grants nothing, and asks once per channel ever.
+      const { noticeWhatTheNumbersAreDoing } = await import(
+        '../services/institution/noticing.js'
+      );
+      let noticedCount = 0;
       for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
         const productId = String(row.id);
+        try {
+          noticedCount += (await noticeWhatTheNumbersAreDoing(productId)).length;
+        } catch (err) {
+          noteFailure(productId, err);
+          logger.error(
+            `noticing failed for ${productId}: ${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'institutional_judgment_tick', productId });
+        }
         const visible = await query(
           `SELECT id FROM institutional_responsibilities
             WHERE product_id=? AND state='visible' AND disposition='active'`, [productId]);
@@ -2703,7 +2783,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           `SELECT x.id FROM responsibility_shadow_expectations x
              JOIN institutional_responsibilities r ON r.id=x.responsibility_id
             WHERE x.product_id=? AND r.state='shadowing'
-              AND x.expected_event_type LIKE 'external_metric:%'`, [productId]);
+              AND ${metricExpectation()}`, [productId]);
         for (const x of open.rows as unknown as Array<Record<string, unknown>>) {
           try {
             const resolved = await resolveExternalMetricShadowing(productId, String(x.id));
@@ -2810,7 +2890,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
 
       if (raised > 0 || observed > 0 || understood > 0 || compared > 0 || selfObserved) {
         logger.info(
-          `institutional_judgment_tick: raised=${raised} observed=${observed} understood=${understood} compared=${compared} self_observed=${selfObserved}`,
+          `institutional_judgment_tick: raised=${raised} observed=${observed} noticed=${String(noticedCount)} understood=${understood} compared=${compared} self_observed=${selfObserved}`,
           { jobName: 'institutional_judgment_tick' },
         );
       }

@@ -75,6 +75,123 @@ Confidence is stated precisely about what evidence supports, and what remains
 unknowable until market contact stays unknown — never a fabricated probability
 of success.
 
+## Built, controlled-proven, reality-proven
+
+**Stated by the owner on 2026-09-01, correcting a development constraint that had
+quietly become a deadlock.** The institution had established, correctly, that a
+capability is not PROVEN until reality proves it. That hardened into something
+else: that a capability may not be BUILT until a real business supplies the data
+to exercise it. Those are not the same rule, and the second one is a trap —
+Private Foundry cannot become complete until it operates companies, and no
+sensible owner entrusts a company to it until it is complete.
+
+Three levels, never conflated:
+
+| | |
+|---|---|
+| **BUILT** | The capability exists end to end in production code. |
+| **CONTROLLED-PROVEN** | It has survived representative fixtures, provider sandboxes, reference companies, adversarial scenarios and assembled-system exercise. |
+| **REALITY-PROVEN** | It has operated a genuine enrolled owner company and produced independently observed effects and outcomes. |
+
+BUILT yes, CONTROLLED-PROVEN yes, REALITY-PROVEN no is a **healthy** state and
+must be sayable — in the institution's memory, in its own claims about itself,
+and on any surface where the owner might otherwise assume more.
+
+**Reality gates CLAIMS and AUTHORITY. Reality does not gate whether the machine
+may be built.** Ability is not authority: the planner, the actuator, the
+verifier and the rollback may all exist before any of them is permitted near a
+real company. What the authority kernel governs is their live use.
+
+**What real companies are for.** AcreOS and the businesses after it are not
+required to INVENT Private Foundry. They are required to PROVE it. The sequence
+is build → controlled proof → enrolment → shadowing → bounded authority →
+operation → observed business outcome → calibration → expansion.
+
+**And the discipline that survives all of it:** do not simulate where reality is
+necessary for truth. A synthetic company may exercise every pathway and may
+never produce owner truth, commercial proof, real outcome evidence, or grounds
+for real-world authority.
+
+## The reference world
+
+The resolution of that deadlock, built on 2026-09-01. A **reference company** is
+a company that does not exist, rich enough to run the institution through, and
+structurally incapable of becoming owner truth. Not by convention — by schema.
+
+**What it is.** `products.reality` answers, for every company that has ever
+existed or ever will, whether it is `real` or `reference`. It is NOT NULL, so no
+company is unasked; a closed vocabulary of two, so a third kind is a migration
+and a conversation; defaulted to `real`, so every path that predates it means
+what it meant; and **immutable**, so a company cannot be promoted into reality
+by an UPDATE. A `reference_companies` row states the scenario it exercises and
+why it exists, cannot be deleted, and cannot describe a real company.
+(Migration 222.)
+
+**What it may never do.** It may not reach a provider: the outbound kill switch
+refuses it at the single door to the world, ahead of every exemption, including
+the ones that deliver while a company is paused. It may not spend: the shared
+founder and global model ceilings are pools real companies draw on, and a
+rehearsal that exhausted them would damage a real business without touching it.
+It is not one of the owner's companies, not in his revenue, not in a benchmark,
+and not a contributor toward any cross-company floor.
+
+**And it may never produce the world's evidence.** The world's readings and the
+reference world's readings are different channels, and which one a company may
+write is decided by the column it cannot change (migration 223). So the question
+"has this been proven against reality?" is a question SQL can answer, rather
+than a qualification a person has to remember to add. Every existing count of
+independent evidence became reference-safe the moment that migration ran.
+
+**One code path, not two.** The reference world posts to the same public metrics
+intake a real company's provider posts to, holding nothing but the token, and
+everything after that is the production path unchanged. Writes narrow to the
+channel a company's reality entitles it to; reads union both, because the
+database guarantees a company holds only one. A rehearsal that travels different
+code rehearses nothing.
+
+**What is seeded and what is not.** A reference company arrives with history,
+because importing a company's past is what importing a past is. It arrives with
+**no observations of that history**, because nobody watched those movements
+happen — so it can enter Shadowing on a channel that has spoken, and every
+expectation it resolves is resolved by evidence that genuinely arrived
+afterwards. Nothing that has to be true is pretended.
+
+## Noticing
+
+**What the reference world proved missing, on the day it was built.** A company
+visibly coming apart — ten live observation channels, new revenue down a
+quarter, churn up half again, support load up 43% on a month ago — was run past
+the institution, which held **zero** responsibilities and therefore did nothing.
+The ladder could only be entered through a door the owner opened first by
+telling Foundry what to look after. An institution that only looks after what it
+was handed is a filing cabinet.
+
+So Foundry reads what a company's own independent observations have done over a
+month and proposes a candidate for the movements that are both **adverse** and
+**material**. Three rules bound it:
+
+- **It asks; it does not diagnose.** "Support volume is up 43%" is arithmetic on
+  two readings that arrived from outside. "Support is not being handled" is a
+  claim about the world nobody observed, and an institution that quietly makes
+  it has started inventing evidence.
+- **It says nothing about a company that is fine.** An institution that finds
+  something urgent every day is one the owner stops reading. Silence is a
+  result, and the "steady and unremarkable" reference scenario exists to prove
+  it can produce one.
+- **It asks each question once, ever.** The convergence key is the job, not the
+  metric, so two readings of one thing converge on one question and a support
+  load that climbs every month for a year is asked about once.
+
+Which direction is adverse for a channel is **declared, not inferred** — it is a
+fact about what the channel means, written down once where it can be argued
+with, never derived at runtime.
+
+**And it grants nothing.** A candidate is non-executable by construction; the
+responsibility it becomes on the owner's recognition starts at `visible`, five
+rungs below anything that touches the world. RECOGNITION, RESPONSIBILITY and
+AUTHORITY remain three separate owner acts, and this only ever reaches the
+first.
+
 ## Deployment modes
 
 Foundry is deployed commercially to other companies and privately under owner

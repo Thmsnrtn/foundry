@@ -293,6 +293,37 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('/zz-gate-fixture');
   });
 
+  it('check-reality-scope fails on a new query that reads every company', () => {
+    // THE BOUNDARY THIS GUARDS. A reference company is synthetic and must never
+    // reach owner truth. Six readers found roughly thirty existing places where
+    // it would have — the fleet letter, the revenue roll-ups, the cross-company
+    // pools — and each was fixed by hand. Hand-fixing does not survive the next
+    // commit, which is what this gate is for: the thirty-first query has to
+    // fail the build rather than quietly put fiction on his page.
+    plant('src/services/_gate_fixture_reality.ts',
+      j("import { query } from '../db/client.js';\n",
+        'export async function everyCompany() {\n',
+        "  return query('SELECT id, name FROM ", "products', []);\n",
+        '}\n'));
+    const r = run('check-reality-scope.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_reality');
+  });
+
+  it('check-reality-scope does not object to a query about one named company', () => {
+    // The false positive that would make the gate useless. Most queries name a
+    // single company by id and are already scoped by construction; if those
+    // failed, the baseline would swallow everything and the gate would stop
+    // meaning anything.
+    plant('src/services/_gate_fixture_reality_ok.ts',
+      j("import { query } from '../db/client.js';\n",
+        'export async function oneCompany(id: string) {\n',
+        "  return query('SELECT name FROM ", "products WHERE id = ?', [id]);\n",
+        '}\n'));
+    const r = run('check-reality-scope.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-reachability fails on a module nothing can reach', () => {
     plant('src/services/_gate_fixture_orphan.ts',
       "export const orphan = () => 'nothing imports this';\n");

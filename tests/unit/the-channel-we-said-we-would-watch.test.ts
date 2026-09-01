@@ -181,8 +181,14 @@ describe('the guards it was built beneath are still there', () => {
 
 describe('the callers state their channel rather than implying it', () => {
   it('both production callers name one', () => {
-    expect(readFileSync('src/services/institution/external-shadowing.ts', 'utf8'))
-      .toMatch(/observationSourceKind: 'external_metric_ingest'/);
+    // MIGRATION 223 GAVE EXTERNAL SHADOWING TWO CHANNELS, not two rules: a real
+    // company's expectation is resolved by the world's readings, a reference
+    // company's by the reference world's. The caller still NAMES the channel —
+    // both of them, as literals, chosen from a column the caller cannot set —
+    // which is the whole point of this rule. Nothing is implied.
+    const external = readFileSync('src/services/institution/external-shadowing.ts', 'utf8');
+    expect(external).toMatch(/observationSourceKind: reality === 'reference'/);
+    expect(external).toMatch(/'reference_metric_ingest' : 'external_metric_ingest'/);
     expect(readFileSync('src/services/institution/development-shadowing.ts', 'utf8'))
       .toMatch(/observationSourceKind: 'development_verification'/);
   });
