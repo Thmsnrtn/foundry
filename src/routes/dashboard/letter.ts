@@ -2629,3 +2629,20 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/channel',
   if (!channel) return c.text('Refused', 403);
   return c.redirect('/letter');
 });
+
+// =============================================================================
+// THE OWNER'S SURFACE LIVES HERE, BEHIND THE DOOR IT REPLACES.
+//
+// `/foundry` is the three-place owner shell — see `foundry-shell.ts` for what it
+// is and why it is not `dashboardLayout`. It is mounted INTO the Letter rather
+// than as a new top-level mount because the Attention Law says so, and the law
+// is right: "the number of top-level route mounts may only shrink; new surfaces
+// live behind existing doors, never as new mounts". A product that answers the
+// owner's questions in one place must not begin by adding a door.
+//
+// The Letter is the door it is behind, and the one it supersedes: this surface
+// absorbs it. When the last capability has moved across, the mount that leaves
+// is this one.
+// =============================================================================
+const { foundryShellRoutes } = await import('./foundry-shell.js');
+letterRoutes.route('/', foundryShellRoutes);

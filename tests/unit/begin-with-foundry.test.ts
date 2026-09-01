@@ -109,7 +109,10 @@ describe('establishing writes the smallest true thing', () => {
 
     const res = await app.request('/onboarding/establish', { method: 'POST' });
     expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe('/letter');
+    // The owner surface, not the Letter. Establishing a company lands him in
+    // his institution; the Letter and the rest of the old application stay
+    // reachable under "Advanced" while their capabilities move across.
+    expect(res.headers.get('location')).toBe('/foundry');
 
     const productId = await resolveFoundryProductId();
     expect(productId, 'self-observation resolves through this identity').not.toBeNull();
@@ -132,7 +135,10 @@ describe('establishing writes the smallest true thing', () => {
     await app.request('/onboarding/establish', { method: 'POST' });
     const first = await resolveFoundryProductId();
     const res = await app.request('/onboarding/establish', { method: 'POST' });
-    expect(res.headers.get('location')).toBe('/letter');
+    // The owner surface, not the Letter. Establishing a company lands him in
+    // his institution; the Letter and the rest of the old application stay
+    // reachable under "Advanced" while their capabilities move across.
+    expect(res.headers.get('location')).toBe('/foundry');
     expect(await resolveFoundryProductId()).toBe(first);
     const n = (await query('SELECT COUNT(*) AS c FROM products')).rows[0] as Record<string, number>;
     expect(n.c, 'the identity is already bound and does not move').toBe(1);

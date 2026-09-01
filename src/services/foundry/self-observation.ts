@@ -91,16 +91,15 @@ export const SELF_MAINTENANCE_SCOPES: Record<string, {
    * fact, cited later in an authority request. Asking a question whose only
    * available answer is a guess does not gather evidence; it manufactures it.
    *
-   * So Foundry drafts what it would say, in plain words, and the owner confirms
-   * or corrects it. He remains the author of record — nothing is written until
-   * he submits — and the provenance says the wording was drafted, because the
-   * difference between a person stating a fact and a person agreeing with a
-   * proposed one is exactly the kind of distinction this institution keeps.
+   * So Foundry answers them itself, from these words — written and reviewed in
+   * the repository, not generated per run — and `describeOwnSelfMaintenance`
+   * records them as ordinary claims that say in their own derivation that
+   * Foundry described itself. A reader must never mistake them for the owner's
+   * words, and he can correct any of them, after which his version stands.
    *
-   * These are answers ABOUT FOUNDRY, which is the one company whose internals
-   * Foundry can honestly speak for. No other company gets drafted answers, and
-   * there is no path here that writes one without the owner pressing the
-   * button.
+   * These are answers ABOUT FOUNDRY, the one company whose internals it can
+   * honestly speak for. No other company gets them: everywhere else the founder
+   * is still the only one who knows, and is still asked.
    */
   understanding: Record<string, string>;
 }> = {
@@ -236,6 +235,88 @@ export async function selfMaintenanceDraftAnswer(input: {
   if (!rows.rows.length) return null;
   const check = String((rows.rows[0] as Record<string, unknown>).check_name ?? '');
   return SELF_MAINTENANCE_SCOPES[check]?.understanding[input.fact] ?? null;
+}
+
+/**
+ * Foundry states what it knows about its own upkeep, so its owner is never
+ * asked to invent it.
+ *
+ * THE EIGHT-QUESTION WALL. Before a responsibility can be watched or carried,
+ * the institution needs eight facts about it: what it is for, what good looks
+ * like, what must never happen while handling it, and so on. For a company's
+ * own obligations the founder is the only one who knows, and asking is right.
+ *
+ * The first responsibility this institution ever took up is its OWN internal
+ * upkeep, and there the asking was backwards. The owner opened his Letter to
+ * "What is 'regenerate the committed schema snapshot after a migration changes
+ * the schema' actually for?" and could only have guessed. A guess typed to
+ * clear a form becomes an institutional fact, cited later in an authority
+ * request — asking a question whose only available answer is a guess does not
+ * gather evidence, it manufactures it.
+ *
+ * So for a self-maintenance responsibility, and only for one, Foundry answers.
+ * The words come from `SELF_MAINTENANCE_SCOPES`, written and reviewed in the
+ * repository rather than generated per run, and the claim cites the observation
+ * that created the responsibility. Every claim says in its derivation that
+ * Foundry described itself: a reader must never mistake these for the owner's
+ * words, and `projectResponsibilityUnderstanding` reports them exactly as it
+ * reports his.
+ *
+ * WHAT THIS IS NOT. Understanding is not authority. It opens the rung where
+ * Foundry may WATCH an obligation and be measured against it; changing a single
+ * file still requires the bounded, expiring, revocable grant only the owner can
+ * give. This function writes no permission and asks for none.
+ *
+ * Idempotent, and it never overwrites: a fact the owner has already stated or
+ * corrected is left exactly as he left it.
+ */
+export async function describeOwnSelfMaintenance(input: {
+  productId: string; observedAt?: Date;
+} = { productId: '' }): Promise<{ described: string[] }> {
+  const productId = input.productId || (await resolveFoundryProductId()) || '';
+  if (!productId) return { described: [] };
+
+  const responsibilities = await query(
+    `SELECT r.id, json_extract(e.payload_json,'$.check') AS check_name, e.id AS evidence_id
+       FROM institutional_responsibilities r
+       JOIN signal_events e ON ('signal_event:' || e.id) = r.discovery_evidence_ref
+        AND e.product_id = r.product_id
+      WHERE r.product_id = ? AND r.capability = 'development'
+        AND r.disposition = 'active' AND e.source = 'development_verification'`,
+    [productId],
+  );
+
+  const { recordReconstructionClaim, getReconstructionClaims } = await import(
+    '../institution/reconstruction.js');
+  const { requiredUnderstandingFacts } = await import(
+    '../institution/responsibility-understanding.js');
+
+  const described: string[] = [];
+  for (const row of responsibilities.rows as unknown as Array<Record<string, unknown>>) {
+    const scope = SELF_MAINTENANCE_SCOPES[String(row.check_name ?? '')];
+    if (!scope) continue;
+    const responsibilityId = String(row.id);
+    const subject = `responsibility:${responsibilityId}`;
+    const now = input.observedAt ?? new Date();
+
+    const held = new Set((await getReconstructionClaims(productId, now))
+      .filter((claim) => claim.subject === subject).map((claim) => claim.predicate));
+
+    for (const fact of requiredUnderstandingFacts('development')) {
+      if (held.has(fact)) continue;
+      const statement = scope.understanding[fact];
+      if (!statement) continue;
+      await recordReconstructionClaim({
+        productId, subject, predicate: fact, value: { statement },
+        epistemicStatus: 'known',
+        evidenceRefs: [{ kind: 'signal_event', id: String(row.evidence_id) }],
+        derivationMethod: 'foundry describing its own upkeep',
+        observedAt: now,
+      });
+      described.push(`${responsibilityId}:${fact}`);
+    }
+  }
+  return { described };
 }
 
 export function snapshotObjectNames(snapshotSql: string): Set<string> {

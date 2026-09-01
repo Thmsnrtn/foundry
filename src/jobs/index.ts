@@ -2776,6 +2776,19 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         );
         const liveness = await observeFoundryBaselineLiveness();
         selfObserved = selfObserved || liveness.observed;
+
+        // AND FOUNDRY SAYS WHAT IT KNOWS ABOUT ITS OWN UPKEEP, so its owner is
+        // never asked to invent it. Understanding is not authority: this opens
+        // the rung where an obligation may be WATCHED, and changing a file
+        // still needs the bounded grant only he can give.
+        const { describeOwnSelfMaintenance } = await import(
+          '../services/foundry/self-observation.js'
+        );
+        const described = await describeOwnSelfMaintenance();
+        if (described.described.length) {
+          logger.info(`foundry described its own upkeep: ${described.described.length} fact(s)`,
+            { jobName: 'institutional_judgment_tick' });
+        }
       } catch (err) {
         logger.error(
           `foundry self-observation failed: ${err instanceof Error ? err.message : String(err)}`,

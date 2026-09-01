@@ -135,7 +135,7 @@ onboardingRoutes.post('/onboarding/establish', requireInstitutionOwner(), async 
   // Idempotent by the institution's own rule: an identity that is already bound
   // does not move, so pressing this twice orients rather than duplicates.
   const existing = await resolveFoundryProductId();
-  if (existing) return c.redirect('/letter');
+  if (existing) return c.redirect('/foundry');
 
   const { nanoid } = await import('nanoid');
   const productId = nanoid();
@@ -148,7 +148,7 @@ onboardingRoutes.post('/onboarding/establish', requireInstitutionOwner(), async 
   await establishSystemIdentity(FOUNDRY_IDENTITY_KEY, productId,
     'owner established the institution\'s first company');
 
-  return c.redirect('/letter');
+  return c.redirect('/foundry');
 });
 
 onboardingRoutes.get('/onboarding', async (c) => {
@@ -162,7 +162,7 @@ onboardingRoutes.get('/onboarding', async (c) => {
       return c.html(dashboardLayout(ctx,
         establishedFoundry('Foundry')));
     }
-    return c.redirect('/letter');
+    return c.redirect('/foundry');
   }
   const ghClientId = process.env.GITHUB_CLIENT_ID ?? '';
   const appUrl = process.env.APP_URL ?? '';

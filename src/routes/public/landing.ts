@@ -47,7 +47,11 @@ landingRoutes.get('/', async (c) => {
   const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
   return c.html(publicLayout('Foundry — Autonomous AI Operations for Solo SaaS Founders', html`
     <script async crossorigin="anonymous" src="https://unpkg.com/@clerk/clerk-js/dist/clerk.browser.js" data-clerk-publishable-key="${publishableKey}"></script>
-    <script>window.addEventListener('load',async()=>{if(window.Clerk){await Clerk.load();if(Clerk.user){window.location.href='/dashboard';}}})</script>
+    <!-- A SIGNED-IN OWNER LANDS ON HIS INSTITUTION, not on the thirty-door
+         dashboard. /foundry is the owner surface; /dashboard and the rest
+         stay reachable through "Advanced — inspect the system" inside it, so
+         nothing is lost while capabilities move across. -->
+    <script>window.addEventListener('load',async()=>{if(window.Clerk){await Clerk.load();if(Clerk.user){window.location.href='/foundry';}}})</script>
 
     <div class="hero" style="text-align:center;padding:4rem 1rem 3rem;">
       <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--accent);margin-bottom:1.25rem;">Autonomous AI Operations Layer</div>
