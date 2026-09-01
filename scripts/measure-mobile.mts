@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   const server = serve({ fetch: app.fetch, port: 4317 });
   const base = 'http://127.0.0.1:4317';
   const paths = ['/foundry', '/foundry?ask=okay', '/foundry?ask=working',
-    '/foundry?ask=allowed', '/foundry?ask=companies'];
+    '/foundry/companies', `/foundry/companies/${COMPANY}`, '/foundry/controls'];
 
   const dir = 'docs/design/mobile';
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });

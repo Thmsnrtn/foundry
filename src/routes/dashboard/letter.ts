@@ -1951,7 +1951,7 @@ letterRoutes.post('/autopilot/panic', async (c) => {
   const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
   if (!ctx.productId) return c.redirect('/dashboard');
   await panicStop(ctx.productId, founder.id as string);
-  return c.redirect('/autopilot');
+  return c.redirect(`${backTo((await c.req.parseBody()).return_to)}?done=stopped`);
 });
 
 // ─── Talk to the company (Trust Plane phase 3) ────────────────────────────────

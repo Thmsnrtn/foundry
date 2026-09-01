@@ -92,12 +92,10 @@ describe('opening Foundry', () => {
 
   it('does not report machinery he did not ask about', async () => {
     // A routine count and a spend of zero are true, measurable, and not why he
-    // opened this. They are answers now, not the first screen.
+    // opened this. They are answers and other places now, not the first screen.
     const body = await get('/foundry');
     expect(body).not.toContain('routine');
     expect(body).not.toContain('$0.00');
-    expect(body).not.toContain('Portfolio');
-    expect(body).not.toContain('Controls');
   });
 
   it('shows exactly one thing to act on', async () => {
@@ -208,15 +206,71 @@ describe('asking it something', () => {
   });
 });
 
-describe('the places that stopped being places', () => {
-  it('has no Portfolio or Controls to visit', async () => {
-    // They were rooms containing a sentence each: one company he established,
-    // and "nothing, right now". They are answers until there is a second
-    // company or a permission to withdraw.
-    for (const gone of ['/foundry/portfolio', '/foundry/controls']) {
-      const res = await app.request(gone, { headers: { cookie: `foundry_product=${COMPANY}` } });
-      expect(res.status).toBe(404);
-    }
+describe('places he can walk to', () => {
+  // READING "TOO TECHNICAL" AS "TOO MUCH INTERFACE" WAS THE ERROR. The old
+  // thirty doors were bad because they exposed machinery — Ambient, Roster,
+  // Multi-Modal — not because destinations are bad. Stripping to a chat box
+  // left him with nowhere to do anything, and he said so.
+  it('offers three, named for his world rather than the institution', async () => {
+    const body = await get('/foundry');
+    expect(body).toContain('/foundry/companies');
+    expect(body).toContain('/foundry/controls');
+    expect(body).toContain('>Companies<');
+    expect(body).toContain('>Controls<');
+  });
+
+  it('lists his companies and offers to add one', async () => {
+    const body = await get('/foundry/companies');
+    const said = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    expect(said).toContain('Your companies');
+    expect(said).toContain('Foundry');
+    // The prompt lives in a placeholder attribute, so it is read from the markup.
+    expect(body).toContain('Add a company by name');
+    // Adding is not connecting, and not permission.
+    expect(said).toContain('It does not connect anything or let me do anything');
+  });
+
+  it('shows a company as what is known and what is missing, not empty charts', async () => {
+    const said = await reads(`/foundry/companies/${COMPANY}`);
+    expect(said).toContain('What I know');
+    expect(said).toContain('What I cannot see');
+    expect(said).toContain('I cannot see any money');
+    expect(said).toContain('Connecting it would show me');
+    // The distinction that governs every connection.
+    expect(said).toContain('Letting me read something never lets me change it');
+  });
+
+  it('asks what he is trying to do, and keeps it', async () => {
+    const before = await reads(`/foundry/companies/${COMPANY}`);
+    expect(before).toContain('You have not told me what you are trying to do');
+
+    const res = await app.request(`/foundry/companies/${COMPANY}/objective`, {
+      method: 'POST',
+      headers: { cookie: `foundry_product=${COMPANY}`,
+        'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ objective: 'Get the first ten paying customers' }),
+    });
+    expect(res.headers.get('location')).toBe(`/foundry/companies/${COMPANY}?done=steered`);
+
+    const after = await reads(`/foundry/companies/${COMPANY}?done=steered`);
+    expect(after).toContain('Get the first ten paying customers');
+    expect(after).toContain('I will weigh that when I decide what is worth your attention');
+  });
+
+  it('refuses a company that is not his, without saying whether it exists', async () => {
+    await query("INSERT INTO founders (id,clerk_user_id,email) VALUES ('os_other','c_o','o@e.com')");
+    await query("INSERT INTO products (id,name,owner_id,status) VALUES ('os_theirs','Theirs','os_other','active')");
+    const mine = await app.request('/foundry/companies/os_theirs',
+      { headers: { cookie: `foundry_product=${COMPANY}` } });
+    expect(mine.status).toBe(404);
+  });
+
+  it('states permissions, money and the stop in one place', async () => {
+    const said = await reads('/foundry/controls');
+    expect(said).toContain('None.');
+    expect(said).toContain('cannot change anything, spend anything, or contact anyone');
+    expect(said).toContain('Stop everything');
+    expect(said).toContain('a month is the limit you set');
   });
 });
 

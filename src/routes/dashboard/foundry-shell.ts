@@ -34,6 +34,7 @@ import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { query } from '../../db/client.js';
 import { selectedProductId } from './_shared.js';
+import { requireInstitutionOwner } from '../../middleware/rbac.js';
 
 export const foundryShellRoutes = new Hono();
 
@@ -265,7 +266,18 @@ function whatNeedsHim(s: OwnerState): Attention {
 
 // ─── one visual system ──────────────────────────────────────────────────────
 
+// THREE PLACES, BECAUSE PLACES WERE NEVER THE PROBLEM.
+//
+// The old product had thirty destinations and they were bad because they
+// exposed MACHINERY — Ambient, Roster, Multi-Modal, Standing Orders. Reading
+// "too technical" as "too much interface" was my error, and it left the owner
+// with a chat box and nowhere to do anything. His companies, his money and what
+// Foundry may do are his world, not the institution's internals, and each is
+// worth being able to walk to.
+type Place = 'foundry' | 'companies' | 'controls';
+
 const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
+  active: Place = 'foundry',
 ) => html`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -378,6 +390,28 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
     clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
+  nav.places{display:flex;gap:var(--s3);margin:0 0 var(--s4);border-bottom:1px solid var(--line)}
+  nav.places a{text-decoration:none;color:var(--ink-3);font-size:.98rem;padding:0 0 var(--s2);
+    border-bottom:2px solid transparent;margin-bottom:-1px}
+  nav.places a.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+  nav.places a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .item{display:block;text-decoration:none;color:inherit;background:var(--card);
+    border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s2)}
+  .item:hover,.item:focus-visible{border-color:var(--ink-3);outline:none}
+  .item h3{margin:0 0 var(--s1);font-size:1.08rem;font-weight:600}
+  .item p{margin:0;color:var(--ink-2);font-size:.93rem}
+  .know{margin:0 0 var(--s4)}
+  .know h3{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+    font-weight:700;margin:0 0 var(--s2)}
+  .know ul{margin:0;padding-left:1.1rem;color:var(--ink-2);font-size:.97rem}
+  .know li{margin:0 0 var(--s1)}
+  .gap{color:var(--alert)}
+  form.inline{display:flex;flex-wrap:wrap;gap:var(--s2);margin:0 0 var(--s3)}
+  form.inline input[type=text]{flex:1 1 12rem;min-width:0;font:inherit;font-size:16px;
+    padding:13px 15px;min-height:48px;border:1px solid var(--line);border-radius:12px;
+    background:var(--card);color:var(--ink)}
+  form.inline input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  form.inline button{flex:0 0 auto}
   footer{margin-top:var(--s5);padding-top:var(--s3);border-top:1px solid var(--line)}
   footer a{color:var(--ink-3);font-size:.85rem;text-decoration:none}
   footer a:hover,footer a:focus-visible{text-decoration:underline}
@@ -385,6 +419,11 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
 </head>
 <body>
 <main class="wrap">
+<nav class="places">
+  <a href="/foundry"${active === 'foundry' ? ' class="on" aria-current="page"' : ''}>Foundry</a>
+  <a href="/foundry/companies"${active === 'companies' ? ' class="on" aria-current="page"' : ''}>Companies</a>
+  <a href="/foundry/controls"${active === 'controls' ? ' class="on" aria-current="page"' : ''}>Controls</a>
+</nav>
 ${body}
 <footer><a href="/letter">Advanced — inspect the system</a></footer>
 </main>
@@ -960,5 +999,293 @@ foundryShellRoutes.get('/foundry', async (c) => {
     `<a href="/foundry?ask=${k}">${QUESTIONS[k]}</a>`).join(''))}
     </div>` : ''}`;
 
-  return c.html(page('Foundry', body));
+  return c.html(page('Foundry', body, 'foundry'));
+});
+
+// ─── companies ──────────────────────────────────────────────────────────────
+
+/**
+ * WHAT FOUNDRY KNOWS ABOUT A COMPANY, AND WHAT IT CANNOT SEE.
+ *
+ * The absence is the useful half. A page of empty charts tells the owner
+ * nothing and implies the numbers are coming; "I cannot see any money — nothing
+ * is connected" tells him exactly where he stands and what would change it.
+ * Every line here is read from state, and every gap names the one thing that
+ * would close it.
+ */
+interface CompanyView {
+  id: string; name: string; established: string | null;
+  objective: string | null;
+  budgetMonthly: number; spent30d: number;
+  knows: string[]; gaps: Array<{ missing: string; unlocks: string; connect: string | null }>;
+  responsibilities: Array<{ title: string; state: string }>;
+}
+
+async function readCompany(productId: string, founderId: string): Promise<CompanyView | null> {
+  const row = (await query(
+    `SELECT id, name, created_at, operating_budget_monthly_usd, ai_cost_trailing_30d_usd,
+            github_repo_url
+       FROM products WHERE id = ? AND owner_id = ?`, [productId, founderId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+
+  const objective = (await query(
+    `SELECT objective_text FROM company_okrs WHERE product_id = ?
+      ORDER BY created_at DESC LIMIT 1`, [productId])).rows[0] as Record<string, unknown> | undefined;
+
+  const { getSelfCheckStanding } = await import(
+    '../../services/institution/development-observation.js');
+  const checks = await getSelfCheckStanding(productId);
+
+  const responsibilities = (await query(
+    `SELECT title, state FROM institutional_responsibilities
+      WHERE product_id = ? AND disposition = 'active' ORDER BY created_at`, [productId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+
+  const knows: string[] = [];
+  const gaps: CompanyView['gaps'] = [];
+
+  if (checks.length) {
+    knows.push(`I check ${count(checks.length, 'thing')} about how it is built, `
+      + `and ${checks.every((ch) => ch.result === 'passed') ? 'all of it still matches'
+        : 'some of it has gone out of step'}.`);
+  }
+  if (row.github_repo_url) knows.push('I can read its code.');
+  else {
+    gaps.push({
+      missing: 'I cannot see its code',
+      unlocks: 'what it is built from, and what changes in it',
+      connect: '/agents/integrations',
+    });
+  }
+  gaps.push({
+    missing: 'I cannot see any money',
+    unlocks: 'revenue, what customers pay, and what is failing to collect',
+    connect: '/agents/integrations',
+  });
+  gaps.push({
+    missing: 'I cannot see any customers',
+    unlocks: 'who is using it, who is stuck, and who is leaving',
+    connect: '/agents/integrations',
+  });
+
+  return {
+    id: String(row.id), name: String(row.name),
+    established: row.created_at == null ? null : String(row.created_at).slice(0, 10),
+    objective: objective ? String(objective.objective_text) : null,
+    budgetMonthly: Number(row.operating_budget_monthly_usd ?? 0),
+    spent30d: Number(row.ai_cost_trailing_30d_usd ?? 0),
+    knows, gaps,
+    responsibilities: responsibilities.map((r) => ({
+      title: String(r.title), state: String(r.state),
+    })),
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/companies', async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+
+  const rows = (await query(
+    `SELECT id, name, created_at FROM products
+      WHERE owner_id = ? AND status = 'active' AND deleted_at IS NULL
+      ORDER BY created_at`, [String(founder.id)])).rows as unknown as Array<Record<string, unknown>>;
+
+  const body = html`
+    <h1>Your companies</h1>
+    ${rows.length === 0 ? html`<p class="lede">You have not given me any yet.</p>` : ''}
+    ${raw(rows.map((r) => `<a class="item" href="/foundry/companies/${String(r.id)}">
+      <h3>${String(r.name)}</h3>
+      <p>Since ${String(r.created_at ?? '').slice(0, 10)}</p></a>`).join(''))}
+
+    <form class="inline" method="POST" action="/foundry/companies" style="margin-top:var(--s4)">
+      <input type="text" name="name" required maxlength="60" placeholder="Add a company by name"
+        aria-label="Company name" />
+      <button class="btn go" type="submit" style="width:auto">Add</button>
+    </form>
+    <p class="quiet">Adding one tells me it exists and that you own it. It does not connect
+      anything or let me do anything — those are separate, and I will ask.</p>`;
+
+  return c.html(page('Companies', body, 'companies'));
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/companies', requireInstitutionOwner(), async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+  const body = await c.req.parseBody();
+  const name = String(body.name ?? '').trim().slice(0, 60);
+  if (!name) return c.redirect('/foundry/companies');
+
+  // The smallest true thing: it exists, and he owns it. No invented sector, no
+  // fabricated stage, no agents, no competitors — the first version of this
+  // product created a company as a side effect of a four-step audit funnel and
+  // filled it with guesses.
+  const { nanoid } = await import('nanoid');
+  const id = nanoid();
+  await query(
+    "INSERT INTO products (id, name, owner_id, status) VALUES (?, ?, ?, 'active')",
+    [id, name, String(founder.id)]);
+  return c.redirect(`/foundry/companies/${id}?done=added`);
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+  const view = await readCompany(c.req.param('id'), String(founder.id));
+  // A company of someone else's and one that does not exist answer the same.
+  if (!view) return c.notFound();
+  const done = String(c.req.query('done') ?? '');
+
+  const body = html`
+    <h1>${view.name}</h1>
+    ${done === 'added' ? html`<div class="done"><p><strong>Added.</strong> I know it exists and
+      that it is yours. I cannot see anything about it yet.</p></div>` : ''}
+    ${done === 'steered' ? html`<div class="done"><p><strong>Noted.</strong> I will weigh that
+      when I decide what is worth your attention here.</p></div>` : ''}
+
+    <div class="know">
+      <h3>What I know</h3>
+      ${view.knows.length === 0
+    ? html`<p class="lede">Almost nothing. You have told me it exists; that is all.</p>`
+    : html`<ul>${raw(view.knows.map((k) => `<li>${k}</li>`).join(''))}</ul>`}
+    </div>
+
+    <div class="know">
+      <h3>What I cannot see</h3>
+      <ul>${raw(view.gaps.map((g) =>
+    `<li><span class="gap">${g.missing}.</span> Connecting it would show me ${g.unlocks}.</li>`)
+    .join(''))}</ul>
+      <p class="quiet">Letting me read something never lets me change it. That is always a
+        separate question.</p>
+    </div>
+
+    ${view.responsibilities.length ? html`<div class="know">
+      <h3>What I look after</h3>
+      <ul>${raw(view.responsibilities.map((r) =>
+    `<li>${CHECK_IN_PLAIN_WORDS['schema-snapshot-freshness']?.name === r.title ? r.title : r.title}
+       — ${LADDER_IN_PLAIN_WORDS[r.state] ?? r.state}</li>`).join(''))}</ul>
+    </div>` : ''}
+
+    <div class="know">
+      <h3>What matters here</h3>
+      ${view.objective
+    ? html`<p>${view.objective}</p>`
+    : html`<p class="lede">You have not told me what you are trying to do with this company.
+        Until you do, I have no way to judge what is worth your attention.</p>`}
+      <form class="inline" method="POST" action="/foundry/companies/${view.id}/objective">
+        <input type="text" name="objective" required maxlength="200"
+          placeholder="${view.objective ? 'Change it' : 'What are you trying to do here?'}"
+          aria-label="What matters for this company" />
+        <button class="btn" type="submit" style="width:auto">Save</button>
+      </form>
+    </div>
+
+    <div class="know">
+      <h3>Money</h3>
+      <ul><li>$${view.spent30d.toFixed(2)} spent of $${String(view.budgetMonthly)} a month.</li></ul>
+    </div>`;
+
+  return c.html(page(view.name, body, 'companies'));
+});
+
+// NO CAPABILITY GATE, AND THE REASON, because the route-guard gate asks.
+// Stating what he is trying to do with his own company grants Foundry nothing
+// and causes nothing: it records the owner's intent, which is read when judging
+// what is worth his attention and nowhere else. Authority is checked
+// server-side regardless — the company must belong to this authenticated
+// founder, and any other id is refused as not found without revealing whether
+// it exists.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/companies/:id/objective', async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+  const productId = c.req.param('id');
+  // Ownership server-side; a company id for anyone else is refused without
+  // revealing that it exists.
+  const owned = await query('SELECT id FROM products WHERE id = ? AND owner_id = ?',
+    [productId, String(founder.id)]);
+  if (!owned.rows.length) return c.notFound();
+
+  const body = await c.req.parseBody();
+  const objective = String(body.objective ?? '').trim().slice(0, 200);
+  if (!objective) return c.redirect(`/foundry/companies/${productId}`);
+
+  const { nanoid } = await import('nanoid');
+  const now = new Date();
+  const period = `${String(now.getUTCFullYear())}-Q${String(Math.floor(now.getUTCMonth() / 3) + 1)}`;
+  await query(
+    `INSERT INTO company_okrs (id, product_id, period, objective_text, objective_owner)
+     VALUES (?, ?, ?, ?, 'founder')`, [nanoid(), productId, period, objective]);
+  return c.redirect(`/foundry/companies/${productId}?done=steered`);
+});
+
+// ─── controls ───────────────────────────────────────────────────────────────
+
+/**
+ * WHAT FOUNDRY MAY DO, WHAT IT COSTS, AND HOW TO STOP IT.
+ *
+ * A place again, not because a concept exists but because these are the three
+ * questions an owner asks about something operating on his behalf, and he
+ * should be able to walk to the answer rather than remember to ask for it.
+ * Everything here enforces something: a permission that is really live, a
+ * ceiling really applied, a stop that really stops.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/controls', async (c: any) => {
+  let s: OwnerState | null;
+  try {
+    s = await context(c);
+  } catch {
+    return c.html(page('Controls', html`
+      <h1>I can't reach my own records</h1>
+      <p class="lede">Nothing of yours has changed and nothing is lost.</p>`, 'controls'), 503);
+  }
+  if (!s) return c.redirect('/onboarding');
+
+  const body = html`
+    <h1>What I'm allowed to do</h1>
+
+    ${standingPermission(s)}
+
+    ${s.permissions.length === 0 ? html`<div class="know">
+      <h3>Permissions</h3>
+      <p><strong>None.</strong> I can look at things and tell you what I find. I cannot change
+        anything, spend anything, or contact anyone.</p>
+      <p class="quiet">Each of those would be something you allow separately, for a set time,
+        and could take back whenever you wanted. I ask on the front page when I have earned
+        the right to.</p>
+    </div>` : ''}
+
+    <div class="know">
+      <h3>Money</h3>
+      <ul>
+        <li>$${s.spent30d.toFixed(2)} spent in the last 30 days.</li>
+        <li>$${String(s.budgetMonthly)} a month is the limit you set for ${s.companyName}.</li>
+        <li>I stop thinking for a company at $2 a day, and for everything at $5 a day.</li>
+      </ul>
+      <p class="quiet">Watching costs nothing — comparing my own records uses no thinking.</p>
+    </div>
+
+    <div class="know">
+      <h3>Connected to</h3>
+      ${s.connectedSenses.length === 0
+    ? html`<p><strong>Nothing.</strong> I have no way to see your code, your money or your
+        customers.</p>`
+    : html`<ul>${raw(s.connectedSenses.map((x) => `<li>${x}</li>`).join(''))}</ul>`}
+    </div>
+
+    <div class="know">
+      <h3>Stopping me</h3>
+      <p>One button halts every routine, every permission and every outgoing action at once.
+        Nothing is lost — I stop acting on it.</p>
+      <form method="POST" action="/autopilot/panic" style="margin-top:var(--s2)">
+        <input type="hidden" name="return_to" value="foundry" />
+        <button class="btn" type="submit" style="width:auto">Stop everything</button>
+      </form>
+    </div>`;
+
+  return c.html(page('Controls', body, 'controls'));
 });
