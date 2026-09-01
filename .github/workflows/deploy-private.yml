@@ -29,10 +29,18 @@ name: Deploy Private Foundry
 # marker in the commit message. Ordinary work pushes dozens of commits and none
 # of them deploy; a commit whose message contains [deploy-private] is a
 # deliberate, auditable request to redeploy the private institution.
+#
+# THE BRANCH NAME IS PER-SESSION, AND THAT IS WHY THERE IS MORE THAN ONE.
+# Each session may push its own designated branch and nothing else, so a
+# trigger naming only the branch that existed when this file was written stops
+# deploying the moment the campaign continues in a new session. Both are listed
+# rather than a `claude/**` glob: a deploy of the private institution should
+# name the branches it will accept, not accept whatever gets created.
 on:
   push:
     branches:
       - 'claude/foundry-autonomous-continuation-0gents'
+      - 'claude/private-foundry-continuation-51vz95'
 
 jobs:
   deploy:

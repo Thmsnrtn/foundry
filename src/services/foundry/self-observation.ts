@@ -83,6 +83,78 @@ export const SELF_MAINTENANCE_SCOPES: Record<string, {
   },
 };
 
+/**
+ * Offer the obligation the check implies, for the owner to recognise or refuse.
+ *
+ * WHY FOUNDRY PROPOSES RATHER THAN WAITING TO BE TOLD. Discovery admits a
+ * founder's report and an external system's, and nothing else — so the only way
+ * a self-maintenance obligation could become a responsibility was for the owner
+ * to type it into the report form and pick its kind from eight plain sentences.
+ * The natural pick for "keep the committed snapshot fresh" is "something that
+ * has to be kept working", which is `maintenance`, which maps to the
+ * `operations` capability — and `beginFounderDevelopmentShadowing` requires
+ * `development`. The owner would have reported the right obligation, been told
+ * it was recorded, and then found no watch offered, with nothing on any page
+ * saying why. A dead end two steps past a correct action is worse than no
+ * action, because it spends the owner's trust rather than his minute.
+ *
+ * A CANDIDATE IS NOT A RESPONSIBILITY. It is non-executable, evidence-bound and
+ * pending until the owner decides; `promoteResponsibilityCandidate` needs an
+ * authenticated owner, and rejecting it is one tap that sticks — the
+ * convergence key returns the decided candidate rather than proposing again, so
+ * a refusal is not re-asked on every observation.
+ *
+ * ONLY WHAT COULD ACTUALLY BE CARRIED. The proposal is made for a check that has
+ * an entry in `SELF_MAINTENANCE_SCOPES` and no other, so Foundry never offers to
+ * take on something no grant could ever authorise it to touch. The sentence
+ * shown is that entry's `plainly` — the same words the authority request will
+ * use, so the owner reads one description of the obligation from recognition
+ * through to grant, and `capability_dependency` is `development` by
+ * construction rather than by the owner guessing a kind.
+ *
+ * Recognising it grants nothing, and this path takes nothing: proposing is not
+ * observing, observing is not carrying, and carrying still needs the bounded,
+ * time-limited, revocable grant it always did.
+ */
+async function proposeSelfMaintenanceCandidate(input: {
+  productId: string; check: string; evidenceId: string; observedAt: Date;
+}): Promise<void> {
+  const scope = SELF_MAINTENANCE_SCOPES[input.check];
+  if (!scope) return;
+
+  const { proposeResponsibilityCandidate } = await import(
+    '../institution/responsibility-candidate.js');
+  await proposeResponsibilityCandidate({
+    productId: input.productId,
+    convergenceKey: `self_maintenance:${input.check}`,
+    proposedResponsibility: scope.plainly,
+    evidenceRefs: [{ kind: 'signal_event', id: input.evidenceId }],
+    derivationMethod: 'self_maintenance_scope',
+    rationale: `${input.check} runs against this company independently, and `
+      + `${scope.path} is the only thing a grant for it could touch.`,
+    // KNOWN, ARRIVED AT BY BEING REFUSED TWICE. Written first as `inferred`
+    // with no confidence, migration 107 refused it —
+    // `responsibility_candidate:confidence_required`, because an inference has
+    // to say how strongly it is held, and there is no frequency here to derive
+    // a number from. Rewritten as `unresolved`, which reads as the honest
+    // answer, migration 108 refused the PROMOTION: `not_promotable` excludes
+    // `unresolved` by design. That would have put a button in front of the
+    // owner that could never work.
+    //
+    // Both refusals were pointing at the same mistake. Nothing here is
+    // estimated. A check with a declared self-maintenance scope implies exactly
+    // this obligation and exactly one path it could touch; the derivation is
+    // deterministic and repeats identically. What is genuinely open is not how
+    // likely the proposition is — it is whether Foundry should carry it, and
+    // that is the owner's decision, which the mechanism already models by
+    // refusing to become a responsibility until he says so.
+    epistemicStatus: 'known',
+    capabilityDependency: 'development',
+    authorityRequired: true,
+    observedAt: input.observedAt,
+  });
+}
+
 export function snapshotObjectNames(snapshotSql: string): Set<string> {
   return new Set(
     [...snapshotSql.matchAll(
@@ -169,6 +241,13 @@ export async function observeFoundryRepositoryReality(input: {
   const observation = await recordDevelopmentObservation({
     productId, check: SCHEMA_SNAPSHOT_CHECK, result, detail, observedAt: input.observedAt,
   });
+  // The observation is the evidence the proposal cites, so it is recorded
+  // first and the proposal cannot exist without it. A proposal that fails does
+  // not lose the observation: evidence is the thing that must survive.
+  await proposeSelfMaintenanceCandidate({
+    productId, check: SCHEMA_SNAPSHOT_CHECK, evidenceId: observation.id,
+    observedAt: input.observedAt ?? new Date(),
+  }).catch(() => { /* offering is not observing */ });
   return { observed: true, productId, observation, result };
 }
 
@@ -334,5 +413,13 @@ export async function observeFoundryBaselineLiveness(input: {
   const observation = await recordDevelopmentObservation({
     productId, check: BASELINE_LIVENESS_CHECK, result, detail, observedAt: input.observedAt,
   });
+  // Silent for this check today, and deliberately so: it has no entry in
+  // `SELF_MAINTENANCE_SCOPES`, so no grant could authorise the upkeep it
+  // describes, and offering a responsibility Foundry could never be permitted
+  // to carry would be the promise this whole path exists to avoid making.
+  await proposeSelfMaintenanceCandidate({
+    productId, check: BASELINE_LIVENESS_CHECK, evidenceId: observation.id,
+    observedAt: input.observedAt ?? new Date(),
+  }).catch(() => { /* offering is not observing */ });
   return { observed: true, productId, observation, result };
 }

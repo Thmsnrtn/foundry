@@ -1258,6 +1258,15 @@ letterRoutes.get('/letter', async (c) => {
   // first fact about itself, and replaced the body — which is where the report
   // form is, so the owner could not take the next step either.
   const hasSelfObservation = selfCheckStanding.length > 0;
+  // AND A PROPOSAL IS THE ONE THING ON THIS PAGE THAT IS ADDRESSED TO HIM.
+  //
+  // The card calls them "possible responsibilities requiring your judgment" and
+  // it sat inside the busy body, below both short-circuits — so on a quiet day,
+  // and on a new company's first, Foundry could ask the owner to recognise a
+  // responsibility and the page would answer "Nothing needs you." A pending
+  // candidate is a question waiting on a person, which is the definition of a
+  // day that is not quiet.
+  const hasPendingCandidate = responsibilityCandidates.length > 0;
   // Both short-circuit branches below replace the whole body, so both would
   // hide a person the company has been asked not to contact. Neither may: the
   // founder who recorded that constraint has to be able to see the list they
@@ -1310,7 +1319,7 @@ letterRoutes.get('/letter', async (c) => {
     </div>` : ''}
     ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
       && supportChannels.length === 0 && !hasDevelopmentActivity && !hasSelfObservation
-          && !fleetHasItems && !hasRecordedPerson
+          && !hasPendingCandidate && !fleetHasItems && !hasRecordedPerson
       && !stopped && !deletion ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
         <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
@@ -1333,7 +1342,7 @@ letterRoutes.get('/letter', async (c) => {
           <a href="/decisions" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">Log your first decision → and the belief behind it, so Foundry can watch it</a>
         </div>
       </div>` : letter.quiet && !hasResponsibilitySummary && !hasDevelopmentActivity
-      && !hasRecordedPerson ? html`
+      && !hasPendingCandidate && !hasRecordedPerson ? html`
       <div class="card" style="padding:1.5rem;text-align:center;">
         <div style="font-size:1rem;color:var(--text-primary);">${fleetChrome
     ? html`Nothing needs you in ${ctx.productName}.`
