@@ -24,6 +24,9 @@ import { query } from '../../src/db/client.js';
 //      ladder state and a table name are all findable one disclosure down, and
 //      none of them is the sentence.
 //   4. What needs the owner is a decision, not a form.
+//   5. There is ONE of it. The first version had three tabs, four status lines
+//      and six chips — a dashboard with a chat box. Every element was true and
+//      none was why he opened it.
 // =============================================================================
 
 const OWNER = 'os_owner';
@@ -35,6 +38,13 @@ const get = async (path: string) => {
   expect(res.status).toBe(200);
   return res.text();
 };
+
+/** What the page SAYS, whitespace collapsed as a browser collapses it. Asserting
+ *  on raw HTML makes a sentence that happens to wrap in the template look like a
+ *  missing sentence, which is a test failing on its own formatting. */
+const reads = async (path: string) => (await get(path))
+  .replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<script[\s\S]*?<\/script>/g, ' ')
+  .replace(/<[^>]*>/g, ' ').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
 
 beforeAll(async () => {
   await runMigrations();
@@ -74,19 +84,35 @@ beforeAll(async () => {
 });
 
 describe('opening Foundry', () => {
-  it('orients from real state in the owner\'s language', async () => {
+  it('orients in one sentence', async () => {
     const body = await get('/foundry');
     expect(body).toContain('Thomas');
     expect(body).toContain('One thing needs you');
-    // Read from the product row, not invented.
-    expect(body).toContain('$0.00');
-    expect(body).toContain('$50');
+  });
+
+  it('does not report machinery he did not ask about', async () => {
+    // A routine count and a spend of zero are true, measurable, and not why he
+    // opened this. They are answers now, not the first screen.
+    const body = await get('/foundry');
+    expect(body).not.toContain('routine');
+    expect(body).not.toContain('$0.00');
+    expect(body).not.toContain('Portfolio');
+    expect(body).not.toContain('Controls');
+  });
+
+  it('shows exactly one thing to act on', async () => {
+    const body = await get('/foundry');
+    // The card itself, not `one-in` inside it: a prefix match counted the
+    // wrapper and its own body as two cards.
+    expect((body.match(/class="one(?: alert)?"/g) ?? [])).toHaveLength(1);
+    // One primary action, so there is never a question of where to press.
+    expect((body.match(/class="btn go"/g) ?? [])).toHaveLength(1);
   });
 
   it('leads with the decision, not a form', async () => {
     const body = await get('/foundry');
     expect(body).toContain('Keep my internal map accurate');
-    expect(body).toContain('Yes, that is mine');
+    expect(body).toContain('Yes, look after it');
     // The eight-question wall is gone from the owner's path entirely.
     expect(body).not.toContain('In your own words');
     expect(body).not.toContain('What is &quot;regenerate');
@@ -119,6 +145,12 @@ describe('opening Foundry', () => {
     }
     expect(body).toContain('Advanced — inspect the system');
   });
+
+  it('does not advertise a prompt library while something needs him', async () => {
+    // Suggestions are for a quiet day. Beside a decision they compete with it.
+    const body = await get('/foundry');
+    expect(body).not.toContain('Are you okay?');
+  });
 });
 
 describe('asking it something', () => {
@@ -128,45 +160,59 @@ describe('asking it something', () => {
     expect(body).toContain('All of them still match');
   });
 
-  it('answers whether it is okay, and what that is based on', async () => {
-    const body = await get('/foundry?ask=okay');
-    expect(body).toContain('everything I watch still matches');
-    expect(body).toContain('1 check matching');
+  it('answers whether it is okay, without overclaiming', async () => {
+    // Nothing has run in this database, and the answer says exactly that rather
+    // than reassuring him on the strength of no evidence.
+    const said = await reads('/foundry?ask=okay');
+    expect(said).toContain('Yes.');
+    expect(said).toContain('I have not run anything yet, so there is not much to go on');
+  });
+
+  it('answers what the owner owns without a Portfolio to visit', async () => {
+    const said = await reads('/foundry?ask=companies');
+    expect(said).toContain('One: Foundry');
+    expect(said).toContain('you have not connected anything');
+    expect(said).toContain('no point pretending to compare one');
+  });
+
+  it('answers what it may do without a Controls to visit', async () => {
+    const said = await reads('/foundry?ask=allowed');
+    expect(said).toContain('Nothing.');
+    expect(said).toContain('I cannot change anything, spend anything, or contact anyone');
+    expect(said).toContain('I have spent nothing');
   });
 
   it('understands typed words, not only the buttons', async () => {
-    const body = await get('/foundry?q=' + encodeURIComponent('are you ok?'));
-    expect(body).toContain('everything I watch still matches');
+    const said = await reads('/foundry?q=' + encodeURIComponent('are you ok?'));
+    expect(said).toContain('I have not run anything yet');
+    const owned = await reads('/foundry?q=' + encodeURIComponent('what companies do I own'));
+    expect(owned).toContain('One: Foundry');
   });
 
   it('says plainly when it cannot answer instead of improvising', async () => {
-    const body = await get('/foundry?q=' + encodeURIComponent('what is our revenue in Germany'));
-    expect(body).toContain('cannot answer that one yet');
-    expect(body).toContain('rather say so than improvise');
+    const said = await reads('/foundry?q=' + encodeURIComponent('draft a plan for hiring'));
+    expect(said).toContain("I don't know yet");
+    expect(said).toContain('rather say that than make something up');
   });
 
   it('never claims a routine ran when none has', async () => {
-    // No `job_health` rows exist here. The first draft said "Everything I run is
+    // No `job_health` rows exist here. An early draft said "Everything I run is
     // running normally — 0 routines", which is a reassurance about nothing.
-    const body = await get('/foundry');
-    expect(body).toContain('I have not run anything yet');
-    expect(body).not.toContain('0 routine');
+    const said = await reads('/foundry?ask=today');
+    expect(said).toContain('I have not run anything yet');
+    expect(said).not.toContain('0 routine');
   });
 });
 
-describe('the other two places', () => {
-  it('shows the one company that exists and does not imply others', async () => {
-    const body = await get('/foundry/portfolio');
-    expect(body).toContain('Foundry');
-    expect(body).toContain('nothing is connected yet');
-    expect(body).toContain('only company you have given me');
-  });
-
-  it('states authority as what it is: nothing', async () => {
-    const body = await get('/foundry/controls');
-    expect(body).toContain('Nothing, right now');
-    expect(body).toContain('cannot change anything');
-    expect(body).toContain('Stop everything');
+describe('the places that stopped being places', () => {
+  it('has no Portfolio or Controls to visit', async () => {
+    // They were rooms containing a sentence each: one company he established,
+    // and "nothing, right now". They are answers until there is a second
+    // company or a permission to withdraw.
+    for (const gone of ['/foundry/portfolio', '/foundry/controls']) {
+      const res = await app.request(gone, { headers: { cookie: `foundry_product=${COMPANY}` } });
+      expect(res.status).toBe(404);
+    }
   });
 });
 
@@ -192,12 +238,12 @@ describe('an obligation it already understands', () => {
       '../../src/services/institution/responsibility-understanding.js');
     await earnResponsibilityUnderstanding(COMPANY, rid);
 
-    const body = await get('/foundry');
-    expect(body).toContain('I understand what it is');
-    expect(body).toContain('Yes — hold me to that');
-    expect(body).toContain('One thing needs you');
+    const said = await reads('/foundry');
+    expect(said).toContain('I understand this well enough to be measured on it');
+    expect(said).toContain('Hold me to that');
+    expect(said).toContain('One thing needs you');
     // And it is still only watching: no permission is implied or requested.
-    expect(body).toContain('I still cannot change anything');
+    expect(said).toContain('I still cannot change anything');
   });
 });
 
@@ -214,7 +260,7 @@ describe('the surface is private', () => {
     const { resolve } = await import('node:path');
     const idx = readFileSync(resolve(import.meta.dirname, '../../src/index.ts'), 'utf8');
     const prefixes = [...idx.matchAll(/app\.use\('([^']+)',\s*authMiddleware\)/g)].map((m) => m[1]);
-    for (const path of ['/foundry', '/foundry/portfolio', '/foundry/controls']) {
+    for (const path of ['/foundry']) {
       const covered = prefixes.some((x) => x === path
         || (x.endsWith('/*') && path.startsWith(x.slice(0, -1))));
       expect(covered, `no authMiddleware prefix covers ${path}`).toBe(true);

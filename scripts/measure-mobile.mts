@@ -99,8 +99,8 @@ async function main(): Promise<void> {
 
   const server = serve({ fetch: app.fetch, port: 4317 });
   const base = 'http://127.0.0.1:4317';
-  const paths = ['/foundry', '/foundry?ask=today', '/foundry?ask=responsibility',
-    '/foundry/portfolio', '/foundry/controls'];
+  const paths = ['/foundry', '/foundry?ask=okay', '/foundry?ask=working',
+    '/foundry?ask=allowed', '/foundry?ask=companies'];
 
   const dir = 'docs/design/mobile';
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -109,11 +109,19 @@ async function main(): Promise<void> {
   const failures: string[] = [];
   const rows: string[] = [];
 
-  for (const width of WIDTHS) {
+  // ACCESSIBILITY IS PART OF THE MEASUREMENT, not a later pass. A layout that
+  // holds at 17px and breaks at 34px is a layout that breaks for anyone who has
+  // turned text up, which on a phone is a great many people.
+  for (const { width, scale } of WIDTHS.flatMap((width) =>
+    [{ width, scale: 1 }, { width, scale: 2 }])) {
     const context = await browser.newContext({
       viewport: { width, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true,
     });
     const page = await context.newPage();
+    if (scale !== 1) {
+      await page.addInitScript(`document.addEventListener('DOMContentLoaded',function(){
+        document.documentElement.style.fontSize = '${String(17 * scale)}px';});`);
+    }
     for (const path of paths) {
       const response = await page.goto(base + path, { waitUntil: 'load' });
       const status = response?.status() ?? 0;
@@ -140,14 +148,14 @@ async function main(): Promise<void> {
       }));
       const overflow = m.scrollWidth - m.innerWidth;
       const verdict = status === 200 && overflow <= 0 ? 'ok' : 'OVERFLOW';
-      rows.push(`${String(width).padStart(4)}  ${String(status)}  `
+      rows.push(`${String(width).padStart(4)} ${scale === 1 ? ' 100%' : ' 200%'}  ${String(status)}  `
         + `scrollWidth ${String(m.scrollWidth).padStart(4)} vs ${String(m.innerWidth).padStart(4)}  `
         + `${verdict.padEnd(9)} ${path}`);
       if (verdict !== 'ok') {
-        failures.push(`${path} at ${String(width)}px: +${String(overflow)}px `
+        failures.push(`${path} at ${String(width)}px ${String(scale * 100)}% text: +${String(overflow)}px `
           + `(widest ${m.widest.tag} reaching ${String(m.widest.w)}px)`);
       }
-      if (path === '/foundry') {
+      if (path === '/foundry' && scale === 1) {
         await page.screenshot({ path: `${dir}/foundry-${String(width)}.png`, fullPage: true });
       }
     }
@@ -157,13 +165,14 @@ async function main(): Promise<void> {
   await browser.close();
   server.close();
 
-  console.log('\nwidth  http  document vs window            verdict   path');
+  console.log('\nwidth  text  http  document vs window            verdict   path');
   console.log(rows.join('\n'));
   if (failures.length) {
     console.log('\nHORIZONTAL OVERFLOW:\n' + failures.map((f) => '  ' + f).join('\n'));
     process.exit(1);
   }
-  console.log(`\nNo horizontal overflow at ${WIDTHS.join(', ')} px. Screenshots in ${dir}/.`);
+  console.log(`\nNo horizontal overflow at ${WIDTHS.join(', ')} px, at 100% and 200% text. `
+    + `Screenshots in ${dir}/.`);
   process.exit(0);
 }
 
