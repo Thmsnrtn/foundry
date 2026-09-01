@@ -97,8 +97,16 @@ describe('a company Foundry has observed', () => {
   it('is shown the check that held, what it found, and that nobody asked for it', async () => {
     const body = await letterFor(OBSERVED);
     expect(body).toContain('What I checked about myself');
-    expect(body).toContain('schema snapshot freshness');
+    // IN THE OWNER'S WORDS, NOT THE CHECK'S NAME. `schema-snapshot-freshness` is
+    // an identifier an engineer chose for machinery, and it was being printed
+    // raw on the one page that answers "does anything need me". The owner read
+    // his own home page and said he had no idea what was happening.
+    expect(body).toContain('My written description of my own database');
+    expect(body).not.toContain('schema snapshot freshness');
+    // The technical detail is EVIDENCE and stays on the page — demoted, not
+    // deleted. A glass box that hides its workings is not one.
     expect(body).toContain('695 schema objects');
+    expect(body).toContain('What I actually compared');
     // The rung it is actually on. Observing is not carrying, and the card may
     // not imply Foundry is keeping the snapshot fresh — it is not permitted to.
     expect(body).toContain('Nobody has asked me to keep it');

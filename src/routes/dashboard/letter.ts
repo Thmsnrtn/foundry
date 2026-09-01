@@ -578,15 +578,70 @@ const failingSelfChecksSection = (
 ) => items.length === 0 ? '' : html`
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;border-left:2px solid #ffb347;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.5rem;">Something I keep for you has drifted</div>
-    ${items.map((item) => html`
-      <div style="padding:0.35rem 0;">
-        <div style="font-size:0.86rem;color:var(--text-primary);">${item.detail}</div>
-        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
+    ${items.map((item) => {
+    const plain = CHECK_IN_PLAIN_WORDS[item.check];
+    return html`
+      <div style="padding:0.5rem 0;">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${plain ? plain.name : item.check.replaceAll('-', ' ')} — this no longer matches.</div>
+        ${plain ? html`<div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.2rem;line-height:1.5;">${plain.what}</div>` : ''}
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem;">
           I last checked ${item.observedAt.slice(0, 10)}. I have not changed anything
           — I only look.
         </div>
-      </div>`)}
+        <details style="margin-top:0.3rem;">
+          <summary style="font-size:0.7rem;color:var(--text-muted);cursor:pointer;">What I actually found</summary>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.2rem;">${item.detail}</div>
+        </details>
+      </div>`;
+  })}
   </div>`;
+
+// PLAIN WORDS, BECAUSE THE OWNER DID NOT NAME ANY OF THIS.
+//
+// The owner read his own home page and said he had no idea what was happening,
+// and he was right to. It said "ratchet baseline liveness — held. 64 baselined
+// exemption(s) across 6 baselines all still name something that exists" and
+// "schema snapshot freshness — held. 695 schema objects, all described by
+// docs/db/schema.snapshot.sql". Those are identifiers an engineer chose for
+// machinery, rendered raw, on the one page that is supposed to answer "does
+// anything need me".
+//
+// A check's NAME is not a sentence, and the technical detail is EVIDENCE — it
+// belongs on the page, because a glass box that hides its workings is not one,
+// but underneath the plain sentence rather than instead of it.
+//
+// This lives in the view because it is a wording concern, and because the
+// institution must not learn which company it is operating in order to speak
+// plainly to its owner. A check with no entry degrades to what it always
+// showed, which is honest: an unnamed check reads as jargon rather than as a
+// confident sentence somebody invented for it.
+const CHECK_IN_PLAIN_WORDS: Record<string, { name: string; what: string }> = {
+  'schema-snapshot-freshness': {
+    name: 'My written description of my own database',
+    what: 'I keep a written description of how my database is built, so a person '
+      + 'can read it without opening the database. It goes out of date whenever the '
+      + 'database changes and nobody updates it. I compared the two.',
+  },
+  'ratchet-baseline-liveness': {
+    name: 'My list of things I have agreed to overlook',
+    what: 'I keep a list of known imperfections in my own code that I have agreed '
+      + 'not to flag, each one naming a specific file or table. When the thing it '
+      + 'names stops existing, the excuse outlives it. I checked they still refer '
+      + 'to something real.',
+  },
+};
+
+/** The ladder, said to the person rather than to the database. */
+const STATE_IN_PLAIN_WORDS: Record<string, string> = {
+  unknown: 'I do not know about it yet',
+  visible: 'I know it exists',
+  understood: 'I understand what it is',
+  shadowing: 'I am watching how it goes',
+  assisting: 'I am helping with it, within what you allowed',
+  operating: 'I am carrying it',
+  mature: 'I have been carrying it for a while',
+  exception_owned: 'you took it back',
+};
 
 // WHAT I CHECKED ABOUT MYSELF, WHEN IT WENT THE OTHER WAY.
 //
@@ -608,15 +663,22 @@ const selfChecksHeldSection = (
 ) => items.length === 0 ? '' : html`
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem;">What I checked about myself</div>
-    ${items.map((item) => html`
-      <div style="padding:0.35rem 0;">
-        <div style="font-size:0.86rem;color:var(--text-primary);">${item.check.replaceAll('-', ' ')} — held.</div>
-        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${item.detail}</div>
-        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">
+    ${items.map((item) => {
+    const plain = CHECK_IN_PLAIN_WORDS[item.check];
+    return html`
+      <div style="padding:0.5rem 0;">
+        <div style="font-size:0.9rem;color:var(--text-primary);">${plain ? plain.name : item.check.replaceAll('-', ' ')} — nothing has gone out of step.</div>
+        ${plain ? html`<div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.2rem;line-height:1.5;">${plain.what}</div>` : ''}
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem;">
           Checked ${item.observedAt.slice(0, 10)}. Nobody has asked me to keep it
           that way, so I only look.
         </div>
-      </div>`)}
+        <details style="margin-top:0.3rem;">
+          <summary style="font-size:0.7rem;color:var(--text-muted);cursor:pointer;">What I actually compared</summary>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.2rem;">${item.detail}</div>
+        </details>
+      </div>`;
+  })}
   </div>`;
 
 // PART OF ME HAS STOPPED RUNNING, AND THIS PAGE IS THEREFORE OUT OF DATE.
@@ -1370,7 +1432,8 @@ letterRoutes.get('/letter', async (c) => {
       ${section('What I learned', letter.learned)}
       ${section('Noticed, and not worth interrupting you for', letter.noted)}
       ${section('What I handled', responsibilitySummary.HANDLED.map((i) => `${i.title} — outcome recorded`))}
-      ${section('What changed', responsibilitySummary.CHANGED.map((i) => `${i.title} — ${i.state}`))}
+      ${section('What changed', responsibilitySummary.CHANGED.map(
+    (i) => `${i.title} — ${STATE_IN_PLAIN_WORDS[i.state] ?? i.state}`))}
       ${section('What differed while I watched', shadowingExceptions.map((item) =>
         `${item.title} — expected ${shadowExpectationPhrase(item.expectedEventType)}; ${item.classification === 'unresolved'
           ? `the outcome remains unresolved (${item.observedSummary})`

@@ -74,12 +74,65 @@ export const SELF_MAINTENANCE_SCOPES: Record<string, {
   changeClass: 'generated_artifact' | 'test' | 'documentation';
   verification: string[];
   plainly: string;
+  /**
+   * WHAT FOUNDRY WOULD ANSWER IF ASKED ABOUT ITS OWN UPKEEP.
+   *
+   * The understanding rung asks the company eight questions before a
+   * responsibility can be watched or carried, and for a company's own
+   * obligations the founder is the only one who knows: what an invoice chase is
+   * for, what "handled properly" means, who is owed what. Asking is right
+   * there.
+   *
+   * Here it was backwards. The first responsibility Foundry ever took up is its
+   * OWN internal upkeep, and the page asked its owner "What is 'regenerate the
+   * committed schema snapshot after a migration changes the schema' actually
+   * for?" He does not know, and he should not have to invent an answer — an
+   * answer typed under pressure by someone guessing becomes an institutional
+   * fact, cited later in an authority request. Asking a question whose only
+   * available answer is a guess does not gather evidence; it manufactures it.
+   *
+   * So Foundry drafts what it would say, in plain words, and the owner confirms
+   * or corrects it. He remains the author of record — nothing is written until
+   * he submits — and the provenance says the wording was drafted, because the
+   * difference between a person stating a fact and a person agreeing with a
+   * proposed one is exactly the kind of distinction this institution keeps.
+   *
+   * These are answers ABOUT FOUNDRY, which is the one company whose internals
+   * Foundry can honestly speak for. No other company gets drafted answers, and
+   * there is no path here that writes one without the owner pressing the
+   * button.
+   */
+  understanding: Record<string, string>;
 }> = {
   [SCHEMA_SNAPSHOT_CHECK]: {
     path: SNAPSHOT_PATH,
     changeClass: 'generated_artifact',
     verification: [SCHEMA_SNAPSHOT_CHECK],
     plainly: 'regenerate the committed schema snapshot after a migration changes the schema',
+    understanding: {
+      purpose: 'So a person can read how my database is built without opening the '
+        + 'database itself. The description is checked into the code, and it is what '
+        + 'anyone reads to understand the shape of what I store.',
+      desired_outcome: 'The written description always matches the real database, so '
+        + 'nobody is ever misled by reading it.',
+      success_conditions: 'A comparison of the description against the real database '
+        + 'finds no difference. I run that comparison and report it, and the same '
+        + 'check runs independently before any change is accepted.',
+      operating_constraints: 'Only the one description file may be touched. Nothing '
+        + 'about the database itself, no other file, and no change that alters how '
+        + 'anything behaves. If the check does not pass afterwards, the change is '
+        + 'undone rather than argued with.',
+      dependencies: 'The database being reachable, and the description file being '
+        + 'where it is expected. Nothing external, no other company, and no network.',
+      risks: 'A wrong description is misleading rather than dangerous — it changes no '
+        + 'behaviour. The real risk is a change that quietly reaches past that one '
+        + 'file, which is why the permission is limited to it.',
+      systems: 'My own code repository and my own database. Nothing belonging to '
+        + 'anyone else.',
+      failure_modes: 'It goes out of date silently: someone changes the database and '
+        + 'does not update the description, so it keeps reading as true while it is '
+        + 'not. That is what the comparison exists to notice.',
+    },
   },
 };
 
@@ -153,6 +206,36 @@ async function proposeSelfMaintenanceCandidate(input: {
     authorityRequired: true,
     observedAt: input.observedAt,
   });
+}
+
+/**
+ * What Foundry would answer about its own upkeep, for a question it is about to
+ * put to the owner — or null when the question is not about self-maintenance.
+ *
+ * The responsibility carries the observation that created it, and that
+ * observation names the check, so the link from "this question" to "this check"
+ * is read from evidence rather than guessed. A responsibility that reached the
+ * ladder any other way has no draft and the owner is asked as he always was:
+ * for every other company, and for anything he reported himself, he is still
+ * the only one who knows.
+ *
+ * Lives here, on the outer boundary, because knowing that a responsibility is
+ * Foundry's OWN is precisely what the institutional kernel may not learn.
+ */
+export async function selfMaintenanceDraftAnswer(input: {
+  productId: string; responsibilityId: string; fact: string;
+}): Promise<string | null> {
+  const rows = await query(
+    `SELECT json_extract(e.payload_json,'$.check') AS check_name
+       FROM institutional_responsibilities r
+       JOIN signal_events e ON ('signal_event:' || e.id) = r.discovery_evidence_ref
+        AND e.product_id = r.product_id
+      WHERE r.id = ? AND r.product_id = ? AND e.source = 'development_verification'`,
+    [input.responsibilityId, input.productId],
+  );
+  if (!rows.rows.length) return null;
+  const check = String((rows.rows[0] as Record<string, unknown>).check_name ?? '');
+  return SELF_MAINTENANCE_SCOPES[check]?.understanding[input.fact] ?? null;
 }
 
 export function snapshotObjectNames(snapshotSql: string): Set<string> {
