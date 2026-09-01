@@ -112,7 +112,11 @@ describe('opening Foundry', () => {
   it('leads with the decision, not a form', async () => {
     const body = await get('/foundry');
     expect(body).toContain('Keep my internal map accurate');
-    expect(body).toContain('Yes, look after it');
+    // The QUESTION is the heading, and the button states the resulting state.
+    // "Hold me to that" had personality and left the consequence ambiguous.
+    expect(body).toContain('Is this worth looking after?');
+    expect(body).toContain('Yes — worth looking after');
+    expect(body).toContain('Recognition');
     // The eight-question wall is gone from the owner's path entirely.
     expect(body).not.toContain('In your own words');
     expect(body).not.toContain('What is &quot;regenerate');
@@ -239,11 +243,16 @@ describe('an obligation it already understands', () => {
     await earnResponsibilityUnderstanding(COMPANY, rid);
 
     const said = await reads('/foundry');
-    expect(said).toContain('I understand this well enough to be measured on it');
-    expect(said).toContain('Hold me to that');
+    // A DIFFERENT ACT, NAMED AS ONE. Recognition and responsibility are not the
+    // same owner decision and the card never lets them read as one.
+    expect(said).toContain('Responsibility');
+    expect(said).toContain('Can I take responsibility for this?');
+    expect(said).toContain('Yes — take responsibility');
     expect(said).toContain('One thing needs you');
-    // And it is still only watching: no permission is implied or requested.
+    // Still no authority, and it says what it would ask for next.
     expect(said).toContain('I still cannot change anything');
+    expect(said).toContain('this permits no changes');
+    expect(said).toContain('Permission to do the work, for seven days');
   });
 });
 

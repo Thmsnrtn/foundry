@@ -88,6 +88,7 @@ POST /letter/evidence/:requestId/defer
 POST /letter/judgments/:judgmentId/disposition
 POST /letter/responsibilities/:responsibilityId/disposition
 POST /letter/responsibility-candidates/:candidateId/promote
+POST /letter/responsibility-candidates/:candidateId/reconsider
 POST /letter/responsibility-candidates/:candidateId/reject
 POST /network/patterns/:matchId/resolve
 POST /onboarding/competitors

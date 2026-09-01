@@ -1518,8 +1518,26 @@ letterRoutes.get('/letter', async (c) => {
   return c.html(dashboardLayout(ctx, content));
 });
 
+
+/**
+ * Where to send the owner after he acts.
+ *
+ * These routes were written when the Letter was the only surface, so they all
+ * ended `c.redirect('/letter')` — which meant acting on the owner surface threw
+ * him into the old application, mid-journey. He should land back where he was,
+ * looking at what his action produced.
+ *
+ * An ALLOWLIST, not the submitted value: a redirect target taken from a form is
+ * an open redirect, and this one is reachable by anyone who can get the owner to
+ * submit a page.
+ */
+function backTo(value: unknown): string {
+  return String(value ?? '') === 'foundry' ? '/foundry' : '/letter';
+}
+
 letterRoutes.post('/letter/responsibility-candidates/:candidateId/promote',async(c)=>{
   const founder=c.get('founder');
+  const back=backTo((await c.req.parseBody()).return_to);
   // Product is resolved server-side from candidate + authenticated owner. No
   // hidden field or caller actor can establish the grounding identity.
   const { query }=await import('../../db/client.js');
@@ -1531,11 +1549,40 @@ letterRoutes.post('/letter/responsibility-candidates/:candidateId/promote',async
   try {
     await promoteResponsibilityCandidate({productId,candidateId:c.req.param('candidateId'),mechanism:'authenticated_owner',ownerId:founder.id as string});
   } catch { return c.text('Candidate decision refused',403); }
-  return c.redirect('/letter');
+  return c.redirect(`${back}?done=recognised`);
+});
+
+// NO CAPABILITY GATE, AND THE REASON, because the route-guard gate asks.
+// Reconsidering returns a candidate the owner rejected to `pending`. It grants
+// nothing and causes nothing to be carried: becoming a responsibility still
+// requires the separate, owner-authenticated promotion beside it, which is
+// where the consequence lives. Authority is checked server-side regardless —
+// the candidate must belong to a product this authenticated founder owns, and
+// a candidate id for anyone else's company is refused with 403 without
+// revealing that it exists.
+letterRoutes.post('/letter/responsibility-candidates/:candidateId/reconsider',async(c)=>{
+  // REFUSAL WAS NEVER PERMANENT, and the product acted as though it were.
+  // Migration 109 turns a `reconsidered` decision back into a pending candidate;
+  // no surface ever offered it, so "No" read as final and was not. Saying no and
+  // changing your mind are both ordinary owner acts.
+  const founder=c.get('founder');
+  const back=backTo((await c.req.parseBody()).return_to);
+  const { query }=await import('../../db/client.js');
+  const result=await query(`SELECT c.product_id FROM responsibility_candidates c JOIN products p ON p.id=c.product_id
+    WHERE c.id=? AND p.owner_id=?`,[c.req.param('candidateId'),founder.id]);
+  if (!result.rows.length) return c.text('Candidate decision refused',403);
+  const { decideResponsibilityCandidate }=await import('../../services/institution/responsibility-candidate.js');
+  try {
+    await decideResponsibilityCandidate({productId:String((result.rows[0] as Record<string,unknown>).product_id),
+      candidateId:c.req.param('candidateId'),decision:'reconsidered',ownerId:founder.id as string,
+      reason:'Authenticated owner asked to look at this again'});
+  } catch { return c.text('Candidate decision refused',403); }
+  return c.redirect(`${back}?done=reopened`);
 });
 
 letterRoutes.post('/letter/responsibility-candidates/:candidateId/reject',async(c)=>{
   const founder=c.get('founder');
+  const back=backTo((await c.req.parseBody()).return_to);
   const { query }=await import('../../db/client.js');
   const result=await query(`SELECT c.product_id FROM responsibility_candidates c JOIN products p ON p.id=c.product_id
     WHERE c.id=? AND p.owner_id=?`,[c.req.param('candidateId'),founder.id]);
@@ -1546,7 +1593,7 @@ letterRoutes.post('/letter/responsibility-candidates/:candidateId/reject',async(
       candidateId:c.req.param('candidateId'),decision:'rejected',ownerId:founder.id as string,
       reason:'Authenticated owner does not recognize this as a responsibility'});
   } catch { return c.text('Candidate decision refused',403); }
-  return c.redirect('/letter');
+  return c.redirect(`${back}?done=declined`);
 });
 
 // The authenticated session is the authority source. Product and responsibility
@@ -2236,7 +2283,7 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/watch-check',
   });
   // Do not reveal whether another tenant's responsibility exists.
   if (!started) return c.text('Refused', 403);
-  return c.redirect('/letter');
+  return c.redirect(`${backTo(body.return_to)}?done=responsible`);
 });
 
 letterRoutes.post('/letter/responsibilities/:responsibilityId/watch',

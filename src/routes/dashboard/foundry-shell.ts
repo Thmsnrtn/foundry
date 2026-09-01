@@ -86,6 +86,7 @@ interface OwnerState {
   responsibilities: Array<{ id: string; title: string; state: string; check: string | null }>;
   pendingCandidates: Array<{ id: string; proposal: string; check: string | null }>;
   permissions: Array<{ what: string; until: string }>;
+  declined: Array<{ id: string; title: string }>;
   budgetMonthly: number;
   spent30d: number;
   connectedSenses: string[];
@@ -129,6 +130,13 @@ async function readOwnerState(productId: string, founderName: string): Promise<O
       WHERE product_id = ? AND revoked_at IS NULL AND datetime(expires_at) > datetime('now')
       ORDER BY expires_at`, [productId])).rows as unknown as Array<Record<string, unknown>>;
 
+  // What he turned down, so refusal is reversible rather than a dead end. The
+  // database always allowed reconsidering; nothing ever offered it.
+  const declined = (await query(
+    `SELECT id, proposed_responsibility FROM responsibility_candidates
+      WHERE product_id = ? AND status = 'rejected' ORDER BY updated_at DESC LIMIT 5`,
+    [productId])).rows as unknown as Array<Record<string, unknown>>;
+
   const candidateChecks = new Map<string, string>();
   for (const candidate of candidates) {
     const evidence = candidate.evidenceRefs.find((r) => r.kind === 'signal_event');
@@ -157,6 +165,11 @@ async function readOwnerState(productId: string, founderName: string): Promise<O
     permissions: consents.map((consent) => ({
       what: String(consent.capability), until: String(consent.expires_at).slice(0, 10),
     })),
+    declined: declined.map((d) => {
+      const proposal = String(d.proposed_responsibility);
+      const known = Object.values(CHECK_IN_PLAIN_WORDS).find((p) => proposal.includes('schema'));
+      return { id: String(d.id), title: known?.name ?? proposal };
+    }),
     budgetMonthly: Number(product?.operating_budget_monthly_usd ?? 0),
     spent30d: Number(product?.ai_cost_trailing_30d_usd ?? 0),
     connectedSenses: product?.github_repo_url ? ['its code'] : [],
@@ -243,7 +256,15 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     margin:0 0 var(--s4);overflow:hidden}
   .one.alert{border-color:var(--alert)}
   .one-in{padding:var(--s3)}
-  .one h2{font-size:1.2rem;line-height:1.3;font-weight:600;margin:0 0 var(--s2);letter-spacing:-.01em}
+  .one h2{font-size:1.2rem;line-height:1.3;font-weight:600;margin:0 0 var(--s1);letter-spacing:-.01em}
+  .act{font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;
+    color:var(--ink-3);margin:0 0 var(--s1)}
+  .one .lead{font-size:1.02rem;margin:0 0 var(--s2)}
+  .done{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    padding:var(--s3);margin:0 0 var(--s4)}
+  .done p{color:var(--ink-2);font-size:.98rem}
+  .done p:last-child{margin-bottom:0}
+  .done strong{color:var(--ink)}
   .one p{color:var(--ink-2);font-size:.98rem}
   .one p:last-child{margin-bottom:0}
   .lead{color:var(--ink)}
@@ -327,95 +348,205 @@ ${body}
 </body>
 </html>`;
 
+
+// ─── the owner decision, as one reusable shape ──────────────────────────────
+
+/**
+ * THREE DIFFERENT ACTS, NEVER COLLAPSED INTO ONE.
+ *
+ * The institution's ladder connects them, which is exactly why the interface
+ * must not: the owner should always know which of these he is doing.
+ *
+ *   RECOGNITION   this is genuinely worth looking after. No accountability, no
+ *                 authority. Foundry keeps watching either way.
+ *   RESPONSIBILITY Foundry is accountable for it and is measured against it.
+ *                 Still no authority to change anything.
+ *   AUTHORITY     Foundry may take consequential action, within stated limits,
+ *                 for a stated time, revocably.
+ *
+ * Every decision the institution ever puts to him — a market worth researching,
+ * a company worth taking on, eight dollars to test an assumption, a change to
+ * deploy — is one of these three, and reads in the same shape: the question,
+ * what it means, what it costs, what it does NOT permit, what he might be asked
+ * next, and one button whose label states the resulting state.
+ */
+type OwnerAct = 'Recognition' | 'Responsibility' | 'Authority';
+
+interface Decision {
+  act: OwnerAct;
+  question: string;
+  title: string;
+  meaning: string[];
+  facts: Array<[string, string]>;
+  primary: { label: string; action: string; fields?: Record<string, string> };
+  secondary?: { label: string; action: string; fields?: Record<string, string> };
+  technical: string;
+  alert?: boolean;
+}
+
+const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedString> => html`
+  <section class="one${d.alert ? ' alert' : ''}" aria-labelledby="d-title">
+    <div class="one-in">
+      <p class="act">${d.act}</p>
+      <h2 id="d-title">${d.question}</h2>
+      <p class="lead">${d.title}</p>
+      ${raw(d.meaning.map((m) => `<p>${m}</p>`).join(''))}
+    </div>
+    <dl>${raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>
+    <div class="do">
+      <form method="POST" action="${d.primary.action}">
+        <input type="hidden" name="return_to" value="foundry" />
+        ${raw(Object.entries(d.primary.fields ?? {}).map(([k, v]) =>
+    `<input type="hidden" name="${k}" value="${v}" />`).join(''))}
+        <button class="btn go" type="submit">${d.primary.label}</button>
+      </form>
+      ${d.secondary ? html`<form method="POST" action="${d.secondary.action}" style="flex:0 0 auto">
+        <input type="hidden" name="return_to" value="foundry" />
+        ${raw(Object.entries(d.secondary.fields ?? {}).map(([k, v]) =>
+    `<input type="hidden" name="${k}" value="${v}" />`).join(''))}
+        <button class="btn" type="submit" style="width:auto">${d.secondary.label}</button>
+      </form>` : ''}
+    </div>
+    <details><summary>Technical details</summary><div class="inner">
+      <p class="mono">${d.technical}</p>
+    </div></details>
+  </section>`;
+
 // ─── the one thing, rendered ────────────────────────────────────────────────
 
 function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedString> {
   if (a === null) return html``;
 
   if (a.kind === 'stopped') {
-    return html`<div class="one alert">
-      <div class="one-in">
-        <h2>Part of me has stopped running</h2>
-        <p class="lead">${count(a.routines.length, 'routine')} of mine
-          ${a.routines.length === 1 ? 'has' : 'have'} failed, so what I tell you may be out
-          of date. Nothing is lost.</p>
-      </div>
-      <details><summary>Technical details</summary><div class="inner">
-        <p class="mono">${a.routines.join(', ')}</p>
-      </div></details>
-    </div>`;
+    return html`<section class="one alert"><div class="one-in">
+      <h2>Part of me has stopped running</h2>
+      <p class="lead">${count(a.routines.length, 'routine')} of mine
+        ${a.routines.length === 1 ? 'has' : 'have'} failed, so what I tell you may be out of
+        date. Nothing is lost, and nothing needs you — I am the one that has to recover.</p>
+    </div>
+    <details><summary>Technical details</summary><div class="inner">
+      <p class="mono">${a.routines.join(', ')}</p>
+    </div></details></section>`;
   }
 
   if (a.kind === 'drifted') {
     const name = CHECK_IN_PLAIN_WORDS[a.checks[0]]?.name ?? a.checks[0];
-    return html`<div class="one alert">
-      <div class="one-in">
-        <h2>${name}</h2>
-        <p class="lead">This no longer matches. I have not changed anything — I only look.</p>
-      </div>
-    </div>`;
+    return html`<section class="one alert"><div class="one-in">
+      <h2>${name}</h2>
+      <p class="lead">This no longer matches. I have not changed anything — I only look.</p>
+    </div></section>`;
   }
 
   if (a.kind === 'recognise') {
     const plain = a.check ? CHECK_IN_PLAIN_WORDS[a.check] : undefined;
-    return html`<div class="one">
-      <div class="one-in">
-        <h2>${plain?.name ?? a.proposal}</h2>
-        <p class="lead">${plain?.why ?? ''}</p>
-        <p>I noticed this about myself and I would like to look after it.</p>
-      </div>
-      <dl>
-        <dt>If you agree</dt><dd>I start watching it</dd>
-        <dt>Cost</dt><dd>Nothing</dd>
-        <dt>Undo</dt><dd>Any time</dd>
-      </dl>
-      <div class="do">
-        <form method="POST" action="/letter/responsibility-candidates/${a.candidateId}/promote">
-          <button class="btn go" type="submit">Yes, look after it</button>
-        </form>
-        <form method="POST" action="/letter/responsibility-candidates/${a.candidateId}/reject"
-          style="flex:0 0 auto">
-          <input type="hidden" name="reason" value="Not something Foundry should look after" />
-          <button class="btn" type="submit" style="width:auto">No</button>
-        </form>
-      </div>
-      <details><summary>Technical details</summary><div class="inner">
-        <p class="mono">${a.proposal}<br />check ${a.check ?? 'unknown'} · capability development
-          <br />candidate ${a.candidateId}</p>
-      </div></details>
-    </div>`;
+    return decisionCard({
+      act: 'Recognition',
+      question: 'Is this worth looking after?',
+      title: plain?.name ?? a.proposal,
+      meaning: [
+        plain?.why ?? '',
+        'I noticed this about myself. Saying yes means it is real and worth watching — '
+        + 'nothing more. I cannot change anything either way.',
+      ].filter(Boolean),
+      facts: [
+        ['Cost', 'Nothing'],
+        ['What I could change', 'Nothing'],
+        ['If you change your mind', 'Say so and I will look at it again'],
+      ],
+      primary: {
+        label: 'Yes — worth looking after',
+        action: `/letter/responsibility-candidates/${a.candidateId}/promote`,
+      },
+      secondary: {
+        label: 'No',
+        action: `/letter/responsibility-candidates/${a.candidateId}/reject`,
+      },
+      technical: `${a.proposal} · check ${a.check ?? 'unknown'} · capability development`
+        + ` · candidate ${a.candidateId}`,
+    });
   }
 
   const plain = CHECK_IN_PLAIN_WORDS[a.check];
-  return html`<div class="one">
-    <div class="one-in">
-      <h2>${plain?.name ?? a.title}</h2>
-      <p class="lead">I understand this well enough to be measured on it. If I am looking
-        after it properly, my check on it should keep passing.</p>
-      <p>I still cannot change anything.</p>
-    </div>
-    <dl>
-      <dt>If you agree</dt><dd>I am scored on it from now on</dd>
-      <dt>Cost</dt><dd>Nothing</dd>
-      <dt>Undo</dt><dd>Any time</dd>
-    </dl>
-    <div class="do">
-      <form method="POST" action="/letter/responsibilities/${a.responsibilityId}/watch-check">
-        <input type="hidden" name="check" value="${a.check}" />
-        <input type="hidden" name="expected_result" value="passed" />
-        <button class="btn go" type="submit">Hold me to that</button>
-      </form>
-    </div>
-    <details><summary>Technical details</summary><div class="inner">
-      <p class="mono">${a.title}<br />check ${a.check} · development · understood
-        <br />${a.responsibilityId}</p>
-    </div></details>
-  </div>`;
+  return decisionCard({
+    act: 'Responsibility',
+    question: 'Can I take responsibility for this?',
+    title: plain?.name ?? a.title,
+    meaning: [
+      'I know how to tell whether this stays correct, and I have been watching it.',
+      'If you say yes, I treat keeping it right as mine, and I am judged on whether it '
+      + 'stays right. I still cannot change anything.',
+      'If I show I can handle the work itself safely, I will ask you separately, for a '
+      + 'limited time, before I am allowed to make any change.',
+    ],
+    facts: [
+      ['Cost', 'Nothing'],
+      ['What I could change', 'Nothing — this permits no changes'],
+      ['If you change your mind', 'You can take it back at any time'],
+      ['What I might ask next', 'Permission to do the work, for seven days'],
+    ],
+    primary: {
+      label: 'Yes — take responsibility',
+      action: `/letter/responsibilities/${a.responsibilityId}/watch-check`,
+      fields: { check: a.check, expected_result: 'passed' },
+    },
+    technical: `${a.title} · check ${a.check} · development · understood`
+      + ` · ${a.responsibilityId}`,
+  });
+}
+
+/**
+ * WHAT JUST HAPPENED, said once, where he did it.
+ *
+ * Every owner action should end in orientation. Before this, acting sent him to
+ * the old application and told him nothing: he was left wondering whether
+ * anything had happened, what Foundry was doing now, and when he would hear
+ * about it again.
+ *
+ * The marker in the URL only chooses WORDING — the state it describes is read
+ * from the database like everything else, so a fabricated one says nothing that
+ * is not true.
+ */
+function whatJustHappened(done: string, s: OwnerState,
+): HtmlEscapedString | Promise<HtmlEscapedString> {
+  const watching = s.responsibilities.some((r) => r.state === 'shadowing');
+  const held = s.responsibilities.length > 0;
+
+  if (done === 'recognised' && held) {
+    return html`<div class="done">
+      <p><strong>Noted.</strong> I will keep watching it and work out whether I can look
+        after it properly.</p>
+      <p>I have not been given anything, and I cannot change anything.</p>
+    </div>`;
+  }
+  if (done === 'responsible' && watching) {
+    return html`<div class="done">
+      <p><strong>Got it.</strong> Keeping this right is mine now, and I am judged on whether
+        it stays right.</p>
+      <p>I am only watching and measuring myself — I still cannot make changes. If I show I
+        can do the work safely, I will ask you before I am allowed to.</p>
+      <p>Nothing else needs you.</p>
+    </div>`;
+  }
+  if (done === 'declined') {
+    return html`<div class="done">
+      <p><strong>Understood.</strong> I will not bring that up again.</p>
+      <p>If you change your mind, ask me what you turned down.</p>
+    </div>`;
+  }
+  if (done === 'reopened') {
+    return html`<div class="done"><p><strong>Back on the table.</strong></p></div>`;
+  }
+  return html``;
 }
 
 // ─── answers, from state ────────────────────────────────────────────────────
 
 const QUESTIONS: Record<string, string> = {
+  this: 'What does this mean?',
+  ifyes: 'What happens if I say yes?',
+  change: 'What can you change?',
+  undo: 'Can I undo it?',
+  turneddown: 'What did I turn down?',
   okay: 'Are you okay?',
   working: 'What are you working on?',
   companies: 'What do I own?',
@@ -426,6 +557,14 @@ const QUESTIONS: Record<string, string> = {
 
 function matchQuestion(text: string): string {
   const t = text.toLowerCase();
+  // CONTEXT FIRST. He is looking at something; "what does this mean" is about
+  // that, and he should never have to name it again to be understood.
+  if (/what.*(this|that).*(mean|about)|explain (this|that)/.test(t)) return 'this';
+  if (/if i (say )?(yes|agree|approve)|what happens if/.test(t)) return 'ifyes';
+  if (/what can you change|can you change|are you allowed to change/.test(t)) return 'change';
+  if (/undo|reverse|take (it )?back|change my mind/.test(t)) return 'undo';
+  if (/turn(ed)? down|declin|reject|said no/.test(t)) return 'turneddown';
+  if (/what.*happens? next|what now|and then/.test(t)) return 'ifyes';
   if (/\b(okay|ok|alright|fine|health|wrong|broken|problem)\b/.test(t)) return 'okay';
   if (/working on|doing|busy|up to|watching/.test(t)) return 'working';
   if (/own|compan|portfolio|business/.test(t)) return 'companies';
@@ -439,6 +578,66 @@ function matchQuestion(text: string): string {
 function answerTo(key: string, s: OwnerState, a: Attention,
 ): HtmlEscapedString | Promise<HtmlEscapedString> {
   const drifted = s.checks.filter((c) => c.result === 'failed');
+
+  if (key === 'this' || key === 'ifyes' || key === 'change' || key === 'undo') {
+    if (a === null || a.kind === 'stopped' || a.kind === 'drifted') {
+      return html`<div class="said"><p>There is nothing waiting on you at the moment,
+        so there is nothing to explain yet.</p></div>`;
+    }
+    const named = a.kind === 'recognise'
+      ? (a.check ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.proposal : a.proposal)
+      : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
+    if (key === 'change') {
+      return html`<div class="said">
+        <p><strong>Nothing.</strong> I have no permission to change anything, and this
+          decision does not give me one.</p>
+        <p>If I ever ask for that, it will be a separate question, for a set number of days,
+          naming exactly what I would touch — and you could take it back at any point.</p>
+      </div>`;
+    }
+    if (key === 'undo') {
+      return html`<div class="said">
+        <p>Yes. ${a.kind === 'recognise'
+    ? 'If you say no I will not raise it again, but you can ask me what you turned down and put it back.'
+    : 'You can take this back at any time, and I stop being judged on it.'}</p>
+      </div>`;
+    }
+    if (key === 'ifyes') {
+      return a.kind === 'recognise'
+        ? html`<div class="said">
+          <p>I keep watching <strong>${named}</strong> and work out whether I can look after
+            it properly. Nothing else changes, and I still cannot alter anything.</p>
+        </div>`
+        : html`<div class="said">
+          <p>Keeping <strong>${named}</strong> right becomes mine, and I am judged on whether
+            it stays right. I still cannot change anything.</p>
+          <p>If I show I can do the work safely, I will come back and ask you for permission
+            to make the change — for a set number of days, and revocable.</p>
+        </div>`;
+    }
+    return html`<div class="said">
+      <p><strong>${named}.</strong> ${a.kind === 'recognise'
+    ? (a.check ? CHECK_IN_PLAIN_WORDS[a.check]?.why ?? '' : '')
+    : 'I watch it, and I am asking to be held responsible for keeping it right.'}</p>
+      <p>${a.kind === 'recognise'
+    ? 'You are only telling me whether it is worth watching.'
+    : 'It permits no changes. That would be a separate question.'}</p>
+    </div>`;
+  }
+
+  if (key === 'turneddown') {
+    return html`<div class="said">
+      ${s.declined.length === 0
+    ? html`<p>Nothing. You have not turned anything down.</p>`
+    : html`<p>You told me not to look after
+        ${raw(s.declined.map((d) => `<strong>${d.title}</strong>`).join(', '))}.</p>
+      ${raw(s.declined.map((d) => `<form method="POST" style="margin-top:12px"
+        action="/letter/responsibility-candidates/${d.id}/reconsider">
+        <input type="hidden" name="return_to" value="foundry" />
+        <button class="btn" type="submit" style="width:auto">Look at ${d.title} again</button>
+      </form>`).join(''))}`}
+    </div>`;
+  }
 
   if (key === 'okay') {
     const well = s.routinesFailing.length === 0 && drifted.length === 0;
@@ -551,30 +750,36 @@ foundryShellRoutes.get('/foundry', async (c) => {
 
   const asked = String(c.req.query('ask') ?? '').trim();
   const typed = String(c.req.query('q') ?? '').trim();
+  const done = String(c.req.query('done') ?? '').trim();
   const key = asked || (typed ? matchQuestion(typed) : '');
   const attention = whatNeedsHim(s);
 
   // ORIENTATION IS ONE SENTENCE. Not four green bullets: a routine count and a
   // spend of zero are true, measurable, and not why he opened this.
-  const orientation = attention === null
-    ? (s.routinesHealthy === 0 && s.checks.length === 0
-      ? 'I am set up, and I have not learned anything about you yet.'
-      : 'Everything is fine. Nothing needs you.')
-    : attention.kind === 'stopped' || attention.kind === 'drifted'
-      ? 'Something needs looking at.'
-      : 'One thing needs you.';
+  const orientation = done && attention === null
+    ? ''
+    : attention === null
+      ? (s.routinesHealthy === 0 && s.checks.length === 0
+        ? 'I am set up, and I have not learned anything about you yet.'
+        : 'Everything is fine. Nothing needs you.')
+      : attention.kind === 'stopped' || attention.kind === 'drifted'
+        ? 'Something needs looking at.'
+        : 'One thing needs you.';
 
   const body = html`
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
-    <p class="lede">${orientation}</p>
+    ${orientation ? html`<p class="lede">${orientation}</p>` : ''}
 
+    ${done ? whatJustHappened(done, s) : ''}
     ${theOneThing(attention)}
 
     ${key ? html`<p class="asked">${typed || QUESTIONS[key] || asked}</p>
       ${answerTo(key, s, attention)}` : ''}
 
-    ${!key && attention === null ? html`<div class="maybe">
-      ${raw(['okay', 'working'].map((k) =>
+    ${!key ? html`<div class="maybe">
+      ${raw((attention !== null && (attention.kind === 'recognise' || attention.kind === 'expect')
+    ? ['ifyes', 'change']
+    : ['okay', 'working']).map((k) =>
     `<a href="/foundry?ask=${k}">${QUESTIONS[k]}</a>`).join(''))}
     </div>` : ''}`;
 
