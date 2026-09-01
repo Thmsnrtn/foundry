@@ -80,6 +80,20 @@ function count(n: number, singular: string, plural = singular + 's'): string {
 
 interface OwnerState {
   productId: string;
+  /** Whose institution this is. Read here so no surface re-derives it. */
+  ownerId: string;
+  /**
+   * ANYTHING NEEDING HIM THAT IS NOT ABOUT FOUNDRY ITSELF.
+   *
+   * The rest of this object describes ONE company — the one that is Foundry —
+   * because self-maintenance is what the ladder has actually climbed. His
+   * institution is larger than that, and the first screen has to answer "does
+   * anything need me" about all of it or the answer is a lie of omission.
+   */
+  elsewhere: Array<{
+    productId: string; companyName: string;
+    candidateId: string; proposal: string; rationale: string;
+  }>;
   companyName: string;
   firstName: string;
   routinesHealthy: number;
@@ -97,7 +111,65 @@ interface OwnerState {
   establishedAt: string | null;
 }
 
-async function readOwnerState(productId: string, founderName: string): Promise<OwnerState> {
+/**
+ * WHICH COMPANY IS FOUNDRY.
+ *
+ * The first screen used to find it with `selectedProductId`, whose rule is
+ * "exactly one company, so the choice is unambiguous". That was true while the
+ * owner had one. The moment he added a second — which the product now invites
+ * him to do on the Companies page — it returned null, `context` returned null,
+ * and the home page REDIRECTED HIM TO ONBOARDING. The sacred screen was one tap
+ * away from disappearing, and nothing would have said why.
+ *
+ * Foundry is not "his only company". It is a specific row, named once in
+ * `system_identities` and immutable there. Asking the right question removes
+ * the dependency on how many companies he happens to own.
+ */
+async function foundryProductId(founderId: string): Promise<string | null> {
+  const row = (await query(
+    `SELECT p.id FROM system_identities i
+       JOIN products p ON p.id = i.product_id
+      WHERE i.identity_key = 'foundry' AND p.owner_id = ?`, [founderId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  return row ? String(row.id) : null;
+}
+
+/**
+ * The questions Foundry is holding about his OTHER companies.
+ *
+ * Ordered so the oldest unanswered one surfaces first: a question that has been
+ * waiting is a question he has already been shown and did not answer, and
+ * burying it under a newer one is how an institution quietly gives up asking.
+ */
+async function questionsElsewhere(
+  founderId: string, exceptProductId: string | null,
+): Promise<OwnerState['elsewhere']> {
+  const rows = (await query(
+    `SELECT c.id, c.proposed_responsibility, c.rationale, p.id AS product_id, p.name
+       FROM responsibility_candidates c
+       JOIN products p ON p.id = c.product_id
+      WHERE p.owner_id = ? AND c.status = 'pending'
+        AND p.status = 'active' AND p.deleted_at IS NULL
+        -- OWNER ATTENTION IS CAPITAL, AND A COMPANY THAT DOES NOT EXIST MAY NOT
+        -- SPEND IT. The reference world exists to be watched, and its questions
+        -- are real questions about real machinery — but nothing is at stake in
+        -- one, so nothing about it NEEDS him, which is what this screen answers.
+        -- They wait on the company's own page, where he goes to look.
+        AND ${realCompany('p')}
+        AND (? IS NULL OR c.product_id <> ?)
+      ORDER BY c.created_at, c.rowid`,
+    [founderId, exceptProductId, exceptProductId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    productId: String(r.product_id), companyName: String(r.name),
+    candidateId: String(r.id), proposal: String(r.proposed_responsibility),
+    rationale: String(r.rationale),
+  }));
+}
+
+async function readOwnerState(
+  productId: string, founderName: string, founderId: string,
+): Promise<OwnerState> {
   const product = (await query(
     `SELECT name, created_at, operating_budget_monthly_usd, ai_cost_trailing_30d_usd, github_repo_url
        FROM products WHERE id = ?`, [productId])).rows[0] as Record<string, unknown> | undefined;
@@ -179,6 +251,7 @@ async function readOwnerState(productId: string, founderName: string): Promise<O
 
   return {
     productId,
+    ownerId: founderId,
     companyName: String(product?.name ?? 'this company'),
     firstName: founderName.split(' ')[0] || '',
     routinesHealthy: Number(health?.n ?? 0),
@@ -213,6 +286,7 @@ async function readOwnerState(productId: string, founderName: string): Promise<O
     spent30d: Number(product?.ai_cost_trailing_30d_usd ?? 0),
     connectedSenses: product?.github_repo_url ? ['its code'] : [],
     establishedAt: product?.created_at == null ? null : String(product.created_at).slice(0, 10),
+    elsewhere: await questionsElsewhere(founderId, productId),
   };
 }
 
@@ -227,6 +301,8 @@ type Attention =
   | { kind: 'authorise'; responsibilityId: string; check: string; path: string;
       verification: string[]; matched: number; wrong: number }
   | { kind: 'recognise'; candidateId: string; check: string | null; proposal: string }
+  | { kind: 'recognise_company'; candidateId: string; productId: string;
+      companyName: string; proposal: string; rationale: string }
   | { kind: 'expect'; responsibilityId: string; check: string; title: string }
   | { kind: 'stopped'; routines: string[] }
   | { kind: 'drifted'; checks: string[] }
@@ -260,6 +336,18 @@ function whatNeedsHim(s: OwnerState): Attention {
     return {
       kind: 'expect', responsibilityId: ready.id,
       check: String(ready.check), title: ready.title,
+    };
+  }
+  // AND THE REST OF HIS INSTITUTION. Last, because everything above is about
+  // Foundry being broken or about a permission — both of which outrank a
+  // question — but never never: a question about one of his companies that the
+  // first screen does not surface is a question he will not answer.
+  const asked = s.elsewhere[0];
+  if (asked) {
+    return {
+      kind: 'recognise_company', candidateId: asked.candidateId,
+      productId: asked.productId, companyName: asked.companyName,
+      proposal: asked.proposal, rationale: asked.rationale,
     };
   }
   return null;
@@ -608,6 +696,42 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
     });
   }
 
+  // A QUESTION ABOUT ONE OF HIS COMPANIES, NOT ABOUT FOUNDRY.
+  //
+  // Same act — RECOGNITION — and deliberately the same card, because it is the
+  // same decision with the same consequence. What differs is that it has to
+  // NAME THE COMPANY: the first screen is the one place where "is this worth
+  // looking after?" could otherwise be read as being about the wrong business.
+  if (a.kind === 'recognise_company') {
+    return decisionCard({
+      act: 'Recognition',
+      question: `Is this worth looking after at ${a.companyName}?`,
+      title: a.proposal,
+      meaning: [
+        a.rationale,
+        'Saying yes means I watch it and tell you what I see — nothing more. '
+        + 'I cannot change anything, spend anything, or contact anyone either way.',
+      ],
+      facts: [
+        ['Company', a.companyName],
+        ['Cost', 'Nothing'],
+        ['What I could change', 'Nothing'],
+        ['If you change your mind', 'Say so and I will look at it again'],
+      ],
+      primary: {
+        label: 'Yes — worth looking after',
+        action: `/letter/responsibility-candidates/${a.candidateId}/promote`,
+        fields: { return_to: 'foundry' },
+      },
+      secondary: {
+        label: 'No',
+        action: `/letter/responsibility-candidates/${a.candidateId}/reject`,
+        fields: { return_to: 'foundry' },
+      },
+      technical: `${a.proposal} · company ${a.productId} · candidate ${a.candidateId}`,
+    });
+  }
+
   const plain = CHECK_IN_PLAIN_WORDS[a.check];
   return decisionCard({
     act: 'Responsibility',
@@ -739,6 +863,44 @@ function whatJustHappened(done: string, s: OwnerState,
 
 // ─── answers, from state ────────────────────────────────────────────────────
 
+/**
+ * WHICH COMPANY HE MEANT.
+ *
+ * "How is AcreOS doing?" is the mandate's own example, and until now the ask box
+ * could not tell one company from another — every answer was about Foundry,
+ * whichever business he named. That is worse than not answering: it is a
+ * confident answer about the wrong thing.
+ *
+ * Longest name first, so "Acre" does not answer for "AcreOS". Reference
+ * companies are included deliberately: if he asks about one by name he should
+ * get an answer, and the answer says what it is.
+ */
+async function companyHeMeant(
+  founderId: string, text: string,
+): Promise<{ id: string; name: string; reference: boolean } | null> {
+  if (!text.trim()) return null;
+  const haystack = text.toLowerCase();
+  // NO REALITY PREDICATE, AND THIS IS THE ONE PLACE THAT IS RIGHT. He asked
+  // about a company BY NAME; refusing to recognise the name would be answering
+  // "I don't know what you mean" about a company he is looking at. `reality` is
+  // selected and travels with the answer, which discloses that the company does
+  // not exist before it says anything else about it — disclosure, not exclusion.
+  // Nothing here becomes owner truth: the numbers it leads to carry the same
+  // banner the company's own page does.
+  const rows = (await query(
+    `SELECT id, name, reality FROM products
+      WHERE owner_id = ? AND status = 'active' AND deleted_at IS NULL
+      ORDER BY length(name) DESC, rowid`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  for (const row of rows) {
+    const name = String(row.name);
+    if (name.length >= 3 && haystack.includes(name.toLowerCase())) {
+      return { id: String(row.id), name, reference: String(row.reality) === 'reference' };
+    }
+  }
+  return null;
+}
+
 const QUESTIONS: Record<string, string> = {
   this: 'What does this mean?',
   ifyes: 'What happens if I say yes?',
@@ -755,6 +917,14 @@ const QUESTIONS: Record<string, string> = {
 
 function matchQuestion(text: string): string {
   const t = text.toLowerCase();
+  // ASKED ABOUT A COMPANY, WHICH IS A DIFFERENT QUESTION FROM ASKED ABOUT
+  // FOUNDRY. These two run first because "how is AcreOS doing" also matches
+  // /okay/ below, and answering it with Foundry's own health would be a
+  // confident answer about the wrong business.
+  if (/show me the numbers|the numbers|how much|revenue|mrr|metrics|customers|churn/.test(t)) {
+    return 'numbers';
+  }
+  if (/how is|how are|how'?s |doing|going|healthy|health of/.test(t)) return 'howdoing';
   // CONTEXT FIRST. He is looking at something; "what does this mean" is about
   // that, and he should never have to name it again to be understood.
   if (/what.*(this|that).*(mean|about)|explain (this|that)/.test(t)) return 'this';
@@ -773,6 +943,109 @@ function matchQuestion(text: string): string {
   return 'unknown';
 }
 
+/**
+ * AN ANSWER ABOUT ONE OF HIS COMPANIES, FROM WHAT IS ACTUALLY THERE.
+ *
+ * STRUCTURE WHERE STRUCTURE HELPS, PROSE WHERE PROSE HELPS — the owner was
+ * explicit that "show me the numbers" must not produce a wall of text, and that
+ * "why isn't it growing" must not produce a bare table. So a health question
+ * answers in sentences and a numbers question answers in a list, and both come
+ * from the same institutional truth rather than from a model retelling it.
+ *
+ * Nothing here interprets. "New revenue is down about a quarter" is arithmetic
+ * on two readings; whether that is bad is his to say, and an institution that
+ * quietly decided would be inventing the one thing it cannot observe.
+ */
+async function answerAboutCompany(
+  about: { id: string; name: string; reference: boolean; key: string },
+): Promise<HtmlEscapedString> {
+  const { whatTheNumbersSay } = await import('../../services/founder/what-the-numbers-say.js');
+  const intent = await import('../../services/institution/standing-intent.js');
+
+  const disclaimer = about.reference
+    ? html`<p class="quiet"><strong>${about.name} does not exist.</strong> I made it up so you
+        could watch me work. The arithmetic is real; the numbers are invented, and nothing
+        here is a fact about a real company.</p>`
+    : '';
+
+  if (about.key === 'numbers') {
+    const read = await whatTheNumbersSay(about.id);
+    return html`<div class="said">
+      ${disclaimer}
+      ${read.absence
+    ? html`<p>${read.absence}</p>`
+    : html`<ul>${raw(read.numbers.map((n) =>
+      `<li><strong>${n.now}</strong> — ${n.sentence}</li>`).join(''))}</ul>
+      <p class="quiet">As of ${String(read.asOf)}, against the nearest reading to a month
+        before it.</p>`}
+      <a class="btn" href="/foundry/companies/${about.id}">Open ${about.name}</a>
+    </div>`;
+  }
+
+  if (about.key === 'allowed') {
+    const bounds = await intent.boundariesFor(about.id);
+    return html`<div class="said">
+      ${disclaimer}
+      ${bounds.length
+    ? html`<p>You have told me not to do these at ${about.name}:</p>
+      <ul>${raw(bounds.map((b) =>
+      `<li>${b.statement}${b.everywhere ? ' — for every company' : ''}</li>`).join(''))}</ul>`
+    : html`<p>You have not told me to hold back on anything at ${about.name}.</p>`}
+      <p>I cannot change anything, spend anything or contact anyone for ${about.name} unless
+        you have given me a permission for it, and I would ask first.</p>
+    </div>`;
+  }
+
+  if (about.key === 'working' || about.key === 'needs') {
+    const held = (await query(
+      `SELECT title, state FROM institutional_responsibilities
+        WHERE product_id = ? AND disposition = 'active' ORDER BY created_at`, [about.id]))
+      .rows as unknown as Array<Record<string, unknown>>;
+    const asking = (await query(
+      `SELECT proposed_responsibility FROM responsibility_candidates
+        WHERE product_id = ? AND status = 'pending' ORDER BY created_at`, [about.id]))
+      .rows as unknown as Array<Record<string, unknown>>;
+    return html`<div class="said">
+      ${disclaimer}
+      ${held.length
+    ? html`<p>At ${about.name} I look after:</p>
+      <ul>${raw(held.map((r) =>
+      `<li>${String(r.title)} — ${LADDER_IN_PLAIN_WORDS[String(r.state)] ?? String(r.state)}</li>`)
+    .join(''))}</ul>`
+    : html`<p>I do not look after anything at ${about.name} yet.</p>`}
+      ${asking.length
+    ? html`<p>And ${asking.length === 1 ? 'there is one thing' : `there are ${String(asking.length)} things`}
+        I have asked you about:</p>
+      <ul>${raw(asking.map((r) => `<li>${String(r.proposed_responsibility)}</li>`).join(''))}</ul>
+      <a class="btn go" href="/foundry/companies/${about.id}">Answer at ${about.name}</a>`
+    : ''}
+    </div>`;
+  }
+
+  // How is it doing. Sentences, because that is how the question was asked.
+  const read = await whatTheNumbersSay(about.id);
+  const objective = await intent.objectiveFor(about.id);
+  const falling = read.numbers.filter((n) => n.direction === 'fell');
+  const rising = read.numbers.filter((n) => n.direction === 'rose');
+  return html`<div class="said">
+    ${disclaimer}
+    ${read.absence
+    ? html`<p>${read.absence}</p>`
+    : html`<p>${falling.length === 0 && rising.length === 0
+      ? `Nothing at ${about.name} has moved much since a month ago.`
+      : `At ${about.name}, ${String(falling.length)} of the numbers I can see are down on a `
+        + `month ago and ${String(rising.length)} are up.`}</p>
+      <ul>${raw(read.numbers.map((n) => `<li>${n.sentence}</li>`).join(''))}</ul>
+      <p class="quiet">That is where things are and which way they are going. Whether it is
+        good is yours to say — I am not judging it.</p>`}
+    ${objective
+    ? html`<p>You told me ${about.name} is for: <strong>${objective.statement}</strong></p>`
+    : html`<p class="quiet">You have not told me what ${about.name} is for, so I have no way
+        to judge which of these matters most.</p>`}
+    <a class="btn" href="/foundry/companies/${about.id}">Open ${about.name}</a>
+  </div>`;
+}
+
 function answerTo(key: string, s: OwnerState, a: Attention,
 ): HtmlEscapedString | Promise<HtmlEscapedString> {
   const drifted = s.checks.filter((c) => c.result === 'failed');
@@ -784,9 +1057,13 @@ function answerTo(key: string, s: OwnerState, a: Attention,
     }
     const named = a.kind === 'recognise'
       ? (a.check ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.proposal : a.proposal)
-      : a.kind === 'authorise'
-        ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.check
-        : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
+      : a.kind === 'recognise_company'
+        // A company's job has no self-check behind it to look up a friendlier
+        // name for; the proposal already IS the plain words.
+        ? `${a.proposal} at ${a.companyName}`
+        : a.kind === 'authorise'
+          ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.check
+          : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
     if (key === 'change') {
       return a.kind === 'authorise'
         ? html`<div class="said">
@@ -954,9 +1231,14 @@ function answerTo(key: string, s: OwnerState, a: Attention,
 async function context(c: any): Promise<OwnerState | null> {
   const founder = c.get('founder') as { id?: string; name?: string; email?: string } | undefined;
   if (!founder?.id) return null;
-  const productId = await selectedProductId(c, String(founder.id));
+  // Foundry itself, by name. `selectedProductId` remains the fallback for a
+  // deployment where Foundry has not yet been established as a company —
+  // it is right there and wrong the moment a second company exists, which is
+  // why it is second.
+  const founderId = String(founder.id);
+  const productId = await foundryProductId(founderId) ?? await selectedProductId(c, founderId);
   if (!productId) return null;
-  return readOwnerState(productId, String(founder.name ?? founder.email ?? ''));
+  return readOwnerState(productId, String(founder.name ?? founder.email ?? ''), founderId);
 }
 
 foundryShellRoutes.get('/foundry', async (c) => {
@@ -979,6 +1261,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const key = asked || (typed ? matchQuestion(typed) : '');
   const attention = whatNeedsHim(s);
 
+  // Only when he TYPED a company's name. The chips below are institutional
+  // questions and must not silently acquire a subject.
+  const named = typed
+    ? await companyHeMeant(s.ownerId, typed) : null;
+  const about = named && (key === 'howdoing' || key === 'numbers' || key === 'working'
+    || key === 'needs' || key === 'allowed') ? { ...named, key } : null;
+
   // ORIENTATION IS ONE SENTENCE. Not four green bullets: a routine count and a
   // spend of zero are true, measurable, and not why he opened this.
   const orientation = done && attention === null
@@ -1000,7 +1289,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${theOneThing(attention)}
 
     ${key ? html`<p class="asked">${typed || QUESTIONS[key] || asked}</p>
-      ${answerTo(key, s, attention)}` : ''}
+      ${about ? answerAboutCompany(about) : answerTo(key, s, attention)}` : ''}
 
     ${!key ? html`<div class="maybe">
       ${raw((attention !== null && attention.kind !== 'stopped' && attention.kind !== 'drifted'
@@ -1025,7 +1314,6 @@ foundryShellRoutes.get('/foundry', async (c) => {
  */
 interface CompanyView {
   id: string; name: string; established: string | null;
-  objective: string | null;
   budgetMonthly: number; spent30d: number;
   knows: string[]; gaps: Array<{ missing: string; unlocks: string; connect: string | null }>;
   responsibilities: Array<{ title: string; state: string }>;
@@ -1034,6 +1322,17 @@ interface CompanyView {
   reference: { situation: string; premise: string } | null;
   /** What Foundry has noticed and is asking about. Recognition, and nothing more. */
   asks: Array<{ id: string; proposal: string; rationale: string }>;
+  /** What he said this company is for, in his words. */
+  said: { statement: string; steers: boolean } | null;
+  /** What he told Foundry not to do. Enforced, and liftable in one tap. */
+  boundaries: Array<{
+    id: string; statement: string; ownerWords: string;
+    everywhere: boolean; enforcedNow: boolean;
+  }>;
+  /** What he lifted, offered back — because changing your mind runs both ways. */
+  lifted: Array<{ statement: string; liftedAt: string; liftedReason: string }>;
+  /** What this company was for before, and when that changed. */
+  formerly: { statement: string; retiredAt: string; retiredReason: string } | null;
 }
 
 async function readCompany(productId: string, founderId: string): Promise<CompanyView | null> {
@@ -1078,9 +1377,15 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
     rationale: rationales.get(candidate.id) ?? '',
   }));
 
-  const objective = (await query(
-    `SELECT objective_text FROM company_okrs WHERE product_id = ?
-      ORDER BY created_at DESC LIMIT 1`, [productId])).rows[0] as Record<string, unknown> | undefined;
+  // STANDING INTENT, NOT AN OKR. `company_okrs` is a quarterly system with key
+  // results, progress percentages and agent owners; writing "focus on
+  // retention" into it invented a period, a status and a progress figure the
+  // owner never stated. Migration 225 gave his sentence a place of its own.
+  const intent = await import('../../services/institution/standing-intent.js');
+  const objective = await intent.objectiveFor(productId);
+  const liveBoundaries = await intent.boundariesFor(productId);
+  const lifted = await intent.liftedBoundariesFor(productId);
+  const formerly = await intent.formerObjectiveFor(productId);
 
   const { getSelfCheckStanding } = await import(
     '../../services/institution/development-observation.js');
@@ -1139,7 +1444,15 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
   return {
     id: String(row.id), name: String(row.name),
     established: row.created_at == null ? null : String(row.created_at).slice(0, 10),
-    objective: objective ? String(objective.objective_text) : null,
+    said: objective ? { statement: objective.statement, steers: objective.channels.length > 0 } : null,
+    boundaries: liveBoundaries.map((b) => ({
+      id: b.id, statement: b.statement, ownerWords: b.ownerWords,
+      everywhere: b.everywhere, enforcedNow: b.door != null,
+    })),
+    lifted: lifted.map((b) => ({
+      statement: b.statement, liftedAt: b.liftedAt, liftedReason: b.liftedReason,
+    })),
+    formerly,
     budgetMonthly: Number(row.operating_budget_monthly_usd ?? 0),
     spent30d: Number(row.ai_cost_trailing_30d_usd ?? 0),
     knows, gaps,
@@ -1301,6 +1614,10 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       that it is yours. I cannot see anything about it yet.</p></div>` : ''}
     ${done === 'steered' ? html`<div class="done"><p><strong>Noted.</strong> I will weigh that
       when I decide what is worth your attention here.</p></div>` : ''}
+    ${done === 'bound' ? html`<div class="done"><p><strong>Held.</strong> I will refuse that
+      every time until you lift it, and tell whatever asked that you said so.</p></div>` : ''}
+    ${done === 'lifted' ? html`<div class="done"><p><strong>Lifted.</strong> I am no longer
+      refusing that. Nothing has happened as a result — it only means I may again.</p></div>` : ''}
     ${done === 'recognised' ? html`<div class="done"><p><strong>Taken on.</strong> I will watch
       it and tell you what I see. I still cannot change anything.</p></div>` : ''}
     ${done === 'declined' ? html`<div class="done"><p><strong>Left alone.</strong> I will not
@@ -1365,17 +1682,54 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
     <div class="know">
       <h3>What matters here</h3>
-      ${view.objective
-    ? html`<p>${view.objective}</p>`
-    : html`<p class="lede">You have not told me what you are trying to do with this company.
-        Until you do, I have no way to judge what is worth your attention.</p>`}
-      <form class="inline" method="POST" action="/foundry/companies/${view.id}/objective">
-        <input type="text" name="objective" required maxlength="200"
-          placeholder="${view.objective ? 'Change it' : 'What are you trying to do here?'}"
-          aria-label="What matters for this company" />
-        <button class="btn" type="submit" style="width:auto">Save</button>
+      ${view.said
+    ? html`<p>${view.said.statement}</p>
+        <p class="quiet">${view.said.steers
+    ? 'I weigh that when deciding what is worth your attention here.'
+    : 'I could not tell which numbers that points at, so I watch all of them equally.'}</p>`
+    : html`<p class="lede">You have not told me what you are trying to do with this company,
+        or what I should not do. Until you do, I have no way to judge what is worth your
+        attention.</p>`}
+      <form class="inline" method="POST" action="/foundry/companies/${view.id}/said">
+        <input type="text" name="said" required maxlength="300"
+          placeholder="${view.said ? 'Say something else' : 'What matters here — or what should I not do?'}"
+          aria-label="What matters for this company, or what Foundry should not do" />
+        <button class="btn" type="submit">Tell me</button>
       </form>
+      <p class="quiet">Tell me what this company is for, or tell me not to do something and
+        I will refuse it every time until you say otherwise. I will say what I understood
+        before anything takes effect.</p>
+      ${view.formerly ? html`<p class="quiet">Before ${view.formerly.retiredAt} it was:
+        &ldquo;${view.formerly.statement}&rdquo; — replaced because
+        ${view.formerly.retiredReason}.</p>` : ''}
     </div>
+
+    ${view.boundaries.length ? html`<div class="know">
+      <h3>What you told me not to do</h3>
+      ${raw(view.boundaries.map((b) => `<div class="noticed">
+        <p><strong>${b.statement}</strong></p>
+        <p class="quiet">I will not ${b.ownerWords}${b.everywhere ? ', for any company' : ''}.
+          ${b.enforcedNow
+    ? 'Refused at the point I would act, not by me remembering.'
+    : 'I have no way to do that today in any case.'}</p>
+        <form method="POST" action="/foundry/companies/${view.id}/boundaries/${b.id}/lift">
+          <button class="btn" type="submit">Lift this</button>
+        </form>
+      </div>`).join(''))}
+    </div>` : ''}
+
+    ${view.lifted.length ? html`<div class="know">
+      <h3>What you lifted</h3>
+      <p class="quiet">Changing your mind runs both ways. These are no longer in force.</p>
+      ${raw(view.lifted.map((b) => `<div class="noticed">
+        <p>${b.statement}</p>
+        <p class="quiet">Lifted ${b.liftedAt} — ${b.liftedReason}.</p>
+        <form method="POST" action="/foundry/companies/${view.id}/said/confirm">
+          <input type="hidden" name="said" value="${b.statement}" />
+          <button class="btn" type="submit">Hold me to this again</button>
+        </form>
+      </div>`).join(''))}
+    </div>` : ''}
 
     <div class="know">
       <h3>Money</h3>
@@ -1389,36 +1743,198 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
   return c.html(page(view.name, body, 'companies'));
 });
 
-// NO CAPABILITY GATE, AND THE REASON, because the route-guard gate asks.
-// Stating what he is trying to do with his own company grants Foundry nothing
-// and causes nothing: it records the owner's intent, which is read when judging
-// what is worth his attention and nowhere else. Authority is checked
-// server-side regardless — the company must belong to this authenticated
-// founder, and any other id is refused as not found without revealing whether
-// it exists.
+// ─── what the owner said ────────────────────────────────────────────────────
+
+/**
+ * ONE FIELD, IN HIS WORDS, FOR TWO DIFFERENT ACTS.
+ *
+ * The owner does not think in objects. He thinks in sentences: "focus on
+ * retention", "don't contact anyone", "get the first ten paying customers". A
+ * form with an Objective box and a Boundary box would make him classify his own
+ * instruction before giving it, which is the institution's job.
+ *
+ * So one field reads the sentence and says what it understood — and NOTHING IS
+ * BOUND HERE. This renders a confirmation showing exactly what will happen, and
+ * only the confirm below writes anything. A boundary is a governance control:
+ * he has to be able to predict the resulting state before it binds.
+ *
+ * NO CAPABILITY GATE, AND THE REASON, because the route-guard gate asks.
+ * Reading a sentence back to the owner grants Foundry nothing and changes
+ * nothing. Ownership is checked server-side regardless — a company id for
+ * anyone else is refused as not found without revealing that it exists.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-foundryShellRoutes.post('/foundry/companies/:id/objective', async (c: any) => {
+foundryShellRoutes.post('/foundry/companies/:id/said',
+  requireInstitutionOwner(), async (c: any) => {
   const founder = c.get('founder') as { id?: string } | undefined;
   if (!founder?.id) return c.redirect('/onboarding');
   const productId = c.req.param('id');
-  // Ownership server-side; a company id for anyone else is refused without
-  // revealing that it exists.
-  const owned = await query('SELECT id FROM products WHERE id = ? AND owner_id = ?',
-    [productId, String(founder.id)]);
+  const owned = await query(
+    'SELECT id, name FROM products WHERE id = ? AND owner_id = ?', [productId, String(founder.id)]);
   if (!owned.rows.length) return c.notFound();
+  const name = String((owned.rows[0] as Record<string, unknown>).name);
 
-  const body = await c.req.parseBody();
-  const objective = String(body.objective ?? '').trim().slice(0, 200);
-  if (!objective) return c.redirect(`/foundry/companies/${productId}`);
+  const form = await c.req.parseBody();
+  const said = String(form.said ?? '').trim().slice(0, 300);
+  if (!said) return c.redirect(`/foundry/companies/${productId}`);
 
-  const { nanoid } = await import('nanoid');
-  const now = new Date();
-  const period = `${String(now.getUTCFullYear())}-Q${String(Math.floor(now.getUTCMonth() / 3) + 1)}`;
-  await query(
-    `INSERT INTO company_okrs (id, product_id, period, objective_text, objective_owner)
-     VALUES (?, ?, ?, ?, 'founder')`, [nanoid(), productId, period, objective]);
-  return c.redirect(`/foundry/companies/${productId}?done=steered`);
+  const intent = await import('../../services/institution/standing-intent.js');
+  const proposal = intent.interpret(said);
+
+  if (proposal.kind === 'unclear') {
+    // TAUGHT IN ONE INTERACTION, RATHER THAN IN A GLOSSARY. He sees what it can
+    // hold at the moment he needed it, which is the only moment it is useful.
+    const subjects = await intent.everySubject();
+    return c.html(page('What you said', html`
+      <h1>I did not follow that</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      <p>${proposal.because}.</p>
+      <div class="know">
+        <h3>What I can hold you to</h3>
+        <p class="quiet">Tell me not to do any of these and I will refuse, every time,
+          until you say otherwise.</p>
+        <ul>${raw(subjects.map((sub) => `<li>${sub.ownerWords}</li>`).join(''))}</ul>
+      </div>
+      <div class="know">
+        <h3>Or tell me what matters</h3>
+        <p class="quiet">Anything else you say about what this company is for, I will keep,
+          and I will weigh it when deciding what is worth your attention.</p>
+      </div>
+      <a class="btn" href="/foundry/companies/${productId}">Back to ${name}</a>`, 'companies'));
+  }
+
+  if (proposal.kind === 'boundary') {
+    const facts = await intent.subjectFacts(proposal.subject);
+    return c.html(page('What you said', html`
+      <h1>Hold you to this?</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      <div class="know">
+        <h3>What I will do</h3>
+        <p>I will not ${facts?.ownerWords ?? proposal.subject} for ${name}. Every time,
+          without exception, until you lift it.</p>
+        ${facts?.door == null
+    ? html`<p class="quiet">I have no way to do that today, so this is already true.
+        I am recording it anyway, so that if I ever can, I will not.</p>`
+    : html`<p class="quiet">This is enforced at the point I would act, not by me
+        remembering. Anything that tries will be refused and told why.</p>`}
+        <ul>
+          <li><strong>Cost</strong> — nothing.</li>
+          <li><strong>How long</strong> — until you lift it.</li>
+          <li><strong>Undo</strong> — one tap, on this company's page.</li>
+        </ul>
+      </div>
+      <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <button class="btn go" type="submit">Yes — hold me to that</button>
+      </form>
+      <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <input type="hidden" name="as" value="objective" />
+        <button class="btn" type="submit">No — just remember I said it</button>
+      </form>`, 'companies'));
+  }
+
+  return c.html(page('What you said', html`
+    <h1>Understood</h1>
+    <p class="lede">You said: <strong>${said}</strong></p>
+    <div class="know">
+      <h3>What I will do</h3>
+      <p>I will treat that as what ${name} is for right now.</p>
+      ${proposal.channels.length
+    ? html`<p class="quiet">I will weigh ${proposal.concerns.join(' and ')} more heavily when
+        deciding what is worth your attention here, and raise other things only when they
+        move far enough that staying quiet would be wrong.</p>`
+    : html`<p class="quiet">I could not tell which of this company's numbers that points at,
+        so I will keep watching all of them equally. That is not a refusal — I have kept
+        what you said, and it is what I will show you when you ask what this company is for.</p>`}
+      <ul>
+        <li><strong>Cost</strong> — nothing.</li>
+        <li><strong>What I could change</strong> — nothing. This changes what I raise, not what I may do.</li>
+        <li><strong>Undo</strong> — say something else and this is replaced.</li>
+      </ul>
+    </div>
+    <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+      <input type="hidden" name="said" value="${said}" />
+      <button class="btn go" type="submit">Yes — that is right</button>
+    </form>
+    <a class="btn" href="/foundry/companies/${productId}">No — leave it</a>`, 'companies'));
 });
+
+/**
+ * BIND IT — AND RE-READ THE SENTENCE HERE RATHER THAN TRUSTING THE FORM.
+ *
+ * The confirmation carries his words and nothing else. The subject, the
+ * channels and the kind are derived again, server-side, from those words. A
+ * form field naming a subject would be a caller asserting what binds, and the
+ * one thing a governance control must never take from a request is what it
+ * governs.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/companies/:id/said/confirm',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const productId = c.req.param('id');
+    const owned = await query('SELECT id FROM products WHERE id = ? AND owner_id = ?',
+      [productId, String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+
+    const form = await c.req.parseBody();
+    const said = String(form.said ?? '').trim().slice(0, 300);
+    if (!said) return c.redirect(`/foundry/companies/${productId}`);
+
+    const intent = await import('../../services/institution/standing-intent.js');
+    const proposal = intent.interpret(said);
+
+    // He read a boundary and chose to keep it as a note instead. His sentence
+    // is kept verbatim either way; only what it binds differs.
+    const asObjective = String(form.as ?? '') === 'objective';
+
+    if (proposal.kind === 'boundary' && !asObjective) {
+      await intent.setBoundary({ productId, subject: proposal.subject, statement: said });
+      return c.redirect(`/foundry/companies/${productId}?done=bound`);
+    }
+    if (proposal.kind === 'unclear') return c.redirect(`/foundry/companies/${productId}`);
+
+    await intent.setObjective({
+      productId, statement: said,
+      channels: proposal.kind === 'objective' ? proposal.channels : [],
+    });
+    return c.redirect(`/foundry/companies/${productId}?done=steered`);
+  });
+
+/**
+ * LIFT ONE. The reason is Foundry's, not his: he does not owe an explanation
+ * for changing his mind about his own company, and a required free-text box
+ * before undoing something is a dark pattern with a compliance excuse.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/companies/:id/boundaries/:boundaryId/lift',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const productId = c.req.param('id');
+    // The boundary must be one this authenticated owner set, resolved from the
+    // join rather than from the URL. A global boundary is his by definition and
+    // is reached through whichever company he happened to be looking at.
+    //
+    // NO REALITY PREDICATE HERE, DELIBERATELY. This reads no company answer: it
+    // binds one BOUNDARY by id and asks only who owns the company it names. A
+    // boundary set on a reference company must be liftable exactly as any other
+    // is, and scoping this to real companies would strand it — the one shape
+    // that predicate must never take.
+    const owned = await query(
+      `SELECT b.id FROM owner_boundaries b
+         LEFT JOIN products p ON p.id = b.product_id
+        WHERE b.id = ? AND b.lifted_at IS NULL
+          AND (b.product_id IS NULL OR p.owner_id = ?)`,
+      [c.req.param('boundaryId'), String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+
+    const { liftBoundary } = await import('../../services/institution/standing-intent.js');
+    await liftBoundary(c.req.param('boundaryId'), 'the owner lifted it');
+    return c.redirect(`/foundry/companies/${productId}?done=lifted`);
+  });
 
 // ─── controls ───────────────────────────────────────────────────────────────
 

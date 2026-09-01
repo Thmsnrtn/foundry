@@ -87,6 +87,19 @@ async function seed(): Promise<void> {
   await noticeWhatTheNumbersAreDoing(reference.productId);
   REFERENCE_COMPANY = reference.productId;
 
+  // A standing boundary and an objective, because the company page renders both
+  // and the lift buttons carry his own sentence — the longest arbitrary string
+  // the owner can put into the layout, and therefore the thing most likely to
+  // overflow a phone.
+  const intent = await import('../src/services/institution/standing-intent.js');
+  await intent.setBoundary({ productId: COMPANY, subject: 'contact_people',
+    statement: 'Do not contact anyone at all until I say otherwise, not even to say hello' });
+  await intent.setBoundary({ productId: null, subject: 'set_prices',
+    statement: 'Never change what any of my companies charge without asking me first' });
+  await intent.setObjective({ productId: COMPANY,
+    statement: 'Retention matters more than acquisition right now',
+    channels: ['day_30_retention', 'churn_rate'] });
+
   // A pending proposal, because the widest thing on the page is the decision.
   const { proposeResponsibilityCandidate } = await import(
     '../src/services/institution/responsibility-candidate.js');
@@ -119,7 +132,21 @@ async function main(): Promise<void> {
   const base = 'http://127.0.0.1:4317';
   const paths = ['/foundry', '/foundry?ask=okay', '/foundry?ask=working',
     '/foundry/companies', `/foundry/companies/${COMPANY}`,
-    `/foundry/companies/${REFERENCE_COMPANY}`, '/foundry/controls'];
+    `/foundry/companies/${REFERENCE_COMPANY}`, '/foundry/controls',
+    // Asked about a company by name: the answer is the widest structured block
+    // the ask box can produce, and it renders inside the same page.
+    '/foundry?q=' + encodeURIComponent('How is Foundry doing?'),
+    '/foundry?q=' + encodeURIComponent('Show me the numbers for Foundry')];
+
+  // label → (path, form body). The label is what the report prints.
+  const POSTS: Array<[string, string, string]> = [
+    ['POST said → boundary', `/foundry/companies/${COMPANY}/said`,
+      'said=' + encodeURIComponent('Do not contact anyone at all until I say otherwise')],
+    ['POST said → objective', `/foundry/companies/${COMPANY}/said`,
+      'said=' + encodeURIComponent('Retention matters more than acquisition right now')],
+    ['POST said → not understood', `/foundry/companies/${COMPANY}/said`,
+      'said=' + encodeURIComponent('Do not do anything weird')],
+  ];
 
   const dir = 'docs/design/mobile';
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -141,9 +168,28 @@ async function main(): Promise<void> {
       await page.addInitScript(`document.addEventListener('DOMContentLoaded',function(){
         document.documentElement.style.fontSize = '${String(17 * scale)}px';});`);
     }
-    for (const path of paths) {
-      const response = await page.goto(base + path, { waitUntil: 'load' });
-      const status = response?.status() ?? 0;
+    // THE CONFIRMATION IS A POST RESULT, AND IT IS THE MOST CONSEQUENTIAL
+    // SCREEN IN THE PRODUCT: it is where a standing boundary binds. A gate that
+    // measured only what a browser can navigate to would skip exactly the page
+    // whose text must not be cut off. The server renders complete documents
+    // with their styles inline, so setting the response as the document is a
+    // faithful measurement of what he would see.
+    const posted = new Map<string, string>();
+    for (const [label, path, body] of POSTS) {
+      const res = await fetch(base + path, {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body,
+      });
+      posted.set(label, await res.text());
+    }
+
+    for (const path of [...paths, ...posted.keys()]) {
+      let status = 200;
+      if (posted.has(path)) {
+        await page.setContent(posted.get(path) ?? '', { waitUntil: 'load' });
+      } else {
+        const response = await page.goto(base + path, { waitUntil: 'load' });
+        status = response?.status() ?? 0;
+      }
       const m = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         innerWidth: window.innerWidth,

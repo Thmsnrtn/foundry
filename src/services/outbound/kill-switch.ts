@@ -91,6 +91,22 @@ export async function checkKillSwitch(
       reason: 'company is a reference company and may not reach the world',
     };
   }
+  // WHAT THE OWNER SAID, BEFORE ANYTHING ELSE HE MIGHT HAVE CONFIGURED.
+  //
+  // A standing boundary is the owner speaking directly, and it outranks every
+  // pause axis, tool list and agent state below — those are settings, and this
+  // is an instruction. It is checked here for the reason everything else is:
+  // this is the single door, and a boundary enforced at nine call sites is a
+  // boundary that will be missing from the tenth.
+  //
+  // His own words come back with the refusal. A reason that said
+  // 'boundary:contact_people' would be true and useless; what he needs to see,
+  // months later, is the sentence he typed.
+  const { boundaryStandingInTheWay } = await import('../institution/standing-intent.js');
+  const said = await boundaryStandingInTheWay({ productId, door: 'outbound', tool });
+  if (said) {
+    return { blocked: true, reason: `${said.refusal} — you said: "${said.statement}"` };
+  }
   if (productRow.status && productRow.status !== 'active') {
     return {
       blocked: true,

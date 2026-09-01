@@ -1,5 +1,10 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+// A PRIVATE-OWNER DEPLOYMENT, WHICH IS WHAT THIS FIXTURE ALWAYS DESCRIBED.
+// Without it `requireInstitutionOwner()` refuses, and the owner-gated routes
+// here were only passing because they had no guard yet.
+process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
@@ -244,11 +249,25 @@ describe('places he can walk to', () => {
     const before = await reads(`/foundry/companies/${COMPANY}`);
     expect(before).toContain('You have not told me what you are trying to do');
 
-    const res = await app.request(`/foundry/companies/${COMPANY}/objective`, {
+    // MIGRATION 225 MOVED THIS. Stating what a company is for used to be
+    // written into `company_okrs`, which invented a quarter, a status and a
+    // progress figure the owner never gave. It is now standing intent, and it
+    // takes the same sentence through a confirmation that says what it will do
+    // before anything binds.
+    const shown = await app.request(`/foundry/companies/${COMPANY}/said`, {
       method: 'POST',
       headers: { cookie: `foundry_product=${COMPANY}`,
         'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ objective: 'Get the first ten paying customers' }),
+      body: new URLSearchParams({ said: 'Get the first ten paying customers' }),
+    });
+    expect(shown.status).toBe(200);
+    expect(await shown.text()).toContain('what Foundry is for right now');
+
+    const res = await app.request(`/foundry/companies/${COMPANY}/said/confirm`, {
+      method: 'POST',
+      headers: { cookie: `foundry_product=${COMPANY}`,
+        'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ said: 'Get the first ten paying customers' }),
     });
     expect(res.headers.get('location')).toBe(`/foundry/companies/${COMPANY}?done=steered`);
 

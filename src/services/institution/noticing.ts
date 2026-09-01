@@ -109,6 +109,19 @@ const WHAT_A_MOVEMENT_SUGGESTS: Array<{
  */
 export const MATERIAL_MOVEMENT = 0.20;
 
+/**
+ * HOW MUCH FURTHER SOMETHING OFF-FOCUS HAS TO MOVE.
+ *
+ * When the owner has said what matters right now, that has to change something
+ * or it was not steering. It does NOT silence everything else: an institution
+ * that stops mentioning a revenue collapse because he said "focus on retention"
+ * has obeyed the letter of an instruction nobody meant. So off-focus movement
+ * is still raised — it just has to be twice as large to be worth the
+ * interruption, which is roughly what a person means by "that matters more
+ * than this right now".
+ */
+export const OFF_FOCUS_MULTIPLIER = 2;
+
 export interface Noticed {
   channel: string;
   responsibility: string;
@@ -153,6 +166,13 @@ export async function noticeWhatTheNumbersAreDoing(productId: string): Promise<N
     [productId, String(latest.snapshot_date)])).rows[0] as Record<string, unknown> | undefined;
   if (!prior) return [];
 
+  // WHAT HE SAID THIS COMPANY IS FOR. Steering that changes nothing is not
+  // steering, and the thing it should change is what is worth interrupting him
+  // about — his attention being the scarcest thing this institution spends.
+  const { objectiveFor } = await import('./standing-intent.js');
+  const objective = await objectiveFor(productId);
+  const focused = new Set(objective?.channels ?? []);
+
   const noticed: Noticed[] = [];
   for (const spec of WHAT_A_MOVEMENT_SUGGESTS) {
     if (!live.has(spec.channel)) continue;
@@ -163,7 +183,10 @@ export async function noticeWhatTheNumbersAreDoing(productId: string): Promise<N
     const change = (now - then) / Math.abs(then);
     const moved = change > 0 ? 'rose' : 'fell';
     if (moved !== spec.adverse) continue;
-    if (Math.abs(change) < MATERIAL_MOVEMENT) continue;
+    const threshold = focused.size > 0 && !focused.has(spec.channel)
+      ? MATERIAL_MOVEMENT * OFF_FOCUS_MULTIPLIER
+      : MATERIAL_MOVEMENT;
+    if (Math.abs(change) < threshold) continue;
 
     // The reading that carries this movement, so the candidate is grounded in a
     // signal event the guard already validated rather than in this function's
@@ -202,7 +225,13 @@ export async function noticeWhatTheNumbersAreDoing(productId: string): Promise<N
         + 'nothing about why it moved',
       rationale:
         `${spec.because} — ${moved === 'rose' ? 'up' : 'down'} about ${String(percent)}% `
-        + 'on a month ago.',
+        + 'on a month ago.'
+        // Said out loud when he asked for something else and this came anyway,
+        // so a question that looks like a distraction explains itself.
+        + (focused.size > 0 && !focused.has(spec.channel) && objective
+          ? ` You told me to focus on something else, so I would not normally raise this — `
+            + `it moved far enough that leaving it unsaid felt wrong.`
+          : ''),
       // The MOVEMENT is known — it is arithmetic on two readings that arrived
       // from outside. What is being proposed from it is a question, and the
       // owner answers that, which is why this is a candidate and not a fact.

@@ -192,6 +192,73 @@ rungs below anything that touches the world. RECOGNITION, RESPONSIBILITY and
 AUTHORITY remain three separate owner acts, and this only ever reaches the
 first.
 
+## Standing intent
+
+Built 2026-09-01, answering the owner's requirement that Private Foundry be
+*simultaneously highly autonomous and highly steerable*, and specifically that
+"do not change pricing without asking" become a real enforced standing boundary.
+
+Two kinds of standing intent, and they are genuinely different objects because
+they are genuinely different acts:
+
+- A **boundary** is prohibitive and **enforced**. It is refused at the two doors
+  everything consequential is already refused at — the outbound gateway's kill
+  switch and the model-spend gate — and nowhere else, for the reason those are
+  single doors. The refusal carries **the owner's own sentence**, not a subject
+  key and not a paraphrase.
+- An **objective** is directional and forbids nothing. It changes what is worth
+  the owner's attention, which is the scarcest thing the institution spends.
+
+**An instruction outranks a setting.** A boundary is checked ahead of every
+pause axis, tool list and exemption below it. Those are configuration; this is
+the owner speaking.
+
+**One mode, deliberately.** The obvious schema has `never` and `ask_first`.
+`ask_first` is not built, because it cannot be honestly enforced today: nothing
+reaching the outbound door carries proof that the owner decided *this
+particular act*, so it would either refuse everything — a synonym for `never`
+with a friendlier name — or trust a caller's word for an approval, which is how
+a governance control becomes decoration. One mode, it means refused, and he
+lifts it in one tap.
+
+**Interpretation is deterministic and refuses to guess.** A model that mishears
+a boundary either binds something he did not mean or, far worse, quietly fails
+to bind something he did — and he cannot tell which, because the whole value of
+a standing boundary is that he stops thinking about it. So his sentence is
+matched against a closed, constitutional vocabulary, and an unrecognised one is
+answered with what Foundry *can* hold, which teaches the vocabulary in the one
+moment it is useful. **Nothing binds without confirmation**: he is shown, in
+plain words, exactly what will happen, and the sentence is re-read server-side
+at the moment it binds rather than trusted from the form.
+
+**A boundary on something Foundry cannot do is still recorded.** Most subjects
+have no door today. Refusing to record the instruction would tell him it was
+ignored; implying an enforcement that is not there would be worse. It is
+recorded, shown as already true, and wired for the day a door exists.
+
+**Steering that changes nothing is not steering.** An objective raises the bar
+for movements it did not name — twice, roughly what a person means by "that
+matters more than this right now" — and never silences them: something falling
+off a cliff is still raised, and says why it spoke anyway.
+
+## The first screen is the institution's
+
+The home screen resolved its company with "exactly one company, so the choice is
+unambiguous". True while the owner had one. The moment he added a second — which
+the product now invites — it resolved nothing and **redirected him to
+onboarding**. The sacred screen was one tap from disappearing.
+
+Foundry is a specific row, named once in `system_identities`. Asking that
+question instead removes the dependency on how many companies he owns. And a
+screen that survives many companies must **answer for** many: a question about
+one of his companies that the first screen does not surface is a question he
+will not answer.
+
+**Owner attention is capital, and a company that does not exist may not spend
+it.** Reference-world questions never compete for the first screen. Nothing is
+at stake in one, so nothing about it *needs* him — which is the only question
+that screen answers. They wait where he goes to look.
+
 ## Deployment modes
 
 Foundry is deployed commercially to other companies and privately under owner

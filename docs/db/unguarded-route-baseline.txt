@@ -80,7 +80,6 @@ POST /beta/intake
 POST /connections/:name/disconnect
 POST /connections/grants/:id/revoke
 POST /decisions/:id/undo-auto
-POST /foundry/companies/:id/objective
 POST /integrations/:type/disconnect
 POST /letter/attention/:decisionId
 POST /letter/channels/:channelId/revoke

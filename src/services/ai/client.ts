@@ -212,6 +212,14 @@ export async function companyMayIncurCost(productId: string): Promise<string | n
     // a model, it gets a separate ceiling of its own, decided then and sized to
     // what it is for. Refusing now costs nothing and cannot starve anyone.
     if (String(row.reality) === 'reference') return 'a reference company';
+    // AND WHAT THE OWNER SAID. "Do not spend anything" is an instruction, not a
+    // setting, so it is checked ahead of the ladder below — a company that is
+    // otherwise perfectly entitled to spend still may not when he has said so.
+    // The reason is his own sentence, because this string becomes the message
+    // on a NotEntitledError he will eventually read.
+    const { boundaryStandingInTheWay } = await import('../institution/standing-intent.js');
+    const said = await boundaryStandingInTheWay({ productId, door: 'spend' });
+    if (said) return `something you said — "${said.statement}"`;
     if (Number(row.operating) === 1) return null;
     if (String(row.s) !== 'active') return `archived (${String(row.s)})`;
     if (row.erasing != null) return 'scheduled for deletion';

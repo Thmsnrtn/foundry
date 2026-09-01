@@ -804,6 +804,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   cross_product_insights: 'aggregate claims that name no contributor; the rows behind them are erased via decision_patterns',
   failure_patterns: 'a library of known failure shapes, written by the institution',
   governed_effect_kinds: 'the effect vocabulary',
+  owner_boundary_subjects: 'the vocabulary of things a boundary can be about, constitutional and the same for every owner; the boundaries themselves are erased with their company',
   job_health: 'whether Foundry\'s own scheduled work is running; job names and error class names, no company in it',
   intelligence_benchmarks: 'benchmarks over a cohort, naming no member',
   job_locks: 'scheduler leases',
