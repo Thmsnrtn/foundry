@@ -54,6 +54,18 @@ afterEach(() => { vi.unstubAllGlobals(); });
 /** Two live subscriptions at $500/mo and $250/mo; one of them started today. */
 function stripeIsReachable(): void {
   const nowSec = Math.floor(Date.now() / 1000);
+  // AN HOUR AGO IS NOT ALWAYS THIS MONTH. `sub_new` stood for "started this
+  // month" and was dated `nowSec - 3600`, which lands in the PREVIOUS month for
+  // the first hour of every one — and this file duly failed at 00:54 UTC on the
+  // 1st, asserting 25000 against a `new_mrr_cents` of 0. Nothing was wrong with
+  // the code under test, and a suite that goes red for an hour a month is how a
+  // real failure gets waved through as "that flaky one".
+  //
+  // Anchored to the start of the current UTC month instead, still in the past
+  // and still unambiguously inside the window the assertion is about.
+  const startOfMonth = Date.UTC(
+    new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) / 1000;
+  const newSubCreated = Math.max(nowSec - 3600, startOfMonth + 60);
   const page = (data: unknown[]) => ({
     ok: true, status: 200,
     json: async () => ({ data, has_more: false }),
@@ -64,7 +76,7 @@ function stripeIsReachable(): void {
       return page([
         { id: 'sub_old', status: 'active', created: nowSec - 90 * 86400, canceled_at: null,
           items: { data: [{ price: { unit_amount: 50000, recurring: { interval: 'month' } } }] } },
-        { id: 'sub_new', status: 'active', created: nowSec - 3600, canceled_at: null,
+        { id: 'sub_new', status: 'active', created: newSubCreated, canceled_at: null,
           items: { data: [{ price: { unit_amount: 25000, recurring: { interval: 'month' } } }] } },
       ]);
     }

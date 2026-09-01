@@ -286,6 +286,10 @@ export type BaselineEntryKind = 'module' | 'source_line' | 'table' | 'column';
 
 export interface BaselineEntry { baseline: string; kind: BaselineEntryKind; value: string }
 
+/** The one file whose presence distinguishes "reading the repository" from
+ *  "reading a deployed image that was never given the source". */
+export const REPOSITORY_SENTINEL = 'src/index.ts';
+
 /** The baselines whose entries are existence questions, and what each names. */
 export const LIVENESS_BASELINES: ReadonlyArray<{ path: string; kind: BaselineEntryKind }> = [
   { path: 'docs/db/unreachable-modules-baseline.txt', kind: 'module' },
@@ -321,11 +325,42 @@ export function compareBaselinesToReality(input: {
   liveTables: Iterable<string>;
   liveColumns: Iterable<string>;
   fileLines: ReadonlyMap<string, number>;
+  sourceVisible?: boolean;
 }): { result: 'passed' | 'failed'; detail: string } {
   const tables = new Set(input.liveTables);
   const columns = new Set(input.liveColumns);
 
-  const stale = input.entries.filter((entry) => {
+  // A MISSING FILE MEANS TWO DIFFERENT THINGS, AND THIS REPORTED BOTH AS DRIFT.
+  //
+  // Read in a repository, an entry naming a file that is not there is exactly
+  // the finding: something was deleted and its exemption was stranded. Read in
+  // the DEPLOYED IMAGE, every such entry names a file that was never shipped —
+  // the runtime carries `dist/`, the migrations, `src/public` and `docs/db`,
+  // and no TypeScript source at all. So on the first tick after this check
+  // reached production it reported `41 baselined exemption(s) name something
+  // that no longer exists`, naming forty-one modules that all exist, and the
+  // owner's Letter was about to tell him something Foundry keeps for him had
+  // drifted. Every one of those files is in the repository this sentence is
+  // written in.
+  //
+  // Absence of evidence again, one layer in from where it was already handled:
+  // an unreadable snapshot is not a failing check, and neither is a source tree
+  // that was never here. The sentinel is the composition root, which every
+  // checkout has and no runtime image carries — so this asks "am I looking at
+  // the repository?" rather than counting misses and guessing.
+  //
+  // What it does NOT do is skip an unreadable file when the source IS visible.
+  // That case is the whole point of the check, and softening it would delete
+  // the finding along with the false one.
+  const sourceVisible = input.sourceVisible ?? true;
+  const evaluated = sourceVisible ? input.entries
+    : input.entries.filter((e) => e.kind !== 'module' && e.kind !== 'source_line');
+  const unevaluated = input.entries.length - evaluated.length;
+  const blind = unevaluated === 0 ? ''
+    : `; ${unevaluated} entr(ies) naming source files were not evaluated — `
+      + 'this runtime does not carry the repository source';
+
+  const stale = evaluated.filter((entry) => {
     if (entry.kind === 'table') return !tables.has(entry.value);
     if (entry.kind === 'column') return !columns.has(entry.value);
     if (entry.kind === 'module') return !input.fileLines.has(entry.value);
@@ -342,13 +377,14 @@ export function compareBaselinesToReality(input: {
   if (!stale.length) {
     return {
       result: 'passed',
-      detail: `${input.entries.length} baselined exemption(s) across ${LIVENESS_BASELINES.length} baselines all still name something that exists`,
+      detail: `${evaluated.length} baselined exemption(s) across ${LIVENESS_BASELINES.length} baselines all still name something that exists${blind}`,
     };
   }
   return {
     result: 'failed',
     detail: `${stale.length} baselined exemption(s) name something that no longer exists: `
-      + stale.slice(0, 10).map((e) => `${e.baseline.split('/').pop()} → ${e.value}`).join(', '),
+      + stale.slice(0, 10).map((e) => `${e.baseline.split('/').pop()} → ${e.value}`).join(', ')
+      + blind,
   };
 }
 
@@ -408,7 +444,13 @@ export async function observeFoundryBaselineLiveness(input: {
     } catch { /* absent stays absent: the comparison reads a missing key as gone */ }
   }
 
-  const { result, detail } = compareBaselinesToReality({ entries, liveTables, liveColumns, fileLines });
+  // The composition root: in every checkout, in no runtime image.
+  let sourceVisible = true;
+  try { readFileSync(resolve(root, REPOSITORY_SENTINEL), 'utf8'); } catch { sourceVisible = false; }
+
+  const { result, detail } = compareBaselinesToReality({
+    entries, liveTables, liveColumns, fileLines, sourceVisible,
+  });
 
   const observation = await recordDevelopmentObservation({
     productId, check: BASELINE_LIVENESS_CHECK, result, detail, observedAt: input.observedAt,

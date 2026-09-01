@@ -10,6 +10,28 @@ true is `IMPLEMENTATION_STATE.md`.
 
 ---
 
+## THE PRIORITY FUNCTION WAS CORRECTED (2026-09-01)
+
+Read `CONSTITUTION.md` § *The owner's priority function* before choosing a
+frontier. The short version, because this is the drift the correction names:
+**Commercial Foundry is dormant optionality, not the objective.** The product
+being built is the owner's private entrepreneurial institution — his venture
+studio, operating institution, portfolio intelligence and command layer.
+
+Do not re-acquire the old ordering from the volume of commercialization
+discussion in this file's history or in the audits. Those are evidence, not
+marching orders. Preserve the commercial infrastructure that exists; stop
+spending effort making it sellable.
+
+The frontier order is Foundry itself → AcreOS → multiple-company understanding →
+portfolio cognition → owner resource model → venture research → bounded venture
+validation → venture origination, with evidence deciding the exact progression.
+Finish the Foundry-on-Foundry proof far enough that the institution can
+understand, observe and carry bounded responsibility for itself, then reassess
+by asking what owner machinery remains — not what would make Foundry sellable.
+
+---
+
 ## NEXT SESSION START HERE
 
 Bootstrap from disk: verify the branch and a clean tree, read
@@ -206,6 +228,35 @@ attributed to that product, durable on the volume. Real owner → real company �
 real identity → real self-observation is DONE, and none of it needed GitHub: the
 observation compares the live schema against the snapshot the image carries, so
 the deployed artifact can see itself with no external sense connected at all.
+
+**THE LOOP RAN ON ITS OWN, AND ASKED HIM A QUESTION.** (2026-09-01 00:20:00Z.)
+`institutional_judgment_tick` recorded the first self-observation it produced
+rather than one an operator invoked: `schema-snapshot-freshness` passed on 695
+objects, and `ratchet-baseline-liveness` reported. Foundry then PROPOSED the
+obligation the first check implies — "regenerate the committed schema snapshot
+after a migration changes the schema", `capability_dependency=development`,
+`epistemic_status=known`, `authority_required`, status `pending` — and proposed
+nothing for the second, which has no entry in `SELF_MAINTENANCE_SCOPES` and so
+could never be granted. `institutional_responsibilities` is still 0: a candidate
+is a question, and nothing was created behind the owner.
+
+**AND THE SECOND CHECK'S FIRST PRODUCTION RUN WAS A FALSE FAILURE.** It reported
+`41 baselined exemption(s) name something that no longer exists` and named
+forty-one modules that all exist. The runtime image ships `dist/`, the
+migrations, `src/public` and `docs/db` — and no TypeScript source — so every
+entry naming a source file resolved to nothing and was read as a deletion. This
+is the same mistake the deployment already made and fixed for the other check
+(`docs/db` missing from the image, `snapshot_unreadable` forever): that fix
+taught the schema check to say "I could not look", and this one still said "it
+is gone". The comparator now asks whether it is reading the repository at all,
+by a sentinel every checkout has and no image carries, and reports what it could
+not evaluate instead of counting it as drift. **A missing file when the source IS
+visible is untouched — that case is the check.**
+
+**Live proof debt:** in the deployed artifact the baseline check can only
+evaluate its table and column entries. Making the source entries answerable in
+production means shipping the source tree or moving that half to CI, and neither
+has been decided. It is honest now, not complete.
 
 **What the chain still lacks is a RESPONSIBILITY.** `institutional_responsibilities = 0`.
 Discovery admits `founder_report` and `external_company_report` and nothing else,
