@@ -149,6 +149,12 @@ function needsOwner(state: OwnerState): Array<{ what: string; where: string }> {
   }
   const drifted = state.checks.filter((c) => c.result === 'failed');
   if (drifted.length) items.push({ what: 'Something I keep has gone out of step', where: '/foundry?ask=okay' });
+  // An obligation Foundry understands but has not been told what to expect is
+  // stopped, waiting on him — and a page that called that a quiet day would be
+  // hiding the only thing he could do about it.
+  if (state.responsibilities.some((r) => r.state === 'understood' && r.check !== null)) {
+    items.push({ what: 'Something I am ready to be measured on', where: '/foundry?ask=responsibility' });
+  }
   return items;
 }
 
@@ -439,6 +445,14 @@ function responsibilityOffer(s: OwnerState): HtmlEscapedString | Promise<HtmlEsc
   }
 
   if (existing) {
+    // THE NEXT STEP HAS TO HAVE A DOOR IN THIS SURFACE. Once Foundry
+    // understands an obligation, the rung above it is watching — and watching
+    // needs the owner to say what he would expect to see, because Foundry may
+    // not predict on its own behalf. That is genuinely his judgment and not a
+    // form: one sentence, one button. Without it here, the new surface would
+    // show him a responsibility that has quietly stopped moving, which is the
+    // dead end this whole cutover exists to remove.
+    const canWatch = existing.state === 'understood' && existing.check !== null;
     return html`<div class="card">
       <div class="card-in">
         <p class="kind">One of my responsibilities</p>
@@ -446,7 +460,17 @@ function responsibilityOffer(s: OwnerState): HtmlEscapedString | Promise<HtmlEsc
         <p class="muted">${plain?.why ?? ''}</p>
         <p class="muted">Where this stands: <strong>${LADDER_IN_PLAIN_WORDS[existing.state] ?? existing.state}</strong>.
           I am not allowed to change anything about it, and I have not asked to be.</p>
+        ${canWatch ? html`<p class="muted">The next step is mine to earn and yours to allow:
+          if I am handling this properly, you would expect my check to keep passing. Say so and
+          I will start being measured against it — I still cannot change anything.</p>` : ''}
       </div>
+      ${canWatch ? html`<div class="acts">
+        <form method="POST" action="/letter/responsibilities/${existing.id}/watch-check">
+          <input type="hidden" name="check" value="${existing.check}" />
+          <input type="hidden" name="expected_result" value="passed" />
+          <button class="btn btn-primary" type="submit">Yes — hold me to that</button>
+        </form>
+      </div>` : ''}
       <details><summary>Technical details</summary><div class="in">
         <p class="tech">${existing.title}<br />state ${existing.state} ·
           capability development<br />${existing.id}</p>

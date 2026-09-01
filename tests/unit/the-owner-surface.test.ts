@@ -170,6 +170,37 @@ describe('the other two places', () => {
   });
 });
 
+describe('an obligation it already understands', () => {
+  it('offers the one judgment that is genuinely the owner\'s, and calls it needed', async () => {
+    // Foundry may not predict on its own behalf, so the expectation is his —
+    // and until he states it, the obligation is stopped. A surface that showed
+    // it as understood with nothing to do would be the dead end this cutover
+    // exists to remove.
+    const { promoteResponsibilityCandidate } = await import(
+      '../../src/services/institution/responsibility-candidate.js');
+    const candidate = (await query(
+      'SELECT id FROM responsibility_candidates WHERE product_id=?', [COMPANY],
+    )).rows[0] as Record<string, unknown>;
+    const rid = await promoteResponsibilityCandidate({
+      productId: COMPANY, candidateId: String(candidate.id),
+      mechanism: 'authenticated_owner', ownerId: OWNER,
+    });
+    const { describeOwnSelfMaintenance } = await import(
+      '../../src/services/foundry/self-observation.js');
+    await describeOwnSelfMaintenance({ productId: COMPANY });
+    const { earnResponsibilityUnderstanding } = await import(
+      '../../src/services/institution/responsibility-understanding.js');
+    await earnResponsibilityUnderstanding(COMPANY, rid);
+
+    const body = await get('/foundry');
+    expect(body).toContain('I understand what it is');
+    expect(body).toContain('Yes — hold me to that');
+    expect(body).toContain('One thing needs you');
+    // And it is still only watching: no permission is implied or requested.
+    expect(body).toContain('I still cannot change anything');
+  });
+});
+
 describe('the surface is private', () => {
   it('is registered under authMiddleware, not guarded only by its own handlers', async () => {
     // A NEW TOP-LEVEL PATH INHERITS NOTHING HERE. `/foundry` lives inside the
