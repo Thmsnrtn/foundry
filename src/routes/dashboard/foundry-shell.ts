@@ -312,7 +312,9 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .standing{background:var(--card);border:1px solid var(--accent);border-radius:var(--r);
     padding:var(--s3);margin:0 0 var(--s4);display:flex;flex-wrap:wrap;gap:var(--s2);
     align-items:center;justify-content:space-between}
-  .standing p{margin:0;color:var(--ink-2);font-size:.95rem;flex:1 1 12rem;min-width:0}
+  .standing>div{flex:1 1 12rem;min-width:0}
+  .standing p{margin:0;color:var(--ink-2);font-size:.95rem}
+  .standing .caveat{margin-top:var(--s2);color:var(--alert)}
   .standing strong{color:var(--ink)}
   .done{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
     padding:var(--s3);margin:0 0 var(--s4)}
@@ -596,9 +598,25 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
 function standingPermission(s: OwnerState): HtmlEscapedString | Promise<HtmlEscapedString> {
   const live = s.permissions[0];
   if (!live) return html``;
+  // A PERMISSION IT CANNOT USE MUST SAY SO, IN THE SAME BREATH.
+  //
+  // He granted this and it is real, correctly scoped and expiring — and there is
+  // no path by which it can be used: nothing in the running system calls the
+  // execute step, and the repository the file lives in is not connected, so a
+  // write would land in a container that is replaced on the next deploy and
+  // reach the repository never. Letting the page say only "you are letting me
+  // change one file" would be the institution taking credit for a capability it
+  // does not have, at the one moment he is extending trust.
+  const unusable = live.path !== null && s.connectedSenses.length === 0;
   return html`<section class="standing">
-    <p><strong>You are letting me change ${live.path ? 'one file' : live.what}</strong>
-      until ${live.until}. It stops then on its own.</p>
+    <div>
+      <p><strong>You are letting me change ${live.path ? 'one file' : live.what}</strong>
+        until ${live.until}. It stops then on its own.</p>
+      ${unusable ? html`<p class="caveat">I cannot use it yet. I have no way to reach the
+        repository that file lives in, so there is nothing I can change even with your
+        permission. Connecting it would be a separate decision, and this permission would
+        still cover only that one file.</p>` : ''}
+    </div>
     <form method="POST" action="/autopilot/development/revoke">
       <input type="hidden" name="return_to" value="foundry" />
       <input type="hidden" name="consent_id" value="${live.id}" />
@@ -652,7 +670,10 @@ function whatJustHappened(done: string, s: OwnerState,
         file back into step myself when it drifts.</p>
       <p>I check my work every time, and put it back if the check does not pass. It ends on
         its own after seven days, and you can take it back before then.</p>
-      <p>You will hear from me when I have actually done something.</p>
+      ${s.connectedSenses.length === 0 ? html`<p><strong>I cannot use it yet</strong> — I have
+        no way to reach the repository that file lives in. The permission is real and it is
+        waiting; connecting the repository is a separate decision.</p>`
+    : html`<p>You will hear from me when I have actually done something.</p>`}
     </div>`;
   }
   if (done === 'withdrawn' && s.permissions.length === 0) {
@@ -843,7 +864,9 @@ function answerTo(key: string, s: OwnerState, a: Attention,
     : html`<p>I may change ${s.permissions[0].path
       ? 'one file — my own description of my database — and nothing else'
       : s.permissions[0].what}, until ${s.permissions[0].until}. It ends then by itself,
-      and you can take it back above.</p>`}
+      and you can take it back above.</p>
+      ${s.connectedSenses.length === 0 ? html`<p>In practice I cannot use it: I have no way
+        to reach the repository, so nothing I could change is reachable from here.</p>` : ''}`}
       <p>${s.spent30d === 0
     ? html`I have spent nothing. Your limit is $${String(s.budgetMonthly)} a month.`
     : html`I have spent $${s.spent30d.toFixed(2)} of your $${String(s.budgetMonthly)} this month.`}</p>

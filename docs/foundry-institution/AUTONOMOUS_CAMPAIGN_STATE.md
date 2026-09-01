@@ -32,6 +32,43 @@ by asking what owner machinery remains — not what would make Foundry sellable.
 
 ---
 
+## THE LADDER IS CLIMBED, AND THE LAST RUNG IS A LIBRARY (2026-09-01)
+
+The owner walked the whole chain in a day, through the product, on a phone:
+established the company, recognised the responsibility, took responsibility for
+it, and granted seven-day authority. Production holds consent
+`gLd54WrfHao1c77gOBSPc` — capability `development`, `shadowing → act`, change
+class `generated_artifact`, path `["docs/db/schema.snapshot.sql"]`, verification
+`["schema-snapshot-freshness"]`, expiring `2026-09-08T16:00:20Z`, unrevoked. One
+matched comparison stands behind it: Foundry predicted its own check would pass,
+and it did.
+
+**AND NOTHING CAN USE IT.** `planDevelopmentChange`, `executeDevelopmentChange`,
+`verifyDevelopmentChange`, `recordDevelopmentOutcome` and
+`rollbackDevelopmentChange` are implemented, tested and called by NOTHING —
+zero callers in `src/` outside their own module, no job, no route. The rung the
+whole campaign was built toward exists as a library.
+
+**AND IT COULD NOT REACH ANYTHING IF IT DID.** `executeDevelopmentChange` writes
+to a `repositoryRoot` on disk. The runtime image carries `dist/`, the
+migrations, `src/public` and `docs/db` — no repository, no git, no GitHub
+connection (`products.github_repo_url` is null). A write would land in a
+container that is replaced on the next deploy and reach the repository never.
+
+So the surface says so, in the same breath as the permission: "I cannot use it
+yet. I have no way to reach the repository that file lives in." An institution
+that let its owner believe otherwise at the moment he extended trust would have
+spent the thing it exists to accumulate.
+
+**The frontier is therefore an EXTERNAL boundary, and it is his:** connecting
+the repository. Note carefully that a sense is not a hand — reading the
+repository still would not let Foundry write to it, and applying a change means
+either a bounded write credential or a mechanism that proposes the change for
+CI to apply. That is a decision about how Foundry touches its own source, and it
+has not been made.
+
+---
+
 ## NEXT SESSION START HERE
 
 Bootstrap from disk: verify the branch and a clean tree, read

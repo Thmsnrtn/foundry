@@ -282,9 +282,17 @@ describe('the permission it earns', () => {
     const after = await reads('/foundry?done=allowed');
     expect(after).toContain('Allowed.');
     expect(after).toContain('I check my work every time');
+    // AND THE TRUTH ABOUT WHAT IT CANNOT DO WITH IT. Nothing in the running
+    // system calls the execute step, and the repository is not connected, so a
+    // write would land in a container replaced on the next deploy. Saying only
+    // "you are letting me change one file" would claim a capability that does
+    // not exist, at the moment he is extending trust.
+    expect(after).toContain('I cannot use it yet');
+    expect(after).toContain('no way to reach the repository');
     // Authority he cannot see is authority he cannot withdraw.
     expect(after).toContain('You are letting me change one file');
     expect(after).toContain('Take it back');
+    expect(after).toContain('nothing I can change even with your permission');
     // And it is no longer asking for what it now has.
     expect(after).not.toContain('May I do this myself');
 
