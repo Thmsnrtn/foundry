@@ -238,6 +238,10 @@ describe('the permission it earns', () => {
     // NO EVIDENCE YET, AND IT DOES NOT PRETEND. Nothing has been compared, so
     // it must not claim a record it does not have.
     expect(said).toContain('I said what my check would report 0 times');
+    // Suggestions follow what is on screen: beside a permission request, the
+    // useful questions are about the permission, not about how Foundry feels.
+    expect(said).toContain('What happens if I say yes?');
+    expect(said).not.toContain('Are you okay?');
   });
 
   it('counts its record honestly once it has one', async () => {

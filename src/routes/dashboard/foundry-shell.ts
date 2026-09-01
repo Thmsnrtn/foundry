@@ -931,7 +931,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${answerTo(key, s, attention)}` : ''}
 
     ${!key ? html`<div class="maybe">
-      ${raw((attention !== null && (attention.kind === 'recognise' || attention.kind === 'expect')
+      ${raw((attention !== null && attention.kind !== 'stopped' && attention.kind !== 'drifted'
     ? ['ifyes', 'change']
     : ['okay', 'working']).map((k) =>
     `<a href="/foundry?ask=${k}">${QUESTIONS[k]}</a>`).join(''))}
