@@ -169,3 +169,31 @@ describe('the other two places', () => {
     expect(body).toContain('Stop everything');
   });
 });
+
+describe('the surface is private', () => {
+  it('is registered under authMiddleware, not guarded only by its own handlers', async () => {
+    // A NEW TOP-LEVEL PATH INHERITS NOTHING HERE. `/foundry` lives inside the
+    // Letter's router, but auth is registered by PATH on the app — so mounting
+    // it there authenticated nothing. Deployed, it answered anonymous callers
+    // with a redirect while `/letter` answered 401, and the only thing between
+    // a stranger and the owner's institution was a null check inside one
+    // handler. This deployment already paid for that lesson once, at
+    // POST /establish.
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const idx = readFileSync(resolve(import.meta.dirname, '../../src/index.ts'), 'utf8');
+    const prefixes = [...idx.matchAll(/app\.use\('([^']+)',\s*authMiddleware\)/g)].map((m) => m[1]);
+    for (const path of ['/foundry', '/foundry/portfolio', '/foundry/controls']) {
+      const covered = prefixes.some((x) => x === path
+        || (x.endsWith('/*') && path.startsWith(x.slice(0, -1))));
+      expect(covered, `no authMiddleware prefix covers ${path}`).toBe(true);
+    }
+  });
+
+  it('carries CSRF, so the first mutating form added here is covered by construction', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const idx = readFileSync(resolve(import.meta.dirname, '../../src/index.ts'), 'utf8');
+    expect(idx).toContain("app.use('/foundry/*', csrfMiddleware)");
+  });
+});

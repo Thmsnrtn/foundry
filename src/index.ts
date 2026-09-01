@@ -359,6 +359,16 @@ app.use('/exit/*', authMiddleware);
 // Ascent surfaces (the Letter, Controls, Talk) + Hands Law connections
 app.use('/letter', authMiddleware);
 app.use('/letter/*', authMiddleware);
+// THE OWNER SURFACE IS A PRIVATE SURFACE, and a new top-level path inherits
+// nothing here. `/foundry` is mounted inside the Letter's router, but auth is
+// registered by PATH on the app, not by router — so without these two lines the
+// only thing standing between an anonymous request and the owner's institution
+// is a null check inside one handler, and the next handler added to that file
+// would not have it. This deployment already paid for that lesson once, when
+// POST /establish was registered as a new top-level path and inherited neither
+// auth nor CSRF.
+app.use('/foundry', authMiddleware);
+app.use('/foundry/*', authMiddleware);
 app.use('/autopilot', authMiddleware);
 app.use('/autopilot/*', authMiddleware);
 app.use('/talk', authMiddleware);
@@ -426,6 +436,12 @@ app.use('/exit/*', csrfMiddleware);
 app.use('/founder-ops/*', csrfMiddleware);
 app.use('/autopilot/*', csrfMiddleware);
 app.use('/letter/*', csrfMiddleware);
+// Origin proof is a separate question from who may. Nothing on the owner
+// surface mutates today — its forms post to the Letter's own routes, which
+// carry CSRF above — and it is registered anyway, so the first POST added here
+// is covered by construction rather than by whoever remembers.
+app.use('/foundry', csrfMiddleware);
+app.use('/foundry/*', csrfMiddleware);
 app.use('/talk/*', csrfMiddleware);
 app.use('/connections/*', csrfMiddleware);
 // Origin-verified CSRF is cheap and token-free, so every remaining
