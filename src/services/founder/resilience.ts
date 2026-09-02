@@ -166,6 +166,12 @@ export async function portfolioFitOf(input: {
     const dimension = String(row.dimension);
     const value = String(row.value);
     const already = carried.get(`${dimension} ${value}`) ?? [];
+    // A NEW KIND OF LIABILITY IS NEVER A CASE FOR A CANDIDATE. Every other axis
+    // is symmetric - differing from the portfolio is what makes something a
+    // separate income stream. Legal exposure is not: a candidate that carries
+    // a kind of liability nothing else does has not diversified anything, it
+    // has added a way to be sued. It counts when it deepens, never as ground.
+    if (dimension === 'legal_exposure' && already.length === 0) continue;
     if (already.length > 0) {
       deepens.push({
         dimension, value, carriedBy: already.map((c) => c.name),
@@ -193,6 +199,7 @@ export async function portfolioFitOf(input: {
   // is concentrated - not merely being new, but being new where it matters.
   const needs = await portfolioNeeds(input.founderId, world);
   const serves = needs
+    .filter((n) => n.dimension !== 'legal_exposure')
     .filter((n) => its.some((row) => String(row.dimension) === n.dimension
       && String(row.value) !== n.value))
     .map((n) => n.need);

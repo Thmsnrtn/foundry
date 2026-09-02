@@ -76,6 +76,8 @@ export interface ReferenceScenario {
    * that in its own rehearsal world would not see it in his.
    */
   exposures?: Array<[string, string]>;
+  /** What liability the company already carries: class, severity, in what it consists. */
+  surfaces?: Array<[string, 'minor' | 'material' | 'serious', string]>;
 }
 
 // THE FIRST SCENARIO, AND WHY IT IS THIS ONE.
@@ -115,6 +117,9 @@ const FALLING: ReferenceScenario = {
     ['provider_dependency', 'stripe'],
     ['support_burden', 'human support inbox'],
   ],
+  surfaces: [
+    ['privacy_data', 'material', 'customer accounts with names, emails and billing history'],
+  ],
 };
 
 // THE CONTROL. A business going nowhere in particular.
@@ -149,6 +154,9 @@ const STEADY: ReferenceScenario = {
     ['provider_dependency', 'stripe'],
     ['support_burden', 'human support inbox'],
   ],
+  surfaces: [
+    ['privacy_data', 'material', 'customer accounts with names, emails and billing history'],
+  ],
 };
 
 // GROWTH THAT IS NOT CONVERTING.
@@ -182,6 +190,10 @@ const NOT_CONVERTING: ReferenceScenario = {
     ['provider_dependency', 'stripe'],
     ['ai_dependency', 'one model provider'],
   ],
+  surfaces: [
+    ['privacy_data', 'material', 'customer accounts with names, emails and billing history'],
+    ['platform_policy', 'material', 'depends on one model provider\'s terms'],
+  ],
 };
 
 // CUSTOMERS LEAVING FASTER THAN THEY WERE, with revenue holding up because new
@@ -209,6 +221,10 @@ const CHURNING: ReferenceScenario = {
     ['pricing_model', 'flat monthly'],
     ['acquisition_channel', 'app store'],
     ['provider_dependency', 'stripe'],
+  ],
+  surfaces: [
+    ['privacy_data', 'material', 'consumer accounts, which brings consumer rules'],
+    ['consumer_protection', 'material', 'monthly billing to consumers, with cancellation rules'],
   ],
 };
 
@@ -243,6 +259,9 @@ const PAYMENTS_FAILING: ReferenceScenario = {
     ['acquisition_channel', 'partner referral'],
     ['provider_dependency', 'stripe'],
     ['support_burden', 'human support inbox'],
+  ],
+  surfaces: [
+    ['privacy_data', 'material', 'customer accounts with names, emails and billing history'],
   ],
 };
 

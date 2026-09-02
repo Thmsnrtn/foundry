@@ -254,6 +254,17 @@ async function main(): Promise<void> {
     if (subject) {
       const blocking = subject.unanswered.find((u) => u.blocking);
       say('what stands in the way', subject.inTheWay.join('; ') || 'nothing');
+      // WHAT LIABILITY IT CREATES, and where the institution stops. A serious
+      // exposure with nobody qualified having looked is the state this exists
+      // to make visible, and the walk shows it saying so rather than
+      // producing a confident paragraph about veterinary liability.
+      say('  legal and risk', subject.legal.profile);
+      for (const sf of subject.legal.surfaces) {
+        say(`    ${sf.whatItIs.slice(0, 44)}`, `${sf.severity}`
+          + `${sf.needsProfessional ? ' - needs somebody qualified; past what I should answer' : ''}`
+          + ` - often avoided by ${sf.oftenAvoidedBy}`);
+      }
+      say('  could it be lighter', subject.legal.lighter ?? 'nobody has asked');
       if (blocking) {
         const experimentId = await validation.designExperiment({
           founderId: OWNER, opportunityId: subject.id, unknownId: blocking.id,

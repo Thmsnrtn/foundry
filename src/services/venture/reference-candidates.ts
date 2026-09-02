@@ -57,6 +57,13 @@ interface DeclaredCandidate {
   claims?: DeclaredClaim[];
   /** Questions that decide it, and the cheapest thing that would answer each. */
   asks?: Array<{ question: string; blocking: boolean; cheapestTest: string | null }>;
+  /** What liability it creates, class by class. */
+  surfaces?: Array<{
+    cls: string; severity: 'minor' | 'material' | 'serious'; needs: boolean;
+    creates: string; known?: string | null; unknown?: string | null;
+  }>;
+  /** The lighter way of building it, or null when nobody has answered yet. */
+  lighter?: string | null;
 }
 
 const CANDIDATES: DeclaredCandidate[] = [
@@ -110,6 +117,15 @@ const CANDIDATES: DeclaredCandidate[] = [
       { question: 'whether the incumbent is already building it', blocking: false,
         cheapestTest: 'read their release notes for the last year' },
     ],
+    surfaces: [
+      { cls: 'professional_reliance', severity: 'serious', needs: true,
+        creates: 'a handover note that a vet might act on as if it were clinical guidance',
+        known: 'the tool would record what a person said, not generate advice', unknown: 'whether recording it under the practice\'s name changes who is liable when something is missed' },
+      { cls: 'privacy_data', severity: 'material', needs: false,
+        creates: 'names of animal owners and treatment notes, held on our servers',
+        known: 'owner contact details are personal data wherever the practice is', unknown: null },
+    ],
+    lighter: 'keep it a structured checklist of what was handed over, never clinical guidance - the practice decides, the tool remembers',
   },
   {
     headline: 'A dashboard that unifies every tool a small agency uses',
@@ -146,6 +162,12 @@ const CANDIDATES: DeclaredCandidate[] = [
       { question: 'why the previous attempts died', blocking: true,
         cheapestTest: 'find two founders of the dead ones and ask them' },
     ],
+    surfaces: [
+      { cls: 'platform_policy', severity: 'material', needs: false,
+        creates: 'reads six vendors\' data through their APIs, each under terms that can change',
+        known: 'two of the six forbid caching their data', unknown: null },
+    ],
+    lighter: null,
   },
   {
     headline: 'A paid-search arbitrage play for local trades',
@@ -163,6 +185,15 @@ const CANDIDATES: DeclaredCandidate[] = [
       ['acquisition_channel', 'paid acquisition'],
       ['pricing_model', 'per lead'],
     ],
+    surfaces: [
+      { cls: 'claims_advertising', severity: 'material', needs: false,
+        creates: 'adverts on behalf of tradespeople that make claims about their work',
+        known: 'the advertiser is us, and the claims would be ours to stand behind', unknown: null },
+      { cls: 'consumer_protection', severity: 'material', needs: false,
+        creates: 'consumers handed to tradespeople with an implied vetting',
+        known: null, unknown: 'whether an implied recommendation carries a duty' },
+    ],
+    lighter: 'sell the leads to one contractor per area on a flat fee, never on a per-lead claim of quality',
   },
   // THE ANSWER, RATHER THAN A BETTER-ARGUED NO.
   //
@@ -220,6 +251,15 @@ const CANDIDATES: DeclaredCandidate[] = [
         cheapestTest: 'list one small dataset and watch what the first fifty '
           + 'buyers do next quarter' },
     ],
+    surfaces: [
+      { cls: 'licensing', severity: 'material', needs: false,
+        creates: 'a dataset derived from public registers whose reuse terms differ',
+        known: 'most registers permit reuse with attribution', unknown: 'two registers publish no terms at all' },
+      { cls: 'intellectual_property', severity: 'minor', needs: false,
+        creates: 'a compiled dataset that others could copy',
+        known: 'compilation is what we are selling; copying is a business risk, not a legal one', unknown: null },
+    ],
+    lighter: 'publish derived deadlines only, never the source records, so nothing personal or licensed is redistributed',
   },
 ];
 
@@ -290,6 +330,23 @@ export async function exerciseReferenceMandate(mandateId: string): Promise<numbe
           observedAt, evidenceMode: 'reference',
         });
       }
+    }
+
+    // WHAT LIABILITY IT CREATES, recorded before anybody argues its merits -
+    // and the lighter-architecture question answered where the reference
+    // world has an answer, left open where it does not, so that the block on
+    // an unasked question is exercised too.
+    const { noteLegalSurface, answerLighter } = await import('./legal-surface.js');
+    for (const sf of candidate.surfaces ?? []) {
+      await noteLegalSurface({
+        founderId, subjectKind: 'opportunity', subjectId: opportunityId,
+        cls: sf.cls, severity: sf.severity, needsProfessional: sf.needs,
+        whatItCreates: sf.creates, known: sf.known ?? null, unknown: sf.unknown ?? null,
+        evidenceMode: 'reference',
+      });
+    }
+    if (candidate.lighter) {
+      await answerLighter({ opportunityId, answer: candidate.lighter });
     }
 
     for (const ask of candidate.asks ?? []) {

@@ -36,6 +36,7 @@ import { query } from '../../db/client.js';
 import type { PortfolioFit } from '../founder/resilience.js';
 import type { OpenUnknown, Standing } from './market-evidence.js';
 import type { Experiment } from './validation.js';
+import type { LegalPicture } from './legal-surface.js';
 
 export type GuidanceKind =
   | 'avoid' | 'prefer' | 'industry' | 'budget' | 'harder' | 'deeper'
@@ -705,6 +706,8 @@ export interface PresentedCandidate {
   buriedBefore: { headline: string; why: string; revisitIf: string | null } | null;
   /** Which of the portfolio's stated needs this would serve, if any. */
   serves: string[];
+  /** What liability it creates, as the owner reads it. */
+  legal: LegalPicture;
   reference: boolean;
 }
 
@@ -725,6 +728,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
   const { portfolioFitOf } = await import('../founder/resilience.js');
   const { standingOf, openUnknowns } = await import('./market-evidence.js');
   const { awaitingHim, whatStandsInTheWay } = await import('./validation.js');
+  const { legalPictureOf } = await import('./legal-surface.js');
 
   const rows = ((await query(
     `SELECT id, headline, who_has_it, the_problem, why_it_might, kill_thesis,
@@ -768,6 +772,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
       awaiting: await awaitingHim(String(r.id)),
       buriedBefore: await seenBefore(founderId, String(r.headline)),
       serves: fit.serves,
+      legal: await legalPictureOf({ founderId, opportunityId: String(r.id), world }),
       reference: String(r.evidence_mode) === 'reference',
     });
   }

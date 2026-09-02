@@ -727,6 +727,13 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // WAYS OF LOOKING THAT BELONG TO THE PERSON. A market belongs to nobody's
   // company, so this is the one sense-shaped thing erasure reaches through the
   // founder rather than through a product.
+  // WHAT LIABILITY HIS THINGS CREATE is a fact about him, reached through
+  // companies and candidates alike, so it carries his id and goes with him.
+  legal_surfaces: {
+    reason: 'what legal exposure one person\'s companies and candidates create, and '
+      + 'what is known about each',
+    onAccountErasure: { op: 'delete' },
+  },
   research_sources: {
     reason: 'the ways one person can look outside their own companies, and what '
       + 'each of them never permits',
@@ -866,6 +873,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   governed_effect_kinds: 'the effect vocabulary',
   owner_boundary_subjects: 'the vocabulary of things a boundary can be about, constitutional and the same for every owner; the boundaries themselves are erased with their company',
   senses: 'the vocabulary of what Foundry can learn about any company and what that never grants; constitutional and the same for every owner',
+  exposure_classes: 'the kinds of liability a thing can create and the structural way of not creating each; constitutional, naming nobody',
   exposure_dimensions: 'the axes a portfolio can be concentrated on and what each failure would cost; constitutional and the same for every owner, naming no company',
   market_source_types: 'the kinds of source market evidence can come from and whether each is self-reported, observed or solicited; constitutional, naming nobody',
   sense_providers: 'which provider could supply which sense, and what the credential hands over; constitutional, naming no company',

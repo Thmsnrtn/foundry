@@ -114,6 +114,9 @@ interface OwnerState {
       serves: string[];
       /** Something like it that was buried before, and why. */
       buriedBefore: string | null;
+      /** The legal picture, one paragraph, and each exposure in a line. */
+      legalProfile: string;
+      exposures: string[];
       /** Claims about the world and how each stands on its evidence. */
       standing: string[];
       /** Open questions, each with the cheapest thing that would settle it. */
@@ -413,6 +416,11 @@ async function readOwnerState(
           worseForThePortfolio: c.fit?.makesItWorse ?? false,
           against: c.against,
           serves: c.serves,
+          legalProfile: c.legal.profile,
+          exposures: c.legal.surfaces.map((sf) =>
+            `${sf.whatItIs} (${sf.severity}${sf.needsProfessional ? ', needs somebody qualified' : ''}`
+            + `${sf.stale ? ', over six months old' : ''}) — ${sf.whatItCreates}`
+            + `${sf.unknown ? `. Unknown: ${sf.unknown}` : ''}`),
           buriedBefore: c.buriedBefore === null ? null
             : `${c.buriedBefore.headline} — ${c.buriedBefore.why}`
               + (c.buriedBefore.revisitIf ? `. Worth another look if ${c.buriedBefore.revisitIf}` : ''),
@@ -1575,6 +1583,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
     + `<strong>What adding it would do</strong> — ${cand.fit}</p>` : ''}
         ${cand.serves.length
     ? `<p class="quiet"><strong>What it would give the portfolio</strong> — ${cand.serves.join('; ')}.</p>` : ''}
+        <p class="quiet"><strong>Legal and risk</strong> — ${cand.legalProfile}</p>
+        ${cand.exposures.length ? `<ul class="quiet">${cand.exposures.map((e) => `<li>${e}</li>`).join('')}</ul>` : ''}
         ${cand.buriedBefore
     ? `<p class="gap"><strong>You have buried something like this before</strong> — ${cand.buriedBefore}.</p>` : ''}
         ${cand.against.length

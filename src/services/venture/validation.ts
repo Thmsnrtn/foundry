@@ -232,6 +232,20 @@ export async function whatStandsInTheWay(opportunityId: string): Promise<string[
   if (Number(untested.n) === 0) {
     inTheWay.push('nothing has been claimed about it that could be checked');
   }
+
+  // WHAT LIABILITY IT CREATES, before it can go anywhere. A candidate nobody
+  // has asked that of, one that needs a qualified person to look, or one whose
+  // legal picture is over six months old, waits - however good the rest reads.
+  const owner = (await query(
+    `SELECT founder_id, evidence_mode FROM venture_opportunities WHERE id = ?`,
+    [opportunityId])).rows[0] as Record<string, unknown> | undefined;
+  if (owner) {
+    const { legalPictureOf } = await import('./legal-surface.js');
+    const picture = await legalPictureOf({
+      founderId: String(owner.founder_id), opportunityId,
+      world: String(owner.evidence_mode) === 'reference' ? 'reference' : 'real' });
+    inTheWay.push(...picture.inTheWay);
+  }
   return inTheWay;
 }
 

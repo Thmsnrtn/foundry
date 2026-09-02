@@ -194,6 +194,16 @@ describe('becoming a company', () => {
           [u.id]);
       }
     }
+    // AND THE LEGAL STOP IS LIFTED THE ONLY WAY IT CAN BE: somebody qualified
+    // looked, and what they found is on the record with their name on it.
+    const { legalSurfaceOf, recordProfessionalReview } = await import(
+      '../../src/services/venture/legal-surface.js');
+    for (const sf of await legalSurfaceOf('opportunity', opportunityId)) {
+      if (sf.needsProfessional) {
+        await recordProfessionalReview({ surfaceId: sf.id, by: 'a veterinary-liability solicitor',
+          found: 'a structured record of what was said creates no duty of clinical judgement' });
+      }
+    }
     const done = await advance({ opportunityId, by: `founder:${OWNER}` });
     expect(done.advanced).toBe(true);
     // FOUNDRY ESTABLISHES THAT NOTHING IS IN THE WAY. IT DOES NOT MAKE THE

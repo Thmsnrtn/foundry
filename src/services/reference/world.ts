@@ -187,6 +187,16 @@ export async function establishReferenceCompany(input: {
   // `evidence_mode: 'reference'` is not a formality - the guard on the table
   // refuses a reference company's exposure filed as real, so none of this can
   // ever count toward a concentration in a portfolio he actually owns.
+  if (scenario.surfaces?.length) {
+    const { noteLegalSurface } = await import('../venture/legal-surface.js');
+    for (const [cls, severity, whatItCreates] of scenario.surfaces) {
+      await noteLegalSurface({
+        founderId: input.ownerId, subjectKind: 'company', subjectId: productId,
+        cls, severity, whatItCreates, known: 'declared by the scenario',
+        evidenceMode: 'reference',
+      });
+    }
+  }
   if (scenario.exposures?.length) {
     const { noteExposure } = await import('../founder/resilience.js');
     for (const [dimension, value] of scenario.exposures) {
