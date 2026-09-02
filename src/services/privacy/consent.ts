@@ -677,6 +677,23 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       resets: { wisdom_network_opted_in: 0, network_opt_in: 0 },
     },
   },
+  // A SEARCH FOR A BUSINESS BELONGS TO THE PERSON, NOT TO A COMPANY — that is
+  // the whole point of it: there is no company yet, and there may never be one.
+  // So it is founder-scoped rather than product-scoped, and the two tables
+  // hanging off it go the same way. Their `by` names the route back to the
+  // person, because neither carries a founder id of its own.
+  venture_mandates: {
+    reason: 'a search for a business, which belongs to the person who asked for it',
+    onAccountErasure: { op: 'delete' },
+  },
+  venture_guidance: {
+    reason: 'what the founder said while a search was running, in their own words',
+    onAccountErasure: { op: 'delete' },
+  },
+  venture_opportunities: {
+    reason: 'candidates found for one person\'s search, including what was rejected',
+    onAccountErasure: { op: 'delete' },
+  },
   ai_output_feedback: {
     reason: 'the founder\'s ratings of outputs, across all their products',
     onAccountErasure: { op: 'delete' },
@@ -1193,6 +1210,7 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   autonomy_consents: { op: 'delete', columns: ['founder_id'], reason: 'authority they granted, which must not outlive them' },
   oauth_states: { op: 'delete', columns: ['founder_id'], reason: 'in-flight authorisation for a person who is gone' },
   sense_authorizations: { op: 'delete', columns: ['founder_id'], reason: 'a half-finished request to let Foundry see something, for a person who is gone' },
+  venture_mandates: { op: 'delete', columns: ['founder_id'], reason: 'a search for a business, run on behalf of a person who is gone' },
   briefing_shares: { op: 'delete', columns: ['founder_id'], reason: 'share links this person created' },
   briefing_decision_links: { op: 'delete', columns: ['founder_id'], reason: 'what they read before deciding' },
   portfolio_memberships: { op: 'delete', columns: ['founder_id'], reason: 'their own portfolio membership' },

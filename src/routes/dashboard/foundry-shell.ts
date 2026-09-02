@@ -83,6 +83,18 @@ interface OwnerState {
   productId: string;
   /** Whose institution this is. Read here so no surface re-derives it. */
   ownerId: string;
+  /** Searches he called off, so starting again does not begin from nothing. */
+  pastSearches: Array<{ statement: string; closedAt: string; why: string }>;
+  /** A venture search, if one is running, and where it honestly is. */
+  search: {
+    statement: string; guidance: string[]; looked: number; rejected: number;
+    open: number; blocked: string | null; wouldNeed: string | null;
+    candidates: Array<{
+      headline: string; whoHasIt: string; theProblem: string; whyItMight: string;
+      killThesis: string; unknowns: string[]; sources: string[];
+      blockedBy: string | null; failsBecause: string | null; reference: boolean;
+    }>;
+  } | null;
   /**
    * ANYTHING NEEDING HIM THAT IS NOT ABOUT FOUNDRY ITSELF.
    *
@@ -304,6 +316,30 @@ async function readOwnerState(
     connectedSenses: product?.github_repo_url ? ['its code'] : [],
     establishedAt: product?.created_at == null ? null : String(product.created_at).slice(0, 10),
     elsewhere: await questionsElsewhere(founderId, productId),
+    pastSearches: await (async () => {
+      const { pastSearches } = await import('../../services/venture/mandate.js');
+      return pastSearches(founderId);
+    })(),
+    search: await (async () => {
+      const { mandateProgress } = await import('../../services/venture/mandate.js');
+      const progress = await mandateProgress(founderId);
+      if (progress === null) return null;
+      const { candidatesFor } = await import('../../services/venture/mandate.js');
+      const candidates = await candidatesFor(progress.mandate.id);
+      return {
+        statement: progress.mandate.statement,
+        guidance: progress.mandate.guidance.map((g) => g.statement),
+        looked: progress.looked, rejected: progress.rejected, open: progress.open,
+        blocked: progress.blocked, wouldNeed: progress.wouldNeed,
+        candidates: candidates.map((c) => ({
+          headline: c.headline, whoHasIt: c.whoHasIt, theProblem: c.theProblem,
+          whyItMight: c.whyItMight, killThesis: c.killThesis,
+          unknowns: c.unknowns, sources: c.sources, blockedBy: c.blockedBy,
+          failsBecause: c.survivesGuidance ? null : c.failsBecause,
+          reference: c.reference,
+        })),
+      };
+    })(),
   };
 }
 
@@ -937,6 +973,7 @@ const QUESTIONS: Record<string, string> = {
   needs: 'What needs me?',
   portfolio: 'What do I own, and how is everything doing?',
   capital: 'Where should the next dollar go?',
+  venture: 'Find me a new business',
 };
 
 function matchQuestion(text: string): string {
@@ -955,6 +992,13 @@ function matchQuestion(text: string): string {
   // matches /money/ below and would be answered as a question about permissions.
   if (/next (dollar|pound|\$|100|1000)|where should (i|we) (spend|invest|put)|allocate/.test(t)) {
     return 'capital';
+  }
+  // A VENTURE SENTENCE IS NOT A QUESTION. Asking Foundry to go and look, or
+  // steering a search that is running, is an instruction — it goes to the
+  // mandate, where it binds after he confirms, rather than being answered.
+  if (/venture|originate|new business|another business|new company|another company|a new saas|micro-?saas/.test(t)
+    || /stop looking|show me another option|try harder to disprove|higher[- ]ticket|paid acquisition/.test(t)) {
+    return 'venture';
   }
   if (/what do i own|my companies|everything doing|how are things|across (all|my)|portfolio|deteriorat|which company/.test(t)) {
     return 'portfolio';
@@ -1346,6 +1390,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
 
   // Only when he TYPED a company's name. The chips below are institutional
   // questions and must not silently acquire a subject.
+  // Venture sentences are instructions, not questions: rendered as a form that
+  // posts to the mandate, so the confirmation grammar is the same one every
+  // other binding act in this product uses.
+  const ventureSaid = key === 'venture' && typed ? typed : '';
+
   const named = typed
     ? await companyHeMeant(s.ownerId, typed) : null;
   const about = named && (key === 'howdoing' || key === 'numbers' || key === 'working'
@@ -1367,15 +1416,71 @@ foundryShellRoutes.get('/foundry', async (c) => {
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
     ${orientation ? html`<p class="lede">${orientation}</p>` : ''}
 
+    ${done === 'looking' ? html`<div class="done"><p><strong>I am looking.</strong>
+      I will bring you very few, and telling you none of them are worth it is a real
+      answer.</p></div>` : ''}
+    ${done === 'steeredsearch' ? html`<div class="done"><p><strong>Held to that.</strong>
+      Every candidate from here is tested against it.</p></div>` : ''}
+    ${done === 'searchstopped' ? html`<div class="done"><p><strong>Stopped looking.</strong>
+      What I found stays on the record, including what I rejected and why.</p></div>` : ''}
+    ${done === 'alreadylooking' ? html`<div class="done"><p><strong>Already looking.</strong>
+      Stop that search first, or steer it instead — two at once would compete for the same
+      attention.</p></div>` : ''}
+    ${s.search ? html`<div class="know">
+      <h3>What I am looking for</h3>
+      <p>${s.search.statement}</p>
+      ${s.search.guidance.length ? html`<ul>${raw(s.search.guidance.map((g) =>
+    `<li>${g}</li>`).join(''))}</ul>` : ''}
+      ${s.search.blocked ? html`<p class="quiet"><strong>Where it has got to:</strong>
+        ${s.search.blocked}</p>
+        <p class="quiet">What I would need: ${s.search.wouldNeed}</p>`
+    : html`<p class="quiet">${s.search.looked} looked at,
+        ${s.search.rejected} rejected, ${s.search.open} still open.</p>`}
+      ${raw(s.search.candidates.map((cand) => `<div class="noticed">
+        <h4>${cand.headline}</h4>
+        ${cand.reference ? '<p class="quiet"><strong>Invented.</strong> This came from a '
+    + 'search I ran against a market that does not exist, so that the way I judge '
+    + 'candidates could be exercised. It is not a real opportunity.</p>' : ''}
+        <p><strong>Who has it</strong> — ${cand.whoHasIt}</p>
+        <p><strong>The problem</strong> — ${cand.theProblem}</p>
+        <p><strong>Why it might matter</strong> — ${cand.whyItMight}</p>
+        <p><strong>Strongest reason it fails</strong> — ${cand.killThesis}</p>
+        <p class="quiet"><strong>What is still unknown</strong> —
+          ${cand.unknowns.join('; ')}.</p>
+        <p class="quiet"><strong>What I checked it against</strong> —
+          ${cand.sources.length ? cand.sources.join('; ') : 'nothing'}.</p>
+        ${cand.failsBecause
+    ? `<p class="gap">I would not bring this to you: ${cand.failsBecause}.</p>` : ''}
+        ${cand.blockedBy
+    ? `<p class="gap">This cannot earn a company yet — ${cand.blockedBy}.</p>` : ''}
+      </div>`).join(''))}
+    </div>` : ''}
+
+    ${!s.search && s.pastSearches.length ? html`<div class="know">
+      <h3>What you have looked for before</h3>
+      <ul>${raw(s.pastSearches.map((p) =>
+    `<li>&ldquo;${p.statement}&rdquo; — stopped ${p.closedAt}${p.why ? `, ${p.why}` : ''}.</li>`)
+    .join(''))}</ul>
+      <p class="quiet">If you ask again I am not starting from nothing: what I rejected, and
+        why, is still here.</p>
+    </div>` : ''}
+
     ${done ? whatJustHappened(done, s) : ''}
     ${standingPermission(s)}
     ${theOneThing(attention)}
 
     ${key ? html`<p class="asked">${typed || QUESTIONS[key] || asked}</p>
-      ${about ? answerAboutCompany(about)
-    : key === 'portfolio' || key === 'capital'
-      ? answerAboutEverything(key, s.ownerId)
-      : answerTo(key, s, attention)}` : ''}
+      ${ventureSaid ? html`<div class="said">
+        <p>That sounds like something for me to go and do rather than a question.</p>
+        <form method="POST" action="/foundry/venture">
+          <input type="hidden" name="said" value="${ventureSaid}" />
+          <button class="btn go" type="submit">Tell me what you would do</button>
+        </form>
+      </div>`
+    : about ? answerAboutCompany(about)
+      : key === 'portfolio' || key === 'capital'
+        ? answerAboutEverything(key, s.ownerId)
+        : answerTo(key, s, attention)}` : ''}
 
     ${!key ? html`<div class="maybe">
       ${raw((attention !== null && attention.kind !== 'stopped' && attention.kind !== 'drifted'
@@ -2126,6 +2231,186 @@ foundryShellRoutes.post('/foundry/advice/:adviceId/:decision',
     });
     return c.redirect(
       `/foundry/companies/${productId}?done=${decision === 'accept' ? 'agreed' : 'notthat'}`);
+  });
+
+// ─── an entrepreneurial mandate ─────────────────────────────────────────────
+
+/**
+ * "I'D LIKE YOU TO ADD A NEW MICRO-SAAS VENTURE TO MY PORTFOLIO."
+ *
+ * Heard as a MANDATE — a standing instruction to go and look — rather than as
+ * an instruction to build software. Everything he says afterwards is absorbed
+ * into it: "I don't want paid acquisition" becomes a filter every candidate is
+ * tested against, "try harder to disprove it" raises the bar one must clear.
+ *
+ * Nothing binds without confirmation, exactly as standing intent does, because
+ * a misheard mandate would send the institution looking for the wrong thing for
+ * weeks and he would not find out until it came back.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+  const form = await c.req.parseBody();
+  const said = String(form.said ?? '').trim().slice(0, 300);
+  if (!said) return c.redirect('/foundry');
+
+  const venture = await import('../../services/venture/mandate.js');
+  const reading = venture.readVentureSentence(said);
+
+  if (reading.kind === 'not_venture') {
+    return c.html(page('What you said', html`
+      <h1>I did not follow that</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      <p>I understood you were talking about finding a business, but not what you
+        wanted me to do about it.</p>
+      <div class="know">
+        <h3>What I can act on</h3>
+        <ul>
+          <li>Asking me to look — &ldquo;add a new micro-SaaS venture to my portfolio&rdquo;</li>
+          <li>Steering the search — what to avoid, what to prefer, an industry, a budget</li>
+          <li>Telling me to be harder on a candidate, or to show you another</li>
+          <li>Telling me to stop</li>
+        </ul>
+      </div>
+      <a class="btn" href="/foundry">Back</a>`, 'foundry'));
+  }
+
+  if (reading.kind === 'stop_mandate') {
+    const open = await venture.currentMandate(String(founder.id));
+    return c.html(page('What you said', html`
+      <h1>${open ? 'Stop looking?' : 'There is nothing to stop'}</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      ${open
+    ? html`<div class="know">
+        <h3>What I would stop</h3>
+        <p><strong>${open.statement}</strong></p>
+        <p class="quiet">I will stop looking. Everything I have already found stays on the
+          record, including what I rejected and why — so if you start again I am not
+          beginning from nothing.</p>
+      </div>
+      <form method="POST" action="/foundry/venture/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <button class="btn go" type="submit">Yes — stop looking</button>
+      </form>` : html`<p>I am not looking for anything at the moment.</p>`}
+      <a class="btn" href="/foundry">Back</a>`, 'foundry'));
+  }
+
+  if (reading.kind === 'guidance') {
+    const open = await venture.currentMandate(String(founder.id));
+    if (!open) {
+      return c.html(page('What you said', html`
+        <h1>There is no search to steer</h1>
+        <p class="lede">You said: <strong>${said}</strong></p>
+        <p>Ask me to look for something first, and I will hold that against every
+          candidate I find.</p>
+        <a class="btn" href="/foundry">Back</a>`, 'foundry'));
+    }
+    return c.html(page('What you said', html`
+      <h1>Hold the search to this?</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      <div class="know">
+        <h3>What I will do</h3>
+        <p>${GUIDANCE_IN_PLAIN_WORDS(reading.guidance, reading.subject)}</p>
+        <p class="quiet">This becomes part of the search itself, not a note beside it.
+          Every candidate from here is tested against it, and I will tell you when one
+          fails because of something you said.</p>
+      </div>
+      <form method="POST" action="/foundry/venture/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <button class="btn go" type="submit">Yes</button>
+      </form>
+      <a class="btn" href="/foundry">No</a>`, 'foundry'));
+  }
+
+  return c.html(page('What you said', html`
+    <h1>Go and look?</h1>
+    <p class="lede">You said: <strong>${said}</strong></p>
+    <div class="know">
+      <h3>What I will do</h3>
+      <p>I will treat that as an instruction to go and find you
+        ${reading.shape ? `a ${reading.shape.replaceAll('_', '-')} business` : 'a business'}
+        — not an instruction to build one.</p>
+      <p class="quiet">That means looking for real problems people already have, working
+        out who solves them now, how they reach anyone, and what anyone pays — and trying
+        to kill each idea before I bring it to you. I will advance very few. Telling you
+        none of them are worth it is a real answer.</p>
+      <ul>
+        <li><strong>Cost</strong> — nothing until you set a budget.</li>
+        <li><strong>What I could do on my own</strong> — nothing. I cannot create a
+          company, spend anything, or contact anyone without asking you.</li>
+        <li><strong>Stopping</strong> — say so, any time.</li>
+      </ul>
+    </div>
+    <form method="POST" action="/foundry/venture/confirm">
+      <input type="hidden" name="said" value="${said}" />
+      <button class="btn go" type="submit">Yes — go and look</button>
+    </form>
+    <a class="btn" href="/foundry">No</a>`, 'foundry'));
+});
+
+/** Plain words for what a piece of steering will actually do. */
+function GUIDANCE_IN_PLAIN_WORDS(kind: string, subject: string | null): string {
+  switch (kind) {
+    case 'avoid':
+      return `I will reject any candidate that depends on ${subject ?? 'that'}, and say `
+        + 'that is why.';
+    case 'prefer':
+      return `I will weight the search toward ${subject ?? 'that'} — it makes a candidate `
+        + 'more likely to reach you, not automatically right.';
+    case 'industry':
+      return `I will look in ${subject ?? 'that industry'} instead of wherever I was `
+        + 'looking. This replaces the last industry you named.';
+    case 'budget':
+      return `I will spend at most $${subject ?? '0'} finding out whether a candidate is `
+        + 'real, and stop and tell you when it is gone.';
+    case 'harder':
+      return 'I will raise the bar. A candidate now has to survive more attempts to kill '
+        + 'it before I bring it to you at all.';
+    case 'deeper':
+      return 'I will keep working on that one rather than moving on.';
+    case 'favour':
+      return 'I will treat that one as the front runner and put my effort there — without '
+        + 'stopping trying to kill it, which is when a favourite is most dangerous.';
+    default:
+      return 'I will look for a different kind of candidate.';
+  }
+}
+
+/** Bind it. The sentence is re-read here rather than trusted from the form. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/venture/confirm',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const form = await c.req.parseBody();
+    const said = String(form.said ?? '').trim().slice(0, 300);
+    if (!said) return c.redirect('/foundry');
+
+    const venture = await import('../../services/venture/mandate.js');
+    const reading = venture.readVentureSentence(said);
+
+    if (reading.kind === 'stop_mandate') {
+      const stopped = await venture.stopMandate(String(founder.id), 'the owner said to stop');
+      return c.redirect(`/foundry?done=${stopped ? 'searchstopped' : 'nothing'}`);
+    }
+    if (reading.kind === 'guidance') {
+      const open = await venture.currentMandate(String(founder.id));
+      if (!open) return c.redirect('/foundry');
+      await venture.absorbGuidance({
+        mandateId: open.id, statement: said,
+        kind: reading.guidance, subject: reading.subject,
+      });
+      return c.redirect('/foundry?done=steeredsearch');
+    }
+    if (reading.kind === 'mandate') {
+      const opened = await venture.openMandate({
+        founderId: String(founder.id), statement: said, shape: reading.shape,
+      });
+      if ('refused' in opened) return c.redirect('/foundry?done=alreadylooking');
+      return c.redirect('/foundry?done=looking');
+    }
+    return c.redirect('/foundry');
   });
 
 // ─── being asked ────────────────────────────────────────────────────────────

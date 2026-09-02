@@ -572,6 +572,60 @@ institution — what any future Foundry would be built from*. "Improve my
 experience" and "change what a commercial product would inherit" can never be
 the same tap.
 
+## The venture origination acceptance test
+
+**Stated by the owner on 2026-09-02 and preserved verbatim in intent as a
+primary acceptance test for the mature Private Foundry.** This is not a feature
+list. It is the interaction that decides whether the venture institution exists.
+
+> **"I'd like you to add a new micro-SaaS venture to my portfolio."**
+
+Foundry must understand that as an **entrepreneurial mandate, not an instruction
+to build software**. It should then, autonomously: research broadly; identify
+real recurring customer problems; investigate market structure; analyse
+competitors and substitutes; evaluate distribution; reason about pricing and
+economics; **attempt to kill its own theses**; maintain explicit unknowns;
+compare opportunities against the existing portfolio; and advance only the
+strongest candidates — then present a small number of serious options in plain
+owner language.
+
+He must be able to steer naturally, and **the guidance must be absorbed into the
+real venture mandate rather than treated as chat**:
+
+> "I like this one." · "I don't want paid acquisition." · "Target this industry
+> instead." · "Look for higher-ticket opportunities." · "Research this more
+> deeply." · "Try harder to disprove it." · "Show me another option." · "Spend
+> no more than $20 validating it." · "Stop."
+
+Once a candidate earns enough evidence, Foundry presents the **company-creation
+decision**. Only after he approves does it progress: company establishment →
+product development → validation → launch → distribution → customer sensing →
+operation. The venture then becomes **a normal first-class company** in his
+portfolio — understood, steered, operated, compared, funded, or killed like any
+other.
+
+**The standard:** it should feel almost as simple as collaborating with Claude,
+while the full governed venture institution operates underneath.
+
+### What this test already implies about honesty
+
+**Research is a SENSE Foundry does not have.** It cannot see the market. An
+opportunity produced from a model's recollection, with no source that could be
+checked, is invented evidence — the precise thing the reality boundary exists to
+prevent. So the machinery of origination can be built and proven now; the
+research that feeds it waits on a sense, and until then Foundry says "I cannot
+see what is happening outside your companies" rather than producing plausible
+opportunities.
+
+**Rejection is the valuable half.** Opportunity generation is cheap. The
+institution should investigate many and advance very few, and *"none of these,
+and here is what would have to be true"* is a complete answer.
+
+**A reference mandate may never create a real company.** The reference world can
+exercise the whole flow — mandate, candidates, kill theses, the creation
+decision — and what it produces is a company that does not exist. That boundary
+is structural, not procedural.
+
 ## Deployment modes
 
 Foundry is deployed commercially to other companies and privately under owner
